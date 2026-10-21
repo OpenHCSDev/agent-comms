@@ -882,10 +882,6 @@ class NewPullRequestSelection(PullRequestSelection):
 class ExistingPullRequestSelection(PullRequestSelection):
     number: int
 
-    def __post_init__(self) -> None:
-        if FieldCodec.decode(int, self.number) <= 0:
-            raise ValueError("--existing needs a positive pull request number.")
-
     @classmethod
     def from_text(cls, text: str) -> Self:
         return cls(int(text))

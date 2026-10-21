@@ -26,7 +26,8 @@ from agent_comms.registration import Registration
 from agent_comms.threads import Thread
 from agent_comms.todos import (
     Assignment, ChangeTodoState, DoneTodoState, GoalRef,
-    MechanicalOrderRun, PendingProblemOrder, PullRequestLink, PullRequests,
+    ClosedListedPullRequest, MechanicalOrderRun, MergedListedPullRequest,
+    PendingProblemOrder, PullRequestLink, PullRequests, UnmergedListedPullRequest,
     DeliverTodo, OperationDelivery, ReleaseTodo, StrikeReason,
     Todo, TodoConflict, TodoError, TodoState, TodoStore, WithdrawTodo,
 )
@@ -256,7 +257,7 @@ def test_one_pr_linked_to_two_orders_closes_both(pr_commander):
     assert "## P343" in body and "## P344" in body
     originals = tuple(pr_order(ctx, pid) for pid in ("P343", "P344"))
     linked = tuple(adopt_pr(ctx, todo.id, 2249) for todo in originals)
-    requests = PullRequests(linked).listed(ctx.repos[0].github, "merged", linked[0])
+    requests = PullRequests(linked).listed(ctx.repos[0].github, MergedListedPullRequest, linked[0])
     assert len(requests) == 1
     assert requests[0].problems == tuple(todo.id for todo in linked)
     assert requests[0].orders == tuple(todo.order.id for todo in linked)
@@ -271,8 +272,30 @@ def test_unlinked_pr_with_matching_problem_heading_closes_nothing(pr_commander):
     ctx = pr_commander
     assert "## P343" in github_body(ctx, 2249)
     original = pr_order(ctx, "P343")
-    assert PullRequests((original,)).listed(original.repo, "merged", original) == ()
+    assert PullRequests((original,)).listed(original.repo, MergedListedPullRequest, original) == ()
     store = TodoStore(ctx.root)
     store.reconcile_merges(ctx.incarnation, ctx.comms.registry.storage_rule)
     assert store.get(original.id) == original
     assert original.order.checked().pull_requests == ()
+
+
+def test_recorded_closed_request_is_not_open_or_merged(pr_commander):
+    ctx = pr_commander
+    original = pr_order(ctx, "P1")
+    linked = adopt_pr(ctx, original.id, 2236)
+    pulls = PullRequests((linked,))
+    assert pulls.listed(linked.repo, UnmergedListedPullRequest, linked) == ()
+    assert pulls.listed(linked.repo, MergedListedPullRequest, linked) == ()
+    assert len(pulls.listed(linked.repo, ClosedListedPullRequest, linked)) == 1
+    store = TodoStore(ctx.root)
+    store.reconcile_merges(ctx.incarnation, ctx.comms.registry.storage_rule)
+    assert store.get(original.id) == linked
+
+
+@pytest.mark.parametrize("number", (0, -1))
+def test_existing_selection_leaves_number_validation_to_the_link(pr_commander, number):
+    ctx = pr_commander
+    original = pr_order(ctx, "P1")
+    with pytest.raises(ValueError, match="pull request number must be positive"):
+        adopt_pr(ctx, original.id, number)
+    assert TodoStore(ctx.root).get(original.id) == original
