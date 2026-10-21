@@ -5,7 +5,6 @@ import os
 from dataclasses import replace
 
 
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoalAction
 from agent_comms.goal_presentation import GoalWaitTarget
@@ -73,18 +72,18 @@ def test_original_reply_is_not_reassigned_to_same_name_replacement(tmp_path):
     )
     wait = comms.goals.goal_wait("owner")
     reply = comms.messaging.send("peer", "owner", "Original dependency reply").message
-    with comms.bus.log.checked_read() as source:
-        original = source.delivery(reply.seq)
+    with comms.bus.bus.reading() as source:
+        original = source.lookup(reply.seq)
         assert wait.matches(original, owner.incarnation.require_recorded())
-        assert original.audience.sender_lookup == RecordedThreadIncarnation("fixture", peer.created_at).lookup
+        assert original.audience.sender_lookup == peer.incarnation.lookup
 
     comms.agents.finish_turn(lease)
     comms.registry.unregister("peer")
     comms.registry.remove("peer")
     replacement = register(comms, "peer")
     assert peer.created_at != replacement.created_at
-    with comms.bus.log.checked_read() as source:
-        original = source.delivery(reply.seq)
+    with comms.bus.bus.reading() as source:
+        original = source.lookup(reply.seq)
         assert wait.matches(original, owner.incarnation.require_recorded())
         replacement_wait = replace(
             wait, targets=(GoalWaitTarget(replacement.incarnation.require_recorded()),)
@@ -110,10 +109,10 @@ def test_original_recipient_and_direct_reply_semantics_cannot_be_replaced(tmp_pa
     wrong = comms.messaging.send("peer", "other", "Different addressed recipient").message
     notice = comms.messaging.send("peer", "owner", "Diagnostic only", role=NoticeRole()).message
     reply = comms.messaging.send("peer", "owner", "Original addressed reply").message
-    with comms.bus.log.checked_read() as source:
-        assert not wait.matches(source.delivery(wrong.seq), owner.incarnation.require_recorded())
-        assert not wait.matches(source.delivery(notice.seq), owner.incarnation.require_recorded())
-        original = source.delivery(reply.seq)
+    with comms.bus.bus.reading() as source:
+        assert not wait.matches(source.lookup(wrong.seq), owner.incarnation.require_recorded())
+        assert not wait.matches(source.lookup(notice.seq), owner.incarnation.require_recorded())
+        original = source.lookup(reply.seq)
         assert wait.matches(original, owner.incarnation.require_recorded())
         assert not replace(wait, after_seq=reply.seq).matches(original, owner.incarnation.require_recorded())
 
@@ -126,9 +125,9 @@ def test_original_recipient_and_direct_reply_semantics_cannot_be_replaced(tmp_pa
     comms.registry.remove("renamed-owner")
     replacement = register(comms, "owner")
     assert owner.created_at != replacement.created_at
-    with comms.bus.log.checked_read() as source:
+    with comms.bus.bus.reading() as source:
         assert not replace(wait, owner=replacement.incarnation.require_recorded()).matches(
-            source.delivery(reply.seq), replacement.incarnation.require_recorded()
+            source.lookup(reply.seq), replacement.incarnation.require_recorded()
         )
     assert not replace(wait, owner=replacement.incarnation.require_recorded()).has_reply(
         comms.bus.bus, replacement.incarnation.require_recorded()

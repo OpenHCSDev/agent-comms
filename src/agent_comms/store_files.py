@@ -11,7 +11,7 @@ import tempfile
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
+from collections.abc import AsyncIterator, Iterator, Mapping
 from contextlib import (
     AbstractAsyncContextManager,
     AbstractContextManager,
@@ -24,27 +24,15 @@ from contextvars import Context, ContextVar
 from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
 from pathlib import Path
-from typing import TYPE_CHECKING, BinaryIO, ClassVar
+from typing import BinaryIO, ClassVar
 
 from .child_process import Platform
 from .declared_family import DeclaredFamily
-from .errors import CheckpointNeedsRepairError, RelationViolationError
+from .errors import RelationViolationError
 from .private_path import FileIdentity, PrivateFileRole
 
 with suppress(ModuleNotFoundError):  # Windows; Win32Platform never asks a mode for its flock.
     import fcntl
-
-if TYPE_CHECKING:
-    import sqlite3
-
-    from .private_bus_checkpoint import (
-        CheckedRead,
-        PrefixWitness,
-        WritableCheckpoint,
-    )
-    from .wire_log import WireLog
-    from .wire_metadata import WireMetadata
-
 
 class LockMode(ABC):
     """Whether a store lock lets other holders in, and what its holder may do."""
@@ -54,75 +42,34 @@ class LockMode(ABC):
         """This mode's POSIX flock operation."""
 
     @abstractmethod
-    def open_checkpoint(self, checkpoint: WritableCheckpoint) -> sqlite3.Connection:
-        """Open a writable bus checkpoint as this lock's holder may."""
-
-    @abstractmethod
-    def verify_checkpoint(self, checkpoint: WritableCheckpoint, bus: WireLog,
-                          marker: WireMetadata, db: sqlite3.Connection,
-                          stream: BinaryIO) -> PrefixWitness:
-        """Verify a writable bus checkpoint as this lock's holder may."""
-
-    @abstractmethod
     def require_writer(self) -> None:
         """Require the exclusive holder before rebuilding a replaced source."""
 
     def require_held(self, held: LockMode) -> None:
         pass
 
-    @abstractmethod
-    def after_repair_needed(self, error: CheckpointNeedsRepairError) -> LockMode:
-        """The mode that may repair what this holder could only name."""
-
 
 class SharedLock(LockMode):
-    """Concurrent readers; the checkpoint is only checked, never repaired."""
+    """Concurrent readers of the owning store."""
 
     def flock(self) -> int:
         return fcntl.LOCK_SH
 
-    def open_checkpoint(self, checkpoint: WritableCheckpoint) -> sqlite3.Connection:
-        return checkpoint.open_read_only()
-
-    def verify_checkpoint(self, checkpoint: WritableCheckpoint, bus: WireLog,
-                          marker: WireMetadata, db: sqlite3.Connection,
-                          stream: BinaryIO) -> PrefixWitness:
-        return checkpoint.check_final(bus, marker, db, stream)
-
     def require_writer(self) -> None:
-        raise CheckpointNeedsRepairError("Replaced bus file needs its page index rebuilt.")
-
-    def after_repair_needed(self, error: CheckpointNeedsRepairError) -> LockMode:
-        return ExclusiveLock()
+        raise RelationViolationError("Cannot upgrade an enclosing shared store lock.")
 
 
 class ExclusiveLock(LockMode):
-    """One holder, which may repair the checkpoint it verifies."""
+    """The owning store's exclusive writer."""
 
     def flock(self) -> int:
         return fcntl.LOCK_EX
-
-    def open_checkpoint(self, checkpoint: WritableCheckpoint) -> sqlite3.Connection:
-        return checkpoint.open_for_repair()
-
-    def verify_checkpoint(self, checkpoint: WritableCheckpoint, bus: WireLog,
-                          marker: WireMetadata, db: sqlite3.Connection,
-                          stream: BinaryIO) -> PrefixWitness:
-        return checkpoint.verify_with_repair(bus, marker, db, stream)
 
     def require_writer(self) -> None:
         pass
 
     def require_held(self, held: LockMode) -> None:
-        try:
-            held.require_writer()
-        except CheckpointNeedsRepairError as error:
-            raise RelationViolationError(
-                "Cannot upgrade an enclosing shared store lock."
-            ) from error
-
-    def after_repair_needed(self, error: CheckpointNeedsRepairError) -> LockMode:
-        raise error
+        held.require_writer()
 
 
 @dataclass(slots=True)
@@ -356,16 +303,12 @@ class UnacquiredStoreLock:
         contention: StoreLockContention, lock_type: type[StoreLock], blocking: bool,
     ) -> Iterator[StoreLock]:
         platform = Platform.current()
-        with _store_lock_file(store_path) as lock_file, ExitStack() as resources:
-            def acquire(mode):
-                contention.acquire(lock_file.fileno(), platform, mode=mode)
-                return resources.enter_context(StoreLockAcquisition.holding(
-                    store_path, lock_file, platform, read_budget, mode=mode, lock_type=lock_type))
-            try:
-                lock = acquire(mode)
-            except CheckpointNeedsRepairError as error:
-                lock = acquire(mode.after_repair_needed(error))
-            yield lock
+        with _store_lock_file(store_path) as lock_file:
+            contention.acquire(lock_file.fileno(), platform, mode=mode)
+            with StoreLockAcquisition.holding(
+                store_path, lock_file, platform, read_budget, mode=mode, lock_type=lock_type,
+            ) as lock:
+                yield lock
 
     @asynccontextmanager
     async def locked_async(
@@ -379,12 +322,6 @@ class UnacquiredStoreLock:
                 store_path, lock_file, platform, read_budget, mode=mode, lock_type=lock_type,
             ) as lock:
                 yield lock
-
-    async def read_checked[T](
-        self, log: WireLog, read: Callable[[CheckedRead], T], mode: LockMode,
-        worker: Callable[[Callable[[], T]], Awaitable[T]],
-    ) -> T:
-        return await log._read_checked_fresh(read, mode, worker)
 
 
 @dataclass
@@ -437,12 +374,6 @@ class StoreLockAcquisition:
     ) -> AsyncIterator[StoreLock]:
         with self.source(store_path, read_budget, lock_type) as lock:
             yield lock
-
-    async def read_checked[T](
-        self, log: WireLog, read: Callable[[CheckedRead], T], mode: LockMode,
-        worker: Callable[[Callable[[], T]], Awaitable[T]],
-    ) -> T:
-        return await log._read_checked_borrowed(read, self, worker)
 
     @classmethod
     @contextmanager

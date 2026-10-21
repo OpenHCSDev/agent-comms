@@ -148,7 +148,7 @@ from .turn_context import (
     Provenance,
     TurnContext,
 )
-from .wire_log import WireLog
+from .recorded_bus import RecordedBusIdentity
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
 from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary
@@ -2404,6 +2404,5 @@ class ReplaceRouteCliCommand(CliCommand, declared_name=ActiveRoute.repair_comman
             "the old file is kept beside it")
 
     def apply(self, ctx: Comms) -> CliResult:
-        marker = WireLog(WireLog.path_in(ctx.root)).private_marker_unlocked()
-        route = ActiveRoute(ctx.root, marker.root_id)
+        route = ActiveRoute(ctx.root, RecordedBusIdentity.capture(ctx.bus.bus.path))
         return RouteReplacedResult(str(ctx.root), str(replace_unreadable_active_route(route)))
