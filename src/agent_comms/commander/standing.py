@@ -253,8 +253,6 @@ class PlanIdle(UndatedStandingRule):
 @dataclass(frozen=True)
 class UnitAskUnanswered(OwedAnswer, UndatedStandingRule):
     unit: str
-    reference: MessageReference
-    sent_at: float
     seconds: ClassVar[int] = 5 * 60
 
     @staticmethod
@@ -274,16 +272,16 @@ class UnitAskUnanswered(OwedAnswer, UndatedStandingRule):
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         snapshot = comms.registry.snapshot()
-        return tuple(cls(snapshot.canonical_name(message.sender), message.reference, message.timestamp)
+        return tuple(cls(message, snapshot.canonical_name(message.sender))
                      for message in cls.asks(comms, commander, time.time() - cls.seconds))
 
-    def owed(self, comms: Comms) -> Message:
-        with comms.bus.log.checked_read() as source:
-            return source.delivery(self.reference.seq).message
+    @classmethod
+    def open_messages(cls, comms: Comms, commander: str) -> tuple[Message, ...]:
+        return cls.asks(comms, commander, time.time())
 
     def line(self) -> str:
-        age = max(0, int((time.time() - self.sent_at) // 60))
-        return (f"UNANSWERED {self.unit}: message {self.reference.seq}:{self.reference.message_id}, "
+        age = max(0, int((time.time() - self.message.timestamp) // 60))
+        return (f"UNANSWERED {self.unit}: message {self.message.seq}:{self.message.message_id}, "
                 f"{age} min old -> commander must answer")
 
 
