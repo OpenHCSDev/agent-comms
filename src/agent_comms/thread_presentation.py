@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Self
 
-from .errors import RelationViolationError
+from agent_comms.coordination_errors import StaleRevision
+from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 
 from .declared_family import DeclaredFamily
 from .thread_identity import OwnerIdentity
@@ -16,6 +17,8 @@ if TYPE_CHECKING:
     from .message_reference import MessageReference
     from .presentation import MessageNotification
     from .transcripts import TranscriptReadIdentity, TranscriptSourceWindow
+    from agent_comms.registry_document import RegistrySnapshot
+    from agent_comms.transcripts import Transcripts
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -111,8 +114,7 @@ class SessionDisconnected(ThreadPresentationStatus):
 
     def over(self, ordinary: ThreadPresentation) -> ThreadPresentation:
         """The ordinary presentation, with its notifications, showing the disconnection."""
-        shown = self.presentation(ordinary.title)
-        return replace(ordinary, marker=shown.marker, summary=shown.summary, status=self)
+        return ordinary.with_paint(self.presentation(ordinary.title))
 
 
 @dataclass(frozen=True, slots=True)
@@ -177,6 +179,8 @@ class LiveThreadOwnerBinding(ThreadOwnerBinding):
 
 @dataclass(frozen=True, slots=True)
 class ThreadPresentation:
+    """A thread's acquired presentation, or its declared absence."""
+
     title: str
     marker: str
     summary: str
@@ -192,20 +196,45 @@ class ThreadPresentation:
         return frozenset(name for item in (*self.notifications, *self.sent_notifications)
                          for name in item.activity_names())
 
-    def same_status(self, other: ThreadPresentation | None) -> bool:
+    def require(self, name: str) -> ThreadPresentation:
+        """Require a presentation for a caller already bound to this thread."""
+        return self
+
+    def for_status(self, name: str) -> ThreadPresentation:
+        """The acquired presentation is already suitable for its status row."""
+        return self
+
+    def with_paint(self, shown: ThreadPresentation) -> Self:
+        """Change display fields without changing this member or its source evidence."""
+        return replace(self, title=shown.title, marker=shown.marker,
+                       summary=shown.summary, status=shown.status)
+
+    def collect_revision_input(self, name: str, readable: dict[str, ThreadPresentation]) -> None:
+        readable[name] = self
+
+    def read_sources(self, transcripts: Transcripts, snapshot: RegistrySnapshot,
+                     name: str, sent_source_limit: int) -> ThreadPresentation:
+        captured = transcripts.capture_page_window(
+            name, source_limit=5, sent_source_limit=sent_source_limit,
+        )
+        if not captured.read.identity.thread.incarnation.current(snapshot):
+            raise StaleRevision("Thread source incarnation changed during presentation")
+        return self.with_sources(captured)
+
+    def same_status(self, other: ThreadPresentation) -> bool:
         """Status changes do not require reacquiring an unchanged source window."""
-        return other is not None and (self.title, self.marker, self.summary, self.status, self.binding) == (
+        return (self.title, self.marker, self.summary, self.status, self.binding) == (
             other.title, other.marker, other.summary, other.status, other.binding,
         )
 
-    def same_observation(self, other: ThreadPresentation | None) -> bool:
+    def same_observation(self, other: ThreadPresentation) -> bool:
         """Equal view and turn evidence, not merely equal global store revisions.
 
         Keep the exact registered thread and binding used for turn settlement.
         The transcript owner decides whether its page changed; unrelated bus,
         read-mark and coordinator writes do not create another page publication.
         """
-        if other is None or replace(self, read_identity=other.read_identity) != other:
+        if replace(self, read_identity=other.read_identity) != other:
             return False
         original, current = self.read_identity, other.read_identity
         if original is None or current is None:
@@ -240,4 +269,30 @@ class ThreadPresentation:
 
     @property
     def label(self) -> str:
-        return f"{self.marker} {self.title}"
+        return f"{self.marker} {self.title}".strip()
+
+
+@dataclass(frozen=True, slots=True)
+class NoThreadPresentation(ThreadPresentation):
+    """No acquired thread: no sources, notifications or readable revision."""
+
+    title: str = ""
+    marker: str = ""
+    summary: str = ""
+
+    def require(self, name: str) -> ThreadPresentation:
+        raise UnregisteredThreadError(f"Thread presentation unavailable: {name}")
+
+    def for_status(self, name: str) -> ThreadPresentation:
+        return self.with_paint(ThreadRetired().presentation(name))
+
+    def collect_revision_input(self, name: str, readable: dict[str, ThreadPresentation]) -> None:
+        pass
+
+    def read_sources(self, transcripts: Transcripts, snapshot: RegistrySnapshot,
+                     name: str, sent_source_limit: int) -> ThreadPresentation:
+        return self
+
+    def with_sources(self, window: TranscriptSourceWindow) -> ThreadPresentation:
+        return self
+
