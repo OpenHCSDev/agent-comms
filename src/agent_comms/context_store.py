@@ -267,7 +267,7 @@ class ContextRequest(TypedTable):
         return self.identity.with_segments(tuple(parts))
 
 
-class ContextPriorSuperseded(RelationViolationError):
+class ContextPriorSupersededError(RelationViolationError):
     """Another writer recorded this thread's context after the prior this writer holds."""
 
 
@@ -320,7 +320,9 @@ class AbsentContext(RecordedContextState):
         self, db: sqlite3.Connection, source: ContextStoreIdentity, owner: ThreadIncarnation
     ) -> None:
         if ContextRequest.newest(db, owner):
-            raise ContextPriorSuperseded(f"{owner.name} has recorded context this writer never read")
+            raise ContextPriorSupersededError(
+                f"{owner.name} has recorded context this writer never read"
+            )
 
     def segment(self, position: int, original: SegmentManifest) -> SegmentRecording:
         return UnrecordedSegment()
@@ -341,7 +343,9 @@ class CapturedContext(RecordedContextState):
     ) -> None:
         newest = ContextRequest.newest(db, owner)
         if source != self.source or not newest or newest[0].id != self.record_id:
-            raise ContextPriorSuperseded(f"{owner.name} recorded context after request {self.record_id}")
+            raise ContextPriorSupersededError(
+                f"{owner.name} recorded context after request {self.record_id}"
+            )
 
     def segment(self, position: int, original: SegmentManifest) -> SegmentRecording:
         if position < len(self.value.segments):

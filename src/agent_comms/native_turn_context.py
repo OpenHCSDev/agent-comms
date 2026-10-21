@@ -1,8 +1,8 @@
 """Native SDK input observations, decoded once by the existing Pi boundary."""
 
-from typing import TYPE_CHECKING, Annotated
 from dataclasses import dataclass, field
 from functools import partial
+from typing import TYPE_CHECKING, Annotated
 
 from agent_comms import field_codec
 
@@ -41,7 +41,7 @@ class NativeContextManifestData(StrictFields, PiResponseData):
         return ContextManifest(thread, turn, tuple(segment.capture_public(self.values)
             for segment in self.segments), self.counter, request_id=self.request_id)
 
-    async def record(self, contexts, prior, thread, lease) -> "CapturedContext":
+    async def record(self, contexts, prior, thread, lease) -> CapturedContext:
         """Publish the original SDK observation under its leased owner turn, after the
         prior this turn holds; the result is the turn's next prior."""
         from .coordinator import Coordination
