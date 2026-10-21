@@ -97,7 +97,7 @@ def test_read_failure_and_thread_status_keep_the_explanation_across_the_pipe(com
 
 
 @pytest.mark.parametrize(
-    "error_type", [SchemaVersionError, CoordinationReadUnavailable, StaleRevision]
+    "error_type", [SchemaVersionError, CoordinationReadUnavailable, StaleRevision, RelationViolationError]
 )
 def test_store_read_only_retains_the_named_busy_state(comms, error_type):
     @dataclass(frozen=True)
