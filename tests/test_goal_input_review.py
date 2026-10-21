@@ -4,6 +4,7 @@ from agent_comms.channel_targets import CommandTarget
 import os
 
 import pytest
+from conftest import publish_initial
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
@@ -33,7 +34,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     comms.agents.begin_turn("parent", "parent-delegation-in-flight")
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Delegate and wait"))
     messages = [
-        comms.messaging.send("parent", "worker", text).message
+        publish_initial(comms, "parent", "worker", text)
         for text in ("Set standby", "Yes wait")
     ]
     ledger = InputDispositions(comms.root)

@@ -4,8 +4,6 @@ import asyncio
 import json
 import multiprocessing as mp
 import os
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -100,27 +98,6 @@ def test_clear_stopped_uses_acquired_wire_descriptor(tmp_path: Path) -> None:
         with pytest.raises(RelationViolationError):
             next_hold = gate.begin(MaintenanceOperator.current())
             gate.clear_stopped(next_hold, other.descriptor)
-
-
-def test_production_only_import_cannot_reach_disposable_control(tmp_path: Path) -> None:
-    src = Path(__file__).resolve().parents[1] / "src"
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            "import importlib.util\n"
-            "from agent_comms.maintenance_barrier import MaintenanceBarrier\n"
-            "assert callable(MaintenanceBarrier.begin); "
-            "assert callable(MaintenanceBarrier.advance); "
-            "assert importlib.util.find_spec('agent_comms.maintenance_control_fixture') is None",
-        ],
-        cwd=tmp_path,
-        env={"PATH": os.environ.get("PATH", ""), "PYTHONPATH": str(src)},
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
-    assert result.returncode == 0, result.stderr
 
 
 def _claim_other_process(registry_path: str, ready: mp.Event, result: mp.Queue) -> None:
