@@ -43,6 +43,7 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
     @classmethod
     def _member_declarations(cls):
         # These existing owners share this registry; imports acquire declarations.
+        from . import native_tools, tools
 
         return super()._member_declarations()
 
