@@ -42,7 +42,6 @@ from .native_arguments import (
 )
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .registration import Registration
-from .repo import Checkout
 from .registry_document import RegistrySnapshot
 from .restart_refusals import (
     OwnerGenerationChangedRefusal,
@@ -505,9 +504,6 @@ class OwnerLifecycle:
         env = initial_input.launch(thread.launch()).apply(env)
         env[NativeArguments.binary_key] = agent_bin
         agent_args.apply(env)
-        # The unit works in its checkout, so a submodule store an interrupted clone left
-        # broken is rebuilt here, and one that cannot be rebuilt refuses the start.
-        Checkout(thread.project_path).prepare()
         owned: Thread | None = None
 
         def reserve(identity: ProcessIdentity) -> None:

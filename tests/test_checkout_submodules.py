@@ -90,6 +90,15 @@ def test_prepare_rebuilds_a_store_an_interrupted_clone_left_broken(
     assert git(checkout.path, "diff", "--name-only", "HEAD") == ""
 
 
+def test_an_intact_checkout_prepares_without_reaching_its_source(repository, tmp_path):
+    checkout = Checkout.add(repository, tmp_path / "unit--P1", "HEAD", "--detach")
+    (module,) = checkout.submodules()
+    git(checkout.path, "config", f"submodule.{module.name}.url", str(tmp_path / "gone"))
+    git(module.path, "remote", "set-url", "origin", str(tmp_path / "gone"))
+    checkout.prepare()
+    assert (module.path / "catalog.md").read_text() == "patterns\n"
+
+
 def test_retiring_a_checkout_with_submodules_keeps_held_work_and_drops_scratch(
     repository, tmp_path
 ):
