@@ -19,6 +19,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.installer.carry import CarryChain, CarryLedger
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.commander.config import CommanderConfig
+from agent_comms.commander.order import Commander, SayVerb
 from agent_comms.commander.standing import (
     Blocked, Detached, HolderCannotRun, UnitAskUnanswered, UnownedWheelSpin,
 )
@@ -221,6 +222,16 @@ def test_unanswered_uses_age_direct_target_and_later_answer_references(held_bus)
     held_bus.messaging.send("lead", "outsider", "Answer in another conversation",
                             answers=(another.reference,))
     assert UnitAskUnanswered.violations(held_bus, "lead") == ()
+
+
+def test_commander_say_answers_an_unanswered_unit_message(held_bus):
+    question = publish(held_bus, "worker", "lead", time.time() - 901)
+    ctx = Commander(**CommanderConfig.read_root(held_bus.root).model_dump())
+    say = SayVerb(units="worker", body_file="unused", answers=(question.message_id,))
+    held_bus.messaging.send("lead", "worker", "Responding", answers=say.answer_references(ctx))
+    assert UnitAskUnanswered.violations(held_bus, "lead") == ()
+    with pytest.raises(SystemExit, match="unanswered unit messages"):
+        SayVerb(units="worker", body_file="unused", answers=("not-a-message",)).answer_references(ctx)
 
 
 def test_detached_and_whole_family_scan_still_find_nonreceiving_holders(held_bus):
