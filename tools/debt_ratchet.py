@@ -9,7 +9,6 @@ import enum
 import importlib
 import io
 import json
-import multiprocessing
 import os
 import re
 import subprocess
@@ -21,7 +20,7 @@ import typing
 from abc import abstractmethod
 from collections import Counter
 from collections.abc import Callable, Iterator
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import as_completed
 from dataclasses import dataclass
 from functools import cache, cached_property, partial
 from pathlib import Path
@@ -40,6 +39,7 @@ from audit.handler_declarations import BuiltinHandlerDeclarations
 from audit.measures import FamilyFlattened as AuditFamilyFlattened
 from audit.measures import ForeignAbsenceProbe as AuditForeignAbsenceProbe
 
+from agent_comms.child_process import ForkedProcessPool, SpawnedProcess
 from agent_comms.core_stamp import WheelStamp
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.installer.carry import STEPS
@@ -313,14 +313,15 @@ class CheckedRevision(Measure):
             configuration.unlink(missing_ok=True)
             if git(repo, "ls-tree", "--name-only", head, "--", "pyproject.toml"):
                 configuration.write_bytes(git(repo, "show", f"{head}:pyproject.toml"))
-            result = subprocess.run([sys.executable, "-m", *cls.command(tree, selected, side)],
-                                    cwd=tree, env=cls.environment(root, tree), capture_output=True,
-                                    text=True, timeout=600)
+            result = SpawnedProcess.run(
+                (sys.executable, "-m", *cls.command(tree, selected, side)),
+                cwd=tree, env=cls.environment(root, tree), timeout=600,
+            )
         if result.returncode not in (0, 1):
             raise ValueError(f"{cls.__name__} could not check {ref}: {result.stderr}")
         # A checker reports each file under the path it was given, inside the tree or relative to
         # it; mypy also reports the modules it follows outside the tree, which are not measured.
-        output = result.stdout + result.stderr
+        output = (result.stdout + result.stderr).decode()
         reported = (Path(tree, match[1]) for match in cls.finding.finditer(output))
         return side, Counter(path.relative_to(tree).as_posix()
                              for path in reported if path.is_relative_to(tree))
@@ -1619,11 +1620,13 @@ class UncarriedRecordFormat(ChangeMeasure):
                 WheelStamp(revision(repo, ref)).write(stamp)
             tree = Path(scratch)
             paths = dict.fromkeys((str(tree / package), *cls.source_paths(root, tree)))
-            result = subprocess.run([sys.executable, "-c", cls.probe,
-                                     str(Path(__file__).resolve().with_name("stored_formats.py")),
-                                     os.pathsep.join(paths), *modules], cwd=scratch,
-                                    env=cls.environment(root, tree),
-                                    capture_output=True, text=True, check=True, timeout=300)
+            result = SpawnedProcess.run(
+                (sys.executable, "-c", cls.probe,
+                 str(Path(__file__).resolve().with_name("stored_formats.py")),
+                 os.pathsep.join(paths), *modules), cwd=scratch,
+                env=cls.environment(root, tree), timeout=300,
+            )
+            result.check_returncode()
         return {name: StoredForm(**form) for name, form in json.loads(result.stdout).items()}
 
     @classmethod
@@ -1707,7 +1710,7 @@ def compare(repo: Path, base: str, head: str, root: str) -> Comparison:
 
     measures = Measure.members_with(Measure)
     # Forked workers start from this already-imported module instead of importing it again.
-    with ProcessPoolExecutor(mp_context=multiprocessing.get_context("fork")) as pool:
+    with ForkedProcessPool() as pool:
         parts = {measure: [pool.submit(part)
                            for part in measure.parts(repo, base, head, paths, root)]
                  for measure in measures}
