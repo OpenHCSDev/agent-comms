@@ -208,8 +208,14 @@ def carry(rts: Path, root: Path, apply: bool, retire: bool) -> None:
                     proposed = todos.Assignment.of(owner, actor, generation)
                     todo = todos.Todo.ordered(pid, repo.github, text, actor, proposed, due, order)
                 todo = todos.AssignTodo.by(
-                    actor, todo.revision, owner, generation, due, row.merged.wrap(order),
-                    todo.goal, todos.NoSourceReference(),
+                    actor,
+                    todo.revision,
+                    owner,
+                    generation,
+                    due,
+                    row.merged.wrap(order),
+                    todo.goal,
+                    todos.NoSourceReference(),
                 ).apply(todo)
                 history = tuple(
                     strike.recorded(actor, comms.registry.require(strike.unit).incarnation)
