@@ -24,7 +24,8 @@ from agent_comms.messages import Claimed, ClaimNoticeKind, InfoKind, Message
 from agent_comms.registration import Registration
 from agent_comms.store_files import store_lock_path
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
-from agent_comms.typed_table import StoreCommittedError, TypedTable
+from agent_comms.locked_store import StoreCommittedError
+from agent_comms.typed_table import TypedTable
 from bus_record_fixture import publication_processes, record_from
 
 
@@ -82,7 +83,7 @@ def claims(tmp_path: Path) -> ClaimBus:
         registry.declare(registry.new_thread(
             name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()),
         ), RunningThreadStatus())
-    bus = Bus(Bus.path_in(root))
+    bus = Bus.install(Bus.path_in(root))
     with bus.writing():
         pass
     return ClaimBus(bus, registry)
@@ -258,7 +259,7 @@ def test_sigkill_after_projection_leaves_no_original_or_derived_claim(claims: Cl
 
 
 def test_retirement_failure_is_sent_not_a_refusal(tmp_path: Path):
-    bus = Bus(Bus.path_in(tmp_path / "bus"))
+    bus = Bus.install(Bus.path_in(tmp_path / "bus"))
     bus.append(lambda seq, db: PublicRecord.from_message(
         Message("author", "worker", "warm", InfoKind, seq=seq),
     ))

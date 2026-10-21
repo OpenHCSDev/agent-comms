@@ -32,6 +32,7 @@ from agent_comms.typed_table import RowNotFoundError
 
 
 def channel_bus(root):
+    Bus.install(Bus.path_in(root))
     messages = MessageBus(root, Registration(RegistryFile.path_in(root)), Publisher)
     for index in range(5):
         message = Message("author", "#history", f"message {index + 1}", InfoKind)

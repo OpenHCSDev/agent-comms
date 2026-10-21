@@ -75,7 +75,7 @@ class ChangedSources(ExitStack):
 
     Exact and ancestor indexes make an ordinary event independent of the number
     of registrations. Directory sources dirty their declaration, not every new
-    allocated filename. Queue loss invalidates every admitted source explicitly.
+    allocated filename. Queue loss invalidates every registered source explicitly.
     """
 
     def __init__(self, *sources: ChangeSource):
@@ -162,8 +162,9 @@ class ChangedSources(ExitStack):
                 self._record(source.path for source in self.sources)
                 self._refresh(lost=True)
                 continue
-            directory = self._directories.get(watch)
-            if directory is None:
+            try:
+                directory = self._directories[watch]
+            except KeyError:
                 # Removal queues an IGNORED event for a registration we retired.
                 continue
             path = directory / os.fsdecode(name)
@@ -171,6 +172,7 @@ class ChangedSources(ExitStack):
             if mask & (_DELETE | _MOVED_FROM | _IGNORED | _DELETE_SELF | _MOVE_SELF):
                 self._record(self._below.get(path, ()))
             if path in self._directory_ancestors:
+                self._record(self._below.get(path, ()))
                 self._refresh(lost=bool(mask & (_IGNORED | _DELETE_SELF | _MOVE_SELF)))
 
     def _take_paths(self) -> frozenset[Path]:
@@ -182,7 +184,7 @@ class ChangedSources(ExitStack):
         self._drain()
         if self._readiness.poll(0):
             # A synchronous reader cannot claim complete coverage of a bounded
-            # batch while the kernel still holds events. Re-read admitted sources
+            # batch while the kernel still holds events. Re-read registered sources
             # rather than keeping stale cached data or draining forever.
             self._record(source.path for source in self.sources)
         return self._take_paths()

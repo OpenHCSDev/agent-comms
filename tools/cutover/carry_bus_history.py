@@ -791,6 +791,7 @@ class BusHistory(Carry):
             raise RelationViolationError(
                 "Bus history source must be a physical read-only staged file"
             )
+        bus = Bus.install(bus.path)
         with bus.writing() as db:
             if not HistoryOffset.present(db):
                 HistoryOffset.create(db)

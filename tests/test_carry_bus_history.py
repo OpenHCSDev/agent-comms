@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 import sys
 import tarfile
@@ -24,6 +23,7 @@ def publish_predecessor_history(directory: Path) -> None:
     from agent_comms.coordination_tables.publications import PublicationIntents
     from agent_comms.coordination_tables.responses import ResponseObligation
     from agent_comms.historical_views import HistoryArchive
+    from agent_comms.installer.backup import StoreBackup
     from agent_comms.messages import InfoKind, Message
     from agent_comms.obligation_states import PublishingResponse
     from agent_comms.read_basis import AllConversation, ConversationCursor, ReadCursor
@@ -80,7 +80,7 @@ def publish_predecessor_history(directory: Path) -> None:
     )
     ReadLedger.at(comms.root).replace(document)
     destination = directory / "destination"
-    shutil.copytree(comms.root, destination)
+    StoreBackup.copy_tree(comms.root, destination)
     ReadLedger.at(destination).replace(replace(
         document, bus_identity=RecordedBusIdentity.capture(destination / "bus.jsonl")))
     archived = HistoryArchive(destination / "bus.jsonl").attach(comms.root)
@@ -102,6 +102,7 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
     from agent_comms.errors import RelationViolationError, UnclaimedError
     from agent_comms.field_codec import FieldCodec
     from agent_comms.historical_views import HistoryArchive
+    from agent_comms.installer.backup import StoreBackup
     from agent_comms.installer.carry import Carried
     from agent_comms.messages import BusRecord
     from agent_comms.read_ledger import ReadLedger
@@ -133,7 +134,7 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
     root = tmp_path / "carried"
     spill = tmp_path / "hdd-spill"
     spill.mkdir()
-    shutil.copytree(original, root)
+    StoreBackup.copy_tree(original, root)
     relatives = (Path(), archived.relative_to(original))
     originals = {relative: (original / relative / BusHistory.filename).read_bytes()
                  for relative in relatives}
@@ -199,9 +200,7 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
     assert converted.root == str(root / archived.relative_to(original))
     fresh = tmp_path / "fresh-sqlite"
     fresh.mkdir()
-    fresh_bus = Bus(Bus.path_in(fresh))
-    with fresh_bus.writing():
-        pass
+    fresh_bus = Bus.install(Bus.path_in(fresh))
     assert BusHistory(fresh, fresh, spill, True).carry() == Carried(0)
     with fresh_bus.writing() as db:
         HistoryOffset.create(db)

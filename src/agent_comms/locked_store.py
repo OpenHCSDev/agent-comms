@@ -292,6 +292,48 @@ class SQLiteFile(RootFile):
             raise
 
 
+class StoreCommittedError(OSError):
+    """COMMIT succeeded; change signalling or connection retirement failed."""
+
+
+class PublishedSQLiteFile(SQLiteFile):
+    """Publish only completed row changes, independently of database attachment."""
+
+    __slots__ = ()
+
+    @staticmethod
+    def _source_paths(path: Path) -> tuple[Path, ...]:
+        return (path.with_suffix(".changed"),)
+
+    @classmethod
+    def source_paths(cls, root: Path) -> tuple[Path, ...]:
+        return cls._source_paths(cls.path_in(root))
+
+    @classmethod
+    def member_paths(cls, path: Path) -> frozenset[Path]:
+        return super().member_paths(path) | frozenset(cls._source_paths(path))
+
+    @classmethod
+    @contextmanager
+    def publishing_changes(
+        cls, connection: sqlite3.Connection, path: Path,
+    ) -> Iterator[None]:
+        before = connection.total_changes
+        yield
+        if connection.total_changes != before:
+            cls.publish_change(path)
+
+    @classmethod
+    def publish_change(cls, path: Path) -> None:
+        """Announce a completed mutation or replacement of this owner's store."""
+        try:
+            cls._source_paths(path)[0].write_bytes(b"")
+        except Exception as error:
+            raise StoreCommittedError(
+                f"Committed {path}, but change notification failed: {error}"
+            ) from error
+
+
 class RuntimeFile(RootFile):
     """A bus file no carry writes: running owners rewrite it at any time, maintenance included."""
 

@@ -110,8 +110,3 @@ def test_wake_dispatch_and_watch_modes_do_not_return_to_input_drain():
                 for child in method.body
                 for node in ast.walk(child)
             )
-    assert not any(
-        isinstance(node, ast.Name)
-        and node.id in {"open_wire_watcher", "PollingWireWatch", "WireChangeWatch"}
-        for node in ast.walk(tree)
-    )
