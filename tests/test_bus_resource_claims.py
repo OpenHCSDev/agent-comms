@@ -24,7 +24,8 @@ from agent_comms.messages import Claimed, ClaimNoticeKind, InfoKind, Message
 from agent_comms.registration import Registration
 from agent_comms.store_files import store_lock_path
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
-from agent_comms.typed_table import StoreCommittedError, TypedTable
+from agent_comms.locked_store import StoreCommittedError
+from agent_comms.typed_table import TypedTable
 from bus_record_fixture import publication_processes, record_from
 
 

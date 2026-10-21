@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import sqlite3
 from collections.abc import Callable, Sequence
-from contextlib import AbstractContextManager, ExitStack
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, replace
 from functools import partial
 from itertools import groupby

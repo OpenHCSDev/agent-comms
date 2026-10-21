@@ -46,7 +46,7 @@ from .field_codec import (
     WireValue,
     compile_decoder,
 )
-from .locked_store import DurableFile, FileStore, RuntimeFile, SQLiteFile
+from .locked_store import DurableFile, FileStore, PublishedSQLiteFile, RuntimeFile, SQLiteFile, StoreCommittedError
 
 RelatedRow = TypeVar("RelatedRow", bound="TypedRow")
 
@@ -632,6 +632,11 @@ class TableSchema(ABC):
             "WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"))
 
     @classmethod
+    def stored_tables(cls, db: sqlite3.Connection) -> list[SQLiteTableName]:
+        """The physical tables this schema owns, dependents before their sources."""
+        return SQLiteTableName.stored(db)
+
+    @classmethod
     def schema_differs(cls, db: sqlite3.Connection) -> bool:
         return bool(SQLiteSchemaObject.differences(cls.stored_schema(db), cls.declared_schema()))
 
@@ -696,6 +701,11 @@ class SharedFileTables(TableSchema):
     def stored_schema(cls, db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
         return TypedTable.objects_of(db, cls.schema_rows())
 
+    @classmethod
+    def stored_tables(cls, db: sqlite3.Connection) -> list[SQLiteTableName]:
+        names = frozenset(row.declared_name for row in cls.schema_rows())
+        return [table for table in super().stored_tables(db) if table.name in names]
+
 
 class AllObjectsTables(TableSchema):
     """A file that declares every object it holds, SQLite's own included."""
@@ -715,8 +725,8 @@ class DerivedTables(TableSchema):
 
     @classmethod
     def reset_schema(cls, db: sqlite3.Connection) -> None:
-        """Inside the caller's transaction: every stored table goes, the declared ones come."""
-        for stored in SQLiteTableName.stored(db):
+        """Inside the caller's transaction: rebuild only this schema's derived tables."""
+        for stored in cls.stored_tables(db):
             stored.drop(db)
         cls.create_schema(db)
 
@@ -1126,11 +1136,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         )
 
 
-class StoreCommittedError(OSError):
-    """COMMIT succeeded; change signalling or connection retirement failed."""
-
-
-class StoreWriter(SQLiteFile, FileStore):
+class StoreWriter(PublishedSQLiteFile, FileStore):
     """A transaction capability shared by stores and their turn-owned writers.
 
     Whether the file outlives an installation belongs to each store: it inherits
@@ -1149,32 +1155,12 @@ class StoreWriter(SQLiteFile, FileStore):
         """The store whose committed row changes this writer publishes."""
         return self
 
-    @classmethod
-    def files_in(cls, root: Path) -> frozenset[Path]:
-        return super().files_in(root) | frozenset(cls._source_paths(cls.path_in(root)))
-
-    @staticmethod
-    def _source_paths(path: Path) -> tuple[Path, ...]:
-        return (path.with_suffix('.changed'),)
-
-    @classmethod
-    def source_paths(cls, root: Path) -> tuple[Path, ...]:
-        """Watch committed row changes, never SQLite reader attachment or retirement."""
-        return cls._source_paths(cls.path_in(root))
-
     @contextmanager
     def transaction(self, connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
-        """The file's write transaction, and a touch of its watch file when rows changed."""
-        before = connection.total_changes
-        with self.write_transaction(connection):
-            yield connection
-        if connection.total_changes != before:
-            try:
-                self._source_paths(self.store.path)[0].write_bytes(b'')
-            except Exception as error:
-                raise StoreCommittedError(
-                    f"Committed {self.store.path}, but change notification failed: {error}"
-                ) from error
+        """Publish through the physical store after its row transaction commits."""
+        with self.publishing_changes(connection, self.store.path):
+            with self.write_transaction(connection):
+                yield connection
 
     @abstractmethod
     def writing(self) -> AbstractContextManager[sqlite3.Connection]:

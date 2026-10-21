@@ -23,7 +23,6 @@ from agent_comms.bus_tables import (
     SentSource,
     ReceivedSource,
     AnsweredSource,
-    AnsweredBySource,
 )
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import CommittedMessageError, RelationViolationError, UnclaimedError
@@ -31,11 +30,11 @@ from agent_comms.envelope_claim_transitions import (
     ClaimOwner, ClaimProjection, ClaimTransition, RecordedScope, ResourceClaim,
 )
 from agent_comms.field_codec import FieldCodec
-from agent_comms.locked_store import DurableFile, RegistryFile
+from agent_comms.locked_store import DurableFile, RegistryFile, StoreCommittedError
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.messages import BusRecord, Claimed, ClaimMessage, Message
 from agent_comms.message_reference import MessageReference
-from agent_comms.typed_table import SQLiteTableName, StoreCommittedError, WalStore
+from agent_comms.typed_table import SQLiteTableName, WalStore
 from agent_comms.watched import Watched
 
 if TYPE_CHECKING:
@@ -227,11 +226,6 @@ class BusReader(ABC):
             (lookup, *sender_lookups), after=after, before=before, limit=limit,
             descending=descending,
         )
-
-    def has_reply(self, original: MessageReference, *, sender_lookup: str) -> bool:
-        """Probe the exact original/frozen-author index without loading reply history."""
-        with self.observing() as db:
-            return AnsweredBySource.exists(db, original=original, lookup=sender_lookup)
 
     def replies(self, references: tuple[MessageReference, ...]):
         with self.observing() as db:
