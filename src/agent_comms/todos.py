@@ -1593,7 +1593,8 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         """Create once; record the returned identity on this order, not in its prose."""
         todo.require_actor(actor, todo.held().generation)
         created = subprocess.run(
-            ("gh", "pr", "create", "-R", todo.repo.to_wire(), "--title", title, "--body-file", "-"),
+            ("gh", "pr", "create", "--draft", "-R", todo.repo.to_wire(),
+             "--title", title, "--body-file", "-"),
             input=body,
             cwd=checkout,
             capture_output=True, text=True, timeout=60)
