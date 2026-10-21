@@ -65,9 +65,6 @@ class CommanderConfig(CommanderRole, BaseModel):
     def packaged_indictment() -> Path:
         return Path(str(files(__package__) / 'indictment.md'))
 
-    @staticmethod
-    def packaged_spine() -> Path:
-        return Path(str(files(__package__) / 'spine.md'))
 
     @staticmethod
     def packaged_voice() -> Path:
