@@ -15,7 +15,7 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .input_attempt import StoredInput
-from .messages import Message
+from .messages import ClaimMessage, Message
 from .message_reference import MessageReference
 from .text_digest import TextDigest
 
@@ -172,7 +172,7 @@ class CurrentHumanConstraintTaskFact(HumanConstraintTaskFact,
 
 @dataclass(frozen=True)
 class ClaimTaskFact(ExactTaskFact):
-    source: Message
+    source: ClaimMessage
 
     def __post_init__(self) -> None:
         self.source.require_claim_transition()
@@ -249,12 +249,14 @@ class RetainedTaskFacts:
         return json.dumps(record, sort_keys=True, separators=(",", ":"),
                           allow_nan=False).encode()
 
-    def original_text_source(self, message: Message) -> Message | StoredInput:
-        originals = {reference: source for fact in self.facts
-                     for reference, source in fact.original_sources()}
-        if originals.get(message.reference) != message:
-            raise RelationViolationError("Authored source is outside this captured read")
-        return message.task.original_text_source(message, originals)
+    def original_text_source(self, reference: MessageReference) -> Message | StoredInput:
+        originals = {key: source for fact in self.facts
+                     for key, source in fact.original_sources()}
+        for fact in self.facts:
+            for message in fact.wire_sources():
+                if message.reference == reference:
+                    return message.task.original_text_source(message, originals)
+        raise RelationViolationError("Authored source is outside this captured read")
 
     def current_authored_lineages(self, owner: Thread, registry: RegistrySnapshot) -> tuple[tuple[Message, Message], ...]:
         """Resolve explicit original-reference lineage, never equal text or time.
@@ -283,7 +285,7 @@ class RetainedTaskFacts:
         """Classify the same original facts at the existing frozen source cut."""
         selected = self.current_authored_sources(owner, registry)
         for message in selected:
-            self.original_text_source(message)
+            self.original_text_source(message.reference)
         current = frozenset(message.reference for message in selected)
         return RetainedTaskFacts(tuple(fact.for_tasks(current).for_owner(owner, registry)
                                        for fact in self.facts))

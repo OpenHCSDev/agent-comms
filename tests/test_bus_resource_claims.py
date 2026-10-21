@@ -106,6 +106,13 @@ def test_existing_owner_allocates_nothing_and_never_invokes_builder(claims: Clai
     with claims.bus.reading() as reader:
         assert reader.resource_owner(resource) == owner
         assert dict(reader.claim_projection()) == {resource: owner}
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.retained_task_facts import ClaimTaskFact
+
+    record = claims.bus.lookup(owner.seq)
+    fact, = record.retained_task_facts()
+    assert fact.source.claim_transition == record.require_claim_transition()
+    assert FieldCodec.decode(ClaimTaskFact, FieldCodec.encode(fact)) == fact
     assert claims.counts() == before
     assert Bus.source_paths(claims.bus.path.parent)[0].stat().st_mtime_ns == signal
 

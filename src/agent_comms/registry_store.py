@@ -22,7 +22,7 @@ from .native_input_owner import RegistryOwner
 from .private_path import FileObservation, FileRevision, MissingFile
 from .private_registry_guard import PrivateRegistryGuard, PublicRegistry, RegistryPrivacy
 from .registration_change import NativeSourcePublication
-from .registry_document import RegistryDocument, RegistryEntry, RegistrySnapshot
+from .registry_document import HistoricalRootPurpose, RegistryDocument, RegistryEntry, RegistrySnapshot
 from .routing import TurnRouting
 from .store_files import SharedLock
 from .thread_identity import TurnIdentity
@@ -351,9 +351,18 @@ class RegistryStore(RegistryFile, LockedStore[RegistryDocument]):
     def editing(self) -> Iterator[RegistryEdit]:
         with self.locked():
             original = self.read_revision_unlocked()
+            original.document.purpose.require_write()
             yield RegistryEdit(self, original.document.copy(), original)
 
+    def mark_historical(self) -> None:
+        """Explicit archive creation/carry seals this declaration, idempotently."""
+        with self.locked():
+            original = self.read_revision_unlocked()
+            document = replace(original.document, purpose=HistoricalRootPurpose())
+            RegistryEdit(self, document, original).commit()
+
     def save_unlocked(self, document: RegistryDocument) -> None:
+        self.read_revision_unlocked().document.purpose.require_write()
         raw = self._encode(document)
         self._write_unlocked(json.dumps(raw, indent=2))
         # Still under the exclusive lock: the written file is this document.

@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Literal, Annotated
 
 
 from .child_process import NoProcess, ProcessIdentity
+from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import (
     FieldCodec,
@@ -236,16 +237,35 @@ class GenerationOf(ThreadSlice[GenerationCounter]):
         return GenerationCounter(value.counter, dict(value.generations))
 
 
-class WholeDocumentValue(ThreadSlice[int]):
+class WholeDocumentValue[Value](ThreadSlice[Value]):
     """A scalar shared by the whole document and every one-thread view."""
 
     @staticmethod
-    def cut(raw: int, canonical: str) -> int:
+    def cut(raw: Value, canonical: str) -> Value:
         return raw
 
     @classmethod
-    def copy(cls, value: int) -> int:
+    def copy(cls, value: Value) -> Value:
         return value
+
+
+class RootPurpose(DeclaredFamily, affix="RootPurpose"):
+    """The registry's durable permission to mutate this root."""
+
+    @abstractmethod
+    def require_write(self) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class WorkingRootPurpose(RootPurpose):
+    def require_write(self) -> None:
+        pass
+
+
+@dataclass(frozen=True, slots=True)
+class HistoricalRootPurpose(RootPurpose):
+    def require_write(self) -> None:
+        raise RelationViolationError("Historical roots are read-only")
 
 
 @ThreadSlice.required
@@ -254,6 +274,9 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
     version: Annotated[
         Literal[1], SlicePolicy(WholeDocumentValue), WireRequired()
     ] = 1
+    purpose: Annotated[RootPurpose, SlicePolicy(WholeDocumentValue)] = field(
+        default_factory=WorkingRootPurpose
+    )
     threads: Annotated[dict[str, Thread], SlicePolicy(OwnRow)] = field(
         default_factory=dict
     )
@@ -702,6 +725,7 @@ class RegistryEntry:
 
 @dataclass(frozen=True, slots=True)
 class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryProvenance):
+    purpose: RootPurpose
     threads: Mapping[str, Thread]
     statuses: Mapping[str, ThreadStatus]
     last_seen: Mapping[str, float]
@@ -745,6 +769,7 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
                 raise RelationViolationError("Registry creation identities collide.")
             indexed[lookup] = thread
         return cls(
+            purpose=document.purpose,
             threads=MappingProxyType(dict(document.threads)),
             statuses=MappingProxyType(dict(document.statuses)),
             last_seen=MappingProxyType(dict(document.last_seen)),
