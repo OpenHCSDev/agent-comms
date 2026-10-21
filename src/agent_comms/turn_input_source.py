@@ -11,7 +11,7 @@ from .agent_backend import WhenBusy
 from .channel_input_batch import InputBatch, SingleInputBatch
 from .messages import Message
 from .started_input import StartedInput
-from .turn_goal_permission import GoalPermission, TurnGoalPermission
+from agent_comms.turn_goal_permission import GoalPermission, TurnGoalPermission
 
 if TYPE_CHECKING:
     from .comms import Comms

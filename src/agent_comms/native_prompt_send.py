@@ -20,7 +20,7 @@ from contextlib import AbstractContextManager, ExitStack
 from typing import TYPE_CHECKING
 from .diagnostics import PublicationMeasurements
 from .coordination_errors import CoordinationError
-from .errors import RelationViolationError
+from agent_comms.errors import RelationViolationError
 
 if TYPE_CHECKING:
     from .tracked_turn import TrackedTurnSession

@@ -14,7 +14,7 @@ from .coordination_session import NativeBoundary
 from .coordinator import Coordination
 from .envelope_claim_transitions import NativeClaim
 from .input_attempt import InputAlreadyCleared
-from .ordinary_turn_rules import (
+from agent_comms.ordinary_turn_rules import (
     AcceptedInputCheck,
     InputKeysCheck,
     MissingAcceptedInputCheck,
@@ -27,7 +27,7 @@ from .ordinary_turn_rules import (
 )
 from .reservation_rules import ReservationRule, ReservationViolationError
 from .routing import TurnRouting
-from .send_outcome import AuthorityChangedSend, DeferredSend, GrantedSend, RefusedSend, SendOutcome
+from agent_comms.send_outcome import AuthorityChangedSend, DeferredSend, GrantedSend, RefusedSend, SendOutcome
 from .thread_identity import TurnId
 from .turn_input_source import (
     OriginalTurnInput,
