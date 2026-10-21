@@ -130,7 +130,8 @@ class RunningSource(ABC):
     @staticmethod
     def current() -> RunningSource:
         root = Path(__file__).resolve().parents[1]
-        return (InstalledSource if root.is_relative_to(Path(sys.prefix).resolve()) else CheckoutSource)(root)
+        installed = root.is_relative_to(Path(sys.prefix).resolve())
+        return (InstalledSource if installed else CheckoutSource)(root)
 
     @abstractmethod
     def environment(self, environment: Mapping[str, str]) -> dict[str, str]: ...
@@ -147,7 +148,8 @@ class CheckoutSource(RunningSource):
     """A source checkout: its root goes first on the child's import path."""
 
     def environment(self, environment: Mapping[str, str]) -> dict[str, str]:
-        return RestartEnvironment.inherit(environment).with_import_root(self.root).apply_runtime(environment)
+        inherited = RestartEnvironment.inherit(environment).with_import_root(self.root)
+        return inherited.apply_runtime(environment)
 
 
 class RestoredRuntime(LaunchRuntime):
