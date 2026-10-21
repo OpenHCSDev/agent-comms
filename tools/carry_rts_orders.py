@@ -215,7 +215,7 @@ def carry(rts: Path, root: Path, apply: bool, retire: bool) -> None:
                     if strike.task == pid
                 )
                 todo = replace(todo, strikes=history, revision=todo.revision + 1)
-                if not todo.sent_in(row.msg):
+                if row.msg != todo.messages[-1].message_id:
                     todo = todos.OrderMessage(todo.revision, actor, row.msg).apply(todo)
                 todo.upsert(db)
             for index, line in enumerate(source[rts / "hunts.jsonl"].splitlines()):
