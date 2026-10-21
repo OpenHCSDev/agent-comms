@@ -1796,11 +1796,10 @@ class _RecordDecoder(ValueDecoder[Any]):
         missing = dict.fromkeys(
             key for key in (*plan.required_keys, *plan.init_required_keys) if key not in data
         )
-        schemas: dict[str, object] = {}
-        if missing:
-            plan.schema_fields(schemas, [])
+        # A data refusal needs the declared keys, not an expansion of every
+        # reachable schema. Recursive records are valid decode declarations.
         problems = {key: f"Missing required fields for {self.target.__name__}: {key}; "
-                         f"fix: supply {json.dumps(schemas[key])}" for key in missing}
+                         "fix: supply this declared field" for key in missing}
         problems.update({key: "Unknown fields; fix: remove this field"
                          for key in data.keys() - plan.accepted_keys})
         return problems

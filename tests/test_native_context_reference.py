@@ -1,11 +1,15 @@
 """Original nullable SQL groups cannot mint a partial recorded native reference."""
 
-from dataclasses import replace
+from dataclasses import fields, replace
+from pathlib import Path
 import sqlite3
 
 import pytest
 
-from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
+from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution, RecordedNativePosition
+from agent_comms.historical_native_inputs import TriageHistoricalNativeInput, FullHistoricalNativeInput
+from agent_comms.native_pi import NativeContextProof
+from agent_comms.selected_triage import FullSelectedTriage
 from agent_comms.selected_triage import IgnoreSelectedTriage
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.native_input_record import NativeInputReference, UnrecordedNativeInputReference
@@ -31,6 +35,15 @@ def reservation():
     )
 
 
+@pytest.fixture
+def recorded():
+    return replace(
+        reservation(), sent_owner_claimed_generation=RecordedNativeClaim(2),
+        session_id="original-session", session_file="/original/session.jsonl",
+        session_entry_id="original-entry", session_entry_start=RecordedNativePosition(128),
+        request_generation=1, llm_context_digest="f" * 64,
+        committed_at_ms=1_791_964_800_001,
+    )
 
 
 @pytest.mark.parametrize("changes", [
@@ -43,42 +56,24 @@ def test_partial_original_cursor_never_becomes_unrecorded_or_complete(changes):
         _ = replace(cursor(), **changes).reference
 
 
-def test_original_unrecorded_context_and_reserved_input_remain_distinct_from_corruption():
+def test_original_unrecorded_context_and_reserved_input_remain_distinct_from_corruption(recorded):
     empty = replace(cursor(), covered_seq=0, injected_seq=0, input_id=None,
                     stage=None, session_id=None, request_generation=None)
     assert empty.reference == UnrecordedNativeInputReference()
     assert reservation().reference == UnrecordedNativeInputReference()
     with pytest.raises(IdentityConflict):
         _ = replace(reservation(), request_generation=1).reference
-    recorded = replace(reservation(), sent_owner_claimed_generation=RecordedNativeClaim(2),
-                       session_id="original-session", session_file="/original/session.jsonl",
-                       session_entry_id="original-entry", request_generation=1,
-                       llm_context_digest="f" * 64, committed_at_ms=1_791_964_800_001)
     assert recorded.reference == NativeInputReference(
         recorded.input_id, type(recorded.execution), recorded.session_id, 1
     )
     with pytest.raises(IdentityConflict):
         _ = replace(recorded, session_file=None).reference
-    for name in ("session_entry_id", "llm_context_digest", "committed_at_ms"):
+    for name in ("session_entry_id", "session_entry_start", "llm_context_digest", "committed_at_ms"):
         with pytest.raises(IdentityConflict):
             _ = replace(recorded, **{name: None}).reference
 
 
-def test_original_native_sql_acquires_required_triage_or_full_recorded_proof():
-    from dataclasses import fields
-    from pathlib import Path
-    from agent_comms.historical_native_inputs import (
-        TriageHistoricalNativeInput, FullHistoricalNativeInput,
-    )
-    from agent_comms.native_pi import NativeContextProof
-    from agent_comms.selected_triage import FullSelectedTriage
-
-    recorded = replace(
-        reservation(), sent_owner_claimed_generation=RecordedNativeClaim(2),
-        session_id="original-session", session_file="/original/session.jsonl",
-        session_entry_id="original-entry", request_generation=1, llm_context_digest="f" * 64,
-        committed_at_ms=1_791_964_800_001,
-    )
+def test_original_native_sql_acquires_required_triage_or_full_recorded_proof(recorded):
     source = dict(
         wire_root_id="a" * 32, source_seq=1, source_message_id="original-message",
         assignment_id="d" * 32, input_id=recorded.input_id,
@@ -86,7 +81,7 @@ def test_original_native_sql_acquires_required_triage_or_full_recorded_proof():
         owner_generation=recorded.owner_generation,
         context=NativeContextProof(recorded.input_id, recorded.session_id,
             recorded.session_entry_id, 1, "f" * 64, 1_791_964_800_001,
-            Path(recorded.session_file)),
+            Path(recorded.session_file), session_entry_start=recorded.session_entry_start.offset),
         native_reference=recorded.reference,
         expected_prompt_equality_established=True,
     )

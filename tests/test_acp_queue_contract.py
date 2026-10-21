@@ -166,7 +166,8 @@ def test_attachment_routing_rename_preserves_exact_executor_fences():
         assert scope.relation(replace(scope, claim_scope=replace(original, claimed_generation=8))).newer
         assert scope.relation(replace(scope, claim_scope=replace(original, claimed_generation=6))).older
     assert scopes[1].relation(replace(scopes[1], wire_root_id="b" * 32)).foreign
-    assert original != renamed  # Routing identity equality is deliberately unchanged.
+    assert original == renamed  # Birth owns identity; a name is only its route.
+    assert original.incarnation.name != renamed.incarnation.name
 
 
 async def test_ending_a_drained_session_leaves_no_state_for_it(tmp_path):
