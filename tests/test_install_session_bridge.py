@@ -1,5 +1,7 @@
 """Real session endpoint retirement; no live home, provider, or package mutation."""
 
+from agent_comms.bus import Bus
+
 import json
 import os
 import select
@@ -31,7 +33,7 @@ SERVE_FROM_SOURCE = (sys.executable, '-c', 'from agent_comms.cli_bridges.claude 
 @contextmanager
 def session_bridge(tmp_path, home, program=SERVE_FROM_SOURCE):
     comms = Comms(tmp_path / 'bus')
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     comms.registry.declare(comms.registry.new_thread(
         'bridge-copy', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
     transcript = tmp_path / 'copied-session.jsonl'

@@ -647,6 +647,14 @@ class TableSchema(ABC):
             raise cls.schema_error(f"{cls.__name__} differs from its declaration")
 
     @classmethod
+    def install_schema(cls, db: sqlite3.Connection) -> None:
+        """Install this declared schema once, rechecking under its writer transaction."""
+        if not cls.stored_schema(db):
+            with SQLiteFile.write_transaction(db):
+                if not cls.stored_schema(db):
+                    cls.create_schema(db)
+
+    @classmethod
     def create_schema(cls, db: sqlite3.Connection) -> None:
         for row in cls.schema_rows():
             row.create(db)
@@ -719,7 +727,7 @@ class AllObjectsTables(TableSchema):
 
 
 class DerivedTables(TableSchema):
-    """Rows derived from another source: a schema that differs is dropped and recreated empty."""
+    """Rows derived from another source: their owner can recreate schema and contents."""
 
     __slots__ = ()
 
@@ -1281,10 +1289,7 @@ class TypedStore(WalStore, TableSchema):
     def _open_writer(self, *, check_same_thread: bool = True) -> Iterator[sqlite3.Connection]:
         """Keep this store's schema policy inside its serialized attachment."""
         with super()._open_writer(check_same_thread=check_same_thread) as connection:
-            if not self.stored_schema(connection):
-                with self.write_transaction(connection):
-                    if not self.stored_schema(connection):
-                        self.create_schema(connection)
+            self.install_schema(connection)
             self.reconcile_schema(connection)
             yield connection
 

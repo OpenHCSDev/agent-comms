@@ -1,5 +1,7 @@
 """Actual atomic marker publication versus independent registry readers."""
 
+from agent_comms.bus import Bus
+
 import multiprocessing as mp
 import os
 import time
@@ -28,7 +30,7 @@ def _read_registry(root, ready, stop, result):
 
 def test_concurrent_canonical_marker_publication_keeps_registry_readable(tmp_path):
     comms = Comms(tmp_path / "wire")
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path)))
     context = mp.get_context("spawn")
     ready, result, stop = context.Queue(), context.Queue(), context.Event()
@@ -91,7 +93,7 @@ def _redirect(path):
 @pytest.mark.parametrize("damage", [_public_mode, _extra_link, _redirect], ids=lambda f: f.__name__)
 def test_marker_ownership_failures_still_block_real_read_and_send(tmp_path, damage):
     comms = Comms(tmp_path / "wire")
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path)))
     comms.registry.declare(comms.registry.new_thread('peer', frozenset(), str(tmp_path)))
     bus = comms.bus.log.path.read_bytes()

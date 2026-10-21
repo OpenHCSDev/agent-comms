@@ -1,4 +1,6 @@
 """Real send entrypoints wait through a private bus hold and publish once."""
+
+from agent_comms.bus import Bus
 import asyncio
 import os
 import sys
@@ -16,7 +18,7 @@ from agent_comms.tools import invoke_tool
 @pytest.fixture
 def held_bus(tmp_path):
     comms = Comms(tmp_path)
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     for name in ('sender', 'recipient'):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
     assert comms.bus.inbox('recipient') == []

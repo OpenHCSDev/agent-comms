@@ -4,6 +4,8 @@ Exercises the agent the way real clients (Toad, Zed) do: through
 ``acp.run_agent`` over real stdio pipes, plus direct handler-level tests.
 """
 
+from agent_comms.bus import Bus
+
 import asyncio
 import json
 import os
@@ -302,7 +304,7 @@ class TestWireProtocol:
         (tmp_path / "proj").mkdir()
         root = tmp_path / "wire"
         comms = wire(root)
-        comms.messaging.initialize_private_initial_protocol()
+        Bus.install(Bus.path_in(comms.root))
         env = dict(
             __import__("os").environ,
             AGENT_COMMS_ROOT=str(root),

@@ -1,5 +1,7 @@
 """Original authored ingress and neutral historical evidence share one input store."""
 
+from agent_comms.bus import Bus
+
 from agent_comms.messages import NoticeRole
 from contextlib import ExitStack
 
@@ -47,7 +49,7 @@ async def test_queue_observation_owns_capture_and_rejects_malformed_available_sc
         LiveQueueScope, NoQueueScope, UnavailableQueueProjection,
     )
     comms, agent = live_owner
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     scope = await agent.inputs.queue_binding('beta')
     assert scope == LiveQueueScope(
         'beta', comms.registry.snapshot().claimed_identity('beta'),
@@ -71,7 +73,7 @@ async def test_queue_observation_owns_capture_and_rejects_malformed_available_sc
 
 async def test_original_human_followup_survives_forwarding_reservation_and_native_disposition(live_owner):
     comms, agent = live_owner
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     agent.on_connect(Client())
     comms.agents.begin_turn("beta", "held-native", "Existing original")
     agent.inputs.state('beta').open_inbox()
@@ -112,7 +114,7 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
 
 async def test_foreign_or_changed_origin_refused_before_any_reservation(live_owner):
     comms, agent = live_owner
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     origin = capture(comms)
     invalid = (replace(origin, root_id="f" * 32),
                replace(origin, author=replace(origin.author, created_at=origin.author.created_at + 1)),
@@ -134,7 +136,7 @@ async def test_foreign_or_changed_origin_refused_before_any_reservation(live_own
 
 async def test_historical_unknown_author_stays_neutral_and_human_scope_invalidates(live_owner):
     comms, agent = live_owner
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     origin = capture(comms)
     neutral = ReservedInput("old", None, "beta", origin.claim_scope.claimed_generation,
                             "beta", "Exact old user-looking text")
@@ -159,7 +161,7 @@ async def test_historical_unknown_author_stays_neutral_and_human_scope_invalidat
 @pytest.mark.parametrize("state", [ActiveGoal(), PausedGoal(), CompletedGoal()])
 async def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope(live_owner, state):
     comms, agent = live_owner
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     absent = capture(comms)
     assert absent.goal == AbsentGoalCheckpoint()
     assert FieldCodec.encode(absent)["goal"] == {"kind": "absent"}
@@ -213,7 +215,7 @@ async def test_direct_human_input_pin_shares_original_source_lineage_without_rep
     from agent_comms.turn_context import WireProvenance
 
     comms, agent = live_owner
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     origin = capture(comms)
     exact = 'Keep the original λ /source.\nNever replay UNKNOWN.'
     async with QueuedInput.reserve(

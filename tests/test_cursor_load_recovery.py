@@ -1,5 +1,7 @@
 """A contended trusted load must not suppress its later real cursor recovery."""
 
+from agent_comms.bus import Bus
+
 from bus_history import read_history
 import asyncio
 import os
@@ -21,7 +23,7 @@ async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
     comms = Comms(tmp_path / "wire")
     owner = comms.registry.new_thread('reader', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(owner)
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.participants.register(
             RecordedThreadIncarnation("fixture", owner.created_at).lookup, owner.name, owner.name, committed=True

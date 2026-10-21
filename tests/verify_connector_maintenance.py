@@ -5,6 +5,8 @@ Only private scratch and the loopback server are changed; no installed service i
 """
 from __future__ import annotations
 
+from agent_comms.bus import Bus
+
 import argparse
 import json
 import os
@@ -33,7 +35,7 @@ def prove(scratch: Path) -> None:
         original = Comms(base / "original")
         for name in ("claude-ai", "worker"):
             original.registry.declare(original.registry.new_thread(name, frozenset(), str(base)))
-        original.messaging.initialize_private_initial_protocol()
+        Bus.install(Bus.path_in(original.root))
         original.messaging.send("worker", "claude-ai", "Ready for your message")
         for worker in threading.enumerate():
             if worker.name == "agent-comms-candidate-maintenance":

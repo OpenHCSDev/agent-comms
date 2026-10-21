@@ -1,5 +1,7 @@
 """Goal settlement reuses the real SQLite grants and nominal state hierarchy."""
 
+from agent_comms.bus import Bus
+
 
 import pytest
 
@@ -17,7 +19,7 @@ from agent_comms.turn_goal_account import OriginGoalSettlement, VerifiedGoalSett
 @pytest.fixture
 def comms(comms):
     """Turn acquisition launches an owner on the declared private protocol."""
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     return comms
 
 

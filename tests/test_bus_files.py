@@ -1,10 +1,13 @@
 """The real bus publishes only files declared by their existing state owners."""
 
+from agent_comms.bus import Bus
+
 from pathlib import Path
 import sqlite3
 
 import pytest
 
+from agent_comms.bus import Bus
 from agent_comms.bus_page_index import BusPageIndex
 from agent_comms.installer.backup import bus_files
 from agent_comms.typed_table import DerivedStore
@@ -21,9 +24,14 @@ from agent_comms.todos import GoalRef, TodoStore
 from test_todos import order
 
 
-def test_every_bus_file_is_a_declared_root_file(tmp_path: Path, source_repository) -> None:
-    comms = Comms(tmp_path / "bus")
-    comms.messaging.initialize_private_initial_protocol()
+@pytest.fixture
+def comms(tmp_path: Path) -> Comms:
+    root = tmp_path / "bus"
+    Bus.install(Bus.path_in(root))
+    return Comms(root)
+
+
+def test_every_bus_file_is_a_declared_root_file(tmp_path: Path, source_repository, comms: Comms) -> None:
     for name in ("owner", "peer"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
     sent = comms.messaging.send("peer", "owner", "Declare the bus files").message
@@ -59,9 +67,7 @@ def test_every_bus_file_is_a_declared_root_file(tmp_path: Path, source_repositor
     assert not durable & runtime
 
 
-def test_a_derived_index_written_by_a_running_owner_is_never_carried(tmp_path: Path) -> None:
-    comms = Comms(tmp_path / "bus")
-    comms.messaging.initialize_private_initial_protocol()
+def test_a_derived_index_written_by_a_running_owner_is_never_carried(tmp_path: Path, comms: Comms) -> None:
     for name in ("owner", "peer"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
     comms.messaging.send("peer", "owner", "Index this message")

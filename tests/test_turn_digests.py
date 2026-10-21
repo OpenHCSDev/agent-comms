@@ -28,7 +28,7 @@ from agent_comms.watched import FileSource
 
 def prepared(tmp_path):
     comms = wire(tmp_path)
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     return comms
 
 
