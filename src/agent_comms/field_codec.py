@@ -712,14 +712,7 @@ class InlineFamilyPlan(InlineFieldPlan):
             for entry in FieldCodec._record_plan(member).fields))))
 
 
-@dataclass(frozen=True, slots=True)
-class DecodedValue[T]:
-    """An external normalizer has already resolved this declared value."""
-
-    value: T
-
-
-type ExternalNormalizer = Callable[[object, Mapping[str, object]], object]
+type ExternalDecoder = Callable[[object, Mapping[str, object]], object]
 
 
 class ExternalField(ABC):
@@ -727,7 +720,7 @@ class ExternalField(ABC):
 
     @classmethod
     @abstractmethod
-    def normalize_external(cls, value: object, record: Mapping[str, object]) -> object: ...
+    def decode_external(cls, value: object, record: Mapping[str, object]) -> object: ...
 
 
 class ExternalNullMember:
@@ -738,26 +731,26 @@ class ExternalNull(ExternalField, MroDispatch):
     """A family's declared null member owns nullable external ingress."""
 
     @classmethod
-    def normalize_external(cls, value: object, record: Mapping[str, object]) -> object:
+    def decode_external(cls, value: object, record: Mapping[str, object]) -> object:
         handler = getattr(cls, next(cls.handler_names_for(type(value))))
         return handler(value, record)
 
     @handles(type(None))
     @classmethod
-    def normalize_null(cls, value: object, record: Mapping[str, object]) -> object:
+    def decode_null(cls, value: object, record: Mapping[str, object]) -> object:
         family = cast(type[DeclaredFamily], cls)
         member, = (member for member in family._member_declarations()
                    if issubclass(member, ExternalNullMember))
-        return DecodedValue(member())
+        return member()
 
     @handles(object)
     @classmethod
-    def normalize_value(cls, value: object, record: Mapping[str, object]) -> object:
-        return super().normalize_external(value, record)
+    def decode_value(cls, value: object, record: Mapping[str, object]) -> object:
+        return super().decode_external(value, record)
 
     @classmethod
     def from_wire(cls, value: object) -> Self:
-        return FieldCodec.decode(cls, cls.normalize_external(value, {}))
+        return FieldCodec.decode_external(cls, value, {})
 
 
 class DefaultExternalName:
@@ -773,8 +766,8 @@ class ExternalName(ExternalField, DeclaredFamily):
         )
 
     @classmethod
-    def normalize_external(cls, value: object, record: Mapping[str, object]) -> object:
-        return DecodedValue(cls.from_external(value))
+    def decode_external(cls, value: object, record: Mapping[str, object]) -> object:
+        return cls.from_external(value)
 
 
 class FieldRepresentation(MroDispatch, ABC):
@@ -929,9 +922,8 @@ class NullMember(ExternalField, AcceptsNull, WireValue):
     """One declared empty member owns the JSON null representation."""
 
     @classmethod
-    def normalize_external(cls, value: object, record: Mapping[str, object]) -> object:
-        # The null representation validates input; a record normalizer must not reshape it.
-        return value
+    def decode_external(cls, value: object, record: Mapping[str, object]) -> object:
+        return cls.from_wire(value)
 
     @classmethod
     def from_wire(cls, data: object) -> Self:
@@ -1252,20 +1244,24 @@ class FieldCodec(MroDispatch, Sealed):
     """
 
     @classmethod
-    def normalize_external(
-        cls, annotation: object, value: object, record: Mapping[str, object],
-    ) -> object:
-        return compile_decoder(annotation).normalize_external(value, record)
+    def decode_external[T](
+        cls, annotation: TypeForm[T], value: object, record: Mapping[str, object],
+    ) -> T:
+        return cast(T, compile_decoder(annotation).decode_external(value, record))
 
     @classmethod
-    def external_normalizers(cls, target: type) -> Iterator[ExternalNormalizer]:
+    def decode_resolved[T](cls, annotation: TypeForm[T], value: T) -> T:
+        return cast(T, compile_decoder(annotation).decode_resolved(value))
+
+    @classmethod
+    def external_decoders(cls, target: type) -> Iterator[ExternalDecoder]:
         for name in cls.handler_names_for(target):
             yield getattr(cls, name)(target)
 
     @handles(ExternalField)
     @classmethod
-    def external_normalizer(cls, target: type[ExternalField]) -> ExternalNormalizer:
-        return target.normalize_external
+    def external_decoder(cls, target: type[ExternalField]) -> ExternalDecoder:
+        return target.decode_external
 
     @staticmethod
     def _representation(annotation: object) -> tuple[object, type[FieldRepresentation] | None]:
@@ -1722,13 +1718,18 @@ class ValueDecoder[T](ABC):
     @abstractmethod
     def encode(self, value: T) -> object: ...
 
-    def normalize_external(self, data: object, record: Mapping[str, object]) -> object:
-        for normalize in self.external_normalizers(data):
-            return normalize(data, record)
-        return data
+    def decode_external(self, data: object, record: Mapping[str, object]) -> T:
+        for decode in self.external_decoders(data):
+            return self.decode_resolved(cast(T, decode(data, record)))
+        return self.decode_bound(data, record)
 
-    def external_normalizers(self, data: object) -> Iterable[ExternalNormalizer]:
+    def external_decoders(self, data: object) -> Iterable[ExternalDecoder]:
         return ()
+
+    def decode_resolved(self, value: T) -> T:
+        if not self.accepts_value(value):
+            raise MalformedRecord(f"Resolved value does not match {self.target}")
+        return value
 
     def accepts_value(self, value: object) -> bool:
         """Select an in-process union case using its compiled declaration."""
@@ -1745,13 +1746,6 @@ class ValueDecoder[T](ABC):
         return self.decode_bound(data, {})
 
     def decode_bound(self, data: object, context: Mapping[str, object]) -> T:
-        if isinstance(data, DecodedValue):
-            if not self.accepts_value(data.value):
-                raise MalformedRecord(f"Resolved value does not match {self.target}")
-            return cast(T, data.value)
-        return self.decode_raw_bound(data, context)
-
-    def decode_raw_bound(self, data: object, context: Mapping[str, object]) -> T:
         return self.decode(data)
 
     field_names: ClassVar[tuple[str, ...]] = ()
@@ -1795,14 +1789,14 @@ class ValueDecoder[T](ABC):
 class _ContextDecoder[T](ValueDecoder[T]):
     """A standalone decode starts with one empty binding context."""
 
-    def external_normalizers(self, data: object) -> Iterable[ExternalNormalizer]:
-        return FieldCodec.external_normalizers(cast(type, self.target))
+    def external_decoders(self, data: object) -> Iterable[ExternalDecoder]:
+        return FieldCodec.external_decoders(cast(type, self.target))
 
     def decode(self, data: object) -> T:
-        return self.decode_raw_bound(data, {})
+        return self.decode_bound(data, {})
 
     @abstractmethod
-    def decode_raw_bound(self, data: object, context: Mapping[str, object]) -> T: ...
+    def decode_bound(self, data: object, context: Mapping[str, object]) -> T: ...
 
 
 class _ChoiceDecoder[T](ValueDecoder[T]):
@@ -1895,8 +1889,8 @@ class _RepresentedDecoder(ValueDecoder[Any]):
     representation: type[FieldRepresentation]
     structural: ValueDecoder[object]
 
-    def external_normalizers(self, data: object) -> Iterable[ExternalNormalizer]:
-        return FieldCodec.external_normalizers(self.representation)
+    def external_decoders(self, data: object) -> Iterable[ExternalDecoder]:
+        return FieldCodec.external_decoders(self.representation)
 
     @property
     def uses_representation(self) -> bool:
@@ -1991,8 +1985,8 @@ class _TypeDecoder(_ScalarDecoder):
     ) -> ValueDecoder[object]:
         return cls(target, cast(type, args[0]))
 
-    def external_normalizers(self, data: object) -> Iterable[ExternalNormalizer]:
-        return FieldCodec.external_normalizers(self.bound)
+    def external_decoders(self, data: object) -> Iterable[ExternalDecoder]:
+        return FieldCodec.external_decoders(self.bound)
 
     def accepts_value(self, value: object) -> bool:
         return isinstance(value, type) and issubclass(value, self.bound)
@@ -2055,12 +2049,12 @@ class UnionDecoder[T](_ContextDecoder[T]):
         alternatives = tuple(compile_decoder(Annotated[item, representation]) for item in args)
         return cls(target, cast(tuple[ValueDecoder[T], ...], alternatives))
 
-    def normalize_external(self, data: object, record: Mapping[str, object]) -> object:
+    def decode_external(self, data: object, record: Mapping[str, object]) -> T:
         if any(alternative.accepts_external_value(data) for alternative in self.alternatives):
-            return data
-        return DecodedValue(self.decode_candidates(lambda alternative: alternative.decode_bound(
-            alternative.normalize_external(data, record), record,
-        )))
+            return self.decode_bound(data, record)
+        return self.decode_resolved(self.decode_candidates(
+            lambda alternative: alternative.decode_external(data, record),
+        ))
 
     @property
     def editor_annotation(self):
@@ -2078,7 +2072,7 @@ class UnionDecoder[T](_ContextDecoder[T]):
                 return alternative.encode(value)
         raise TypeError(f"Value does not match {self.target}")
 
-    def decode_raw_bound(self, data: object, context: Mapping[str, object]) -> T:
+    def decode_bound(self, data: object, context: Mapping[str, object]) -> T:
         return self.decode_candidates(lambda alternative: alternative.decode_bound(data, context))
 
     def decode_candidates(self, decode: Callable[[ValueDecoder[T]], T]) -> T:
@@ -2116,12 +2110,10 @@ class _ArrayDecoder(ValueDecoder[Any]):
     ) -> ValueDecoder[object]:
         return _ScalarDecoder(cls.container)
 
-    def external_normalizers(self, data: object) -> Iterable[ExternalNormalizer]:
-        return (self.normalize_items,) if isinstance(data, list) else ()
-
-    def normalize_items(self, data: object, record: Mapping[str, object]) -> object:
-        return [self.items[0].normalize_external(value, record)
-                for value in cast(list[object], data)]
+    def decode_external(self, data: object, record: Mapping[str, object]) -> object:
+        return self.decode_resolved(self.decode_items(
+            data, lambda plan, value: plan.decode_external(value, record),
+        ))
 
     def accepts_value(self, value: object) -> bool:
         return isinstance(value, self.container)
@@ -2130,15 +2122,18 @@ class _ArrayDecoder(ValueDecoder[Any]):
         return self.encode_items(value)
 
     def decode(self, data):
-        if not isinstance(data, list):
-            raise MalformedRecord("Expected a JSON array.")
-        return self.container(self.decode_items(data))
+        return self.decode_items(data, lambda plan, value: plan.decode_bound(value, {}))
 
     def encode_items(self, items: Iterable[object]) -> list[object]:
         return [self.items[0].encode(item) for item in items]
 
-    def decode_items(self, data):
-        return (self.items[0].decode_bound(value, {}) for value in data)
+    def decode_items(self, data: object, read: Callable[[ValueDecoder[object], object], object]):
+        if not isinstance(data, list):
+            raise MalformedRecord("Expected a JSON array.")
+        return self.container(read(plan, value) for plan, value in self.plan_items(data))
+
+    def plan_items(self, data: list[object]):
+        return ((self.items[0], value) for value in data)
 
 
 class _FrozenSetDecoder(_ArrayDecoder):
@@ -2172,18 +2167,12 @@ class _VariadicTupleDecoder(_TupleDecoder):
 
 
 class _FixedTupleDecoder(_TupleDecoder):
-    def normalize_items(self, data: object, record: Mapping[str, object]) -> object:
+    def plan_items(self, data: list[object]):
         with MalformedRecord.refusing("Tuple length does not match declaration"):
-            pairs = tuple(zip(self.items, cast(list[object], data), strict=True))
-        return [plan.normalize_external(value, record) for plan, value in pairs]
+            return tuple(zip(self.items, data, strict=True))
 
     def encode_items(self, items: Iterable[object]) -> list[object]:
         return [plan.encode(item) for plan, item in zip(self.items, items, strict=True)]
-
-    def decode_items(self, data):
-        if len(data) != len(self.items):
-            raise MalformedRecord("Tuple length does not match declaration.")
-        return (item.decode_bound(value, {}) for item, value in zip(self.items, data, strict=True))
 
 
 def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
@@ -2233,8 +2222,15 @@ class _DictDecoder(ValueDecoder[Any]):
         return isinstance(value, dict)
 
     def decode(self, data):
-        return {self.key.decode_bound(key, {}): self.value.decode_bound(value, {})
-                for key, value in self.entries(data)}
+        return self.decode_entries(data, lambda plan, value: plan.decode_bound(value, {}))
+
+    def decode_external(self, data: object, record: Mapping[str, object]) -> object:
+        return self.decode_resolved(self.decode_entries(
+            data, lambda plan, value: plan.decode_external(value, record),
+        ))
+
+    def decode_entries(self, data: object, read: Callable[[ValueDecoder[object], object], object]):
+        return {read(self.key, key): read(self.value, value) for key, value in self.entries(data)}
 
     def decode_keys(self, data, keys, selections):
         encoded = tuple(FieldCodec.encode(key) for key in keys)
@@ -2299,7 +2295,7 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
             key: value for key, value in data.items() if key != tag
         }
 
-    def decode_raw_bound(self, data: object, context: Mapping[str, object]) -> Member:
+    def decode_bound(self, data: object, context: Mapping[str, object]) -> Member:
         member, payload = self.member(data)
         return cast(Member, _member_decoder(member).decode_bound(payload, context))
 
@@ -2355,7 +2351,7 @@ class _RecordDecoder(_ContextDecoder[Any]):
     def field_names(self) -> tuple[str, ...]:
         return tuple(entry.name for entry in FieldCodec._record_plan(self.target).bindings)
 
-    def decode_raw_bound(self, data: object, context: Mapping[str, object]) -> Any:
+    def decode_bound(self, data: object, context: Mapping[str, object]) -> Any:
         return self.decode_selected(data, {}, fields=self.field_names, context=context)
 
     def decode_selected(self, data, selections, *, fields: tuple[str, ...], context={},

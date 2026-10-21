@@ -50,8 +50,8 @@ class TotalCountWire(PiCountWire, ExternalField):
 
     @classmethod
     @boundary_decoder
-    def normalize_external(cls, value: object, record: Mapping[str, object]) -> object:
-        return value if type(value) is int else None
+    def decode_external(cls, value: object, record: Mapping[str, object]) -> object:
+        return cls.decode(value) if type(value) is int else UnreportedCount()
 
 
 class NonnegativeCountWire(PiCountWire):

@@ -95,7 +95,7 @@ def test_opaque_retains_the_record_while_known_content_projects_declared_fields(
     assert UnknownContent in PiContent.members_with(Opaque)
     assert TextContent not in PiContent.members_with(Opaque)
     original = {"type": "future_content", "nested": {"future": [1, True]}, "text": "extension"}
-    assert UnknownContent.normalize_wire(original)["payload"] is original
+    assert UnknownContent.from_wire(original).payload == original
     unknown = PiContent.from_wire(original)
     assert unknown.payload == original
     assert unknown.to_wire() == original
@@ -208,7 +208,7 @@ def test_external_fields_use_their_declared_type_not_their_parent_or_field_name(
 @pytest.mark.parametrize("data", [[{"role": "user"}], [{"role": "user"}, 1, 2]])
 def test_external_fixed_tuples_refuse_wrong_lengths_at_the_codec_boundary(data):
     with pytest.raises(MalformedRecord):
-        FieldCodec.normalize_external(tuple[PiMessage, int], data, {})
+        FieldCodec.decode_external(tuple[PiMessage, int], data, {})
 
 
 @pytest.mark.parametrize("family, spelling", [(PiStopReason, "stop"), (CompactionReason, "overflow")])
@@ -280,8 +280,10 @@ def test_external_null_members_and_nullable_names_use_their_declarations():
     assert NullableName.from_wire({"ending": None}).ending is None
     known = PiStopReason.member_named("stop")
     assert NullableName.from_wire({"ending": "stop"}).ending is known
-    resolved = FieldCodec.normalize_external(type[PiStopReason], "stop", {})
-    assert FieldCodec.decode(type[PiStopReason], resolved) is known
+    resolved = FieldCodec.decode_external(type[PiStopReason], "stop", {})
+    assert FieldCodec.decode_resolved(type[PiStopReason], resolved) is known
+    with pytest.raises(MalformedRecord):
+        FieldCodec.decode_resolved(type[PiStopReason], StateData)
     with pytest.raises(MalformedRecord):
         FieldCodec.decode(type[PiStopReason], known)
 
@@ -296,9 +298,9 @@ def test_response_command_owns_data_normalization_without_redecoding_its_identit
         response_payload = StateData
 
         @classmethod
-        def normalize_response_data(cls, value):
+        def decode_response_data(cls, value):
             seen.append(value)
-            return super().normalize_response_data(value)
+            return super().decode_response_data(value)
 
     payload = {"model": None}
     response = Response.from_wire({
