@@ -11,13 +11,17 @@ import pytest
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.change_report import FileLine
 from agent_comms.comms import Comms
+from agent_comms.coordination_database import CoordinationStore
+from agent_comms.errors import RelationViolationError
+from agent_comms.installer.carry import CarryChain, CarryLedger
+from agent_comms.locked_store import SQLiteFile
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.standing import (
     Blocked, Detached, HolderCannotRun, UnitAskUnanswered, UnownedWheelSpin,
 )
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.goal_actions import BlockedGoalAction, CreateProblemGoalAction, SetGoalAction
-from agent_comms.goal_attempts import AttemptRecord
+from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore, GoalWorkDecision
 from agent_comms.goal_attempt_phase import ResolvedAttempt
 from agent_comms.goal_generation import ReadyGeneration
 from agent_comms.goal_states import ActiveGoal
@@ -35,6 +39,7 @@ from agent_comms.installer.backup import StoreBackup
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.todos import PendingProblemOrder, TodoConflict
 from agent_comms.thread_identity import CoreWatcherIncarnation
+from cutover.carry_goal_work_decision import GoalWorkDecisions, RETIRED_TABLE
 
 
 @pytest.fixture
@@ -188,6 +193,61 @@ def test_detached_and_whole_family_scan_still_find_nonreceiving_holders(held_bus
     assert blocked in family
     broken = StandingRule.broken(held_bus, "lead")
     assert all(rule in broken for rule in family)
+
+
+def legacy_decision_table(comms):
+    store = comms.goals.open_goal_store()
+    goal = comms.registry.require("worker").goal.require()
+    generation = store.require_generation(goal.id)
+    with closing(CoordinationStore.writer(store.path)) as db:
+        with SQLiteFile.write_transaction(db):
+            GoalWorkDecision(goal.id, "recorded-decision", generation.number).claim(db)
+            db.execute(f'ALTER TABLE "{GoalWorkDecision.declared_name}" RENAME TO "{RETIRED_TABLE}"')
+    return store.path
+
+
+def test_cutover_renames_copied_ledger_once_and_preserves_rows(held_bus, comms):
+    path = legacy_decision_table(held_bus)
+    original = comms.goals.open_goal_store().path.read_bytes()
+    with closing(CoordinationStore.read_snapshot(path)) as db:
+        before = tuple(db.execute(f'SELECT * FROM "{RETIRED_TABLE}"'))
+    assert GoalWorkDecisions.carry(held_bus.root, apply=False).changed == 1
+    carried = GoalWorkDecisions.carry(held_bus.root, apply=True)
+    assert carried.changed == 1
+    assert carried.rewritten == (str(path.relative_to(held_bus.root)),)
+    assert GoalWorkDecisions.carry(held_bus.root, apply=True).changed == 0
+    GoalAttemptStore(path.parent)  # the installed reader accepts the carried schema
+    with closing(CoordinationStore.read_snapshot(path)) as db:
+        assert tuple(db.execute(f'SELECT * FROM "{GoalWorkDecision.declared_name}"')) == before
+    assert comms.goals.open_goal_store().path.read_bytes() == original
+    assert held_bus.goals.open_goal_store().require_generation(
+        held_bus.registry.require("worker").goal.require().id,
+    ).number == 1
+    assert path in GoalWorkDecisions.backup_files(held_bus.root)
+
+
+def test_cutover_refuses_two_tables_without_choosing_rows(held_bus):
+    path = legacy_decision_table(held_bus)
+    with closing(CoordinationStore.writer(path)) as db:
+        GoalWorkDecision.create(db)
+        db.commit()
+    before = path.read_bytes()
+    with pytest.raises(RelationViolationError):
+        GoalWorkDecisions.carry(held_bus.root, apply=True)
+    assert path.read_bytes() == before
+
+
+def test_install_discovers_and_records_decision_cutover_once(held_bus):
+    from pathlib import Path
+
+    chain = CarryChain.at(Path(__file__).resolve().parents[1])
+    assert GoalWorkDecisions in chain.steps
+    ledger = CarryLedger(held_bus.root)
+    first = ledger.apply(GoalWorkDecisions.name(), lambda: GoalWorkDecisions.carry(held_bus.root, apply=True))
+    assert first.changed == 0  # this bus was created with the new declaration
+    second = ledger.apply(GoalWorkDecisions.name(), lambda: GoalWorkDecisions.carry(held_bus.root, apply=True))
+    assert second.changed == 0 and second.rewritten == ()
+    assert GoalWorkDecisions not in chain.pending(ledger.applied())
 
 
 def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus):

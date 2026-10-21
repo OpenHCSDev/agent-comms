@@ -408,8 +408,8 @@ class NoAttempt(MissingAttempt):
 
 
 @dataclass(frozen=True)
-class GoalWorkDecision(GoalLedgerTable, TypedTable, declared_name="goal_human_decision"):
-    """Explicit new-work authority; the persisted SQL identity stays unchanged."""
+class GoalWorkDecision(GoalLedgerTable, TypedTable):
+    """Explicit new-work authority, named by this declaration."""
     goal_id: Annotated[str, Column(primary_key=True, references=(Generation, "goal_id"))]
     decision_id: Annotated[str, Column(primary_key=True)]
     generation: int
@@ -777,8 +777,13 @@ class GoalAttemptStore(DurableFile, SQLiteFile):
 
     def _connect(self) -> sqlite3.Connection:
         self._require_root()
+        return self.database(self.path)
+
+    @classmethod
+    def database(cls, path: Path) -> sqlite3.Connection:
+        """Open this ledger's database, including a retained format at its carry boundary."""
         try:
-            conn = CoordinationStore.writer(self.path, isolation_level=None)
+            conn = CoordinationStore.writer(path, isolation_level=None)
             conn.execute("PRAGMA foreign_keys=ON")
             conn.execute("PRAGMA synchronous=EXTRA")
             modes = SQLiteJournalMode.read(conn.execute("PRAGMA journal_mode"))
