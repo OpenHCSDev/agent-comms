@@ -23,11 +23,11 @@ from agent_comms.bus_tables import (
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import MessageNotificationError, RelationViolationError
 from agent_comms.field_codec import FieldCodec
-from agent_comms.locked_store import DurableFile, RegistryFile
+from agent_comms.locked_store import DurableFile, RegistryFile, StoreNotificationError
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.messages import BusRecord, ClaimMessage, Message
 from agent_comms.message_reference import MessageReference
-from agent_comms.typed_table import SQLiteTableName, StoreNotificationError, StoreWriter
+from agent_comms.typed_table import SQLiteTableName, StoreWriter
 from agent_comms.watched import Watched
 
 

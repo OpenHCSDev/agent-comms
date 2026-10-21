@@ -25,7 +25,7 @@ import time
 import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterator, Mapping
-from contextlib import AbstractContextManager, ExitStack
+from contextlib import AbstractContextManager, ExitStack, aclosing
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
@@ -1169,15 +1169,14 @@ class ObservationService:
             request.receive(self)
 
     async def watch(self) -> None:
-        from agent_comms.wire_watch import ModifiedWatchSource, WireWatch
+        from agent_comms.watched import FileSource
 
-        paths = tuple(path for group in WireRevision.source_paths(self.comms.views).values()
-                      for path in group)
-        sources = tuple(ModifiedWatchSource(directory, frozenset(
-            os.fsencode(path.name) for path in paths if path.parent == directory))
-            for directory in dict.fromkeys(path.parent for path in paths))
-        async for _ in WireWatch.observations(*sources):
-            self.observe_again()
+        sources = tuple(FileSource(path)
+                        for group in WireRevision.source_paths(self.comms.views).values()
+                        for path in group)
+        async with aclosing(self.comms.bus.bus.watch(*sources)) as changes:
+            async for _ in changes:
+                self.observe_again()
 
     def observe_again(self) -> None:
         if not self.closed:
