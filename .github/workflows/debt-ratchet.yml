@@ -38,6 +38,8 @@ jobs:
           PY
       - name: Collect the test suite
         run: pytest --collect-only -q -p no:cacheprovider
+      - name: The native pin matches the tree
+        run: pytest tests/test_native_pin.py --noconftest --no-cov -q -p no:cacheprovider
       - name: Stack clients import only modules Core has
         run: python tools/module_layers.py --check
 

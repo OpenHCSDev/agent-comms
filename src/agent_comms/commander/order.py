@@ -34,7 +34,7 @@ from pydantic import PrivateAttr
 
 from agent_comms.change_report import FileLine, MainRevision, NoSourceReference
 from agent_comms.child_process import BoundedRun
-from agent_comms.cli_bridges.shared import DeclaredOptions
+from agent_comms.cli_bridges.shared import DeclaredVerb
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
@@ -74,7 +74,6 @@ from agent_comms.todos import (
     OrderMessage,
     OrderProgress,
     PendingProblemOrder,
-    PlannedInstallDeadline,
     PullRequestLink,
     RecordPullRequest,
     Slop,
@@ -747,7 +746,7 @@ class Commander(CommanderContext):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommanderVerb(CommanderRole, DeclaredFamily, DeclaredOptions, affix="Verb"):
+class CommanderVerb(CommanderRole, DeclaredVerb, affix="Verb"):
     """One commander verb: its options are its fields, its parser comes from them, and run() does the work."""
 
     fork: Annotated[
@@ -772,26 +771,11 @@ class CommanderVerb(CommanderRole, DeclaredFamily, DeclaredOptions, affix="Verb"
     def run(self, ctx: Commander) -> None: ...
 
     @classmethod
-    def tool(cls) -> str:
-        """The agent-comms-commander tool this verb belongs to: its module's name."""
-        return cls.__module__.rpartition('.')[2].replace('_', '-')
-
-    @classmethod
     def usage(cls) -> str:
         """This verb's command line, rendered by the parser its options declare."""
         verbs = argparse.ArgumentParser(prog=cls.tool()).add_subparsers()
         cls.add_parser(verbs)
         return ' '.join(next(iter(verbs.choices.values())).format_usage().split()[1:])
-
-    @classmethod
-    def parse(cls, argv: list[str], description: str) -> CommanderVerb:
-        parser = argparse.ArgumentParser(prog=cls.tool(), description=description,
-                                         formatter_class=argparse.RawDescriptionHelpFormatter)
-        verbs = parser.add_subparsers(dest='command', required=True)
-        for member in cls.members_with(cls):
-            member.add_parser(verbs)
-        args = parser.parse_args(argv)
-        return cls.member_named(args.command).from_arguments(args)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -929,25 +913,6 @@ class UnstrikeVerb(OrderVerb):
 
     def run(self, ctx: Commander) -> None:
         ctx.unstrike(self.pid, self.why, self.at)
-
-
-@dataclass(frozen=True, kw_only=True)
-class InstallVerb(OrderVerb):
-    help = "plan the fleet's next install; merged and delivered orders wait on it"
-    at: Annotated[
-        str, Argument(flags=("at",), options={"help": "HH:MM the install is due"})
-    ]
-    installer: Annotated[
-        str,
-        Argument(
-            flags=("installer",), options={"help": "the unit that runs the install"}
-        ),
-    ]
-
-    def run(self, ctx: Commander) -> None:
-        planned = RecordedEventTime(time.time()).at_clock(self.at)
-        PlannedInstallDeadline(planned, self.installer).plan(ctx.comms.root)
-        print(f'install due {self.at}, run by {self.installer}')
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1255,4 +1220,4 @@ class BoardVerb(OrderVerb):
 
 
 def main(a, ctx: Commander):
-    OrderVerb.parse(a, __doc__).apply(ctx)
+    OrderVerb.parse(a).apply(ctx)

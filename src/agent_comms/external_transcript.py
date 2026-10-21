@@ -533,13 +533,13 @@ class DraftPublication:
         pass
 
 
+@dataclass(eq=False, repr=False)
 class TurnDraftPublication(DraftPublication, StoreWriter):
     """A native turn owns one connection; each message owns one draft identity."""
 
-    def __init__(self, transcript: ExternalTranscript, connection: Connection, turn_id: str):
-        self.transcript = transcript
-        self.connection = connection
-        self.turn_id = turn_id
+    transcript: ExternalTranscript
+    connection: Connection
+    turn_id: str
 
     @property
     def store(self) -> ExternalTranscript:
