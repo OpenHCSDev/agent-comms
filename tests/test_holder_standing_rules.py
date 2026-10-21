@@ -3,13 +3,17 @@ from contextlib import closing
 from pathlib import Path
 from dataclasses import replace
 import os
+import json
 import sqlite3
+import subprocess
+import sys
 import time
 from uuid import uuid4
 
 import pytest
 
 from source_revision_fixture import SourceRepository
+from conftest import declare_test_bus
 
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.comms import Comms
@@ -18,7 +22,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.installer.carry import CarryChain, CarryLedger
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.commander.config import CommanderConfig
-from agent_comms.commander.order import Commander, SayVerb
+from agent_comms.commander.order import Commander, OrderFile, SayVerb
 from agent_comms.commander.standing import (
     HeartbeatSilent,
     Blocked, Detached, HolderCannotRun, UnitAskUnanswered, UnownedWheelSpin, UnresolvedBlock,
@@ -34,6 +38,7 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.messages import InfoKind, Message
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.read_basis import DMDisplayScope
+from agent_comms.field_codec import FieldCodec
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
@@ -52,12 +57,14 @@ from cutover.carry_goal_work_decision import GoalWorkDecisions, RETIRED_TABLE
 
 
 @pytest.fixture
-def held_bus(comms, tmp_path, source_repository):
+def held_bus(comms, tmp_path, source_repository, configured_repository):
     """One setup owner: real declarations, checked orders, UNKNOWN row, then a copy."""
     source = source_repository
     scope = source.scope()
-    for name in ("lead", "worker", "outsider"):
-        comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset(), worktree=str(source.checkout)))
+    declare_test_bus(comms, channels=('comms',), threads=tuple(
+        comms.registry.new_thread(name=name, tags=frozenset({'comms'}), worktree=str(source.checkout))
+        for name in ('lead', 'worker', 'outsider')
+    ))
     comms.goals.update_goal("lead", SetGoalAction(
         text="Repair the held work", goal_id="request", order=RequestGoalOrder(),
     ))
@@ -80,14 +87,12 @@ def held_bus(comms, tmp_path, source_repository):
                   target="worker", text="Do not replay this input")
     assert inputs.bind("unresolved-input", claim_scope=1, turn_id="old-turn",
                        native_id=uuid4().hex, text="Do not replay this input")
-    config = CommanderConfig(
-        commander="lead", root=comms.root, state=tmp_path, repos=(),
-        worktrees=tmp_path, scratch=tmp_path, disk=tmp_path,
-    )
-    config.root_path(comms.root).write_text(config.model_dump_json())
+    configured_repository(comms)
     copied = tmp_path / "copied-bus"
     StoreBackup.copy_tree(comms.root, copied)
-    return Comms(copied)
+    copied_bus = Comms(copied)
+    configured_repository(copied_bus)
+    return copied_bus
 
 
 def blocked_holder(comms):
@@ -266,7 +271,7 @@ def test_a_running_turn_is_not_a_stalled_holder(held_bus):
 def test_unanswered_uses_age_direct_target_and_later_answer_references(held_bus):
     now = time.time()
     publish(held_bus, "worker", "lead", now - 7200)  # before every held order
-    publish(held_bus, "worker", "lead", now - 870)  # younger than fifteen minutes
+    publish(held_bus, "worker", "lead", now - UnitAskUnanswered.seconds + 30)
     publish(held_bus, "outsider", "lead", now - 1800)  # not a holder
     publish(held_bus, "worker", "outsider", now - 1800)  # not its commander
     question = publish(held_bus, "worker", "lead", now - 901)
@@ -283,17 +288,95 @@ def test_unanswered_uses_age_direct_target_and_later_answer_references(held_bus)
     assert UnitAskUnanswered.violations(held_bus, "lead") == ()
 
 
-def test_commander_say_answers_an_unanswered_unit_message(held_bus):
-    question = publish(held_bus, "worker", "lead", time.time() - 901)
-    ctx = Commander(**CommanderConfig.read_root(held_bus.root).model_dump())
-    say = SayVerb(units="worker", body_file="unused", answers=(question.message_id,))
-    held_bus.messaging.send("lead", "worker", "Responding", answers=say.answer_references(ctx))
+@pytest.mark.parametrize('target,body', [
+    ('lead', 'The worker needs an answer'),
+    ('#comms', '@lead The worker needs an answer'),
+])
+def test_commander_say_answers_an_unanswered_unit_message(held_bus, target, body, tmp_path):
+    question = held_bus.bus.publisher.publish_ordinary(
+        Message(sender='worker', target=target, type=InfoKind, body=body,
+                timestamp=time.time() - UnitAskUnanswered.seconds - 1), origin=AgentOrigin(),
+    )
+    ctx = Commander.read_root(held_bus.root)
+    reply = tmp_path / 'reply.txt'
+    reply.write_text('Responding to the worker with the actual commander command')
+    say = SayVerb(units="worker", body_file=str(reply), answers=(question.message_id,))
+    say.apply(ctx)
     assert UnitAskUnanswered.violations(held_bus, "lead") == ()
     with pytest.raises(SystemExit, match="unanswered unit messages"):
         SayVerb(units="worker", body_file="unused", answers=("not-a-message",)).answer_references(ctx)
 
 
-def test_detached_and_whole_family_scan_still_find_nonreceiving_holders(held_bus):
+@pytest.mark.parametrize('body', ['@outsider This question is yours', 'The worker broadcasts its result'])
+def test_channel_messages_without_a_commander_addressee_are_not_a_question(held_bus, body):
+    held_bus.messaging.send('worker', '#comms', body)
+    assert UnitAskUnanswered.asks(held_bus, 'lead', time.time()) == ()
+
+
+def test_send_and_check_accept_a_deletion_check_on_fresh_main(
+    held_bus, source_repository, tmp_path, durable_home, configured_repository,
+):
+    source = source_repository
+    # Advance only the remote: the configured tree stays stale and dirty throughout.
+    content = source.main_source + 'obsolete = 1\n' * 4
+    blob = source.git_input(source.checkout, content, 'hash-object', '-w', '--stdin')
+    tree = source.git_input(source.checkout, f'100644 blob {blob}\towner.py\n', 'mktree')
+    main = source.git(source.checkout, 'commit-tree', tree, '-p', source.main_commit,
+                      '-m', 'Four obsolete declarations').strip()
+    source.git(source.checkout, 'push', 'origin', f'{main}:refs/heads/main')
+    local = source.checkout / 'owner.py'
+    local.write_text(source.main_source + '# Uncommitted user work\n')
+    before = local.read_bytes()
+    head = source.git(source.checkout, 'rev-parse', 'HEAD')
+    worktrees = configured_repository(held_bus, source).worktrees
+    original = held_bus.goals.todos.get('P1')
+    check = OrderCheck(str(source.checkout), 'grep -c obsolete owner.py', CountCheckResult(0))
+    order = replace(original.order.checked(), id='delete-obsolete', check=check,
+                    banned=('optional guards', 'maybe.py'), report='Report optional examples')
+    document = OrderFile(order, 'Four obsolete declarations remain after their reader was deleted.',
+                         'This is stupid because dead declarations still occupy the source.',
+                         unplanned_reason='Repair the order tool before returning to the planned work.',
+                         problems=())
+    order_file = tmp_path / 'order.json'
+    order_file.write_text(json.dumps(FieldCodec.encode(document)))
+
+    def cli(*arguments):
+        run = subprocess.run((sys.executable, '-c',
+            'from agent_comms.commander.cli import main; main()', '--config', str(CommanderConfig.path(durable_home)),
+            'order', *arguments), capture_output=True, text=True, timeout=90)
+        assert run.returncode == 0, run.stdout + run.stderr
+        print(run.stdout)
+
+    # Problem creates the first order through Commander.send, including its message link.
+    cli('problem', str(order_file), '--to', 'worker', '--where', 'owner.py:2')
+    first = held_bus.goals.todos.get('P3')
+    assert first.messages
+    document = replace(document, problems=('P3',),
+                       order=replace(document.order, id='replacement-deletion'))
+    order_file.write_text(json.dumps(FieldCodec.encode(document)))
+    cli('send', 'worker', str(order_file), '--clean')
+    sent = held_bus.goals.todos.get('P3')
+    assert sent.order.check == check
+    corrected = 'grep -c "^obsolete" owner.py'
+    cli('check', 'P3', '--check', f'{source.checkout} :: {corrected} -> 0', '--why',
+        'The original count also included comments rather than only declarations')
+    current = held_bus.goals.todos.get('P3')
+    assert current.order.id == sent.order.id
+    assert current.review_at == sent.review_at and current.strikes == sent.strikes
+    assert current.order.check.command == corrected
+    assert current.order.check.result == CountCheckResult(0)
+    # Done's result rule remains the inverse: the delivered commit must meet the target.
+    current.order.check.result.require(current.order.check.at(
+        source.branch_commit, str(source.checkout), worktrees))
+    with pytest.raises(ValueError):
+        current.order.check.result.require(current.order.check.at(main, str(source.checkout), worktrees))
+    assert source.git(source.checkout, 'rev-parse', 'HEAD') == head
+    assert local.read_bytes() == before
+    assert not tuple(worktrees.iterdir())
+    print('Deletion expected 0, remote main reads 4: send and check accepted; stale dirty tree unchanged.')
+
+
+def test_detached_and_whole_family_scan_still_find_nonreceiving_holders(held_bus, installed_runtime):
     blocked_holder(held_bus)
     held_bus.registry.register(held_bus.registry.require("worker"), StoppedThreadStatus())
     detached, = Detached.violations(held_bus, "lead")
@@ -372,7 +455,7 @@ def test_install_discovers_and_records_decision_cutover_once(held_bus):
     assert GoalWorkDecisions not in chain.pending(ledger.applied())
 
 
-def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus):
+def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus, installed_runtime):
     blocked_holder(held_bus)
     question = publish(held_bus, "worker", "lead", time.time() - 901)
     expected = tuple(rule.line() for rule in (
