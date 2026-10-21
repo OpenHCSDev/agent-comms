@@ -28,13 +28,21 @@ from types import get_original_bases
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, get_args, get_origin
 from uuid import uuid4
 
-from agent_comms.order_runs import OrderRun
-
 from agent_comms import skills
+from agent_comms.build_identity import (
+    BuildIdentity,
+    CommitInstallation,
+    RecordedBuildIdentity,
+    UnrecordedBuildIdentity,
+)
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.change_report import (
-    FileLine, MainRevision, NoSourceReference, PullRequestHeadRevision,
-    SourceReference, SourceRevision,
+    FileLine,
+    MainRevision,
+    NoSourceReference,
+    PullRequestHeadRevision,
+    SourceReference,
+    SourceRevision,
 )
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.child_process import (
@@ -62,16 +70,11 @@ from agent_comms.field_codec import (
     boundary_decoder,
 )
 from agent_comms.goals import CheckedCommit, OrderCheck, ProblemGoalOrder
-from agent_comms.build_identity import (
-    BuildIdentity,
-    CommitInstallation,
-    RecordedBuildIdentity,
-    UnrecordedBuildIdentity,
-)
 from agent_comms.locked_store import RegistryFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier
-from agent_comms.messages import InfoKind, Message
 from agent_comms.message_reference import MessageReference
+from agent_comms.messages import InfoKind, Message
+from agent_comms.order_runs import OrderRun
 from agent_comms.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from agent_comms.plan_phases import OrderPhase, UnplannedPhase
 from agent_comms.private_bus_checkpoint import PublicMessages
@@ -93,8 +96,8 @@ from agent_comms.threads import Thread
 from agent_comms.typed_table import (
     Column,
     DurableStore,
-    Index,
     ExpressionIndex,
+    Index,
     JsonStorage,
     TextStorage,
     TypedTable,
@@ -3262,15 +3265,15 @@ class TodoStore(DurableStore):
         """The original open Todo owns who assigns its unit, under this transaction."""
         states = TodoState.open_names()
         held = Todo.select(db,
-            where="json_extract(assignment, '$.owner')=? "
-                  "AND json_extract(assignment, '$.owner_created')=? "
-                  f"AND state IN ({','.join('?' for _ in states)}) "
+            where=f"({Todo.unit_index.term_sql(Todo)}) IN "
+                  f"(VALUES {','.join('(?,?,?)' for _ in states)}) "
                   "AND NOT (creator=? AND creator_created=?)",
-            parameters=(unit.name, unit.wire_birth, *states, assigner.name, assigner.wire_birth),
-            limit=1)
+            parameters=tuple(value for state in states
+                             for value in (unit.name, unit.wire_birth, state))
+                       + (assigner.name, assigner.wire_birth), limit=1)
         for todo in held:
             raise TodoError(
-                f"{unit.name} is assigned by {todo.creator} on open order {todo.order.id} "
+                f"{unit.name} is assigned by {todo.creator} on open order {todo.order.checked().id} "
                 f"({todo.id}); finish or release that order before assigning it again.")
 
     def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:

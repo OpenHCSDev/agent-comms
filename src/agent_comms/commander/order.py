@@ -23,11 +23,10 @@ import subprocess
 import sys
 import time
 from abc import abstractmethod
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from pathlib import Path
-from collections.abc import Sequence
 from typing import Annotated, ClassVar, Self
 
 from pydantic import PrivateAttr
@@ -35,18 +34,20 @@ from pydantic import PrivateAttr
 from agent_comms.change_report import FileLine, MainRevision, NoSourceReference
 from agent_comms.child_process import BoundedRun
 from agent_comms.cli_bridges.shared import DeclaredVerb
+from agent_comms.commander.config import CommanderConfig, CommanderRole
+from agent_comms.commander.standing import UnitAskUnanswered, UnownedWheelSpin
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import (
+    Argument,
     FieldCodec,
     MalformedRecord,
+    Normalize,
     NullMember,
     SingleFieldValue,
     SubclassUnion,
     boundary_decoder,
-    Argument,
-    Normalize,
 )
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.goals import OrderCheck, ProblemGoalOrder
@@ -91,8 +92,8 @@ from agent_comms.tools import (
     CommsChangeProblemTool,
     CommsFireTool,
     CommsOrderCheckTool,
-    CommsOrderDoneTool,
     CommsOrderDeliverTool,
+    CommsOrderDoneTool,
     CommsOrderServeTool,
     CommsOrderTool,
     CommsProblemCloseTool,
@@ -100,8 +101,6 @@ from agent_comms.tools import (
     CommsTodoListTool,
     TodoList,
 )
-from agent_comms.commander.config import CommanderConfig, CommanderRole
-from agent_comms.commander.standing import UnitAskUnanswered, UnownedWheelSpin
 
 OUTGOING = DirectiveText.OUTGOING  # every commander text passes each one
 

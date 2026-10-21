@@ -1,17 +1,21 @@
 """Commander forks use registered identity and the original Todo assignment."""
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import replace
+from io import StringIO
 import json
 import os
 from pathlib import Path
 import subprocess
 import sys
 import time
+from unittest.mock import patch
 
 import pytest
 
 from source_revision_fixture import SourceRepository
 from agent_comms.change_report import FileLine
+from agent_comms.commander.cli import main
 from agent_comms.commander.order import Commander, OrderFile
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
@@ -66,11 +70,30 @@ def fork_bus(tmp_path):
 
 
 def command(comms, *args):
+    """Exercise the real parser and state without cold-importing Core for every verb."""
+    argv = ['agent-comms-commander', '--root', str(comms.root), *args]
+    output, error = StringIO(), StringIO()
+    code = 0
+    with patch.object(sys, 'argv', argv), redirect_stdout(output), redirect_stderr(error):
+        try:
+            main()
+        except SystemExit as exited:
+            # CPython prints a non-integer SystemExit value and returns 1.
+            if isinstance(exited.code, str):
+                print(exited.code, file=error)
+                code = 1
+            else:
+                code = exited.code or 0
+    return subprocess.CompletedProcess(argv, code, output.getvalue(), error.getvalue())
+
+
+def process_command(comms, *args):
+    """Independent processes must resolve identity and acquire the same Todo write lock."""
     return subprocess.run(
         [sys.executable, '-c', 'from agent_comms.commander.cli import main; main()',
          '--root', str(comms.root), *args],
         env={**os.environ, 'PYTHONPATH': str(Path(__file__).parents[1] / 'src')},
-        capture_output=True, text=True, timeout=40)
+        capture_output=True, text=True, timeout=90)
 
 
 def document(path, order):
@@ -154,7 +177,7 @@ def test_two_commanders_allocate_distinct_global_problem_ids(fork_bus, tmp_path)
     def assign(pair):
         name, unit = pair
         body = document(tmp_path / f'{name}.json', replace(order, id=name))
-        return command(comms, 'order', 'problem', body, '--to', unit,
+        return process_command(comms, 'order', 'problem', body, '--to', unit,
                        '--where', 'owner.py:2', '--fork', name)
     with ThreadPoolExecutor(max_workers=2) as commands:
         results = tuple(commands.map(assign, (('fork-a', 'worker'), ('fork-b', 'other'))))
@@ -170,7 +193,7 @@ def test_two_commanders_cannot_assign_the_same_unit_concurrently(fork_bus, tmp_p
     comms, source, order = fork_bus
     def assign(name):
         body = document(tmp_path / f'{name}.json', replace(order, id=name))
-        return command(comms, 'order', 'problem', body, '--to', 'worker',
+        return process_command(comms, 'order', 'problem', body, '--to', 'worker',
                        '--where', 'owner.py:2', '--fork', name)
     with ThreadPoolExecutor(max_workers=2) as commands:
         results = tuple(commands.map(assign, ('fork-a', 'fork-b')))

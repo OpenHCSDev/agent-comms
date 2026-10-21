@@ -6,10 +6,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, NoReturn
 
 from .cli_result import ThreadToolCatalogResult, ToolCatalogResult
+from .errors import RelationViolationError
 from .field_codec import WireForm
 from .launch_root import LaunchRoot
 from .launch_runtime import CallingThreadUnavailable
-from .errors import RelationViolationError
 from .presentation import MessageNotification, ThreadRecord
 from .tool_result import ToolResult
 

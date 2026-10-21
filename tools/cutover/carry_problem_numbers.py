@@ -2,6 +2,7 @@
 
 Delete this step once every retained bus has been carried.
 """
+
 from contextlib import closing
 from pathlib import Path
 
@@ -40,5 +41,6 @@ class ProblemNumbers(Carry):
             if index_missing:
                 db.execute(Todo.unit_index.sql(Todo))
             TodoStore.require_schema(db)
-        return Carried(changed, rewritten=tuple(
-            str(file.relative_to(root)) for file in SQLiteFile.files(path)))
+        return Carried(
+            changed, rewritten=tuple(str(file.relative_to(root)) for file in SQLiteFile.files(path))
+        )

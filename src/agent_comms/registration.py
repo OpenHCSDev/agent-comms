@@ -11,7 +11,9 @@ from typing import TYPE_CHECKING, Concatenate
 from .catalog_store import ChannelCatalog
 from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError
+from .goal_actions import GoalActionContext, SetGoalAction
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
+from .goals import RequestGoalOrder
 from .maintenance_barrier import MaintenanceBarrier
 from .native_input_owner import RegistryOwner
 from .registration_change import RegistrationChange
@@ -20,15 +22,15 @@ from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import TurnRouting
 from .storage_rules import StorageProjection, StorageRule
 from .store_files import SharedLock, _store_lock
-from .thread_identity import GenerationCounter, TurnId
-from .thread_text import ForkedParent, NoThreadText, ThreadText
 from .thread_execution import CommanderForkExecution
+from .thread_identity import GenerationCounter, TurnId
 from .thread_status import (
     ConnectedThreadStatus,
     NoBridgeThreadStatus,
     RunningThreadStatus,
     ThreadStatus,
 )
+from .thread_text import ForkedParent, NoThreadText, ThreadText
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -85,15 +87,12 @@ class Registration:
 
     def register_commander_child(self, name: str, parent_name: str, goals: Goals) -> Thread:
         """Declare or resume one child and its own request under the registry's lock."""
-        from .goal_actions import GoalActionContext, SetGoalAction
-        from .goals import RequestGoalOrder
-
         with self.store.editing() as edit:
             parent = edit.document.require(parent_name)
             if edit.document.canonical_name(name) != name:
                 raise RelationViolationError(f"Commander fork {name!r} is an alias.")
-            existing = edit.document.threads.get(name)
-            if existing is not None:
+            if edit.document.taken(name):
+                existing = edit.document.require(name)
                 existing.execution.require_commander_fork()
                 if not existing.parent.named(parent.name):
                     raise RelationViolationError(f"Thread {name!r} is not a fork of {parent.name!r}.")
