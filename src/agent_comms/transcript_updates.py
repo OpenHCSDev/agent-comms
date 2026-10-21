@@ -54,8 +54,11 @@ class TranscriptReplay:
 
     @contextmanager
     def observing(self) -> Iterator[ObservationProcess]:
-        reads = (self._subscriptions[0] if self._subscriptions
-                 else ObservationProcess.awaited(self.comms.route))
+        reads = (
+            self._subscriptions[0]
+            if self._subscriptions
+            else ObservationProcess.awaited(self.comms.route)
+        )
         self._subscriptions.append(reads)
         try:
             yield reads

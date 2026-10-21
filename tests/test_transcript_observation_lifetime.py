@@ -1,6 +1,7 @@
 """Observation follows real transcript attachments, never a headless bind."""
 
 import asyncio
+import logging
 import multiprocessing
 import os
 from functools import partial
@@ -31,7 +32,8 @@ async def headless_owner(comms, tmp_path, caplog):
         yield owner
     finally:
         await owner.shutdown()
-    assert not [record for record in caplog.records if record.levelno >= 40]
+    assert not [record for phase in ('setup', 'call', 'teardown')
+                for record in caplog.get_records(phase) if record.levelno >= logging.ERROR]
 
 
 def observation_children():
@@ -53,6 +55,7 @@ async def test_subscriptions_share_process_and_last_close_joins_it(headless_owne
     frontend = canonical_agent(owner._comms, auto_wake=False)
     first = RuntimeProxy(frontend, session, socket_path(owner._comms.root, os.getpid()))
     second = RuntimeProxy(frontend, session, socket_path(owner._comms.root, os.getpid()))
+    reopened = RuntimeProxy(frontend, session, socket_path(owner._comms.root, os.getpid()))
     try:
         assert observation_children() == ()
         await first.subscribe()
@@ -66,9 +69,16 @@ async def test_subscriptions_share_process_and_last_close_joins_it(headless_owne
         await until(lambda: not process.is_alive())
         assert process.exitcode == 0
         assert observation_children() == ()
+        await reopened.subscribe()
+        replacement, = observation_children()
+        assert replacement.pid != process.pid
+        await reopened.close()
+        await until(lambda: not replacement.is_alive())
+        assert replacement.exitcode == 0
     finally:
         await first.close()
         await second.close()
+        await reopened.close()
         await frontend.shutdown()
 
 
