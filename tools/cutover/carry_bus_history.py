@@ -34,9 +34,16 @@ from agent_comms.field_codec import (
     WireOmitDefault,
     WireOrder,
 )
+from agent_comms.historical_views import HistoryArchive, HistorySource
 from agent_comms.installer.carry import Carried, Carry
+from agent_comms.locked_store import RegistryFile
 from agent_comms.messages import BusRecord, Message
+from agent_comms.private_path import FileObservation, FileRevision
+from agent_comms.read_ledger import ReadLedger
+from agent_comms.recorded_bus import RecordedBusIdentity
+from agent_comms.registry_provenance import RegistryProvenance
 from agent_comms.response_acknowledgement import KeyedResponseAcknowledgement
+from agent_comms.store_files import _atomic_write_text, _store_lock
 from agent_comms.typed_table import Column, DerivedTables, SharedFileTables, TypedTable
 from agent_comms.wake_policy import (
     MessageAudience,
@@ -46,6 +53,91 @@ from agent_comms.wake_policy import (
     WakeDecision,
     WakePolicy,
 )
+
+
+@dataclass(frozen=True)
+class HistoryMetadata:
+    """Only the retired stream boundary is needed, never its root ID or activation."""
+
+    last_seq: int
+    claimed_after_seq: Annotated[int, WireName("admission_after_seq")]
+    filename: ClassVar[str] = "bus_meta.json"
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.claimed_after_seq <= self.last_seq:
+            raise RelationViolationError("Retired claim boundary is outside its stream")
+
+    @classmethod
+    def read(cls, root: Path) -> HistoryMetadata:
+        data = FieldCodec.parse((root / cls.filename).read_bytes())
+        return FieldCodec.construct(cls, {
+            name: value for plan in FieldCodec.field_plans(cls)
+            for name, value in plan.decoded(data).items()
+        })
+
+
+@dataclass(frozen=True)
+class HistoryCatalogSource:
+    """The retired archive catalogue, consumed once before its snapshots move."""
+
+    root: str
+    original_root: str
+    wire_root_id: str
+    bus_identity: RecordedBusIdentity
+    size: int
+    snapshot_bus_revision: FileObservation
+    snapshot_registry_revision: FileObservation
+    provenance: RegistryProvenance
+
+    @classmethod
+    def read(cls, root: Path, original_root: Path) -> tuple[HistoryCatalogSource, ...]:
+        path = HistoryArchive.path_in(root)
+        if not path.exists():
+            return ()
+        sources = FieldCodec.decode(tuple[cls, ...], FieldCodec.parse(path.read_bytes()))
+        for source in sources:
+            source.mapped_root(root, original_root)
+            source.require_snapshot()
+        return sources
+
+    @classmethod
+    def publish(cls, root: Path, original_root: Path,
+                sources: tuple[HistoryCatalogSource, ...],
+                bindings: Mapping[RecordedBusIdentity, RecordedBusIdentity]) -> Carried:
+        path = HistoryArchive.path_in(root)
+        if not path.exists():
+            return Carried(0)
+        converted = tuple(source.converted(root, original_root, bindings) for source in sources)
+        with _store_lock(path):
+            _atomic_write_text(path, json.dumps(FieldCodec.encode(converted)))
+        return Carried(len(converted), rewritten=(HistoryArchive.filename,))
+
+    def mapped_root(self, root: Path, original_root: Path) -> Path:
+        original = Path(self.root)
+        Carry.require_confined(original_root, original)
+        mapped = root / original.relative_to(original_root)
+        Carry.require_confined(root, mapped)
+        return mapped
+
+    def require_snapshot(self) -> None:
+        original = Path(self.root)
+        if (FileRevision.capture(original / BusHistory.filename) != self.snapshot_bus_revision
+                or FileRevision.capture(RegistryFile.path_in(original))
+                != self.snapshot_registry_revision):
+            raise RelationViolationError(f"Retired archive changed before carrying: {original}")
+
+    def converted(self, root: Path, original_root: Path,
+                  bindings: Mapping[RecordedBusIdentity, RecordedBusIdentity]) -> HistorySource:
+        mapped = self.mapped_root(root, original_root)
+        bus = Bus(Bus.path_in(mapped))
+        source = HistorySource(
+            str(mapped), self.original_root,
+            bindings.get(self.bus_identity, self.bus_identity),
+            RecordedBusIdentity.capture(bus.path), bus.revision(),
+            FileRevision.capture(RegistryFile.path_in(mapped)), self.provenance,
+        )
+        source.validate()
+        return source
 
 
 class HistoryDecision(SubclassUnion, ABC, affix="HistoryDecision"):
@@ -135,6 +227,10 @@ class HistoryRow(SubclassUnion, Message, ABC, affix="HistoryRow"):
 
     def restored(self, record: BusRecord) -> HistoryRow:
         return replace(self, **{item.name: getattr(record, item.name) for item in fields(Message)})
+
+    def located(self, number: int, offset: int, raw: bytes,
+                metadata: HistoryMetadata) -> HistoryLine:
+        return HistoryLine(number, offset, raw, self)
 
     def line(self) -> bytes:
         # The old writer put the two envelope identities before the declared fields.
@@ -332,7 +428,13 @@ class ClaimHistoryRow(RecordMember, HistoryRow):
     claim_transition: Annotated[HistoryClaim, WireOrder(11)]
 
     def record(self) -> ClaimRecord:
-        return ClaimRecord.from_message(self, claim_transition=self.claim_transition.current())
+        return ClaimRecord.of(self, self.claim_transition.current())
+
+    def located(self, number: int, offset: int, raw: bytes,
+                metadata: HistoryMetadata) -> HistoryLine:
+        if self.seq <= metadata.claimed_after_seq:
+            return UnclaimedHistoryLine(number, offset, raw, self)
+        return super().located(number, offset, raw, metadata)
 
     def restored(self, record: ClaimRecord) -> ClaimHistoryRow:
         return replace(super().restored(record),
@@ -366,7 +468,7 @@ class HistoryLine:
     row: HistoryRow
 
     @classmethod
-    def rows(cls, source: Path):
+    def rows(cls, source: Path, metadata: HistoryMetadata):
         previous = 0
         number = 0
         with source.open("rb") as stream:
@@ -377,8 +479,12 @@ class HistoryLine:
                     raise RelationViolationError(
                         f"Bus history line {number}: sequence gap/repeat at {row.seq}"
                     )
-                yield cls(number, stream.tell() - len(raw), raw, row)
+                yield row.located(number, stream.tell() - len(raw), raw, metadata)
                 previous = row.seq
+        if previous != metadata.last_seq:
+            raise RelationViolationError(
+                f"Bus history ends at {previous}; retired marker declares {metadata.last_seq}"
+            )
 
     def record(self) -> BusRecord:
         try:
@@ -386,11 +492,26 @@ class HistoryLine:
         except ValueError as error:
             raise RelationViolationError(f"Bus history line {self.number}: {error}") from error
 
+    def restored(self, record: BusRecord) -> HistoryRow:
+        return self.row.restored(record)
+
     def verify(self, record: BusRecord) -> None:
-        if self.row.restored(record).line() != self.raw:
+        if self.restored(record).line() != self.raw:
             raise RelationViolationError(
                 f"Bus history seq {self.row.seq}: record round trip differs"
             )
+
+
+class UnclaimedHistoryLine(HistoryLine):
+    """The retired boundary marks this claim as display history, not attestation."""
+
+    def record(self) -> PublicRecord:
+        return PublicRecord.from_message(self.row)
+
+    def restored(self, record: BusRecord) -> HistoryRow:
+        # The discarded attestation is only the old encoding template. Every
+        # retained Message value must still come back from SQLite unchanged.
+        return HistoryRow.restored(self.row, record)
 
 
 class BusHistory(Carry):
@@ -400,9 +521,15 @@ class BusHistory(Carry):
 
     @classmethod
     def backup_files(cls, root: Path) -> tuple[Path, ...]:
-        source = root / cls.filename
-        cls.require_confined(root, source)
-        return (source,)
+        sources = HistoryCatalogSource.read(root, root)
+        roots = (root, *(source.mapped_root(root, root) for source in sources))
+        paths = {HistoryArchive.path_in(root)}
+        for directory in roots:
+            paths.update((directory / cls.filename, directory / HistoryMetadata.filename,
+                          ReadLedger.path_in(directory)))
+        for path in paths:
+            cls.require_confined(root, path)
+        return tuple(sorted(paths))
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
@@ -413,14 +540,15 @@ class BusHistory(Carry):
                 "BusHistory needs the installer's spill_dir to stage bus.jsonl read-only "
                 "before creating bus.sqlite3; Carry.carry currently receives only root/apply"
             )
+        metadata = HistoryMetadata.read(root)
         count = 0
-        for line in HistoryLine.rows(source):
+        for line in HistoryLine.rows(source, metadata):
             line.verify(line.record())
             count = line.number
         return Carried(0, detail=dict(rows=count, continuous=count, round_tripped=count))
 
     @classmethod
-    def transfer(cls, source: Path, bus: Bus) -> Carried:
+    def transfer(cls, source: Path, bus: Bus, metadata: HistoryMetadata) -> Carried:
         """The staged source stays immutable; interrupted batches resume by original seq.
 
         Installer entry remains refused until HDD staging and activation are connected.
@@ -438,11 +566,12 @@ class BusHistory(Carry):
         count = 0
         changed = 0
         # File reads, field decoding and record construction happen outside the write lock.
-        for batch in batched(HistoryLine.rows(source), 1000, strict=False):
+        for batch in batched(HistoryLine.rows(source, metadata), 1000, strict=False):
             records = tuple(line.record() for line in batch)
-            for line in batch:
-                if line.row.seq <= committed:
-                    line.verify(bus.lookup(line.row.seq))
+            with bus.reading() as reader:
+                for line in batch:
+                    if line.row.seq <= committed:
+                        line.verify(reader.lookup(line.row.seq))
             with bus.writing() as db:
                 for line, record in zip(batch, records, strict=True):
                     if record.seq > committed:
@@ -460,9 +589,10 @@ class BusHistory(Carry):
                         raise RelationViolationError(
                             f"Bus history seq {record.seq}: committed offset mapping differs"
                         )
-            for line in batch:
-                line.verify(bus.lookup(line.row.seq))
-                count = line.number
+            with bus.reading() as reader:
+                for line in batch:
+                    line.verify(reader.lookup(line.row.seq))
+                    count = line.number
         with bus.observing() as db:
             if BusRow.count(db) != count or HistoryOffset.count(db) != count:
                 raise RelationViolationError(
