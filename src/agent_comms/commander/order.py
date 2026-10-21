@@ -16,7 +16,6 @@ sees the review time: when it is up, the heartbeat tells the commander to read t
 from __future__ import annotations
 
 import argparse
-import asyncio
 import dataclasses
 import re
 import subprocess
@@ -33,7 +32,6 @@ from typing import Annotated, ClassVar, Self
 from pydantic import PrivateAttr
 
 from agent_comms.change_report import FileLine, MainRevision, NoSourceReference
-from agent_comms.child_process import BoundedRun
 from agent_comms.cli_bridges.shared import DeclaredVerb
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
@@ -73,6 +71,7 @@ from agent_comms.todos import (
     OrderedHunt,
     OrderMessage,
     OrderProgress,
+    OrderText,
     PendingProblemOrder,
     PullRequestLink,
     RecordPullRequest,
@@ -203,7 +202,8 @@ class OrderFile:
     def problems_found(self, clean: bool) -> list[str]:
         problems = [f'{name}: {error}; fix: state the defect plainly without wording rules on code'
                     for name, text in (('defect', self.defect), ('why_stupid', self.why_stupid))
-                    for error in DirectiveText.refused(text)]
+                    for family in (*OUTGOING, OrderText)
+                    if (error := family.refused(text))]
         if len(self.defect.split()) < 8:
             problems.append('defect: fix: describe what fails in at least eight words')
         if not self.why_stupid.strip():
@@ -438,16 +438,12 @@ class Commander(CommanderContext):
                     validate()
             except MalformedRecord as error:
                 problems.append(f'{label}: {error}; fix: name an existing source location or directory')
-        # A check that can never print its target, or a premise naming lines that do something else, wastes the order.
-        # An order's check must fail now (or it proves nothing), and every absolute
-        # path:line it cites must exist.
+        # Send and correction ask the check's owner the same question on clean main.
         try:
             with MalformedRecord.refusing('order.check'):
                 order.require_writable()
                 if Path(check.directory).is_dir():
-                    ran = asyncio.run(BoundedRun.run(('bash', '-c', check.command),
-                                                    cwd=check.directory, timeout=90))
-                    problems += check.result.distance(ran).unproven(check.command, 0)
+                    check.require_acceptance(self.worktrees)
         except MalformedRecord as error:
             problems.append(f'order.check: {error}; fix: supply a focused measurable command')
         references = list(dict.fromkeys((
@@ -529,24 +525,14 @@ class Commander(CommanderContext):
                         evidence=(order.owner,))
 
     def correct_check(self, pid: str, line: str, why: str) -> None:
-        """Core replaces a wrong check of an open order. The new check must already pass on main, so a
-        correction fixes the commander's check and never passes undelivered work: done still runs it on
-        the --sha it is given."""
+        """Replace a wrong check using the same rule as send; done still checks the delivered SHA."""
         todo = self.comms.goals.todos.get(pid)
         if not todo.state.open or not todo.pending:
             sys.exit(f'Refused: {pid} has no pending order')
         check = self.read_check(line)
         if len(why.split()) < 8:
             sys.exit('Refused: --why says what was wrong with the recorded check (8+ words)')
-        def git(*args: str) -> str:
-            return subprocess.run(['git', '-C', check.directory, *args],
-                                  capture_output=True, text=True).stdout.strip()
-        head = git('rev-parse', 'HEAD')
-        if head != git('rev-parse', 'origin/main') or git('status', '--porcelain', '-uno'):
-            sys.exit(f'Refused: {check.directory} is not a clean checkout of origin/main; '
-                     'the corrected check runs on main')
-        check.result.require(asyncio.run(BoundedRun.run(
-            ('bash', '-c', check.command), cwd=check.directory, timeout=90)))
+        check.require_acceptance(self.worktrees)
         self.call(CommsOrderCheckTool(problem=pid, check=check, why=why))
         print(f'{pid}: order {todo.order.id} now checks `{check.command}`')
 
