@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.lifecycle_capability import Complete
+
 import logging
 import sqlite3
 import threading
@@ -55,7 +57,7 @@ class CandidateMaintenance(threading.Thread):
                             record, root_id=snapshot.metadata.root_id
                         ),
                     )
-                for completed in route_result.completed_items(result):
+                for completed in route_result.items_with(Complete, result):
                     if completed.caught_up:
                         with _guard:
                             if self.through_bytes <= completed.checkpoint_bytes:

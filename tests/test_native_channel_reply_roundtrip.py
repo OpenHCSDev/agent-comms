@@ -398,7 +398,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
 
         def selected_turn_finished():
             states = [fact.state for fact in facts if isinstance(fact, TurnChangedUpdate)]
-            return any(not state.active.executing and state.finished_turn_id for state in states)
+            return any(not bool(state.active.executing_items(state.active)) and state.finished_turn_id for state in states)
 
         await until(selected_turn_finished, "Selected turn end published to the open session")
         await until(

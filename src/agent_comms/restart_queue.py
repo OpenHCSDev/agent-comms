@@ -207,7 +207,7 @@ class RestartQueue:
         return FieldCodec.decode(QueuedRestart, json.loads(path.read_text(encoding='utf-8')))
 
     def path_for(self, record: QueuedRestart) -> Path:
-        for current in record.state.active_items(record):
+        for current in record.state.items_with(Active, record):
             return self.active_path(current.selection.identity.incarnation.require_recorded())
         return self.settled_path(record)
 
@@ -226,14 +226,14 @@ class RestartQueue:
     def save(self, record: QueuedRestart) -> None:
         path = self.active_path(record.selection.identity.incarnation.require_recorded())
         _atomic_write_text(path, json.dumps(FieldCodec.encode(record), sort_keys=True), fsync_parent=True)
-        if not record.state.active_items(record):
+        if not record.state.items_with(Active, record):
             self.move(path, record)
 
     def _active_record(self, path: Path) -> Iterator[QueuedRestart]:
         record = self.read(path)
         if path != self.active_path(record.selection.identity.incarnation.require_recorded()):
             raise ValueError('Restart queue record has another owner key')
-        if record.state.active_items(record):
+        if record.state.items_with(Active, record):
             yield record
         else:
             self.move(path, record)
@@ -270,7 +270,7 @@ def enqueue(comms: Comms, selection: OwnerRestartSelection, *,
         with queue.locked():
             for previous in queue.active_for(owner.incarnation.require_recorded()):
                 result = previous.state.enqueue(previous, selection, target)
-                if result.state.active_items(result):
+                if result.state.items_with(Active, result):
                     break
                 queue.save(result)
             else:
@@ -306,7 +306,7 @@ def cancel(comms: Comms, name: str) -> list[QueuedRestart]:
     changed = []
     with queue.locked():
         for record in queue.active_for(owner):
-            for pending in record.state.pending_items(record):
+            for pending in record.state.items_with(Pending, record):
                 cancelled = pending.transition(CancelledRestart())
                 queue.save(cancelled)
                 changed.append(cancelled)
@@ -318,7 +318,7 @@ def step(comms: Comms) -> None:
     with queue.locked():
         initial_records = tuple(queue.active_records())
     for initial in initial_records:
-        if not initial.state.pending_items(initial) or not initial.target.is_current_watcher:
+        if not initial.state.items_with(Pending, initial) or not initial.target.is_current_watcher:
             continue
         with queue.locked():
             current = tuple(queue.active_for(initial.selection.identity.incarnation.require_recorded()))
@@ -398,7 +398,7 @@ async def run(comms: Comms) -> None:
             def release_if_empty():
                 with queue.locked():
                     pending = tuple(pending for record in queue.active_records()
-                                    for pending in record.state.pending_items(record))
+                                    for pending in record.state.items_with(Pending, record))
                     if any(record.target.is_current_watcher for record in pending):
                         return False
                     fcntl.flock(lock, fcntl.LOCK_UN)
@@ -424,7 +424,7 @@ def main() -> None:
         queue = RestartQueue(comms.root / DIRECTORY)
         with queue.locked():
             for record in queue.active_records():
-                if record.state.pending_items(record) and record.target.is_current_watcher:
+                if record.state.items_with(Pending, record) and record.target.is_current_watcher:
                     queue.save(record.transition(
                         BlockedRestart(reason=f"Watcher failed: {type(exc).__name__}: {exc}")
                     ))

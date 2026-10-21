@@ -8,7 +8,7 @@ import pytest
 from agent_comms.coordination_tables.executions import NoPointedAttempt, NoPointedExecution
 from agent_comms.assignment_states import AssignmentState, BoundAssignment
 from agent_comms.attempt_states import AttemptState, LiveAttempt
-from agent_comms.lifecycle_capability import Successful, Terminal
+from agent_comms.lifecycle_capability import Complete, Failed, Successful, Terminal, Active
 from agent_comms.coordination_errors import IntegrityViolationError
 from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.attempts import ReplayAssessments, ReplayFact
@@ -31,9 +31,9 @@ from agent_comms.wake_policy import MessageAudience, RecipientDecision, WakePoli
 from test_coordination_store import ready, started
 
 
-def members(family):
+def members(family, capability=object):
     """Only maintained production declarations; no parallel case inventory."""
-    return tuple(c for c in family.members_with(family) if c.__module__.startswith("agent_comms."))
+    return tuple(c for c in family.members_with(capability) if c.__module__.startswith("agent_comms."))
 
 
 @pytest.fixture
@@ -80,13 +80,13 @@ def test_assignment_decision_and_binding_owned_by_policy(policy):
             initial.load(mode, "invalid-verdict", None, None)
         with pytest.raises(IntegrityViolationError):
             initial.load(mode, None, None, "unowned")
-        if mode.active:
+        for active in mode.items_with(Active, mode):
             for owner in AssignmentState.members_with(BoundAssignment):
-                bound = owner.build(mode, "exec", "owner")
+                bound = owner.build(active, "exec", "owner")
                 assert bound.execution_id == "exec" and bound.exact_target == "owner"
                 for execution_id, target in ((None, "owner"), ("exec", None)):
                     with pytest.raises(IntegrityViolationError):
-                        owner.build(mode, execution_id, target)
+                        owner.build(active, execution_id, target)
 
 
 @pytest.mark.parametrize("owner", members(ExecutionState), ids=lambda c: c.declared_name)
@@ -282,7 +282,7 @@ def terminal_snapshot(active, execution_owner, attempt_owner, response_owner, *,
 
 
 def test_snapshot_retry_terminal_coupling(active):
-    failures = tuple(c for c in members(AttemptState) if c.failed)
+    failures = members(AttemptState, Failed)
     responses = tuple(
         c for c in members(ResponseState) if not c.published and not c.requires_intent
     )
@@ -302,19 +302,16 @@ def test_snapshot_retry_terminal_coupling(active):
                 terminal_snapshot(active, DeferredExecution, phase, response, replay_safe=True)
         failed = terminal_snapshot(active, FailedExecution, phase, response, replay_safe=False)
         assert not failed.can_retry
-    for owner in members(ExecutionState):
-        if owner.completed:
-            for phase in (c for c in members(AttemptState) if c.succeeded):
-                for response in responses:
-                    if response in ResponseState.members_with(Successful):
-                        assert not terminal_snapshot(
-                            active, owner, phase, response, replay_safe=True
-                        ).can_retry
-                    else:
-                        with pytest.raises(
-                            IntegrityViolationError
-                        ):
-                            terminal_snapshot(active, owner, phase, response, replay_safe=True)
+    for owner in members(ExecutionState, Complete):
+        for phase in (c for c in members(AttemptState) if c.succeeded):
+            for response in responses:
+                if response in ResponseState.members_with(Successful):
+                    assert not terminal_snapshot(
+                        active, owner, phase, response, replay_safe=True
+                    ).can_retry
+                else:
+                    with pytest.raises(IntegrityViolationError):
+                        terminal_snapshot(active, owner, phase, response, replay_safe=True)
 
 
 def published_snapshot(pending):

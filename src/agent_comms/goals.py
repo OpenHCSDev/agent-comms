@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.lifecycle_capability import Active
+
 import json
 import os
 import re
@@ -963,7 +965,7 @@ class Goal(RecordMember, GoalDeclaration):
             raise ValueError("Goal changed during resume; refresh its state.")
 
     def accepts_following_handoff(self) -> bool:
-        return bool(self.state.active_items(self))
+        return bool(self.state.items_with(Active, self))
 
     @property
     def objective(self) -> str:
@@ -1006,7 +1008,7 @@ class Goal(RecordMember, GoalDeclaration):
         return self if self.id == goal_id else NoGoal()
 
     def active(self) -> GoalDeclaration:
-        return next(iter(self.state.active_items(self)), NoGoal())
+        return next(iter(self.state.items_with(Active, self)), NoGoal())
 
     def reports_turn(self, turn_id: str) -> bool:
         return self.reported_turn.reports(turn_id)

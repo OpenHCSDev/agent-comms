@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.lifecycle_capability import Active
+
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, fields
@@ -163,7 +165,7 @@ class GoalExecution(RecordMember, ThreadGoalExecution):
 
     def waiting_for(self, goal: Goal) -> bool:
         return any(self.goal_id == active.id and self.standby()
-                   for active in goal.state.active_items(goal))
+                   for active in goal.state.items_with(Active, goal))
 
     def validate_goal(self, goal: GoalCheckpoint) -> None:
         goal.require_identity(self.goal_id)

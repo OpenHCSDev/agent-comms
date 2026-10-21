@@ -109,7 +109,7 @@ class InputAttempt(LifecycleCapability, DeclaredFamily, affix="Input"):
         return False
 
     def unresolved_claim(self, claim_scope: int) -> bool:
-        return any(row.matches_claim(claim_scope) for row in self.unresolved_items(self))
+        return any(row.matches_claim(claim_scope) for row in self.items_with(Unresolved, self))
 
     def queued_for(self, owner: ThreadIncarnation, claim_scope: int, text: str) -> bool:
         return False

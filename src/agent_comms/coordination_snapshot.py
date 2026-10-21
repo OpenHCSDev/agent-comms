@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.lifecycle_capability import Active, Complete
+
 from dataclasses import dataclass
 from typing import Annotated, TYPE_CHECKING
 
@@ -106,7 +108,7 @@ class RecoverySnapshot:
         return intent, acknowledgement
 
     def completed_response(self) -> bool:
-        return bool(self.execution.lifecycle.completed_items(self))
+        return bool(self.execution.lifecycle.items_with(Complete, self))
 
     @property
     @boundary_decoder
@@ -192,7 +194,7 @@ class RecoverySnapshot:
         if self.is_current != (
             self.current_execution_id.otherwise(None) == execution_id
             and self.current_attempt_ordinal.otherwise(None) == execution.lifecycle.current_attempt_ordinal
-            and bool(execution.lifecycle.active_items(attempt))
+            and bool(execution.lifecycle.items_with(Active, attempt))
             and attempt is not None
             and attempt.lifecycle.accepts_active_execution()
         ):

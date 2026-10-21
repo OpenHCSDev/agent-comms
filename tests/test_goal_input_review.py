@@ -98,7 +98,8 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     assert [row.input_id for row in again.already_reviewed_inputs] == keys
     for message, key in zip(messages, keys, strict=True):
         row = stored_inputs(ledger.root).rows[key]
-        assert row.unresolved and row.accepts_reservation
+        row.require_review()
+        assert row.accepts_reservation
         assert not hasattr(row, "native_id") and not hasattr(row, "turn_id")
         assert row.source_text == message.body and not hasattr(row, "sent_text")
         assert row.claim_scope == claim_scope and row.reviewed_for_goal(goal.id)

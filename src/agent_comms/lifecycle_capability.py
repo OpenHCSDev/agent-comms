@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .coordination_session import CoordinationSession
+    from .coordination_tables.responses import ResponseObligation
+    from .native_tool_call import NativeToolCall
+
 
 class LifecycleCapability:
     """The neutral behavior shared by lifecycle families, without another registry."""
@@ -17,28 +24,25 @@ class LifecycleCapability:
 
     @classmethod
     def reject_success_as_failure(cls, refusal: Exception) -> None:
-        """An observation without success may supply failure evidence."""
+        if cls.success_count():
+            raise refusal
 
     @classmethod
     def require_successful_completion(cls, refusal: Exception) -> None:
-        raise refusal
+        if not cls.success_count():
+            raise refusal
 
-    def active_items[T](self, *items: T) -> tuple[T, ...]:
+    @classmethod
+    def items_with[T](cls, capability: type[LifecycleCapability], *items: T) -> tuple[T, ...]:
+        """Project values using declared nominal membership, without another flag store."""
+        return items if issubclass(cls, capability) else ()
+
+    @classmethod
+    def executing_items[T](cls, *items: T) -> tuple[T, ...]:
         return ()
 
-    def pending_items[T](self, *items: T) -> tuple[T, ...]:
-        return ()
-
-    def executing_items[T](self, *items: T) -> tuple[T, ...]:
-        return ()
-
-    def unresolved_items[T](self, *items: T) -> tuple[T, ...]:
-        return ()
-
-    def completed_items[T](self, *items: T) -> tuple[T, ...]:
-        return ()
-
-    def unsettled_items[T](self, *items: T) -> tuple[T, ...]:
+    @classmethod
+    def unsettled_items[T](cls, *items: T) -> tuple[T, ...]:
         return items
 
     @classmethod
@@ -49,15 +53,24 @@ class LifecycleCapability:
     def require_review(cls) -> None:
         raise ValueError("Reviewed inputs changed; inspect them again.")
 
+    def require_failure(self) -> None:
+        from .goal_attempt_identity import FailureNotObserved
+
+        raise FailureNotObserved("missing_binding")
+
     def accepts_interrupted_execution(self) -> bool:
         return False
 
-    def resume_response(self, session, obligation, execution_id: str) -> None:
+    @classmethod
+    def resume_response(
+        cls, session: CoordinationSession, obligation: ResponseObligation, execution_id: str
+    ) -> None:
         """A response that was not deferred has nothing to reengage."""
 
 
 class Settled(LifecycleCapability):
-    def unsettled_items[T](self, *items: T) -> tuple[T, ...]:
+    @classmethod
+    def unsettled_items[T](cls, *items: T) -> tuple[T, ...]:
         return ()
 
 
@@ -65,7 +78,7 @@ class Terminal(Settled):
     """A settled state has no ordinary successor and cannot advance piecemeal."""
 
     @classmethod
-    def successors(cls) -> tuple[type, ...]:
+    def successors(cls) -> tuple[type[LifecycleCapability], ...]:
         return ()
 
     @classmethod
@@ -78,29 +91,27 @@ class Terminal(Settled):
 class Failed(LifecycleCapability):
     """Failure evidence can support an interrupted execution, including a retry."""
 
+    def require_failure(self) -> None:
+        pass
+
     def accepts_interrupted_execution(self) -> bool:
         return True
 
 
 class Pending(LifecycleCapability):
-    def pending_items[T](self, *items: T) -> tuple[T, ...]:
-        return items
-
     @classmethod
     def require_no_pending(cls, refusal: Exception) -> None:
         raise refusal
 
 
 class Active(LifecycleCapability):
-    def active_items[T](self, *items: T) -> tuple[T, ...]:
-        return items
-
     def require_active(self) -> None:
         """Active members need no state-specific refusal."""
 
 
 class Executing(LifecycleCapability):
-    def executing_items[T](self, *items: T) -> tuple[T, ...]:
+    @classmethod
+    def executing_items[T](cls, *items: T) -> tuple[T, ...]:
         return items
 
     def require_executing(self) -> None:
@@ -108,16 +119,16 @@ class Executing(LifecycleCapability):
 
 
 class Unresolved(LifecycleCapability):
-    def unresolved_items[T](self, *items: T) -> tuple[T, ...]:
-        return items
-
     @classmethod
     def require_review(cls) -> None:
         pass
 
 
 class Deferred(LifecycleCapability):
-    def resume_response(self, session, obligation, execution_id: str) -> None:
+    @classmethod
+    def resume_response(
+        cls, session: CoordinationSession, obligation: ResponseObligation, execution_id: str
+    ) -> None:
         from .coordination_tables.responses import ResponseObligation
         from .obligation_states import PendingResponse
         from .reason_codes import NoReasonCode
@@ -132,13 +143,12 @@ class Deferred(LifecycleCapability):
 
 
 class Complete(Settled):
-    def completed_items[T](self, *items: T) -> tuple[T, ...]:
-        return items
-
     def assert_complete(self) -> None:
         """The outcome has been recorded; no uncertain work remains."""
 
-    def accepts_current_request(self, call, candidate) -> bool:
+    def accepts_current_request(
+        self, call: NativeToolCall, candidate: NativeToolCall
+    ) -> bool:
         return False
 
 
@@ -146,11 +156,3 @@ class Successful(Terminal):
     @classmethod
     def success_count(cls) -> int:
         return 1
-
-    @classmethod
-    def reject_success_as_failure(cls, refusal: Exception) -> None:
-        raise refusal
-
-    @classmethod
-    def require_successful_completion(cls, refusal: Exception) -> None:
-        pass

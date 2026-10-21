@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.lifecycle_capability import Active
+
 from agent_comms.native_session_files import NativeSessionFiles
 from agent_comms.native_session_reopen import NativeSessionIdentity
 
@@ -402,7 +404,7 @@ class FullNativeSend(NativeSendStage):
         snapshot, attempt = store.attempts.require_fence(self.fence)
         current.lifecycle.require_engagement()
         if (
-            not snapshot.execution.lifecycle.active_items(snapshot.execution)
+            not snapshot.execution.lifecycle.items_with(Active, snapshot.execution)
             or not attempt.lifecycle.starting
             or attempt.lifecycle.backend_done
             or attempt.lifecycle.process_dead

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.lifecycle_capability import Unresolved
+
 import logging
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -226,7 +228,7 @@ class Goals:
                     message.target,
                     message.body,
                 )
-            for pending in row.unresolved_items(row):
+            for pending in row.items_with(Unresolved, row):
                 if pending.owner in owners:
                     unknown[key] = pending
                     eligible.add(key)

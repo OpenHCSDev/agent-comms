@@ -124,7 +124,7 @@ class InputDocument:
         return tuple(
             sorted(
                 (pending for row in self.rows.values()
-                 for pending in row.unresolved_items(row) if pending.owner in owners),
+                 for pending in row.items_with(Unresolved, row) if pending.owner in owners),
                 key=lambda row: row.order,
             )
         )

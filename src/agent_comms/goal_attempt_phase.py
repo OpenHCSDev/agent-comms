@@ -7,9 +7,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
-from .goal_attempt_identity import FailureNotObserved
 from .lifecycle import LifecycleState
-from .lifecycle_capability import Terminal
+from .lifecycle_capability import Failed, Terminal
 
 if TYPE_CHECKING:
     import sqlite3
@@ -28,9 +27,6 @@ class GoalAttemptPhase(DeclaredFamily, LifecycleState, affix="Attempt"):
     launched: ClassVar[bool] = False
     verified_progress: ClassVar[bool] = False
 
-    def require_failure(self) -> None:
-        raise FailureNotObserved("missing_binding")
-
 
 class ReservedAttempt(GoalAttemptPhase):
     @classmethod
@@ -46,12 +42,9 @@ class ClaimedAttempt(GoalAttemptPhase):
         return FailedAttempt, SucceededAttempt, ResolvedAttempt
 
 
-class FailedAttempt(ReadyAttempt, GoalAttemptPhase):
+class FailedAttempt(Failed, ReadyAttempt, GoalAttemptPhase):
     def record_ready(self, attempt: AttemptRecord, db: sqlite3.Connection, note: str) -> None:
         attempt.advance(db, self, resolution=note)
-
-    def require_failure(self) -> None:
-        return None
 
     @classmethod
     def successors(cls):

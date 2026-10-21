@@ -226,14 +226,14 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
             m for m in read_history(comms) if m.reference in tuple(acknowledgement.reference for acknowledgement in outcome.publications)
         ]
         assert len(responses) == 1 and responses[0].body == "CODING_TOOLS_OK"
-        assert not comms.registry.require("beta").active_turn.executing
+        assert not comms.registry.require('beta').executing
         assert phases and 'preparing' not in phases
         if not selected_write:
             assert not comms.bus.log.claim_projection()
         with Coordination(str(root / "coordination.sqlite3")) as store:
             assignment = store.assignments.get(outcome.assignment_ids[0])
             snapshot = store.snapshots.get(assignment.lifecycle.require_completion().execution_id)
-            assert snapshot.execution.lifecycle.completed
+            snapshot.execution.lifecycle.assert_complete()
             assert (
                 snapshot.attempt.lifecycle.backend_done and snapshot.attempt.lifecycle.process_dead
             )

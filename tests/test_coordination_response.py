@@ -185,7 +185,8 @@ def test_original_routes_prepare_together_and_release_one_attempt_only_after_all
             case.store, case.bus, case.fence,
             exact_target=routes[1], owner_witness=case.witness,
         ).value
-        assert settled.execution.lifecycle.completed and not settled.is_current
+        settled.execution.lifecycle.assert_complete()
+        assert not settled.is_current
         assert len(settled.publication_evidence) == 2
         assert all(row.lifecycle.require_completion() for row in settled.assignments)
         assert settled.current_execution_id == NoPointedExecution()

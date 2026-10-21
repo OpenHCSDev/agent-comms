@@ -1,6 +1,8 @@
 """Shared start notification behavior on the existing turn input sources."""
 from __future__ import annotations
 
+from agent_comms.lifecycle_capability import Unresolved
+
 from functools import partial
 from typing import TYPE_CHECKING, ClassVar
 
@@ -25,7 +27,7 @@ class StartedInput:
         row = document.lookup(key).require_started(scope.claimed_generation)
         for key in self.keys:
             stored = document.rows.get(key)
-            if stored is not None and not stored.unresolved_items(stored):
+            if stored is not None and not stored.items_with(Unresolved, stored):
                 await inputs.emit_input_disposition(session_id, stored)
         item = inputs.state(session_id).queued.get(self.accepted_id)
         text = await item.started(inputs) if item is not None else self.notice_text

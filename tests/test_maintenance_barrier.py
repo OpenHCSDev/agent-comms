@@ -82,7 +82,8 @@ def test_only_hold_bound_cutover_may_retire_during_draining(tmp_path: Path) -> N
 
         with pytest.raises(OwnerMaintenancePendingRefusal) as refused:
             PreserveOwnerRuntime().require_restart_phase(comms.owners)
-        assert refused.value.queue_state().pending  # Idle reload remains queued, not UNKNOWN.
+        with pytest.raises(ValueError):
+            refused.value.queue_state().require_no_pending(ValueError("open work"))  # Idle reload remains queued, not UNKNOWN.
     comms.owners.maintenance.clear(hold)
     with _store_lock(comms.root / 'wire'):
         with pytest.raises(RelationViolationError):
@@ -239,7 +240,7 @@ async def test_direct_claim_and_bind_denied_after_phase_ack_in_other_process(tmp
         with status.phase.send_new(None, None, "native", "original") as outcome:
             assert isinstance(outcome, HeldSend)
     assert comms.owners.maintenance.read() == hold
-    assert not comms.registry.require("owner").turn_state.active.executing
+    assert not bool(comms.registry.require('owner').turn_state.active.executing_items(comms.registry.require('owner').turn_state.active))
 
 
 def test_rename_and_stopped_same_pid_cannot_reactivate_under_gate(tmp_path: Path) -> None:
@@ -276,7 +277,7 @@ def test_cross_process_claim_races_pause_at_registry_lock(tmp_path: Path) -> Non
     current = comms.registry.require("owner")
     # A claim linearized before the pause is visible for explicit drain; a
     # claim after pause is denied. Neither is silently retried or erased.
-    assert current.turn_state.active.executing == (result == "claimed")
+    assert bool(current.turn_state.active.executing_items(current.turn_state.active)) == (result == "claimed")
     assert comms.owners.maintenance.read() == hold
     with pytest.raises(RelationViolationError):
         comms.registry.lease_local_turn("owner", "never-after-pause")

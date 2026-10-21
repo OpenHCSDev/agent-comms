@@ -27,7 +27,7 @@ class PendingDecision:
     mode: WakePolicy
 
     def __post_init__(self):
-        if not self.mode.active_items(self.mode):
+        if not self.mode.items_with(Active, self.mode):
             raise IntegrityViolationError("passive decision cannot be deferred or failed")
 
     @property
@@ -435,7 +435,7 @@ class DeferredAssignment(EngageableAssignment, Deferred, SelectedResponseNotific
 
     def permits_engagement_change(self, after):
         return super().permits_engagement_change(after) and not (
-            self.execution_id is not None and after.pending_items(after)
+            self.execution_id is not None and after.items_with(Pending, after)
         )
 
 

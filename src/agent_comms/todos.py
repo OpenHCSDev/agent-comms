@@ -3013,7 +3013,7 @@ class Todo(TypedTable):
 
     @property
     def pending(self):
-        return bool(self.order.pending_items(self))
+        return bool(self.order.items_with(Pending, self))
 
     def story(self) -> ProblemStory:
         implied = frozenset(strike for verdict in self.verdicts

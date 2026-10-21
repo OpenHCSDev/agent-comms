@@ -121,7 +121,7 @@ def test_dead_active_turn_does_not_make_wait_cycle_runnable(tmp_path):
     )
     comms.agents.begin_turn("carol", "carol-turn")
     carol_thread = comms.registry.require("carol")
-    assert carol_thread.turn_record.executing
+    assert carol_thread.executing
     record = carol_thread.require_turn_lease().record
     record.begin(record.registry_path, record.identity,
                  replace(record.read().require_active(), owner_pid=999999999))

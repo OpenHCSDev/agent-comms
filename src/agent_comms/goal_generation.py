@@ -6,7 +6,6 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
-from .goal_attempt_identity import FailureNotObserved
 from .goal_attempt_phase import (
     FailedAttempt,
     GoalAttemptPhase,
@@ -35,9 +34,6 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
         from .goal_attempts import UnresolvedAttemptError
 
         raise UnresolvedAttemptError(UnresolvedAttemptError.diagnostic_text)
-
-    def require_failure(self) -> None:
-        raise FailureNotObserved("missing_binding")
 
     def permits_retirement(self, phase: GoalAttemptPhase | None) -> bool:
         return False
@@ -121,9 +117,6 @@ class BlockedGeneration(Failed, GenerationState, RetryableGeneration):
             )
             raise ValueError(refusal)
         super().resume_status(generation, goal, ctx)
-
-    def require_failure(self) -> None:
-        return None
 
     def permits_retirement(self, phase: GoalAttemptPhase | None) -> bool:
         return isinstance(phase, FailedAttempt)

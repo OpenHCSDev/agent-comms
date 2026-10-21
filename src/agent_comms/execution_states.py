@@ -37,7 +37,7 @@ class ExecutionState(DeclaredFamily, LifecycleState, affix="Execution"):
 
     @property
     def next_attempt_ordinal(self) -> int:
-        return 1
+        return (self.current_attempt_ordinal or 0) + 1
 
     def require_attempt_start(self) -> None:
         raise IdentityConflict("execution cannot start an attempt")
@@ -78,7 +78,13 @@ class ExecutionState(DeclaredFamily, LifecycleState, affix="Execution"):
         """State-specific cross-lifecycle rules, after common identities agree."""
 
 
-class UnstartedExecution(ExecutionState):
+class EngagedExecution:
+    @classmethod
+    def assignment_state(cls) -> type[AssignmentState]:
+        return EngagedAssignment
+
+
+class UnstartedExecution(EngagedExecution, ExecutionState):
     unstarted = True
 
     @classmethod
@@ -86,10 +92,6 @@ class UnstartedExecution(ExecutionState):
         if ordinal is not None:
             raise IntegrityViolationError("unstarted execution cannot reference an attempt")
         return cls()
-
-    @classmethod
-    def assignment_state(cls) -> type[AssignmentState]:
-        return EngagedAssignment
 
 
 class QueuedExecution(UnstartedExecution):
@@ -123,10 +125,6 @@ class AttemptReference:
     def current_attempt_ordinal(self) -> int | None:
         return self.ordinal
 
-    @property
-    def next_attempt_ordinal(self) -> int:
-        return (self.ordinal or 0) + 1
-
     @classmethod
     def load(cls, ordinal: int | None) -> ExecutionState:
         return cls(ordinal)
@@ -141,7 +139,7 @@ class AttemptExecution(AttemptReference, ExecutionState):
             raise IntegrityViolationError("active/completed execution requires an attempt")
 
 
-class ActiveExecution(Active, AttemptExecution):
+class ActiveExecution(Active, EngagedExecution, AttemptExecution):
 
     def require_final_response(self) -> None:
         pass
@@ -149,10 +147,6 @@ class ActiveExecution(Active, AttemptExecution):
     @classmethod
     def successors(cls):
         return DeferredExecution, CompletedExecution, FailedExecution
-
-    @classmethod
-    def assignment_state(cls) -> type[AssignmentState]:
-        return EngagedAssignment
 
     def accepts_attempt(self, phase):
         return phase.accepts_active_execution()

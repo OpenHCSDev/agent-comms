@@ -1,4 +1,6 @@
 """One configured saved-helper fork and fresh USER channel request, never a retry."""
+
+from agent_comms.lifecycle_capability import Complete
 from agent_comms.thread_text import SavedSessionFile
 from agent_comms.native_entries import NativeEvidenceScope
 import asyncio
@@ -131,7 +133,7 @@ async def run(stage, package):
                             claims = WakeAssignment.select(db, where='wire_seq=?', parameters=(original.seq,))
                             inputs = NativeRuntimeInput.select(db)
                             publications = PublicationEvidence.select(db)
-                        if len(claims) == 1 and claims[0].lifecycle.completed:
+                        if len(claims) == 1 and bool(claims[0].lifecycle.items_with(Complete, True)):
                             triage = tuple(row for row in inputs if row.reference_stage is TriageNativeExecution)
                             full = tuple(row for row in inputs if row.reference_stage is FullNativeExecution)
                             assert len(triage) == len(full) == 1
@@ -180,7 +182,7 @@ async def run(stage, package):
     finally:
         current = service.registry.require(child.name)
         # Observation expiry cannot authorize aborting a still-running input.
-        if not current.active_turn.executing:
+        if not current.executing:
             await asyncio.to_thread(service.owners.stop, child.name)
         acknowledgement['owned_owner_after_observation'] = FieldCodec.encode(service.registry.require(child.name).process_identity)
         acknowledgement['configured_source_hashes_unchanged'] = all(

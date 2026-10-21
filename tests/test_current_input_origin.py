@@ -288,4 +288,4 @@ async def test_direct_human_input_pin_shares_original_source_lineage_without_rep
         task=UserTaskDrop(CorrectionTaskChange(second_pin.reference)))
     assert captured(owner.name).current_authored_sources(owner, comms.registry.snapshot()) == (revised,)
     assert stored_inputs(inputs.root).lookup(row.key) == row
-    assert stored_inputs(inputs.root).lookup(second.key).unresolved
+    stored_inputs(inputs.root).lookup(second.key).require_review()

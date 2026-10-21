@@ -104,7 +104,8 @@ def test_recover_owner_without_an_input_settles_unknown_and_clears_pointer(relea
     RecoveryMonitorCapability.recover_owner(released_starting, owner)
     with Coordination(released_starting / "coordination.sqlite3") as store:
         after = store.snapshots.get(execution_id)
-        assert not after.is_current and after.attempt.lifecycle.failed
+        after.attempt.lifecycle.require_failure()
+        assert not after.is_current
         assert after.attempt.reason_code == GivenReasonCode("released_native_unknown")
         assert after.replay.facts & ReplayFact.UNKNOWN_EFFECTS
         assert not after.replay.replay_safe
