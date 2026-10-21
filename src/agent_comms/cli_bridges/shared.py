@@ -449,7 +449,8 @@ class SendRequest(DeclaredOptions):
 class Send(SendRequest, Operation[OperationBridge]):
     async def execute(self, bridge: OperationBridge) -> None:
         request = replace(self, sender=bridge.binding.bus)
-        await bridge.show_sent(await asyncio.to_thread(request.report.send, bridge.comms, request))
+        await bridge.show_sent(await bridge.comms.bus.when_open(
+            partial(request.report.send, bridge.comms, request)))
 
 
 class Inbox(Operation[OperationBridge]):

@@ -200,7 +200,7 @@ class MessageBus[Writes: Publisher](RuntimeFile, StoreLockOwner):
                         break
 
     async def when_open[Result](self, operation: Callable[[], Result | Awaitable[Result]]) -> Result:
-        """Wait out a hold without replaying an admitted synchronous write.
+        """Wait out a hold without repeating a synchronous write.
 
         Synchronous callbacks run under ingress in a worker, so refusal precedes
         even in-memory mutation and maintenance cannot split a publication batch.
@@ -210,13 +210,14 @@ class MessageBus[Writes: Publisher](RuntimeFile, StoreLockOwner):
         """
         maintenance = MaintenanceBarrier(self._registry.store.path)
 
-        def admitted():
-            with maintenance.allow_input():
+        def execute():
+            with self.locked():
+                maintenance.assert_open_unlocked()
                 return operation()
 
         while True:
             try:
-                result = await Coordination.run_worker(admitted)
+                result = await Coordination.run_worker(execute)
                 return await result if inspect.isawaitable(result) else result
             except MaintenanceHeldError:
                 await self.resumed()

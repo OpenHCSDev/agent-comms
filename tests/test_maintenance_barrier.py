@@ -341,8 +341,8 @@ def test_phase_change_waits_for_final_native_write_lock(tmp_path: Path) -> None:
         gate.assert_open_unlocked()
 
 
-def test_core_writes_outside_a_watch_are_refused_while_draining(tmp_path: Path, capsys) -> None:
-    """A sender or tool-use hook is not paused by the drain; Core refuses its write instead."""
+def test_activity_write_is_refused_while_draining(tmp_path: Path, capsys) -> None:
+    """Activity is not a publication request and remains refused during a hold."""
     from agent_comms.cli import main
 
     def cli(*argv: str) -> tuple[int, str]:
@@ -358,11 +358,8 @@ def test_core_writes_outside_a_watch_are_refused_while_draining(tmp_path: Path, 
     before = written()
     gate = MaintenanceBarrier(tmp_path / 'registry.json')
     hold = gate.begin(MaintenanceOperator.current())
-    for argv in (('send', '--from', 'a', '--to', 'b', '--body', 'hi'),
-                 ('user-send', '--to', 'b', '--body', 'hi', '--worktree', '/wt'),
-                 ('activity', '--name', 'a', '--state', 'working')):
-        code, out = cli(*argv)
-        assert code != 0 and 'under maintenance' in out
+    code, out = cli('activity', '--name', 'a', '--state', 'working')
+    assert code != 0 and 'under maintenance' in out
     assert written() == before
     gate.clear(hold)
     assert cli('send', '--from', 'a', '--to', 'b', '--body', 'hi')[0] == 0

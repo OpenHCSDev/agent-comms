@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
 import threading
 from abc import abstractmethod
 from collections.abc import Mapping
 from pathlib import Path
+from functools import partial
 from dataclasses import MISSING, dataclass, field, fields, replace
 from typing import TYPE_CHECKING, ClassVar, Literal, NoReturn, TextIO, Type
 
@@ -369,6 +371,18 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
         self: ToolRequest[ToolCaller], comms: Comms, caller: NoThreadCaller
     ) -> ToolResult:
         return self.apply(comms, caller)
+
+
+class PublishingToolRequest[Caller: ToolCaller = ToolCaller](
+    ToolRequest[Caller], declared_name=None
+):
+    """A publication waits at the bus owner before any caller or message mutation."""
+
+    def apply(self, comms: Comms, caller: Caller) -> ToolResult:
+        return asyncio.run(comms.bus.when_open(partial(self.publish, comms, caller)))
+
+    @abstractmethod
+    def publish(self, comms: Comms, caller: Caller) -> ToolResult: ...
 
 
 class LiveOwnerTool:
@@ -1086,7 +1100,7 @@ class CommsSendRefusalsTool(ReadTool, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSendTool(ToolRequest):
+class CommsSendTool(PublishingToolRequest):
     label = "Comms Send"
     description = (
         "Send a message to another thread or channel. Address specific threads with "
@@ -1106,7 +1120,7 @@ class CommsSendTool(ToolRequest):
         "Change report fields; required for the change-report kind", default=None
     )
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
+    def publish(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
         try:
             caller.require_directive(comms, self.body)
             body = VerdictAudience(self.audience).addressed(self.target, self.body)
@@ -1121,7 +1135,7 @@ class CommsSendTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsAuthoredTaskTool(ThreadToolRequest):
+class CommsAuthoredTaskTool(ThreadToolRequest, PublishingToolRequest[ThreadCaller]):
     """One original authorized publication path for authored task declarations."""
     target: str = tool_field("Thread or channel receiving the original declaration", wire_name="to")
     scope: TaskScopeSelection = tool_field(
@@ -1136,7 +1150,7 @@ class CommsAuthoredTaskTool(ThreadToolRequest):
     @abstractmethod
     def original_body(self, declaration): ...
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> TaskPublished:
+    def publish(self, comms: Comms, caller: ThreadCaller) -> TaskPublished:
         owner = comms.registry.require(caller.name)
         declaration = self.declaration(owner)
         result = comms.messaging.send(

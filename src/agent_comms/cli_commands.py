@@ -18,6 +18,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping
 from contextlib import aclosing
 from dataclasses import dataclass, field, fields, replace
+from functools import partial
 from inspect import iscoroutinefunction, signature
 from itertools import dropwhile, takewhile
 from pathlib import Path
@@ -886,23 +887,32 @@ class ImportSubagentsCliCommand(ImportingCliCommand, declared_name="import-subag
             for path in ClaudeTranscript.subagents(self.session.expanduser().resolve())))
 
 
+class PublishingCliCommand(CliCommand, declared_name=None):
+    """Wait for maintenance to clear before running a CLI publication."""
+
+    def apply(self, ctx: Comms) -> CliResult:
+        return asyncio.run(ctx.bus.when_open(partial(self.publish, ctx)))
+
+    @abstractmethod
+    def publish(self, ctx: Comms) -> CliResult: ...
+
+
 @dataclass(frozen=True, kw_only=True)
-class SendCliCommand(SendRequest, CliCommand):
+class SendCliCommand(SendRequest, PublishingCliCommand):
     sender: str = option("--from")
 
-    def apply(self, ctx: Comms) -> MessageSentResult:
+    def publish(self, ctx: Comms) -> MessageSentResult:
         return MessageSentResult(self.report.send(ctx, self))
 
 
 @dataclass(frozen=True, kw_only=True)
-class UserSendCliCommand(CliCommand, declared_name="user-send"):
+class UserSendCliCommand(PublishingCliCommand, declared_name="user-send"):
     help = "Send as the human user to a thread (DM), #channel, or #all"
     target: str = option("--to")
     body: str = option("--body")
     worktree: str = option("--worktree", default_factory=os.getcwd)
 
-    def apply(self, ctx: Comms) -> CliResult:
-
+    def publish(self, ctx: Comms) -> CliResult:
         message = ctx.messaging.send_user_message(self.target, self.body, worktree=self.worktree)
         return UserMessageSentResult(message.reference)
 
