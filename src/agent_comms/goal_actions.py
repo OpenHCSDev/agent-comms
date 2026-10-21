@@ -240,6 +240,26 @@ class ActiveGoalAction(
 
 
 @dataclass(frozen=True, kw_only=True)
+class CompliedGoalAction(TransitionGoalAction, OwnerInvocable):
+    """The commander complied, so a unit its chokehold paused works again. The compliant answer
+    is a witness the way an order is: a generation an interruption left unresolved continues
+    as a fresh order continues it (continue_work), where a status-only resume is refused.
+    Only Core's release takes it; no model or control surface can name a witness."""
+
+    witness: str
+
+    def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
+        return ActiveGoal()
+
+    def before_transition(self, goal: Goal, ctx: GoalActionContext) -> None:
+        store = ctx.goals.open_goal_store()
+        generation = store.require_generation(goal.id)
+        generation.lifecycle.continue_work(store, generation, self.witness)
+        resumed = store.require_generation(goal.id)
+        resumed.lifecycle.resume_status(resumed, goal, ctx)
+
+
+@dataclass(frozen=True, kw_only=True)
 class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
     wait_for: tuple[str, ...] = ()
     reviewed_inputs: tuple[str, ...] = ()

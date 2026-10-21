@@ -208,6 +208,19 @@ class UnansweredUnitAsks(MessageReadRequest[tuple[Message, ...]]):
 
 
 @dataclass(frozen=True, slots=True)
+class SenderMessages(UnansweredUnitAsks):
+    """Everything the other side sent the commander in the window, answered or not."""
+
+    def indexed(self, index: BusPageIndex, source: WireSnapshot) -> tuple[Message, ...]:
+        with closing(index.recent_offsets(
+            self.since, predicate=self.scope.index_predicate, before_offset=source.boundary,
+        )) as offsets:
+            return tuple(row.message for row in self.indexed_records(source, offsets)
+                         if row.message.sender not in self.scope.first_names
+                         and row.message.timestamp <= self.before)
+
+
+@dataclass(frozen=True, slots=True)
 class UnansweredBurst(UnansweredUnitAsks):
     """A sender whose messages arrive as one burst: an answer to any of its messages covers
     everything it sent before that answer, so the commander answers a burst once, not once per

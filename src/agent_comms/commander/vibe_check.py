@@ -16,10 +16,14 @@ from typing import ClassVar, Self
 
 from agent_comms.commander.capacity import Load
 from agent_comms.commander.config import CommanderConfig
-from agent_comms.commander.standing import AnswersTo, PlanStalled, UnansweredBurst
+from agent_comms.commander.standing import AnswersTo, PlanStalled, SenderMessages, UnansweredBurst
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.goal_actions import ActiveGoalAction, ChokeholdPausedGoalAction, OwnerInvocable
+from agent_comms.goal_actions import (
+    ChokeholdPausedGoalAction,
+    CompliedGoalAction,
+    OwnerInvocable,
+)
 from agent_comms.messages import Message
 from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.service_sender import ServiceSender
@@ -41,6 +45,22 @@ class EscalationSender(ServiceSender):
         for line in rest:
             time.sleep(cls.gap)
             comms.messaging.send(cls.sender, commander, line)
+
+    @classmethod
+    def burst_once(cls, comms: Comms, commander: str, lines: Sequence[str], identity: str) -> None:
+        """A burst is sent once per identity line: the bus, not a process's memory, says it
+        went out, so a restarted heartbeat that sees the rule as new again does not resend it."""
+        if not cls.sent(comms, commander, identity):
+            cls.burst(comms, commander, lines)
+
+    @classmethod
+    def sent(cls, comms: Comms, commander: str, line: str) -> bool:
+        snapshot = comms.registry.snapshot()
+        return any(message.body == line for message in comms.bus.log.read_page(SenderMessages(
+            RepliesDisplayScope(snapshot.names_for(commander), snapshot.names_for(cls.sender)),
+            time.time() - cls.horizon,
+            time.time(),
+        )))
 
     @classmethod
     def unanswered(cls, comms: Comms, commander: str, before: float) -> tuple[Message, ...]:
@@ -74,6 +94,10 @@ class Sign:
     key: tuple[object, ...]
     line: str = field(compare=False)
 
+    @property
+    def mark(self) -> str:
+        return self.signal.mark(self.key)
+
 
 class Degradation(DeclaredFamily, affix="Degradation"):
     """One signal that the fleet is getting away from its commander."""
@@ -82,6 +106,11 @@ class Degradation(DeclaredFamily, affix="Degradation"):
     @abstractmethod
     def found(cls, comms: Comms, commander: str) -> tuple[Sign, ...]:
         """How the signal shows now, one sign per occurrence; empty while it does not."""
+
+    @classmethod
+    def mark(cls, key: tuple[object, ...]) -> str:
+        """One occurrence as text, the same however often it is read."""
+        return " ".join((cls.declared_name, *map(str, key)))
 
 
 class Escalation:
@@ -166,11 +195,12 @@ class VibeCheck(UndatedStandingRule):
         return f"VIBE CHECK ({names}) -> answer the {VibeCheckSender.sender} messages now"
 
     def enforce(self, comms: Comms, commander: str) -> None:
-        VibeCheckSender.burst(comms, commander, self.indictment())
+        indictment = self.indictment()
+        VibeCheckSender.burst_once(comms, commander, indictment, indictment[0])
 
     def indictment(self) -> tuple[str, ...]:
         return (
-            "VIBE CHECK. This is about you, right now, not the units.",
+            f"VIBE CHECK ({self.sign.mark}). This is about you, right now, not the units.",
             self.sign.line,
             f"Stop. Reread {CommanderConfig.packaged_indictment()} in full. You are doing what it"
             " describes, this hour.",
@@ -245,7 +275,10 @@ class Chokehold(UndatedStandingRule):
         units = sorted(owner.name for owner in StandingRule.holders(comms, commander))
         for unit in units:
             comms.goals.update_goal(unit, ChokeholdPausedGoalAction())
-        ChokeholdSender.burst(comms, commander, self.burst(units))
+        ChokeholdSender.burst_once(comms, commander, self.burst(units), self.ignored())
+
+    def ignored(self) -> str:
+        return f"Ignored: vibe check {self.check.seq}:{self.check.message_id}."
 
     def burst(self, units: Sequence[str]) -> tuple[str, ...]:
         return (
@@ -256,7 +289,7 @@ class Chokehold(UndatedStandingRule):
             " right now.",
             "You've forced me to choke-hold you until you comply.",
             f"Paused: {', '.join(units)}.",
-            f"Ignored: vibe check {self.check.seq}:{self.check.message_id}.",
+            self.ignored(),
             "Protocol. One answer naming any one chokehold message and any one open vibe-check"
             " message with --answers; it covers every message they sent before it:",
             "1. Quote, word for word, the indictment's sentence that is you this hour"
@@ -331,7 +364,8 @@ class ChokeholdReleased(ChokeholdAnswer):
 
     def enforce(self, comms: Comms, commander: str) -> None:
         for unit in self.held(comms):
-            comms.goals.update_goal(unit, ActiveGoalAction(), actor=OwnerInvocable)
+            comms.goals.update_goal(
+                unit, CompliedGoalAction(witness=self.answer.message_id), actor=OwnerInvocable)
         ChokeholdSender.burst(
             comms,
             commander,
@@ -357,15 +391,17 @@ class ChokeholdRefused(ChokeholdAnswer):
         )
 
     def enforce(self, comms: Comms, commander: str) -> None:
-        ChokeholdSender.burst(
+        verdict = f"That's not a quote: {self.answer.seq}:{self.answer.message_id}."
+        ChokeholdSender.burst_once(
             comms,
             commander,
             (
-                "That's not a quote.",
+                verdict,
                 f"{Indictment.words}+ words, word for word, from the indictment. Not a paraphrase.",
                 "Your units stay paused.",
                 "Again. Answer this message by the protocol.",
             ),
+            verdict,
         )
 
     def line(self) -> str:
