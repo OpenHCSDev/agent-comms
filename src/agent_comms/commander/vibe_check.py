@@ -94,8 +94,7 @@ class Sign:
 
     @property
     def mark(self) -> str:
-        """The occurrence as text, the same however often it is read."""
-        return " ".join((self.signal.declared_name, *map(str, self.key)))
+        return self.signal.mark(self.key)
 
 
 class Degradation(DeclaredFamily, affix="Degradation"):
@@ -105,6 +104,11 @@ class Degradation(DeclaredFamily, affix="Degradation"):
     @abstractmethod
     def found(cls, comms: Comms, commander: str) -> tuple[Sign, ...]:
         """How the signal shows now, one sign per occurrence; empty while it does not."""
+
+    @classmethod
+    def mark(cls, key: tuple[object, ...]) -> str:
+        """One occurrence as text, the same however often it is read."""
+        return " ".join((cls.declared_name, *map(str, key)))
 
 
 class Escalation:
@@ -140,8 +144,7 @@ class PlanStalledDegradation(Degradation):
     def found(cls, comms: Comms, commander: str) -> tuple[Sign, ...]:
         now = time.time()
         return tuple(
-            Sign(cls, (rule.phase.declared_name, rule.since, cls.doublings(now - rule.since)),
-                 rule.line())
+            Sign(cls, (rule.phase, rule.since, cls.doublings(now - rule.since)), rule.line())
             for rule in PlanStalled.violations(comms, commander)
         )
 
