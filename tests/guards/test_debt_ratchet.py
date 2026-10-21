@@ -979,12 +979,17 @@ def test_a_frozen_write_counts_except_in_its_own_classes_post_init():
     source = b"""class Snapshot:
     def __post_init__(self):
         object.__setattr__(self, "maps", dict(self.maps))
+        object.__setattr__(self.other, "maps", {})
+        def later():
+            object.__setattr__(self, "maps", {})
     def refresh(self):
         object.__setattr__(self, "maps", {})
 def __post_init__(self):
     object.__setattr__(self, "maps", {})
 """
-    assert FrozenFieldWrite.count(source, "values.py") == 2
+    # Only the first write builds the instance; another object, a nested scope, another
+    # method and a module-level function of the same name all still count.
+    assert FrozenFieldWrite.count(source, "values.py") == 4
 
 
 def test_changed_prose_fails_but_an_unchanged_disk_key_does_not(repo):

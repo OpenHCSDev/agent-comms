@@ -579,25 +579,48 @@ class CleanChangedLines(OccurrenceMeasure):
         return sites
 
 
+class OwnInstanceWrites(ast.NodeVisitor):
+    """A method body's object.__setattr__ calls on its own instance; nested scopes own theirs."""
+
+    def __init__(self, instance: str) -> None:
+        self.instance = instance
+        self.found: list[ast.Call] = []
+
+    def visit_FunctionDef(self, node: ast.AST) -> None:
+        pass
+
+    visit_AsyncFunctionDef = visit_Lambda = visit_ClassDef = visit_FunctionDef
+
+    def visit_Call(self, node: ast.Call) -> None:
+        written = [*map(ast.unparse, node.args[:1])]
+        if FrozenFieldWrite.occurrences(node) and written == [self.instance]:
+            self.found.append(node)
+        self.generic_visit(node)
+
+
 class FrozenFieldWrite(CleanChangedLines, PerFileOccurrenceMeasure):
-    """object.__setattr__ writes past a frozen class; only the class's own __post_init__ may,
-    because there the instance is still being constructed."""
+    """object.__setattr__ writes past a frozen class; only the class's own __post_init__ may
+    write its own instance, because there the instance is still being constructed."""
 
     construction: typing.ClassVar[str] = "__post_init__"
 
     @classmethod
     def sites(cls, tree: ast.AST, filename: str) -> Iterator[ast.AST]:
-        constructing = {id(part) for node in ast.walk(tree) for part in cls.constructing(node)}
+        constructing = {id(write) for node in ast.walk(tree) for write in cls.constructing(node)}
         return (node for node in ast.walk(tree) if id(node) not in constructing)
 
     @classmethod
-    def constructing(cls, node: ast.AST) -> Iterator[ast.AST]:
+    def constructing(cls, node: ast.AST) -> Iterator[ast.Call]:
         match node:
             case ast.ClassDef(body=members):
                 for member in members:
                     match member:
-                        case ast.FunctionDef(name=FrozenFieldWrite.construction):
-                            yield from ast.walk(member)
+                        case ast.FunctionDef(name=FrozenFieldWrite.construction,
+                                             args=ast.arguments(args=[instance, *_]), body=body):
+                            writes = OwnInstanceWrites(instance.arg)
+                            for statement in body:
+                                writes.visit(statement)
+                            yield from writes.found
 
     @staticmethod
     def occurrences(node: ast.AST) -> int:
