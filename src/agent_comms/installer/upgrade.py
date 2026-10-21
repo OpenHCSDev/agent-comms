@@ -38,22 +38,15 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 from agent_comms.active_route import ActiveRoute, active_route_path, route_new_bus
+from agent_comms.cli_bridges.shared import BridgeResume, Serve
 from agent_comms.cli_commands import InstallResult, ThreadsResult, WhoResult
 from agent_comms.cli_result import CliResult
-from agent_comms.cli_bridges.shared import BridgeResume, Serve
-from agent_comms.declared_family import DeclaredFamily
 from agent_comms.comms import Comms
+from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.history_result import EverythingHistoryPageResult
-from agent_comms.storage_rules import StorageRule
 from agent_comms.host_services import HostService
-from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
-from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, MaintenanceOperator
-from agent_comms.registry_store import RegistryStore
-from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
-from agent_comms.runtime_processes import RuntimeProcesses, RuntimeRetirement
-from agent_comms.store_files import _store_lock
-from agent_comms.wire_log import WireLog
+from agent_comms.install_choices import InstallerChoice
 from agent_comms.installer import publication, step_worker
 from agent_comms.installer.backup import (
     BackupReport,
@@ -67,7 +60,14 @@ from agent_comms.installer.backup import (
 from agent_comms.installer.carry import STEPS, Carried, Carry, CarryChain, CarryLedger
 from agent_comms.installer.practice import PracticeMeasurement, practice_copy, prepare_runtime_home
 from agent_comms.installer.runtime_resolution import RuntimeResolution
-from agent_comms.install_choices import InstallerChoice
+from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
+from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, MaintenanceOperator
+from agent_comms.registry_store import RegistryStore
+from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
+from agent_comms.runtime_processes import RuntimeProcesses, RuntimeRetirement
+from agent_comms.storage_rules import StorageRule
+from agent_comms.store_files import _store_lock
+from agent_comms.wire_log import WireLog
 
 if TYPE_CHECKING:
     from agent_comms.installer.launch import InstallReport
@@ -581,12 +581,14 @@ def rehearse(root: Path, stack: Stack, installed: Stack, tree: TargetTree, chain
             if path.exists() and not destination.exists():
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(path, destination)
-        stopping = before_stop(copied, pending, stack, tree)
         installed.running_owners(copied)
-        os.environ[HOLDER_NONCE] = MaintenanceBarrier(copied / "registry.json").begin(
-            MaintenanceOperator.current(), target=stack.runtime).nonce
+        maintenance = MaintenanceBarrier(RegistryStore.at(copied).path)
+        held = maintenance.begin(MaintenanceOperator.current())
+        held = maintenance.retarget(held, stack.runtime)
+        os.environ[HOLDER_NONCE] = held.nonce
         with transcripts_held(copied):
             before = bus_files(copied)
+        stopping = before_stop(copied, pending, stack, tree)
         passed = carry_and_read(copied, before, pending, stack, stack, tree, stopping)
         return passed.extended(CarriedRehearsal, copy=measurement)
 
@@ -809,13 +811,11 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
     RootRuntimeStore.at(root).owner(installed.runtime)
     running = installed.running_owners(root)
     maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
-    held = maintenance.begin(MaintenanceOperator.current(), target=staged.runtime)
+    held = maintenance.begin(MaintenanceOperator.current())
     os.environ[HOLDER_NONCE] = held.nonce  # this run's own CLI calls read under its hold
     try:
-        stopping = before_stop(root, pending, staged, tree)
         installed.owners(root, "stop", running)
         with transcripts_held(root):
-            before = bus_files(root)
             backup = StoreBackup.take(root, active_route_path(), selected, spill_dir)
     except BaseException as error:
         maintenance.clear(held)
@@ -824,6 +824,12 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
               f"maintenance cleared; owners: {started}", file=sys.stderr)
         raise
     try:
+        # The outgoing CLI has finished. No outgoing reader sees this target-bearing hold.
+        held = maintenance.retarget(held, staged.runtime)
+        os.environ[HOLDER_NONCE] = held.nonce
+        with transcripts_held(root):
+            before = bus_files(root)
+        stopping = before_stop(root, pending, staged, tree)
         run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
         TargetTree.prepare(checkout)
         staged.prepare_native()

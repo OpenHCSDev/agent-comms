@@ -3,11 +3,16 @@
 import pytest
 
 from agent_comms.comms import Comms
+from agent_comms.errors import RelationViolationError
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.locked_store import RegistryFile
-from agent_comms.wire_log import WireLog
-from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator, NoMaintenanceTarget
+from agent_comms.maintenance_barrier import (
+    MaintenanceBarrier,
+    MaintenanceOperator,
+    NoMaintenanceTarget,
+)
 from agent_comms.root_runtime import ForeignRuntimeError, RootRuntime, RootRuntimeStore
+from agent_comms.wire_log import WireLog
 
 
 def test_root_runtime_attachment_family(tmp_path):
@@ -26,13 +31,21 @@ def test_root_runtime_attachment_family(tmp_path):
     assert str(foreign.prefix) in str(refused.value)
 
     barrier = MaintenanceBarrier(RegistryFile.path_in(root))
-    held = barrier.begin(MaintenanceOperator.current(), target=target)
+    original = barrier.begin(MaintenanceOperator.current())
+    assert not original.allows_runtime(target)
+    with pytest.raises(ForeignRuntimeError):
+        RootRuntime.require_attachable(root, target)
+    held = barrier.retarget(original, target)
+    assert held.generation == original.generation + 1
+    with pytest.raises(RelationViolationError):
+        barrier.retarget(original, foreign)
     assert not NoMaintenanceTarget().allows_runtime(foreign)
     RootRuntime.require_attachable(root, target)
     RootRuntime.require_attachable(root, owner)
     with pytest.raises(ForeignRuntimeError):
         RootRuntime.require_attachable(root, foreign)
-    barrier.clear(held)
+    cleared = barrier.clear(held)
+    assert cleared.target == NoMaintenanceTarget()
     with pytest.raises(ForeignRuntimeError):
         RootRuntime.require_attachable(root, target)
     RootRuntime.publish(root, target)

@@ -17,14 +17,22 @@ from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Literal, Self
+from typing import Annotated, Literal, Self
 
 from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, ToolRefusedError
-from .field_codec import FieldCodec, Id128Text, MalformedRecord, NullMember, RecordMember, SubclassUnion
-from .lifecycle import LifecycleState
+from .field_codec import (
+    FieldCodec,
+    Id128Text,
+    MalformedRecord,
+    NullMember,
+    RecordMember,
+    SubclassUnion,
+    WireOmitDefault,
+)
 from .launch_runtime import LaunchRuntime
+from .lifecycle import LifecycleState
 from .locked_store import DurableFile
 from .send_outcome import GrantedSend, HeldSend
 from .store_files import (
@@ -95,6 +103,10 @@ class MaintenancePhase(DeclaredFamily, LifecycleState, affix="Phase"):
     new_sends = running_sends = HeldSends
 
     @classmethod
+    def target_after(cls, target: MaintenanceTarget) -> MaintenanceTarget:
+        return target
+
+    @classmethod
     def allows_runtime(cls, state: MaintenanceState, runtime: LaunchRuntime) -> bool:
         return state.target.allows_runtime(runtime)
 
@@ -152,6 +164,10 @@ class InstallingPhase(MaintenancePhase):
 
 class ReadyPhase(MaintenancePhase):
     new_sends = running_sends = GrantedSends
+
+    @classmethod
+    def target_after(cls, target: MaintenanceTarget) -> MaintenanceTarget:
+        return NoMaintenanceTarget()
 
     @classmethod
     def allows_runtime(cls, state: MaintenanceState, runtime: LaunchRuntime) -> bool:
@@ -242,7 +258,9 @@ class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
     operator: MaintenanceOperator
     nonce: str
     phase: type[MaintenancePhase]
-    target: MaintenanceTarget = field(default_factory=NoMaintenanceTarget)
+    target: Annotated[MaintenanceTarget, WireOmitDefault()] = field(
+        default_factory=NoMaintenanceTarget
+    )
 
     def allows_runtime(self, runtime: LaunchRuntime) -> bool:
         return self.phase.allows_runtime(self, runtime)
@@ -275,7 +293,12 @@ class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
     def successor(self, phase: type[MaintenancePhase], nonce: str) -> MaintenanceState:
         if not self.phase().may_become(phase()):
             raise ValueError('Maintenance transition requires a valid expected successor')
-        return replace(self, generation=self.generation + 1, nonce=nonce, phase=phase)
+        return self.in_phase(phase, nonce)
+
+    def in_phase(self, phase: type[MaintenancePhase], nonce: str) -> MaintenanceState:
+        """Ordinary and dead-holder transitions share the phase's target lifetime."""
+        return replace(self, generation=self.generation + 1, nonce=nonce, phase=phase,
+                       target=phase.target_after(self.target))
 
     def require_open_to(self, holder: str) -> None:
         if holder != self.nonce:
@@ -370,10 +393,7 @@ class MaintenanceBarrier(MaintenanceIngress):
         current = self._current_unlocked()
         if current != expected:
             return current
-        self._write_unlocked(replace(
-            expected, generation=expected.generation + 1, nonce=Id128Text.mint(),
-            phase=DeadHolderReleasedPhase,
-        ))
+        self._write_unlocked(expected.in_phase(DeadHolderReleasedPhase, Id128Text.mint()))
         raise MaintenanceHeldError(
             f"Maintenance released dead holder pid={expected.operator.pid} "
             f"start_time={expected.operator.start_time}; ingress reopened"
@@ -408,16 +428,25 @@ class MaintenanceBarrier(MaintenanceIngress):
         _atomic_write_text(self.marker_path, marker_text, fsync_parent=True)
         _atomic_write_text(self.state_path, state_text, fsync_parent=True)
 
-    def begin(self, operator: MaintenanceOperator, *,
-              target: LaunchRuntime = LaunchRuntime.running()) -> MaintenanceState:
+    def begin(self, operator: MaintenanceOperator) -> MaintenanceState:
         """Hold new turns before fleet drain; an uncertain write stays closed."""
         with _store_lock(self.wire_path), _store_lock(self.registry_path):
             current = self.current_unlocked()
             current.require_open()
             hold = MaintenanceState(version=2, root=str(self.registry_path.parent.resolve()),
                                     generation=current.generation + 1, operator=operator,
-                                    nonce=Id128Text.mint(), phase=DrainingPhase,
-                                    target=TargetRuntime(target.interpreter))
+                                    nonce=Id128Text.mint(), phase=DrainingPhase)
+            self._write_unlocked(hold)
+            return hold
+
+    def retarget(self, expected: MaintenanceState, runtime: LaunchRuntime) -> MaintenanceState:
+        """Transfer a drained hold after its outgoing readers have stopped."""
+        expected.require_draining()
+        with _store_lock(self.wire_path), _store_lock(self.registry_path):
+            if self.current_unlocked() != expected:
+                raise RelationViolationError('Maintenance generation/operator changed')
+            hold = replace(expected, generation=expected.generation + 1,
+                           nonce=Id128Text.mint(), target=TargetRuntime(runtime.interpreter))
             self._write_unlocked(hold)
             return hold
 
