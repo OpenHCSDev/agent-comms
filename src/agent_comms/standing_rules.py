@@ -142,6 +142,11 @@ class OwedAnswer(StandingRule, declared_name=None):
 
     message: Message
 
+    @property
+    def cited(self) -> str:
+        """The owed message as the heartbeat and the gate name it."""
+        return f"{self.message.seq}:{self.message.message_id}"
+
     @classmethod
     @abstractmethod
     def open_messages(cls, comms: Comms, commander: str) -> tuple[Message, ...]:
@@ -321,7 +326,7 @@ class LocatedHuntDue(HuntDue, declared_name=None):
 
 @dataclass(frozen=True)
 class DirectiveUnacted(OwedAnswer, DatedStandingRule):
-    """A claude-ai directive recorded on an open request, past its deadline with no order since."""
+    """An owner directive recorded on an open request, past its deadline with no order since."""
 
     request: str
     directive: RequestDirective
@@ -347,7 +352,7 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
 
     def line(self) -> str:
         return (
-            f"DIRECTIVE UNACTED: claude-ai {self.directive.seq}:{self.message.message_id}"
+            f"DIRECTIVE UNACTED: owner directive {self.cited}"
             f" on request {self.request},"
             f" due {self.directive.due_time} -> order its next step or mark the request done"
         )
@@ -359,7 +364,7 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
         oldest = min(current, key=lambda rule: rule.directive.seq).directive
         newest = max(current, key=lambda rule: rule.directive.seq).directive
         return (
-            f"DIRECTIVE UNACTED: request {self.request}: {len(current)} claude-ai directives; "
+            f"DIRECTIVE UNACTED: request {self.request}: {len(current)} owner directives; "
             f"oldest {oldest.seq} due {oldest.due_time}; "
             f"newest {newest.seq} due {newest.due_time} "
             "-> order the next step or mark the request done"
