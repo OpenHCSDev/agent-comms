@@ -71,7 +71,7 @@ class HistoryMetadata(BusFile):
             raise RelationViolationError("Retired claim boundary is outside its stream")
 
     @classmethod
-    def read(cls, root: Path) -> HistoryMetadata:
+    def read(cls, root: Path) -> Self:
         data = FieldCodec.parse((root / cls.filename).read_bytes())
         return FieldCodec.construct(
             cls,
@@ -760,8 +760,7 @@ class BusHistory(Carry, BusFile):
                 bindings[source.original_identity] = RecordedBusIdentity.capture(source.bus.path)
                 directory = source.bus.path.parent.relative_to(self.root)
                 rewritten.update(
-                    str(directory / name)
-                    for name in (*result.rewritten, *read.rewritten)
+                    str(directory / name) for name in (*result.rewritten, *read.rewritten)
                 )
             catalog_result = HistoryCatalogSource.publish(
                 self.root, self.original_root, catalog, bindings
@@ -782,11 +781,16 @@ class BusHistory(Carry, BusFile):
         if spill.is_relative_to(self.root):
             raise RelationViolationError("History spill must be outside the bus")
         with _store_lock(HistoryArchive.path_in(self.root)):
-            roots = (self.root, *(Path(source.root) for source in
-                                  HistoryArchive(Bus.path_in(self.root)).sources()))
+            roots = (
+                self.root,
+                *(Path(source.root) for source in HistoryArchive(Bus.path_in(self.root)).sources()),
+            )
             stage = Path(tempfile.mkdtemp(prefix=f"{self.name()}-", dir=spill))
-            rewritten = tuple(name for directory in roots
-                              for name in HistoryInput.moved(self.root, directory, stage))
+            rewritten = tuple(
+                name
+                for directory in roots
+                for name in HistoryInput.moved(self.root, directory, stage)
+            )
             if not rewritten:
                 stage.rmdir()
         return Carried(len(rewritten), rewritten=rewritten)
