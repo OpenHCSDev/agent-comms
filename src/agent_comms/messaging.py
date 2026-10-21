@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .active_route import guard_original_root_write
 from .bus_publication import AgentOrigin, HumanOrigin
@@ -28,14 +29,18 @@ from .task_sources import (
 )
 from .thread_identity import UserThreadRole
 from .threads import Thread
+
+if TYPE_CHECKING:
+    from .goal_management import Goals
 from .todos import TodoError, TodoStore
 
 
 class Messaging:
-    def __init__(self, root: Path, registry: Registration, bus: MessageBus):
+    def __init__(self, root: Path, registry: Registration, bus: MessageBus, goals: Goals):
         self.root = root
         self.registry = registry
         self.bus = bus
+        self.goals = goals
         self._wire_lock_path = root / "wire"
 
     def send(
@@ -49,6 +54,7 @@ class Messaging:
         task: TaskAttachment = NoTaskAttachment(),
         report: ReportEvidence = NoChangeReport(),
         answers: Sequence[MessageReference] = (),
+        origin: AgentOrigin = AgentOrigin(),
     ) -> SendResult:
         """Return the committed envelope and its separate wording-correction outcome."""
         type.require_sendable()
@@ -76,7 +82,8 @@ class Messaging:
                 answers=tuple(dict.fromkeys((*answers, *self._answered_by(owner, target)))),
             )
             publisher: OwnerPublisher = self.bus.publisher
-            committed = publisher.publish_ordinary(message, origin=AgentOrigin())
+            committed = publisher.publish_ordinary(message, origin=origin)
+        origin.published(self.goals, committed)
         try:
             todos.correct(owner.name, committed.message_id, body)
         except TodoError as error:
@@ -128,8 +135,10 @@ class Messaging:
         # The historical root write fence precedes identity creation and
         # remains held through the actual bus publication on an old root.
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
-            user = self._user_identity_under_wire_lock(worktree)
-            return self._publish_user_under_wire_lock(user, target, body, task)
+            origin = HumanOrigin.of(self._user_identity_under_wire_lock(worktree))
+            message = self._publish_user_under_wire_lock(origin, target, body, task)
+        origin.published(self.goals, message)
+        return message
 
     def pin_user_constraint(self, recipient: str, subject: MessageReference, *, worktree: str,
                             scope: TaskScopeSelection = CurrentTaskScopeSelection(),
@@ -156,18 +165,21 @@ class Messaging:
                         **declaration_options):
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             user = self._user_identity_under_wire_lock(worktree)
+            origin = HumanOrigin.of(user)
             owner = self.registry.require(recipient)
             task = declaration(scope=scope.select_human(owner), subject=subject,
                                source_user=user.incarnation, recipient=owner.incarnation,
                                change=change, **declaration_options)
-            return self._publish_user_under_wire_lock(
-                user, owner.name, "Pinned constraint from its original source",
+            message = self._publish_user_under_wire_lock(
+                origin, owner.name, "Pinned constraint from its original source",
                 task, role=NoticeRole())
+        origin.published(self.goals, message)
+        return message
 
-    def _publish_user_under_wire_lock(self, user, target, body, task, *, role=ConversationRole()):
+    def _publish_user_under_wire_lock(self, origin: HumanOrigin, target, body, task, *,
+                                      role=ConversationRole()):
         return self.bus.publisher.publish_ordinary(
-            Message(user.name, target, body, InfoKind, task=task, role=role),
-            origin=HumanOrigin(user.name, user.created_at, user.worktree),
+            Message(origin.sender, target, body, InfoKind, task=task, role=role), origin=origin,
         )
 
     def acknowledge(

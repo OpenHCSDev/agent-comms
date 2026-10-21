@@ -1339,13 +1339,13 @@ class CommsSendTool(PublishingToolRequest):
         try:
             caller.require_directive(comms, self.body)
             body = VerdictAudience(self.audience).addressed(self.target, self.body)
-            result = comms.messaging.send(self.sender, self.target, body, self.type, report=self.report)
+            result = comms.messaging.send(self.sender, self.target, body, self.type,
+                                          report=self.report, origin=caller.origin())
         except ToolRefusedError as error:
             # The caller hears the refusal now; the record waits for the wire lock on its own.
             threading.Thread(target=SendRefusal.record,
                              args=(comms.root, self.sender, self.target, error)).start()
             raise
-        caller.sent(comms, result.message)
         return MessagePublished.from_send(result)
 
 

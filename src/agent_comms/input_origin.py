@@ -137,7 +137,7 @@ class HumanInputOrigin(InputOrigin):
             root_id = comms.bus.log.read_metadata_unlocked().root_id
             root_id = Id128Text.decode(root_id)
             user = comms.messaging._user_identity_under_wire_lock(owner.worktree)
-            return cls(root_id, HumanOrigin(user.name, user.created_at, user.worktree),
+            return cls(root_id, HumanOrigin.of(user),
                        claim_scope, owner.worktree, owner.goal.captured)
 
     @property

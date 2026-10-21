@@ -479,7 +479,7 @@ class SetGoalAction(ReplacementGoalAction[Goal], OwnerInvocable, RuntimeInvocabl
 
 @dataclass(frozen=True, kw_only=True)
 class DirectiveGoalAction(GoalAction[GoalDeclaration], RuntimeInvocable):
-    """A claude-ai message to a thread that holds owner requests becomes one of its requests."""
+    """An owner-voice message to a thread that holds owner requests becomes one of its requests."""
 
     text: str
     seq: int

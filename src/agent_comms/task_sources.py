@@ -22,6 +22,7 @@ from .thread_identity import (
 from .turn_context import Provenance, WireProvenance
 
 if TYPE_CHECKING:
+    from .goal_management import Goals
     from .input_attempt import StoredInput
     from .input_disposition import InputDispositions
     from .messages import Message
@@ -213,6 +214,10 @@ class TaskAttachment(DeclaredFamily, affix="TaskAttachment"):
     def annotation_rules(self, message: Message, facts) -> tuple[str, ...]:
         return ()
 
+    def direct(self, goals: Goals, message: Message) -> None:
+        """An owner message carrying a task is acted on by that task's declaration, not
+        recorded as a request."""
+
     def original_text_source(self, message: Message, originals: dict[MessageReference, Message]) -> Message:
         return message
 
@@ -265,7 +270,16 @@ class TaskAttachment(DeclaredFamily, affix="TaskAttachment"):
 
 @dataclass(frozen=True)
 class NoTaskAttachment(TaskAttachment, declared_name="absent"):
-    pass
+    def direct(self, goals: Goals, message: Message) -> None:
+        """A plain owner message to a thread is a request when that thread holds owner
+        requests; a channel holds none."""
+        from .goal_actions import DirectiveGoalAction
+
+        if message.target in goals.registry:
+            goals.update_goal(
+                message.target,
+                DirectiveGoalAction(text=message.body, seq=message.seq, at=message.timestamp),
+            )
 
 
 @dataclass(frozen=True)

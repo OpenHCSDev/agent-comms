@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, NoReturn
 
+from .bus_publication import AgentOrigin
 from .cli_result import ThreadToolCatalogResult, ToolCatalogResult
 from .field_codec import WireForm
 from .launch_root import LaunchRoot
@@ -14,7 +15,6 @@ from .tool_result import ToolResult
 
 if TYPE_CHECKING:
     from .comms import Comms
-    from .messages import Message
     from .tools import ToolRequest
 
 
@@ -60,9 +60,9 @@ class ToolCaller(ABC):
     def require_directive(self, comms: Comms, body: str) -> None:
         """A caller whose sends direct units refuses a body its directive checks refuse."""
 
-    @abstractmethod
-    def sent(self, comms: Comms, message: Message) -> None:
-        """What a message this caller sent records beyond the bus."""
+    def origin(self) -> AgentOrigin:
+        """Who this caller's sends speak for; an agent speaks only for itself."""
+        return AgentOrigin()
 
 
 @dataclass(frozen=True)
@@ -93,9 +93,6 @@ class NoThreadCaller(ToolCaller):
 
     def require_directive(self, comms: Comms, body: str) -> None:
         """A caller with no thread gives no directive."""
-
-    def sent(self, comms: Comms, message: Message) -> None:
-        """A message sent without a calling thread records nothing more."""
 
 
 @dataclass(frozen=True)
@@ -131,6 +128,3 @@ class ThreadCaller(ToolCaller):
 
     def require_directive(self, comms: Comms, body: str) -> None:
         """A unit's or a script's send is a message, not a directive."""
-
-    def sent(self, comms: Comms, message: Message) -> None:
-        """An agent's message is only the bus record."""
