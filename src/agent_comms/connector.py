@@ -36,7 +36,7 @@ from typing import Annotated, ClassVar, Literal, Self, get_args
 from urllib.parse import urlencode
 
 from aiohttp import web
-from aiohttp.abc import AbstractAccessLogger
+from aiohttp.typedefs import Handler
 from pydantic import JsonValue
 
 from .cli_commands import DeclaredOptions
@@ -362,7 +362,7 @@ class McpMessage(DeclaredFamily, affix="Message"):
 
     @property
     def log_name(self) -> str:
-        return str(type(self).declared_name)
+        return self.declared_name
 
     @abstractmethod
     async def answer(self, connector: Connector) -> web.Response: ...
@@ -519,7 +519,7 @@ class Connector:
     def application(self) -> web.Application:
         with self.opened_wire() as comms:
             CommanderHeartbeat.register(comms.registry)
-        app = web.Application()
+        app = web.Application(middlewares=[self.log_route])
         app.cleanup_ctx.append(self.watch_orders)
         app.add_routes(
             [
@@ -533,6 +533,24 @@ class Connector:
             ]
         )
         return app
+
+    @web.middleware
+    async def log_route(self, request: web.Request, handler: Handler) -> web.StreamResponse:
+        """One line per request naming its route template: paths and queries carry one-use secrets
+        and OAuth values, and headers carry bearer tokens, so none of them is logged."""
+        started = time.monotonic()
+        status = web.HTTPInternalServerError.status_code
+        try:
+            response = await handler(request)
+            status = response.status
+            return response
+        except web.HTTPException as refusal:
+            status = refusal.status
+            raise
+        finally:
+            # A route renders as its method and path template, never the matched values.
+            elapsed = time.monotonic() - started
+            logging.info("%s %s %.3fs", request.match_info.route, status, elapsed)
 
     async def watch_orders(self, app: web.Application) -> AsyncIterator[None]:
         """Core owns both order maintenance and the commander's changed-rule wakes."""
@@ -668,15 +686,6 @@ class Connector:
         return response
 
 
-class RouteAccessLogger(AbstractAccessLogger):
-    """One line per request, naming the route template: paths and queries carry
-    one-use secrets and OAuth values, and headers carry bearer tokens, so neither is logged."""
-
-    def log(self, request: web.Request, response: web.StreamResponse, time: float) -> None:
-        # A route renders as its method and path template, never the matched values.
-        self.logger.info("%s %s %.3fs", request.match_info.route, response.status, time)
-
-
 @dataclass(frozen=True, kw_only=True)
 class ConnectorVerb(DeclaredFamily, DeclaredOptions, Command, affix="Verb"):
     """One connector command: its options are its fields, and its parser comes from them."""
@@ -716,7 +725,7 @@ class ServeVerb(ConnectorVerb):
         except UnregisteredThreadError:
             return f"First run agent-comms register --name {CALLER.name} --worktree DIR"
         logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
-        web.run_app(app, host=LOOPBACK, port=self.port, access_log_class=RouteAccessLogger)
+        web.run_app(app, host=LOOPBACK, port=self.port, access_log=None)
         return 0
 
 

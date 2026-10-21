@@ -28,7 +28,6 @@ from agent_comms.connector import (
     ServeVerb,
     ApproveVerb,
     RevokeVerb,
-    RouteAccessLogger,
 )
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.maintenance_barrier import (
@@ -192,23 +191,22 @@ async def test_a_refused_call_answers_its_own_request_id(client, store):
     assert "undeclared" in refused["error"]["message"]
 
 
-async def test_access_log_names_the_route_and_never_its_values(client, store, root, caplog):
-    """Served the way the service serves: run_app's AppRunner with the connector's logger."""
-    connector = Connector(store, "http://127.0.0.1:18766", root)
-    runner = web.AppRunner(connector.application(), access_log_class=RouteAccessLogger)
+async def test_request_log_names_the_route_and_never_its_values(client, store, root, caplog):
+    """Served as run_app serves it, with aiohttp's raw access log off."""
+    runner = web.AppRunner(Connector(store, "http://127.0.0.1:18766", root).application(),
+                           access_log=None)
     await runner.setup()
     site = web.TCPSite(runner, "127.0.0.1", 0)
     await site.start()
-    port = runner.addresses[0][1]
     try:
-        with caplog.at_level(logging.INFO, logger="aiohttp.access"):
+        with caplog.at_level(logging.INFO):
             async with ClientSession() as session:
-                await session.get(f"http://127.0.0.1:{port}/authorize",
+                await session.get(f"http://127.0.0.1:{runner.addresses[0][1]}/authorize",
                                   params={"state": "one-use-value"})
     finally:
         await runner.cleanup()
-    lines = [record.getMessage() for record in caplog.records if record.name == "aiohttp.access"]
-    assert lines and "/authorize" in lines[0] and " 400 " in lines[0]
+    lines = [record.getMessage() for record in caplog.records]
+    assert any("/authorize" in line and " 400 " in line for line in lines), lines
     assert all("one-use-value" not in line for line in lines), lines
 
 
