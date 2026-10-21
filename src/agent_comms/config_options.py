@@ -6,7 +6,6 @@ import asyncio
 import os
 from abc import abstractmethod
 from collections import Counter
-from collections.abc import Callable
 from contextlib import aclosing
 from dataclasses import dataclass
 from functools import cached_property, partial
@@ -22,6 +21,7 @@ from acp.schema import (
     SetSessionConfigOptionResponse,
 )
 
+from .active_route import CommsRoute, resolve_comms_route
 from .agent_backend import UseSettings
 from .bus import Bus
 from .comms import Comms
@@ -272,28 +272,29 @@ class ConfigOptions:
         agent_bin: str,
         agent_args: NativeArguments,
         configuration: RestartEnvironment,
-        acquire_package: Callable[[], VerifiedNativePackage],
+        route: CommsRoute,
     ):
         self.agent_bin, self.agent_args = agent_bin, agent_args
         self.configuration = configuration
-        self.acquire_package = acquire_package
+        self.route = route
         self.catalogs: dict[type[CatalogConfigOption], CatalogConfigOption] = {}
 
     @cached_property
     def package(self) -> VerifiedNativePackage:
         """The verified artifact, acquired when a catalog or configuration first runs Pi."""
-        return self.acquire_package()
+        return NativePiRpcLaunch.package_for_command(
+            self.agent_bin, LaunchRuntime.running(), self.route.root,
+        )
 
     @classmethod
     def configured(cls) -> ConfigOptions:
         """Catalogs of the native binary, arguments and environment this process is configured with."""
         command = ConfiguredBinary().configured()
         configuration = RestartEnvironment.inherit(os.environ)
-        package = partial(
-            NativePiRpcLaunch.package_for_command,
-            command, LaunchRuntime.running(), LaunchRoot.current().path,
+        return cls(
+            command, InheritedArguments().configured(), configuration,
+            resolve_comms_route(LaunchRoot.current().path),
         )
-        return cls(command, InheritedArguments().configured(), configuration, package)
 
     def catalog_for(self, member: type[CatalogConfigOption]) -> CatalogConfigOption:
         if member not in self.catalogs:
@@ -334,10 +335,7 @@ class SessionConfigOptions(ConfigOptions):
             agent_bin,
             agent_args,
             RestartEnvironment.inherit(os.environ),
-            partial(
-                NativePiRpcLaunch.package_for_command,
-                agent_bin, LaunchRuntime.running(), comms.root,
-            ),
+            comms.route,
         )
         self.comms, self.runtime, self.sessions, self.effects = comms, runtime, sessions, effects
         self.catalog_publish_lock = asyncio.Lock()
