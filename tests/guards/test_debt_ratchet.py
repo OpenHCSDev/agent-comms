@@ -5,9 +5,15 @@ import json
 import os
 import subprocess
 import sys
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
+
+from agent_comms.child_process import ObservedProcess, SpawnedProcess
+from process_tree_fixture import TREE, identities
 
 from tools.debt_ratchet import (
     BannedVocabulary, BroadExceptDefault, BroadSwallow, ForeignFieldSpellings,
@@ -51,18 +57,62 @@ class Repository:
         self.git("-c", "commit.gpgsign=false", "commit", "-qm", "test", "--allow-empty")
         return self.git("rev-parse", "HEAD")
 
-    def compare(self, base: str, head: str) -> tuple[int, dict]:
-        result = subprocess.run(
-            [sys.executable, str(Path(__file__).resolve().parents[2] / "tools/debt_ratchet.py"),
-             "--root", self.root, "--base", base, "--head", head],
-            cwd=self.path,
-            capture_output=True,
-            text=True,
-            timeout=120,  # Each comparison type-checks both revisions.
-            check=False,
+    @contextmanager
+    def comparing(self, base: str, head: str) -> Iterator[SpawnedProcess]:
+        source = Path(__file__).resolve().parents[2]
+        command = (
+            sys.executable, str(source / "tools/debt_ratchet.py"),
+            "--root", self.root, "--base", base, "--head", head,
         )
+        environment = {**os.environ, "PYTHONPATH": os.pathsep.join(
+            (str(source / "src"), os.environ["PYTHONPATH"]))}
+        with SpawnedProcess.launch(command, cwd=self.path, env=environment,
+                                   output=subprocess.PIPE) as child:
+            yield child
+
+    def compare(self, base: str, head: str, *, timeout: float = 120) -> tuple[int, dict]:
+        with self.comparing(base, head) as child:
+            result = child.collect(timeout=timeout)
         assert result.returncode in (0, 1), result.stderr[-2000:]
         return result.returncode, json.loads(result.stdout)
+
+
+def test_compare_timeout_retires_pool_probe_and_defiant_grandchild(tmp_path: Path) -> None:
+    repo = Repository(tmp_path, "src/sample")
+    announcement = tmp_path / "probe-tree.json"
+    declaration = (
+        "from dataclasses import dataclass\nfrom typing import ClassVar\n"
+        "@dataclass(frozen=True)\nclass Record:\n"
+        "    version: ClassVar[int] = 1\n    value: str = ''\n"
+    )
+    # A real stored-format probe imports this committed module. Its child tree
+    # announces exact identities before blocking; no production method is patched.
+    source = declaration + f"\nimport sys\nsys.argv = ['tree', {str(announcement)!r}]\n" + TREE
+    base = repo.commit({"__init__.py": "", "record.py": source})
+    head = repo.commit({"record.py": source.replace("version: ClassVar[int] = 1",
+                                                  "version: ClassVar[int] = 2")})
+    observed = ()
+    try:
+        with repo.comparing(base, head) as child:
+            deadline = time.monotonic() + 30
+            while not announcement.exists():
+                assert child.alive(), child.process.communicate()
+                assert time.monotonic() < deadline, "stored-format probe did not become ready"
+                time.sleep(.01)
+            observed = identities(announcement)
+            assert all(member.alive() for member in observed)
+            pool = child.platform.group_members(child.identity)
+            assert len(pool) > 1, "the real ratchet must have started its pool"
+            with pytest.raises(subprocess.TimeoutExpired):
+                child.collect(timeout=.05)
+        assert not child.platform.group_members(child.identity)
+        assert all(not member.alive() for member in observed)
+    finally:
+        # Failure cleanup has exact identities and runs after the assertions. It
+        # cannot make the test pass by sweeping unrelated processes by name.
+        for member in observed:
+            if member.alive():
+                ObservedProcess(member).stop_sync()
 
 
 @pytest.fixture(params=["src/agent_comms", "src/toad"])
