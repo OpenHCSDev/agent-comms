@@ -5,7 +5,9 @@ These rows are hints, never authority to deliver or start a model turn.
 
 from __future__ import annotations
 
+import hashlib
 import sqlite3
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Literal
@@ -17,6 +19,28 @@ from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .mro_dispatch import MroDispatch, handles
 from .typed_table import Column, DerivedStore, Index, TypedTable
 from .wake_policy import WakePolicy
+from .watched import FileSource
+
+
+class ThreadWake(FileSource):
+    """One recipient's transient native hint; committed rows own every position."""
+
+    @classmethod
+    def at(cls, root: Path, recipient_lookup: str) -> ThreadWake:
+        # Lookup syntax belongs to ParticipantIdentity, not filesystem names.
+        # Hash only the resource address; never store or compare it as a position.
+        key = hashlib.sha256(recipient_lookup.encode()).hexdigest()
+        directory = root / ".thread-wakes" / key
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        return cls(directory / "changed")
+
+    def notify(self) -> None:
+        self.path.write_bytes(b"")
+
+    @classmethod
+    def notify_many(cls, root: Path, recipients: Iterable[str]) -> None:
+        for lookup in set(recipients):
+            cls.at(root, lookup).notify()
 
 
 class ProjectionUnavailableError(RuntimeError):
@@ -102,10 +126,15 @@ class WakeCandidateIndex(DerivedStore, MroDispatch):
             raise ValueError("max_rows must be between 1 and 256")
 
     @handles(Delivered)
-    def _insert_candidates(self, record: Delivered, db: sqlite3.Connection) -> None:
+    def _insert_candidates(
+        self, record: Delivered, db: sqlite3.Connection, recipients: set[str],
+    ) -> None:
         for recipient, decision in zip(record.audience.recipients, record.decisions, strict=True):
-            Candidate(record.seq, record.message_id, recipient.recipient_lookup,
-                      record.sender, record.target, decision.candidate_wake_mode()).insert(db)
+            candidate = Candidate(
+                record.seq, record.message_id, recipient.recipient_lookup,
+                record.sender, record.target, decision.candidate_wake_mode())
+            candidate.insert(db)
+            recipients.add(candidate.recipient_lookup)
 
     @property
     def through_seq(self) -> int:
@@ -117,15 +146,18 @@ class WakeCandidateIndex(DerivedStore, MroDispatch):
         self._validate_limits(max_rows)
         prior = self.through_seq
         records = self.bus.since(prior, max_rows)
+        recipients: set[str] = set()
         with self.writing() as db:
             current = CandidateScan.through(db)
             if current != prior:
                 return current
             for record in records:
-                self.dispatch_sync(record, db)
+                self.dispatch_sync(record, db, recipients)
             through = records[-1].seq if records else prior
             CandidateScan(1, through).upsert(db)
-            return through
+        if records:
+            ThreadWake.notify_many(self.root, recipients)
+        return through
 
     def rebuild(self, *, max_rows: int = batch_rows) -> int:
         """Discard the disposable projection, then start its bounded scan from zero."""

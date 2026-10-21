@@ -40,7 +40,8 @@ from .restart_refusals import RestartRefusal
 from .restart_scope import OwnersNamed
 from .store_files import _atomic_write_text, _store_lock
 from .thread_identity import RecordedThreadIncarnation
-from .watched import DirectorySource, FileSource
+from .wake_candidate_index import ThreadWake
+from .watched import ChangeSignal, DirectorySource
 
 DIRECTORY = "owner-restart-queue"
 
@@ -386,30 +387,37 @@ async def run(comms: Comms) -> None:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return
-        # Watch before the first step, so no turn settlement can be missed.
-        async for _ in Bus.watch_sources(
-            FileSource(comms.registry.store.path),
-            FileSource(comms.registry.store.guard_path),
-            *(FileSource(path) for path in CoordinationStore.source_paths(comms.root)),
-            DirectorySource(queue.active_directory),
-        ):
-            await Coordination.run_worker(lambda: step(comms))
-            # Check emptiness and release under enqueue's lock, so a new
-            # request cannot slip between the empty check and release.
-            def release_if_empty():
-                with queue.locked():
-                    pending = tuple(record for record in queue.active_records() if record.state.pending)
-                    if any(record.target.is_current_watcher for record in pending):
-                        return False
-                    fcntl.flock(lock, fcntl.LOCK_UN)
-                    # Enqueue may have raced this older runtime's watcher. Its
-                    # lock loser cannot service a newer target; hand it over.
-                    if pending:
-                        _start_watcher(comms.root, pending[0].target)
-                    return True
+        def pending_sources():
+            with queue.locked():
+                return frozenset(
+                    ThreadWake.at(comms.root, record.selection.identity.incarnation.lookup)
+                    for record in queue.active_records()
+                    if record.state.pending and record.target.is_current_watcher
+                )
 
-            if await Coordination.run_worker(release_if_empty):
-                return
+        def release_if_empty():
+            # Enqueue and release share this lock, so no request is orphaned.
+            with queue.locked():
+                pending = tuple(record for record in queue.active_records() if record.state.pending)
+                if any(record.target.is_current_watcher for record in pending):
+                    return False
+                fcntl.flock(lock, fcntl.LOCK_UN)
+                if pending:
+                    _start_watcher(comms.root, pending[0].target)
+                return True
+
+        while True:
+            sources = await Coordination.run_worker(pending_sources)
+            async with ChangeSignal.opened(DirectorySource(queue.active_directory), *sources) as changes:
+                # Admit notifications before reading committed state. A new
+                # queue target discovered by step must be admitted before wait.
+                changes.prepare()
+                await Coordination.run_worker(lambda: step(comms))
+                if await Coordination.run_worker(release_if_empty):
+                    return
+                if sources != await Coordination.run_worker(pending_sources):
+                    continue
+                await changes.wait()
     finally:
         os.close(lock)
 
