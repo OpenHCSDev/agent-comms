@@ -132,12 +132,17 @@ class AgentActivity:
         participant = snapshot.require(thread)
         return self.all_activity((participant,), snapshot=snapshot)[participant.name]
 
-    def is_working(self, incarnation: ThreadIncarnation, snapshot: RegistrySnapshot) -> bool:
+    def is_live(self, incarnation: ThreadIncarnation, snapshot: RegistrySnapshot) -> bool:
+        """This exact registered incarnation still has a running, live process."""
         if not incarnation.current(snapshot):
             return False
         name = snapshot.canonical_name(incarnation.name)
-        return (snapshot.status(name).running and snapshot.threads[name].process_alive
-                and self.activity_of(name, snapshot=snapshot).state.busy)
+        return snapshot.status(name).running and snapshot.threads[name].process_alive
+
+    def is_working(self, incarnation: ThreadIncarnation, snapshot: RegistrySnapshot) -> bool:
+        return self.is_live(incarnation, snapshot) and self.activity_of(
+            snapshot.canonical_name(incarnation.name), snapshot=snapshot,
+        ).state.busy
 
     def _observed(self, participant: Thread, owner: OwnerIdentity,
                   event: Activity) -> ObservedActivity:

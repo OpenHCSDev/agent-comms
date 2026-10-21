@@ -357,12 +357,12 @@ class GoalWaits(ThreadOwnedState, TypedStore, DurableTables, WireWakeFile):
         snapshot: RegistrySnapshot,
         agents: AgentActivity,
     ) -> tuple[str, ...]:
-        """Find waits with no path to a live active turn outside the wait graph.
+        """Find waits closed by dead targets or waits leading back into the group.
 
-        A dependency list wakes on any qualifying reply. One independent
-        target is therefore enough to keep a group runnable, even if another
-        branch contains a cycle. Call this under the wire lock before recording
-        the proposed wait so concurrent standby reports cannot both pass.
+        A live target with no wait of its own is an independent worker even
+        while idle between turns. One independent target keeps the group open,
+        even if another branch cycles. Call under the wire lock before recording
+        a proposed wait so concurrent standby reports cannot both pass.
         """
         pending = [owner]
         seen: set[str] = set()
@@ -389,17 +389,15 @@ class GoalWaits(ThreadOwnedState, TypedStore, DurableTables, WireWakeFile):
                 peer_wait = next(iter(cls.current_waits(
                     peer_goal, rows, peer.incarnation.require_recorded(),
                 )), None)
-                if agents.is_working(target.incarnation, snapshot):
-                    # A persisted wait does not make a *new* live owner turn
-                    # part of the old wait graph. It may send the reply before
-                    # its turn finishes; only the reporting turn belongs here.
-                    current_turn = peer.turn_lease
-                    if (
-                        peer_wait is None
-                        or not current_turn.reports(
-                            peer_wait.report_turn_id, peer_wait.report_turn_generation)
-                    ):
+                if peer_wait is None:
+                    if agents.is_live(target.incarnation, snapshot):
                         return ()
-                if peer_wait is not None:
-                    pending.append(canonical)
+                    continue
+                # A new active turn can reply independently of its older wait;
+                # the turn that reported that wait still belongs to the graph.
+                if agents.is_working(target.incarnation, snapshot) and not peer.turn_lease.reports(
+                    peer_wait.report_turn_id, peer_wait.report_turn_generation,
+                ):
+                    return ()
+                pending.append(canonical)
         return tuple(sorted(seen))
