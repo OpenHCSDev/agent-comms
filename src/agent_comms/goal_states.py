@@ -98,7 +98,7 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
             raise ValueError(self.transition_refusal())
 
     def continues_turn_from(self, captured: GoalState) -> bool:
-        """A running turn of this goal keeps its authority only while the state it was granted stands."""
+        """A running turn keeps its authority only while the state it was granted stands."""
         return self == captured
 
     def transition_refusal(self) -> str:
@@ -149,7 +149,7 @@ class ActiveGoal(OpenGoal, FromOpenGoal):
         pass
 
     def continues_turn_from(self, captured: GoalState) -> bool:
-        """An order or retry that makes the goal active grants work; it never ends a running turn."""
+        """An order or retry that makes the goal active never ends a running turn."""
         return True
 
     @property

@@ -659,14 +659,15 @@ class ProblemGoalOrder(GoalOrder):
 class GoalAuthority:
     """What an owner input was granted: this goal in this state.
 
-    Assigning or replacing a problem order revises the goal but keeps its authority;
-    pausing, completing, blocking, clearing or replacing the goal changes it.
+    Assigning or replacing a problem order revises the goal but keeps its authority, and an
+    order or retry that makes the same goal active keeps a running turn; pausing, completing,
+    blocking, clearing or replacing the goal ends it.
     """
 
     goal_id: str
     state: GoalState
 
-    def admits(self, current: GoalAuthority | NoGoal) -> bool:
+    def keeps_turn_under(self, current: GoalAuthority | NoGoal) -> bool:
         """Whether a turn granted this authority may keep working under the current goal."""
         return current.continues(self)
 
@@ -852,7 +853,7 @@ class NoGoal(NullMember, GoalDeclaration):
     def authority(self) -> NoGoal:
         return self
 
-    def admits(self, current: GoalAuthority | NoGoal) -> bool:
+    def keeps_turn_under(self, current: GoalAuthority | NoGoal) -> bool:
         return current == self
 
     def continues(self, captured: GoalAuthority) -> bool:

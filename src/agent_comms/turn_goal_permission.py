@@ -32,7 +32,7 @@ class OwnerGoalPermission(GoalPermission):
     goal: GoalDeclaration
 
     def allows(self, current: GoalDeclaration) -> bool:
-        return self.goal.authority.admits(current.authority)
+        return self.goal.authority.keeps_turn_under(current.authority)
 
 
 class PublishedGoalPermission(OwnerGoalPermission):
@@ -72,7 +72,8 @@ class TurnGoalPermission(GoalPermission):
     """One running input's permission, changed only by its own tool publication.
 
     The writer returns its exact declaration, not a reread of whatever another
-    owner may have published. A later external change still fails equality.
+    owner may have published. A later external change fails unless the current goal state
+    continues the captured one (GoalState.continues_turn_from).
     """
 
     captured: GoalPermission

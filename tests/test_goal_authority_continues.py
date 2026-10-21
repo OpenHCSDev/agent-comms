@@ -6,14 +6,14 @@ from agent_comms.goals import GoalAuthority, NoGoal
 
 def test_reactivated_goal_keeps_the_running_turn():
     captured = GoalAuthority("g", BlockedGoal("Backend turn ended without a result."))
-    assert captured.admits(GoalAuthority("g", ActiveGoal()))
+    assert captured.keeps_turn_under(GoalAuthority("g", ActiveGoal()))
 
 
 def test_paused_goal_ends_the_running_turn():
-    assert not GoalAuthority("g", ActiveGoal()).admits(GoalAuthority("g", PausedGoal()))
+    assert not GoalAuthority("g", ActiveGoal()).keeps_turn_under(GoalAuthority("g", PausedGoal()))
 
 
 def test_another_goal_ends_the_running_turn():
-    assert not GoalAuthority("g", ActiveGoal()).admits(GoalAuthority("h", ActiveGoal()))
-    assert not GoalAuthority("g", ActiveGoal()).admits(NoGoal())
-    assert not NoGoal().admits(GoalAuthority("g", ActiveGoal()))
+    assert not GoalAuthority("g", ActiveGoal()).keeps_turn_under(GoalAuthority("h", ActiveGoal()))
+    assert not GoalAuthority("g", ActiveGoal()).keeps_turn_under(NoGoal())
+    assert not NoGoal().keeps_turn_under(GoalAuthority("g", ActiveGoal()))
