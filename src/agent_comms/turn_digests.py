@@ -46,9 +46,9 @@ class TurnBound(DeclaredFamily):
         return len(turns)
 
     def older(self, turns: tuple[TurnDigest, ...]) -> TurnBound:
-        if not turns:
-            return self
-        return TurnsBefore(at=turns[-1].events[0].timestamp, count=self.page_count(turns))
+        """Continue from the oldest recorded start, retaining undated turns in the answer."""
+        return next((TurnsBefore(at=at, count=self.page_count(turns))
+                     for turn in reversed(turns) for at in turn.start.timestamps()), self)
 
     @abstractmethod
     def includes(self, turn: TurnDigest) -> bool:
