@@ -67,6 +67,12 @@ class BusReader(ABC):
     @abstractmethod
     def observing(self) -> AbstractContextManager[sqlite3.Connection]: ...
 
+    @contextmanager
+    def reading(self) -> Iterator[BusReader]:
+        """Keep a batch of queries on one admitted SQLite snapshot."""
+        with self.observing() as db:
+            yield BusSnapshot(db)
+
     def revision(self) -> int:
         with self.observing() as db:
             return BusRow.last_seq(db)
@@ -292,12 +298,6 @@ class Bus(BusReader, WalStore, DurableFile, Watched):
             BusTables.require_schema(db)
             BusProjectionTables.require_schema(db)
             yield db
-
-    @contextmanager
-    def reading(self) -> Iterator[BusReader]:
-        """Use one read-only SQLite snapshot for a batch of queries."""
-        with self.observing() as db:
-            yield BusSnapshot(db)
 
     def backup(self, destination: Path) -> None:
         """Copy a consistent SQLite snapshot, never replace an existing destination."""
