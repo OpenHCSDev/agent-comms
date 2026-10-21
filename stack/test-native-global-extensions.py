@@ -104,7 +104,7 @@ console.log(JSON.stringify({{errors, extensions:extensions.map(e => ({{path:e.pa
     assert any("tool_call" in item["handlers"] for item in registered["extensions"]), registered
     session = root / "session.jsonl"
     if args.session:
-        subprocess.run(["cp", "--reflink=auto", str(args.session), str(session)], check=True)
+        shutil.copyfile(args.session, session)
         session.chmod(0o600)
     else:
         session.write_text(json.dumps({"type":"session", "version":3,
