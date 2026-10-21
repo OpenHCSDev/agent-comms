@@ -172,10 +172,10 @@ class RootFile:
                 import_module(module.name)
 
     @classmethod
-    def declarations_in(cls, root: Path) -> Iterator[tuple[type[RootFile], Path]]:
+    def declarations_in(cls, root: Path) -> Iterator[tuple[type[Self], Path]]:
         """Each declaring owner and its directory, once across composed capabilities."""
-        pending: list[type[RootFile]] = [cls]
-        visited: set[type[RootFile]] = set()
+        pending: list[type[Self]] = [cls]
+        visited: set[type[Self]] = set()
         while pending:
             family = pending.pop()
             if family in visited:
