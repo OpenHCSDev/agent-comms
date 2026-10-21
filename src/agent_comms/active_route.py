@@ -18,7 +18,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import Annotated, ClassVar
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -151,7 +151,7 @@ class ActiveRoute(CommsRoute):
         return super(ActiveRoute, self).observe_root()
 
     def launch(self) -> PrivateNkLaunch:
-        return PrivateNkLaunch.installed(self.root)
+        return RootLaunch.derive(self).require_private()
 
 
 def resolve_comms_route(root: CommsRoute | Path | str | None = None) -> CommsRoute:

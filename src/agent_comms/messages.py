@@ -364,7 +364,7 @@ class Message(Addressed, BusCapability):
 
     body: Annotated[str, WireName("text"), WireOrder(6)]
     type: Annotated[builtins.type[MessageKind], WireOrder(5)]
-    timestamp: Annotated[float, WireName("ts"), WireOrder(4)] = (
+    timestamp: Annotated[float, WireName("ts"), WireOrder(4), Column(index=True)] = (
         field(default_factory=time.time)
     )
     seq: Annotated[int, WireOrder(0), PublicationExclude()] = (
@@ -470,14 +470,8 @@ class Message(Addressed, BusCapability):
         """Retain display facts, never another root's resource-claim authority."""
         return self
 
-    def checkpoint_rows(self, previous_sequence: int):
-        """The checkpoint indexes public identity only; Bus owns resource claims."""
-        from .private_bus_checkpoint import PublicMessages
-
-        yield PublicMessages(self.seq, previous_sequence, self.sender, self.message_id)
-
     def require_claim_transition(self) -> ClaimTransition:
-        raise RelationViolationError("Original wire message has no claim transition")
+        raise RelationViolationError("Message has no claim transition")
 
     def retained_task_facts(self):
         yield from self.sender_role.user_task_facts(self)

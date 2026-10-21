@@ -37,6 +37,7 @@ from agent_comms.goals import CountCheckResult, Goal, OrderCheck, RequestGoalOrd
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.messages import InfoKind, Message
 from agent_comms.message_page import MessagePageRequest
+from agent_comms.message_reference import MessageReference
 from agent_comms.read_basis import DMDisplayScope
 from agent_comms.field_codec import FieldCodec
 from agent_comms.order_runs import MechanicalOrderRun
@@ -286,6 +287,20 @@ def test_unanswered_uses_age_direct_target_and_later_answer_references(held_bus)
     held_bus.messaging.send("lead", "outsider", "Answer in another conversation",
                             answers=(another.reference,))
     assert UnitAskUnanswered.violations(held_bus, "lead") == ()
+
+
+def test_unanswered_pages_match_the_complete_answer_reference(held_bus):
+    now = time.time()
+    questions = tuple(publish(held_bus, "worker", "lead", now - 900 - offset)
+                      for offset in range(105))
+    held_bus.messaging.send("lead", "worker", "Different original identity",
+                            answers=(MessageReference(questions[0].seq, "not-the-original-hash"),))
+    answered = (questions[1].reference, questions[-1].reference)
+    held_bus.messaging.send("lead", "outsider", "Answers retain their original references",
+                            answers=answered)
+    assert tuple(item.reference for item in UnitAskUnanswered.violations(held_bus, "lead")) == tuple(
+        question.reference for question in reversed(questions) if question.reference not in answered
+    )
 
 
 @pytest.mark.parametrize('target,body', [

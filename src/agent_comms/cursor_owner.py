@@ -4,12 +4,14 @@ from __future__ import annotations
 import sqlite3
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
+from functools import partial
 from typing import TYPE_CHECKING
 
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_errors import IdentityConflict, StaleFence
+from .coordination_database import CoordinationStore
+from .field_codec import FieldCodec
 from .coordinator import Coordination
-from .historical_native_inputs import HistoricalNativeInput
 from .message_bus import MessageBus
 from .native_input_owner import RegistryOwner, ParticipantOwner
 from .native_input_record import NativeInputReference
@@ -20,7 +22,7 @@ from .private_send_rules import RunningTurnRegistryCheck
 
 if TYPE_CHECKING:
     from .acp_extension import CursorObservation
-    from .proven_source_coverage import ProvenSourceCoverage
+    from .native_entries import NativeEvidenceScope
 
 
 @dataclass(frozen=True)
@@ -35,6 +37,95 @@ class CursorOwner(RegistryOwner):
         GenerationCounter.require_positive(self.generation)
         GenerationCounter.require_positive(self.claimed_generation)
 
+    @classmethod
+    async def read_async(cls, bus: MessageBus, *, wire_root_id: str, owner_name: str,
+                         source_reads: NativeEvidenceScope) -> CursorState:
+        return await Coordination.run_read_async(
+            CoordinationStore.path_in(bus.bus.path.parent),
+            partial(cls._read_owned, bus, wire_root_id, owner_name, source_reads),
+        )
+
+    @classmethod
+    def _read_owned(cls, bus, root_id, owner_name, source_reads, store) -> CursorState:
+        from .proven_source_coverage import SourcePrefix
+
+        with store.session.boundary(bus) as boundary:
+            reason = "Current native cursor has no matching live owner"
+            bus._registry.store.private_guard_unlocked().require_root(root_id, StaleFence(reason))
+            captured = RegistryOwner.capture(boundary.registry, owner_name, reason)
+            with store.session.read():
+                db = store.session._connection
+                assert_native_runtime_schema(db)
+                person = store.participants.get(captured.thread.incarnation.lookup)
+                if not person.committed or person.owner_thread != owner_name:
+                    raise StaleFence("Current cursor recipient is not committed")
+                owner = cls(thread=captured.thread, claimed_generation=captured.claimed_generation,
+                            wire_root_id=root_id, generation=person.participant_generation)
+                state = owner.state(db)
+        with source_reads.borrow():
+            prefix = SourcePrefix.capture(bus.bus, state.covered_seq)
+        with store.session.boundary(bus) as boundary:
+            prefix.require_current(bus.bus)
+            owner.require_live(bus, boundary.registry, "Current cursor owner changed while reading")
+            with store.session.read():
+                owner.require_participant(store, "Current cursor participant generation changed")
+                if owner.cursor(store.session._connection) != state.cursor:
+                    raise StaleFence("Current cursor SQL row changed while reading")
+        return state
+
+    @classmethod
+    async def advance_async(cls, bus: MessageBus, *, wire_root_id: str, owner,
+                            owner_claimed_generation: int, owner_generation: int,
+                            committed_input_id: str | None,
+                            source_reads: NativeEvidenceScope) -> CursorState:
+        captured = cls(thread=owner, claimed_generation=owner_claimed_generation,
+                       wire_root_id=wire_root_id, generation=owner_generation)
+        return await Coordination.run_async(
+            CoordinationStore.path_in(bus.bus.path.parent),
+            partial(captured._advance_owned, bus, committed_input_id, source_reads),
+        )
+
+    @classmethod
+    async def refresh_async(cls, bus: MessageBus, *, wire_root_id: str, owner_name: str,
+                            source_reads: NativeEvidenceScope) -> CursorState:
+        return await Coordination.run_async(
+            CoordinationStore.path_in(bus.bus.path.parent),
+            partial(cls._refresh_owned, bus, wire_root_id, owner_name, source_reads),
+        )
+
+    @classmethod
+    def _refresh_owned(cls, bus, root_id, owner_name, source_reads, store) -> CursorState:
+        thread, generation = bus._registry.live_owner_with_claim(owner_name)
+        person = store.participants.get(thread.incarnation.lookup)
+        owner = cls(thread=thread, claimed_generation=generation, wire_root_id=root_id,
+                    generation=person.participant_generation)
+        return owner._advance_owned(bus, None, source_reads, store)
+
+    def _advance_owned(self, bus, committed_input_id, source_reads, store) -> CursorState:
+        from .proven_source_coverage import SourceCoverage
+
+        committed_input_id = FieldCodec.decode(str | None, committed_input_id)
+        with source_reads.borrow():
+            sources = SourceCoverage(bus, store, wire_root_id=self.wire_root_id,
+                                     recipient_lookup=self.lookup)
+            with store.session.boundary(bus), store.session.read():
+                state = self.state(store.session._connection)
+            coverage = sources.since(state, source_reads=source_reads)
+            proof = coverage.proof
+            with store.session.boundary(bus) as boundary, store.session.writing() as db:
+                coverage.source_prefix.require_current(bus.bus)
+                self.require_live(bus, boundary.registry, "Current cursor owner or namespace changed")
+                self.require_participant(store, "Current cursor recipient generation changed")
+                if self.cursor(db) != state.cursor:
+                    raise StaleFence("Current cursor SQL row changed during source verification")
+                state.require_progress(self, coverage, proof.injected_for(state))
+                if self.matches_prefix(db, coverage.evidence()) and proof.allows(
+                    self, db, state, committed_input_id,
+                ):
+                    state = state.publish(db, self, coverage, proof)
+                state.require_coverage(self, db, coverage, proof)
+                return state
+
     @property
     def participant_identity(self):
         return ParticipantOwner(self.thread, self.generation).coordinator_identity(self.lookup)
@@ -44,8 +135,7 @@ class CursorOwner(RegistryOwner):
         return self.thread.incarnation.lookup
 
     def require_live(self, bus: MessageBus, registry: RegistrySnapshot, reason: str) -> None:
-        if bus.log.private_marker_unlocked().root_id != self.wire_root_id:
-            raise StaleFence(reason)
+        bus._registry.store.private_guard_unlocked().require_root(self.wire_root_id, StaleFence(reason))
         self.require_snapshot(registry, reason)
 
     def require_participant(self, store: Coordination, reason: str) -> None:
