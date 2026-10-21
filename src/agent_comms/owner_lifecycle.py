@@ -19,6 +19,7 @@ from .active_route import resolve_comms_route
 from agent_comms.attempt_recovery import RecoveryMonitorCapability
 from .child_process import (
     ObservedProcess,
+    OutlivesLauncherLifetime,
     Platform,
     ProcessIdentity,
     ProcessState,
@@ -507,6 +508,7 @@ class OwnerLifecycle:
                 output=output,
                 before_start=reserve,
                 runtime=launch_runtime,
+                lifetime=OutlivesLauncherLifetime,
             )
         assert owned is not None
         return owned
