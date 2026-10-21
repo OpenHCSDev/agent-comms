@@ -75,6 +75,7 @@ def requested(comms, scope, source, problem='P1'):
     CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
         problem=problem, order=replace(order(source), scope=scope), request='request',
         review_at=RecordedEventTime(1000), commander='lead',
+        assigner=comms.registry.require('lead').incarnation,
         repo=RepositoryName.from_wire('OpenHCSDev/agent-comms'),
         text='Classify the source without changing it',
     )).apply(comms, caller)
@@ -136,6 +137,7 @@ def test_carry_scopes_current_nested_and_prior_orders_on_a_copy(comms, tmp_path,
     worker = comms.registry.require('worker')
     for problem in TRIAGE_PROBLEMS:
         store.create(problem, original.repo, 'Classify the source', creator=lead, owner=worker,
+                     assigner=lead.incarnation,
                      generation=original.held().generation, review_at=original.review_at,
                      goal=original.goal, order=replace(order(source_repository), scope=TriageScope()))
     copied = tmp_path / 'copy'

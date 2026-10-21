@@ -25,7 +25,6 @@ from agent_comms.commander.standing import (
     HeartbeatSilent,
     HolderCannotRun,
     UnitAskUnanswered,
-    UnownedWheelSpin,
 )
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import Comms
@@ -82,6 +81,7 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
     for problem in ("P1", "P2"):
         comms.goals.update_goal("worker", CreateProblemGoalAction(
             problem=problem, commander="lead", request="request",
+            assigner=comms.registry.require('lead').incarnation,
             repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"), text=f"Repair {problem}",
             review_at=RecordedEventTime(now + 3600),
             order=PendingProblemOrder(
@@ -163,9 +163,7 @@ def test_an_order_to_a_blocked_goal_activates_it_and_keeps_other_orders(held_bus
     blocked_holder(held_bus)
     before = held_bus.registry.require("worker").goal.require()
     todo = held_bus.goals.todos.get("P1")
-    held_bus.goals.update_goal("worker", ReissuedOrderGoalAction.for_todo(
-        todo, "lead", held_bus.registry.require("lead").incarnation,
-    ))
+    held_bus.goals.update_goal("worker", ReissuedOrderGoalAction.for_todo(todo, "lead"))
     current = held_bus.registry.require("worker").goal.require()
     assert current.id == before.id and isinstance(current.state, ActiveGoal)
     assert {todo.id for todo in held_bus.goals.todos.for_goal(
@@ -264,8 +262,10 @@ def test_commander_say_answers_an_unanswered_unit_message(held_bus, target, body
     say = SayVerb(units="worker", body_file=str(reply), answers=(question.message_id,))
     say.apply(ctx)
     assert UnitAskUnanswered.violations(held_bus, "lead") == ()
-    with pytest.raises(SystemExit, match="unanswered unit messages"):
-        SayVerb(units="worker", body_file="unused", answers=("not-a-message",)).answer_references(ctx)
+    # A name that is not open needs no answer: it is dropped, never a refusal of the verb.
+    assert SayVerb(
+        units="worker", body_file="unused", answers=("not-a-message",)
+    ).answer_references(ctx) == ()
 
 
 def test_an_unanswered_unit_message_gates_send_and_say_until_answered(held_bus, tmp_path):
@@ -279,8 +279,10 @@ def test_an_unanswered_unit_message_gates_send_and_say_until_answered(held_bus, 
             verb.apply(ctx)
     SayVerb(units="worker", body_file=str(reply), answers=(question.message_id,)).apply(ctx)
     assert UnitAskUnanswered.violations(held_bus, "lead") == ()
-    with pytest.raises(SystemExit, match="REFUSED: --answers"):
-        SendVerb(unit="worker", body_file="unused", answers=(question.message_id,)).apply(ctx)
+    # Naming it again after it was answered names nothing open, so it answers nothing.
+    assert SendVerb(
+        unit="worker", body_file="unused", answers=(question.message_id,)
+    ).answer_references(ctx) == ()
 
 
 def test_answering_one_owed_message_leaves_another_owed(held_bus, tmp_path):
@@ -504,3 +506,17 @@ def test_every_pass_beats_and_a_stale_beat_is_heartbeat_silent(held_bus, monkeyp
     silent, = HeartbeatSilent.violations(held_bus, "lead")
     assert silent.beat == unchanged.seq
     assert silent.line().startswith(f"HEARTBEAT SILENT: no beat since seq {unchanged.seq}")
+
+
+def test_one_answer_covers_an_escalation_burst_sent_before_it(held_bus):
+    from agent_comms.commander.vibe_check import VibeCheckSender
+
+    VibeCheckSender.register(held_bus.registry)
+    now = time.time()
+    burst = [publish(held_bus, VibeCheckSender.sender, "lead", now - 30 + line) for line in range(4)]
+    assert len(VibeCheckSender.unanswered(held_bus, "lead", time.time())) == 4
+    publish(held_bus, "lead", VibeCheckSender.sender, now - 20, answers=(burst[0].reference,))
+    assert VibeCheckSender.unanswered(held_bus, "lead", time.time()) == ()
+    later = publish(held_bus, VibeCheckSender.sender, "lead", now - 10)
+    assert [m.message_id for m in VibeCheckSender.unanswered(held_bus, "lead", time.time())] == [
+        later.message_id]

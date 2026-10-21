@@ -148,7 +148,7 @@ def test_merge_in_head_cannot_close_until_the_recorded_build_contains_it(
     merged = replace(order(graph.repository), run=run).merged(graph.newer)
     todo = comms.goals.todos.create(
         "P1", graph.repository.github, "Prove installation instead of inferring it from merge",
-        creator=lead, owner=lead, generation="fixture-goal",
+        creator=lead, assigner=lead.incarnation, owner=lead, generation="fixture-goal",
         goal=GoalRef(lead.name, lead.created_at, "fixture-goal"),
         review_at=RecordedEventTime(1000), order=merged,
     )
@@ -298,7 +298,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
                         order=order,
                         request="request",
                         review_at=RecordedEventTime(4102444800),
-                        commander="lead",
+                        commander="lead", assigner=caller.identity(copied),
                         repo=graph.repository.github,
                         text="Bind proof to its build",
                     ),
