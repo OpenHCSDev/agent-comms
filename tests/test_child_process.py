@@ -18,6 +18,7 @@ from agent_comms.child_process import (
     AttachedChild,
     BoundedRun,
     ChildOutcome,
+    DiesWithLauncherLifetime,
     ExitedOutcome,
     GroupMember,
     IdentityMismatchError,
@@ -459,7 +460,8 @@ def test_parent_pipe_cleanup_closes_after_real_exception():
     with (
         pytest.raises(ValueError),
         Platform.current().launch(
-            (sys.executable, "-c", "import time; time.sleep(60)"), (), LaunchRuntime.running()
+            (sys.executable, "-c", "import time; time.sleep(60)"), (), LaunchRuntime.running(),
+            DiesWithLauncherLifetime,
         ) as launch,
         launch.spawn(stdout=subprocess.PIPE, stderr=subprocess.PIPE) as child,
     ):
