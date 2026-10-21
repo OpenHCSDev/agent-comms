@@ -1001,9 +1001,12 @@ class CommsStandingRulesTool(ThreadToolRequest):
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> StandingRulesRead:
         broken = StandingRule.broken(comms, caller.name)
-        StandingRule.enforce_all(comms, caller.name, broken)
+        rejected = StandingRule.enforce_all(comms, caller.name, broken)
         return StandingRulesRead(
-            tuple(rule.line() for rule in broken if rule.broke_after(self.after)))
+            tuple(rule.line() for rule in broken
+                  if rule.broke_after(self.after) and rule not in rejected)
+            + tuple(rule.rejected_line() for rule in broken
+                    if rule.broke_after(self.after) and rule in rejected))
 
 
 @dataclass(frozen=True, kw_only=True)

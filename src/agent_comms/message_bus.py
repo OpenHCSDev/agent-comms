@@ -11,33 +11,33 @@ from contextlib import AbstractContextManager, aclosing, contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .bus import Bus
-from .bus_activity_index import ActivityClocks, BusActivityIndex
-from .bus_route_counts import OpenedRouteCounts
-from .channel_targets import CommandTarget
-from .channels import AnyChannel
-from .coordinator import Coordination
-from .errors import UnregisteredThreadError
-from .historical_views import HistoryArchive
-from .maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError
-from .message_page import InboxPage, MessagePage, MessagePageRequest, PageBounds
-from .message_reference import AfterMessageStart, FirstUnreadStart, InboxStart, MessageReference
-from .messages import Message
-from .page_traversal import NewerTraversal
-from .private_path import ObservedPath
-from .read_basis import (
+from agent_comms.bus import Bus
+from agent_comms.bus_activity_index import ActivityClocks, BusActivityIndex
+from agent_comms.bus_route_counts import OpenedRouteCounts
+from agent_comms.channel_targets import CommandTarget
+from agent_comms.channels import AnyChannel
+from agent_comms.coordinator import Coordination
+from agent_comms.errors import UnregisteredThreadError
+from agent_comms.historical_views import HistoryArchive
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError
+from agent_comms.message_page import InboxPage, MessagePage, MessagePageRequest, PageBounds
+from agent_comms.message_reference import AfterMessageStart, FirstUnreadStart, InboxStart, MessageReference
+from agent_comms.messages import Message
+from agent_comms.page_traversal import NewerTraversal
+from agent_comms.private_path import ObservedPath
+from agent_comms.publisher import Publisher
+from agent_comms.read_basis import (
     AnonymousViewer, CapturedSelection, DisplayBasis, DisplayViewer,
     ListedDeliveries, NamedViewer, WatchAcknowledgment,
 )
-from .routing import DeliveryScope
-from .publisher import Publisher
+from agent_comms.routing import DeliveryScope
 
 if TYPE_CHECKING:
-    from .comms import Comms
-    from .registration import Registration
-    from .registry_document import RegistrySnapshot
-    from .relationships import PeerRelation
-    from .threads import Thread
+    from agent_comms.comms import Comms
+    from agent_comms.registration import Registration
+    from agent_comms.registry_document import RegistrySnapshot
+    from agent_comms.relationships import PeerRelation
+    from agent_comms.threads import Thread
 
 
 class HeldBusWrite:
@@ -47,13 +47,19 @@ class HeldBusWrite:
         return asyncio.run(comms.bus.when_open(operation))
 
 
-class WatchPass(HeldBusWrite, ABC):
+class WatchPass[Observed](HeldBusWrite, ABC):
+    """Observe before entering maintenance; apply only the captured result."""
+
     def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
         with opened_wire() as comms:
-            self.write_when_open(comms, partial(self.pass_body, comms))
+            observed = self.observe(comms)
+            self.write_when_open(comms, partial(self.pass_body, comms, observed))
 
     @abstractmethod
-    def pass_body(self, comms: Comms) -> None: ...
+    def observe(self, comms: Comms) -> Observed: ...
+
+    @abstractmethod
+    def pass_body(self, comms: Comms, observed: Observed) -> None: ...
 
 
 class MessageBus[Writes: Publisher]:
@@ -61,8 +67,8 @@ class MessageBus[Writes: Publisher]:
         self, root: Path, registry: Registration, publisher: type[Writes], *,
         projection: type[OpenedRouteCounts] = OpenedRouteCounts,
     ):
-        from .catalog_store import ChannelCatalog
-        from .read_ledger import ReadLedger
+        from agent_comms.catalog_store import ChannelCatalog
+        from agent_comms.read_ledger import ReadLedger
 
         self.bus = Bus(Bus.path_in(root))
         self.reads = ReadLedger.at(root)
@@ -242,8 +248,8 @@ class MessageBus[Writes: Publisher]:
             self.reads.mark_displayed(canonical, displayed)
 
     def awareness_segments(self, owner: Thread, relations: Sequence[PeerRelation], *, blocking=False):
-        from .context_segments.awareness import AwarenessSegment
-        from .peer_relevance import Prioritized
+        from agent_comms.context_segments.awareness import AwarenessSegment
+        from agent_comms.peer_relevance import Prioritized
 
         first = {relation.peer.lookup for relation in relations
                  if relation.relevance.grants(Prioritized)}
