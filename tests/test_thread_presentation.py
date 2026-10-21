@@ -1,16 +1,42 @@
 """Attention belongs to the original status, including working and progress members."""
+import pickle
 from dataclasses import replace
 
 import pytest
 
+from agent_comms.errors import UnregisteredThreadError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.notification_progress import SendingProgress
 from agent_comms.thread_presentation import (
-    IdleThreadPresentationStatus, SessionDisconnected, ThreadPresentationStatus,
-    WorkingThreadPresentationStatus,
+    IdleThreadPresentationStatus, NoThreadPresentation, SessionDisconnected,
+    StatusPending, ThreadPresentationStatus, WorkingThreadPresentationStatus,
 )
 from agent_comms.ui_model.delivery import InputDelivery
 from agent_comms.ui_model.status import ThreadStatusModel
+
+
+@pytest.mark.parametrize("presentation", [
+    NoThreadPresentation(), StatusPending().presentation("worker"),
+])
+def test_presentation_family_preserves_member_and_observation(presentation):
+    decoded = pickle.loads(pickle.dumps(presentation))
+    assert decoded == presentation
+    assert decoded.same_status(presentation)
+    assert decoded.same_observation(presentation)
+
+
+def test_missing_presentation_owns_source_absence_and_retired_status(comms):
+    presentations = comms.views.thread_presentations(("missing",))
+    absent = presentations.read("missing")
+    assert absent == presentations.view("missing") == NoThreadPresentation()
+    assert not absent.notification_activity_names()
+    assert absent.label == ""
+    assert ThreadStatusModel.known("missing", absent) == ThreadStatusModel.retired("missing")
+    readable = {}
+    absent.collect_revision_input("missing", readable)
+    assert readable == {}
+    with pytest.raises(UnregisteredThreadError, match="Thread presentation unavailable: missing"):
+        presentations.require("missing")
 
 
 @pytest.mark.parametrize("original", [

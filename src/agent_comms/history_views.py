@@ -34,7 +34,7 @@ from .channel_targets import CommandTarget, ThreadTarget
 from .channels import ChannelMemberIndex
 from .collaboration_ledger import CollaborationLedger
 from .coordination_errors import StaleRevision
-from .errors import UnknownChannelError, UnregisteredThreadError
+from .errors import UnknownChannelError
 from .exporting import (
     WireExportBoundary,
     WireExportFormat,
@@ -63,7 +63,7 @@ from .presentation import (
 )
 from .read_basis import AnonymousViewer, DisplayViewer, DMDisplayBasis, NamedViewer
 from .store_files import SharedLock, _store_lock
-from .thread_presentation import ThreadPresentation
+from agent_comms.thread_presentation import NoThreadPresentation, ThreadPresentation
 from .threads import current_thread
 from .transcripts import TranscriptCursor, Transcripts
 
@@ -150,27 +150,19 @@ class ThreadPresentations:
     transcripts: Transcripts
     sent_source_limit: int
 
-    def view(self, name: str) -> ThreadView | None:
-        return self.views.get(self.snapshot.canonical_name(name))
+    def view(self, name: str) -> ThreadPresentation:
+        view = self.views.get(self.snapshot.canonical_name(name))
+        return NoThreadPresentation() if view is None else view.presentation
 
-    def read(self, name: str) -> ThreadPresentation | None:
-        view = self.view(name)
-        if view is None:
-            return None
-        captured = self.transcripts.capture_page_window(
-            view.thread.name, source_limit=5, sent_source_limit=self.sent_source_limit
+    def read(self, name: str) -> ThreadPresentation:
+        return self.view(name).read_sources(
+            self.transcripts, self.snapshot, self.snapshot.canonical_name(name),
+            self.sent_source_limit,
         )
-        owner = captured.read.identity.thread
-        if not owner.incarnation.current(self.snapshot):
-            raise StaleRevision("Thread source incarnation changed during presentation")
-        return view.presentation.with_sources(captured)
 
     def require(self, name: str) -> ThreadPresentation:
         """A bound caller must name an available thread, not an anonymous view."""
-        presentation = self.read(name)
-        if presentation is None:
-            raise UnregisteredThreadError(f"Thread presentation unavailable: {name}")
-        return presentation
+        return self.read(name).require(name)
 
 
 class HistoryViews:
