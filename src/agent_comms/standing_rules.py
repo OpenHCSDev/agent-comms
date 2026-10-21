@@ -67,7 +67,7 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
                 continue
             rule = (new or old)[0]
             prefix = "RULE" if new else "NO LONGER CURRENT:"
-            lines.append(f"{prefix} {rule.heartbeat_line(new)}")
+            lines.append(f"{prefix} {rule.heartbeat_line(new or old)}")
         return tuple(lines)
 
     @staticmethod
@@ -305,9 +305,6 @@ class DirectiveUnacted(DatedStandingRule):
         return type(self), self.request
 
     def heartbeat_line(self, current: Sequence[Self]) -> str:
-        if not current:
-            return (f"DIRECTIVE UNACTED: request {self.request}: 0 claude-ai directives; "
-                    "oldest none; newest none")
         oldest = min(current, key=lambda rule: rule.directive.seq).directive
         newest = max(current, key=lambda rule: rule.directive.seq).directive
         return (

@@ -116,8 +116,10 @@ class StorageRule(RoomAllocation):
                 except FileNotFoundError:
                     continue  # An absent allocation holds no files; other errors propagate.
                 present.append(path)
+            if not present:
+                continue
+            storage = UnitStorage.read(self, owner)
             for path in present:
-                storage = UnitStorage.read(self, owner)
                 if path not in (storage.home, *storage.extra_checkouts):
                     self.deny(f'{path} is not a registered Git checkout of {owner.name}')
                 work = OrderCheckoutWork(path, owner)

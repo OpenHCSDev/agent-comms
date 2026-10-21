@@ -103,10 +103,7 @@ class UnownedWheelSpin(UndatedStandingRule):
         actor = comms.registry.require(commander).incarnation
         rows = tuple(todo for todo in comms.goals.todos.for_commander(actor)
                      if not todo.holder_state.current_assignments())
-        paired = cls.paired(comms, commander, rows, actor)
-        assigned = {rule.todo.id for rule in paired}
-        return paired + tuple(WaitingUnownedWheelSpin(todo)
-            for todo in rows if todo.pending and todo.id not in assigned)
+        return cls.paired(comms, commander, rows, actor)
 
     @classmethod
     def paired(cls, comms: Comms, commander: str, todos: Iterable[Todo],
@@ -126,7 +123,9 @@ class UnownedWheelSpin(UndatedStandingRule):
                     found.append(ReassignedWheelSpin(todo, ReusedWorkDispatch(
                         cls.order_for(todo, commander, assigner), todo.revision, unit)))
                     break
-        return (*retained, *found)
+        covered = {rule.todo.id for rule in (*retained, *found)}
+        return (*retained, *found,
+                *(WaitingUnownedWheelSpin(todo) for todo in rows if todo.id not in covered))
 
     def line(self) -> str:
         return f"UNOWNED ROW: {self.todo.id} waits for a new unit"
