@@ -11,6 +11,7 @@ import ctypes
 import io
 import json
 import math
+import multiprocessing
 import os
 import re
 import secrets
@@ -23,16 +24,19 @@ import threading
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator
+from concurrent.futures import Future, ProcessPoolExecutor
 from contextlib import (
     AbstractContextManager,
+    ExitStack,
     asynccontextmanager,
     contextmanager,
     nullcontext,
     suppress,
 )
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, NoReturn
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -1584,18 +1588,21 @@ class ParentLifeline:
     def environment(self) -> dict[str, str]:
         return {**os.environ, self.variable: str(self.read_fd)}
 
-    @classmethod
-    def guard(cls) -> None:
-        descriptor = int(os.environ.pop(cls.variable))
+    @staticmethod
+    def watch(descriptor: int, lost: Callable[[], None]) -> None:
         os.fstat(descriptor)
 
         def parent_watchdog() -> None:
             try:
                 os.read(descriptor, 1)
             finally:
-                os._exit(1)
+                lost()
 
         threading.Thread(target=parent_watchdog, daemon=True).start()
+
+    @classmethod
+    def guard(cls) -> None:
+        cls.watch(int(os.environ.pop(cls.variable)), partial(os._exit, 1))
 
 
 class BoundedRun:
@@ -1787,6 +1794,30 @@ class SpawnedProcess(SynchronousProcess):
                 raise
         return child
 
+    def collect(self, *, timeout: float) -> subprocess.CompletedProcess[bytes]:
+        """Collect within the caller's owned context; its exit retires descendants."""
+        stdout, stderr = self.process.communicate(timeout=timeout)
+        return subprocess.CompletedProcess(self.process.args, self.process.wait(), stdout, stderr)
+
+    @classmethod
+    def run(
+        cls, command: tuple[str, ...], *, timeout: float,
+        cwd: str | Path, env: dict[str, str],
+    ) -> subprocess.CompletedProcess[bytes]:
+        """A one-shot interpreter exchange, including forced descendant retirement.
+
+        Containers use launch/collect instead: their graceful scope exit lets
+        nested owners retire their own groups before the outer force pass.
+        """
+        if not math.isfinite(timeout) or timeout <= 0:
+            raise ValueError("A positive finite timeout is required")
+        deadline = time.monotonic() + timeout
+        with cls.launch(command, cwd=cwd, env=env, output=subprocess.PIPE) as child:
+            try:
+                return child.collect(timeout=max(0, deadline - time.monotonic()))
+            finally:
+                child.platform.force_group(child.identity)
+
     def reap(self) -> ChildOutcome:
         return ChildOutcome.from_returncode(self.process.wait(timeout=STOP_GRACE_SECONDS))
 
@@ -1811,6 +1842,54 @@ class SpawnedProcess(SynchronousProcess):
 
     def __exit__(self, *_):
         self.close()
+
+
+class PoolWorkerStopped(BaseException):
+    """A pool's parent stopped; unwind owned work before the worker exits."""
+
+
+class ForkedProcessPool(ExitStack, ProcessPoolExecutor, ParentLifeline):
+    """Parallel work whose workers and nested child owners cannot outlive its parent."""
+
+    def __init__(self) -> None:
+        ExitStack.__init__(self)
+        ParentLifeline.__enter__(self)
+        self.callback(ParentLifeline.__exit__, self)
+        try:
+            ProcessPoolExecutor.__init__(
+                self, mp_context=multiprocessing.get_context("fork"),
+                initializer=self._initialize, initargs=(self.read_fd, self.write_fd),
+            )
+        except BaseException:
+            self.close()
+            raise
+        self.callback(ProcessPoolExecutor.shutdown, self)
+
+    @staticmethod
+    def _stopped(signum: int, frame: object) -> NoReturn:
+        # A second notification must not interrupt the current child's retirement.
+        signal.signal(signum, signal.SIG_IGN)
+        raise PoolWorkerStopped()
+
+    @classmethod
+    def _initialize(cls, read_fd: int, write_fd: int) -> None:
+        signal.signal(signal.SIGTERM, cls._stopped)
+        os.close(write_fd)
+        cls.watch(read_fd, partial(os.kill, os.getpid(), signal.SIGTERM))
+
+    @staticmethod
+    def _work[T](work: Callable[[], T]) -> T:
+        try:
+            return work()
+        except PoolWorkerStopped:
+            # ProcessPoolExecutor otherwise catches BaseException and waits for
+            # another task from the dead parent. Owned scopes have now unwound.
+            os._exit(1)
+
+    def submit[T, **P](
+        self, fn: Callable[P, T], /, *args: P.args, **kwargs: P.kwargs,
+    ) -> Future[T]:
+        return super().submit(self._work, partial(fn, *args, **kwargs))
 
 
 @dataclass(frozen=True)
