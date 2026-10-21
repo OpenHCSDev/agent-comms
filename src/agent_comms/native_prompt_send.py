@@ -20,6 +20,7 @@ from contextlib import AbstractContextManager, ExitStack
 from typing import TYPE_CHECKING
 from .diagnostics import PublicationMeasurements
 from .coordination_errors import CoordinationError
+from .errors import RelationViolationError
 
 if TYPE_CHECKING:
     from .tracked_turn import TrackedTurnSession
@@ -32,7 +33,7 @@ class PromptBoundary(ABC):
     async def send_prompt(self, turn: TrackedTurnSession) -> None: ...
 
     def following_original(self, prompt: str):
-        raise RuntimeError("An unowned prompt cannot authorize following input")
+        raise RelationViolationError("An unowned prompt cannot authorize following input")
 
 
 class UnguardedPrompt(PromptBoundary):

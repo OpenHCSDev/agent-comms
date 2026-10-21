@@ -18,6 +18,7 @@ from .ordinary_turn_rules import (
     AcceptedInputCheck,
     InputKeysCheck,
     MissingAcceptedInputCheck,
+    MissingAcceptedInputRule,
     MissingTurnOwnerCheck,
     OrdinaryContextCheck,
     OrdinaryOwnerCheck,
@@ -58,7 +59,10 @@ class OwnedSend(CodingToolOwner):
     def source(self, public_id: str | None) -> TurnInputSource:
         if public_id is None:
             return self.original
-        return self.inputs.state(self.session_id).following[public_id]
+        try:
+            return self.inputs.state(self.session_id).following[public_id]
+        except KeyError as error:
+            raise ReservationViolationError(MissingAcceptedInputRule()) from error
 
     def _check_owner(
         self,

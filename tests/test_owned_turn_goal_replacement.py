@@ -16,6 +16,7 @@ from agent_comms.owned_send import OwnedSend
 from agent_comms.queued_input import InitialInput, QueuedInput
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
+from agent_comms.reservation_rules import ReservationViolationError
 from compaction_loopback import LoopbackProvider
 from native_backend_fixture import native_backend_fixture, wait_for
 from test_todos import order
@@ -94,7 +95,7 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
                 messages = saved.session.read_text()
                 assert 'following input reached the new turn' in messages
                 assert 'captured goal permission no longer applies' not in messages
-                with pytest.raises(KeyError):
+                with pytest.raises(ReservationViolationError, match='acknowledgement is missing'):
                     sender.source('unknown-public-input')
             finally:
                 task.cancel()
