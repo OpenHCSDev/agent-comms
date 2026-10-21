@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from functools import partial
 from typing import TYPE_CHECKING, Any, cast
 
@@ -36,13 +36,20 @@ if TYPE_CHECKING:
     from .runtime import RuntimeServer, SocketClient
 
 
-@dataclass(eq=False, repr=False)
 class AcpEventConsumer(MroDispatch):
-    agent: CommsAgent
-    session_id: str
-    client: AgentSideConnection | RuntimeServer | SocketClient
-    turn_id: str | None = None
-    route: MessageRoute | None = None
+    def __init__(
+        self,
+        agent: CommsAgent,
+        session_id: str,
+        client: AgentSideConnection | RuntimeServer | SocketClient,
+        turn_id: str | None = None,
+        route: MessageRoute | None = None,
+    ) -> None:
+        self.agent = agent
+        self.session_id = session_id
+        self.client = client
+        self.turn_id = turn_id
+        self.route = route
 
     @handles(events.GoalChanged)
     async def goal_changed(self, event: events.GoalChanged) -> None:
