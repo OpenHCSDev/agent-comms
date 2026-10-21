@@ -39,6 +39,7 @@ from agent_comms.obligation_states import PendingResponse, PublishedResponse, Pu
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.registration import Registration
 from agent_comms.selected_source_batch import SelectedSource
+from agent_comms.coordination_tables.executions import NoPointedExecution
 
 # Private bus publication requires POSIX owner/mode ancestry; Windows stat
 # emulation cannot attest this boundary or exercise its durability contract.
@@ -187,7 +188,7 @@ def test_original_routes_prepare_together_and_release_one_attempt_only_after_all
         assert settled.execution.lifecycle.completed and not settled.is_current
         assert len(settled.publication_evidence) == 2
         assert all(row.lifecycle.require_completion() for row in settled.assignments)
-        assert settled.current_execution_id is None
+        assert settled.current_execution_id == NoPointedExecution()
         for route in routes:
             intent, acknowledgement = settled.require_published_evidence(route)
             message = case.bus.log.read_keyed_response(intent)

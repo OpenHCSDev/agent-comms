@@ -170,12 +170,12 @@ def test_pi_argument_records_reject_bad_shapes_without_claiming(name, arguments)
 
 def test_family_selector_is_denied_but_record_presentation_stays_readable():
     from agent_comms.native_tool_call import SelectedToolDenied
-    from agent_comms.tool_declaration import ToolDeclaration
+    from agent_comms.tool_declaration import NoToolRecord, ToolDeclaration
 
     arguments = {"path": "x", "tool": "write"}
     with pytest.raises(SelectedToolDenied):
         CodingCall.decode("selector", "read", arguments)
-    assert ToolDeclaration.record("read", arguments, call_id="refused") is None
+    assert ToolDeclaration.record("read", arguments, call_id="refused") == NoToolRecord()
 
 
 

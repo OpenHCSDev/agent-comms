@@ -13,12 +13,12 @@ import argparse
 import sys
 from collections.abc import Sequence
 
-from .active_route import resolve_comms_route
-from .cli_bridges.shared import SendArguments
-from .cli_commands import CliCommand
-from .cli_protocol import CoreError
-from .coordination_errors import CoordinationError
-from .launch_root import LaunchRoot
+from agent_comms.active_route import resolve_comms_route
+from agent_comms.cli_bridges.shared import SendArguments
+from agent_comms.cli_commands import CliCommand
+from agent_comms.cli_protocol import CoreError
+from agent_comms.coordination_errors import CoordinationError
+from agent_comms.launch_root import LaunchRoot
 
 
 def _fail(error: BaseException) -> int:

@@ -162,6 +162,11 @@ class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
     @abstractmethod
     async def delivery_time(self, check): ...
 
+    @property
+    def installation_commits(self) -> tuple[str, ...]:
+        """An operation has no source commit to require in the installed build."""
+        return ()
+
     def merged_commits(self, repo: Repo) -> tuple[str, ...]:
         """Operations have no commit whose ancestry could prove a merge."""
         return ()
@@ -193,6 +198,10 @@ class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
     @property
     def work(self) -> str:
         return f"delivered commit {self.delivered}"
+
+    @property
+    def installation_commits(self) -> tuple[str, ...]:
+        return (self.delivered,)
 
     def merged_commits(self, repo: Repo) -> tuple[str, ...]:
         return (self.delivered,) if repo.contains(self.delivered, "origin/main") else ()
@@ -1843,7 +1852,9 @@ class DeliveredProblemOrder(CheckedProblemOrder):
         raise ValueError("A delivered order keeps the check its delivery passed.")
 
     def require_installation(self) -> None:
-        self.delivery.proof_build.require_installed()
+        self.delivery.proof_build.require_installed(
+            self.delivery.installation_commits, Path(self.check.directory)
+        )
 
     def installed(self, works, artifact):
         self.run.require_closing(works)

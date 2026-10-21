@@ -17,6 +17,7 @@ from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.owner_restart import OwnerRestartHandoff, RetiredOwnerLaunch
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
+from agent_comms.native_arguments import ConfiguredBinary, InheritedArguments
 
 
 @pytest.mark.parametrize("source", [{}, {"PYTHONPATH": ""}, {"PYTHONPATH": "/source"}])
@@ -97,7 +98,7 @@ def test_handoff_codec_preserves_complete_stopped_witness_and_original_launch(*,
     launch = RetainedOwnerLaunch(thread.require_process(), "/authored/python", environment)
     owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)
     runtime = RestartEnvironment.inherit(environment)
-    original = OwnerRestartHandoff("/authored", (owner,), runtime, None, None, LaunchRuntime(Path("/target/bin/python")))
+    original = OwnerRestartHandoff("/authored", (owner,), runtime, ConfiguredBinary(), InheritedArguments(), LaunchRuntime(Path("/target/bin/python")))
     encoded = FieldCodec.encode(original)
     assert set(encoded["owners"][0]) == {"owner", "admission", "launch"}
     decoded = FieldCodec.decode(OwnerRestartHandoff, encoded)

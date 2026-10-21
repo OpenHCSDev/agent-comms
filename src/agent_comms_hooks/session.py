@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import json
 import os
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 from agent_comms.child_process import ParentedProcess, ProcessIdentity
 from agent_comms.cli_bridges.monitor import EndSession, VerifySession
 from agent_comms.cli_bridges.shared import Serve
-from agent_comms.field_codec import FieldCodec
+from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms_hooks import ClaudeHookProgram, ClaudeTranscriptHook
 from agent_comms_hooks.watch import LiveWatch, RecordedWatch, WatchClaim
 
@@ -50,18 +50,13 @@ class SessionHook(ClaudeTranscriptHook):
                         "An older watch still owns this session. "
                         "Stop that Monitor once, then connect."
                     ) from error
-            command = (
-                state.record.command[0],
-                Serve.__name__.lower(),
-                *state.record.command[2:],
-                "--owner",
-                json.dumps(FieldCodec.encode_record(owner)),
-                "--transcript",
-                self.transcript_path,
-            )
+            runtime = LaunchRuntime.installed()
+            command = Serve(owner=owner, transcript=Path(self.transcript_path)).command(
+                state.record, runtime)
             log = claim.path.with_suffix(".log")
             with log.open("ab") as output:
-                child = ParentedProcess.launch(command, env=dict(os.environ), output=output)
+                child = ParentedProcess.launch(
+                    command, env=runtime.environment(os.environ), output=output, runtime=runtime)
             deadline = time.monotonic() + 30
             while child.alive() and time.monotonic() < deadline:
                 try:

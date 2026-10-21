@@ -88,8 +88,7 @@ def _projection(
 ) -> OptionalAwarenessProjection:
     active = owner.turn_record.read().require_active()
     assert active.executing
-    claimed_generation = active.claimed_generation
-    assert claimed_generation is not None
+    claimed_generation = active.claimed_generation.value
     return OptionalAwarenessProjection(
         index,
         after_seq,

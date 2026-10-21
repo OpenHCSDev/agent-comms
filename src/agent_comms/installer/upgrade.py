@@ -29,6 +29,7 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Annotated
@@ -37,6 +38,7 @@ import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity run
 from agent_comms.active_route import ActiveRoute, active_route_path, route_new_bus
 from agent_comms.cli_commands import InstallResult, ThreadsResult, WhoResult
 from agent_comms.cli_result import CliResult
+from agent_comms.cli_bridges.shared import Serve
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec, PathText
@@ -544,7 +546,7 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
         names = tuple(step.name() for step in pending)
         if rehearse_only:
             return RehearsedUpgrade(current, target, root, names, rehearsal)
-        return InstalledUpgrade(current, target, root, names, rehearsal, install.live(rehearsal),
+        return InstalledUpgrade(current, target, root, names, rehearsal, install.install(rehearsal),
                                 harnesses())
     finally:
         tree.close()
@@ -594,6 +596,19 @@ class Install[Rehearsed: Rehearsal](ABC):
 
     @abstractmethod
     def rehearsal(self) -> Rehearsed: ...
+
+    def install(self, rehearsal: Rehearsed) -> LiveRun:
+        """Session bridges close their bus resources before units stop, then exec in place.
+
+        The owner-launched process is the only launcher with the right ancestry. Its
+        retained control connection survives until live() publishes or rolls back;
+        the installed pointer, not a copied target version, selects its successor.
+        """
+        with ExitStack() as resources:
+            for bridge in Serve.running(self.installed.home):
+                for paused in bridge.pause(resources):
+                    resources.callback(paused.resume)
+            return self.live(rehearsal)
 
     @abstractmethod
     def live(self, rehearsal: Rehearsed) -> LiveRun: ...

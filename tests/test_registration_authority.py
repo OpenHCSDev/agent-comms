@@ -11,6 +11,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.goals import Goal
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.thread_text import GivenThreadText
+from agent_comms.turn_lease import RecordedGeneration
 
 
 def registered(root):
@@ -72,7 +73,7 @@ def test_live_owner_read_rejects_raw_stale_turn_witness(tmp_path):
     leased, _ = registry.lease_local_turn('owner', 'turn')
     with registry.store.editing() as edit:
         record = edit.document.threads['owner'].turn_record
-        record._publish_unlocked(replace(record.read(), claimed_generation=99))
+        record._publish_unlocked(replace(record.read(), claimed_generation=RecordedGeneration(99)))
         edit.commit()
     with pytest.raises(RelationViolationError):
         registry.live_owner_with_claim('owner')

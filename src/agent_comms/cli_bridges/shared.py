@@ -8,16 +8,19 @@ import io
 import json
 import os
 import signal
+import socket
 import sys
+import time
 import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from contextlib import ExitStack, closing, contextmanager
+from contextlib import ExitStack, closing, contextmanager, suppress
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from functools import cached_property, partial
 from pathlib import Path
-from typing import Annotated, ClassVar, Generic, Literal, Self, TypeVar, TextIO
+from typing import Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar
+
 from acp.schema import SessionConfigSelectOption
 from metaclass_registry import RegistryConfig
 from pydantic import Field, TypeAdapter, model_validator
@@ -48,15 +51,20 @@ from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
 from agent_comms.typed_table import Column, DurableTables, ExpressionIndex, TypedTable
-from agent_comms_hooks.watch import WatchClaim, WatchRecord
+from agent_comms_hooks.watch import LiveWatch, WatchClaim, WatchRecord
 
 from ..locked_store import RegistryFile, SQLiteFile
 from .monitor import (
+    REPLIES,
+    BridgeExit,
+    InspectSession,
     MonitorAttachment,
     MonitorPeer,
     MonitorService,
     NoReader,
+    PauseSession,
     ReaderState,
+    SessionInformation,
     read_monitor,
 )
 
@@ -280,6 +288,9 @@ class Operation(DeclaredOptions, ABC, Generic[OperationBridge]):
     def transcript_source(self) -> Path:
         raise ValueError('This command does not own a live transcript subscription')
 
+    def retired(self, bridge: OperationBridge) -> None:
+        """Most operations have no runtime successor."""
+
     @classmethod
     def serves(cls, bridge: type[CliBridge]) -> bool:
         """Whether this command runs on that bridge; every bridge sends."""
@@ -477,6 +488,33 @@ class Serve(Watch):
     def transcript_source(self) -> Path:
         return self.transcript
 
+    def command(self, record: WatchRecord, runtime: LaunchRuntime) -> tuple[str, ...]:
+        return (
+            str(runtime.interpreter.with_name(Path(record.command[0]).name)),
+            type(self).__name__.lower(), *record.command[2:],
+            '--owner', json.dumps(FieldCodec.encode_record(self.owner)),
+            '--transcript', str(self.transcript),
+        )
+
+    @staticmethod
+    def running(home: Path) -> tuple[SessionBridge, ...]:
+        claims = set()
+        for state in sorted(WatchClaim.directory(home).parent.glob('*-bridge-*')):
+            journal = state / BridgeStateTable.filename
+            if not journal.is_file():
+                continue
+            with closing(CoordinationStore.read_snapshot(journal)) as db:
+                bindings = Binding.select(db)
+            for binding in bindings:
+                claim = WatchClaim(binding.thread, home)
+                if isinstance(claim.state(), LiveWatch) and claim.socket_path.exists():
+                    claims.add(claim)
+        return tuple(SessionBridge(claim, InspectSession().information(claim))
+                     for claim in sorted(claims, key=lambda claim: claim.thread))
+
+    def retired(self, bridge: LineMonitorBridge) -> None:
+        bridge.retirement.finish(self, bridge.watch_record())
+
     async def execute(self, bridge: LineMonitorBridge) -> None:
         if self.transcript.stem != bridge.binding.thread:
             raise ValueError('The live transcript belongs to another Claude session')
@@ -486,6 +524,57 @@ class Serve(Watch):
     def start(self, bridge: LineMonitorBridge, tasks: asyncio.TaskGroup) -> None:
         super().start(bridge, tasks)
         tasks.create_task(MonitorService(bridge, self.owner, bridge.stop).run())
+
+
+@dataclass(frozen=True)
+class SessionBridge:
+    """A live endpoint's own description, captured before install stops anything."""
+
+    claim: WatchClaim
+    observed: SessionInformation
+
+    def pause(self, resources: ExitStack) -> tuple[PausedSessionBridge, ...]:
+        if not self.observed.owner.alive():
+            if self.observed.process.alive():
+                self.observed.process.signal(signal.SIGTERM)
+            print(f'Session bridge {self.claim.thread}: owner exited; left stopped', file=sys.stderr)
+            return ()
+        self.observed.owner.require_ancestor_of(self.observed.process.pid)
+        peer = resources.enter_context(PauseSession(
+            owner=self.observed.owner, process=self.observed.process).connection(self.claim))
+        stream = resources.enter_context(peer.makefile('rb'))
+        REPLIES.validate_json(stream.readline(4096)).require()
+        return (PausedSessionBridge(self, peer),)
+
+
+@dataclass(frozen=True)
+class PausedSessionBridge:
+    bridge: SessionBridge
+    peer: socket.socket
+
+    def resume(self) -> str:
+        runtime = LaunchRuntime.installed()
+        observed = self.bridge.observed
+        name = self.bridge.claim.thread
+        if not observed.owner.alive():
+            print(f'Session bridge {name}: owner exited; left stopped', file=sys.stderr)
+            return f'{name}: owner exited; left stopped'
+        self.peer.sendall((json.dumps(FieldCodec.encode(runtime)) + '\n').encode())
+        deadline = time.monotonic() + 30
+        while observed.process.alive() and time.monotonic() < deadline:
+            try:
+                current = InspectSession().information(self.bridge.claim)
+            except (FileNotFoundError, ConnectionRefusedError):
+                time.sleep(.05)
+                continue
+            if current.process != observed.process or current.owner != observed.owner:
+                raise ValueError(f'Session bridge {name}: process or owner changed')
+            if current.runtime.prefix != runtime.prefix:
+                raise ValueError(f'Session bridge {name}: wrong runtime {current.runtime.prefix}')
+            print(f'Session bridge {name}: {observed.runtime.prefix} -> {current.runtime.prefix}',
+                  file=sys.stderr)
+            return name
+        raise ValueError(f'Session bridge {name}: successor runtime was not observed')
 
 
 class Enrol(Operation):
@@ -760,6 +849,7 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         super().__init__(options, binding, db)
         self.reader: ReaderState = NoReader()
         self.reader_changed = asyncio.Condition()
+        self.retirement: BridgeExit = BridgeExit()
 
     def watch_record(self) -> WatchRecord:
         command = (str(Path(sys.argv[0]).absolute()), Watch.__name__.lower(),
@@ -822,8 +912,8 @@ def run_bridge(bridge_type: type[CliBridge[BridgeOptions]], options: BridgeOptio
     try:
         with Binding.open(options.state) as db, asyncio.Runner() as runner:
             bridge = bridge_type(options, options.binding.bind(db), db)
-            runner.run(bridge.run())
-    except* asyncio.CancelledError:
-        pass
+            with suppress(asyncio.CancelledError):
+                runner.run(bridge.run())
+        options.operation.retired(bridge)
     except* BlockingIOError:
         sys.exit('Another watcher owns this conversation')

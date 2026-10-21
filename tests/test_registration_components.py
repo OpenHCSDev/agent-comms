@@ -15,7 +15,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.locked_store import LockedStore
 from agent_comms.registration import Registration
 from agent_comms.registry_document import RegistryDocument, ThreadSlice
-from agent_comms.registry_store import RegistryStore
+from agent_comms.registry_store import RegistryStore, UncachedRegistry
 from agent_comms.store_files import SharedLock
 from agent_comms.threads import Thread
 from agent_comms.thread_text import GivenThreadText
@@ -66,7 +66,7 @@ def test_one_thread_entry_decodes_only_that_thread_and_matches_the_document(tmp_
     for name in ("renamed", "owner", "other"):
         assert RegistryDocument.entry_from_wire(raw, name) == document.entry(name)
     # Another process's write leaves this process without a decoded revision.
-    registration.store.cache.entry = None
+    registration.store.cache.entry = UncachedRegistry()
     read = registration.entry("owner")
     assert read.entry == document.entry("renamed") and read.entry.thread.name == "renamed"
     assert read.revision == registration.store.revision_unlocked()

@@ -26,7 +26,7 @@ def main() -> None:
         with LaunchRoot.from_path(request.root).selected():
             print(json.dumps(FieldCodec.encode(request.run()), indent=2))
     except UpgradeRefused as error:
-        raise SystemExit(error.output)
+        raise SystemExit(str(error))
 
 
 if __name__ == "__main__":
