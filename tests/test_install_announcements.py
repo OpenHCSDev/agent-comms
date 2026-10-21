@@ -205,13 +205,19 @@ def test_publication_failure_raises_after_registering_the_sender(private_comms, 
 
 def test_cleanup_failure_replaces_a_finished_result_before_the_terminal_post(
         reported_install, monkeypatch):
-    comms, report, tree = reported_install
+    comms, report, unadded = reported_install
+    head = subprocess.run(["git", "-C", REPOSITORY, "rev-parse", "HEAD"], check=True,
+                          capture_output=True, text=True).stdout.strip()
+    tree = TargetTree(REPOSITORY, unadded.scratch, head)
+    tree.add()  # Only an added tree's retirement runs git.
     with pytest.raises(FileNotFoundError):
         with report.running(tree):
             report.complete(Upgrade("a" * 40, tree.revision, comms.root, ()))
             monkeypatch.setenv("PATH", "")  # The external git process cannot start.
+    monkeypatch.undo()
+    subprocess.run(["git", "-C", REPOSITORY, "worktree", "prune"], check=True)
     assert not tree.scratch.exists()
     started, failed = messages(comms)
     assert started.body.startswith("Install starting\n")
     assert failed.body.startswith("Install failed: FileNotFoundError:")
-    assert "Source: src/agent_comms/installer/upgrade.py:" in failed.body
+    assert "Source: src/agent_comms/repo.py:" in failed.body
