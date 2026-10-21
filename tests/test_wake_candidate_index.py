@@ -38,7 +38,7 @@ def append_reply(bus, sender, recipient, body="reply"):
         audience = freeze_audience(
             message, (FrozenRecipient(recipient.lookup, recipient.name),), "c" * 64,
             sender_lookup=sender.lookup, sender_name=sender.name)
-        return PrivateRecord.of(
+        return PrivateRecord.from_message(
             message, audience=audience,
             decisions=resolve_wake_cohort(
                 message, frozen_audience=audience, control=ControlClassification.ORDINARY),
@@ -70,7 +70,7 @@ def test_rebuild_recreates_the_same_candidate_rows(bus, owner, peer):
 
 def test_scan_progress_includes_non_candidate_suffix_and_is_bounded(bus, owner, peer):
     first = append_reply(bus, peer, owner)
-    public = tuple(bus.append(lambda seq: PublicRecord.of(
+    public = tuple(bus.append(lambda seq: PublicRecord.from_message(
         Message("external", "owner", "public", InfoKind, seq=seq))) for _ in range(3))
     index = WakeCandidateIndex(bus)
     hint = CommittedAppendHint.capture("a" * 32, public[-1].seq)
@@ -97,7 +97,7 @@ def test_background_maintenance_coalesces_committed_sequences(bus, owner, peer):
 
 
 def test_read_prefix_preserves_unpainted_holes_and_compacts_exact_reads(bus):
-    messages = tuple(bus.append(lambda seq, target=target: PublicRecord.of(
+    messages = tuple(bus.append(lambda seq, target=target: PublicRecord.from_message(
         Message("sender", target, "visible", InfoKind, seq=seq)))
         for target in ("#team", "#elsewhere", "#team", "#team"))
     first, _, middle, last = messages
@@ -116,7 +116,7 @@ def test_wait_finds_dependency_reply_after_its_recorded_sequence(bus, owner, pee
         targets=(GoalWaitTarget(peer),), owner=owner, target_turn_generations=(None,),
         report_turn_id=None, report_turn_generation=None)
     assert not wait.has_reply(bus, owner)
-    bus.append(lambda seq: PublicRecord.of(
+    bus.append(lambda seq: PublicRecord.from_message(
         Message("other", owner.name, "not a private dependency reply", InfoKind, seq=seq)))
     reply = append_reply(bus, peer, owner)
     assert wait.has_reply(bus, owner)
