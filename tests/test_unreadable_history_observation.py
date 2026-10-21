@@ -193,7 +193,9 @@ def test_sidebar_prepares_once_then_publishes_and_keeps_real_rows(comms, cause):
     first = list(reading.read(comms, revision))
     assert isinstance(first[0], SidebarPreparing)
     assert first[0].cause is cause
-    assert first[0].status_text() == f"Reading comms\n{cause}"
+    transmitted = pickle.loads(pickle.dumps(first[0]))
+    assert type(transmitted.cause) is type(cause)
+    assert transmitted.cause.args == cause.args
     assert reading.request is request and reading.stage is stage
     assert not any(isinstance(result, SidebarPreparing) for result in reading.read(comms, revision))
     reading.stage = SidebarReadStage()

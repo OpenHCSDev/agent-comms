@@ -50,7 +50,9 @@ from agent_comms.registry_document import RosterVisibility
 from agent_comms.registry_provenance import DeletedThread
 from agent_comms.revision_views import NotificationsView, RegistrationsView, SidebarView, StoresView
 from agent_comms.ui_model.delivery import InputDelivery
-from agent_comms.ui_model.sidebar import ChannelRowModel, SidebarModel, ThreadRowModel, WaitingSidebar
+from agent_comms.ui_model.sidebar import (
+    ChannelRowModel, SidebarModel, ThreadRowModel, WaitingSidebar,
+)
 from agent_comms.ui_model.status import OpenThreadStatus, ThreadStatusModel
 from agent_comms.view_unread import ReplyIndexResult
 
@@ -207,7 +209,9 @@ class Observation[InterestT: InterestRequest](ObservationLifetime):
         service.observe_again()
 
     @abstractmethod
-    def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep, None, None]: ...
+    def read(
+        self, comms: Comms, revision: WireRevision,
+    ) -> Generator[ObservationStep, None, None]: ...
 
     def after_read(self, service: ObservationService) -> None:
         """Subscribe to completion when this observation has unfinished preparation."""
