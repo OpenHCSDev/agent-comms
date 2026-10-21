@@ -141,6 +141,17 @@ async def tool_listener():
 
 
 @pytest.fixture
+def durable_home(tmp_path, monkeypatch):
+    """A credential-free durable host never reads the developer's Pi account."""
+    home = tmp_path / "home"
+    config = home / ".pi" / "agent"
+    config.mkdir(parents=True)
+    (config / "auth.json").write_text("{}")
+    monkeypatch.setenv("HOME", str(home))
+    return home
+
+
+@pytest.fixture
 def source_reads():
     from agent_comms.native_entries import NativeEvidenceScope
 
