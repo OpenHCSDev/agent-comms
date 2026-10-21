@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.errors import RouteChanged, UnregisteredThreadError
+from agent_comms.errors import RouteChangedError, UnregisteredThreadError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.notification_progress import SendingProgress
 from agent_comms.thread_presentation import (
@@ -56,7 +56,7 @@ def test_other_route_status_presents_the_route_owners_explanation():
     row = ThreadStatusModel.other_route("x")
     assert row.name == "x"
     assert isinstance(row.status, OtherRouteThread)
-    assert row.lines == row.summary == (RouteChanged.reader_sentence,)
+    assert row.lines == row.summary == (RouteChangedError.reader_sentence,)
     assert row.presentation.title == "x"
 
 

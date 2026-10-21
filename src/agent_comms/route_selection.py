@@ -48,7 +48,7 @@ class RouteSelection:
         route = resolve_comms_route()
         selection = cls(route, route.observe_root())
         if source is not None and Path(source).expanduser().resolve() != selection.root:
-            raise errors.RouteChanged(errors.RouteChanged.reader_sentence)
+            raise errors.RouteChangedError(errors.RouteChangedError.reader_sentence)
         return selection
 
     @classmethod

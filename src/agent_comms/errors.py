@@ -17,7 +17,7 @@ class UnknownChannelError(ToolRefusedError):
     """A target is absent from the catalog and current thread tags."""
 
 
-class RouteChanged(ValueError):
+class RouteChangedError(ValueError):
     """The selected Comms route was replaced; reopen against the current one."""
 
     reader_sentence = "On another Comms route; reopen this view"
