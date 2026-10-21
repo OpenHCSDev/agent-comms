@@ -10,7 +10,7 @@ from math import isfinite
 from typing import ClassVar, Never
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, FieldRepresentation, NullMember, boundary_decoder
+from .field_codec import AcceptsNull, FieldCodec, FieldRepresentation, NullMember, boundary_decoder
 
 class RecordedEventSeconds(FieldRepresentation):
     """The recorded-time value of an existing numeric-seconds contract."""
@@ -30,10 +30,9 @@ class RecordedEventSeconds(FieldRepresentation):
         return FieldCodec.value_schema(float)
 
 
-class NullableEventSeconds(FieldRepresentation):
+class NullableEventSeconds(AcceptsNull, FieldRepresentation):
     """A source clock may be explicitly unrecorded; units belong to its wire type."""
 
-    accepts_null = True
     units_per_second: ClassVar[int] = 1
 
     @classmethod

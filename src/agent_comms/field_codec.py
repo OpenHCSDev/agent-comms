@@ -38,6 +38,7 @@ from uuid import uuid4
 from typing_extensions import TypeAliasType
 
 from .declared_family import DeclaredFamily
+from .mro_dispatch import MroDispatch, handles
 from .sealed import Sealed
 
 if TYPE_CHECKING:
@@ -711,7 +712,7 @@ class InlineFamilyPlan(InlineFieldPlan):
             for entry in FieldCodec._record_plan(member).fields))))
 
 
-class FieldRepresentation(ABC):
+class FieldRepresentation(MroDispatch, ABC):
     """A field capability, declared as ``Annotated[ValueType, Representation]``.
 
     Private transports can declare captures without permitting those objects in
@@ -719,10 +720,22 @@ class FieldRepresentation(ABC):
     """
 
     field_plan: ClassVar[type[FieldPlan]] = DeclaredFieldPlan
-    accepts_null = False
-    # True when the wire value is one external JSON shape decoded by from_wire
-    # rather than the representation's own validated decode.
-    external_json_shape = False
+
+    @classmethod
+    def decode_field(cls, data: object, structural: ValueDecoder[object]) -> object:
+        handler = getattr(cls, next(cls.handler_names_for(type(data))))
+        with MalformedRecord.refusing(f"Invalid {cls.__name__}"):
+            return cast(object, handler(data, structural))
+
+    @handles(type(None))
+    @classmethod
+    def decode_null(cls, data: object, structural: ValueDecoder[object]) -> object:
+        return structural.decode(data)
+
+    @handles(object)
+    @classmethod
+    def decode_value(cls, data: object, structural: ValueDecoder[object]) -> object:
+        return cls.decode(data)
 
     @classmethod
     @abstractmethod
@@ -740,6 +753,28 @@ class FieldRepresentation(ABC):
     def argument_options(cls) -> dict[str, object]:
         """argparse options for this representation's command-line text."""
         return {}
+
+
+class AcceptsNull(FieldRepresentation):
+    """Null is this representation's input, not the structural target's."""
+
+    @handles(type(None))
+    @classmethod
+    def decode_null(cls, data: object, structural: ValueDecoder[object]) -> object:
+        return cls.decode_value(data, structural)
+
+
+class ExternalJsonShape(FieldRepresentation):
+    """Decode the external shape directly, without revalidating each subtree."""
+
+    @handles(object)
+    @classmethod
+    def decode_value(cls, data: object, structural: ValueDecoder[object]) -> object:
+        return cls.from_wire(data)
+
+    @classmethod
+    @abstractmethod
+    def from_wire(cls, data: object) -> Self: ...
 
 
 class WiredValue(Protocol):
@@ -776,10 +811,8 @@ class WireValue(WireForm):
         return cls.from_wire(value)
 
 
-class SingleFieldValue(WireValue):
+class SingleFieldValue(ExternalJsonShape, WireValue):
     """One declared field is the whole wire value, not an object envelope."""
-
-    external_json_shape = True
 
     @classmethod
     def wire_field(cls):
@@ -804,11 +837,8 @@ class SingleFieldValue(WireValue):
         return FieldCodec.encode_document(getattr(self, entry.name), entry.annotation)
 
 
-class SubclassUnion(DeclaredFamily, WireValue):
+class SubclassUnion(DeclaredFamily, AcceptsNull, ExternalJsonShape, WireValue):
     """An untagged wire family; each union declares its own root with affix=""."""
-
-    accepts_null = True
-    external_json_shape = True
 
     @classmethod
     def decodes_tagged_records(cls) -> bool:
@@ -830,10 +860,8 @@ class SubclassUnion(DeclaredFamily, WireValue):
         return ValueDecoder.for_members(cls.members_with(cls)).argument_options()
 
 
-class NullMember(WireValue):
+class NullMember(AcceptsNull, WireValue):
     """One declared empty member owns the JSON null representation."""
-
-    accepts_null = True
 
     @classmethod
     def from_wire(cls, data: object) -> Self:
@@ -851,8 +879,6 @@ class NullMember(WireValue):
 class RecordMember(WireValue):
     """A wire union's record case uses the declared record codec."""
 
-    accepts_null = False
-
     @classmethod
     def from_wire(cls, data: object) -> Self:
         return FieldCodec.decode_record(cls, data)
@@ -865,11 +891,10 @@ class RecordMember(WireValue):
         return FieldCodec.encode_record(self)
 
 
-class InlineRecord(WireValue):
+class InlineRecord(ExternalJsonShape, WireValue):
     """A typed field represented by its declared object's sibling wire fields."""
 
     field_plan = InlineFieldPlan
-    external_json_shape = True
 
     @classmethod
     def wire_record(cls):
@@ -892,22 +917,18 @@ class JsonShapeMember:
         return cls(value=value)
 
 
-class JsonShapeFamily(WireValue):
+class JsonShapeFamily(AcceptsNull, ExternalJsonShape, WireValue):
     """Untagged external JSON enters one declaration-owned value family.
 
     Put DeclaredFamily before this capability in the root's bases, preserving
     its name-decoding contract. Each JsonShapeMember declares
     its external shape through its value annotation; this codec owns primitive
     selection and recursive conversion. Rendering stays with the value owners.
-    Its wire value is the declared shape itself, so it answers
-    ``external_json_shape`` True and decodes through ``from_wire``.
+    Its wire value is the declared shape itself; ExternalJsonShape decodes it
+    through ``from_wire``.
     Each family class owns the map from JSON type to the member beneath it that
     owns that type, filled as members are defined; a bad declaration fails then.
     """
-
-    external_json_shape = True
-
-    accepts_null = True
 
     _json_owners: ClassVar[dict[type, tuple[type, object]]]
 
@@ -983,14 +1004,22 @@ class TextRepresentation[V](FieldRepresentation):
         return {"type": "string", "description": f"{cls.__module__}.{cls.__qualname__} text"}
 
 
-class SpelledText(TextRepresentation[str]):
+class ValidatedScalar[V](FieldRepresentation):
+    """The wire scalar is the decoded value, validated identically in both directions."""
+
+    @classmethod
+    @abstractmethod
+    def decode(cls, value: object) -> V: ...
+
+    @classmethod
+    def encode(cls, value: object) -> V:
+        return cls.decode(value)
+
+
+class SpelledText(TextRepresentation[str], ValidatedScalar[str]):
     """Text with one declared spelling: what decoding accepts and what its schema reports."""
 
     spelling: ClassVar[re.Pattern[str]]
-
-    @classmethod
-    def encode(cls, value: object) -> str:
-        return cls.decode(value)
 
     @classmethod
     def from_text(cls, value: str) -> str:
@@ -1015,14 +1044,10 @@ class PathText(TextRepresentation[Path]):
         return Path(value)
 
 
-class BoundedText(TextRepresentation[str]):
+class BoundedText(TextRepresentation[str], ValidatedScalar[str]):
     """Nonempty identity text of bounded length: an owner, incarnation or message ID."""
 
     max_length: ClassVar[int] = 4096
-
-    @classmethod
-    def encode(cls, value: object) -> str:
-        return cls.decode(value)
 
     @classmethod
     def from_text(cls, value: str) -> str:
@@ -1042,7 +1067,7 @@ class ResourcePathText(BoundedText):
         return path
 
 
-class SequenceNumber(FieldRepresentation):
+class SequenceNumber(ValidatedScalar[int]):
     """An exact integer bus position; its minimum is the kind's one rule."""
 
     minimum: ClassVar[int]
@@ -1053,10 +1078,6 @@ class SequenceNumber(FieldRepresentation):
         if position < cls.minimum:
             raise MalformedRecord(f"{cls.__name__} is at least {cls.minimum}")
         return position
-
-    @classmethod
-    def encode(cls, value: object) -> int:
-        return cls.decode(value)
 
     @classmethod
     def schema(cls) -> dict[str, object]:
@@ -1668,6 +1689,16 @@ class ValueDecoder[T](ABC):
         return text
 
 
+class _ContextDecoder[T](ValueDecoder[T]):
+    """A standalone decode starts with one empty binding context."""
+
+    def decode(self, data: object) -> T:
+        return self.decode_bound(data, {})
+
+    @abstractmethod
+    def decode_bound(self, data: object, context: Mapping[str, object]) -> T: ...
+
+
 class _ChoiceDecoder[T](ValueDecoder[T]):
     """A finite domain: its command line offers exactly the editor's choices."""
 
@@ -1770,16 +1801,7 @@ class _RepresentedDecoder(ValueDecoder[Any]):
 
     @boundary_decoder
     def decode(self, data):
-        representation = self.representation
-        if data is None and not representation.accepts_null:
-            return self.structural.decode(data)
-        with MalformedRecord.refusing(f"Invalid {representation.__name__}"):
-            if representation.external_json_shape:
-                # Decode through the representation capability, independently
-                # of the family's public name decoder. Children validate once;
-                # WireValue's pre-validation would traverse each subtree again.
-                return representation.from_wire(data)
-            return representation.decode(data)
+        return self.representation.decode_field(data, self.structural)
 
 
 class _JsonValueRepresentation(FieldRepresentation):
@@ -1901,7 +1923,7 @@ class _LiteralDecoder(_ChoiceDecoder[Any]):
 
 
 @dataclass(frozen=True, slots=True)
-class UnionDecoder[T](ValueDecoder[T]):
+class UnionDecoder[T](_ContextDecoder[T]):
     origins = (Union, types.UnionType)
     alternatives: tuple[ValueDecoder[T], ...]
 
@@ -1931,9 +1953,6 @@ class UnionDecoder[T](ValueDecoder[T]):
             if alternative.accepts_value(value):
                 return alternative.encode(value)
         raise TypeError(f"Value does not match {self.target}")
-
-    def decode(self, data: object) -> T:
-        return self.decode_bound(data, {})
 
     def decode_bound(self, data: object, context: Mapping[str, object]) -> T:
         first_error = None
@@ -2107,7 +2126,7 @@ class _PairKeyDictDecoder(_DictDecoder):
 
 
 @dataclass(frozen=True, slots=True)
-class _FamilyRecordDecoder[Member: DeclaredFamily](ValueDecoder[Any]):
+class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Any]):
     """The encoded object carries its member's name under the family tag."""
 
     target: type[Member]
@@ -2140,9 +2159,6 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](ValueDecoder[Any]):
             key: value for key, value in data.items() if key != tag
         }
 
-    def decode(self, data):
-        return self.decode_bound(data, {})
-
     def decode_bound(self, data: object, context: Mapping[str, object]) -> Any:
         member, payload = self.member(data)
         return _member_decoder(member).decode_bound(payload, context)
@@ -2159,7 +2175,7 @@ class _LeafDocumentDecoder(_FamilyRecordDecoder):
 
 
 @dataclass(frozen=True, slots=True)
-class _RecordDecoder(ValueDecoder[Any]):
+class _RecordDecoder(_ContextDecoder[Any]):
     """A dataclass record. Its plan is looked up at decode time, so a
     record that contains itself compiles without recursion."""
 
@@ -2198,9 +2214,6 @@ class _RecordDecoder(ValueDecoder[Any]):
     @property
     def field_names(self) -> tuple[str, ...]:
         return tuple(entry.name for entry in FieldCodec._record_plan(self.target).bindings)
-
-    def decode(self, data):
-        return self.decode_bound(data, {})
 
     def decode_bound(self, data: object, context: Mapping[str, object]) -> Any:
         return self.decode_selected(data, {}, fields=self.field_names, context=context)

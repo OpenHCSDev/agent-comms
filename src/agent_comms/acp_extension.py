@@ -26,6 +26,8 @@ from .context_reading import ContextReading
 from .declared_family import DeclaredFamily
 from .external_transcript import DraftRow
 from .field_codec import (
+    AcceptsNull,
+    ExternalJsonShape,
     FieldCodec,
     Id128Text,
     MalformedRecord,
@@ -158,10 +160,8 @@ def decode_updates(metadata: object) -> tuple[AgentCommsUpdate, ...]:
     return FieldCodec.decode(UpdateBatch, extension).updates
 
 
-class AttachmentScope(WireValue):
+class AttachmentScope(AcceptsNull, ExternalJsonShape, WireValue):
     """One decoded attachment; JSON null is an absent attachment, not Python None."""
-    accepts_null = True
-    external_json_shape = True
 
     @classmethod
     def from_wire(cls, data):
