@@ -22,15 +22,26 @@ from agent_comms.commander.rule_file import RuleFile
 from agent_comms.todos import Slop
 from agent_comms_hooks import ClaudeHookProgram
 from agent_comms_hooks.reread import ContextCadence, SourcesOrder, ToolUseReminder
+from agent_comms_hooks.watch import WatchClaim
 
 
 @dataclass(frozen=True)
 class CommanderStart(SourcesOrder):
     part_chars: ClassVar[int] = 60_000
     """The most characters one Read of a part returns in full."""
+    unreadable: ClassVar[tuple[type[Exception], ...]] = (
+        FileNotFoundError, PermissionError, IsADirectoryError, UnicodeError, ValidationError,
+    )
+    """How the installed commander configuration fails to read; the sources still go out."""
 
     def due(self, tokens: int) -> bool:
-        return True
+        """Every session the commander's bridge binding does not rule out: a session bound to
+        another bus thread (a Claude unit) never gets the commander's sources."""
+        try:
+            commander = CommanderConfig.read(CommanderConfig.path()).commander
+        except self.unreadable:
+            return True
+        return WatchClaim(self.session_id).state().may_serve(commander)
 
     def prepare(self) -> None:
         """A start or compaction drops what was read, so every reminder is due again."""
@@ -70,13 +81,7 @@ class CommanderStart(SourcesOrder):
     def notice() -> str:
         try:
             return f"Commander: {CommanderConfig.read(CommanderConfig.path()).commander}."
-        except (
-            FileNotFoundError,
-            PermissionError,
-            IsADirectoryError,
-            UnicodeError,
-            ValidationError,
-        ):
+        except CommanderStart.unreadable:
             return "No commander is configured (installed configuration is missing or invalid)."
 
 
