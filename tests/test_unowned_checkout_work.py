@@ -87,7 +87,21 @@ def checkout_bus(tmp_path: Path) -> Comms:
             'Keep changes with their author', creator=lead, owner=worker,
             generation='shared-work', review_at=RecordedEventTime(now + 3600),
             order=order, goal=GoalRef('lead', lead.created_at, 'request'))
+    # Both current IDs change, as they do when Core hands work out again.
+    for problem in ('P1', 'P2'):
+        row = c.goals.todos.get(problem)
+        c.goals.todos.assign(
+            problem, expected_revision=row.revision, owner=worker,
+            assigner=lead.incarnation, generation='reissued-work',
+            review_at=RecordedEventTime(now + 3600), order=order.reissued(now + 1),
+            goal=GoalRef('lead', lead.created_at, 'request'))
+    c.goals.todos.create(
+        'P3', RepositoryName.from_wire('OpenHCSDev/agent-comms'),
+        'Keep unrelated work separate', creator=lead, owner=worker,
+        generation='other-work', review_at=RecordedEventTime(now + 3600),
+        order=order.reissued(now + 2), goal=GoalRef('lead', lead.created_at, 'request'))
     row = c.goals.todos.get('P2')
+    assert {related.id for related in c.goals.todos.related_problems(row)} == {'P1', 'P2'}
     c.goals.todos.apply('P2', ReleaseTodo(
         row.revision, CoreWatcherIncarnation.watcher(), row.held(),
         StrikeReason('The unit stopped answering this order before its checked work was finished.')))

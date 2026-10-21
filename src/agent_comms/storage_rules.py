@@ -105,7 +105,7 @@ class StorageRule(RoomAllocation):
         self, problem: Todo, registry: Registration, todos: TodoStore,
     ) -> tuple[OrderCheckoutWork, ...]:
         """Find retained work, including a checkout of another problem linked to this order."""
-        related = todos.for_order(problem.order.id)
+        related = todos.related_problems(problem)
         found = []
         for owner in registry.all_threads().values():
             paths = tuple(self.order_checkout(owner.name, row.id) for row in related)
