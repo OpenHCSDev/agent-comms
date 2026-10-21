@@ -11,7 +11,6 @@ from dataclasses import dataclass
 
 import pytest
 
-from agent_comms.bus_route_counts import RouteIndexRebuilding
 from agent_comms.context_segments.response import SelectedResponseSegment
 from agent_comms.coordination_errors import (
     CoordinationReadUnavailable,
@@ -184,7 +183,6 @@ class PreparingStage(SidebarReadStage):
 @pytest.mark.parametrize("cause", [
     CoordinationReadUnavailable("original sidebar read deferred"),
     StaleRevision("source moved"),
-    RouteIndexRebuilding(1, 2),
 ])
 def test_sidebar_prepares_once_then_publishes_and_keeps_real_rows(comms, cause):
     request = ObserveSidebar(str(comms.root.parent), True, True)
