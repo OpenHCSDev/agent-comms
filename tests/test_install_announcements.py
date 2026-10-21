@@ -8,6 +8,7 @@ import pytest
 from agent_comms.cli_commands import HistoryCliCommand, InstallResult
 from agent_comms.commander.config import NoConfigFile
 from agent_comms.commander_heartbeat import CommanderHeartbeat
+from agent_comms.errors import UnknownChannelError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.backup import BackupReport, RestoreSpace, UpgradeRefused
 from agent_comms.installer.carry import Carried
@@ -47,16 +48,16 @@ def test_typed_results_publish_as_installer_and_survive_history_read(private_com
     # The wire codec still carries the same result family and fields after factoring.
     decoded = FieldCodec.decode(Upgrade, FieldCodec.encode(installed))
     assert decoded == installed
-    report.starting(found)
-    report.finished(decoded)
+    started = report.starting(found)
+    finished = report.finished(decoded)
     messages = tuple(reversed(HistoryCliCommand(target="#comms").apply(comms).messages))
     assert len(messages) == 2
     assert tuple(message.sender for message in messages) == ("installer", "installer")
+    assert tuple(message.reference for message in messages) == (started.reference, finished.reference)
     assert all(found.target[:12] in message.body for message in messages)
     assert all(line in messages[1].body for line in live.lines())
     sender = comms.registry.require("installer")
     assert sender.execution is ExternalThreadExecution
-    print("POSTED", *(message.body for message in messages), sep="\n")
 
 
 def test_rollback_and_refusal_are_published_from_their_error_types(private_comms):
@@ -81,16 +82,15 @@ def test_rollback_and_refusal_are_published_from_their_error_types(private_comms
     )
     assert completed.returncode == 0, completed.stderr
     assert FieldCodec.parse(completed.stdout) == HistoryCliCommand(target="#comms").apply(comms).to_wire()
-    print("POSTED", *(message.body for message in messages), sep="\n")
 
 
-def test_services_share_registration_and_publication_failure_does_not_escape(private_comms, capsys):
+def test_publication_failure_raises_after_registering_the_sender(private_comms):
     # No #comms channel exists: the real publisher refuses it after registering its sender.
     CommanderHeartbeat.register(private_comms.registry)
     report = InstallReport(private_comms.root)
-    report.failed(UpgradeRefused("stopped before carrying"))
+    with pytest.raises(UnknownChannelError):
+        report.failed(UpgradeRefused("stopped before carrying"))
     original = private_comms.registry.require("installer")
     report.register(private_comms.registry)
     assert private_comms.registry.require("installer").incarnation == original.incarnation
     assert private_comms.registry.require(CommanderHeartbeat.sender).execution is ExternalThreadExecution
-    assert capsys.readouterr().err

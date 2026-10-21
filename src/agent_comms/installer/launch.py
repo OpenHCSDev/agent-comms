@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import os
-import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -19,10 +18,8 @@ from typing import Annotated, ClassVar, TextIO
 import agent_comms.installer
 from agent_comms.cli_commands import InstallCliCommand, InstallResult
 from agent_comms.comms import client_wire
-from agent_comms.coordination_errors import CoordinationError
 from agent_comms.bus_publication import AgentOrigin
-from agent_comms.errors import CheckpointNeedsRepairError, RelationViolationError, ToolRefusedError
-from agent_comms.field_codec import FieldCodec, Id128Text, MalformedRecord, PathText
+from agent_comms.field_codec import FieldCodec, Id128Text, PathText
 from agent_comms.installer.backup import UpgradeRefused
 from agent_comms.installer.upgrade import TargetTree, Upgrade, run, upgrade
 from agent_comms.messages import InfoKind, Message
@@ -37,25 +34,21 @@ class InstallReport(ServiceSender):
     sender: ClassVar[str] = "installer"
     root: Path
 
-    def post(self, lines: tuple[str, ...]) -> None:
-        try:
-            with client_wire(self.root) as comms:
-                self.register(comms.registry)
-                comms.bus.publisher.publish_ordinary(
-                    Message(sender=self.sender, target="#comms", body="\n".join(lines),
-                            type=InfoKind), origin=AgentOrigin())
-        except (OSError, sqlite3.Error, CoordinationError, RelationViolationError,
-                ToolRefusedError, MalformedRecord, CheckpointNeedsRepairError) as error:
-            print(f"install announcement failed: {error}", file=sys.stderr)
+    def post(self, lines: tuple[str, ...]) -> Message:
+        with client_wire(self.root) as comms:
+            self.register(comms.registry)
+            return comms.bus.publisher.publish_ordinary(
+                Message(sender=self.sender, target="#comms", body="\n".join(lines),
+                        type=InfoKind), origin=AgentOrigin())
 
-    def starting(self, upgrade: Upgrade) -> None:
-        self.post(("Install starting", *upgrade.lines()))
+    def starting(self, upgrade: Upgrade) -> Message:
+        return self.post(("Install starting", *upgrade.lines()))
 
-    def finished(self, upgrade: Upgrade) -> None:
-        self.post(("Install finished", *upgrade.lines()))
+    def finished(self, upgrade: Upgrade) -> Message:
+        return self.post(("Install finished", *upgrade.lines()))
 
-    def failed(self, error: UpgradeRefused) -> None:
-        self.post(error.lines())
+    def failed(self, error: UpgradeRefused) -> Message:
+        return self.post(error.lines())
 
 
 @dataclass(frozen=True)
