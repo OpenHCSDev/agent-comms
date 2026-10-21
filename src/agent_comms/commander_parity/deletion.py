@@ -126,6 +126,7 @@ class DeletionPath(ABC):
         initial = OrderFile.read(run.document.read_text())
         order = replace(
             initial.order,
+            owner=FileLine("family.py", 1),
             check=OrderCheck(
                 str(repository),
                 shlex.join((sys.executable, "-c", "import family;assert not family.decisions()")),
