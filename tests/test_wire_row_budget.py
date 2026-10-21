@@ -1,5 +1,6 @@
 """One physical encoded-row budget, independent of candidate work quantum."""
 from __future__ import annotations
+from agent_comms.context_store import UNREAD_CONTEXT
 
 import io
 import json
@@ -143,7 +144,7 @@ def test_unknown_segment_only_blocks_its_own_thread(tmp_path, other):
 
     comms, _ = _root(tmp_path)
     message = publish_initial(comms, 'sender', '#team', '@Alice original question')
-    comms.contexts.record(manifest(comms.registry.require('Alice')))
+    comms.contexts.record_after(UNREAD_CONTEXT, manifest(comms.registry.require('Alice')))
     corrupt_context_kind(comms, 'Alice', 'unavailable_future_segment')
     assert read_history(comms) == [message]
     assert comms.contexts.page(other, comms.registry).resources == ()
