@@ -7,21 +7,22 @@ from dataclasses import dataclass, replace
 from functools import partial
 from typing import TYPE_CHECKING
 
+from .agent_backend import InputId
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .coordination_errors import IdentityConflict, StaleFence
 from .coordination_database import CoordinationStore
-from .field_codec import FieldCodec
+from .coordination_errors import IdentityConflict, StaleFence
 from .coordinator import Coordination
 from .message_bus import MessageBus
-from .native_input_owner import RegistryOwner, ParticipantOwner
+from .native_input_owner import ParticipantOwner, RegistryOwner
 from .native_input_record import NativeInputReference
-from .thread_identity import GenerationCounter
 from .native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
-from .registry_document import RegistrySnapshot
 from .private_send_rules import RunningTurnRegistryCheck
+from .registry_document import RegistrySnapshot
+from .thread_identity import GenerationCounter
 
 if TYPE_CHECKING:
     from .acp_extension import CursorObservation
+    from .historical_native_inputs import HistoricalNativeInput
     from .native_entries import NativeEvidenceScope
 
 
@@ -56,7 +57,9 @@ class CursorOwner(RegistryOwner):
             with store.session.read():
                 db = store.session._connection
                 assert_native_runtime_schema(db)
-                person = store.participants.get(captured.thread.incarnation.lookup)
+                person = store.participants.get(
+                    captured.thread.incarnation.require_recorded().lookup
+                )
                 if not person.committed or person.owner_thread != owner_name:
                     raise StaleFence("Current cursor recipient is not committed")
                 owner = cls(thread=captured.thread, claimed_generation=captured.claimed_generation,
@@ -73,17 +76,17 @@ class CursorOwner(RegistryOwner):
                     raise StaleFence("Current cursor SQL row changed while reading")
         return state
 
-    @classmethod
-    async def advance_async(cls, bus: MessageBus, *, wire_root_id: str, owner,
-                            owner_claimed_generation: int, owner_generation: int,
-                            committed_input_id: str | None,
-                            source_reads: NativeEvidenceScope) -> CursorState:
-        captured = cls(thread=owner, claimed_generation=owner_claimed_generation,
-                       wire_root_id=wire_root_id, generation=owner_generation)
+    async def advance_async(
+        self, bus: MessageBus, *, source_reads: NativeEvidenceScope,
+    ) -> CursorState:
         return await Coordination.run_async(
             CoordinationStore.path_in(bus.bus.path.parent),
-            partial(captured._advance_owned, bus, committed_input_id, source_reads),
+            partial(self._advance_owned, bus, source_reads),
         )
+
+    def permits_input(self, input_id: InputId) -> bool:
+        """A refresh can advance through any verified input for this owner."""
+        return True
 
     @classmethod
     async def refresh_async(cls, bus: MessageBus, *, wire_root_id: str, owner_name: str,
@@ -96,15 +99,14 @@ class CursorOwner(RegistryOwner):
     @classmethod
     def _refresh_owned(cls, bus, root_id, owner_name, source_reads, store) -> CursorState:
         thread, generation = bus._registry.live_owner_with_claim(owner_name)
-        person = store.participants.get(thread.incarnation.lookup)
+        person = store.participants.get(thread.incarnation.require_recorded().lookup)
         owner = cls(thread=thread, claimed_generation=generation, wire_root_id=root_id,
                     generation=person.participant_generation)
-        return owner._advance_owned(bus, None, source_reads, store)
+        return owner._advance_owned(bus, source_reads, store)
 
-    def _advance_owned(self, bus, committed_input_id, source_reads, store) -> CursorState:
+    def _advance_owned(self, bus, source_reads, store) -> CursorState:
         from .proven_source_coverage import SourceCoverage
 
-        committed_input_id = FieldCodec.decode(str | None, committed_input_id)
         with source_reads.borrow():
             sources = SourceCoverage(bus, store, wire_root_id=self.wire_root_id,
                                      recipient_lookup=self.lookup)
@@ -120,7 +122,7 @@ class CursorOwner(RegistryOwner):
                     raise StaleFence("Current cursor SQL row changed during source verification")
                 state.require_progress(self, coverage, proof.injected_for(state))
                 if self.matches_prefix(db, coverage.evidence()) and proof.allows(
-                    self, db, state, committed_input_id,
+                    self, db, state,
                 ):
                     state = state.publish(db, self, coverage, proof)
                 state.require_coverage(self, db, coverage, proof)
@@ -132,7 +134,7 @@ class CursorOwner(RegistryOwner):
 
     @property
     def lookup(self) -> str:
-        return self.thread.incarnation.lookup
+        return self.thread.incarnation.require_recorded().lookup
 
     def require_live(self, bus: MessageBus, registry: RegistrySnapshot, reason: str) -> None:
         bus._registry.store.private_guard_unlocked().require_root(self.wire_root_id, StaleFence(reason))
@@ -187,6 +189,16 @@ class CursorOwner(RegistryOwner):
             raise IdentityConflict("current cursor proof differs from journal")
 
 
+@dataclass(frozen=True)
+class CommittedCursorOwner(CursorOwner):
+    """Settlement advances only through this exact committed native input."""
+
+    input_id: InputId
+
+    def permits_input(self, input_id: InputId) -> bool:
+        return self.input_id == input_id
+
+
 class CursorState(ABC):
     """One SQL state owns its scan start, checks and publication behavior."""
 
@@ -212,14 +224,14 @@ class CursorState(ABC):
     @abstractmethod
     def observation(self) -> CursorObservation: ...
 
-    def proves_input(self, input_id: str) -> bool:
-        return False
+    @abstractmethod
+    def proves_input(self, input_id: str) -> bool: ...
 
-    def require_input_progress(self, proof) -> None:
-        pass
+    @abstractmethod
+    def require_input_progress(self, proof: HistoricalNativeInput) -> None: ...
 
-    def claim_mismatch(self, injected_seq) -> bool:
-        return False
+    @abstractmethod
+    def claim_mismatch(self, injected_seq: int) -> bool: ...
 
     @abstractmethod
     def publish(self, db, owner, coverage, proof) -> CursorState: ...
@@ -241,6 +253,15 @@ class UnstartedCursor(CursorState):
     @property
     def injected_seq(self):
         return 0  # No injected native input; cursor presence is this state's type.
+
+    def proves_input(self, input_id: str) -> bool:
+        return False
+
+    def require_input_progress(self, proof: HistoricalNativeInput) -> None:
+        """No preceding input constrains the first verified input."""
+
+    def claim_mismatch(self, injected_seq: int) -> bool:
+        return False
 
     def without_input(self, proof, owner, coverage):
         return proof.build(owner, coverage.covered_seq)
@@ -294,11 +315,11 @@ class RecordedCursor(CursorState):
                 or injected < self.row.injected_seq):
             raise IdentityConflict("current cursor would change owner or regress")
 
-    def require_input_progress(self, proof):
+    def require_input_progress(self, proof: HistoricalNativeInput) -> None:
         if proof.source_seq <= self.row.injected_seq and not self.proves_input(proof.input_id):
             raise IdentityConflict("current cursor native input changed")
 
-    def claim_mismatch(self, injected_seq):
+    def claim_mismatch(self, injected_seq: int) -> bool:
         if injected_seq > self.row.injected_seq:
             return False
         raise IdentityConflict("current cursor input claim_scope differs")

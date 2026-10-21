@@ -1,25 +1,36 @@
 """Read evidence follows displayed messages across projections and restarts."""
 
-from agent_comms.bus import Bus
-from bus_record_fixture import prepare_native_comms
-
-from agent_comms.channel_targets import CommandTarget
-
 import random
 from dataclasses import replace
 
 import pytest
 
+from agent_comms.bus import Bus
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.comms import Comms, wire
 from agent_comms.coordination_errors import DMPaintedBoundChanged, StaleRevision
 from agent_comms.field_codec import FieldCodec
-from agent_comms.comms import Comms, wire
 from agent_comms.message_page import MessagePageRequest, PageBounds
 from agent_comms.page_traversal import OlderTraversal
-from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.read_basis import ChannelConversation, DMConversation, ConversationCursor, NamedViewer, ReadCursor, NoDisplaySelection
-from agent_comms.read_ledger import NoReadNotice, PendingReadNotice, ReadDocument, ReadLedger, ReadNotice
 from agent_comms.presentation import ReadThrough
+from agent_comms.read_basis import (
+    ChannelConversation,
+    ConversationCursor,
+    DMConversation,
+    NamedViewer,
+    NoDisplaySelection,
+    ReadCursor,
+)
+from agent_comms.read_ledger import (
+    NoReadNotice,
+    PendingReadNotice,
+    ReadDocument,
+    ReadLedger,
+    ReadNotice,
+)
+from agent_comms.thread_identity import RecordedThreadIncarnation
+from bus_record_fixture import prepare_native_comms
 
 
 def prepared(root):
@@ -294,13 +305,9 @@ def test_all_read_uses_one_watermark_without_sparse_sequences(tmp_path):
     comms.views.mark_user_view_read("#any", worktree=str(tmp_path))
     snapshot = comms.registry.snapshot()
     seen = comms.bus.reads.cursor(viewer, snapshot)
-    from agent_comms.read_basis import AllChannelDisplayScope, AllConversation
-    with comms.bus.bus.reading() as source:
-        basis = AllChannelDisplayScope("#any").capture_all(
-            comms.bus.reads, viewer, snapshot, source, document=comms.bus.reads.read(),
-            through=source.revision())
-    assert tuple(item.conversation for item in basis.conversations) == (AllConversation(),)
+    from agent_comms.read_basis import AllConversation
     assert tuple(seen.conversations) == (AllConversation(),)
+    assert seen.for_conversation(AllConversation()).high_water == messages[-1].seq
     assert all(message.seq in seen.for_conversation(ReadLedger.conversation(message, snapshot))
                for message in messages)
     assert all(not cursor.exceptions for cursor in seen.conversations.values())
