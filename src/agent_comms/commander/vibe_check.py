@@ -228,7 +228,7 @@ class VibeCheck(UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class VibeCheckUnanswered(Escalation, IndependentStandingRule, OwedAnswer, UndatedStandingRule):
+class VibeCheckUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
     """A vibe check is owed an answer like a directive: the gate refuses until it gets one."""
 
     seconds: ClassVar[int] = 5 * 60
@@ -321,7 +321,7 @@ class Chokehold(IndependentStandingRule, UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class ChokeholdUnanswered(Escalation, IndependentStandingRule, OwedAnswer, UndatedStandingRule):
+class ChokeholdUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
     """Every chokehold message gates the commander from the moment it lands."""
 
     @classmethod

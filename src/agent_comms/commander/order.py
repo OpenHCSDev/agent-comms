@@ -102,7 +102,6 @@ from agent_comms.tools import (
     CommsTodoListTool,
     TodoList,
 )
-from agent_comms.ui_model.unit_state import UnitState
 
 OUTGOING = DirectiveText.OUTGOING  # every commander text passes each one
 
@@ -805,9 +804,7 @@ class DirectiveVerb(CommanderVerb):
 
     def gate(self, ctx: Commander) -> None:
         named = self.named(ctx)
-        states = UnitState.current(ctx.comms, self.who(ctx))
-        owed = tuple(rule for rule in OwedAnswer.broken(
-                         ctx.comms, self.who(ctx), observed=states)
+        owed = tuple(rule for rule in OwedAnswer.overdue(ctx.comms, self.who(ctx))
                      if not rule.answered_by(named))
         if owed:
             lines = '\n'.join(f'{rule.line()}: {rule.message.body[:80]}' for rule in owed)

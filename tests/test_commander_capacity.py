@@ -42,14 +42,25 @@ def test_claimed_child_capacity_uses_receiving_presence(held_bus, claim_order, p
     child = replace(comms.registry.require("worker"), parent=ForkedParent("lead"))
     comms.registry.register(child, presence)
     comms.goals.update_goal("outsider", CreateProblemGoalAction(
-        problem="P3", commander=child.name, request=child.goal.require().id,
+        problem="P3", commander="lead", request=comms.registry.require("lead").goal.require().id,
+        assigner=child.incarnation,
         repo=template.repo, text="Review the child commander's work",
         review_at=template.review_at,
         order=replace(template.order.checked(), id="order-P3"),
     ))
-    assert not any(todo.pending for todo in comms.goals.todos.held_for_commander(
-        comms.registry.require("lead").incarnation))
+    assert not any(todo.pending for todo in comms.goals.todos.held_by(
+        comms.registry.require("lead").incarnation, child.incarnation))
     with LaunchRoot.from_path(comms.root).selected():
         assert Load.of(comms, "lead").forks == expected
+
+
+def test_capacity_does_not_mix_new_children_into_a_captured_frame(held_bus):
+    from agent_comms.ui_model.unit_state import UnitState
+
+    states = UnitState.current(held_bus, "lead")
+    child = held_bus.registry.new_thread(
+        "late-fork", frozenset(), str(held_bus.root), parent=ForkedParent("lead"))
+    held_bus.registry.register(child)
+    assert "late-fork" not in Load.from_states(held_bus, "lead", states).forks
 
 

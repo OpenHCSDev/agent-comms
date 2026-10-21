@@ -116,12 +116,12 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
 
     @classmethod
     def broken(cls, comms: Comms, commander: str, after: float = 0.0, *,
-               observed: Sequence[UnitState]) -> tuple[StandingRule, ...]:
-        """Read each rule owner once against the supplied unit frame, including an empty one."""
+               observed: Sequence[UnitState]) -> tuple[Self, ...]:
+        """Read each owner once against the supplied frame, preserving the requested family."""
         owners = dict.fromkeys(rule.scan_owner() for rule in cls.members_with(cls))
         return tuple(rule for owner in owners
                      for rule in owner.scan_observed(comms, commander, observed)
-                     if rule.attention() and rule.broke_after(after))
+                     if isinstance(rule, cls) and rule.attention() and rule.broke_after(after))
 
 
 class IndependentStandingRule(StandingRule, declared_name=None):
@@ -155,7 +155,7 @@ class DatedStandingRule(StandingRule, declared_name=None):
 
 
 @dataclass(frozen=True)
-class OwedAnswer(StandingRule, declared_name=None):
+class OwedAnswer(IndependentStandingRule, declared_name=None):
     """A message to the commander owed an answer past its window. Every member gates the
     commander's answering verbs until an action names it with --answers, so an answer cannot
     be held: one that must wait is sent now as "waiting on X, owner Y"."""
@@ -171,6 +171,12 @@ class OwedAnswer(StandingRule, declared_name=None):
     @abstractmethod
     def open_messages(cls, comms: Comms, commander: str) -> tuple[Message, ...]:
         """This member's messages an action may answer now, inside their window or past it."""
+
+    @classmethod
+    def overdue(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        """The message gate reads message debt, without classifying checkouts or runtimes."""
+        return tuple(rule for member in cls.members_with(cls)
+                     for rule in member.violations(comms, commander))
 
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         """Whether an action naming these open messages answers this one."""
@@ -310,7 +316,7 @@ class LocatedHuntDue(HuntDue, declared_name=None):
 
 
 @dataclass(frozen=True)
-class DirectiveUnacted(IndependentStandingRule, OwedAnswer, DatedStandingRule):
+class DirectiveUnacted(OwedAnswer, DatedStandingRule):
     """An owner directive recorded on an open request, past its deadline with no order since."""
 
     request: str

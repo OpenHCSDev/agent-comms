@@ -114,7 +114,7 @@ def test_claim_is_a_commander_question_not_a_verified_delivery(held_bus, claim_o
     claim = claim_order("P1")
     with LaunchRoot.from_path(comms.root).selected():
         state, = AwaitingCommander.violations(comms, "lead")
-        question, = state.questions
+        question, = state.owed
         assert question.message_id == claim.message.message_id
         assert question.seq > claim.message.answers[0].seq
         assert DeliveredUnclosed.violations(comms, "lead") == ()

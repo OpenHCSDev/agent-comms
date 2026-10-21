@@ -276,11 +276,19 @@ class UnitAskUnanswered(OwedAnswer, UndatedStandingRule):
         return tuple(cls(message, state.unit.name) for state in observed for message in state.owed)
 
     @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        from agent_comms.ui_model.unit_state import UnitState
+
+        return tuple(cls(message, source.thread.name)
+                     for source in UnitState.observations(comms, commander)
+                     for message in source.due_questions)
+
+    @classmethod
     def open_messages(cls, comms: Comms, commander: str) -> tuple[Message, ...]:
         from agent_comms.ui_model.unit_state import UnitState
 
-        return tuple(message for state in UnitState.current(comms, commander)
-                     for message in state.open_questions())
+        return tuple(message for source in UnitState.observations(comms, commander)
+                     for message in source.questions)
 
     def line(self) -> str:
         age = max(0, int((time.time() - self.message.timestamp) // 60))

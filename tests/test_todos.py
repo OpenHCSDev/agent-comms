@@ -236,7 +236,7 @@ def test_merged_order_keeps_its_checked_fields(tmp_path: Path, source_repository
 
 
 @pytest.fixture
-def pr_commander(tmp_path, monkeypatch, proof_build_checkouts):
+def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, configured_repository):
     """One cited source, its real bare remote and installed history; only GitHub is synthetic."""
     graph = next(graph for graph in proof_build_checkouts
                  if graph.repository.github == CorePackage.repository)
@@ -267,8 +267,9 @@ def pr_commander(tmp_path, monkeypatch, proof_build_checkouts):
     rule = StorageRule(checkout_base=source.checkout.parent)
     (tmp_path / "storage.json").write_text(json.dumps(FieldCodec.encode(rule)))
     Registration(tmp_path / "registry.json").register(lead)
+    config = configured_repository(Comms(tmp_path), source)
     return Commander(commander=lead.name, root=tmp_path, state=tmp_path / "state",
-                     repos=(source,), worktrees=source.checkout.parent,
+                     repos=config.repos, worktrees=source.checkout.parent,
                      scratch=tmp_path, disk=tmp_path)
 
 

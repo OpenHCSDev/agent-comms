@@ -230,9 +230,6 @@ class UnitState(UndatedStandingRule, declared_name=None):
     @abstractmethod
     def derive(cls, source: UnitObservation) -> Iterator[Self]: ...
 
-    def open_questions(self) -> tuple[Message, ...]:
-        return self.source.questions
-
     @property
     def owed(self) -> tuple[Message, ...]:
         return self.source.due_questions
@@ -294,9 +291,6 @@ class Unreadable(NeedsCommanderAttention, UnitState):
         # Validate the checkout reads before a higher-level label can hide a failure.
         source.require_read()
         return iter(())
-
-    def open_questions(self) -> tuple[Message, ...]:
-        return ()
 
     @property
     def owed(self) -> tuple[Message, ...]:
