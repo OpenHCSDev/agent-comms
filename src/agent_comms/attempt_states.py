@@ -25,6 +25,10 @@ class AttemptState(DeclaredFamily, LifecycleState, affix="Attempt"):
     def permits_retry(self) -> bool:
         return False
 
+    def accepts_active_execution(self) -> bool:
+        """Only a live attempt can support the execution's current pointer."""
+        return False
+
     preserve_check: ClassVar[bool] = True
     allows_tool_claim: ClassVar[bool] = False
     succeeded: ClassVar[bool] = False
@@ -90,6 +94,9 @@ class LiveAttempt(AttemptState):
     def __post_init__(self):
         if type(self.lease_expires_at_ms) is not int or self.lease_expires_at_ms < 0:
             raise IntegrityViolationError("active attempt requires a lease")
+
+    def accepts_active_execution(self) -> bool:
+        return True
 
     @classmethod
     def load(cls, lease, done, dead):

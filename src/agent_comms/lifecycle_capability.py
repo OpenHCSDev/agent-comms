@@ -15,6 +15,14 @@ class LifecycleCapability:
         """Contribution to an aggregate of successful results."""
         return 0
 
+    @classmethod
+    def reject_success_as_failure(cls, refusal: Exception) -> None:
+        """An observation without success may supply failure evidence."""
+
+    @classmethod
+    def require_successful_completion(cls, refusal: Exception) -> None:
+        raise refusal
+
 
 class Terminal(LifecycleCapability):
     """A settled state has no ordinary successor and cannot advance piecemeal."""
@@ -34,3 +42,11 @@ class Successful(Terminal):
     @classmethod
     def success_count(cls) -> int:
         return 1
+
+    @classmethod
+    def reject_success_as_failure(cls, refusal: Exception) -> None:
+        raise refusal
+
+    @classmethod
+    def require_successful_completion(cls, refusal: Exception) -> None:
+        pass

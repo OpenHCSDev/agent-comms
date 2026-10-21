@@ -11,6 +11,7 @@ from .coordination_errors import IntegrityViolationError, IdentityConflict
 from .declared_family import DeclaredFamily
 from .field_codec import NullMember
 from .lifecycle import LifecycleState
+from .lifecycle_capability import Successful, Terminal
 from .message_reference import MessageReference
 
 
@@ -21,8 +22,6 @@ class Unpublished(NullMember):
 
 @dataclass(frozen=True)
 class ResponseState(DeclaredFamily, LifecycleState, affix="Response"):
-    terminal: ClassVar[bool] = False
-    successful: ClassVar[bool] = False
     retryable: ClassVar[bool] = False
     allows_intent: ClassVar[bool] = False
     requires_intent: ClassVar[bool] = False
@@ -117,11 +116,9 @@ class DeferredResponse(ResponseState):
 
 
 @dataclass(frozen=True)
-class PublishedResponse(ResponseState):
+class PublishedResponse(Successful, ResponseState):
     message_id: str
     seq: int
-    terminal = True
-    successful = True
     allows_intent = True
     requires_intent = True
     published = True
@@ -156,24 +153,10 @@ class PublishedResponse(ResponseState):
             raise IntegrityViolationError("published obligations require a acknowledgement")
         return cls(message_id, seq)
 
-    @classmethod
-    def successors(cls):
-        return ()
+
+class SilentResponse(Successful, ResponseState):
+    pass
 
 
-class SilentResponse(ResponseState):
-    terminal = True
-    successful = True
-
-    @classmethod
-    def successors(cls):
-        return ()
-
-
-class FailedResponse(ResponseState):
-    terminal = True
+class FailedResponse(Terminal, ResponseState):
     allows_intent = True
-
-    @classmethod
-    def successors(cls):
-        return ()

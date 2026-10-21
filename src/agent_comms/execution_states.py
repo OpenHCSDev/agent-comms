@@ -16,6 +16,7 @@ from .assignment_states import (
 from .coordination_errors import IdentityConflict, IntegrityViolationError
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
+from .lifecycle_capability import Terminal
 from .coordination_errors import ResponseClaimBlocked
 
 
@@ -26,7 +27,6 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class ExecutionState(DeclaredFamily, LifecycleState, affix="Execution"):
     active: ClassVar[bool] = False
-    terminal: ClassVar[bool] = False
     starts_attempt: ClassVar[bool] = False
     retry: ClassVar[bool] = False
     queued: ClassVar[bool] = False
@@ -163,7 +163,7 @@ class ActiveExecution(AttemptExecution):
         return EngagedAssignment
 
     def accepts_attempt(self, phase):
-        return not phase.terminal
+        return phase.accepts_active_execution()
 
     def accepts_previous(self, previous):
         return (
@@ -175,24 +175,21 @@ class ActiveExecution(AttemptExecution):
             raise IntegrityViolationError("active snapshot must carry exact owner pointer")
 
 
-class CompletedExecution(AttemptExecution):
-    terminal = True
+class CompletedExecution(Terminal, AttemptExecution):
     completed = True
 
     @classmethod
     def assignment_state(cls) -> type[AssignmentState]:
         return CompletedAssignment
 
-    @classmethod
-    def successors(cls):
-        return ()
-
     def accepts_attempt(self, phase):
         return phase.succeeded
 
     def validate_snapshot(self, snapshot, authorized):
-        if snapshot.obligations and not all(row.lifecycle.successful for row in snapshot.obligations):
-            raise IntegrityViolationError("completed wire execution requires terminal obligation")
+        for row in snapshot.obligations:
+            row.lifecycle.require_successful_completion(
+                IntegrityViolationError("completed wire execution requires terminal obligation")
+            )
 
 
 @dataclass(frozen=True)
@@ -233,17 +230,12 @@ class DeferredExecution(StartsAttempt, InterruptedExecution):
         return authorized and attempt.permits_retry() and not is_current
 
 
-class FailedExecution(InterruptedExecution):
-    terminal = True
+class FailedExecution(Terminal, InterruptedExecution):
     failed = True
 
     @classmethod
     def assignment_state(cls) -> type[AssignmentState]:
         return FailedAssignment
-
-    @classmethod
-    def successors(cls):
-        return ()
 
     def validate_snapshot(self, snapshot, authorized):
         if bool(snapshot.publication_evidence):

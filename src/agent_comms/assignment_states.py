@@ -10,6 +10,7 @@ from typing import ClassVar, TYPE_CHECKING
 from .coordination_errors import IdentityConflict, IntegrityViolationError
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
+from .lifecycle_capability import Terminal
 from .notification_progress import (
     UnrecordedProgress, ContextualProgress, PassiveProgress, IgnoredProgress,
     EngagedProgress, CompletedProgress, InterruptedProgress, FailedProgress,
@@ -102,7 +103,6 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
             changed=self.notification_changed,
         )
 
-    terminal: ClassVar[bool] = False
     engaged: ClassVar[bool] = False
     deferred: ClassVar[bool] = False
     triage_pending: ClassVar[bool] = False
@@ -178,18 +178,12 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
         return after
 
 
-class PassiveAssignment(AssignmentState):
+class PassiveAssignment(Terminal, AssignmentState):
     notification_state = PassiveProgress
-
-    terminal = True
 
     @property
     def mode(self):
         return PassiveWake()
-
-    @classmethod
-    def successors(cls):
-        return ()
 
 
 class PendingNotification:
@@ -282,11 +276,9 @@ class FullPendingAssignment(PendingNotification, AssignmentState):
         return EngagedAssignment, DeferredAssignment, FailedAssignment
 
 
-class IgnoredAssignment(AssignmentState):
+class IgnoredAssignment(Terminal, AssignmentState):
     notification_changed = True
     notification_state = IgnoredProgress
-
-    terminal = True
     preengagement_target = True
 
     @property
@@ -296,10 +288,6 @@ class IgnoredAssignment(AssignmentState):
     @property
     def verdict(self):
         return "ignore"
-
-    @classmethod
-    def successors(cls):
-        return ()
 
 
 class AssignmentDecision:
@@ -393,7 +381,7 @@ class EngagedAssignment(SelectedResponseNotification, BoundAssignment):
         return CompletedAssignment, DeferredAssignment, FailedAssignment
 
 
-class CompletedAssignment(BoundAssignment):
+class CompletedAssignment(Terminal, BoundAssignment):
     def notification(
         self,
         recipient,
@@ -414,12 +402,7 @@ class CompletedAssignment(BoundAssignment):
 
     notification_state = CompletedProgress
 
-    terminal = True
     completed = True
-
-    @classmethod
-    def successors(cls):
-        return ()
 
 
 @dataclass(frozen=True)
@@ -463,7 +446,7 @@ class DeferredAssignment(SelectedResponseNotification, InterruptedAssignment):
 
 
 @dataclass(frozen=True)
-class DeliveredAssignment(AssignmentDecision, AssignmentState):
+class DeliveredAssignment(Terminal, AssignmentDecision, AssignmentState):
     """The recipient's running turn took this message as one of its inputs.
 
     No execution answers it: the agent replies with its own tools. Only the
@@ -501,7 +484,6 @@ class DeliveredAssignment(AssignmentDecision, AssignmentState):
 
     notification_state = IgnoredProgress
 
-    terminal = True
     preengagement_target = True
 
     @classmethod
@@ -512,12 +494,8 @@ class DeliveredAssignment(AssignmentDecision, AssignmentState):
     def build(cls, mode, execution_id, target):
         return cls(PendingDecision(mode))
 
-    @classmethod
-    def successors(cls):
-        return ()
 
-
-class FailedAssignment(InterruptedAssignment):
+class FailedAssignment(Terminal, InterruptedAssignment):
     def notification(
         self,
         recipient,
@@ -541,9 +519,4 @@ class FailedAssignment(InterruptedAssignment):
 
     notification_state = FailedProgress
 
-    terminal = True
     failed = True
-
-    @classmethod
-    def successors(cls):
-        return ()

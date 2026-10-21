@@ -165,7 +165,7 @@ async def run(stage, package):
                                 'original_historical_source_proofs': 2}
                             persist('configured-saved-triage-full-canonical-channel-reply-handling-PASS')
                             break
-                    if claims and claims[0].lifecycle.terminal:
+                    if claims and not claims[0].lifecycle.successors():
                         acknowledgement['terminal_assignment'] = FieldCodec.encode(claims[0])
                         raise AssertionError('Original request ended without a canonical reply')
                     diagnostics = tuple((service.root / 'diagnostics').glob('*.json'))

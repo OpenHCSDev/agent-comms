@@ -10,14 +10,14 @@ from typing import TYPE_CHECKING, Annotated
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import AcceptsNull, FieldCodec, FieldRepresentation
 from .pi_counts import PiCount, UnreportedCount
+from .lifecycle_capability import LifecycleCapability, Successful
 
 if TYPE_CHECKING:
     from .backend import TurnSession
 
 
-class PiStopReason(DeclaredFamily, affix="StopReason"):
+class PiStopReason(LifecycleCapability, DeclaredFamily, affix="StopReason"):
     failed = False
-    successful = False
     tool_round = False
     explicit_abort = False
     tracked_failure = "Provider returned an unsuccessful terminal"
@@ -74,8 +74,9 @@ class PiStopReason(DeclaredFamily, affix="StopReason"):
     @classmethod
     def require_failed_terminal(cls):
         # A saved tool round cannot establish whether the live owner accepted it.
-        if cls.successful or cls.tool_round:
-            raise ValueError("Saved assistant message did not end its turn as a failure")
+        cls.reject_success_as_failure(
+            ValueError("Saved assistant message did not end its turn as a failure")
+        )
 
 
 class UnfinishedPiStop:
@@ -102,8 +103,7 @@ class FinishedPiStop:
         return AttemptFailedAttempt(), ReplayFact.ASSISTANT_OUTPUT
 
 
-class StopStopReason(FinishedPiStop, PiStopReason):
-    successful = True
+class StopStopReason(Successful, FinishedPiStop, PiStopReason):
 
     @classmethod
     async def apply(cls, session, message):
@@ -136,6 +136,11 @@ class LengthStopReason(FailedPiStop, PiStopReason):
 
 class ToolUseStopReason(PiStopReason, declared_name="toolUse"):
     tool_round = True
+
+    @classmethod
+    def require_failed_terminal(cls):
+        # A saved tool round cannot establish whether the live owner accepted it.
+        raise ValueError("Saved assistant message did not end its turn as a failure")
 
     @classmethod
     async def apply(cls, session, message):

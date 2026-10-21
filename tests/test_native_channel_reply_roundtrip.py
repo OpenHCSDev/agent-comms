@@ -315,7 +315,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                 with Coordination(str(comms.root / "coordination.sqlite3")) as store:
                     with store.session.read():
                         rows = WakeAssignment.select(store.session._connection)
-                        return len(rows) == 6 and all(row.lifecycle.terminal for row in rows)
+                        return len(rows) == 6 and all(not row.lifecycle.successors() for row in rows)
 
             await until(settled, "Original and every peer-reply claim settled")
             with sqlite3.connect(comms.root / "coordination.sqlite3") as db:

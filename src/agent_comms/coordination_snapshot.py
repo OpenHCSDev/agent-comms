@@ -194,7 +194,7 @@ class RecoverySnapshot:
             and self.current_attempt_ordinal.otherwise(None) == execution.lifecycle.current_attempt_ordinal
             and execution.lifecycle.active
             and attempt is not None
-            and not attempt.lifecycle.terminal
+            and attempt.lifecycle.accepts_active_execution()
         ):
             raise IntegrityViolationError("snapshot current pointer is inconsistent")
 

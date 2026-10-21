@@ -899,7 +899,7 @@ class AssistantMessage(PiMessage):
 
     @property
     def final_reply(self):
-        return self.stop_reason.successful
+        return self.stop_reason.success_count() > 0
 
     async def apply_start(self, session, event):
         await session.assistant_started()
@@ -922,7 +922,7 @@ class AssistantMessage(PiMessage):
         session.output.start_message()
         if session.accepts_output:
             updates.extend(self.usage.charges(session.usage))
-        session.output.final_assistant_stop = reason.successful and session.started_input
+        session.output.final_assistant_stop = reason.success_count() > 0 and session.started_input
         updates.extend([event async for event in reason.apply(session, self)])
         await session.assistant_ended()
         return tuple(updates)
