@@ -134,7 +134,7 @@ def test_production_peer_wake_and_restart(tmp_path, monkeypatch, base_only_owner
 
     try:
         comms.owners.start("recipient")
-        until(lambda: len(replies()) == 1 and not comms.registry.require("recipient").active_turn.executing)
+        until(lambda: len(replies()) == 1 and not comms.registry.require('recipient').executing)
         assert replies()[0].body == "BOOTSTRAP_REPLY_1" and replies()[0].target == "sender"
         original = comms.registry.require("recipient")
         with sqlite3.connect(comms.root / "coordination.sqlite3") as db:
@@ -145,7 +145,7 @@ def test_production_peer_wake_and_restart(tmp_path, monkeypatch, base_only_owner
         comms.owners.start("recipient")
         assert comms.registry.require("recipient").process_identity != original.process_identity
         second = comms.messaging.send("sender", "recipient", "BOOTSTRAP_SECOND").message
-        until(lambda: len(replies()) == 2 and not comms.registry.require("recipient").active_turn.executing)
+        until(lambda: len(replies()) == 2 and not comms.registry.require('recipient').executing)
         assert replies()[1].body == "BOOTSTRAP_REPLY_2" and replies()[1].target == "sender"
         assert len(requests) == 2 and not failures
         for request, message in zip(requests, (first, second), strict=True):
