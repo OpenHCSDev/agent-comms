@@ -12,6 +12,7 @@ from agent_comms.behaviour_patterns import PostmortemFailure
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.rule_file import RuleFile
 from agent_comms.todos import Slop
+from agent_comms_hooks.reread import CommanderReread, VoiceReminder
 
 
 @pytest.mark.parametrize("source", ["startup", "resume", "compact"])
@@ -65,6 +66,7 @@ def test_session_start_reads_all_packaged_files_without_a_bus(tmp_path, source, 
     catalog = Slop.catalog()
     readme = catalog / "README.md"
     assert text.split("\n\n", 1)[1] == "\n\n".join((
+        VoiceReminder.text(),
         CommanderConfig.packaged_indictment().read_text(),
         CommanderConfig.packaged_spine().read_text(),
         "# Recorded failures\n\n" + PostmortemFailure.catalog(),
@@ -82,29 +84,50 @@ def usage(tokens):
         separators=(",", ":"))
 
 
-def test_reread_is_due_every_hundred_thousand_context_tokens(tmp_path, monkeypatch, capsys):
+def hook_record(transcript):
+    return {"hook_event_name": "PostToolUse", "session_id": "s", "transcript_path": str(transcript)}
+
+
+@pytest.mark.parametrize("member", [CommanderReread, VoiceReminder], ids=lambda member: member.__name__)
+def test_each_reminder_keeps_its_own_cadence_and_resets_at_compaction(tmp_path, member):
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    hook = member.decode(hook_record(transcript))
+    assert hook.take(250_000) is None  # not a commander session: no parts were written
+    hook.parts.mkdir()
+    (hook.parts / "01.md").write_text("sources")
+    assert hook.take(250_000)
+    assert hook.take(250_000 + member.every - 1) is None
+    assert hook.take(250_000 + member.every)
+    assert hook.take(20_000)  # compaction shrank the context below the mark
+
+
+def run_hook(program, transcript, event, monkeypatch, capsys, *lines):
     import io
+
+    transcript.write_text("".join(line + "\n" for line in lines))
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(
+        {"hook_event_name": event, "session_id": "s", "transcript_path": str(transcript)})))
+    program.main()
+    return capsys.readouterr().out
+
+
+def test_every_due_reminder_goes_out_in_one_hook_output_with_the_voice_inline(
+        tmp_path, monkeypatch, capsys):
     from agent_comms_hooks import reread, skill
 
     transcript = tmp_path / "session.jsonl"
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
-
-    def hook(program, event, *lines):
-        transcript.write_text("".join(line + "\n" for line in lines))
-        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(
-            {"hook_event_name": event, "session_id": "s", "transcript_path": str(transcript)})))
-        program.main()
-        return capsys.readouterr().out
-
-    assert not hook(reread, "PostToolUse", usage(250_000))
-    assert hook(skill, "SessionStart", usage(250_000))
-    assert not hook(reread, "PostToolUse", usage(250_000), usage(349_999))
-    assert hook(reread, "PostToolUse", usage(350_000))
-    # Compaction: the context shrinks below the mark, which was set before compaction.
-    assert hook(reread, "PostToolUse", usage(317_202))
-    assert hook(skill, "SessionStart", usage(20_000))
-    assert not hook(reread, "PostToolUse", usage(119_999))
-    assert hook(reread, "PostToolUse", json.dumps({"type": "user", "message": {}}), usage(120_000))
+    assert not run_hook(reread, transcript, "PostToolUse", monkeypatch, capsys, usage(250_000))
+    assert run_hook(skill, transcript, "SessionStart", monkeypatch, capsys, usage(250_000))
+    first = run_hook(reread, transcript, "PostToolUse", monkeypatch, capsys, usage(250_001))
+    (document,) = first.splitlines()
+    assert json.loads(document)["hookSpecificOutput"]["additionalContext"] == VoiceReminder.text()
+    both = run_hook(reread, transcript, "PostToolUse", monkeypatch, capsys, usage(350_000))
+    (document,) = both.splitlines()
+    context = json.loads(document)["hookSpecificOutput"]["additionalContext"]
+    assert VoiceReminder.text() in context
+    assert all(str(part) in context for part in sorted(transcript.with_suffix(".reread").iterdir()))
 
 
 @pytest.mark.parametrize("path", CommanderConfig.packaged_rules_files(), ids=lambda path: path.name)
