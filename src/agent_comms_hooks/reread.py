@@ -185,7 +185,7 @@ class SourcesOrder(ContextCadence, ABC):
         return (
             f"Read each of these {len(unread)} files in full with the Read tool before any other"
             " action: they are the indictment, the recorded failures, the commander skill, every"
-            " packaged rule and the refactor-audit pattern catalog. A summary or memory of them"
+            " packaged rule and the refactor-audit catalog index. A summary or memory of them"
             " does not count as reading them.\n" + "\n".join(unread)
         )
 

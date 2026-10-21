@@ -29,6 +29,7 @@ from agent_comms.selected_actions import NoSelectedTools
 from agent_comms.pi_vocabulary import OverflowCompactionReason, ThresholdCompactionReason
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from stored_inputs import stored_inputs
+from native_backend_fixture import NativeBackendFixture
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="native Pi uses POSIX fsync")
 
@@ -219,7 +220,8 @@ async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch, nat
                 async with asyncio.timeout(30):
                     async for event in backend.stream_agent_events(
                         native_bin, native_args, "Reply OK.", str(project),
-                        root=Path(str(project)), env_extra=child_env, session_file=str(session),
+                        root=project, owner=NativeBackendFixture.participant_at(project, project),
+                        env_extra=child_env, session_file=str(session),
                         native_start=lambda *_: True,
                         persistent_session=pi_session,
                         package=native_runtime_package,

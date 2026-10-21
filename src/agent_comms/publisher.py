@@ -5,7 +5,8 @@ from __future__ import annotations
 import hashlib
 import sqlite3
 from collections.abc import Callable, Sequence
-from dataclasses import replace
+from contextlib import AbstractContextManager
+from dataclasses import dataclass, replace
 from functools import partial
 from itertools import groupby
 from pathlib import Path
@@ -55,14 +56,14 @@ from .channels import Channel
 from .wire_log import WireStoreLock
 
 
+@dataclass(eq=False, repr=False)
 class Publisher:
     """Reads and validates publications; each private write is a capability below."""
 
-    def __init__(self, bus: Bus, registry: Registration, channels: ChannelCatalog, opened_activity):
-        self.bus = bus
-        self._registry = registry
-        self._channels = channels
-        self.opened_activity = opened_activity
+    bus: Bus
+    registry: Registration
+    channels: ChannelCatalog
+    opened_activity: Callable[[], AbstractContextManager[ActivityClocks]]
 
     @classmethod
     def prepare_root(cls, root: Path) -> None:
@@ -172,7 +173,7 @@ class ClaimWrites(PrivateWrites):
         metadata = self.log.private_marker_unlocked()
         if not metadata.claims:
             raise RelationViolationError("Claim read barrier is unavailable.")
-        sender, target, require_channel = self._validate_publish_request(message, registry_snapshot=snapshot, catalog=self._channels.read(), activity=activity)
+        sender, target, require_channel = self._validate_publish_request(message, registry_snapshot=snapshot, catalog=self.channels.read(), activity=activity)
         with bus_lock.current_source(self.log, metadata) as source:
             def build(seq: int, db: sqlite3.Connection) -> ClaimRecord:
                 stored = self._prepare_message_unlocked(
@@ -198,9 +199,9 @@ class InitialWrites(PrivateWrites):
         with (
             self.opened_activity() as activity,
             guard_original_root_write(self.bus.path.parent),
-            self._channels.reading(self._registry.store) as catalog,
+            self.channels.reading(self.registry.store) as catalog,
         ):
-            snapshot = self._registry.snapshot()
+            snapshot = self.registry.snapshot()
             sender, target, require_channel = self._validate_publish_request(
                 message, registry_snapshot=snapshot, catalog=catalog, activity=activity)
             sender_thread = snapshot.require(sender)
@@ -223,8 +224,8 @@ class InitialWrites(PrivateWrites):
                 origin.require_source(source, sender, stored.message_id)
                 revision = hashlib.sha256(
                     repr((
-                        FileRevision.capture(self._registry.store.path),
-                        self._channels.revision(),
+                        FileRevision.capture(self.registry.store.path),
+                        self.channels.revision(),
                         sorted((name, thread.created_at, sorted(thread.tags))
                                for name, thread in snapshot.threads.items()),
                     )).encode()
@@ -271,7 +272,7 @@ class ResponseWrites(PrivateWrites):
         message = intent.message
         # A durable exact replay above wins even after registry/route renames.
         sender, target, require_channel = self._validate_publish_request(
-            message, registry_snapshot=registry_snapshot, catalog=self._channels.read(), activity=activity
+            message, registry_snapshot=registry_snapshot, catalog=self.channels.read(), activity=activity
         )
         role = registry_snapshot.threads[sender].role
         role.require_executable(RelationViolationError("Keyed response sender must be executable."))
