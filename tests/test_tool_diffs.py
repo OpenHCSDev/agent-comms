@@ -9,7 +9,7 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.pi_payloads import PiToolResult
 from agent_comms.tool_declaration import ToolDeclaration
-from agent_comms.tool_results import ToolDiff, tool_result_content
+from agent_comms.tool_results import NoToolDiff, ToolDiff, tool_result_content
 
 PATCH = "--- src/example.py\n+++ src/example.py\n@@ -40,2 +40,2 @@\n context\n-old = 1\n+new = 2\n"
 
@@ -33,11 +33,11 @@ def result(patch=PATCH):
             True,
             ToolDiff("-1 old\n+1 new", "numbered"),
         ),
-        ("edit", result(), False, None),
-        ("bash", result(), True, None),
-        ("edit", {"details": {"patch": 123}}, True, None),
-        ("edit", None, True, None),
-        ("edit", {"details": ["extension-defined", 3]}, True, None),
+        ("edit", result(), False, NoToolDiff()),
+        ("bash", result(), True, NoToolDiff()),
+        ("edit", {"details": {"patch": 123}}, True, NoToolDiff()),
+        ("edit", None, True, NoToolDiff()),
+        ("edit", {"details": ["extension-defined", 3]}, True, NoToolDiff()),
     ],
 )
 def test_native_edit_evidence(name, native, ok, expected):

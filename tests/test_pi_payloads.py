@@ -6,6 +6,7 @@ from collections.abc import Mapping
 import pytest
 
 from agent_comms.field_codec import FieldCodec
+from agent_comms.tool_results import NoToolDiff
 from agent_comms.pi_commands import GetState, PiCommand, Prompt
 from agent_comms.pi_counts import PiCount, ReportedCount, UnreportedCount
 from agent_comms.pi_events import MessageEnd, MessageUpdate, Response, UnknownPiEvent
@@ -136,7 +137,7 @@ def test_optional_native_observations_have_named_absence_and_one_serialization()
         event = decode({"type": "tool_execution_end", **result_wire})
         assert isinstance(event.result, ProvidedToolResult if "result" in result_wire and result_wire["result"] == {"content": []} else MissingToolResult)
         assert event.result.text() == ""
-        assert event.result.edit_diff(True) is None
+        assert event.result.edit_diff(True) == NoToolDiff()
         assert FieldCodec.decode(type(event), FieldCodec.encode(event)) == event
 
 
