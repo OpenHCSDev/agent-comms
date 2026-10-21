@@ -60,11 +60,11 @@ def test_store_backup_restores_wal_rows_and_ledger(tmp_path):
 def test_backup_name_recognizes_only_its_own_complete_names(tmp_path, root_name):
     root = tmp_path / root_name
     name = BackupName.now(root)
-    assert BackupName.read(root, name.value) == name
-    assert BackupName.read(root, BackupName.now(tmp_path / 'other').value) is None
-    for foreign in (name.value + '.restored-123', name.value + '.retired-123',
-                    name.value + '0', name.value[:-1]):
-        assert BackupName.read(root, foreign) is None
+    foreign = (BackupName.now(tmp_path / 'other').value,
+               name.value + '.restored-123', name.value + '.retired-123',
+               name.value + '0', name.value[:-1])
+    assert tuple(BackupName.matching(root, (name.value, *foreign))) == (name,)
+    assert tuple(BackupName.matching(root, foreign)) == ()
 
 
 def test_backup_retention_keeps_two_newest_and_other_roots(tmp_path):

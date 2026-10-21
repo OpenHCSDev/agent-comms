@@ -13,7 +13,7 @@ import sys
 import tempfile
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Collection
+from collections.abc import Collection, Iterable
 from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -162,13 +162,16 @@ class BackupName:
         for literal, name, spec, _ in Formatter().parse(cls.format):
             parts.append(re.escape(literal))
             if name:
-                parts.append(re.escape(root.name) if name == "root"
-                             else rf"[0-9]{{{int(spec.removesuffix('d'))}}}")
+                parts.append(rf"[0-9]{{{int(spec.removesuffix('d'))}}}" if spec
+                             else re.escape(root.name))
         return re.compile("".join(parts))
 
     @classmethod
-    def read(cls, root: Path, name: str) -> Self | None:
-        return cls(name) if cls.pattern(root).fullmatch(name) else None
+    def matching(cls, root: Path, names: Iterable[str]) -> Iterator[Self]:
+        pattern = cls.pattern(root)
+        for name in names:
+            if pattern.fullmatch(name):
+                yield cls(name)
 
 
 class ResourceBackup(ABC):
@@ -240,10 +243,9 @@ class StoreBackup(ResourceBackup):
         return backup
 
     def retain(self, spill_dir: Path) -> tuple[Path, ...]:
-        backups = sorted(
-            name for path in spill_dir.iterdir()
-            if path.is_dir() and (name := BackupName.read(self.root, path.name))
-        )
+        backups = sorted(BackupName.matching(
+            self.root, (path.name for path in spill_dir.iterdir() if path.is_dir()),
+        ))
         retired = tuple(spill_dir / name.value for name in backups[:-self.kept])
         for path in retired:
             shutil.rmtree(path)
