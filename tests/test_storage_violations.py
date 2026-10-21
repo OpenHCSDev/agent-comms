@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 from pathlib import Path
 from sys import monitoring
@@ -24,7 +25,7 @@ from agent_comms.storage_rules import (
     StorageViolation,
     UnitStorage,
 )
-from agent_comms.todos import GoalRef, PendingProblemOrder
+from agent_comms.todos import GoalRef, PendingProblemOrder, PresentCheckout
 from agent_comms.order_runs import MechanicalOrderRun
 
 
@@ -34,8 +35,11 @@ from agent_comms.order_runs import MechanicalOrderRun
         (False, 0, {StorageHomeMissing}),
         (True, 3, {StorageOverQuota}),
         (False, 3, {StorageHomeMissing, StorageOverQuota}),
+        (True, 1, set()),
+        (False, 1, {StorageHomeMissing}),
     ],
-    ids=("home-missing-only", "quota-only", "quota-and-home-missing"),
+    ids=("home-missing-only", "quota-only", "quota-and-home-missing",
+         "declared-home-with-order-checkout", "gone-declared-home-with-order-checkout"),
 )
 def test_storage_family_reads_once_and_renders_each_broken_fact(
     tmp_path: Path,
@@ -47,9 +51,7 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
     repository.mkdir()
     base = tmp_path / "checkouts"
     base.mkdir()
-    home = base / "worker"
-    if has_home:
-        home.mkdir()
+    home = tmp_path / "declared-project"
     for arguments in (
         ("init", "-q"),
         (
@@ -75,6 +77,12 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
             text=True,
             timeout=15,
         )
+    subprocess.run(
+        ["git", "-C", str(repository), "worktree", "add", "-q", "-b", "declared-home", str(home)],
+        check=True, capture_output=True, text=True, timeout=15,
+    )
+    if not has_home:
+        shutil.rmtree(home)
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     (root / "storage.json").write_text(
@@ -83,7 +91,7 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
     comms = Comms(root)
     lead = comms.registry.declare(comms.registry.new_thread("lead", frozenset(), str(repository)))
     worker = comms.registry.declare(
-        comms.registry.new_thread("worker", frozenset(), str(repository))
+        comms.registry.new_thread("worker", frozenset(), str(home))
     )
     comms.goals.todos.create(
         "storage-case",
@@ -125,14 +133,19 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
     assert {type(violation) for violation in found} == expected
     assert len(reads) == 1
     assert all(violation.storage is reads[0] for violation in found)
-    for violation in found:
-        text = violation.line()
-        if isinstance(violation, StorageHomeMissing):
-            assert "quota" not in text.lower()
-            assert str(home) in text
-            assert "restore the home checkout" in text
-        else:
-            assert "3 checkouts" in text and "limit 2" in text
-            assert "order the cleanup" in text
-            assert "missing" not in text
+    assert reads[0].home == home
+    assert len(reads[0].extra_checkouts) == extra_count
+    assert reads[0].missing_home is not has_home
+    assert not (base / "worker").exists()
+    assert comms.registry.storage_rule.owns_checkout(worker, home)
+    assert not comms.registry.storage_rule.owns_checkout(worker, base / "worker")
+    if has_home:
+        declared_ref = subprocess.check_output(
+            ["git", "-C", str(home), "symbolic-ref", "HEAD"], text=True, timeout=15
+        ).strip()
+        assert declared_ref in PresentCheckout(repository).references(comms.registry.storage_rule, worker)
+    text = comms.registry.storage_rule.order_text(worker, ("python",))
+    assert str(home) in text
+    assert str(comms.registry.storage_rule.order_checkout(worker.name, "P<n>")) in text
+    assert str(worker.storage_roots.scratch) in text
     print("\n".join(StandingRule.heartbeat_changes((), found)))
