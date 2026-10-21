@@ -7,7 +7,7 @@ import argparse
 import ast
 import dataclasses
 import enum
-import importlib.util
+import importlib
 import io
 import json
 import os
@@ -360,10 +360,8 @@ class CheckedRevision(Measure):
     @classmethod
     def findings(cls, repo: Path, ref: str, head: str, root: str, selected: list[str],
                  side: Side) -> tuple[Side, Counter[str]]:
-        # A missing checker exits 1 like a finding run, so its absence must refuse, not count zero.
-        checker = cls.command(Path(), [], side)[0]
-        if importlib.util.find_spec(checker) is None:
-            raise ValueError(f"{cls.__name__} needs {checker} installed for {sys.executable}")
+        # A missing checker exits 1 like a finding run, so importing it first fails loud instead.
+        importlib.import_module(cls.command(Path(), [], side)[0])
         with tempfile.TemporaryDirectory(prefix="debt-ratchet-check-") as scratch:
             tree = Path(scratch)
             cls.extract(repo, ref, tree, selected)
