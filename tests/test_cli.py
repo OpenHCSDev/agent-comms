@@ -649,6 +649,9 @@ def test_result_kind_decides_exit_code_and_navigation_targets():
     ))
     assert launched.reconnect_targets() == ("alpha",) and attached.reconnect_targets() == ()
     assert batch.reconnect_targets() == ("alpha",)
+    assert batch.completed_count == 2
+    assert batch.outcomes[0].success_count() == 1
+    assert batch.outcomes[-1].success_count() == 0
     assert batch.exit_code() == 1
     assert TargetBatchResult(batch.outcomes[:2]).exit_code() == 0
     assert ThreadStoppedResult("alpha").exit_code() == 0

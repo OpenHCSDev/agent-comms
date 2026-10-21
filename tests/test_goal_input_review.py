@@ -31,6 +31,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
         comms.registry.declare(
             comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
+    comms.messaging.initialize_private_initial_protocol()
     comms.agents.begin_turn("parent", "parent-delegation-in-flight")
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Delegate and wait"))
     messages = [
