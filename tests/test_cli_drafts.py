@@ -70,11 +70,11 @@ def test_saved_completion_survives_initial_idle_snapshot_until_ordered_end(tmp_p
 
 def test_ending_one_turn_preserves_other_live_prefixes(tmp_path):
     output = _output(tmp_path)
-    output.publish_batch([start('one', 'a', 'one'), start('two', 'b', 'two'),
-                          FinishedTurn('one'), AppendDraftItem('two', 'b', ' continued')])
+    output.publish_batch([start('one', 'same-item', 'one'), start('two', 'same-item', 'two'),
+                          FinishedTurn('one'), AppendDraftItem('two', 'same-item', ' continued')])
     assert output.transcript.current_draft(output.transcript.root, output.transcript.incarnation).events[0].text == 'two continued'
-    assert AppendDraftItem('one', 'a', 'late').accumulate(output) == ()
-    output.publish_batch([AllTurnsEnded(), AppendDraftItem('two', 'b', 'late')])
+    assert AppendDraftItem('one', 'same-item', 'late').accumulate(output) == ()
+    output.publish_batch([AllTurnsEnded(), AppendDraftItem('two', 'same-item', 'late')])
     assert output.transcript.current_draft(output.transcript.root, output.transcript.incarnation) == NoDraft()
 
 

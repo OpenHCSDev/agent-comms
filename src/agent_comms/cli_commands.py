@@ -745,7 +745,9 @@ class ThreadArgument:
 
 @dataclass(frozen=True, kw_only=True)
 class WorktreeArgument:
-    worktree: Annotated[str, Argument(flags=("--worktree",))] = dataclasses.field(default_factory=os.getcwd)
+    worktree: Annotated[str, Argument(flags=("--worktree",))] = (
+        dataclasses.field(default_factory=os.getcwd)
+    )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1115,7 +1117,9 @@ class UserSendCliCommand(WorktreeArgument, PublishingCliCommand, declared_name="
 
 
 @dataclass(frozen=True, kw_only=True)
-class ConfigureCliCommand(NameArgument, NextTurnConfiguration, CliCommand, declared_name="configure"):
+class ConfigureCliCommand(
+    NameArgument, NextTurnConfiguration, CliCommand, declared_name="configure"
+):
     help = "Set a stopped thread's model, thinking level, or service tier for its next start"
 
     def apply(self, ctx: Comms) -> CliResult:
@@ -1255,7 +1259,9 @@ class AnnotationsCalibrationCliCommand(CliCommand, declared_name="annotations"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SupersedeConstraintCliCommand(WorktreeArgument, CliCommand, declared_name="supersede-constraint"):
+class SupersedeConstraintCliCommand(
+    WorktreeArgument, CliCommand, declared_name="supersede-constraint"
+):
     help = "Publish a human's exact replacement for an authored constraint"
     thread: Annotated[str, Argument(flags=("thread",))]
     source: Annotated[
