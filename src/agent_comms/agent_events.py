@@ -22,7 +22,7 @@ from .acp_failure import (
 )
 from .turn_terminal import FailedGoalTurn
 from .turn_goal_account import OriginGoalSettlement, VerifiedGoalSettlement
-from .diagnostics import terminal_failure_reason
+from .diagnostics import FailureReason, terminal_failure_reason
 from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
 from .field_codec import NullMember
@@ -272,17 +272,15 @@ class Done(AgentEvent, FailedGoalTurn):
         return replace(self, outcome=outcome)
 
     @property
-    def failure_reason(self) -> str:
+    def failure_reason(self) -> FailureReason:
         return terminal_failure_reason(asdict(self))
 
     def failure_observation(self, account, permit, captured):
         return None if self.ok else super().failure_observation(account, permit, captured)
 
-    def observe_goal(self, account) -> None:
-        if not self.ok:
-            account.permit.block(account, "Backend turn failed; inspect local diagnostics before resuming.")
-        else:
-            account.require_output(self.text)
+    def settle_current(self, account) -> None:
+        if self.ok:
+            VerifiedGoalSettlement.settle_current(account)
 
     def settle_launched(self, account, permit, store, captured, current) -> None:
         if self.ok:

@@ -6,17 +6,15 @@ import time
 from collections.abc import Iterable, Sequence
 from abc import abstractmethod
 from contextlib import closing
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar, Self
 
 from agent_comms.build_identity import RecordedBuildIdentity
 from agent_comms.comms import Comms
-from agent_comms.goal_actions import GoalPrecondition, ReissuedOrderGoalAction
+from agent_comms.goal_actions import ReissuedOrderGoalAction
 from agent_comms.goals import Goal
-from agent_comms.goal_states import BlockedState
-from agent_comms.goal_history import GoalHistoryStore
-from agent_comms.goal_generation import GenerationState, RetryableGeneration
+from agent_comms.goal_presentation import BlockedExecution
 from agent_comms.message_page import MessageReadRequest
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
@@ -131,67 +129,28 @@ class Detached(HolderCannotRun):
 
 
 @dataclass(frozen=True)
-class BlockedHolder(HolderCannotRun, declared_name=None):
-    """An idle holder classified by its goal and original attempt ledger."""
+class GoalCannotRun(UndatedStandingRule):
+    """An ordered unit whose goal execution supplies the block and its action."""
 
-    block_record: Path
+    unit: str
+    orders: tuple[str, ...]
     goal: Goal
-
-    @staticmethod
-    @abstractmethod
-    def accepts(goal: Goal, generation: GenerationState) -> bool: ...
+    execution: BlockedExecution
 
     @classmethod
-    def stalled(cls, comms: Comms, thread: Thread) -> bool:
-        store = comms.goals.open_goal_store()
-        return not thread.executing and any(
-            cls.accepts(goal, store.require_generation(goal.id).lifecycle)
-            for goal in thread.goal)
-
-    @classmethod
-    def found(cls, comms: Comms, thread: Thread, orders: tuple[str, ...]) -> Self:
-        return cls(
-            thread.name, orders, GoalHistoryStore.path_in(comms.root), thread.goal.require()
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        return tuple(
+            cls(owner.name, tuple(todo.id for todo in todos), view.goal.require(), block)
+            for owner, todos in cls.holders(comms, commander).items()
+            for view in (comms.goals.goal_snapshot(owner.name),)
+            for block in view.execution.unit_blocks()
         )
 
-
-@dataclass(frozen=True)
-class UnresolvedBlock(BlockedHolder):
-    """An attempt with an unknown outcome: Core never retries it, so it is never replayed."""
-
-    @staticmethod
-    def accepts(goal: Goal, generation: GenerationState) -> bool:
-        return not isinstance(generation, RetryableGeneration)
-
-    def line(self) -> str:
-        return (f"UNRESOLVED BLOCK {self.unit}: orders {', '.join(self.orders)}; "
-                f"goal {self.goal.id}@{self.goal.revision} has an attempt with an unknown result "
-                "-> inspect it, then fail or finish the attempt")
-
-
-@dataclass(frozen=True)
-class Blocked(BlockedHolder):
-    @staticmethod
-    def accepts(goal: Goal, generation: GenerationState) -> bool:
-        return isinstance(goal.state, BlockedState) and isinstance(generation, RetryableGeneration)
-
     def enforce(self, comms: Comms, commander: str) -> None:
-        observed = self.goal
-        for problem in self.orders:
-            todo = comms.goals.todos.get(problem)
-            todo.require_assignee(comms.registry.require(self.unit).incarnation, observed.id)
-            action = UnownedWheelSpin.order_for(todo, commander)
-            observed = comms.goals.update_goal(self.unit, replace(
-                action, expect=GoalPrecondition(
-                    goal_id=observed.id, expected_state=observed.state,
-                    expected_checkpoint=observed.captured,
-                ),
-            ))
+        self.execution.enforce_unit_block(comms, commander, self.unit, self.orders, self.goal)
 
     def line(self) -> str:
-        return (f"BLOCKED {self.unit}: orders {', '.join(self.orders)}; "
-                f"block record {self.block_record}, goal {self.goal.id}@{self.goal.revision} "
-                "-> Core reissues the orders")
+        return self.execution.unit_block_line(self.unit, self.orders)
 
 
 @dataclass(frozen=True)
@@ -380,15 +339,6 @@ class UnownedWheelSpin(UndatedStandingRule):
                        and TurnDigestRead(comms.root, thread, bound).read().turns),
                       key=lambda thread: thread.name)
 
-    @staticmethod
-    def order_for(todo: Todo, commander: str) -> ReissuedOrderGoalAction:
-        now = time.time()
-        return ReissuedOrderGoalAction(
-            problem=todo.id, expected_revision=todo.revision,
-            order=todo.order.reissued(now), request=todo.goal.request(),
-            review_at=todo.reissued_review(now), commander=commander, assigner=todo.acting_assigner,
-            traced=todo.order.owner)
-
     def _identity(self) -> tuple[object, ...]:
         # Observation times and proposed idle units change; the row and its disposition do not.
         return type(self), self.todo.id
@@ -422,7 +372,7 @@ class UnownedWheelSpin(UndatedStandingRule):
                 if not todo.live_strikes(unit.name):
                     idle.remove(unit)
                     found.append(ReassignedWheelSpin(todo, ReusedWorkDispatch.for_unit(
-                        cls.order_for(todo, commander), unit)))
+                        ReissuedOrderGoalAction.for_todo(todo, commander), unit)))
                     break
         covered = {rule.todo.id for rule in (*retained, *found)}
         return (*retained, *found,

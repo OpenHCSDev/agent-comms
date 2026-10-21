@@ -44,8 +44,11 @@ from .goal_attempt_phase import (
     SucceededAttempt,
 )
 from .goal_failure_observation import (
+    FailedTurnEvidence,
     FailedTurnObservation,
+    GoalFailureEvidence,
     GoalLedgerTable,
+    NoFailedTurnEvidence,
     record_observation,
 )
 from .goal_generation import (
@@ -803,6 +806,12 @@ class GoalAttemptStore(DurableFile, SQLiteFile):
     def read_attempt(self, attempt_id: str) -> LedgerAttempt:
         with closing(self._connect()) as conn:
             return AttemptRecord.read_in(conn, attempt_id)
+
+    def failure_evidence(self, generation: Generation) -> GoalFailureEvidence:
+        with closing(self._connect()) as conn:
+            return next(FailedTurnEvidence.stream(
+                conn, attempt_id=generation.attempt_identity.attempt_id,
+            ), NoFailedTurnEvidence())
 
     def stopped_permit(self, goal_id: str) -> GoalTurnPermit:
         generation = self.require_generation(goal_id)

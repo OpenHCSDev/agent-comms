@@ -11,13 +11,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from .bus_publication import CommittedDelivery
 from .declared_family import DeclaredFamily
 from .field_codec import NullMember
-from .goal_presentation import (
-    GoalExecution,
-    GoalExecutionState,
-    GoalWaitTarget,
-    IdleGoalExecution,
-    ThreadGoalExecution,
-)
+from .goal_presentation import GoalExecution, GoalExecutionSource, GoalWaitTarget, StandbyExecution
 from .goals import Goal, GoalDeclaration
 from .input_attempt import StoredInput, UnresolvedInput
 from .locked_store import WireWakeFile
@@ -70,19 +64,15 @@ class GoalWait(ABC):
     def consume_reply(self, waits: GoalWaits, goal_id: str) -> bool:
         return False
 
-    def idle_execution(self) -> IdleGoalExecution:
-        return IdleGoalExecution()
-
-    def project(self, goal: Goal, snapshot: RegistrySnapshot, agents: AgentActivity) -> GoalExecution:
-        return GoalExecution(
-            GoalExecutionState.for_domain_state(goal.state),
-            goal.id,
-            block_reason=goal.state.reason,
-        )
+    @abstractmethod
+    def execution(self, source: GoalExecutionSource) -> GoalExecution: ...
 
 
 @dataclass(frozen=True, slots=True)
 class NoGoalWait(GoalWait):
+    def execution(self, source: GoalExecutionSource) -> GoalExecution:
+        return source.generation.lifecycle.execution(source)
+
     @property
     def targets(self) -> tuple[GoalWaitTarget, ...]:
         return ()
@@ -157,16 +147,16 @@ class RecordedGoalWait(GoalWait):
     def consume_reply(self, waits: GoalWaits, goal_id: str) -> bool:
         return waits.clear(goal_id, wait_id=self.wait_id)
 
-    def project(self, goal: Goal, snapshot: RegistrySnapshot, agents: AgentActivity) -> GoalExecution:
+    def execution(self, source: GoalExecutionSource) -> GoalExecution:
         targets = tuple(
-            GoalWaitTarget(target.incarnation.renamed(snapshot.canonical_name(target.incarnation.name)))
+            GoalWaitTarget(target.incarnation.renamed(source.snapshot.canonical_name(target.incarnation.name)))
             for target in self.targets
         )
         inactive = tuple(
             target for target in targets
-            if not agents.is_working(target.incarnation, snapshot)
+            if not source.agents.is_working(target.incarnation, source.snapshot)
         )
-        return GoalExecution(GoalExecutionState.STANDBY, goal.id, targets, inactive)
+        return StandbyExecution(source.goal.id, targets, inactive)
 
     def current_for(self, goal: GoalDeclaration, owner: RecordedThreadIncarnation) -> bool:
         """A retained wait can survive edits, but not replacement of its owner.
@@ -364,17 +354,6 @@ class GoalWaits(ThreadOwnedState, DurableStore, WireWakeFile):
     @staticmethod
     def for_goal(goal: GoalDeclaration, rows: dict[str, RecordedGoalWait]) -> GoalWait:
         return rows.get(goal.active().reported_id(), NoGoalWait())
-
-    @classmethod
-    def execution(
-        cls,
-        goal: GoalDeclaration,
-        rows: dict[str, RecordedGoalWait],
-        snapshot: RegistrySnapshot,
-        agents: AgentActivity,
-    ) -> ThreadGoalExecution:
-        """Resolve absence once beside the goal/wait acquisition."""
-        return goal.describe_execution(cls.for_goal(goal, rows), snapshot, agents)
 
     @staticmethod
     def current_waits(goal: GoalDeclaration, rows: dict[str, RecordedGoalWait],
