@@ -17,7 +17,7 @@ from . import agent_events as events
 from .agent_backend import InputContent, TurnDelivery
 from .channel_input_batch import InputBatch
 from .field_codec import Id128Text
-from .goal_attempts import GoalTurnPermit, NoLaunchPermit
+from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from .goals import Goal
 from .messages import Message
 from .input_attempt import ReservedInput

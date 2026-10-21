@@ -16,10 +16,10 @@ from agent_comms.goal_attempt_phase import ReservedAttempt, ResolvedAttempt
 from agent_comms.goal_attempts import (
     AttemptRecord,
     GoalAttemptStore,
-    MissingAttempt,
     NoAttempt,
     RecordedAttempt,
     StaleAttemptError,
+    StorageUncertainError,
 )
 from agent_comms.goal_generation import CancelledGeneration, ReadyGeneration, ReservedGeneration
 
@@ -60,7 +60,8 @@ def test_a_missing_attempt_refuses_every_question_and_cannot_be_retired(store):
     store.create_goal("goal")
     reservation = store.reserve("goal", 1)
     attempt = read(store, "0" * 32)
-    assert attempt == MissingAttempt()
+    with pytest.raises(StorageUncertainError, match="0" * 32):
+        attempt.stopped_permit()
     with pytest.raises(StaleAttemptError):
         attempt.reserved_by(reservation, StaleAttemptError("absent"))
     with pytest.raises(StaleAttemptError):

@@ -245,11 +245,14 @@ class RecoveryMonitorCapability:
         """An explicit stop retires only the exited owner's original local attempt."""
         from .comms import Comms
 
-        if not (CoordinationStore.path_in(root)).exists():
-            return  # No native coordinator, hence no selected attempt claims.
-        acknowledgement = Comms(root).owners.releases.get(owner.name)
+        comms = Comms(root)
+        acknowledgement = comms.owners.releases.get(owner.name)
         if not acknowledgement.matches(owner):
             raise RecoveryBlocked("stopped attempt requires the exact exited owner release")
+        store = comms.goals.open_goal_store()
+        owner.goal.stopped_permit(store).stop(store)
+        if not (CoordinationStore.path_in(root)).exists():
+            return  # Goal claims can exist without a selected native execution.
         cls.recover_owner(root, owner)
 
     @classmethod

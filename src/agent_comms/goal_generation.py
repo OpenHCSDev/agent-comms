@@ -13,6 +13,7 @@ from .goal_attempt_phase import (
     GoalAttemptPhase,
 )
 from .lifecycle import LifecycleState
+from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 
 if TYPE_CHECKING:
     from .goal_attempts import Generation, GoalAttemptStore
@@ -45,6 +46,9 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
 
     def allows_resume(self, active_turn: bool) -> bool:
         return False
+
+    def stopped_permit(self, store: GoalAttemptStore, generation: Generation) -> GoalTurnPermit:
+        return NoLaunchPermit()
 
     def authorize_retry(
         self, store: GoalAttemptStore, generation: Generation, decision: str
@@ -88,6 +92,9 @@ class ReadyGeneration(GenerationState, RetryableGeneration):
 
 @dataclass(frozen=True)
 class ReservedGeneration(GenerationState):
+    def stopped_permit(self, store: GoalAttemptStore, generation: Generation) -> GoalTurnPermit:
+        return store.read_attempt(generation.attempt_identity.attempt_id).stopped_permit()
+
     def permits_retirement(self, phase: GoalAttemptPhase | None) -> bool:
         return phase is not None and phase.may_become(FailedAttempt())
 
@@ -116,11 +123,11 @@ class BlockedGeneration(GenerationState, RetryableGeneration):
     def authorize_retry(
         self, store: GoalAttemptStore, generation: Generation, decision: str
     ) -> None:
-        assert generation.attempt_id is not None
+        identity = generation.attempt_identity
         store.authorize_retry(
-            generation.goal_id,
-            expected_generation=generation.number,
-            attempt_id=generation.attempt_id,
+            identity.goal_id,
+            expected_generation=identity.generation,
+            attempt_id=identity.attempt_id,
             user_decision_id=decision,
         )
 
