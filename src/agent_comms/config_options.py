@@ -23,6 +23,7 @@ from acp.schema import (
 )
 
 from .agent_backend import UseSettings
+from .bus import Bus
 from .comms import Comms
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
@@ -36,7 +37,7 @@ from .native_failures import NativePiUnavailable
 from .pi_vocabulary import ThinkingChoice
 from .thread_model import ThreadModel
 from .threads import ChosenModel, NextTurnConfiguration, Thread
-from .wire_watch import WatchSource, WireWatch
+from .watched import FileSource
 
 if TYPE_CHECKING:
     from .pi_commands import SettingCommand
@@ -457,10 +458,10 @@ class SessionConfigOptions(ConfigOptions):
 
     async def _observe_configuration(self) -> None:
         sources = (
-            WatchSource.file(self.comms.registry.store.path),
-            WatchSource.file(self.configuration.native_config / "auth.json"),
+            FileSource(self.comms.registry.store.path),
+            FileSource(self.configuration.native_config / "auth.json"),
         )
-        async with aclosing(WireWatch.observations(*sources)) as observations:
+        async with aclosing(Bus.watch_sources(*sources)) as observations:
             async for _ in observations:
                 for session_id in tuple(self._publication_sessions):
                     await self.publish_configuration(session_id)

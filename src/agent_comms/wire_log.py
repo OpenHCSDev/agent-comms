@@ -40,9 +40,6 @@ from .bus_publication import (
 from .bus_source_page import AddressedPage
 from .child_process import Platform
 from .coordination_errors import StaleRevision
-from .envelope_claim_transitions import (
-    ClaimProjection,
-)
 from .errors import (
     CheckpointNeedsRepairError,
     RelationViolationError,
@@ -702,11 +699,6 @@ class WireLog(DurableFile, WireWakeFile, StoreLockOwner):
             if path == path.parent:
                 break
             path = path.parent
-
-    def claim_projection(self) -> ClaimProjection:
-        """Read the current resource claims from the checked bus index."""
-        with self.checked_read() as source:
-            return source.claim_projection()
 
     def private_marker_unlocked(self) -> WireMetadata:
         self._assert_private_directory()

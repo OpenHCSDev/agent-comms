@@ -21,25 +21,47 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 
 from .audience_manifest import FrozenRecipient
-from .bus_publication import CommittedDelivery
+from .bus import Bus
+from .bus_publication import Delivered
 from .cohort_schema import ClaimBatchAcknowledgements, assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_cohort import AcceptedCohort, _claim_record
 from .historical_native_inputs import HistoricalNativeInput, read_historical_native_inputs
 from .message_bus import MessageBus
-from .private_bus_checkpoint import (
-    PrefixWitness,
-    verify_private_bus_checkpoint_unlocked,
-)
+from .private_path import FileIdentity, ObservedPath, PresentPath
 from .wake_policy import RecipientDecision
 from .native_input_record import NumberNativeColumn, TextNativeColumn, UnrecordedNativeColumn
 
 if TYPE_CHECKING:
     from .native_entries import NativeEvidenceScope
     from .cursor_owner import CursorState
-from .store_files import StoreLockContention
 
 _MAX_SCAN_SECONDS = 0.25
+
+
+@dataclass(frozen=True)
+class SourcePrefix(PresentPath):
+    """One immutable SQLite prefix; identity is not a message position."""
+
+    through_seq: int
+
+    @classmethod
+    def capture(cls, bus: Bus, after_seq: int) -> SourcePrefix:
+        identity = FileIdentity.from_stat(bus.path.stat())
+        prefix = cls(identity, bus.revision())
+        prefix.require_start(after_seq)
+        prefix.require_current(bus)
+        return prefix
+
+    def require_start(self, covered_seq: int) -> None:
+        if covered_seq > self.through_seq:
+            raise IdentityConflict("current source coverage exceeds the bus")
+
+    def require_current(self, bus: Bus) -> None:
+        if not ObservedPath.at(bus.path).same_file(self.identity):
+            raise IdentityConflict("native source database changed")
+        if bus.revision() < self.through_seq:
+            raise IdentityConflict("native source prefix regressed")
 
 
 class CoverageInput(ABC):
@@ -138,7 +160,7 @@ class ProvenSourceCoverage:
     no_wake_seqs: tuple[int, ...]
     blocked_seq: int | None
     more_sources: bool = False
-    source_witness: PrefixWitness = field(kw_only=True)
+    source_prefix: SourcePrefix = field(kw_only=True)
 
     @property
     def injected_source_seqs(self) -> tuple[int, ...]:
@@ -168,7 +190,7 @@ class ProvenSourceCoverage:
 
 
 class SourceCoverage:
-    """Canonical source snapshot reader bound to one wire and stable recipient.
+    """Canonical SQLite prefix reader bound to one stable recipient.
 
     Owns bounded paging and historical checks, never permission to start native input.
     No claim, input or schema is created by this read path.
@@ -178,37 +200,10 @@ class SourceCoverage:
 
     def __init__(
         self, bus: MessageBus, store: Coordination, *, wire_root_id: str, recipient_lookup: str,
-        contention: StoreLockContention | None = None,
     ):
         self.bus, self.store = bus, store
-        self.contention = contention  # Borrowed lock wait resource; never source evidence.
         self.wire_root_id = FieldCodec.decode(Annotated[str, Id128Text], wire_root_id)
         self.recipient_lookup = FieldCodec.decode(Annotated[str, Id128Text], recipient_lookup)
-
-    def witness_unlocked(self) -> PrefixWitness:
-        return verify_private_bus_checkpoint_unlocked(
-            self.bus.log, self.bus.log.private_marker_unlocked()
-        )
-
-    def witness(self) -> PrefixWitness:
-        with self.bus.log.checked_read(
-            blocking=False, contention=self.contention
-        ) as source:
-            return source.witness
-
-    def recorded_witness(self, state: CursorState) -> PrefixWitness:
-        """The stored prefix is proved; reading it does not prove later sources."""
-        with self.bus.log.checked_read(blocking=False, contention=self.contention) as source:
-            witness: PrefixWitness = source.witness
-            self.start(state, source.marker.claimed_after_seq, witness)
-            return witness
-
-    def start(self, state: CursorState, floor: int, witness: PrefixWitness) -> int:
-        if witness.root_id != self.wire_root_id:
-            raise IdentityConflict("current source claim_scope root changed")
-        if not floor <= state.covered_seq <= witness.through_seq:
-            raise IdentityConflict("current source coverage regressed or exceeds the bus")
-        return state.covered_seq
 
     def read(
         self, *, limit: int = 100, after_seq: int = 0, partial: bool = False,
@@ -221,14 +216,32 @@ class SourceCoverage:
         not the last message anywhere on the bus. Filesystem flushes and locks
         can still take longer than the requested time limit.
         """
+        request = CoveragePage.capture(lookup=self.recipient_lookup, limit=limit,
+                                       after_seq=after_seq, partial=partial)
+        return self._read(
+            request, SourcePrefix.capture(self.bus.bus, request.after_seq), source_reads)
+
+    def _read(
+        self, request: CoveragePage, prefix: SourcePrefix, source_reads: NativeEvidenceScope,
+    ) -> ProvenSourceCoverage:
         with source_reads.borrow():
-            request = CoveragePage.capture(lookup=self.recipient_lookup, limit=limit,
-                                           after_seq=after_seq, partial=partial)
             if self.store.session._connection.in_transaction:
                 raise IdentityConflict("source coverage requires a committed coordinator snapshot")
-            witness, initials, more = self._page(request)
-            horizon = initials[-1].message.seq if more else witness.latest_source_seq
-            covered, inputs, no_wake, blocked = after_seq if partial else 0, [], [], None
+            prefix.require_start(request.after_seq)
+            deadline = time.monotonic() + _MAX_SCAN_SECONDS
+            records = self.bus.bus.received(
+                self.recipient_lookup, after=request.after_seq, before=prefix.through_seq + 1,
+                descending=False, limit=request.limit + 1,
+            )
+            more = len(records) > request.limit
+            request.require_exhausted(more)
+            initials = tuple(delivery for record in records[:request.limit]
+                             for delivery in record.deliveries())
+            if time.monotonic() > deadline:
+                raise IdentityConflict("source coverage exceeded its scan deadline")
+            prefix.require_current(self.bus.bus)
+            horizon = initials[-1].seq if more else prefix.through_seq
+            covered, inputs, no_wake, blocked = request.after_seq if request.partial else 0, [], [], None
             for initial in initials:
                 seq = initial.message.seq
                 matches = [
@@ -241,8 +254,7 @@ class SourceCoverage:
                 if len(matches) > 1:
                     raise IdentityConflict("duplicate stable lookup in frozen audience")
                 if not matches:
-                    covered = seq
-                    continue
+                    raise IdentityConflict("recipient source differs from its frozen audience")
                 recipient, decision = matches[0]
                 acknowledgement = self._accepted_cohort(initial)
                 if acknowledgement is None:
@@ -262,6 +274,7 @@ class SourceCoverage:
                 covered = seq
             if blocked is None:
                 covered = max(covered, horizon)
+            prefix.require_current(self.bus.bus)
             return ProvenSourceCoverage(
                 self.wire_root_id,
                 self.recipient_lookup,
@@ -270,25 +283,10 @@ class SourceCoverage:
                 tuple(no_wake),
                 blocked,
                 more,
-                source_witness=witness,
+                source_prefix=prefix,
             )
 
-    def _page(self, request: CoveragePage) -> tuple[PrefixWitness, tuple[CommittedDelivery, ...], bool]:
-        deadline = time.monotonic() + _MAX_SCAN_SECONDS
-        remaining_before = self.contention.remaining if self.contention is not None else 0.0
-        with self.bus.log.checked_read(blocking=False, contention=self.contention) as source:
-            waited = remaining_before - self.contention.remaining if self.contention is not None else 0.0
-            if time.monotonic() > deadline + waited:
-                raise IdentityConflict("source coverage exceeded its scan deadline")
-            if source.marker.root_id != self.wire_root_id:
-                raise IdentityConflict("source coverage private wire root changed")
-            witness, initials, more = source.addressed_page(self.bus.log, request)
-            if request.after_seq > max(witness.latest_source_seq, source.marker.claimed_after_seq):
-                raise IdentityConflict("source coverage prefix exceeds checked initials")
-            request.require_exhausted(more)
-        return witness, tuple(initials), more
-
-    def _accepted_cohort(self, initial: CommittedDelivery) -> AcceptedCohort | None:
+    def _accepted_cohort(self, initial: Delivered) -> AcceptedCohort | None:
         with self.store.session.read():
             db = self.store.session._connection
             assert_cohort_schema(db)
@@ -330,21 +328,18 @@ class SourceCoverage:
 
     def since(self, state: CursorState, *,
               source_reads: NativeEvidenceScope) -> ProvenSourceCoverage:
-        """Verify the sealed bus and prove only sources beyond its durable cursor."""
+        """Prove sources beyond the cursor, bounded to one captured SQLite prefix."""
         with source_reads.borrow():
-            with self.bus.log.checked_read(
-                blocking=False, contention=self.contention
-            ) as source:
-                witness = source.witness
-                covered = self.start(state, source.marker.claimed_after_seq, witness)
+            prefix = SourcePrefix.capture(self.bus.bus, state.covered_seq)
+            covered = state.covered_seq
             inputs, no_wake = [], []
             for _ in range(self.page_budget):
-                page = self.read(after_seq=covered, partial=True, source_reads=source_reads)
+                request = CoveragePage.capture(lookup=self.recipient_lookup,
+                                              after_seq=covered, partial=True)
+                page = self._read(request, prefix, source_reads)
                 if page.covered_seq < covered:
                     raise IdentityConflict("canonical source coverage regressed between pages")
-                if witness is not None and page.source_witness != witness:
-                    raise IdentityConflict("checked source changed between coverage pages")
-                witness, covered = page.source_witness, page.covered_seq
+                covered = page.covered_seq
                 inputs.extend(page.inputs)
                 no_wake.extend(page.no_wake_seqs)
                 if (
@@ -359,6 +354,6 @@ class SourceCoverage:
                         tuple(no_wake),
                         page.blocked_seq,
                         page.more_sources,
-                        source_witness=witness,
+                        source_prefix=prefix,
                     )
             raise IdentityConflict("source coverage exceeded bounded canonical page budget")

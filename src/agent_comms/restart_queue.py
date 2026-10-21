@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Annotated, ClassVar
 
 
+from .bus import Bus
 from .child_process import ProcessIdentity, SpawnedProcess
 from .comms import Comms, wire
 from .coordination_database import CoordinationStore
@@ -39,7 +40,7 @@ from .restart_refusals import RestartRefusal
 from .restart_scope import OwnersNamed
 from .store_files import _atomic_write_text, _store_lock
 from .thread_identity import RecordedThreadIncarnation
-from .wire_watch import DirectoryWatchSource, WatchSource, WireWatch
+from .watched import DirectorySource, FileSource
 
 DIRECTORY = "owner-restart-queue"
 
@@ -386,12 +387,11 @@ async def run(comms: Comms) -> None:
         except BlockingIOError:
             return
         # Watch before the first step, so no turn settlement can be missed.
-        async for _ in WireWatch.observations(
-            WatchSource.file(comms.registry.store.path),
-            WatchSource.file(comms.registry.store.guard_path),
-            WatchSource.file(CoordinationStore.path_in(comms.root)),
-            WatchSource.file(comms.root / "coordination.sqlite3-wal"),
-            DirectoryWatchSource(queue.active_directory),
+        async for _ in Bus.watch_sources(
+            FileSource(comms.registry.store.path),
+            FileSource(comms.registry.store.guard_path),
+            *(FileSource(path) for path in CoordinationStore.source_paths(comms.root)),
+            DirectorySource(queue.active_directory),
         ):
             await Coordination.run_worker(lambda: step(comms))
             # Check emptiness and release under enqueue's lock, so a new

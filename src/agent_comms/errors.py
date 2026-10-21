@@ -61,13 +61,13 @@ class HumanSendRefusedError(ToolRefusedError):
     """The send transaction rolled back; the human's message was not sent."""
 
 
-class MessageNotificationError(RuntimeError):
-    """The message committed; only notifying its readers failed."""
+class CommittedMessageError(RuntimeError):
+    """The message was sent; signalling or connection retirement then failed."""
 
     def __init__(self, record: BusRecord) -> None:
         self.record = record
         super().__init__(
-            f"Message {record.seq}/{record.message_id} was sent, but notification failed."
+            f"Message {record.seq}/{record.message_id} was sent, but write completion failed."
         )
 
 
