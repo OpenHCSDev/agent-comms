@@ -53,6 +53,7 @@ from .field_codec import (
     DefaultNonNull,
     Description,
     FieldDirective,
+    Normalize,
     WireChoices,
     WireName,
     WireOmitDefault,
@@ -414,8 +415,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
 
     def cli_command(self, caller: ToolCaller) -> InvokeCliCommand:
         """Project this declaration into Core's existing external tool command."""
-        return InvokeCliCommand(caller=caller.acting_name(''),
-                                tool=self.declared_name, arguments=self.arguments)
+        return InvokeCliCommand(caller=caller, tool=self.declared_name, arguments=self.arguments)
 
     @classmethod
     def invoke(
@@ -1559,24 +1559,26 @@ class CommsArchiveTool(ArchiveOwnerControl, ToolRequest):
 class ToolsCliCommand(CliCommand):
     help = "Emit the shared adapter tool catalog"
     name: Annotated[
-        str | None, Argument(flags=("--name",), options={"help": "Calling thread"})
-    ] = None
+        ThreadCaller | NoThreadCaller,
+        Normalize(FieldCodec.encode),
+        Argument(flags=("--name",), options={"type": ThreadCaller, "help": "Calling thread"}),
+    ] = NoThreadCaller()
 
     def apply(self, ctx: Comms) -> ToolCatalogResult:
-        caller = ToolCaller.from_actor(self.name)
-        return caller.catalog(ctx, tuple(NativeRequestTools.catalog()))
+        return self.name.catalog(ctx, tuple(NativeRequestTools.catalog()))
 
 
 @dataclass(frozen=True, kw_only=True)
 class InvokeCliCommand(CliCommand, declared_name="tool"):
     help = "Invoke one declared adapter tool, as --from THREAD when given"
     caller: Annotated[
-        str | None,
+        ThreadCaller | NoThreadCaller,
+        Normalize(FieldCodec.encode),
         Argument(
             flags=("--from",),
-            options={"help": "Calling thread; omit for tools that need no thread"},
+            options={"type": ThreadCaller, "help": "Calling thread; omit for tools that need no thread"},
         ),
-    ] = None
+    ] = NoThreadCaller()
     tool: Annotated[str, Argument(flags=("--tool",))]
     arguments: Annotated[
         dict[str, object],
@@ -1588,14 +1590,12 @@ class InvokeCliCommand(CliCommand, declared_name="tool"):
 
     def argv(self, root: Path) -> tuple[str, ...]:
         """The CLI boundary owns its module, grammar and argument serialization."""
-        caller = ToolCaller.from_actor(self.caller)
         return (sys.executable, '-m', comms_cli.__name__, '--root', str(root),
-                self.declared_name, '--from', caller.acting_name(''), '--tool', self.tool,
+                self.declared_name, *self.caller.from_flag(), '--tool', self.tool,
                 '--arguments', json.dumps(self.arguments))
 
     def apply(self, ctx: Comms) -> dict[str, JsonValue]:
-        return invoke_tool(ctx, self.tool, self.arguments,
-                           caller=ToolCaller.from_actor(self.caller))
+        return invoke_tool(ctx, self.tool, self.arguments, caller=self.caller)
 
     def run(self, ctx: Comms, output: TextIO) -> int:
         """The tool protocol's own reply, the one every adapter receives, not a CLI result."""

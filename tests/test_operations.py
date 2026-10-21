@@ -280,7 +280,7 @@ class TestThreadOps:
         assert attached.parent == ForkedParent("PR111")
         assert attached.task == GivenThreadText("fix auth")
         assert attached.process_identity == ProcessIdentity.capture(os.getpid())
-        assert attached.session_file == str(session_file.resolve())
+        assert attached.session_file == SavedSessionFile(str(session_file.resolve()))
         assert wired.registry.status("fixer").declared_name == "running"
 
 
@@ -561,7 +561,7 @@ class TestReDeclarationPreservesProvenance:
             wired.registry.new_thread(name='PR111', tags=frozenset({'base'}), worktree='/tmp/wt1', session_file=SavedSessionFile(str(tmp_path / 's.json')))
         )
         wired.registry.declare(wired.registry.new_thread(name='PR111', tags=frozenset({'base'}), worktree='/tmp/wt1'))
-        assert wired.registry.require("PR111").session_file == str(tmp_path / "s.json")
+        assert wired.registry.require("PR111").session_file == SavedSessionFile(str(tmp_path / "s.json"))
 
     def test_fresh_declaration_is_unaffected(self, wired):
         wired.registry.declare(wired.registry.new_thread(name='fresh', tags=frozenset(), worktree='/wt'))

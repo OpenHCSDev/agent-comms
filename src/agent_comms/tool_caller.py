@@ -43,6 +43,10 @@ class ToolCaller(ABC):
     def acting_name(self, default: str) -> str: ...
 
     @abstractmethod
+    def from_flag(self) -> tuple[str, ...]:
+        """The command line's --from argument naming this caller, if it names a thread."""
+
+    @abstractmethod
     def own_thread(self) -> str:
         """The thread a tool acts on when its call names none."""
 
@@ -78,6 +82,9 @@ class NoThreadCaller(ToolCaller):
     def acting_name(self, default: str) -> str:
         return default
 
+    def from_flag(self) -> tuple[str, ...]:
+        return ()
+
     def own_thread(self) -> NoReturn:
         return self.refuse_thread()
 
@@ -111,6 +118,9 @@ class ThreadCaller(ToolCaller):
 
     def acting_name(self, default: str) -> str:
         return self.name
+
+    def from_flag(self) -> tuple[str, ...]:
+        return ("--from", self.name)
 
     def own_thread(self) -> str:
         return self.name
