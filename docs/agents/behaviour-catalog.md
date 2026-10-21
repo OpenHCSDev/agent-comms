@@ -31,6 +31,7 @@ The [Codex postmortem](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/
 - Failure 20, Its own orders stopped the units they were sent to: no pattern cites it yet
 - Failure 21, It reported a state its evidence did not show: no pattern cites it yet
 - Failure 22, It left a unit's question unanswered for hours: no pattern cites it yet
+- Failure 23, It held plan work for hours while nothing reached main: `plan_stalled`
 
 ## plan_idle
 
@@ -41,6 +42,16 @@ Checked by:
 - standing rule `plan_idle` (`agent_comms.standing_rules.PlanIdle`)
 
 Learned from: P83 (34ba68c81)
+
+## plan_stalled
+
+A plan phase whose earlier phases are all done is held by a unit, and main still lacks it two hours after the phase was first ordered.
+
+Checked by:
+
+- standing rule `plan_stalled` (`agent_comms.standing_rules.PlanStalled`)
+
+Learned from: Failure 23: October 21: every virtual bus step had a holder and none merged for 22 hours, because the steps only land together and nobody owned integrating them; Tristan caught it (claude-ai #comms 2dde16189509).
 
 ## board_disagrees
 

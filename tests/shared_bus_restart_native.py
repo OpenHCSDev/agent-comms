@@ -3,6 +3,8 @@
 Only the localhost provider is controlled. Worker, registry, bus, selected
 claim_scope, native process, source proof and response publication remain real.
 """
+
+from agent_comms.lifecycle_capability import Complete
 from agent_comms.thread_text import SavedSessionFile
 from agent_comms.native_entries import NativeEvidenceScope
 from conftest import publish_initial
@@ -235,7 +237,7 @@ async def configured_pure_channel(arguments):
                     # otherwise an observer can block publisher COMMIT while
                     # awaiting a registry lock held by that publisher.
                     active = tuple(name for name in names
-                        if service.registry.require(name).active_turn.executing)
+                        if service.registry.require(name).executing)
                     observed = {'elapsed_seconds':time.perf_counter()-begun,
                             'active_owners':active,
                             'dispatched_unproven_inputs':[{'owner':row.owner_thread,
@@ -248,7 +250,7 @@ async def configured_pure_channel(arguments):
                     overlap |= len({row.owner_thread for row in dispatched}) == len(names)
                     triage = [row for row in inputs if row.reference_stage is TriageNativeExecution]
                     full = [row for row in inputs if row.reference_stage is FullNativeExecution]
-                    if len(claims) == len(names)*len(originals) and all(row.lifecycle.completed for row in claims) and not active:
+                    if len(claims) == len(names)*len(originals) and all(bool(row.lifecycle.items_with(Complete, True)) for row in claims) and not active:
                         assert len(triage) == len(full) == len(names)
                         assert all(row.verdict is FullSelectedTriage for row in triage)
                         assert all(row.session_id and row.session_entry_id for row in inputs)
@@ -421,11 +423,11 @@ async def configured_cancel_continue(arguments, service, attachment, name, sende
                 and not row.reference.recorded)
             if authorized:
                 break
-            assert not (claims and all(claim.lifecycle.completed for claim in claims)), \
+            assert not (claims and all(bool(claim.lifecycle.items_with(Complete, True)) for claim in claims)), \
                 'Original completed before cancellation; cancellation was not exercised'
             await asyncio.sleep(.03)
         await attachment.cancel(name)
-        while service.registry.require(name).active_turn.executing:
+        while service.registry.require(name).executing:
             await asyncio.sleep(.03)
         cancelled_claims, cancelled_inputs, cancelled_receipts = observe(cancelled)
         assert {row.input_id for row in authorized}.issubset({row.input_id for row in cancelled_inputs})
@@ -433,8 +435,8 @@ async def configured_cancel_continue(arguments, service, attachment, name, sende
         continuation = publish('NEW_CONTINUATION_ORIGINAL')
         while True:
             claims, inputs, receipts = observe(continuation)
-            if claims and all(claim.lifecycle.completed for claim in claims) and \
-                    not service.registry.require(name).active_turn.executing:
+            if claims and all(bool(claim.lifecycle.items_with(Complete, True)) for claim in claims) and \
+                    not service.registry.require(name).executing:
                 full = tuple(row for row in inputs if row.reference_stage is FullNativeExecution)
                 assert len(full) == 1 and full[0].reference.recorded
                 assert len(receipts) == 1 and receipts[0].exact_target == '#openhcs'
@@ -527,8 +529,8 @@ async def configured_mixed_routes(arguments):
                     assignments = WakeAssignment.select(db,order_by=('wire_seq',))
                     cursors = CurrentNativeCursor.select(db,where='input_id IS NOT NULL')
                     if late is not None and len(assignments) == len(originals)+1 and all(
-                            row.lifecycle.completed for row in assignments) and len(cursors) == 1 and (
-                            cursors[0].covered_seq >= late.seq) and not service.registry.require(name).active_turn.executing:
+                            bool(row.lifecycle.items_with(Complete, True)) for row in assignments) and len(cursors) == 1 and (
+                            cursors[0].covered_seq >= late.seq) and not service.registry.require(name).executing:
                         assert len(inputs) == 2 and all(row.reference_stage is FullNativeExecution for row in inputs)
                         links = ExecutionAssignmentLink.select(db,order_by=('execution_id','ordinal'))
                         original_claims = {row.assignment_id for row in assignments if row.wire_seq != late.seq}
@@ -1038,7 +1040,7 @@ async def run(arguments):
                 expected_posts = (4 if arguments.wave_size > 1 else
                                   2 if arguments.cancel_before_grant else len(names))
                 if arguments.wave_size > 1 and provider.posts == 1 and late_original is None:
-                    assert service.registry.require(names[0]).active_turn.executing
+                    assert service.registry.require(names[0]).executing
                     # All original batch members were reserved before this late
                     # arrival, while the real provider's first response is held.
                     with closing(sqlite3.connect((service.root/'coordination.sqlite3').as_uri()+
@@ -1055,7 +1057,7 @@ async def run(arguments):
                     provider.response_gate.set()
                 if provider.posts == expected_posts:
                     if not provider.response_gate.is_set():
-                        assert all(service.registry.require(name).active_turn.executing
+                        assert all(service.registry.require(name).executing
                                    for name in names)
                         concurrent_native = True
                         provider.response_gate.set()
@@ -1075,11 +1077,11 @@ async def run(arguments):
                                     ','.join('?' for _ in (*cutover.originals, late_original))+')',
                                     parameters=tuple(message.seq for message in (*cutover.originals, late_original)))
                                 completed = len(rows) == arguments.wave_size+1 and all(
-                                    row.lifecycle.completed for row in rows)
+                                    bool(row.lifecycle.items_with(Complete, True)) for row in rows)
                             else:
                                 completed = len(rows)==len(names) and all(
                                     row.lifecycle.declared_name=='ignored' for row in rows)
-                    if completed and all(not service.registry.require(name).active_turn.executing
+                    if completed and all(not service.registry.require(name).executing
                                          for name in names):
                         break
                 if not diagnosed and time.perf_counter()-started > 25:
