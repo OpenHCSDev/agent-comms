@@ -1322,7 +1322,8 @@ class FamilyFlattened(PerFileMeasure, ast.NodeTransformer):
     mechanism_modules = frozenset((
         *(Path("src", Path(inspect.getfile(module)).relative_to(
             Path(inspect.getfile(agent_comms)).parents[1]))
-          for module in (field_codec, typed_table, coordination_schema, coordinated_runtime_schema)),
+          for module in (field_codec, typed_table,
+                         coordination_schema, coordinated_runtime_schema)),
         *(Path("src", "toad", module) for module in ("agent_schema.py", "db.py")),
     ))
 
