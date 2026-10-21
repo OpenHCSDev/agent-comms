@@ -17,12 +17,33 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, Self
 
+from aiohttp.web import TCPSite
+
 from ..declared_family import DeclaredFamily
 from ..launch_runtime import LaunchRuntime
 
 
 class ServiceNotServingError(RuntimeError):
     """A restarted service did not serve its installed runtime's contract."""
+
+
+@dataclass(frozen=True, init=False)
+class BoundListener:
+    """Evidence from a started site's actual listening sockets."""
+
+    site: TCPSite
+
+    def __new__(cls):
+        raise TypeError("Use BoundListener.of(site)")
+
+    @classmethod
+    def of(cls, site: TCPSite) -> Self:
+        server = site._server
+        if server is None or not server.is_serving() or not server.sockets:
+            raise ServiceNotServingError("The service has no bound listening socket")
+        listener = object.__new__(cls)
+        object.__setattr__(listener, "site", site)
+        return listener
 
 
 class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
@@ -85,8 +106,8 @@ class SystemdUserService(HostService, declared_name=None):
     notify_variable: ClassVar[str] = "NOTIFY_SOCKET"  # systemd's spelling of the supervisor socket
 
     @classmethod
-    def ready(cls) -> None:
-        """Tell the supervisor this process serves.
+    def ready(cls, listener: BoundListener) -> None:
+        """Tell the supervisor this process serves on a proved listener.
 
         Every launch has one: systemd for the installed unit, ``tests/connector_readiness.py``
         for a test. A launch without NOTIFY_SOCKET has nobody to tell and fails here, loudly.
