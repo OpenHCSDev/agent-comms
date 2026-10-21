@@ -6,7 +6,7 @@ import pytest
 
 from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
 from agent_comms.assignment_states import DeliveredAssignment, PendingDecision
-from agent_comms.bus import Bus, PrivateRecord, PublicRecord
+from agent_comms.bus import Bus, BusRecord, PrivateRecord, PublicRecord
 from agent_comms.candidate_maintenance import drain_candidate_catchup, schedule_candidate_catchup
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.goal_presentation import GoalWaitTarget
@@ -22,6 +22,7 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.wake import ControlClassification, resolve_wake_cohort
 from agent_comms.wake_candidate_index import CommittedAppendHint, WakeCandidateIndex
 from agent_comms.wake_policy import FullWake, MessageAudience
+from test_bus import record_from
 
 
 @pytest.fixture
@@ -52,6 +53,15 @@ def append_reply(bus, sender, recipient, body="reply", *, role=ConversationRole(
                 message, frozen_audience=audience, control=ControlClassification.ORDINARY),
             control=ControlClassification.ORDINARY.value)
     return bus.append(build)
+
+
+@pytest.mark.parametrize("declaration", BusRecord.members_with(BusRecord))
+def test_recipient_query_follows_frozen_delivery_membership(bus, declaration):
+    record = bus.append(lambda seq, db: record_from(
+        declaration, Message("author", "worker", "source", InfoKind, seq=seq)))
+    assert bus.received("b" * 32, after=0, limit=1, descending=False) == record.deliveries()
+    assert bus.received("b" * 32, after=record.seq, limit=1, descending=False) == ()
+    assert bus.received("f" * 32, after=0, limit=1, descending=False) == ()
 
 
 def test_three_committed_messages_are_candidates_by_their_bus_sequences(bus, owner, peer):

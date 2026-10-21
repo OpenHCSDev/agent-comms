@@ -1,4 +1,3 @@
-import multiprocessing
 import os
 import signal
 import sqlite3
@@ -7,7 +6,7 @@ from dataclasses import replace
 
 import pytest
 
-from bus_record_fixture import record_from
+from bus_record_fixture import publication_processes, record_from
 from agent_comms.bus import (
     Bus,
     BusRecord,
@@ -211,9 +210,8 @@ def test_sigkill_after_header_rolls_back_every_capability_table(tmp_path):
     bus = Bus(Bus.path_in(tmp_path))
     with bus.writing() as db:
         before = {table: table.count(db) for table in TypedTable.members_with(BusTables)}
-    context = multiprocessing.get_context("spawn")
-    reader, writer = context.Pipe(duplex=False)
-    process = context.Process(target=append_until_header, args=(bus.path, writer))
+    reader, writer = publication_processes.Pipe(duplex=False)
+    process = publication_processes.Process(target=append_until_header, args=(bus.path, writer))
     process.start()
     writer.close()
     try:

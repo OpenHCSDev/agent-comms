@@ -1,4 +1,6 @@
-"""Typed bus values without importing a test module and collecting its cases."""
+"""Typed values and prepared crash-test workers share their existing owners."""
+
+from multiprocessing.context import ForkServerContext
 
 from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
 from agent_comms.bus_publication import Delivered, KeyedPublication
@@ -8,6 +10,10 @@ from agent_comms.response_acknowledgement import (
     KeyedResponseAcknowledgement, canonical_publication_key, public_envelope_digest,
 )
 from agent_comms.wake import ControlClassification, resolve_wake_cohort
+
+
+publication_processes = ForkServerContext()
+publication_processes.set_forkserver_preload([ClaimMessage.__module__.partition(".")[0]])
 
 
 def record_from(declaration, message):

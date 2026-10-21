@@ -16,6 +16,9 @@ from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.locked_store import RegistryFile
 from agent_comms.historical_views import HistoryArchive
 from agent_comms.message_bus import MessageBus
+from agent_comms.message_page import MessagePageRequest, PageBounds
+from agent_comms.page_traversal import NewerTraversal, OlderTraversal
+from agent_comms.read_basis import ChannelDisplayScope
 from agent_comms.messaging import Messaging
 from agent_comms.messages import InfoKind, Message
 from agent_comms.native_transcript import NativeTranscript
@@ -48,6 +51,25 @@ def pages(messages):
 
 def test_message_bus_pages_five_channel_messages_two_at_a_time(tmp_path):
     assert pages(channel_bus(tmp_path)) == [(5, 4), (3, 2), (1,)]
+
+
+@pytest.mark.parametrize("traversal", [OlderTraversal(), OlderTraversal(8), NewerTraversal(3)])
+def test_scoped_page_rows_and_edges_share_the_admitted_cut(tmp_path, traversal):
+    messages = channel_bus(tmp_path)
+    request = MessagePageRequest(
+        ChannelDisplayScope("#history", frozenset({"#history"})),
+        PageBounds(traversal, limit=2),
+    )
+    with messages.bus.reading() as source:
+        before = request.read_opened(source)
+        messages.bus.append(lambda seq, db: PublicRecord.from_message(
+            Message("author", "#history", "later", InfoKind, seq=seq)))
+        retained = request.read_opened(source)
+        assert retained == before
+        assert tuple(row.seq for row in retained.messages) == (4, 5)
+        assert retained.has_older and not retained.has_newer
+    latest = request.read_opened(messages.bus)
+    assert latest != retained
 
 
 def test_archived_database_pages_read_only(tmp_path):
