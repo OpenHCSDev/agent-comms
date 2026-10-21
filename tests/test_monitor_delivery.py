@@ -53,7 +53,7 @@ async def test_parts_require_complete_exact_body_then_reopen(tmp_path, capsys, r
             acknowledgments.extend(references)
     with Binding.open(state) as db:
         binding=Binding(str(tmp_path),'viewer','session')
-        Binding.bind(db, binding)
+        binding.bind(db)
         bridge=ClaudeBridge(Options(Watch(),None,state),binding,db)
         bridge.comms=Core()
         message=Message(sender='claude-code',target='viewer',type=InfoKind,body='x'*3000,timestamp=1.,seq=1)
