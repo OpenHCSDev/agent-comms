@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.activity import Activity, ActivityLog, ActivityState
+from agent_comms.activity import Activity, ActivityState, ActivityStore
 from agent_comms.audience_manifest import FrozenRecipient
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
@@ -60,13 +60,13 @@ def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_own
     assert not hasattr(unrecorded.threads["second"].incarnation, "lookup")
 
 
-def test_activity_log_projects_only_requested_threads(tmp_path):
-    log = ActivityLog(tmp_path / "activity.jsonl")
+def test_activity_store_selects_only_requested_threads(tmp_path):
+    store = ActivityStore.at(tmp_path)
     for index in range(10):
-        log.emit(Activity(f"peer-{index}", ActivityState.THINKING, "working"))
-    assert set(log.current_for(("peer-7",))) == {"peer-7"}
-    assert log.current_for(()) == {}
-    assert len(log.all_current()) == 10
+        store.emit(Activity(f"peer-{index}", ActivityState.THINKING, "working"))
+    assert set(store.current_for(("peer-7", "absent"))) == {"peer-7", "absent"}
+    assert store.current_for(()) == {}
+    assert len(store.all_current()) == 10
 
 
 @pytest.mark.parametrize(("viewer_of", "seen"), [

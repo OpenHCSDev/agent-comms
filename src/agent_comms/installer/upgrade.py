@@ -36,7 +36,6 @@ from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
-import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
 from agent_comms.active_route import ActiveRoute, active_route_path, route_new_bus
 from agent_comms.cli_commands import InstallResult, ThreadsResult, WhoResult
 from agent_comms.cli_result import CliResult
