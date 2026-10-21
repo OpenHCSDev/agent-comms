@@ -36,7 +36,6 @@ from .native_source_cursor import NativeSourceCursor
 from .publisher import ResponseWrites
 from .runtime import RuntimeServer
 from .thread_identity import ClaimedIdentity
-from .wire_log import WireLog
 
 if TYPE_CHECKING:
     from .selected_participant import SelectedParticipant
