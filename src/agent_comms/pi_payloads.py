@@ -237,7 +237,9 @@ class PiPayload:
         for f, key in FieldCodec.record_fields(cls):
             # Native null means omitted where the declaration names its not-reported member.
             if key in value and not (value[key] is None and isinstance(f.default, PiPayload)):
-                data[key] = cls.normalize_field(hints[f.name], key, value[key], value)
+                # Overrides select by the declared value type; its directives already named the key.
+                declared, _ = FieldCodec._representation(hints[f.name])
+                data[key] = cls.normalize_field(declared, key, value[key], value)
         return data
 
     @classmethod
