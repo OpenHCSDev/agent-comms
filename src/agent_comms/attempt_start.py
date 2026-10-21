@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 
+from agent_comms.reason_codes import NoReasonCode
 from .coordination_errors import (
     IdentityConflict,
     PublicationUncertain,
@@ -16,7 +17,7 @@ from .participant_store import ParticipantSnapshot
 
 
 from .attempt_states import PromptStartingAttempt
-from .coordination_tables.executions import ExecutionRecord, CurrentExecutions
+from .coordination_tables.executions import CurrentExecutions, ExecutionRecord, PointedAttempt, PointedExecution
 from .execution_states import ActiveExecution
 
 INITIAL_LEASE_DURATION_MS = 60_000
@@ -104,7 +105,7 @@ class AttemptStart:
             lifecycle=PromptStartingAttempt(lease),
             revision=1,
             last_progress_at_ms=None,
-            reason_code=None,
+            reason_code=NoReasonCode(),
             created_at_ms=created,
             updated_at_ms=created,
         ).insert(db)
@@ -114,14 +115,14 @@ class AttemptStart:
             parameters=(self.execution_id,),
             lifecycle=ActiveExecution(self.attempt_ordinal),
             revision=execution.revision + 1,
-            reason_code=None,
+            reason_code=NoReasonCode(),
             updated_at_ms=created,
         )
         CurrentExecutions.update(
             db,
             where="owner_lookup=?",
             parameters=(execution.owner_lookup,),
-            execution_id=self.execution_id,
-            attempt_ordinal=self.attempt_ordinal,
+            execution_id=PointedExecution(self.execution_id),
+            attempt_ordinal=PointedAttempt(self.attempt_ordinal),
             pointer_revision=snapshot.pointer_revision + 1,
         )

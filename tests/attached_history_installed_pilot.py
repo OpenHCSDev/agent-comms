@@ -32,6 +32,8 @@ class InstalledApp(ToadApp):
 
 
 from retained_history_cutover_pilot import reference_actual_history
+from agent_comms.thread_model import DeclaredModel
+from agent_comms.thread_text import ForkedParent, NoParent
 
 def prepare_physical_fixture():
     """Prepare the same original immutable archive for the existing native recorder."""
@@ -46,7 +48,7 @@ def prepare_physical_fixture():
     (profile/'auth.json').write_text('{}')
     (profile/'settings.json').write_text(json.dumps({'retry':{'enabled':False,'maxRetries':0}}))
     comms=wire(destination/'wire');root_id=comms.messaging.initialize_private_initial_protocol()
-    comms.registry.declare(comms.registry.new_thread('archive-review', frozenset({'comms'}), str(project), model='selected-offline/fixture', thinking_level=OffThinkingLevel))
+    comms.registry.declare(comms.registry.new_thread('archive-review', frozenset({'comms'}), str(project), model=DeclaredModel('selected-offline/fixture'), thinking_level=OffThinkingLevel))
     reference_actual_history(comms.root,Path(os.environ['ACTUAL_COMMS_SOURCE_ROOT']))
     index=next(i for i,item in enumerate(comms.views.historical_threads()) if item.thread.name=='nra-architecture')
     acknowledgement={'owner':'Mendel477/268','root':str(comms.root),'wire_root_id':root_id,
@@ -66,7 +68,7 @@ async def main():
                           XDG_STATE_HOME=str(root/'state'),XDG_DATA_HOME=str(root/'data'))
         comms=wire(root/'wire')
         comms.messaging.initialize_private_initial_protocol()
-        for name, parent in [('openhcs-architecture-memory',None),('openhcs-pr159-viewer-bind-owner','openhcs-architecture-memory')]:
+        for name, parent in [('openhcs-architecture-memory',NoParent()),('openhcs-pr159-viewer-bind-owner',ForkedParent('openhcs-architecture-memory'))]:
             comms.registry.declare(comms.registry.new_thread(name, frozenset({'openhcs', 'comms'}), str(root), parent=parent))
         originals=reference_actual_history(comms.root,live)
         sources=comms.bus.history.sources()
@@ -94,7 +96,7 @@ async def main():
         assert all('history' in message for message in output['messages'])
         print(f'INSTALLED_CLI_HISTORY_READ_{len(output["messages"])}_ORIGINAL_ROWS',flush=True)
         session=next(item for item in declared if item.thread.name=='nra-architecture')
-        session_path=Path(session.thread.session_file)
+        session_path=Path(session.thread.runtime.read_key)
         native_before=hashlib.sha256(session_path.read_bytes()).hexdigest()
         native_page=comms.transcripts.thread_transcript_page(
             session.thread.name,historical_source=session.source.key)

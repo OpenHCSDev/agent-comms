@@ -29,7 +29,7 @@ import time
 from abc import abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
-from dataclasses import dataclass, field, fields, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Annotated, ClassVar, Literal, Self
 
@@ -38,13 +38,14 @@ from aiohttp.typedefs import Handler
 from aiohttp.web_urldispatcher import AbstractResource, ResourceRoute, SystemRoute
 from pydantic import JsonValue
 
+
 from .cli_commands import DeclaredOptions
-from .command import Command
 from .cli_protocol import CoreError
+from .command import Command
 from .comms import Comms, client_wire
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .errors import ToolRefusedError, UnregisteredThreadError
-from .field_codec import FieldCodec, MalformedRecord, PathText, option
+from .field_codec import FieldCodec, MalformedRecord, PathText, Argument, WireName, WireOmitDefault
 from .goal_actions import DirectiveGoalAction
 from .host_services import HostService, SystemdUserService
 from .connector_store import (
@@ -92,8 +93,8 @@ class ConnectorTool(ToolRequest[DirectorCaller], affix="ConnectorTool"):
 class ConnectorVerdictTool(ConnectorTool, declared_name=CommsVerdictTool.declared_name):
     label = "Review PR head"
     description = "Record the connector reviewer's acceptance of the exact PR commit it reviewed."
-    id: str = tool_field("Problem ID")
-    operation: ReviewedHeadVerdict = tool_field("Accepted PR-head verdict")
+    id: Annotated[str, *tool_field("Problem ID")]
+    operation: Annotated[ReviewedHeadVerdict, *tool_field("Accepted PR-head verdict")]
 
     def apply(self, comms: Comms, caller: DirectorCaller) -> TodoChanged:
         todo = self.operation.reviewed(
@@ -108,7 +109,7 @@ PROTOCOL_VERSION = "2025-06-18"
 
 def declared(record: type, values: Mapping[str, object]) -> dict[str, object]:
     """The values a record declares; an OAuth peer may send parameters it does not read."""
-    names = {FieldCodec.wire_key(item) for item in fields(record)}
+    names = {plan.key for plan in FieldCodec.field_plans(record)}
     return {key: value for key, value in values.items() if key in names}
 
 
@@ -288,7 +289,7 @@ class AddressedErrorReply(McpEnvelope):
 
 @dataclass(frozen=True)
 class ToolCapabilities:
-    list_changed: bool = field(default=False, metadata={"wire_name": "listChanged"})
+    list_changed: Annotated[bool, WireName("listChanged")] = False
 
 
 @dataclass(frozen=True)
@@ -304,16 +305,16 @@ class ServerInfo:
 
 @dataclass(frozen=True)
 class InitializeResult(McpResult):
-    protocol_version: str = field(
-        default=PROTOCOL_VERSION, metadata={"wire_name": "protocolVersion"}
+    protocol_version: Annotated[str, WireName("protocolVersion")] = (
+        PROTOCOL_VERSION
     )
     capabilities: ServerCapabilities = ServerCapabilities()
-    server_info: ServerInfo = field(default=ServerInfo(), metadata={"wire_name": "serverInfo"})
+    server_info: Annotated[ServerInfo, WireName("serverInfo")] = ServerInfo()
 
 
 @dataclass(frozen=True)
 class ToolAnnotations:
-    read_only_hint: bool = field(metadata={"wire_name": "readOnlyHint"})
+    read_only_hint: Annotated[bool, WireName("readOnlyHint")]
 
 
 @dataclass(frozen=True)
@@ -321,7 +322,7 @@ class ToolDescription:
     name: str
     title: str
     description: str
-    input_schema: dict[str, JsonValue] = field(metadata={"wire_name": "inputSchema"})
+    input_schema: Annotated[dict[str, JsonValue], WireName("inputSchema")]
     annotations: ToolAnnotations
 
     @classmethod
@@ -340,7 +341,9 @@ class ToolsListResult(McpResult):
 class ToolCall:
     name: str
     arguments: dict[str, object] = field(default_factory=dict)
-    meta: dict[str, object] = field(default_factory=dict, metadata={"wire_name": "_meta"})
+    meta: Annotated[dict[str, object], WireName("_meta")] = field(
+        default_factory=dict
+    )
 
     @classmethod
     def of(cls, tool: type[ToolRequest]) -> ToolCall:
@@ -467,11 +470,12 @@ class ToolsCallResult(McpResult):
     """A tool's encoded reply, or its failed call encoded as an MCP error result."""
 
     content: tuple[TextContent, ...]
-    is_error: bool = field(metadata={"wire_name": "isError"})
-    structured_content: dict[str, JsonValue] = field(
-        default_factory=dict,
-        metadata={"wire_name": "structuredContent", "wire_omit_default": True},
-    )
+    is_error: Annotated[bool, WireName("isError")]
+    structured_content: Annotated[
+        dict[str, JsonValue],
+        WireName("structuredContent"),
+        WireOmitDefault(),
+    ] = field(default_factory=dict)
 
     @classmethod
     def failed(cls, error: Exception) -> ToolsCallResult:
@@ -810,13 +814,23 @@ class ConnectorVerb(
 @dataclass(frozen=True, kw_only=True)
 class ServeVerb(ConnectorVerb):
     help = f"Serve MCP on {LOOPBACK}:{PORT}/mcp"
-    root: Annotated[Path, PathText] = option("--root", help="Explicit Comms root to serve")
-    port: int = option("--port", default=PORT, help="The loopback port it listens on")
-    issuer: str = option(
-        "--issuer",
-        default=f"http://{LOOPBACK}:{PORT}",
-        help="Public origin the OAuth metadata names",
-    )
+    root: Annotated[
+        Path,
+        PathText,
+        Argument(flags=("--root",), options={"help": "Explicit Comms root to serve"}),
+    ]
+    port: Annotated[
+        int,
+        Argument(
+            flags=("--port",), options={"help": "The loopback port it listens on"}
+        ),
+    ] = PORT
+    issuer: Annotated[
+        str,
+        Argument(
+            flags=("--issuer",), options={"help": "Public origin the OAuth metadata names"}
+        ),
+    ] = f"http://{LOOPBACK}:{PORT}"
 
     def apply(self, ctx: ConnectorStore) -> int | str:
         connector = Connector(ctx, self.issuer.rstrip("/"), self.root)

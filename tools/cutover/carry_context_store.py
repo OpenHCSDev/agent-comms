@@ -9,7 +9,7 @@ from abc import abstractmethod
 from contextlib import ExitStack, closing
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import ClassVar
+from typing import Annotated, ClassVar
 
 from agent_comms.context_store import (
     AbsentContext,
@@ -48,8 +48,8 @@ from agent_comms.installer.carry import Carried, Carry
 # whose context records still sit in the log.
 @dataclass(frozen=True)
 class RecordedContextManifestSources(TypedTable):
-    offset: int = field(metadata={"sql": Column(check="offset>=0")})
-    length: int = field(metadata={"sql": Column(check="length>0")})
+    offset: Annotated[int, Column(check="offset>=0")]
+    length: Annotated[int, Column(check="length>0")]
     thread: ThreadIncarnation
     indexes = (Index(("thread", "offset")), Index(("offset",), unique=True))
 

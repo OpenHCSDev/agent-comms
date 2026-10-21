@@ -12,7 +12,9 @@ from typing import TYPE_CHECKING, BinaryIO, ClassVar
 from .errors import RelationViolationError, StoredHistoryUnreadable
 from .field_codec import FieldCodec, MalformedRecord
 from .messages import Message
-from agent_comms.response_acknowledgement import KeyedResponseAcknowledgement, has_private_wire_fields
+from agent_comms.response_acknowledgement import (
+    NoResponseAcknowledgement, ResponseAcknowledgement, has_private_wire_fields,
+)
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
@@ -21,7 +23,7 @@ if TYPE_CHECKING:
 
 class WireRecord(ABC):
     __slots__ = ()
-    acknowledgement: KeyedResponseAcknowledgement | None = None
+    acknowledgement: ResponseAcknowledgement = NoResponseAcknowledgement()
     max_row_bytes: ClassVar[int] = 8 * 1024 * 1024
 
     @classmethod
@@ -82,8 +84,7 @@ class WireRecord(ABC):
                      if message.type.conversation_message)
 
     def record_key(self, seen: set[str]) -> None:
-        if self.acknowledgement is not None:
-            self.acknowledgement.add_unique(seen)
+        self.acknowledgement.add_unique(seen)
 
     @abstractmethod
     def require_claim(self, metadata: WireMetadata) -> None: ...

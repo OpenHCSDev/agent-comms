@@ -5,14 +5,16 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Annotated
+
 
 from .context_reading import ContextReading, UnmeasuredContext
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, SingleFieldValue
+from .field_codec import FieldCodec, SingleFieldValue, WireName, WireRequired
 from .locked_store import DurableFile, LockedStore
 from .pi_counts import PiCount, UnreportedCount
+from .thread_model import ThreadModel, UndeclaredModel
 from .thread_owned_state import ThreadOwnedState
 
 if TYPE_CHECKING:
@@ -51,10 +53,12 @@ class AgentRuntimeInfo(RuntimeInfo):
     """Declares mutable runtime metadata for one registered thread."""
 
     thread: str
-    model: str | None = None
+    model: ThreadModel = UndeclaredModel()
     context_used: PiCount = field(default_factory=UnreportedCount)
     context_size: PiCount = field(default_factory=UnreportedCount)
-    timestamp: float = field(metadata={"wire_name": "ts", "wire_required": True}, kw_only=True)
+    timestamp: Annotated[
+        float, WireName("ts"), WireRequired()
+    ] = field(kw_only=True)
 
     def __post_init__(self) -> None:
         FieldCodec.decode(float, self.timestamp)
@@ -65,7 +69,7 @@ class AgentRuntimeInfo(RuntimeInfo):
         return self.context_size.reading(self.context_used)
 
     def model_or(self, default: str) -> str:
-        return self.model or default
+        return self.model.otherwise(default)
 
 
 @dataclass(frozen=True, slots=True)

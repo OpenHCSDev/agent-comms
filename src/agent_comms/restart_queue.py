@@ -15,9 +15,10 @@ import sys
 import uuid
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import ClassVar
+from typing import Annotated, ClassVar
+
 
 from .child_process import ProcessIdentity, SpawnedProcess
 from .comms import Comms, wire
@@ -26,15 +27,16 @@ from .coordination_errors import CoordinationError
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, WireOmitDefault
 from .launch_runtime import LaunchRuntime, RestartEnvironment
-from .native_arguments import NativeArguments
+from .native_arguments import GivenBinary, NativeArguments
 from .owner_cutover import PreserveOwnerRuntime
 from .owner_launch import RetainedOwnerLaunch
 from .owner_lifecycle import OwnerRestartSelection
 from .owner_restart import OwnerRestartRequest, StoppedOwnerFailure
 from .private_path import PrivateDirectoryRole
 from .restart_refusals import RestartRefusal
+from .restart_scope import OwnersNamed
 from .store_files import _atomic_write_text, _store_lock
 from .thread_identity import RecordedThreadIncarnation
 from .wire_watch import DirectoryWatchSource, WatchSource, WireWatch
@@ -44,7 +46,7 @@ DIRECTORY = "owner-restart-queue"
 
 @dataclass(frozen=True, kw_only=True)
 class RestartState(DeclaredFamily, affix="Restart"):
-    reason: str = field(default="", metadata={"wire_omit_default": True})
+    reason: Annotated[str, WireOmitDefault()] = ""
     pending: ClassVar[bool] = False
     attempting: ClassVar[bool] = False
     active: ClassVar[bool] = False
@@ -349,10 +351,10 @@ def step(comms: Comms) -> None:
             continue
         try:
             request = OwnerRestartRequest(
-                (owner.name,),
+                OwnersNamed((owner.name,)),
                 expected=record.selection,
                 runtime=record.target.runtime,
-                agent_bin=record.target.agent_bin,
+                agent_bin=GivenBinary(record.target.agent_bin),
                 launch_runtime=record.target.launch_runtime,
             )
             (acknowledgement,) = PreserveOwnerRuntime().restart(comms.owners, request)

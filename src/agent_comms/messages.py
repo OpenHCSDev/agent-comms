@@ -10,12 +10,13 @@ from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, fields, replace
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Type, cast
+from typing import TYPE_CHECKING, ClassVar, Type, cast, Annotated
 
 from agent_comms.bus_tables import Addressed, BusCapability
 from agent_comms.response_acknowledgement import _canonical, public_envelope_digest
+from agent_comms.typed_table import Column
 
-from .change_report import ChangeReport, FileLine
+from .change_report import FileLine, NoChangeReport, ReportEvidence
 from .channel_targets import CommandTarget
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ClaimTransition
@@ -27,6 +28,10 @@ from .field_codec import (
     NullMember,
     compile_decoder,
     projected,
+    PublicationExclude,
+    WireName,
+    WireOmitDefault,
+    WireOrder,
 )
 from .mentions import ThreadMention
 from .message_reference import MessageReference
@@ -141,12 +146,6 @@ class ChangeReportKind(SendableMessageKind, declared_name="change-report"):
 
     @classmethod
     def require_publishable(cls, message: Message, worktree: Path) -> None:
-        if message.report is None:
-            raise ValueError(
-                "A change report requires its report: the branch, each touched fact, "
-                "its one owner and every consumer as file:line, the search command "
-                "showing the declaration is single, and the new-case edit counts."
-            )
         message.report.require_references_exist(worktree)
 
 
@@ -168,8 +167,12 @@ class NoMembershipChange(NullMember):
 class MessageRoleWire:
     """The unchanged external fields, decoded once into a message role."""
 
-    change: MembershipChange | NoMembershipChange = field(default_factory=NoMembershipChange, metadata={"wire_name": "membership", "wire_omit_default": True})
-    notice: bool = field(default=False, metadata={"wire_omit_default": True})
+    change: Annotated[
+        MembershipChange | NoMembershipChange,
+        WireName("membership"),
+        WireOmitDefault(),
+    ] = field(default_factory=NoMembershipChange)
+    notice: Annotated[bool, WireOmitDefault()] = False
 
     def role(self):
         role = self.change.conversation_role()
@@ -338,29 +341,35 @@ class Message(Addressed, BusCapability):
     time; the hash-derived ``message_id`` is identity only and is not ordered.
     """
 
-    body: str = field(metadata={"wire_name": "text", "wire_order": 6})
-    type: builtins.type[MessageKind] = field(metadata={"wire_order": 5})
-    timestamp: float = field(
-        default_factory=time.time, metadata={"wire_name": "ts", "wire_order": 4}
+    body: Annotated[str, WireName("text"), WireOrder(6)]
+    type: Annotated[builtins.type[MessageKind], WireOrder(5)]
+    timestamp: Annotated[float, WireName("ts"), WireOrder(4)] = (
+        field(default_factory=time.time)
     )
-    seq: int = field(default=0, metadata={"wire_order": 0, "publication_exclude": True})
-    sender_role: Type[ThreadRole] = field(  # noqa: UP006 - the `type` field shadows the builtin
-        default=AgentThreadRole, metadata={"wire_order": 7, "publication_exclude": True}
+    seq: Annotated[int, WireOrder(0), PublicationExclude()] = (
+        0
     )
-    role: MessageRole = field(default_factory=ConversationRole, metadata={"wire_order": 8})
-    mentions: tuple[ThreadMention, ...] = field(
-        default=(),
-        metadata={"wire_omit_default": True, "wire_order": 10, "publication_exclude": True},
+    sender_role: Annotated[
+        Type[ThreadRole], WireOrder(7), PublicationExclude()
+    ] = AgentThreadRole
+    role: Annotated[MessageRole, WireOrder(8)] = field(
+        default_factory=ConversationRole
     )
-    task: TaskAttachment = field(
-        default_factory=NoTaskAttachment, metadata={"wire_omit_default": True, "wire_order": 12}
-    )
-    report: ChangeReport | None = field(
-        default=None, metadata={"wire_omit_default": True, "wire_order": 13}
-    )
-    answers: tuple[MessageReference, ...] = field(
-        default=(), metadata={"wire_omit_default": True, "wire_order": 14}
-    )
+    mentions: Annotated[
+        tuple[ThreadMention, ...],
+        WireOmitDefault(),
+        WireOrder(10),
+        PublicationExclude(),
+    ] = ()
+    task: Annotated[
+        TaskAttachment, WireOmitDefault(), WireOrder(12)
+    ] = field(default_factory=NoTaskAttachment)
+    report: Annotated[
+        ReportEvidence, WireOmitDefault(), WireOrder(13), Column(nullable=True)
+    ] = NoChangeReport()
+    answers: Annotated[
+        tuple[MessageReference, ...], WireOmitDefault(), WireOrder(14)
+    ] = ()
 
     @property
     def text_size(self) -> int:
@@ -378,9 +387,9 @@ class Message(Addressed, BusCapability):
         return replace(
             self,
             **{
-                declared.name: declared.default
-                for declared in fields(self)
-                if declared.metadata.get("publication_exclude")
+                plan.name: plan.declared.default
+                for plan in FieldCodec.field_plans(type(self))
+                if plan.setting(PublicationExclude, False)
             },
         )
 
@@ -527,7 +536,8 @@ class Message(Addressed, BusCapability):
 @dataclass(frozen=True, kw_only=True)
 class ClaimMessage(Message):
     """An original claim envelope, distinct from a fresh conversation message."""
-    claim_transition: ClaimTransition = field(metadata={'wire_order': 11})
+
+    claim_transition: Annotated[ClaimTransition, WireOrder(11)]
 
     @classmethod
     def of(cls, message: Message, transition: ClaimTransition) -> ClaimMessage:

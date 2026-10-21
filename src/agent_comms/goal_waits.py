@@ -6,10 +6,11 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Annotated
 
 from .bus_publication import CommittedDelivery
 from .declared_family import DeclaredFamily
+from .field_codec import NullMember
 from .goal_presentation import (
     GoalExecution,
     GoalExecutionState,
@@ -195,6 +196,11 @@ class ExcludedInput(UnresolvedInput):
 
 
 @dataclass(frozen=True)
+class NoStandbyReview(NullMember):
+    """No standby was asked for, so the page carries no review."""
+
+
+@dataclass(frozen=True)
 class StandbyReview:
     """The reply form of a goal input review: eligible messages and their exact keys."""
 
@@ -204,6 +210,7 @@ class StandbyReview:
     messages: tuple[UnresolvedInput, ...]
     already_reviewed_inputs: tuple[UnresolvedInput, ...]
     excluded_inputs: tuple[ExcludedInput, ...]
+
 
 @dataclass(frozen=True, slots=True)
 class GoalInputReview:
@@ -240,14 +247,14 @@ class GoalInputReview:
 
 @dataclass(frozen=True, slots=True)
 class StoredGoalWaitRow(TypedTable):
-    goal_id: str = field(metadata={"sql": Column(primary_key=True)})
+    goal_id: Annotated[str, Column(primary_key=True)]
     wait: RecordedGoalWait
 
 
 @dataclass(frozen=True, slots=True)
 class GoalWaitTargetRow(TypedTable):
-    goal_id: str = field(metadata={"sql": Column(primary_key=True)})
-    position: int = field(metadata={"sql": Column(primary_key=True)})
+    goal_id: Annotated[str, Column(primary_key=True)]
+    position: Annotated[int, Column(primary_key=True)]
     target_lookup: str
     indexes = (Index(("target_lookup", "goal_id")),)
 
@@ -389,9 +396,8 @@ class GoalWaits(ThreadOwnedState, TypedStore, DurableTables, WireWakeFile):
                     current_turn = peer.turn_lease
                     if (
                         peer_wait is None
-                        or current_turn is None
-                        or peer_wait.report_turn_id != current_turn.turn_id
-                        or peer_wait.report_turn_generation != current_turn.identity.generation
+                        or not current_turn.reports(
+                            peer_wait.report_turn_id, peer_wait.report_turn_generation)
                     ):
                         return ()
                 if peer_wait is not None:

@@ -22,10 +22,10 @@ import sqlite3
 import stat
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import IdentityConflict
@@ -203,7 +203,7 @@ def _connect(raw: bytes | None) -> sqlite3.Connection:
 
 @dataclass(frozen=True)
 class SnapshotMeta(TypedTable):
-    singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True)})
+    singleton: Annotated[Literal[1], Column(primary_key=True)]
     ddl_digest: str
 
     @classmethod

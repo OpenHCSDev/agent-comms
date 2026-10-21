@@ -4,12 +4,13 @@ from agent_comms.cli_bridges.claude_protocol import ClaudeSession, KnownTurn, Li
 from agent_comms.tool_calls import ToolCall
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_tools import BashTool
+from agent_comms.tool_results import NoToolDiff
 
 
 @pytest.mark.parametrize('name,arguments,native,expected,title,patch', [
-    ('Bash', {'command':'echo hello'}, 'bash', {'command':'echo hello'}, 'Run echo hello', None),
-    ('Read', {'file_path':'a.py'}, 'read', {'path':'a.py'}, 'Read a.py', None),
-    ('Grep', {'pattern':'needle'}, 'grep', {'pattern':'needle'}, 'Search needle', None),
+    ('Bash', {'command':'echo hello'}, 'bash', {'command':'echo hello'}, 'Run echo hello', NoToolDiff()),
+    ('Read', {'file_path':'a.py'}, 'read', {'path':'a.py'}, 'Read a.py', NoToolDiff()),
+    ('Grep', {'pattern':'needle'}, 'grep', {'pattern':'needle'}, 'Search needle', NoToolDiff()),
     ('Edit', {'file_path':'a.py','old_string':'old\n','new_string':'new\n','replace_all':True}, 'edit',
      {'path':'a.py','old_string':'old\n','new_string':'new\n','replace_all':True},
      'Edit a.py', '-old\n+new\n'),
@@ -17,7 +18,7 @@ from agent_comms.native_tools import BashTool
     ('MultiEdit', {'file_path':'a.py','edits':[{'old_string':'a\n','new_string':'b\n'},{'old_string':'c\n','new_string':'d\n'}]}, 'edit',
      {'path':'a.py','edits':[{'old_string':'a\n','new_string':'b\n'},{'old_string':'c\n','new_string':'d\n'}]},
      'Edit a.py', '-c\n+d\n'),
-    ('mcp__opaque', {'custom':['untouched']}, 'mcp__opaque', {'custom':['untouched']}, 'mcp__opaque', None),
+    ('mcp__opaque', {'custom':['untouched']}, 'mcp__opaque', {'custom':['untouched']}, 'mcp__opaque', NoToolDiff()),
 ])
 def test_claude_tool_names_arguments_and_diff_reach_shared_events(name, arguments, native, expected, title, patch):
     session=ClaudeSession(turn=KnownTurn('turn'), phase=Live())
@@ -34,8 +35,8 @@ def test_claude_tool_names_arguments_and_diff_reach_shared_events(name, argument
     started,ended=completed.events
     assert started.raw_input==expected and started.title==title
     assert started.timestamp == ended.timestamp == record.timestamp
-    if patch is None:
-        assert ended.diff is None
+    if patch == NoToolDiff():
+        assert ended.diff == NoToolDiff()
     else:
         assert patch in ended.diff.text
         if name=='Write':

@@ -25,7 +25,7 @@ from contextlib import ExitStack, closing, suppress
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, TypeVar
+from typing import TYPE_CHECKING, ClassVar, TypeVar, Annotated
 from uuid import uuid4
 
 from .coordination_database import CoordinationStore
@@ -58,7 +58,7 @@ from .locked_store import DurableFile, SQLiteFile
 from .ordinary_turn_rules import OrdinaryGoalGrantCheck
 from .pi_counts import PiCount, UnreportedCount
 from .pi_payloads import PiUsage
-from .typed_table import Column, SQLiteJournalMode, TypedTable
+from .typed_table import Column, Generated, SQLiteJournalMode, TypedTable
 
 if TYPE_CHECKING:
     from .turn_terminal import TurnTerminal
@@ -112,8 +112,8 @@ class StaleAttemptError(GoalAttemptError):
 
 @dataclass(frozen=True)
 class Generation(GoalLedgerTable, TypedTable):
-    goal_id: str = field(metadata={"sql": Column(primary_key=True)})
-    number: int = field(metadata={"sql": Column(check="number>0")})
+    goal_id: Annotated[str, Column(primary_key=True)]
+    number: Annotated[int, Column(check="number>0")]
     lifecycle: GenerationState
     attempt_id: str | None
     ready_digest: str = field(default="", compare=False, repr=False)
@@ -253,33 +253,26 @@ class Reservation:
 
 @dataclass(frozen=True)
 class AttemptRecord(GoalLedgerTable, TypedTable):
-    reservation: Reservation = field(metadata={"sql": Column(primary_key=True)})
+    reservation: Annotated[Reservation, Column(primary_key=True)]
     phase: GoalAttemptPhase
     progress_witness: str | None
     resolution: str | None
 
-    attempt_id: str | None = field(
-        default=None,
-        init=False,
-        compare=False,
-        metadata={"sql": Column(unique=True, generated="json_extract(reservation,'$.attempt_id')")},
+    attempt_id: ClassVar[Generated] = Generated(
+        str,
+        Column(unique=True, generated="json_extract(reservation,'$.attempt_id')", nullable=True),
     )
-    goal_id: str | None = field(
-        default=None,
-        init=False,
-        compare=False,
-        metadata={
-            "sql": Column(
-                generated="json_extract(reservation,'$.goal_id')",
-                references=(Generation, "goal_id"),
-            )
-        },
+    goal_id: ClassVar[Generated] = Generated(
+        str,
+        Column(
+            generated="json_extract(reservation,'$.goal_id')",
+            references=(Generation, "goal_id"),
+            nullable=True,
+        ),
     )
-    generation: int | None = field(
-        default=None,
-        init=False,
-        compare=False,
-        metadata={"sql": Column(generated="json_extract(reservation,'$.generation')")},
+    generation: ClassVar[Generated] = Generated(
+        int,
+        Column(generated="json_extract(reservation,'$.generation')", nullable=True),
     )
     unique = (("goal_id", "generation"),)
     checks = (f"json_extract(phase,'$.kind') IN {GoalAttemptPhase.sql_choices()}",)
@@ -416,10 +409,8 @@ class NoAttempt(MissingAttempt):
 
 @dataclass(frozen=True)
 class GoalHumanDecision(GoalLedgerTable, TypedTable):
-    goal_id: str = field(
-        metadata={"sql": Column(primary_key=True, references=(Generation, "goal_id"))}
-    )
-    decision_id: str = field(metadata={"sql": Column(primary_key=True)})
+    goal_id: Annotated[str, Column(primary_key=True, references=(Generation, "goal_id"))]
+    decision_id: Annotated[str, Column(primary_key=True)]
     generation: int
 
     def claim(self, conn: sqlite3.Connection) -> None:
@@ -431,10 +422,10 @@ class GoalHumanDecision(GoalLedgerTable, TypedTable):
 
 @dataclass(frozen=True)
 class GoalProviderUsage(GoalLedgerTable, TypedTable):
-    attempt_id: str = field(
-        metadata={"sql": Column(primary_key=True, references=(AttemptRecord, "attempt_id"))}
-    )
-    response_id: str = field(metadata={"sql": Column(primary_key=True)})
+    attempt_id: Annotated[
+        str, Column(primary_key=True, references=(AttemptRecord, "attempt_id"))
+    ]
+    response_id: Annotated[str, Column(primary_key=True)]
     # The canonical opaque provider object remains exact; no second native usage codec.
     usage_json: str
 

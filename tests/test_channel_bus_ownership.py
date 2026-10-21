@@ -9,6 +9,7 @@ from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordinator import Coordination
 from agent_comms.notification_progress import SentProgress
 from agent_comms.wake_policy import BoundedTriageWake
+from agent_comms.native_arguments import GivenBinary
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
 
@@ -94,7 +95,7 @@ async def test_natural_owned_turn_prepares_observer_pointer_without_native_start
     root, root_id, comms, initial, _people = _root(tmp_path, mentioned=True)
     agent = CommsAgent(
         comms,
-        agent_bin="pi",
+        agent_bin=GivenBinary("pi"),
         auto_wake=False,
     )
     turn = OwnedTurn(agent.turns, "alpha", "alpha", "Independently authorized task")

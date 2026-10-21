@@ -26,7 +26,7 @@ from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.order import CommanderContext
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec, PathText, option
+from agent_comms.field_codec import FieldCodec, PathText, Argument
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
 from agent_comms.messages import Message
@@ -108,7 +108,7 @@ async def stop_after_turn(comms: Comms, unit: str) -> None:
 
 @dataclass(frozen=True, kw_only=True)
 class ProofCommand(DeclaredFamily, DeclaredOptions, affix="ProofCommand"):
-    root: Annotated[Path, PathText] = option("--root")
+    root: Annotated[Path, PathText, Argument(flags=("--root",))]
 
     @abstractmethod
     def apply(self, project: Path) -> int: ...
@@ -117,9 +117,9 @@ class ProofCommand(DeclaredFamily, DeclaredOptions, affix="ProofCommand"):
 @dataclass(frozen=True, kw_only=True)
 class CheckProofCommand(ProofCommand):
     help = "check the actual native reply"
-    commander: str = option("--commander")
-    unit: str = option("--unit")
-    token: str = option("--token")
+    commander: Annotated[str, Argument(flags=("--commander",))]
+    unit: Annotated[str, Argument(flags=("--unit",))]
+    token: Annotated[str, Argument(flags=("--token",))]
 
     def apply(self, project: Path) -> int:
         print(int(Reply.read(Comms(self.root), self.commander, self.unit, self.token).arrived))

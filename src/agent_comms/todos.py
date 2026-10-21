@@ -15,7 +15,7 @@ import sqlite3
 import subprocess
 import sys
 import time
-from abc import ABC, abstractmethod
+from abc import abstractmethod, ABC
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
@@ -27,9 +27,10 @@ from statistics import median
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 from uuid import uuid4
 
+
 from . import skills
 from .bus_publication import AgentOrigin
-from .change_report import FileLine, SourceReference
+from .change_report import FileLine, NoSourceReference, SourceReference
 from .channel_targets import CommandTarget
 from .child_process import (
     BoundedRun,
@@ -48,9 +49,12 @@ from .field_codec import (
     MalformedRecord,
     NullMember,
     RecordMember,
+    SingleFieldValue,
     SubclassUnion,
     WireValue,
     boundary_decoder,
+    WireOmitDefault,
+    WireTransient,
 )
 from .goals import CheckedCommit, OrderCheck, ProblemGoalOrder
 from .launch_runtime import BuildIdentity, UnrecordedBuildIdentity
@@ -110,10 +114,12 @@ class FileDeliveryEvidence(DeliveryEvidence):
 @dataclass(frozen=True, kw_only=True)
 class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
     at: EventTime = field(default_factory=UnrecordedEventTime)
-    evidence: DeliveryEvidence = field(default_factory=NoDeliveryEvidence,
-                                      metadata={"wire_omit_default": True})
-    proof_build: BuildIdentity = field(default_factory=UnrecordedBuildIdentity,
-                                       metadata={"wire_omit_default": True})
+    evidence: Annotated[DeliveryEvidence, WireOmitDefault()] = field(
+        default_factory=NoDeliveryEvidence
+    )
+    proof_build: Annotated[BuildIdentity, WireOmitDefault()] = field(
+        default_factory=UnrecordedBuildIdentity
+    )
 
     @property
     def work(self) -> str:
@@ -1190,6 +1196,7 @@ class HierarchyText(OrderWords):
     refusal = ("{1} keeps a forwarder or bans fixing the hierarchy: fold the false owner into the real one or compose "
                "providers as parents, and delete every route.")
 
+
 class Derivation(DeclaredFamily, affix="Derivation"):
     sentence: ClassVar[str]
 
@@ -1366,16 +1373,71 @@ class LocatedProblemFinding(ProblemFinding):
 
 
 @dataclass(frozen=True, kw_only=True)
+class Successor(SubclassUnion, affix="Successor"):
+    """The problem that already owns a withdrawn order's fix, or none."""
+
+    @abstractmethod
+    def withdrawal_note(self) -> str: ...
+
+
+@dataclass(frozen=True, slots=True)
+class SupersedingProblem(SingleFieldValue, Successor):
+    problem: str
+
+    def withdrawal_note(self) -> str:
+        return f" (superseded by {self.problem})"
+
+
+@dataclass(frozen=True, slots=True)
+class NoSuccessor(NullMember, Successor):
+    def withdrawal_note(self) -> str:
+        return ""
+
+
+class Replacement(SubclassUnion, affix="Replacement"):
+    """The order message a resend replaces, or none named."""
+
+    @abstractmethod
+    def names_latest(self, todo: Todo) -> bool: ...
+
+    @abstractmethod
+    def refusals(self, replacing: bool) -> tuple[str, ...]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ReplacedMessage(SingleFieldValue, Replacement):
+    message_id: str
+
+    def names_latest(self, todo: Todo) -> bool:
+        return todo.sent_in(self.message_id)
+
+    def refusals(self, replacing: bool) -> tuple[str, ...]:
+        return () if replacing else (
+            "--replaces: fix: name the current order on these problems to the same unit",)
+
+
+@dataclass(frozen=True, slots=True)
+class NoReplacement(NullMember, Replacement):
+    def names_latest(self, todo: Todo) -> bool:
+        return False
+
+    def refusals(self, replacing: bool) -> tuple[str, ...]:
+        return ()
+
+
+@dataclass(frozen=True, kw_only=True)
 class ProblemOrder(DeclaredFamily, StorySource, affix="ProblemOrder"):
     """A problem's order state; an unassigned finding is not a fabricated order."""
+
     pending: ClassVar[bool] = False
 
     @property
     def line(self) -> str:
         return "No order"
 
-    finding: ProblemFinding = field(default_factory=UnlocatedProblemFinding,
-                                   metadata={"wire_omit_default": True})
+    finding: Annotated[ProblemFinding, WireOmitDefault()] = field(
+        default_factory=UnlocatedProblemFinding
+    )
 
     @property
     def declarations(self) -> tuple[CheckedProblemOrder, ...]:
@@ -1504,8 +1566,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         return (self,)
 
     id: str
-    pull_requests: tuple[PullRequestLink, ...] = field(
-        default=(), metadata={"wire_omit_default": True})
+    pull_requests: Annotated[tuple[PullRequestLink, ...], WireOmitDefault()] = ()
     owner: FileLine
     check: OrderCheck
     edits: tuple[str, ...]
@@ -1513,12 +1574,14 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     report: str
     at: EventTime
     first_call_deadline: EventTime
-    check_corrections: tuple[CorrectCheckTodo, ...] = field(
-        default=(), metadata={"wire_omit_default": True})
+    check_corrections: Annotated[
+        tuple[CorrectCheckTodo, ...], WireOmitDefault()
+    ] = ()
     run: OrderRun
-    deletes: OrderDeletion = field(
-        default_factory=NoOrderDeletion, metadata={"wire_omit_default": True})
-    serves: type[OrderPhase] = field(default=UnplannedPhase, metadata={"wire_omit_default": True})
+    deletes: Annotated[OrderDeletion, WireOmitDefault()] = field(
+        default_factory=NoOrderDeletion
+    )
+    serves: Annotated[type[OrderPhase], WireOmitDefault()] = UnplannedPhase
 
     def board_cells(self, todo: Todo) -> str:
         last = todo.released[-1:]
@@ -1648,7 +1711,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         raise ValueError(f"An installed claim needs the recorded check result of {problem}; "
                          "its order has none.")
 
-    def withdrawn(self, previous: Assignment, why: str, superseded_by: str | None) -> ProblemOrder:
+    def withdrawn(self, previous: Assignment, why: str, superseded_by: Successor) -> ProblemOrder:
         self.require_withdrawal()
         return self.copy_as(WithdrawnProblemOrder, previous=previous, why=why,
                             superseded_by=superseded_by)
@@ -1852,7 +1915,7 @@ class WithdrawnProblemOrder(CheckedProblemOrder):
 
     previous: Assignment
     why: str
-    superseded_by: str | None = field(default=None, metadata={"wire_omit_default": True})
+    superseded_by: Annotated[Successor, WireOmitDefault()] = NoSuccessor()
     pending: ClassVar[bool] = False
     line: ClassVar[str] = "Withdrawn"
 
@@ -1860,9 +1923,8 @@ class WithdrawnProblemOrder(CheckedProblemOrder):
         """Retiring an erroneous order does not claim installed work."""
 
     def withdrawals(self, todo: Todo) -> tuple[str, ...]:
-        superseded = f" (superseded by {self.superseded_by})" if self.superseded_by else ""
         return (f"{todo.id}: order {self.id} withdrawn from {self.previous.owner}, "
-                f"no strike: {self.why}{superseded}",)
+                f"no strike: {self.why}{self.superseded_by.withdrawal_note()}",)
 
 
 @dataclass(frozen=True)
@@ -1898,8 +1960,8 @@ class OrderedHunt(Hunt):
 
 @dataclass(frozen=True)
 class HuntRecord(TypedTable):
-    id: str = field(metadata={"sql": Column(primary_key=True)})
-    commander: ThreadIncarnation = field(metadata={"sql": Column(index=True)})
+    id: Annotated[str, Column(primary_key=True)]
+    commander: Annotated[ThreadIncarnation, Column(index=True)]
     hunt: Hunt
 
 
@@ -2007,8 +2069,9 @@ class Assignment(TodoHolder):
     parent: str
     parent_created: float
     generation: str
-    previous_owners: tuple[ThreadIncarnation, ...] = field(
-        default=(), metadata={"wire_omit_default": True})
+    previous_owners: Annotated[
+        tuple[ThreadIncarnation, ...], WireOmitDefault()
+    ] = ()
 
     @classmethod
     def of(cls, owner: ThreadIncarnation, parent: ThreadIncarnation, generation: str) -> Assignment:
@@ -2082,7 +2145,7 @@ class TodoState(DeclaredFamily, affix="TodoState"):
         pass
 
     @classmethod
-    def assign(cls, current: Todo, proposed: Assignment, traced: FileLine | None = None) -> Todo:
+    def assign(cls, current: Todo, proposed: Assignment, traced: SourceReference) -> Todo:
         raise TodoConflict(current)
 
     @classmethod
@@ -2101,7 +2164,7 @@ class TodoState(DeclaredFamily, affix="TodoState"):
 
 class OpenTodoState(TodoState):
     @classmethod
-    def assign(cls, current, proposed, traced=None):
+    def assign(cls, current, proposed, traced):
         return current.assigned(proposed, traced)
 
 
@@ -2167,11 +2230,12 @@ class TodoOperation(TodoCommand, declared_name=None):
 @dataclass(frozen=True)
 class AssignTodo(TodoOperation):
     """The order's commander gives the problem to a unit."""
+
     proposed: Assignment
     review_at: EventTime
     order: PendingProblemOrder | MergedProblemOrder
     goal: GoalReference
-    traced: FileLine | None = field(default=None, metadata={"wire_omit_default": True})
+    traced: Annotated[FileLine | NoSourceReference, WireOmitDefault()] = NoSourceReference()
 
     def apply(self, current: Todo) -> Todo:
         self.review_at.require_recorded("A review time")
@@ -2198,8 +2262,8 @@ class AssignTodo(TodoOperation):
 
 @dataclass(frozen=True)
 class CitedStrike(TodoOperation, declared_name=None):
-    evidence: tuple[FileLine, ...] = field(default=(), kw_only=True,
-                                         metadata={"wire_omit_default": True})
+    evidence: Annotated[tuple[FileLine, ...], WireOmitDefault()] = field(
+        default=(), kw_only=True)
 
     def prepare(self, goals: Goals, current: Todo) -> Self:
         if not self.evidence:
@@ -2599,9 +2663,8 @@ class DeliverTodo(TodoOperation):
     actor: ThreadIncarnation
     delivery: OrderDelivery
     order_id: str
-    verified_claims: dict[ProgressClaim, tuple[str, ...]] = field(
+    verified_claims: Annotated[dict[ProgressClaim, tuple[str, ...]], WireTransient()] = field(
         default_factory=dict, kw_only=True, repr=False, compare=False,
-        metadata={"wire_transient": True},
     )
 
     def prepare(self, goals, current):
@@ -2662,7 +2725,7 @@ class WithdrawTodo(CloseOrderTodo):
     """An undelivered order sent in error leaves its problem with its reason and no strike."""
     previous: Assignment
     why: str
-    superseded_by: str | None = None
+    superseded_by: Successor = NoSuccessor()
 
     def closed(self, current: Todo) -> ProblemOrder:
         order = current.order.withdrawn(self.previous, self.why, self.superseded_by)
@@ -2691,14 +2754,14 @@ class ChangeTodoState(TodoOperation):
 class Todo(TypedTable):
     indexes = (Index(("creator", "creator_created", "state")), Index(("state",)))
 
-    id: str = field(metadata={"sql": Column(primary_key=True)})
-    repo: RepositoryName = field(metadata={"sql": Column(storage=TextStorage)})
+    id: Annotated[str, Column(primary_key=True)]
+    repo: Annotated[RepositoryName, Column(storage=TextStorage)]
     text: str
     creator: str
     creator_created: float
     state: type[TodoState]
-    revision: int = field(metadata={"sql": Column(check="revision>0")})
-    goal: GoalReference = field(metadata={"sql": Column(storage=JsonStorage, nullable=True)})
+    revision: Annotated[int, Column(check="revision>0")]
+    goal: Annotated[GoalReference, Column(storage=JsonStorage, nullable=True)]
     assignment: Assignment | None
     order: ProblemOrder
     review_at: EventTime = field(default_factory=UnrecordedEventTime)
@@ -2860,10 +2923,10 @@ class Todo(TypedTable):
     def proposed_assignment(self, proposed: Assignment) -> Assignment:
         return self.holder_state.proposed_assignment(proposed)
 
-    def assigned(self, proposed: Assignment, traced: FileLine | None = None) -> Todo:
+    def assigned(self, proposed: Assignment, traced: SourceReference) -> Todo:
         self.order.require_transfer(self)
         holder = self.holder_state
-        holder.require_trace(proposed.owner, SourceReference.from_optional(traced))
+        holder.require_trace(proposed.owner, traced)
         proposed = holder.successor(proposed, self)
         return replace(self, assignment=proposed, revision=self.revision + 1)
 
@@ -2875,10 +2938,10 @@ class Todo(TypedTable):
         """Only the latest recorded send names this order, not an earlier replacement."""
         return bool(self.messages) and self.messages[-1].message_id == message_id
 
-    def require_replacement(self, message_id: str) -> None:
+    def require_replacement(self, replaces: Replacement) -> None:
         if not self.messages:
             raise ValueError(f"{self.holder} holds {self.id}, but no order message was recorded.")
-        if not self.sent_in(message_id):
+        if not replaces.names_latest(self):
             raise ValueError(
                 f"{self.holder} already holds {self.id}; "
                 f"pass --replaces {self.messages[-1].message_id}"
@@ -3259,7 +3322,7 @@ class TodoStore(TypedStore, DurableTables):
         goal: GoalRef,
         review_at: EventTime,
         order: PendingProblemOrder,
-        traced: FileLine | None = None,
+        traced: FileLine | NoSourceReference = NoSourceReference(),
     ) -> Todo:
         proposed = Assignment.of(_thread(owner), assigner, generation)
         return self.apply(

@@ -15,10 +15,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+from agent_comms.reason_codes import GivenReasonCode, NoDetail
 from agent_comms.attempt_states import UnknownOutcomeAttempt, UnsuccessfulTerminal
-from agent_comms.coordination_contracts import (
-    MAX_REASON_CODE_CHARS,
-)
 from agent_comms.coordination_errors import (
     IdentityConflict,
     PublicationUncertain,
@@ -39,6 +37,7 @@ from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.recovery_states import DeferredRecovery, FailedRecovery
 
 from .coordination_database import CoordinationStore
+from .native_input_record import FullNativeExecution
 from .field_codec import MalformedRecord
 from .input_disposition import InputDispositions
 from .locked_store import RegistryFile
@@ -95,8 +94,7 @@ class VerifiedOwnerLoss:
                 raise RecoveryBlocked("native recovery requires the current attempted execution")
             source = NativeRuntimeInput.one(
                 store.session._connection,
-                execution_id=execution_id,
-                attempt_ordinal=attempt.attempt_ordinal,
+                **FullNativeExecution(execution_id, attempt.attempt_ordinal).binding_fields(),
             )
             if source is None or source.owner_identity != attempt.owner_identity:
                 raise RecoveryBlocked("native attempt has no matching dispatched owner")
@@ -185,7 +183,7 @@ class MonitorEvidence:
 
     subprocess_dead: bool
     backend_done: bool
-    reason_code: str
+    reason_code: GivenReasonCode
     observed_at_ms: int
     outcome: UnsuccessfulTerminal
 
@@ -197,8 +195,6 @@ class MonitorEvidence:
             raise ValueError("monitor observations must be explicit booleans")
         if not isinstance(self.outcome, UnsuccessfulTerminal):
             raise TypeError("monitor outcome must be an unsuccessful terminal attempt")
-        if not 1 <= len(self.reason_code) <= MAX_REASON_CODE_CHARS:
-            raise ValueError("monitor reason must be bounded and nonempty")
         if self.observed_at_ms < 0:
             raise ValueError("negative evidence timestamp")
 
@@ -272,22 +268,24 @@ class RecoveryMonitorCapability:
                 return
             # The released owner and exact keyed dispatch prove an existing
             # frozen reply before any attempt is marked uncertain.
-            with VerifiedOwnerLoss.observe_native_release(store, pointer.execution_id) as loss:
+            execution_id = pointer.execution_id.require("the owner pointer names no execution")
+            with VerifiedOwnerLoss.observe_native_release(store, execution_id) as loss:
                 loss.require_native_exit()
                 PublicationAppendDispatches.resolve_retained(
                     store, loss.boundary.bus, loss.boundary,
                     owner_lookup=lookup, owner_thread=owner.name,
-                    execution_id=pointer.execution_id,
+                    execution_id=execution_id,
                 )
             pointer = CurrentExecutions.one(store.session._connection, owner_lookup=lookup)
             if pointer is not None and pointer.unresolved:
+                execution_id = pointer.execution_id.require("the owner pointer names no execution")
                 try:
-                    cls.recover_released_native_attempt(store, pointer.execution_id)
+                    cls.recover_released_native_attempt(store, execution_id)
                 except RecoveryBlocked:
                     # Stop cannot reconstruct absent or broken provider proof.
                     # The existing monitor still demands the same exact release
                     # and native exit before recording UNKNOWN, never replay.
-                    cls.abandon_released_native_attempt(store, pointer.execution_id)
+                    cls.abandon_released_native_attempt(store, execution_id)
 
     @classmethod
     def recover_released_native_attempt(cls, store, execution_id):
@@ -296,18 +294,18 @@ class RecoveryMonitorCapability:
         from .native_pi import NativeContextProof
         from .native_prompt_binding import expected_prompt_bindings, expected_prompt_matches_journal
         from .pi_vocabulary import PendingStopReason
-        from .private_path import FileRevision
+        from .private_path import FileRevision, MissingFile
 
         snapshot = store.snapshots.get(execution_id)
         attempt = snapshot.require_current_attempt()
         source = NativeRuntimeInput.one(
-            store.session._connection, execution_id=execution_id,
-            attempt_ordinal=attempt.attempt_ordinal,
+            store.session._connection,
+            **FullNativeExecution(execution_id, attempt.attempt_ordinal).binding_fields(),
         )
         if source is None:
             raise RecoveryBlocked("native attempt has no original input")
         terminal = PendingStopReason
-        revision = None
+        revision = MissingFile()
         session = source.selected_session
         if session is not None:
             with expected_prompt_bindings(store, (source.input_id,)) as bindings:
@@ -335,8 +333,9 @@ class RecoveryMonitorCapability:
             if loss.native_input != source:
                 raise StaleRevision("native input changed during recovery")
             loss.require_native_exit()
-            if revision is not None and FileRevision.capture(session.path) != revision:
-                raise StaleRevision("native journal changed during recovery")
+            for kept in revision.revisions():
+                if FileRevision.capture(session.path) != kept:
+                    raise StaleRevision("native journal changed during recovery")
             current = store.snapshots.get(execution_id)
             attempt = current.require_current_attempt()
             outcome, replay_facts = terminal.unpublished_attempt()
@@ -351,7 +350,7 @@ class RecoveryMonitorCapability:
                 evidence=MonitorEvidence(
                     subprocess_dead=True, backend_done=True,
                     outcome=outcome,
-                    reason_code="released_native_" + terminal.declared_name,
+                    reason_code=GivenReasonCode("released_native_" + terminal.declared_name),
                     observed_at_ms=int(time.time() * 1000),
                 ),
             )
@@ -393,7 +392,7 @@ class RecoveryMonitorCapability:
                     # This is not evidence of a provider response or its effects.
                     backend_done=True,
                     outcome=UnknownOutcomeAttempt(),
-                    reason_code="released_native_unknown",
+                    reason_code=GivenReasonCode("released_native_unknown"),
                     observed_at_ms=int(time.time() * 1000),
                 ),
             )
@@ -467,7 +466,7 @@ class RecoveryMonitorCapability:
                         subprocess_dead=True,
                         backend_done=True,
                         outcome=UnknownOutcomeAttempt(),
-                        reason_code="released_native_failure",
+                        reason_code=GivenReasonCode("released_native_failure"),
                         observed_at_ms=int(time.time() * 1000),
                     ),
                 )
@@ -541,7 +540,7 @@ class RecoveryMonitorCapability:
                     execution_id=execution_id,
                     kind=kind,
                     reason_code=evidence.reason_code,
-                    sanitized_detail=None,
+                    sanitized_detail=NoDetail(),
                     attempt=ordinal,
                     elapsed_ms=0,
                     observed_at_ms=now,

@@ -2,10 +2,12 @@
 
 import json
 
+from agent_comms.thread_text import SavedSessionFile
 from agent_comms.cli import main
 from agent_comms.field_codec import FieldCodec
 from agent_comms.context_segments.retained import RetainedSegment
 from agent_comms.threads import Thread
+from agent_comms.turn_lease import NoTurnLease
 from stored_inputs import stored_inputs
 
 
@@ -20,7 +22,7 @@ def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
     saved = tmp_path / "original.jsonl"
     saved_source(saved)
     goal = Goal("Original task goal, not an exported human constraint", "original-goal", published_seq=0, revision=7)
-    owner = comms.registry.declare(comms.registry.new_thread('reader', frozenset(), str(tmp_path), session_file=str(saved), goal=goal))
+    owner = comms.registry.declare(comms.registry.new_thread('reader', frozenset(), str(tmp_path), session_file=SavedSessionFile(str(saved)), goal=goal))
     wording = "Original human constraint λ; preserve UNKNOWN and its source."
     original = comms.messaging.send_user_message(owner.name, wording, worktree=owner.worktree)
     comms.messaging.pin_user_constraint(owner.name, original.reference, worktree=owner.worktree)
@@ -66,7 +68,7 @@ def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
     snapshot = comms.bus.log.retained_context(owner.name, comms.registry)
     assert FieldCodec.decode(RetainedSegment, FieldCodec.encode(snapshot)) == snapshot
     assert snapshot.text().count(wording.replace("\n", "\\n")) == 1
-    assert comms.registry.require(owner.name).turn_lease is None
+    assert comms.registry.require(owner.name).turn_lease == NoTurnLease()
 
     destination = comms.root / "AGENTS-export.md"
     code, exported = command("export-retained", owner.name, "--output", str(destination))
@@ -103,7 +105,7 @@ def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
     assert code == 0 and exported["exported_messages"] == 0
     assert replacement not in destination.read_text()
     assert (comms.root / "bus.jsonl").read_bytes().startswith(original_prefix)
-    assert comms.registry.require(owner.name).turn_lease is None
+    assert comms.registry.require(owner.name).turn_lease == NoTurnLease()
 
     # No semantic sidecar is needed for a new Comms instance to read the result.
     from agent_comms.comms import Comms
@@ -142,7 +144,7 @@ async def original_input_consumer_journey(tmp_path, command):
     def invoke(*args):
         result = command(comms.root, args)
         assert inputs.path.read_bytes() == original_inputs
-        assert comms.registry.require("beta").turn_lease is None
+        assert comms.registry.require("beta").turn_lease == NoTurnLease()
         return result
 
     def reference(ref):
@@ -187,7 +189,7 @@ async def original_input_consumer_journey(tmp_path, command):
     def renamed(*args):
         result = command(comms.root, args)
         assert inputs.path.read_bytes() == original_inputs
-        assert comms.registry.require("renamed-beta").turn_lease is None
+        assert comms.registry.require("renamed-beta").turn_lease == NoTurnLease()
         return result
 
     code, result = renamed("export-retained", "renamed-beta", "--output", str(destination),

@@ -11,6 +11,7 @@ from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import accept_delivery_cohort, pending_sealed_assignments
 from agent_comms.coordinator import Coordination
 from agent_comms.selected_participant import SelectedParticipant
+from agent_comms.thread_model import DeclaredModel
 
 
 @pytest.mark.asyncio
@@ -25,7 +26,7 @@ async def test_a_mixed_route_wave_turns_one_route_at_a_time(tmp_path, *, cursor_
     root.mkdir(mode=0o700)
     comms = Comms(root)
     for name in ("sender", "receiver"):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model='openai-codex/gpt-6-sol'))
+        comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('openai-codex/gpt-6-sol')))
     root_id = comms.messaging.initialize_private_initial_protocol()
     lookup = RecordedThreadIncarnation("fixture", comms.registry.require("receiver").created_at).lookup
     with Coordination(str(root / "coordination.sqlite3")) as store:

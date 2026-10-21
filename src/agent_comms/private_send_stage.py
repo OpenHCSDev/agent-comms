@@ -37,7 +37,7 @@ from .native_prompt_binding import (
 from .native_runtime_input import NativeRuntimeInput
 from .private_sidecar import native_request_digest
 from .reservation_rules import ReservationViolationError
-from .selected_triage import SelectedTriage
+from .selected_triage import DecidedTriageRecord, SelectedTriage
 from .text_digest import TextDigest
 from .turn_failure import TurnFailure
 from .typed_table import SqlValue
@@ -312,7 +312,7 @@ class TriageNativeSend(NativeSendStage):
         with store.session.writing() as db:
             row = self.pending_input(store, input_id, owner, token_digest)
             self.require_claim(store)
-            row.commit_context(db, context, verdict=type(decision))
+            row.commit_context(db, context, verdict=DecidedTriageRecord(type(decision)))
             for captured in self.assignments:
                 decision.settle(store, db, store.assignments.get(captured.assignment_id))
             # This is the settlement transaction's witness, not a replacement

@@ -6,15 +6,16 @@ from agent_comms.native_session_reopen import NativeSessionIdentity
 import hashlib
 import os
 import sqlite3
+from typing import Annotated
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
-from .field_codec import MalformedRecord
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
-from .private_path import FileRevision
+from .field_codec import MalformedRecord
+from .private_path import FileObservation, FileRevision
 from .routing import TurnRouting
 from .store_files import _store_lock
 from .typed_table import Column, DurableTables, StoreWriter, TypedTable
@@ -28,8 +29,8 @@ class RouteAnnotationTable(DurableTables):
 
 @dataclass(frozen=True)
 class TranscriptRoute(RouteAnnotationTable, TypedTable):
-    session_file: str = field(metadata={"sql": Column(primary_key=True)})
-    entry_id: str = field(metadata={"sql": Column(primary_key=True)})
+    session_file: Annotated[str, Column(primary_key=True)]
+    entry_id: Annotated[str, Column(primary_key=True)]
     routing: TurnRouting
     without_rowid = True
 
@@ -42,7 +43,7 @@ class TranscriptRoute(RouteAnnotationTable, TypedTable):
 class InputDisplay(RouteAnnotationTable, TypedTable):
     """Owner-authored presentation for one native input; None text means internal."""
 
-    native_id: str = field(metadata={"sql": Column(primary_key=True)})
+    native_id: Annotated[str, Column(primary_key=True)]
     text: str | None
     routing: TurnRouting | None = None
     sent_text_digest: str | None = None
@@ -101,7 +102,7 @@ class TranscriptRoutes(StoreWriter):
         super().__init__(self.path_in(root))
         self._initialized = False
 
-    def revision(self) -> FileRevision | None:
+    def revision(self) -> FileObservation:
         return FileRevision.capture(self.source_paths(self.path.parent)[0])
 
     def snapshot(self, destination: Path) -> None:
@@ -178,8 +179,8 @@ class TranscriptRoutes(StoreWriter):
         A partial successful send subset remains published if a later send fails.
         """
         from .input_disposition import InputDispositions
-        from .native_transcript import NativeTranscript
         from .native_input_owner import RegistryOwner
+        from .native_transcript import NativeTranscript
 
         if not routing.requires_annotation(published):
             return
@@ -189,9 +190,8 @@ class TranscriptRoutes(StoreWriter):
         if thread.turn_lease != lease:
             raise RelationViolationError("Native publication has no current original turn")
         path = Path(thread.runtime.path)
-        revision = FileRevision.capture(path)
-        if revision is None:
-            raise RelationViolationError("Native publication has no retained session")
+        revision = FileRevision.capture(path).require(
+            RelationViolationError("Native publication has no retained session"))
         reader = NativeTranscript(path)
         floor = checkpoint.offset if thread.runtime.read_key == checkpoint.session_file else 0
         try:
@@ -210,23 +210,40 @@ class TranscriptRoutes(StoreWriter):
             current = RegistryOwner.capture_local(snapshot, incarnation.name).thread
             if current.turn_lease != lease:
                 raise RelationViolationError("Native publication turn lease changed")
-            if current.runtime.read_key != thread.runtime.read_key or FileRevision.capture(path) != revision:
+            if (
+                current.runtime.read_key != thread.runtime.read_key
+                or FileRevision.capture(path) != revision
+            ):
                 raise RelationViolationError("Native publication session changed")
             if not inputs.in_turn(lease.turn_id).started_for_native(
-                    lease, user.input_id, user.message.text, snapshot=snapshot):
+                lease, user.input_id, user.message.text, snapshot=snapshot
+            ):
                 raise RelationViolationError("Native publication has no original STARTED input")
             references = tuple(dict.fromkeys((*routing.requests, *published)))
             marks = ",".join("?" for _ in references)
-            originals = tuple(source.conversation_sources(
-                lookup, f"w.seq IN ({marks})", tuple(ref.seq for ref in references),
-                limit=len(references), ascending=True,
-            )) if references else ()
-            if {item.message.reference for item in originals} != set(references) or len(set(published)) != len(published):
+            originals = (
+                tuple(
+                    source.conversation_sources(
+                        lookup,
+                        f"w.seq IN ({marks})",
+                        tuple(ref.seq for ref in references),
+                        limit=len(references),
+                        ascending=True,
+                    )
+                )
+                if references
+                else ()
+            )
+            if {item.message.reference for item in originals} != set(references) or len(
+                set(published)
+            ) != len(published):
                 raise RelationViolationError("Publication is not its original seq/id relation")
             routing.require_publications(
                 tuple(item for item in originals if item.message.reference in published), lookup
             )
-            self._record_publication(thread.runtime.read_key, ids, final.entry.id, routing, published)
+            self._record_publication(
+                thread.runtime.read_key, ids, final.entry.id, routing, published
+            )
 
     def _record_publication(self, session_file, entry_ids, final_id, routing, published):
         with self.writing() as connection:

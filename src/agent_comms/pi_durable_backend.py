@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import fcntl
+from typing import Annotated
 from collections.abc import Callable
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
@@ -11,11 +12,12 @@ from uuid import uuid4
 
 from pydantic import JsonValue
 
+from agent_comms import field_codec
+
 from .agent_backend import (
     AgentBackend,
     CompactionOutcome,
     Compacts,
-    ConfiguresModel,
     RuntimeLocation,
 )
 from .agent_events import Error
@@ -27,14 +29,11 @@ from .native_session_files import SessionFiles
 from .native_transcript import StoredRecord
 from .pi_commands import (
     Compact,
-    GetAvailableModels,
-    GetState,
     PiCommand,
     SetModel,
-    SetThinkingLevel,
 )
 from .pi_events import AutoRetryEnd, DurablePiEvent, RetryEnd
-from .pi_payloads import PiResponseData
+from .pi_payloads import PiOmitted, PiResponseData
 from .pi_vocabulary import ThinkingLevelField
 from .transcript_sources import TranscriptSource
 from .unstarted_runtime import UnstartedRuntime
@@ -138,7 +137,7 @@ class DurableRetryEnd(RetryEnd, DurablePiEvent):
 
 @dataclass(frozen=True)
 class TaskFailed(DurablePiEvent):
-    task_id: int = field(metadata={'wire_name': 'taskId'})
+    task_id: Annotated[int, field_codec.WireName("taskId")]
     message: str
 
     def convert(self):
@@ -153,10 +152,10 @@ class HostQuery(PiCommand, declared_name=None):
 class Open(HostQuery):
     path: str
     cwd: str
-    provider: str | None
-    model_id: str | None = field(metadata={'wire_name': 'modelId'})
-    thinking_level: ThinkingLevelField = field(metadata={'wire_name': 'thinkingLevel'})
-    auth_path: str = field(metadata={'wire_name': 'authPath'})
+    provider: str | PiOmitted
+    model_id: Annotated[str | PiOmitted, field_codec.WireName("modelId")]
+    thinking_level: Annotated[ThinkingLevelField, field_codec.WireName("thinkingLevel")]
+    auth_path: Annotated[str, field_codec.WireName("authPath")]
     response_payload = RecoveryData
 
 
@@ -191,9 +190,13 @@ class Settle(HostQuery):
 class Entries(HostQuery):
     limit: int
     cursor: dict[str, JsonValue] | None = None
-    min_entry_id: int | None = field(default=None, metadata={'wire_name': 'minEntryId', 'wire_omit_default': True})
-    max_entry_id: int | None = field(default=None, metadata={'wire_name': 'maxEntryId', 'wire_omit_default': True})
-    order: str = 'descending'
+    min_entry_id: Annotated[
+        int | PiOmitted, field_codec.WireName("minEntryId"), field_codec.WireOmitDefault()
+    ] = PiOmitted()
+    max_entry_id: Annotated[
+        int | PiOmitted, field_codec.WireName("maxEntryId"), field_codec.WireOmitDefault()
+    ] = PiOmitted()
+    order: str = "descending"
     response_payload = HistoryData
 
 
@@ -202,7 +205,7 @@ class CompactDurable(Compact):
     response_payload = OutcomeData
 
 
-class PiDurableBackend(AgentBackend, Compacts, ConfiguresModel):
+class PiDurableBackend(AgentBackend, Compacts):
     serves_threads = False
     location_type = DurableDatabase
     unstarted_type = UnstartedRuntime
@@ -231,7 +234,7 @@ class PiDurableBackend(AgentBackend, Compacts, ConfiguresModel):
                     child = await PiChild.start_command(('node', str(Path(__file__).with_name('pi_durable_host.mjs'))),
                         cwd=thread.worktree, pass_fds=(lock.fileno(),), event_type=DurablePiEvent, resources=resources.pop_all())
                 async with child.failures():
-                    model = SetModel.from_name(thread.model)
+                    model = thread.model.set_model(SetModel)
                     await child.request(Open(str(path), thread.worktree, model.provider, model.model_id, thread.thinking_level, str(Path.home() / '.pi/agent/auth.json')))
                     await child.request(Resume())
                 self.child = child
@@ -245,18 +248,6 @@ class PiDurableBackend(AgentBackend, Compacts, ConfiguresModel):
 
     async def compact(self, thread, instructions):
         child = await self.open(thread)
-        return (await child.request(CompactDurable(custom_instructions=instructions))).outcome
+        command = CompactDurable(custom_instructions=PiOmitted.from_input(instructions))
+        return (await child.request(command)).outcome
 
-    async def models(self, thread):
-        child = await self.open(thread)
-        return tuple(model.display_name for model in (await child.request(GetAvailableModels())).models)
-
-    async def configure(self, thread, model, thinking):
-        child = await self.open(thread)
-        if model is not None:
-            await child.request(SetModel.from_name(model))
-        if thinking is not None:
-            await child.request(SetThinkingLevel(level=thinking))
-        state = await child.request(GetState())
-        reported = state.model.require_selection(model if model is not None else state.model.display_name)
-        return reported.display_name, state.thinking_level.wire_value()

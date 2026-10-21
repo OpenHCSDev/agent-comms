@@ -31,7 +31,7 @@ from .goal_actions import (
 from .goal_scheduler import GoalScheduler
 from .messages import Message
 from .mro_dispatch import MroDispatch, handles
-from .native_arguments import NativeArguments
+from .native_arguments import LaunchArguments, LaunchBinary
 from .native_input_owner import RegistryOwner
 from .routing import TurnRouting
 from .runtime import (
@@ -85,14 +85,14 @@ class TurnRunner:
         runtime: RuntimeServer,
         effects: TurnEffects,
         *,
-        agent_bin: str | None,
-        agent_args: list[str] | None,
+        agent_bin: LaunchBinary,
+        agent_args: LaunchArguments,
     ):
         self.comms = comms
         self.runtime = runtime
         self.effects = effects
-        self.agent_bin = NativeArguments.configured_binary(agent_bin)
-        self.agent_args = NativeArguments.configured(agent_args)
+        self.agent_bin = agent_bin.configured()
+        self.agent_args = agent_args.configured()
         self.turn_tasks: dict[str, asyncio.Task[Any]] = {}
         # One backend per ACP session, of the bound thread's declared kind.
         self.persistent_backends: dict[str, AgentBackend] = {}
@@ -127,10 +127,8 @@ class TurnRunner:
         if name is None:
             return
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
-        lease = thread.turn_lease
-        if lease is None:
-            return
-        await CompactionObservation(self, session_id, lease, thread.turn_record.read().phase).dispatch(event)
+        for lease in thread.turn_lease.held():
+            await CompactionObservation(self, session_id, lease, thread.turn_record.read().phase).dispatch(event)
 
     def backend_for(self, session_id: str, thread: Thread) -> AgentBackend:
         """This session's backend, created for the thread's declared backend on first use."""
@@ -240,9 +238,11 @@ class TurnRunner:
             await Coordination.run_worker(partial(self.pause_active_goal, thread))
         task = self.turn_tasks.get(session_id)
         if task is not None:
-            current = await Coordination.run_worker(partial(self.comms.registry.require, name)) if name else None
-            lease = current.turn_lease if current is not None else None
-            if lease is not None:
+            leases = ()
+            if name:
+                current = await Coordination.run_worker(partial(self.comms.registry.require, name))
+                leases = current.turn_lease.held()
+            for lease in leases:
                 await self.transition_turn(session_id, lease, CancellingPhase())
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)

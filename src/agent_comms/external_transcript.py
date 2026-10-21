@@ -22,7 +22,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .locked_store import RegistryFile
 from .native_transcript import RecordsCut
-from .recorded_time import EventTime, GeneratedTimestamp, UnrecordedEventTime
+from .recorded_time import EventTime, GeneratedTimestamp
 from .thread_identity import ThreadIncarnation
 from .tool_declaration import ToolDeclaration
 from .transcript_events import ToolStartTranscript, TranscriptEvent, TurnDigest
@@ -31,6 +31,7 @@ from .typed_table import (
     Column,
     DurableTables,
     ForeignKey,
+    Generated,
     Index,
     RealStorage,
     StoreWriter,
@@ -129,9 +130,9 @@ class NoItems:
 
 @dataclass(frozen=True)
 class ExternalPageRow(TypedRow):
-    thread: str = field(metadata={"sql": Column(primary_key=True)})
-    turn_id: str = field(metadata={"sql": Column(primary_key=True)})
-    item_id: str = field(metadata={"sql": Column(primary_key=True)})
+    thread: Annotated[str, Column(primary_key=True)]
+    turn_id: Annotated[str, Column(primary_key=True)]
+    item_id: Annotated[str, Column(primary_key=True)]
     seq: int
     earlier: ExternalPage = field(default_factory=NoEarlierPage, kw_only=True)
 
@@ -202,25 +203,39 @@ class ExternalItemRow(ExternalPageRow, TypedTable):
 class ExternalEventRow(TypedTable):
     """Each saved event exists once; SQL derives its query keys from that event."""
 
-    thread: str = field(metadata={"sql": Column(primary_key=True)})
-    seq: int = field(metadata={"sql": Column(primary_key=True)})
-    ordinal: int = field(metadata={"sql": Column(primary_key=True)})
+    thread: Annotated[str, Column(primary_key=True)]
+    seq: Annotated[int, Column(primary_key=True)]
+    ordinal: Annotated[int, Column(primary_key=True)]
     event: TranscriptEvent
-    timestamp: Annotated[EventTime, GeneratedTimestamp] = field(metadata={"sql": Column(
-        storage=RealStorage, nullable=True, generated="json_extract({event}, '$.timestamp')")})
-    kind: str = field(metadata={"sql": Column(generated="json_extract({event}, '$.kind')")})
-    tool: str | None = field(metadata={"sql": Column(generated="json_extract({event}, '$.tool.tool')")})
-    call_id: str | None = field(metadata={"sql": Column(generated="json_extract({event}, '$.tool_call_id')")})
+    timestamp: ClassVar[Generated] = Generated(
+        EventTime,
+        Column(
+            storage=RealStorage, nullable=True, generated="json_extract({event}, '$.timestamp')"
+        ),
+    )
+    kind: ClassVar[Generated] = Generated(str, Column(generated="json_extract({event}, '$.kind')"))
+    tool: ClassVar[Generated] = Generated(
+        str,
+        Column(generated="json_extract({event}, '$.tool.tool')", nullable=True),
+    )
+    call_id: ClassVar[Generated] = Generated(
+        str,
+        Column(generated="json_extract({event}, '$.tool_call_id')", nullable=True),
+    )
 
-    foreign_keys = (ForeignKey(("thread", "seq"), ExternalItemRow, ("thread", "seq"), on_delete="CASCADE"),)
-    indexes = (Index(("thread", "kind", "tool", "timestamp", "call_id")),
-               Index(("thread", "kind", "timestamp")),
-               Index(("thread", "kind", "seq", "ordinal")),)
+    foreign_keys = (
+        ForeignKey(("thread", "seq"), ExternalItemRow, ("thread", "seq"), on_delete="CASCADE"),
+    )
+    indexes = (
+        Index(("thread", "kind", "tool", "timestamp", "call_id")),
+        Index(("thread", "kind", "timestamp")),
+        Index(("thread", "kind", "seq", "ordinal")),
+    )
 
     @classmethod
     def append(cls, connection, thread, seq, events) -> None:
         for ordinal, event in enumerate(events):
-            cls(thread, seq, ordinal, event, UnrecordedEventTime(), "", None, None).insert(connection)
+            cls(thread, seq, ordinal, event).insert(connection)
 
     @classmethod
     def unjudged_query(cls, thread, todo):
@@ -245,7 +260,7 @@ class ExternalEventRow(TypedTable):
 class DraftRow(TypedTable, TranscriptDraft, declared_name="external_draft"):
     """The assigned transcript's current message, shared by native and CLI writers."""
 
-    thread: str = field(metadata={"sql": Column(primary_key=True)})
+    thread: Annotated[str, Column(primary_key=True)]
     turn_id: str
     item_id: str
     events: tuple[TranscriptEvent, ...]
@@ -307,7 +322,7 @@ class ExternalRecord(TranscriptRecord):
 class ExternalCut(RecordsCut, TypedRow):
     """The thread's newest finished item sequence when read."""
 
-    offset: int = field(metadata={"sql": Column(generated="coalesce(max({seq}), 0)")})
+    offset: Annotated[int, Column(generated="coalesce(max({seq}), 0)")]
 
     def contains(self, current: ExternalCut, through: int) -> bool:
         # Finished items are append-only: later items belong to the next update.
@@ -399,6 +414,7 @@ class StoreRead(TranscriptSource):
         return self.connection.execute(
             f'SELECT count(DISTINCT e.call_id) FROM "{ExternalEventRow.declared_name}" e WHERE {where}',
             parameters).fetchone()[0]
+
 
 @dataclass(frozen=True, slots=True)
 class ExternalTranscript(TranscriptSource, TypedStore, DurableTables):
@@ -554,4 +570,3 @@ class TurnDraftPublication(DraftPublication, StoreWriter):
     def retire_message(self) -> None:
         with self.writing() as connection:
             DraftRow.delete(connection, thread=self.transcript.lookup, turn_id=self.turn_id)
-

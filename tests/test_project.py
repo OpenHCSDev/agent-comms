@@ -13,6 +13,7 @@ from acp import RequestError
 from delivery_owner_fixture import canonical_agent
 from agent_comms.comms import wire
 from agent_comms.acp_extension import CoordinationChangedUpdate, decode_updates
+from agent_comms.native_arguments import GivenArguments, GivenBinary
 
 
 
@@ -23,7 +24,7 @@ async def test_project_update_is_published_and_old_saved_cwd_can_resume(tmp_path
     old.mkdir()
     new.mkdir()
     comms = wire(tmp_path / "wire")
-    agent = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[])
+    agent = canonical_agent(comms, agent_bin=GivenBinary("/bin/echo"), agent_args=GivenArguments(()))
     session = (await agent.new_session(str(old))).session_id
     updates = []
 
@@ -40,7 +41,7 @@ async def test_project_update_is_published_and_old_saved_cwd_can_resume(tmp_path
         if isinstance(update, CoordinationChangedUpdate)
     ) == str(new)
     await agent.shutdown()
-    resumed = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[])
+    resumed = canonical_agent(comms, agent_bin=GivenBinary("/bin/echo"), agent_args=GivenArguments(()))
     try:
         result = await resumed.load_session(str(old), session)
         assert next(
@@ -65,7 +66,7 @@ async def test_project_changes_reach_all_subscribed_clients(tmp_path):
     old.mkdir()
     new.mkdir()
     comms = wire(tmp_path / "wire")
-    owner = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
+    owner = canonical_agent(comms, agent_bin=GivenBinary("/bin/echo"), agent_args=GivenArguments(()), runtime_enabled=True)
     session = (await owner.new_session(str(old))).session_id
     proxies, updates = [], [[], []]
 

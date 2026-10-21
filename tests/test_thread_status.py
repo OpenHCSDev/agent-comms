@@ -8,6 +8,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.thread_text import SavedSessionFile
 from agent_comms.activity import Activity, ActivityState
 from agent_comms.comms import wire
 from agent_comms.child_process import ProcessIdentity
@@ -26,6 +27,7 @@ from agent_comms.thread_status import (
     StoppedThreadStatus,
     ThreadStatus,
 )
+from agent_comms.thread_text import GivenThreadText
 
 
 def test_captured_owner_presentation_survives_exit_until_fresh_acquisition(tmp_path):
@@ -57,7 +59,7 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status)
     comms = wire(tmp_path)
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
     try:
-        thread = comms.registry.new_thread('owner', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(child.pid), title='Retained title', session_file='/retained/session.jsonl', created_at=12.5)
+        thread = comms.registry.new_thread('owner', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(child.pid), title=GivenThreadText('Retained title'), session_file=SavedSessionFile('/retained/session.jsonl'), created_at=12.5)
         comms.registry.register(thread, status)
         before = comms.registry.snapshot()
         saved = comms.registry.store.path.read_bytes()
@@ -139,7 +141,7 @@ def test_delete_fence_rejects_metadata_and_presence_without_erasing_data(tmp_pat
     with pytest.raises(RelationViolationError):
         registry.heartbeat("owner")
     with pytest.raises(RelationViolationError):
-        registry.register(replace(registry.require("owner"), title="late metadata"))
+        registry.register(replace(registry.require("owner"), title=GivenThreadText("late metadata")))
     assert registry.store.path.read_bytes() == before
     assert registry.status("owner") == DeletingThreadStatus()
 

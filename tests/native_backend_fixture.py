@@ -24,6 +24,7 @@ from agent_comms.selected_actions import NoSelectedTools
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.queued_input import InitialInput
 from agent_comms.storage_rules import StorageRule
+from agent_comms.native_arguments import GivenArguments, GivenBinary
 from delivery_owner_fixture import canonical_agent
 from compaction_loopback import LoopbackProvider
 from native_proof_cases import read_proof_rows
@@ -104,8 +105,8 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
                          native_options=("--no-tools",), client=None):
         """Acquire the real saved ACP owner and attested idle native child."""
         agent = canonical_agent(
-            Comms(self.root), auto_wake=auto_wake, runtime_enabled=runtime_enabled, agent_bin="pi",
-            agent_args=self.native_arguments(native_options),
+            Comms(self.root), auto_wake=auto_wake, runtime_enabled=runtime_enabled, agent_bin=GivenBinary("pi"),
+            agent_args=GivenArguments(tuple(self.native_arguments(native_options))),
         )
         agent.on_connect(client)
         try:

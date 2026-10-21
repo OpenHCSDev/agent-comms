@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import dataclasses
 import re
 import subprocess
 import sys
@@ -26,16 +27,27 @@ from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Self
+from collections.abc import Sequence
+from typing import Annotated, ClassVar, Self
 
 from pydantic import PrivateAttr
 
-from ..change_report import FileLine, SourceReference
+from ..change_report import FileLine, NoSourceReference
 from ..child_process import BoundedRun
-from ..cli_commands import DeclaredOptions, option
+from ..cli_commands import DeclaredOptions
 from ..comms import Comms
 from ..declared_family import DeclaredFamily
-from ..field_codec import FieldCodec, MalformedRecord, boundary_decoder
+from ..errors import RelationViolationError
+from ..field_codec import (
+    FieldCodec,
+    MalformedRecord,
+    NullMember,
+    SingleFieldValue,
+    SubclassUnion,
+    boundary_decoder,
+    Argument,
+    Normalize,
+)
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
 from ..goals import OrderCheck, ProblemGoalOrder
 from ..message_reference import MessageReference
@@ -56,6 +68,8 @@ from ..todos import (
     LocatedProblemFinding,
     MeasuredReview,
     NoDeliveryEvidence,
+    NoReplacement,
+    NoSuccessor,
     OperationDelivery,
     OrderedHunt,
     OrderMessage,
@@ -64,9 +78,11 @@ from ..todos import (
     PlannedInstallDeadline,
     PullRequestLink,
     RecordPullRequest,
+    Replacement,
     Slop,
     StrikeReason,
     StrikeTodo,
+    Successor,
     Todo,
     UnlocatedProblemFinding,
     VerdictAudience,
@@ -91,6 +107,7 @@ from agent_comms.commander.standing import UnownedWheelSpin
 
 OUTGOING = DirectiveText.OUTGOING  # every commander text passes each one
 
+
 def refuse(text, *families):
     """Core's text families decide what the commander may write; nothing is recorded when one refuses."""
     if refused := [r for family in families if (r := family.refused(text))]:
@@ -107,10 +124,16 @@ def struck(todo, unit):
 # nothing the commander approves, delivers or orders may add or keep one. The cure is the hierarchy, never a
 # route: fold the false owner into the real one, or compose the providers as parents.
 FORWARDER = re.compile(
-    r"^\+\s*(?:def \w+\([^)]*\)(?:\s*->[^:]+)?:\s*return self\.\w+\.\w+(?:\([^()]*\))?\s*$"      # one-line def returning self.x.y(...)
-    r"|\w+\s*=\s*property\(lambda \w+:\s*\w+\.\w+\.\w+\)"                                        # attr = property(lambda s: s._a.attr)
-    r"|def __getattr__\(self)", re.M)
-FORWARD_BODY = re.compile(r"^\+(\s*)def (\w+)\(self[^)]*\)[^:]*:\s*\n\+\1\s+return self\.\w+\.\2\b", re.M)  # def x(self): / return self._a.x(...)
+    r"^\+\s*(?:def \w+\([^)]*\)(?:\s*->[^:]+)?:\s*return self\.\w+\.\w+(?:\([^()]*\))?\s*$"  # one-line def returning self.x.y(...)
+    r"|\w+\s*=\s*property\(lambda \w+:\s*\w+\.\w+\.\w+\)"  # attr = property(lambda s: s._a.attr)
+    r"|def __getattr__\(self)",
+    re.M,
+)
+FORWARD_BODY = re.compile(
+    r"^\+(\s*)def (\w+)\(self[^)]*\)[^:]*:\s*\n\+\1\s+return self\.\w+\.\2\b", re.M
+)  # def x(self): / return self._a.x(...)
+
+
 def overrides(sources):
     """Names a class answers again for a question a base in the same module declares: a per-state answer, not forwarding."""
     import ast
@@ -194,10 +217,13 @@ class OrderFile:
         return problems
 
 
-
-
-
-STAGES = ('tool call', 'review', 'install', 'live', 'user')  # where a mistake was caught; later is worse
+STAGES = (
+    "tool call",
+    "review",
+    "install",
+    "live",
+    "user",
+)  # where a mistake was caught; later is worse
 
 
 def revision(repo: str, ref: str) -> str:
@@ -283,10 +309,93 @@ class CommanderContext(CommanderConfig):
         return thread.runtime.history_source(self.comms.root, thread.incarnation).last_tool_call()
 
 
+class Reassignment(SubclassUnion, affix="Reassignment"):
+    """Why a held problem changes owner, or no change of owner."""
+
+    # A resend to the same unit is a send-back strike unless it reassigns.
+    strikes_send_back: ClassVar[bool]
+
+    @abstractmethod
+    def refusals(self, holders: Sequence[str]) -> tuple[str, ...]: ...
+
+    @abstractmethod
+    def note(self) -> str:
+        """The order's line saying why the unit takes the work over."""
+
+    @abstractmethod
+    def because(self) -> str:
+        """The reason told to each former holder."""
+
+
+@dataclass(frozen=True, slots=True)
+class ReassignReason(SingleFieldValue, Reassignment):
+    text: str
+    strikes_send_back = False
+
+    def refusals(self, holders: Sequence[str]) -> tuple[str, ...]:
+        return () if len(self.text.split()) >= 8 else (
+            '--reassign needs the concrete failure that forces replacement (8+ words), '
+            'told to the old and new owner',)
+
+    def note(self) -> str:
+        return f'\nTaken over because: {self.text}'
+
+    def because(self) -> str:
+        return self.text
+
+
+@dataclass(frozen=True, slots=True)
+class NoReassignment(NullMember, Reassignment):
+    strikes_send_back = True
+
+    def refusals(self, holders: Sequence[str]) -> tuple[str, ...]:
+        return () if not holders else (
+            f'fact already owned by {list(holders)}; keep that owner, or pass --reassign '
+            '"<the concrete failure: provider diagnostic, strikes, a wrong delivery>"',)
+
+    def note(self) -> str:
+        return ''
+
+    def because(self) -> str:
+        raise RelationViolationError('a held problem changes owner only with --reassign')
+
+
+class StrikeSelector(SubclassUnion, affix="Strike"):
+    """Which live strike a void takes back: the one recorded at a clock time, or the newest."""
+
+    @abstractmethod
+    def selects(self, strike: StrikeTodo) -> bool: ...
+
+    @abstractmethod
+    def refusal(self, task: str) -> str: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ClockedStrike(SingleFieldValue, StrikeSelector):
+    clock: str
+
+    def selects(self, strike: StrikeTodo) -> bool:
+        return strike.at.clock() == self.clock
+
+    def refusal(self, task: str) -> str:
+        return f'Refused: {task} has no live strike recorded at {self.clock}.'
+
+
+@dataclass(frozen=True, slots=True)
+class NewestStrike(NullMember, StrikeSelector):
+    def selects(self, strike: StrikeTodo) -> bool:
+        return True
+
+    def refusal(self, task: str) -> str:
+        return f'Refused: {task} has no live strike.'
+
+
 class Commander(CommanderContext):
     @boundary_decoder
-    def send(self, unit, document: OrderFile, clean=False, reassign=None, new=None,
-             traced=None, replaces=None, disk=False, finding=UnlocatedProblemFinding(),
+    def send(self, unit, document: OrderFile, clean=False,
+             reassign: Reassignment = NoReassignment(), new=None,
+             traced: FileLine | NoSourceReference = NoSourceReference(),
+             replaces: Replacement = NoReplacement(), disk=False, finding=UnlocatedProblemFinding(),
              answers: tuple[MessageReference, ...] = ()):
         """Record the decoded order, or report every failed prerequisite before any write."""
         problems = document.problems_found(clean)
@@ -352,14 +461,7 @@ class Commander(CommanderContext):
         # Ownership reversals waste work: one owner through completion; a change of owner names the concrete failure.
         holders = sorted({listed[pid].holder for pid in group if pid in listed} - {unit, None})
         replacing = not new and bool(group) and all(pid in listed and listed[pid].holder == unit for pid in group)
-        trace = None
-        if traced is not None:
-            try:
-                with MalformedRecord.refusing('--traced'):
-                    trace = FileLine.from_wire(traced)
-                    references.append(trace)
-            except MalformedRecord as error:
-                problems.append(f'--traced: {error}; fix: supply PATH:LINE')
+        references.extend(traced.located())
         for reference in references:
             try:
                 with MalformedRecord.refusing(reference.to_wire()):
@@ -378,24 +480,18 @@ class Commander(CommanderContext):
                     if replacing:
                         listed[pid].require_replacement(replaces)
                     if pid in listed:
-                        listed[pid].holder_state.require_trace(
-                            unit, SourceReference.from_optional(trace),
-                        )
+                        listed[pid].holder_state.require_trace(unit, traced)
             except MalformedRecord as error:
                 problems.append(str(error))
-        if replaces and not replacing:
-            problems.append('--replaces: fix: name the current order on these problems to the same unit')
-        if holders and not reassign:
-            problems.append(f'fact already owned by {holders}; keep that owner, or pass --reassign "<the concrete failure: provider diagnostic, strikes, a wrong delivery>"')
-        if reassign is not None and len(reassign.split()) < 8:
-            problems.append('--reassign needs the concrete failure that forces replacement (8+ words), told to the old and new owner')
+        problems.extend(replaces.refusals(replacing))
+        problems.extend(reassign.refusals(holders))
         if problems:
             sys.exit('Refused order:\n  ' + '\n  '.join(problems))
         instructions = '\n'.join((document.prose, *(slop.render() for slop in document.slop),
             f'Problems: {", ".join(group)}', *order.work_instructions()))
-        message = (instructions + ('\nThis replaces my earlier order on it; drop that one.' if replacing else '') + (f'\nTaken over because: {reassign}' if reassign else '') + '\n' + self.comms.registry.storage_rule.order_text(self.comms.registry.require(unit), [f'{repo.checkout}/.venv/bin/python' for repo in self.repos]) + '\nIf two lines of this order conflict, take the narrower reading, say which one you took, and proceed; do not stop to ask.'
+        message = (instructions + ('\nThis replaces my earlier order on it; drop that one.' if replacing else '') + reassign.note() + '\n' + self.comms.registry.storage_rule.order_text(self.comms.registry.require(unit), [f'{repo.checkout}/.venv/bin/python' for repo in self.repos]) + '\nIf two lines of this order conflict, take the narrower reading, say which one you took, and proceed; do not stop to ask.'
                    + '\nStart now and push as you go.')
-        taken = {other: f'Taken off you: {", ".join(group)} ("{listed[group[0]].text[:120]}") now belongs to {unit} because: {reassign}. Stop that work; do not touch its files.' for other in holders}
+        taken = {other: f'Taken off you: {", ".join(group)} ("{listed[group[0]].text[:120]}") now belongs to {unit} because: {reassign.because()}. Stop that work; do not touch its files.' for other in holders}
         fired = tuple(listed[pid] for pid in group
                       if pid in listed and listed[pid].struck_out(unit))
         order.run.require_assignment(self.comms.registry.require(unit).incarnation,
@@ -413,7 +509,7 @@ class Commander(CommanderContext):
         for pid in [] if new else group:
             self.call(CommsOrderTool(owner=unit, order=OrderGoalAction(
                 problem=pid, expected_revision=self.comms.goals.todos.get(pid).revision,
-                assigner=self.incarnation, traced=trace,
+                assigner=self.incarnation, traced=traced,
                 order=order, request=request, review_at=review_at, commander=self.commander)))
         message += "\n" + "\n".join(order.pull_request_instruction(pid) for pid in group)
         sent = self.post(VerdictAudience((unit,)), message, answers)
@@ -428,7 +524,7 @@ class Commander(CommanderContext):
         if replacing and not clean and struck_already:
             print(f'{unit} already struck on this order of {group[0]}; '
                   'the send-back counts that one miss once')
-        elif replacing and not clean and not reassign:
+        elif replacing and not clean and reassign.strikes_send_back:
             # A send-back is a strike, no warnings, and every send-back is roasted in #comms.
             # Done here so the commander cannot send work back and forget either.
             verdict = document.prose.strip()
@@ -610,13 +706,12 @@ class Commander(CommanderContext):
             OrderedHunt(ref, why, at, sent) if sent else CleanHunt(ref, why, at))
         print(f'hunt recorded: {where} -> {sent or "clean"}')
 
-    @boundary_decoder
-    def unstrike(self, task: str, why: str, at: str | None = None) -> None:
+    def unstrike(self, task: str, why: str, at: StrikeSelector = NewestStrike()) -> None:
         """A strike recorded in error is voided in Core, then announced to #comms."""
         todo = self.comms.goals.todos.get(task)
-        live = [s for s in todo.live_strikes() if at in (None, s.at.clock())]
+        live = [s for s in todo.live_strikes() if at.selects(s)]
         if not live:
-            sys.exit(f'Refused: {task} has no live strike' + (f' recorded at {at}.' if at else '.'))
+            sys.exit(at.refusal(task))
         voided = live[-1]
         refuse(why, *OUTGOING)  # posted to #comms, so refused before Core records the void
         self.call(CommsChangeProblemTool(problem=task, operation=VoidStrikeTodo(
@@ -628,8 +723,7 @@ class Commander(CommanderContext):
         self.on_record(line, 'Void', VerdictAudience.of(unit, todo.goal))
         print(f'{unit}: {n} strike(s) on {task}')
 
-    @boundary_decoder
-    def withdraw(self, pid: str, why: str, superseded_by: str | None = None) -> None:
+    def withdraw(self, pid: str, why: str, superseded_by: Successor = NoSuccessor()) -> None:
         """Core retires an undelivered order sent in error.
 
         The reason goes on the public record and to the unit that held it."""
@@ -658,9 +752,14 @@ class Commander(CommanderContext):
 @dataclass(frozen=True, kw_only=True)
 class CommanderVerb(CommanderRole, DeclaredFamily, DeclaredOptions, affix="Verb"):
     """One commander verb: its options are its fields, its parser comes from them, and run() does the work."""
-    fork: ThreadCaller | NoThreadCaller = option(
-        "--fork", type=ThreadCaller, normalize=FieldCodec.encode,
-        default=NoThreadCaller(), help="the acting commander's name")
+
+    fork: Annotated[
+        ThreadCaller | NoThreadCaller,
+        Normalize(FieldCodec.encode),
+        Argument(
+            flags=("--fork",), options={"type": ThreadCaller, "help": "the acting commander's name"}
+        ),
+    ] = NoThreadCaller()
 
     def who(self, ctx: Commander) -> str:
         return self.fork.acting_name(ctx.commander)
@@ -702,8 +801,13 @@ class CommanderVerb(CommanderRole, DeclaredFamily, DeclaredOptions, affix="Verb"
 class DirectiveVerb(CommanderVerb):
     """An action may answer named directives; unrelated work cannot clear them."""
 
-    answers: tuple[str, ...] = option("--answers", nargs="+", default=(),
-                                      help="original directive message IDs this action answers")
+    answers: Annotated[
+        tuple[str, ...],
+        Argument(
+            flags=("--answers",),
+            options={"nargs": "+", "help": "original directive message IDs this action answers"},
+        ),
+    ] = ()
 
     def answer_references(self, ctx: Commander) -> tuple[MessageReference, ...]:
         thread = ctx.comms.registry.require(self.who(ctx))
@@ -735,14 +839,45 @@ class OrderVerb(CommanderVerb):
 @dataclass(frozen=True, kw_only=True)
 class SendVerb(OrderVerb, DirectiveVerb):
     help = "record the order in Core and send it"
-    unit: str = option("unit")
-    body_file: str = option("body_file", metavar="ORDER.json")
-    clean: bool = option("--clean", default=False, help="the unit showed no incompetence")
-    reassign: str | None = option("--reassign", default=None, help="the concrete failure that forces replacement")
-    replaces: str | None = option("--replaces", default=None, help="the current message this order replaces")
-    disk: bool = option("--disk", default=False, help="a cleanup order; never overrides a tool's storage rule")
-    traced: str | None = option("--traced", default=None, metavar="PATH:LINE",
-                                help="the first failing source line, required after two owners")
+    unit: Annotated[str, Argument(flags=("unit",))]
+    body_file: Annotated[
+        str, Argument(flags=("body_file",), options={"metavar": "ORDER.json"})
+    ]
+    clean: Annotated[
+        bool,
+        Argument(
+            flags=("--clean",), options={"help": "the unit showed no incompetence"}
+        ),
+    ] = False
+    reassign: Annotated[
+        Reassignment,
+        Argument(
+            flags=("--reassign",), options={"help": "the concrete failure that forces replacement"}
+        ),
+    ] = NoReassignment()
+    replaces: Annotated[
+        Replacement,
+        Argument(
+            flags=("--replaces",), options={"help": "the current message this order replaces"}
+        ),
+    ] = NoReplacement()
+    disk: Annotated[
+        bool,
+        Argument(
+            flags=("--disk",),
+            options={"help": "a cleanup order; never overrides a tool's storage rule"},
+        ),
+    ] = False
+    traced: Annotated[
+        FileLine | NoSourceReference,
+        Argument(
+            flags=("--traced",),
+            options={
+                "metavar": "PATH:LINE",
+                "help": "the first failing source line, required after two owners",
+            },
+        ),
+    ] = NoSourceReference()
 
     def run(self, ctx: Commander) -> None:
         ctx.send(self.unit, OrderFile.read(Path(self.body_file).read_text()), clean=self.clean,
@@ -753,11 +888,22 @@ class SendVerb(OrderVerb, DirectiveVerb):
 @dataclass(frozen=True, kw_only=True)
 class StrikeVerb(OrderVerb, DirectiveVerb):
     help = "a send-back or a false claim"
-    unit: str = option("unit")
-    pid: str = option("pid", help="the struck problem")
-    where: str = option("where", help="the source file:line that explains the strike")
-    why: str = option("--why")
-    caught: str = option("--caught", default='review', help='"WHO at STAGE"; stage is review/install/live/user')
+    unit: Annotated[str, Argument(flags=("unit",))]
+    pid: Annotated[str, Argument(flags=("pid",), options={"help": "the struck problem"})]
+    where: Annotated[
+        str,
+        Argument(
+            flags=("where",), options={"help": "the source file:line that explains the strike"}
+        ),
+    ]
+    why: Annotated[str, Argument(flags=("--why",))]
+    caught: Annotated[
+        str,
+        Argument(
+            flags=("--caught",),
+            options={"help": '"WHO at STAGE"; stage is review/install/live/user'},
+        ),
+    ] = "review"
 
     def run(self, ctx: Commander) -> None:
         ctx.strike(self.unit, self.pid, self.why, self.caught,
@@ -768,8 +914,8 @@ class StrikeVerb(OrderVerb, DirectiveVerb):
 @dataclass(frozen=True, kw_only=True)
 class FireVerb(OrderVerb):
     help = "take every open problem off a unit; their orders and strikes stay"
-    unit: str = option("unit")
-    why: str = option("--why")
+    unit: Annotated[str, Argument(flags=("unit",))]
+    why: Annotated[str, Argument(flags=("--why",))]
 
     def run(self, ctx: Commander) -> None:
         ctx.fire(self.unit, self.why)
@@ -778,10 +924,14 @@ class FireVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class UnstrikeVerb(OrderVerb):
     help = "void a strike recorded in error; it stays on the record and stops counting"
-    pid: str = option("pid")
-    why: str = option("--why")
-    at: str | None = option("--at", default=None,
-                            help="HH:MM:SS the strike was recorded, as its #comms line prints it; default the newest")
+    pid: Annotated[str, Argument(flags=("pid",))]
+    why: Annotated[str, Argument(flags=("--why",))]
+    at: Annotated[
+        StrikeSelector,
+        Argument(
+            flags=("--at",), options={"help": "HH:MM:SS the strike was recorded, as its #comms line prints it; default the newest"}
+        ),
+    ] = NewestStrike()
 
     def run(self, ctx: Commander) -> None:
         ctx.unstrike(self.pid, self.why, self.at)
@@ -790,8 +940,15 @@ class UnstrikeVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class InstallVerb(OrderVerb):
     help = "plan the fleet's next install; merged and delivered orders wait on it"
-    at: str = option("at", help="HH:MM the install is due")
-    installer: str = option("installer", help="the unit that runs the install")
+    at: Annotated[
+        str, Argument(flags=("at",), options={"help": "HH:MM the install is due"})
+    ]
+    installer: Annotated[
+        str,
+        Argument(
+            flags=("installer",), options={"help": "the unit that runs the install"}
+        ),
+    ]
 
     def run(self, ctx: Commander) -> None:
         planned = RecordedEventTime(time.time()).at_clock(self.at)
@@ -802,10 +959,15 @@ class InstallVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class WithdrawVerb(OrderVerb):
     help = "retire an undelivered order sent in error; its problem closes with no strike"
-    pid: str = option("pid")
-    why: str = option("--why")
-    superseded_by: str | None = option("--superseded-by", default=None, metavar="PID",
-                                       help="the problem that already owns this fix")
+    pid: Annotated[str, Argument(flags=("pid",))]
+    why: Annotated[str, Argument(flags=("--why",))]
+    superseded_by: Annotated[
+        Successor,
+        Argument(
+            flags=("--superseded-by",),
+            options={"metavar": "PID", "help": "the problem that already owns this fix"},
+        ),
+    ] = NoSuccessor()
 
     def run(self, ctx: Commander) -> None:
         ctx.withdraw(self.pid, self.why, self.superseded_by)
@@ -814,14 +976,34 @@ class WithdrawVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class DoneVerb(OrderVerb):
     help = "Core checks the delivered commit; late delivery is a strike"
-    unit: str = option("unit", metavar="UNIT")
-    message: str = option("message", metavar="ORDER")
-    sha: str = option("--sha", help="the delivered commit in --repo HEAD, or op")
-    screenshot: str = option("--screenshot", default="", metavar="PATH",
-                             help="for an op: the screenshot the working claim stands on")
+    unit: Annotated[str, Argument(flags=("unit",), options={"metavar": "UNIT"})]
+    message: Annotated[
+        str, Argument(flags=("message",), options={"metavar": "ORDER"})
+    ]
+    sha: Annotated[
+        str,
+        Argument(
+            flags=("--sha",), options={"help": "the delivered commit in --repo HEAD, or op"}
+        ),
+    ]
+    screenshot: Annotated[
+        str,
+        Argument(
+            flags=("--screenshot",),
+            options={
+                "metavar": "PATH",
+                "help": "for an op: the screenshot the working claim stands on",
+            },
+        ),
+    ] = ""
 
-    seen: str = option("--seen", default="")
-    repo: str = option("--repo", default="", help="the recorded order check directory")
+    seen: Annotated[str, Argument(flags=("--seen",))] = ""
+    repo: Annotated[
+        str,
+        Argument(
+            flags=("--repo",), options={"help": "the recorded order check directory"}
+        ),
+    ] = ""
 
     def run(self, ctx: Commander) -> None:
         todo = ctx.comms.goals.todos.resolve_order(ctx.incarnation, self.unit, self.message)
@@ -866,13 +1048,21 @@ class ExistingPullRequestSelection(PullRequestSelection):
 @dataclass(frozen=True, kw_only=True)
 class PullRequestVerb(OrderVerb, declared_name="pr"):
     help = "create or adopt a PR and record its GitHub identity on this order"
-    pid: str = option("pid")
-    title: str = option("--title", default="")
-    body_file: str = option("--body-file", default="")
-    existing: PullRequestSelection = option(
-        "--existing", type=ExistingPullRequestSelection.from_text, normalize=FieldCodec.encode,
-        default_factory=NewPullRequestSelection, parser_default_factory=NewPullRequestSelection,
-        choices=None, metavar="N")
+    pid: Annotated[str, Argument(flags=("pid",))]
+    title: Annotated[str, Argument(flags=("--title",))] = ""
+    body_file: Annotated[str, Argument(flags=("--body-file",))] = ""
+    existing: Annotated[
+        PullRequestSelection,
+        Normalize(FieldCodec.encode),
+        Argument(
+            flags=("--existing",),
+            options={
+                "type": ExistingPullRequestSelection.from_text,
+                "choices": None,
+                "metavar": "N",
+            },
+        ),
+    ] = dataclasses.field(default_factory=NewPullRequestSelection)
 
     def run(self, ctx: Commander) -> None:
         todo = ctx.comms.goals.todos.get(self.pid)
@@ -889,9 +1079,19 @@ class PullRequestVerb(OrderVerb, declared_name="pr"):
 @dataclass(frozen=True, kw_only=True)
 class CheckVerb(OrderVerb):
     help = "replace an open order's wrong check with one passing on main; keeps its review timer and strikes"
-    pid: str = option("pid")
-    check: str = option("--check", help='"<repo> :: <shell command> -> <integer>"')
-    why: str = option("--why", help="what was wrong with the recorded check")
+    pid: Annotated[str, Argument(flags=("pid",))]
+    check: Annotated[
+        str,
+        Argument(
+            flags=("--check",), options={"help": '"<repo> :: <shell command> -> <integer>"'}
+        ),
+    ]
+    why: Annotated[
+        str,
+        Argument(
+            flags=("--why",), options={"help": "what was wrong with the recorded check"}
+        ),
+    ]
 
     def run(self, ctx: Commander) -> None:
         ctx.correct_check(self.pid, self.check, self.why)
@@ -900,8 +1100,13 @@ class CheckVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class ServeVerb(OrderVerb):
     help = "name the plan phase an open order serves; keeps its id, review timer and strikes"
-    pid: str = option("pid")
-    phase: str = option("phase", help="one of " + ", ".join(OrderPhase.names()))
+    pid: Annotated[str, Argument(flags=("pid",))]
+    phase: Annotated[
+        str,
+        Argument(
+            flags=("phase",), options={"help": "one of " + ", ".join(OrderPhase.names())}
+        ),
+    ]
 
     def run(self, ctx: Commander) -> None:
         ctx.call(CommsOrderServeTool(problem=self.pid, serves=OrderPhase.member_named(self.phase)))
@@ -911,8 +1116,12 @@ class ServeVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class SayVerb(OrderVerb, DirectiveVerb):
     help = "a non-order message; refused if it orders work"
-    units: str = option("units", metavar="UNIT[,UNIT]")
-    body_file: str = option("body_file", metavar="BODYFILE")
+    units: Annotated[
+        str, Argument(flags=("units",), options={"metavar": "UNIT[,UNIT]"})
+    ]
+    body_file: Annotated[
+        str, Argument(flags=("body_file",), options={"metavar": "BODYFILE"})
+    ]
 
     def run(self, ctx: Commander) -> None:
         ctx.say(self.units, self.body_file, self.answer_references(ctx))
@@ -921,10 +1130,17 @@ class SayVerb(OrderVerb, DirectiveVerb):
 @dataclass(frozen=True, kw_only=True)
 class ProblemVerb(OrderVerb, DirectiveVerb):
     help = "Core records the problem with its order, or nothing"
-    order: str = option("order", metavar="ORDER.json")
-    to: str = option("--to")
-    where: str = option("--where", help="the actual file:line where this problem occurs")
-    disk: bool = option("--disk", default=False)
+    order: Annotated[
+        str, Argument(flags=("order",), options={"metavar": "ORDER.json"})
+    ]
+    to: Annotated[str, Argument(flags=("--to",))]
+    where: Annotated[
+        str,
+        Argument(
+            flags=("--where",), options={"help": "the actual file:line where this problem occurs"}
+        ),
+    ]
+    disk: Annotated[bool, Argument(flags=("--disk",))] = False
 
     def run(self, ctx: Commander) -> None:
         ctx.problem(self.order, self.to, self.where, self.disk,
@@ -934,9 +1150,9 @@ class ProblemVerb(OrderVerb, DirectiveVerb):
 @dataclass(frozen=True, kw_only=True)
 class DropVerb(OrderVerb):
     help = "drop an old order for a live newer one without a strike"
-    unit: str = option("unit")
-    message: str = option("message")
-    by: str = option("--by")
+    unit: Annotated[str, Argument(flags=("unit",))]
+    message: Annotated[str, Argument(flags=("message",))]
+    by: Annotated[str, Argument(flags=("--by",))]
 
     def run(self, ctx: Commander) -> None:
         ctx.comms.goals.todos.drop(ctx.incarnation, self.unit, self.message, self.by)
@@ -946,9 +1162,9 @@ class DropVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class FoldVerb(OrderVerb):
     help = "join duplicate open problems without losing their text"
-    pid: str = option("pid")
-    into: str = option("--into")
-    why: str = option("--why")
+    pid: Annotated[str, Argument(flags=("pid",))]
+    into: Annotated[str, Argument(flags=("--into",))]
+    why: Annotated[str, Argument(flags=("--why",))]
 
     def run(self, ctx: Commander) -> None:
         ctx.comms.goals.todos.fold(ctx.incarnation, self.pid, self.into, self.why)
@@ -958,9 +1174,9 @@ class FoldVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class LinkVerb(OrderVerb):
     help = "attach an unassigned problem to an existing order"
-    pid: str = option("pid")
-    unit: str = option("unit")
-    message: str = option("message")
+    pid: Annotated[str, Argument(flags=("pid",))]
+    unit: Annotated[str, Argument(flags=("unit",))]
+    message: Annotated[str, Argument(flags=("message",))]
 
     def run(self, ctx: Commander) -> None:
         ctx.comms.goals.todos.link(ctx.incarnation, self.pid, self.unit, self.message)
@@ -970,9 +1186,14 @@ class LinkVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class CloseVerb(OrderVerb):
     help = "the fix works in the app; Core closes the problem"
-    pid: str = option("pid")
-    works: str = option("--works")
-    artifact: str = option("--artifact", default="", help="defaults to the file recorded by done --seen")
+    pid: Annotated[str, Argument(flags=("pid",))]
+    works: Annotated[str, Argument(flags=("--works",))]
+    artifact: Annotated[
+        str,
+        Argument(
+            flags=("--artifact",), options={"help": "defaults to the file recorded by done --seen"}
+        ),
+    ] = ""
 
     def run(self, ctx: Commander) -> None:
         ctx.close(self.pid, self.works, self.artifact)
@@ -981,10 +1202,20 @@ class CloseVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class HuntVerb(OrderVerb):
     help = "a hot-path read: clean unless --sent names the order it became"
-    where: str = option("where", metavar="FILE:LINE")
-    why: str = option("--why")
-    sent: str = option("--sent", default="", metavar="ORDER",
-                       help="the open order the hunt became; omitted means clean")
+    where: Annotated[
+        str, Argument(flags=("where",), options={"metavar": "FILE:LINE"})
+    ]
+    why: Annotated[str, Argument(flags=("--why",))]
+    sent: Annotated[
+        str,
+        Argument(
+            flags=("--sent",),
+            options={
+                "metavar": "ORDER",
+                "help": "the open order the hunt became; omitted means clean",
+            },
+        ),
+    ] = ""
 
     def run(self, ctx: Commander) -> None:
         ctx.hunt(self.where, self.why, self.sent)

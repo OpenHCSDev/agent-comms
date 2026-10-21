@@ -9,7 +9,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from functools import partial
 from pathlib import Path
-from typing import Callable, ClassVar
+from typing import Annotated, Callable, ClassVar
+
 
 from .agent_backend import RuntimeLocation
 from .bus_publication import CommittedDelivery
@@ -20,7 +21,7 @@ from .coordination_response import _assert_response_schema
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .external_transcript import ExternalTranscript
-from .field_codec import FieldCodec, projected
+from .field_codec import FieldCodec, projected, ContentExclude, WireName
 from .historical_views import HistorySource
 from .message_bus import MessageBus
 from .message_reference import MessageReference
@@ -29,7 +30,7 @@ from .messaging import Messaging
 from .native_runtime_input import PublishedReplyRevision
 from .native_transcript import NativeTranscript, RecordsCut
 from .presentation import MessageNotification
-from .private_path import FileRevision
+from .private_path import FileObservation, FileRevision
 from .registration import Registration
 from .routing import TurnRouting
 from .thread_identity import ThreadProvenance
@@ -217,7 +218,7 @@ class PageSource:
     """The retained stores one thread's transcript page is read from."""
 
     thread: Thread
-    runtime: RuntimeLocation = field(metadata={"wire_name": "session_file"})
+    runtime: Annotated[RuntimeLocation, WireName("session_file")]
     inherited: bool
     root: Path
     log: WireLog
@@ -233,16 +234,14 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
 
     root: str
     requested_name: str
-    thread: ThreadProvenance = field(metadata={"content_exclude": True})
+    thread: Annotated[ThreadProvenance, ContentExclude()]
     runtime: RuntimeLocation
-    records_cut: RecordsCut = field(metadata={"content_exclude": True})
-    route_revision: FileRevision | None
-    bus_revision: FileRevision | None = field(metadata={"content_exclude": True})
-    coordination_revision: FileRevision | None = field(
-        metadata={"content_exclude": True}
-    )
+    records_cut: Annotated[RecordsCut, ContentExclude()]
+    route_revision: FileObservation
+    bus_revision: Annotated[FileObservation, ContentExclude()]
+    coordination_revision: Annotated[FileObservation, ContentExclude()]
     reply_revision: PublishedReplyRevision
-    read_revision: FileRevision | None = field(metadata={"content_exclude": True})
+    read_revision: Annotated[FileObservation, ContentExclude()]
     wire_frontier: WireFrontier
     before: TranscriptCursor | None
     after: TranscriptCursor | None
@@ -283,7 +282,7 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     def content_bus(self):
         # Appends beyond this page's assigned messages do not change its content.
         # Replacing the bus file does.
-        return self.bus_revision.identity if self.bus_revision is not None else None
+        return self.bus_revision.file_identity()
 
     @property
     def page_bound(self) -> TranscriptCursor:
@@ -317,7 +316,7 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
 
 @dataclass(frozen=True, slots=True)
 class LiveTranscriptReadIdentity(TranscriptReadIdentity):
-    thread: Thread = field(metadata={"content_exclude": True})
+    thread: Annotated[Thread, ContentExclude()]
 
     @projected(view="content", name="thread")
     def content_thread(self):
@@ -343,7 +342,7 @@ class LiveTranscriptReadIdentity(TranscriptReadIdentity):
 
 @dataclass(frozen=True, slots=True)
 class RecordedTranscriptReadIdentity(TranscriptReadIdentity):
-    source: HistorySource = field(kw_only=True, metadata={"content_exclude": True})
+    source: Annotated[HistorySource, ContentExclude()] = field(kw_only=True)
 
     @property
     def historical_source(self) -> str:
@@ -609,12 +608,13 @@ class Transcripts:
 
     @staticmethod
     def _fork_start_events(thread: Thread) -> tuple[TranscriptEvent, ...]:
-        if not thread.parent:
-            return ()
-        return (
-            ForkOriginTranscript(f"Forked from @{thread.parent}. This thread started with:",
-                                 timestamp=thread.created_at),
-            *((ForkTaskTranscript(thread.task, timestamp=thread.created_at),) if thread.task else ()),
+        return tuple(
+            event for parent in thread.parent.names() for event in (
+                ForkOriginTranscript(f"Forked from @{parent}. This thread started with:",
+                                     timestamp=thread.created_at),
+                *(ForkTaskTranscript(task, timestamp=thread.created_at)
+                  for task in thread.task.texts()),
+            )
         )
 
     def thread_transcript_page(
@@ -724,4 +724,3 @@ class Transcripts:
         self.routes.record_turn_publication(
             self.registry, self.bus.log, lease, checkpoint, routing, published
         )
-

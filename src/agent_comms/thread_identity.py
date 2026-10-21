@@ -12,7 +12,8 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property
-from typing import TYPE_CHECKING, Callable, ClassVar, Literal, Self, TypeVar
+from typing import TYPE_CHECKING, Callable, ClassVar, Self, TypeVar, Annotated
+
 
 from agent_comms.participant_identity import ParticipantIdentity
 from .agent_backend import AgentBackend, RuntimeLocation
@@ -20,8 +21,15 @@ from .channel_targets import Tag
 from .cli_options import JsonFlagRecord
 from .declared_family import DeclaredFamily, declared_words
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, NullMember, WireValue, boundary_decoder
+from .field_codec import (
+    FieldCodec,
+    WireValue,
+    WireName,
+    WireOmitDefault,
+    WireRequired,
+)
 from .response_policy import CollectivePolicy, InformationalPolicy, ResponsePolicy
+from .thread_text import NoSessionFile, NoThreadText, SessionFile, ThreadText
 
 if TYPE_CHECKING:
     from .child_process import ProcessIdentity
@@ -252,23 +260,6 @@ class CoreWatcherIncarnation(BirthlessIncarnation):
         return "Core's watcher"
 
 
-@dataclass(frozen=True, slots=True)
-class NoThreadText(NullMember):
-    """No title or original assignment was supplied for this thread."""
-
-    def __bool__(self) -> Literal[False]:
-        return False
-
-    @classmethod
-    @boundary_decoder
-    def from_input(cls, value: ThreadText | None) -> ThreadText:
-        return cls() if value is None else value
-
-
-ThreadText = str | NoThreadText
-NO_THREAD_TEXT = NoThreadText()
-
-
 @dataclass(frozen=True, kw_only=True)
 class ThreadProvenance:
     """Recorded thread identity, without permission to own a process or start a turn."""
@@ -276,22 +267,21 @@ class ThreadProvenance:
     name: str
     tags: frozenset[str]
     worktree: str
-    created_at: float = field(metadata={"wire_required": True})
-    session_file: str | None = None
+    created_at: Annotated[float, WireRequired()]
+    session_file: SessionFile = field(default_factory=NoSessionFile)
     title: ThreadText = field(default_factory=NoThreadText)
-    backend: type[AgentBackend] = field(
-        default_factory=AgentBackend.for_new_threads, metadata={"wire_omit_default": True},
+    backend: Annotated[type[AgentBackend], WireOmitDefault()] = field(
+        default_factory=AgentBackend.for_new_threads
     )
 
     @cached_property
     def runtime(self) -> RuntimeLocation:
         """The codec decoded both stored fields; their record owns this binding."""
-        return (self.backend.unstarted_type(self.backend) if self.session_file is None
-                else self.backend.location_type(self.session_file))
+        return self.session_file.location(self.backend)
 
     @property
     def display_title(self) -> str:
-        return self.title or self.name
+        return self.title.otherwise(self.name)
 
     @staticmethod
     def require_name(name: str) -> None:
@@ -384,7 +374,7 @@ class ClaimedIdentity:
     """A registry-allocated input generation, never an owner lease."""
 
     incarnation: ThreadIncarnation
-    claimed_generation: int = field(metadata={"wire_name": "admission_generation"})
+    claimed_generation: Annotated[int, WireName("admission_generation")]
 
     def includes(self, previous: ClaimedIdentity) -> bool:
         """Compare order only within this registry's input-generation counter."""
@@ -407,7 +397,7 @@ class TurnFence:
 
     identity: TurnIdentity
     turn_id: str
-    claimed_generation: int = field(metadata={"wire_name": "admission_generation"})
+    claimed_generation: Annotated[int, WireName("admission_generation")]
 
     def renamed(self, name: str) -> Self:
         """Registry alias resolution changes the name, never incarnation or epochs."""
@@ -662,5 +652,3 @@ class UserThreadRole(ThreadRole):
     @classmethod
     def user_task_facts(cls, message: Message) -> Iterable[object]:
         return message.task.user_task_facts(message)
-
-

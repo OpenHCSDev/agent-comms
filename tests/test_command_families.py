@@ -9,6 +9,7 @@ import pytest
 from agent_comms.cli import build_parser, main
 from agent_comms.cli_commands import CliCommand
 from agent_comms.comms import Comms
+from agent_comms.native_arguments import ConfiguredBinary, GivenArguments, GivenBinary, InheritedArguments
 from agent_comms.history_result import (
     ChannelHistoryPageResult,
     DmHistoryPageResult,
@@ -38,22 +39,23 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch):
     assert send.type is InfoKind
     for tier in ServiceTier:
         configured = parse(["configure", "--name", "a", "--service-tier", tier.value])
-        assert configured.service_tier is tier
+        assert configured.service_tier.tier is tier
     with pytest.raises(ValueError) as refused:
         parser.parse_args(["configure", "--name", "a", "--service-tier", "fast"])
     assert "fast" in str(refused.value)
     assert all(tier.value in str(refused.value) for tier in ServiceTier)
     restart = parse(["restart", "--all"])
     assert restart.all_ is True
-    assert restart.agent_bin is None
-    assert restart.agent_args is None
+    assert restart.agent_bin == ConfiguredBinary()
+    assert restart.agent_args == InheritedArguments()
     explicit = parse(
         ["restart", "--all", "--agent-bin", "/a pi", "--agent-args", '--label "two words"']
     )
-    assert explicit.agent_bin == "/a pi"
-    assert explicit.agent_args == ["--label", "two words"]
+    assert explicit.agent_bin == GivenBinary("/a pi")
+    assert explicit.agent_args == GivenArguments(("--label", "two words"))
     monkeypatch.setenv("AGENT_COMMS_AGENT_BIN", "/next pi")
-    assert build_parser().parse_args(["restart", "--all"]).agent_bin is None
+    fresh = build_parser().parse_args(["restart", "--all"])
+    assert CliCommand.member_named(fresh.command).from_arguments(fresh).agent_bin == ConfiguredBinary()
 
 
 @pytest.mark.parametrize(

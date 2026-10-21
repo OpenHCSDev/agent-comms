@@ -8,7 +8,9 @@ from agent_comms.channels import AllChannel
 from agent_comms.comms import wire
 from agent_comms.errors import UnknownChannelError, UnregisteredThreadError
 from agent_comms.messages import Message, InfoKind
+from agent_comms.read_basis import NamedViewer
 from bus_history import read_history
+from agent_comms.thread_text import ForkedParent, GivenThreadText
 
 
 @pytest.fixture
@@ -20,7 +22,7 @@ def chat(comms):
 
     return declare_test_bus(comms, channels=("ci", "docs"), threads=(
         comms.registry.new_thread('PR111', frozenset({'ci'}), '/tmp/wt1', process_identity=ProcessIdentity.capture(os.getpid())),
-        comms.registry.new_thread('fixer', frozenset({'ci'}), '/tmp/wt1', parent='PR111', task='fix auth'),
+        comms.registry.new_thread('fixer', frozenset({'ci'}), '/tmp/wt1', parent=ForkedParent('PR111'), task=GivenThreadText('fix auth')),
         comms.registry.new_thread('PR112', frozenset({'docs'}), '/tmp/wt2'),
     ))
 
@@ -96,11 +98,11 @@ class TestHistory:
         chat.messaging.send("PR111", "fixer", "hello").message.message_id
         chat.messaging.send("fixer", "PR111", "hi back").message.message_id
         chat.messaging.send("PR111", "PR112", "unrelated").message.message_id
-        history = [m.body for m in list(chat.views.history_page(CommandTarget.named("fixer"), viewer="PR111").messages)]
+        history = [m.body for m in list(chat.views.history_page(CommandTarget.named("fixer"), viewer=NamedViewer("PR111")).messages)]
         assert history == ["hello", "hi back"]
 
     def test_dm_history_of_undeclared_peer_is_empty_and_does_not_register_it(self, chat):
-        assert chat.views.history_page(CommandTarget.named("ghost"), viewer="PR111").messages == ()
+        assert chat.views.history_page(CommandTarget.named("ghost"), viewer=NamedViewer("PR111")).messages == ()
         assert "ghost" not in chat.registry
 
     def test_channel_history_returns_all(self, chat):

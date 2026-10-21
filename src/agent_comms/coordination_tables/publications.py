@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
-from dataclasses import field as dataclass_field
-from typing import ClassVar
+from typing import Annotated, ClassVar
 
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
@@ -15,7 +14,7 @@ from agent_comms.coordination_contracts import (
 )
 from agent_comms.coordination_errors import CoordinationError, IntegrityViolationError
 from agent_comms.coordination_schema import CoordinatorTable
-from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.field_codec import FieldCodec, MalformedRecord, WireName
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
 from agent_comms.response_acknowledgement import canonical_publication_key
@@ -23,6 +22,7 @@ from agent_comms.typed_table import (
     Column,
     ExactStorage,
     ForeignKey,
+    Generated,
     TypedTable,
 )
 
@@ -51,49 +51,46 @@ class PublicationIntents(CoordinatorTable, TypedTable):
         if acknowledgement.message_id != self.expected_message_id:
             raise IntegrityViolationError("acknowledgement envelope does not match frozen intent")
 
-    execution_id: str = dataclass_field(
-        metadata={
-            "sql": Column(
-                primary_key=True,
-                storage=ExactStorage,
-                check="""typeof(execution_id) = 'text' AND length(execution_id) BETWEEN 1 AND 256
+    execution_id: Annotated[
+        str,
+        Column(
+            primary_key=True,
+            storage=ExactStorage,
+            check="""typeof(execution_id) = 'text' AND length(execution_id) BETWEEN 1 AND 256
              AND instr(execution_id, ':' ) = 0""",
-            ),
-        }
-    )
-    exact_target: str = dataclass_field(
-        metadata={
-            "sql": Column(
-                primary_key=True, storage=ExactStorage,
-                check="""
+        ),
+    ]
+    exact_target: Annotated[
+        str,
+        Column(
+            primary_key=True,
+            storage=ExactStorage,
+            check="""
       typeof(exact_target) = 'text' AND length(exact_target) BETWEEN 1 AND 256""",
-            ),
-        }
-    )
-    message: Message = dataclass_field(metadata={"sql": Column(check="json_valid(message)")})
-    publication_key: str = dataclass_field(
-        metadata={
-            "sql": Column(
-                storage=ExactStorage,
-                unique=True,
-                check="""
+        ),
+    ]
+    message: Annotated[Message, Column(check="json_valid(message)")]
+    publication_key: Annotated[
+        str,
+        Column(
+            storage=ExactStorage,
+            unique=True,
+            check="""
       typeof(publication_key) = 'text' AND length(publication_key) BETWEEN 1 AND 256
     """,
-            )
-        }
-    )
-    expected_message_id: str = dataclass_field(
-        metadata={
-            "sql": Column(
-                storage=ExactStorage,
-                unique=True,
-                check="""
+        ),
+    ]
+    expected_message_id: Annotated[
+        str,
+        Column(
+            storage=ExactStorage,
+            unique=True,
+            check="""
       typeof(expected_message_id) = 'text' AND length(expected_message_id) BETWEEN 1 AND
       256
     """,
-            ),
-        }
-    )
+        ),
+    ]
 
     def __post_init__(self) -> None:
         validate_execution_id(self.execution_id)
@@ -108,8 +105,9 @@ class PublicationIntents(CoordinatorTable, TypedTable):
         if self.message.message_id != self.expected_message_id:
             raise IntegrityViolationError("expected message id does not match Message authority")
 
-    obligation_intent_required: int | None = dataclass_field(
-        init=False, compare=False, metadata={"sql": Column(generated="1")}
+    obligation_intent_required: ClassVar[Generated] = Generated(
+        int,
+        Column(generated="1", nullable=True),
     )
 
     @classmethod
@@ -186,35 +184,37 @@ class PublicationEvidence(CoordinatorTable, TypedTable, declared_name="publicati
     def reference(self) -> MessageReference:
         return MessageReference(self.seq, self.message_id)
 
-    execution_id: str = dataclass_field(
-        metadata={
-            "sql": Column(
-                primary_key=True,
-                storage=ExactStorage,
-                check=(
-                    "typeof(execution_id) = 'text' AND length(execution_id) BETWEEN 1"
-                    " AND 256\n"
-                    "             AND instr(execution_id, ':') = 0"
-                ),
-            )
-        }
-    )
-    exact_target: str = dataclass_field(metadata={"sql": Column(primary_key=True, storage=ExactStorage, check="length(exact_target) BETWEEN 1 AND 256")})
-    seq: int = dataclass_field(metadata={"sql": Column(unique=True, check="seq > 0")})
-    message_id: str = dataclass_field(
-        metadata={
-            "sql": Column(
-                storage=ExactStorage,
-                unique=True,
-                check=(
-                    "\n      typeof(message_id) = 'text' AND length(message_id) BETWEEN 1 AND 256"
-                ),
-            )
-        }
-    )
-    received_at_ms: int = dataclass_field(metadata={"sql": Column(check="received_at_ms >= 0")})
-    obligation_receipt_required: int | None = dataclass_field(
-        init=False, compare=False, metadata={"sql": Column(generated="1")}
+    execution_id: Annotated[
+        str,
+        Column(
+            primary_key=True,
+            storage=ExactStorage,
+            check=(
+                "typeof(execution_id) = 'text' AND length(execution_id) BETWEEN 1"
+                " AND 256\n"
+                "             AND instr(execution_id, ':') = 0"
+            ),
+        ),
+    ]
+    exact_target: Annotated[
+        str,
+        Column(
+            primary_key=True, storage=ExactStorage, check="length(exact_target) BETWEEN 1 AND 256"
+        ),
+    ]
+    seq: Annotated[int, Column(unique=True, check="seq > 0")]
+    message_id: Annotated[
+        str,
+        Column(
+            storage=ExactStorage,
+            unique=True,
+            check=("\n      typeof(message_id) = 'text' AND length(message_id) BETWEEN 1 AND 256"),
+        ),
+    ]
+    received_at_ms: Annotated[int, Column(check="received_at_ms >= 0")]
+    obligation_publication_required: ClassVar[Generated] = Generated(
+        Annotated[int, WireName("obligation_receipt_required")],
+        Column(record_key=True, generated="1", nullable=True),
     )
 
     @classmethod
@@ -222,11 +222,15 @@ class PublicationEvidence(CoordinatorTable, TypedTable, declared_name="publicati
         from agent_comms.coordination_tables.responses import ResponseObligation
 
         return (
-            ForeignKey(("execution_id", "exact_target"), PublicationIntents, ("execution_id", "exact_target")),
             ForeignKey(
-                ("execution_id", "exact_target", "obligation_receipt_required"),
+                ("execution_id", "exact_target"),
+                PublicationIntents,
+                ("execution_id", "exact_target"),
+            ),
+            ForeignKey(
+                ("execution_id", "exact_target", "obligation_publication_required"),
                 ResponseObligation,
-                ("execution_id", "exact_target", "receipt_settled"),
+                ("execution_id", "exact_target", "publication_settled"),
                 deferred=True,
             ),
         )

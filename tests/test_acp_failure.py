@@ -112,7 +112,7 @@ def test_provider_array_order_and_unknown_json_text_survive():
 
 
 def test_declared_provider_retry_exhaustion_owns_execution_retry_classification():
-    from agent_comms.acp_failure import ProviderRetryResult
+    from agent_comms.acp_failure import ExhaustedRetry
     from agent_comms.turn_failure import ModelRequestFailed, ProviderRetryExhausted
     from agent_comms.turn_output import TurnOutput
 
@@ -121,9 +121,7 @@ def test_declared_provider_retry_exhaustion_owns_execution_retry_classification(
 
     transient = TurnOutput(
         failure=ModelRequestFailed("opaque provider failure"),
-        retry_result=ProviderRetryResult(
-            success=False, attempt=3, final_error="opaque provider failure"
-        ),
+        retry_result=ExhaustedRetry(attempt=3, final_error="opaque provider failure"),
     )
     assert type(transient.declared_failure) is ProviderRetryExhausted
 

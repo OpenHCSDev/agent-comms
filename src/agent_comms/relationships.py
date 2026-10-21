@@ -15,7 +15,9 @@ from dataclasses import dataclass, field, fields, replace
 from functools import cmp_to_key
 from pathlib import Path
 from threading import RLock
-from typing import TYPE_CHECKING, ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal, Annotated
+
+from agent_comms import field_codec
 
 from . import presentation
 from .channel_targets import CommandTarget
@@ -33,7 +35,7 @@ from .peer_relevance import (
     PeerRelevance,
     StrangerRelevance,
 )
-from .private_path import FileRevision
+from .private_path import FileObservation, FileRevision, MissingFile
 from .registry_document import RegistrySnapshot, RosterVisibility
 from .routing import DeliveryScope
 from .store_files import SharedLock, _store_lock
@@ -335,7 +337,7 @@ class ParentRelationshipGroup(RelationshipGroup):
 
     @classmethod
     def supply(cls, context: RelationshipContext) -> tuple[RelationshipEntry, ...]:
-        return (context.entry(context.thread.parent),) if context.thread.parent else ()
+        return tuple(context.entry(name) for name in context.thread.parent.names())
 
 
 @dataclass(frozen=True, slots=True)
@@ -386,7 +388,8 @@ class ChildrenRelationshipGroup(SortableRelationshipGroup):
         return tuple(
             context.entry(child.name)
             for child in context.registry.threads.values()
-            if child.parent and context.registry.canonical_name(child.parent) == context.thread.name
+            for parent in child.parent.names()
+            if context.registry.canonical_name(parent) == context.thread.name
         )
 
 
@@ -510,9 +513,11 @@ class RelationshipOrder:
 
 @dataclass(frozen=True, slots=True)
 class RelationshipDocument:
-    collaborations: tuple[Collaboration, ...] = field(default=(), metadata={"wire_required": True})
-    orders: tuple[RelationshipOrder, ...] = field(default=(), metadata={"wire_required": True})
-    version: Literal[2] = field(default=2, metadata={"wire_required": True})
+    collaborations: Annotated[tuple[Collaboration, ...], field_codec.WireRequired()] = (
+        ()
+    )
+    orders: Annotated[tuple[RelationshipOrder, ...], field_codec.WireRequired()] = ()
+    version: Annotated[Literal[2], field_codec.WireRequired()] = 2
 
     def __post_init__(self):
         pairs = [edge.pair_identity for edge in self.collaborations]
@@ -692,7 +697,7 @@ class ThreadRelationships:
         self._wire_lock_path = root / "wire"
         self.store = RelationshipStore.at(root)
         self._lock = RLock()
-        self._recent_revision: FileRevision | None = None
+        self._recent_revision: FileObservation = MissingFile()
         self._recent: tuple[Message, ...] = ()
         self._limited = False
 
@@ -797,7 +802,7 @@ class ThreadRelationships:
                 registry.canonical_name(message.target))
             if peer is not None:
                 correspondents[peer] = max(correspondents.get(peer, 0), message.timestamp)
-        return tuple(r for r in relations if r.records or r.peer.name == thread.parent
+        return tuple(r for r in relations if r.records or thread.parent.named(r.peer.name)
                      or correspondents.get(r.peer.name, 0) >= max(
                          thread.created_at, r.peer.require_recorded().created_at))
 
@@ -877,13 +882,14 @@ class ThreadRelationships:
     def _opened_recent_messages(self, source) -> tuple[tuple[Message, ...], bool]:
         if not source.changed_since(self._recent_revision):
             return self._recent, self._limited
-        previous = self._recent_revision
-        if (previous is not None and source.same_file(previous.identity)
-                and source.boundary > previous.size
-                and previous.holds_cut(source.revision, previous.size)):
-            start = max(previous.size, source.boundary - self.RECENT_BYTES)
-            data, start = source.tail_bytes(source.boundary - start)
-            contiguous = start == previous.size
+        for previous in self._recent_revision.revisions():
+            if (source.same_file(previous.identity)
+                    and source.boundary > previous.size
+                    and previous.holds_cut(source.revision, previous.size)):
+                start = max(previous.size, source.boundary - self.RECENT_BYTES)
+                data, start = source.tail_bytes(source.boundary - start)
+                contiguous = start == previous.size
+                break
         else:
             data, start = source.tail_bytes(self.RECENT_BYTES)
             contiguous = False
@@ -898,7 +904,7 @@ class ThreadRelationships:
         )
         limited = (self._limited if contiguous else bool(start)) or len(messages) > self.RECENT_MESSAGES
         messages = messages[-self.RECENT_MESSAGES :]
-        self._recent_revision = source.revision if source.boundary else None
+        self._recent_revision = source.revision if source.boundary else MissingFile()
         self._recent, self._limited = messages, limited
         return messages, limited
 

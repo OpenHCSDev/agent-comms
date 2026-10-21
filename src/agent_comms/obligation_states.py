@@ -6,9 +6,17 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import ClassVar
 
+from .coordination_contracts import MAX_IDENTIFIER_CHARS, require_bounded
 from .coordination_errors import IntegrityViolationError, IdentityConflict
 from .declared_family import DeclaredFamily
+from .field_codec import NullMember
 from .lifecycle import LifecycleState
+from .message_reference import MessageReference
+
+
+@dataclass(frozen=True, slots=True)
+class Unpublished(NullMember):
+    """An obligation has no publication acknowledgement until it is published."""
 
 
 @dataclass(frozen=True)
@@ -28,12 +36,15 @@ class ResponseState(DeclaredFamily, LifecycleState, affix="Response"):
     def successors(cls) -> tuple[type[ResponseState], ...]: ...
 
     @property
-    def receipt_message_id(self) -> str | None:
-        return None
+    def published_message_id(self) -> str | Unpublished:
+        return Unpublished()
 
     @property
-    def receipt_seq(self) -> int | None:
-        return None
+    def publication_seq(self) -> int | Unpublished:
+        return Unpublished()
+
+    def published_reference(self) -> MessageReference:
+        raise IntegrityViolationError("only published obligations have an acknowledgement")
 
     @classmethod
     def load(cls, message_id: str | None, seq: int | None) -> ResponseState:
@@ -51,8 +62,6 @@ class ResponseState(DeclaredFamily, LifecycleState, affix="Response"):
         raise IdentityConflict("no frozen publishing intent for current owner")
 
     def require_nonpublication(self) -> None:
-        from .coordination_errors import IdentityConflict
-
         if not self.retryable:
             raise IdentityConflict("wire completion requires nonpublication obligation")
 
@@ -97,6 +106,7 @@ class PublishingResponse(ResponseState):
     def successors(cls):
         return PublishedResponse, FailedResponse
 
+
 class DeferredResponse(ResponseState):
     retryable = True
     deferred = True
@@ -119,16 +129,20 @@ class PublishedResponse(ResponseState):
     def __post_init__(self):
         if not isinstance(self.message_id, str) or not self.message_id:
             raise IntegrityViolationError("published obligations require a acknowledgement")
+        require_bounded(self.message_id, "receipt_message_id", MAX_IDENTIFIER_CHARS)
         if type(self.seq) is not int or self.seq <= 0:
             raise ValueError("receipt_seq must be positive")
 
     @property
-    def receipt_message_id(self):
+    def published_message_id(self):
         return self.message_id
 
     @property
-    def receipt_seq(self):
+    def publication_seq(self):
         return self.seq
+
+    def published_reference(self) -> MessageReference:
+        return MessageReference(self.seq, self.message_id)
 
     def validate_acknowledgement(self, acknowledgement) -> None:
         if acknowledgement is None:

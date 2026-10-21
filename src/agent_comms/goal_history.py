@@ -16,10 +16,11 @@ from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
+
 
 from .coordination_database import CoordinationStore
-from .field_codec import FieldCodec, MalformedRecord
+from .field_codec import FieldCodec, MalformedRecord, HistoryExclude
 from .goals import GoalDeclaration, NoGoal
 from .locked_store import DurableFile, SQLiteFile
 from .typed_table import Column, DurableTables, Index, JsonStorage, TypedTable
@@ -32,7 +33,7 @@ class GoalHistoryError(RuntimeError):
 @dataclass(frozen=True)
 class RecordedGoalRevision:
     """A history entry's public fields; its owner key and journal state stay in the store."""
-    sequence: int | None
+    sequence: int
     kind: Literal["transition", "baseline", "observed_gap"]
     observed_at: float
     before: GoalDeclaration
@@ -44,15 +45,17 @@ class GoalHistoryEntry(TypedTable, DurableTables):
     # The durable kind field is a journal fact, not the TypedTable family tag.
     schema_error = GoalHistoryError
 
-    sequence: int | None = field(metadata={"sql": Column(primary_key=True)})
+    sequence: Annotated[int, Column(primary_key=True)]
     kind: Literal["transition", "baseline", "observed_gap"]
     observed_at: float
-    before: GoalDeclaration = field(metadata={"sql": Column(storage=JsonStorage, nullable=True)})
-    after: GoalDeclaration = field(metadata={"sql": Column(storage=JsonStorage, nullable=True)})
-    owner_created_at: float = field(kw_only=True, metadata={"history_exclude": True})
-    state: Literal["pending", "committed", "aborted", "uncertain"] = field(
-        kw_only=True, metadata={"history_exclude": True}
+    before: Annotated[GoalDeclaration, Column(storage=JsonStorage, nullable=True)]
+    after: Annotated[GoalDeclaration, Column(storage=JsonStorage, nullable=True)]
+    owner_created_at: Annotated[float, HistoryExclude()] = field(
+        kw_only=True
     )
+    state: Annotated[
+        Literal["pending", "committed", "aborted", "uncertain"], HistoryExclude()
+    ] = field(kw_only=True)
     indexes = (Index(("owner_created_at", "sequence")),)
 
     def reports_turn(self, turn_id: str) -> bool:
@@ -173,15 +176,16 @@ class GoalHistoryStore(DurableFile, SQLiteFile):
         after: GoalDeclaration,
     ) -> int:
         with self._transaction() as connection:
-            cursor = GoalHistoryEntry(
-                None,
-                kind,
-                time.time(),
-                before,
-                after,
+            # SQLite assigns the sequence; a stored entry always has one.
+            cursor = GoalHistoryEntry.insert_values(
+                connection,
+                kind=kind,
+                observed_at=time.time(),
+                before=before,
+                after=after,
                 owner_created_at=owner_created_at,
                 state=state,
-            ).insert(connection)
+            )
             sequence = cursor.lastrowid
             if sequence is None:
                 raise GoalHistoryError("Goal history insert returned no sequence.")

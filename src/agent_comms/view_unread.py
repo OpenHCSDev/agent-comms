@@ -8,10 +8,10 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import ExitStack, closing, contextmanager
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from threading import Event, RLock
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Annotated
 from weakref import WeakValueDictionary, finalize
 
 from .coordination_database import CoordinationStore, StoreBusy
@@ -19,12 +19,12 @@ from .coordination_errors import CoordinationReadUnavailable
 from .locked_store import RuntimeFile, SQLiteFile
 from .native_entries import NativeEntry
 from .native_transcript import SessionCut, reverse_records
-from .private_path import FileRevision
+from .private_path import FileObservation, FileRevision, MissingFile
 from .read_ledger import ReadDocument, ReadLedger
 from .registry_document import RosterVisibility
 from .store_files import SharedLock, _store_lock
 from .thread_owned_state import ThreadOwnedState
-from .typed_table import Column, SQLiteTableName, SQLiteUserVersion, TypedRow, TypedTable
+from .typed_table import Column, JsonStorage, SQLiteTableName, SQLiteUserVersion, TypedRow, TypedTable
 from .ui_model.unread import CappedReplyUnread, IndexingUnread, ReplyUnread, UnreadPresentation
 from .wire_watch import FileWatch, NativeFileWatch, WatchSource
 
@@ -43,9 +43,9 @@ class ReplyIndexTable:
 
 @dataclass(frozen=True)
 class ReplyIndex(ReplyIndexTable, TypedTable):
-    revision: FileRevision | None = None
+    revision: Annotated[FileObservation, Column(storage=JsonStorage, nullable=True)] = MissingFile()
     records: int = 0
-    source: str = field(default="", metadata={"sql": Column(primary_key=True, check="source<>''")})
+    source: Annotated[str, Column(primary_key=True, check="source<>''")] = ""
     start: int = 0
     limit: ClassVar[int] = 32
 
@@ -117,8 +117,8 @@ class ReplyRead:
 
 @dataclass(frozen=True)
 class TranscriptReply(ReplyIndexTable, TypedTable):
-    source: str = field(metadata={"sql": Column(primary_key=True)})
-    end: int = field(metadata={"sql": Column(primary_key=True)})
+    source: Annotated[str, Column(primary_key=True)]
+    end: Annotated[int, Column(primary_key=True)]
     without_rowid = True
 
     @classmethod
@@ -303,7 +303,7 @@ class ReplyReading:
             return
         expected = self.read.revision
         revision = FileRevision.capture(Path(self.read.index.source))
-        if revision is not None and expected.holds_cut(revision, expected.size):
+        if revision.contains_cut(expected, expected.size):
             self.future.result().commit(database)
 
 
@@ -368,7 +368,7 @@ class NativeReplyPreparation(ReplyPreparation):
 class TranscriptReadKeys:
     incarnation: ThreadIncarnation
     runtime: RuntimeLocation
-    revisions: dict[str, FileRevision | None]
+    revisions: dict[str, FileObservation]
     paths: dict[str, Path]
 
     def matches(self, thread: Thread) -> bool:
@@ -378,7 +378,7 @@ class TranscriptReadKeys:
     def capture(cls, thread: Thread):
         return cls(thread.incarnation, thread.runtime, {}, {}).refresh({})
 
-    def refresh(self, observed: Mapping[str, FileRevision | None]) -> TranscriptReadKeys:
+    def refresh(self, observed: Mapping[str, FileObservation]) -> TranscriptReadKeys:
         paths = {key: self.paths[key] if key in self.paths else Path(key).absolute()
                  for key in self.runtime.read_keys()}
         return replace(self, paths=paths, revisions={
@@ -449,7 +449,7 @@ class TranscriptReadState(RuntimeFile, SQLiteFile, ThreadOwnedState):
     def _database(self) -> sqlite3.Connection:
         revision = FileRevision.capture(self.index_path)
         if self._connection is not None and (
-            revision is None or revision.identity.inode != self._database_inode
+            not revision.holds_inode(self._database_inode)
         ):
             self._close_database()
         if self._connection is None:
@@ -506,7 +506,7 @@ class TranscriptReadState(RuntimeFile, SQLiteFile, ThreadOwnedState):
 
     @contextmanager
     def _indexed_sources(
-        self, revisions: dict[str, FileRevision | None], seen: Mapping[str, int]
+        self, revisions: dict[str, FileObservation], seen: Mapping[str, int]
     ) -> Iterator[tuple[sqlite3.Connection, dict[str, ReplyIndex]]]:
         database = self._database()
         # Publish before reading committed counts, if the preparation has finished.
@@ -516,8 +516,9 @@ class TranscriptReadState(RuntimeFile, SQLiteFile, ThreadOwnedState):
             indexes = ReplyIndex.for_sources(database, tuple(revisions))
             needed = {
                 source: ReplyRead(indexes[source], revision, seen[source])
-                for source, revision in revisions.items()
-                if revision is not None and not indexes[source].counts(revision, seen[source])
+                for source, observed in revisions.items()
+                for revision in observed.revisions()
+                if not indexes[source].counts(revision, seen[source])
             }
             yield database, indexes
         # Start only after releasing the read snapshot. Spawn receives data and
@@ -599,18 +600,20 @@ class TranscriptReadState(RuntimeFile, SQLiteFile, ThreadOwnedState):
                      for source, revision in keys.revisions.items()}
         if not revisions:
             return TranscriptUnread({name: ReplyUnread(0) for name in threads})
-        per_file: dict[str, FileReplyCount] = {}
+        # A missing transcript has no replies.
+        per_file: dict[str, FileReplyCount] = {source: Counted(0) for source in revisions}
+        present = {source: revision for source, observed in revisions.items()
+                   for revision in observed.revisions()}
         seen = {}
-        for source, revision in revisions.items():
-            if revision is not None:
-                mark = self.reads.transcript_seen(
-                    viewer, source, revision.identity.inode, document=document
-                )
-                seen[source] = mark if mark <= revision.size else 0
+        for source, revision in present.items():
+            mark = self.reads.transcript_seen(
+                viewer, source, revision.identity.inode, document=document
+            )
+            seen[source] = mark if mark <= revision.size else 0
         with self._indexed_sources(revisions, seen) as (database, indexes):
             ends: dict[str, int] = {}
-            for source, revision in revisions.items():
-                if revision is None or seen[source] == revision.size:
+            for source, revision in present.items():
+                if seen[source] == revision.size:
                     per_file[source] = Counted(0)
                 elif not indexes[source].counts(revision, seen[source]):
                     per_file[source] = Indexing()

@@ -34,6 +34,7 @@ from agent_comms.comms import Comms
 from agent_comms.private_bus_checkpoint import addressed_source_pointers_unlocked
 from agent_comms.store_files import _store_lock
 from test_coordinated_runtime import tmp_path as private_root_fixture
+from agent_comms.thread_model import DeclaredModel
 
 # Reuse the existing sealed-runtime persistent /var/tmp test root.
 tmp_path = private_root_fixture
@@ -110,7 +111,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                             assert len(pending) == 1
                             original = pending[0]
                             user = next(entry for entry in NativeTranscript(
-                                Path(original.session_file)
+                                Path(original.runtime.read_key)
                             ).tail() if entry.input_boundary).require_tracked_user()
                             assert user.input_id == original.input_id
                             is_triage = original.stage is TriageNativeExecution
@@ -242,7 +243,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
         project.mkdir()
         projects[name] = project
         comms.registry.declare(
-            comms.registry.new_thread(name, frozenset({'team'}), str(project), model=f'roundtrip-local/{name}' if broadcast else 'roundtrip-local/fixture', thinking_level=OffThinkingLevel)
+            comms.registry.new_thread(name, frozenset({'team'}), str(project), model=DeclaredModel(f'roundtrip-local/{name}' if broadcast else 'roundtrip-local/fixture'), thinking_level=OffThinkingLevel)
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
     attachment = CommsClient(
@@ -494,7 +495,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                 assert current.process_identity != old.process_identity
                 assert after.claim_generation(name) > before.claim_generation(name)
                 assert current.session_file == old.session_file
-                assert Path(current.session_file).read_bytes() == saved[name]
+                assert Path(current.runtime.read_key).read_bytes() == saved[name]
             assert len(requests) == seed_count + 2, "Restart replayed saved input"
             attachment = CommsClient(
                 comms, runtime_enabled=True,

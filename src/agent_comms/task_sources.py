@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import Annotated, TYPE_CHECKING
+
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, WireOmitDefault
 from .goals import GoalDeclaration, GoalRevision
 from .message_reference import MessageReference
 from .thread_identity import (
@@ -24,9 +25,9 @@ if TYPE_CHECKING:
     from .input_attempt import StoredInput
     from .input_disposition import InputDispositions
     from .messages import Message
+    from .private_bus_checkpoint import CheckedRead
     from .registry_document import RegistrySnapshot
     from .threads import Thread
-    from .private_bus_checkpoint import CheckedRead
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -61,6 +62,7 @@ class TaskScope(DeclaredFamily, affix="TaskScope"):
                            registry: RegistrySnapshot) -> None:
         if previous.scope != self:
             raise RelationViolationError("Decision correction must preserve its original scope")
+
 
 @dataclass(frozen=True, kw_only=True)
 class GoalTaskScope(TaskScope):
@@ -316,9 +318,11 @@ class UserTaskDrop(UserTaskSupersession):
 @dataclass(frozen=True, kw_only=True)
 class ScopedTaskDeclaration(TaskAttachment):
     """The source and its history; each author type decides whether work may start."""
+
     scope: TaskScope
-    change: TaskChange = field(default_factory=OriginalTaskChange,
-                              metadata={"wire_omit_default": True})
+    change: Annotated[TaskChange, WireOmitDefault()] = field(
+        default_factory=OriginalTaskChange
+    )
     retains_authored_task = True
 
     def require_scoped_task(self) -> ScopedTaskDeclaration:
@@ -634,8 +638,8 @@ class Constraint(ModelTaskDeclaration):
         return (ConstraintTaskFact(message),)
 
 
-from .working_memory_labels import ClassifierVersion, JevClassifier
 from .turn_context import ContextSegment
+from .working_memory_labels import ClassifierVersion, JevClassifier
 
 
 @dataclass(frozen=True, kw_only=True)

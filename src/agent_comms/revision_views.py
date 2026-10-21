@@ -5,13 +5,13 @@ from __future__ import annotations
 from itertools import zip_longest
 
 from .declared_family import DeclaredFamily
-from .private_path import FileRevision
+from .private_path import FileObservation, MissingFile
 
 
 class RevisionView(DeclaredFamily, affix="View"):
     """A view derived from the revision sources that declare they feed it."""
 
-    def differs(self, before: tuple[FileRevision, ...], current: tuple[FileRevision, ...]) -> bool:
+    def differs(self, before: tuple[FileObservation, ...], current: tuple[FileObservation, ...]) -> bool:
         return before != current
 
 
@@ -45,10 +45,10 @@ class NotificationsView(RevisionView):
 
 
 class BusSourceView(RevisionView):
-    def differs(self, before: tuple[FileRevision, ...], current: tuple[FileRevision, ...]) -> bool:
+    def differs(self, before: tuple[FileObservation, ...], current: tuple[FileObservation, ...]) -> bool:
         return any(
-            FileRevision.source_changed(earlier, now)
-            for earlier, now in zip_longest(before, current)
+            earlier.lost_in(now)
+            for earlier, now in zip_longest(before, current, fillvalue=MissingFile())
         )
 
 

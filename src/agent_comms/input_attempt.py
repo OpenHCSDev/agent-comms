@@ -4,11 +4,20 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, field, fields, replace
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Annotated
+
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, Id128Text, NullMember
+from .field_codec import (
+    FieldCodec,
+    Id128Text,
+    NullMember,
+    PublicExclude,
+    WireName,
+    WireOmitDefault,
+    WireRequired,
+)
 from .input_origin import (
     InputDelivery,
     InputOrigin,
@@ -22,7 +31,6 @@ from .thread_identity import GenerationCounter, ThreadIncarnation
 if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
     from .turn_lease import TurnLeaseFence
-
 
 
 class InputAlreadyCleared(RelationViolationError):
@@ -189,10 +197,11 @@ class UnresolvedInput:
     sequence: int | None
     target: str
     text: str
-    input_id: str = field(metadata={"wire_name": "inputId"})
+    input_id: Annotated[str, WireName("inputId")]
     status: str
-    reviewed_for_goals: tuple[str, ...] = field(
-        default=(), metadata={"wire_name": "reviewedForGoals", "wire_omit_default": True})
+    reviewed_for_goals: Annotated[
+        tuple[str, ...], WireName("reviewedForGoals"), WireOmitDefault()
+    ] = ()
 
     @classmethod
     def of(cls, row: StoredInput) -> UnresolvedInput:
@@ -206,7 +215,9 @@ class UnresolvedInput:
 class HistoricalInput(UnresolvedInput):
     """An earlier notice of an unresolved input, shown with whether the owner dismissed it."""
 
-    notice_dismissed: bool = field(kw_only=True, metadata={"wire_name": "noticeDismissed"})
+    notice_dismissed: Annotated[bool, WireName("noticeDismissed")] = field(
+        kw_only=True
+    )
 
     @classmethod
     def notice(cls, row: StoredInput, notice_dismissed: bool) -> HistoricalInput:
@@ -230,18 +241,22 @@ class StoredInput(InputAttempt):
             raise RelationViolationError("Constraint lacks its original input provenance")
         self.origin.require_human()
         return self
+
     key: str
     sequence: int | None
     owner: str
-    claim_scope: int = field(metadata={"wire_name": 'admission'})
+    claim_scope: Annotated[int, WireName("admission")]
     target: str
     source_text: str
-    origin: InputOrigin = field(default_factory=UnattributedInputOrigin, kw_only=True,
-                               metadata={"wire_omit_default": True})
-    notice_dismissed: bool = field(default=False, metadata={"wire_omit_default": True},
-                                   kw_only=True)
-    goal_reviews: dict[str, GoalInputDecision] = field(
-        default_factory=dict, metadata={"wire_omit_default": True}, kw_only=True)
+    origin: Annotated[InputOrigin, WireOmitDefault()] = field(
+        default_factory=UnattributedInputOrigin, kw_only=True
+    )
+    notice_dismissed: Annotated[bool, WireOmitDefault()] = field(
+        default=False, kw_only=True
+    )
+    goal_reviews: Annotated[
+        dict[str, GoalInputDecision], WireOmitDefault()
+    ] = field(default_factory=dict, kw_only=True)
 
     def __post_init__(self) -> None:
         try:
@@ -334,10 +349,14 @@ class ReservedInput(RecoverableUnboundInput):
 @dataclass(frozen=True)
 class SentInput(StoredInput):
     has_native_binding = True
-    turn_id: str = field(metadata={"public_exclude": True, "wire_required": True})
-    native_id: str = field(metadata={"public_exclude": True, "wire_required": True})
+    turn_id: Annotated[str, PublicExclude(), WireRequired()]
+    native_id: Annotated[
+        str, PublicExclude(), WireRequired()
+    ]
     # The native session owns the sent text; this row only proves which text it was.
-    sent_digest: TextDigest = field(metadata={"public_exclude": True, "wire_required": True})
+    sent_digest: Annotated[
+        TextDigest, PublicExclude(), WireRequired()
+    ]
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -414,6 +433,7 @@ class StartedInput(SentInput):
         """
         return self.matches_lease(lease, snapshot) and self.matches_native(
             turn_id=lease.turn_id, native_id=native_id, text=sent_text)
+
 
 class NotSentInput(RecoverableUnboundInput):
     unresolved = True

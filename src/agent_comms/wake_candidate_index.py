@@ -11,13 +11,13 @@ from __future__ import annotations
 import sqlite3
 import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from .bus_source_page import CandidateQuery
 from .checkpoint_seals import PrefixSource
-from agent_comms.response_acknowledgement import KeyedResponseAcknowledgement
+from agent_comms.response_acknowledgement import ResponseAcknowledgement
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .private_path import FileRevision
@@ -82,15 +82,14 @@ class CandidateTable:
 
 @dataclass(frozen=True, kw_only=True)
 class CandidateCheckpoint(CandidateTable, TypedTable, CheckpointState):
-    singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True)})
+    singleton: Annotated[Literal[1], Column(primary_key=True)]
     version: Literal[3]
     root_id: str
     device: int
     inode: int
-    byte_offset: int = field(metadata={"sql": Column(check="byte_offset>=0")})
+    byte_offset: Annotated[int, Column(check="byte_offset>=0")]
     tail_digest: str
-    last_seq: int = field(metadata={"sql": Column(check="last_seq>=0")})
-
+    last_seq: Annotated[int, Column(check="last_seq>=0")]
 
     @classmethod
     def initial(cls, root_id: str, revision: FileRevision) -> CandidateCheckpoint:
@@ -134,15 +133,15 @@ class CandidateCheckpoint(CandidateTable, TypedTable, CheckpointState):
 
 @dataclass(frozen=True)
 class CandidateResponseKey(CandidateTable, TypedTable):
-    publication_key: str = field(metadata={"sql": Column(primary_key=True)})
+    publication_key: Annotated[str, Column(primary_key=True)]
     without_rowid = True
 
 
 @dataclass(frozen=True)
 class Candidate(CandidateTable, TypedTable):
-    source_seq: int = field(metadata={"sql": Column(primary_key=True)})
+    source_seq: Annotated[int, Column(primary_key=True)]
     message_id: str
-    recipient_lookup: str = field(metadata={"sql": Column(primary_key=True)})
+    recipient_lookup: Annotated[str, Column(primary_key=True)]
     sender: str
     target: str
     wake_mode: type[WakePolicy] | None  # None means a delivery-only/no-wake member.
@@ -192,7 +191,7 @@ class CandidateCatchUp:
 class _ParsedRow:
     seq: int
     recipients: tuple[Candidate, ...]
-    response: KeyedResponseAcknowledgement | None
+    response: ResponseAcknowledgement
 
 
 @dataclass(frozen=True, slots=True)
@@ -333,8 +332,7 @@ class WakeCandidateIndex(TypedStore, DerivedTables):
             parsed = cls._parse_row(record, source.metadata.root_id, last_seq)
             last_seq = parsed.seq
             rows.extend(parsed.recipients)
-            if parsed.response is not None:
-                response_keys.append(CandidateResponseKey(parsed.response.publication_key))
+            response_keys.extend(map(CandidateResponseKey, parsed.response.publication_keys()))
             through = end
         return _ReplayBatch(through, last_seq, tuple(rows), tuple(response_keys))
 

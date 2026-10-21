@@ -12,34 +12,45 @@ from dataclasses import dataclass, field, replace
 from hashlib import sha256
 from typing import TYPE_CHECKING, Annotated, Callable, ClassVar
 
-from .agent_backend import InputId, SendNow, TurnInbox
+
 from .acp_failure import (
-    ACPFailure, BackendDeliveryFailure, DeliveryFailure, FailureSource, UnrecordedFailureSource,
+    ACPFailure,
+    BackendDeliveryFailure,
+    DeliveryFailure,
+    FailureSource,
+    UnrecordedFailureSource,
 )
+from .agent_backend import InputId, SendNow, TurnInbox
 from .agent_events import CompactionEvent
-from .declared_family import DeclaredFamily
 from .context_reading import ContextReading
+from .declared_family import DeclaredFamily
+from .external_transcript import DraftRow
+from .field_codec import (
+    FieldCodec,
+    Id128Text,
+    MalformedRecord,
+    WireValue,
+    WireName,
+    WireOmitDefault,
+)
+from .goal_presentation import GoalSnapshot, ThreadGoalExecution
 from .input_attempt import InputAttempt
 from .input_origin import HumanInputOrigin, InputOrigin, UnattributedInputOrigin
-from .field_codec import FieldCodec, Id128Text, MalformedRecord, WireValue
-from .goal_presentation import GoalSnapshot, ThreadGoalExecution
 from .native_runtime_input import CurrentNativeCursor
 from .owner_protocol import IncompatibleOwner
 from .pi_payloads import McpLiveAcknowledgement
 from .routing import MessageRoute
 from .thread_identity import ClaimedIdentity, ThreadIncarnation
 from .tool_result import DeclaredReply
-from .turn_lease import TurnState
 from .transcripts import TranscriptCursor, TranscriptPage, TranscriptReadIdentity
-from .external_transcript import DraftRow
 from .turn_context import ContextManifest
+from .turn_lease import TurnState
 from .working_memory_labels import ModelLabel
 
 if TYPE_CHECKING:
-    import asyncio
     from acp.schema import AgentMessageChunk
+
     from .input_drain import InputDrain
-    from .queued_input import QueuedInput
 
 
 class AgentCommsUpdate(DeclaredFamily, affix="Update"):
@@ -114,7 +125,7 @@ class UpdateBatch:
 class UpdateMetadata:
     """An ACP ``_meta`` object carrying one batch of Comms updates."""
 
-    batch: UpdateBatch = field(metadata={"wire_name": "agentComms"})
+    batch: Annotated[UpdateBatch, WireName("agentComms")]
 
     @classmethod
     def of(cls, *updates: AgentCommsUpdate) -> UpdateMetadata:
@@ -125,8 +136,8 @@ class UpdateMetadata:
 class GoalSnapshotReply(DeclaredReply, GoalSnapshot):
     """A goal request's reply: the owner's goal snapshot and its turn state."""
 
-    execution: ThreadGoalExecution = field(metadata={"wire_name": "goalExecution"})
-    meta: UpdateMetadata = field(metadata={"wire_name": "_meta"})
+    execution: Annotated[ThreadGoalExecution, WireName("goalExecution")]
+    meta: Annotated[UpdateMetadata, WireName("_meta")]
 
 
 def encode_updates(*updates: AgentCommsUpdate) -> dict:
@@ -300,7 +311,7 @@ class NoCursorScope(CursorScope):
 class LiveCursorScope(CursorScope, LiveAttachmentScope):
     session_id: str
     wire_root_id: str
-    claim_scope: ClaimedIdentity = field(metadata={"wire_name": 'admission'})
+    claim_scope: Annotated[ClaimedIdentity, WireName("admission")]
     owner_pid: int
 
     def __post_init__(self):
@@ -316,7 +327,6 @@ class LiveCursorScope(CursorScope, LiveAttachmentScope):
     @property
     def logical_key(self):
         return self.session_id, self.wire_root_id
-
 
 
 class CursorObservation(DeclaredFamily, affix="CursorObservation"):
@@ -446,7 +456,7 @@ class NoQueueScope(QueueScope):
 @dataclass(frozen=True)
 class LiveQueueScope(QueueScope, LiveAttachmentScope):
     session_id: str
-    claim_scope: ClaimedIdentity = field(metadata={"wire_name": 'admission'})
+    claim_scope: Annotated[ClaimedIdentity, WireName("admission")]
     owner_pid: int
 
     @property
@@ -476,7 +486,6 @@ class LiveQueueScope(QueueScope, LiveAttachmentScope):
 
     def unidentified_start(self, input_id: str | None) -> bool:
         return False
-
 
 
 @dataclass(frozen=True)
@@ -664,7 +673,7 @@ class InputDeliveryChangedUpdate(AgentCommsUpdate):
 @dataclass(frozen=True)
 class McpClientAcknowledgementUpdate(AgentCommsUpdate, declared_name="mcp_client_receipt"):
     turn_id: str
-    acknowledgement: McpLiveAcknowledgement = field(metadata={"wire_name": 'receipt'})
+    acknowledgement: Annotated[McpLiveAcknowledgement, WireName("receipt")]
 
     def matches_turn(self, turn_id: str) -> bool:
         return self.turn_id == turn_id
@@ -683,8 +692,9 @@ class PromptRequest(CommsRequest):
     user_text: str | None = None
     defer_display: bool = False
     input_id: Annotated[str, Id128Text] = field(default_factory=Id128Text.mint)
-    origin: InputOrigin = field(default_factory=UnattributedInputOrigin, kw_only=True,
-                               metadata={"wire_omit_default": True})
+    origin: Annotated[InputOrigin, WireOmitDefault()] = field(
+        default_factory=UnattributedInputOrigin, kw_only=True
+    )
 
     def __post_init__(self):
         Id128Text.decode(self.input_id)

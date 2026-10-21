@@ -23,15 +23,16 @@ import stat
 import struct
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Annotated, TYPE_CHECKING
+
 
 from . import store_files
 from .coordination_database import CoordinationStore
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, Id128Text, MalformedRecord
+from .field_codec import FieldCodec, Id128Text, MalformedRecord, WireName
 from .locked_store import DurableFile, WireWakeFile
 from .private_path import fsync_directory
 
@@ -338,7 +339,7 @@ class PrivateOwnerRenameIntent(DurableFile):
     old: str
     new: str
     generation: int
-    wire_root_id: str = field(metadata={"wire_name": "wireRootId"})
+    wire_root_id: Annotated[str, WireName("wireRootId")]
     version: int = 1
     completed: bool = False
 

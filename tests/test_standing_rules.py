@@ -3,6 +3,7 @@ import time
 from dataclasses import replace
 
 
+from agent_comms.thread_text import SavedSessionFile
 from agent_comms.todos import (DirectiveText)
 
 
@@ -23,10 +24,10 @@ def working(comms, name, created):
     path.write_text("".join(json.dumps(row) + "\n" for row in rows))
     path.chmod(0o600)
     if name in comms.registry.all_threads():
-        comms.registry.register(replace(comms.registry.require(name), session_file=str(path)))
+        comms.registry.register(replace(comms.registry.require(name), session_file=SavedSessionFile(str(path))))
     else:
         comms.registry.declare(comms.registry.new_thread(
-            name, frozenset(), str(comms.root), session_file=str(path), created_at=created))
+            name, frozenset(), str(comms.root), session_file=SavedSessionFile(str(path)), created_at=created))
 
 
 def test_plain_messages_need_no_order_labels():

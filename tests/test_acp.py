@@ -31,7 +31,10 @@ from agent_comms.context_reading import ContextUsage, UnmeasuredContext
 from agent_comms.channels import ANY_CHANNEL
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.pi_counts import PiCount
+from agent_comms.read_basis import NamedViewer
+from agent_comms.native_arguments import GivenArguments
 from delivery_owner_fixture import canonical_agent
+from agent_comms.thread_model import DeclaredModel
 
 
 
@@ -78,7 +81,7 @@ class TestHandlers:
             "proj", ae.ContextUsageObservation(context_used=PiCount.from_wire(38723))
         )
         agent._comms.agents.observe_runtime_info(
-            "proj", ae.AgentInfo(model="test/model", context_size=PiCount.from_wire(272000))
+            "proj", ae.AgentInfo(model=DeclaredModel('test/model'), context_size=PiCount.from_wire(272000))
         )
         reopened = canonical_agent(wire(agent._comms.root))
         assert facts((await reopened.sessions.metadata("proj")), CoordinationChangedUpdate)[
@@ -96,7 +99,7 @@ class TestHandlers:
 
         monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "openrouter/one")
         agent = canonical_agent(
-            wire(tmp_path / "wire"), agent_args=["--provider", "openrouter", "--model", "one"]
+            wire(tmp_path / "wire"), agent_args=GivenArguments(("--provider", "openrouter", "--model", "one",))
         )
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         with pytest.raises(RequestError):
@@ -509,7 +512,7 @@ class TestTargetPrefix:
         await agent.prompt(session_id="proj", prompt=[{"type": "text", "text": "@peer hi peer"}])
         assert wired.bus.pending_count("peer") == 1
         assert wired.bus.pending_count("PR111") == 0
-        assert [m.body for m in list(wired.views.history_page(CommandTarget.named("peer"), viewer="proj").messages)] == ["hi peer"]
+        assert [m.body for m in list(wired.views.history_page(CommandTarget.named("peer"), viewer=NamedViewer("proj")).messages)] == ["hi peer"]
 
 
 

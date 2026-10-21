@@ -10,6 +10,7 @@ import weakref
 
 import pytest
 
+from agent_comms.thread_text import SavedSessionFile
 from agent_comms.view_unread import transcript_read_state
 from agent_comms.comms import wire
 from native_unread_fixture import native_reader
@@ -24,7 +25,7 @@ def test_collected_reader_cancels_and_joins_its_worker_then_closes_sqlite(tmp_pa
     }}) + "\n")
     state = native_reader(tmp_path / 'read_ledger.json')
     registry = wire(tmp_path).registry
-    registry.declare(registry.new_thread('worker', frozenset(), str(tmp_path), session_file=str(source)))
+    registry.declare(registry.new_thread('worker', frozenset(), str(tmp_path), session_file=SavedSessionFile(str(source))))
     assert state.counts('viewer', registry=registry.snapshot(), document=state.reads.read(), visibility=DEFAULT_ROSTER).counts == {"worker": IndexingUnread()}
     for future in state.watch(frozenset(), lambda _: None):
         future.result(timeout=10)

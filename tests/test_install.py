@@ -6,11 +6,16 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
+import pytest
+
 from agent_comms.active_route import ActiveRoute, read_active_route, route_new_bus
 from agent_comms.candidate_maintenance import drain_candidate_catchup
 from agent_comms.comms import Comms
+from agent_comms.commander.config import (
+    CommanderConfig, GivenRepos, NamedCommander, NoConfigFile, WrittenConfigFile,
+)
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.installer.backup import bus_files
+from agent_comms.installer.backup import UpgradeRefused, bus_files
 from agent_comms.installer.carry import CarryChain, CarryLedger
 from agent_comms.installer.practice import practice_copy
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
@@ -135,8 +140,68 @@ def test_install_report_encodes_its_registered_harnesses() -> None:
     from agent_comms.cli_commands import InstallResult
     from agent_comms.field_codec import FieldCodec
 
-    report = InstallResult("/config.json", {"claude-code": ("skill", "tools")})
-    assert FieldCodec.decode(InstallResult, FieldCodec.encode(report)) == report
+    for config in (WrittenConfigFile("/config.json"), NoConfigFile()):
+        report = InstallResult(config, {"claude-code": ("skill", "tools")})
+        assert FieldCodec.decode(InstallResult, FieldCodec.encode(report)) == report
+
+
+def _harnessless_home(directory: Path, monkeypatch) -> Path:
+    home = directory / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("PATH", "")
+    return home
+
+
+def test_an_install_on_a_bus_with_no_commander_writes_no_commander_config(private_directory, monkeypatch):
+    # The laptop's install failed its last step: the flag default named this machine's commander.
+    from agent_comms.cli_commands import InstallCliCommand
+
+    root = private_directory / "wire"
+    root.mkdir(mode=0o700)
+    comms = Comms(root)
+    home = _harnessless_home(private_directory, monkeypatch)
+    result = InstallCliCommand(project=private_directory).apply(comms)
+    assert result.config == NoConfigFile()
+    assert not CommanderConfig.root_path(root).exists()
+    assert not CommanderConfig.path(home).exists() and not CommanderConfig.path(home).is_symlink()
+
+
+@pytest.mark.parametrize("flags", [
+    {"commander": NamedCommander("lead")},
+    {"repos": GivenRepos((Path("/checkout"),))},
+], ids=["commander-without-repos", "repos-without-commander"])
+def test_an_install_refuses_flags_a_bus_without_a_commander_record_cannot_use(
+    private_directory, monkeypatch, flags,
+):
+    from agent_comms.cli_commands import InstallCliCommand
+
+    root = private_directory / "wire"
+    root.mkdir(mode=0o700)
+    home = _harnessless_home(private_directory, monkeypatch)
+    with pytest.raises(UpgradeRefused):
+        InstallCliCommand(project=private_directory, **flags).apply(Comms(root))
+    assert not CommanderConfig.root_path(root).exists() and not CommanderConfig.path(home).is_symlink()
+
+
+def test_an_install_without_flags_keeps_the_recorded_commander_and_rehomes_its_paths(
+    private_directory, monkeypatch,
+):
+    from agent_comms.cli_commands import InstallCliCommand
+
+    root = (private_directory / "wire").resolve()
+    root.mkdir(mode=0o700)
+    comms = Comms(root)
+    comms.registry.declare(comms.registry.new_thread("lead", frozenset(), str(private_directory)))
+    old_home = private_directory / "old-home"
+    recorded = CommanderConfig.on_machine("lead", (), root, old_home, frozenset({"parked-unit"}))
+    recorded.write(old_home)
+    home = _harnessless_home(private_directory, monkeypatch)
+    result = InstallCliCommand(project=private_directory).apply(comms)
+    expected = CommanderConfig.on_machine("lead", (), root, home, frozenset({"parked-unit"}))
+    assert result.config == WrittenConfigFile(str(CommanderConfig.path(home)))
+    assert CommanderConfig.root_path(root).read_text() == expected.model_dump_json(indent=1) + "\n"
+    assert CommanderConfig.read(CommanderConfig.path(home)) == expected
 
 
 def test_a_practice_copy_of_a_bus_without_messages_reads_its_history_twice(private_directory, capsys):

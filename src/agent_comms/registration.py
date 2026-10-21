@@ -19,7 +19,8 @@ from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import TurnRouting
 from .storage_rules import StorageProjection, StorageRule
 from .store_files import SharedLock, _store_lock
-from .thread_identity import NO_THREAD_TEXT, GenerationCounter, ThreadText, TurnId
+from .thread_identity import GenerationCounter, TurnId
+from .thread_text import NoThreadText, ThreadText
 from .thread_status import (
     ConnectedThreadStatus,
     NoBridgeThreadStatus,
@@ -181,7 +182,7 @@ class Registration:
 
     def new_thread(
         self, name, tags, worktree, *, kind: type[Thread] = Thread,
-        task: ThreadText = NO_THREAD_TEXT, title: ThreadText = NO_THREAD_TEXT, **values,
+        task: ThreadText = NoThreadText(), title: ThreadText = NoThreadText(), **values,
     ) -> Thread:
         return kind(
             name, tags, worktree, task=task, title=title,

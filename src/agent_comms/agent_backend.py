@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     from .image_inputs import ImageInput
     from .launch_runtime import LaunchRuntime
     from .native_tool_call import NativeToolMode
+    from .thread_model import ThreadModel
     from .threads import Thread
     from .transcript_sources import TranscriptSource
     from .turn_context import InputContributionCoordinates
@@ -229,7 +230,7 @@ class UseSettings(TurnInboxItem):
     finishes on the settings it started with.
     """
 
-    model: str
+    model: ThreadModel
     thinking_level: ThinkingLevelField
 
     def deliver_to(self, receiver: TurnInboxReceiver, turn: object) -> Awaitable[bool]:
@@ -354,22 +355,9 @@ class Forks(ABC):
         """
 
 
-class ConfiguresModel(ABC):
-    """Lists the models the runtime can use and applies a model / thinking choice."""
-
-    @abstractmethod
-    async def models(self, thread: Thread) -> tuple[str, ...]:
-        """Model names, as ``provider/model``, available to this thread."""
-
-    @abstractmethod
-    async def configure(self, thread: Thread, model: str | None, thinking: str | None) -> tuple[str, str]:
-        """Apply the choice and return the ``(model, thinking level)`` now in effect."""
-
-
 THREAD_CAPABILITIES: tuple[type, ...] = (
     Steers,
     Compacts,
-    ConfiguresModel,
 )
 
 

@@ -10,6 +10,7 @@ from agent_comms.child_process import BoundedRun
 from agent_comms.cli import main
 from agent_comms.comms import Comms
 from agent_comms.runtime import socket_path
+from agent_comms.read_basis import NamedViewer
 from native_backend_fixture import native_backend_fixture
 
 
@@ -91,8 +92,8 @@ class TestEndToEndLifecycle:
             comms = agent._comms
             target = CommandTarget.named(session)
             assert [message.body for message in comms.views.history_page(
-                target, viewer='cli-agent').messages] == ['from the cli side']
+                target, viewer=NamedViewer('cli-agent')).messages] == ['from the cli side']
             await cli(source_programs, native.root, 'send', '--from', 'cli-agent', '--to', session,
                       '--body', 'roger')
             assert [message.body for message in Comms(native.root).views.history_page(
-                target, viewer='cli-agent').messages] == ['from the cli side', 'roger']
+                target, viewer=NamedViewer('cli-agent')).messages] == ['from the cli side', 'roger']

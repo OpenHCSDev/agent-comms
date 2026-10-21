@@ -54,7 +54,7 @@ class RootLaunch(ABC):
         metadata = WireLog(WireLog.path_in(root)).read_metadata_unlocked()
         if not metadata.private:
             return SharedRootLaunch(root)
-        return PrivateNkLaunch.installed(root, metadata.wire_root_id)
+        return PrivateNkLaunch.installed(root, metadata.root_id)
 
     @property
     @abstractmethod

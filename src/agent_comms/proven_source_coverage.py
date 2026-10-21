@@ -32,6 +32,7 @@ from .private_bus_checkpoint import (
     verify_private_bus_checkpoint_unlocked,
 )
 from .wake_policy import RecipientDecision
+from .native_input_record import NumberNativeColumn, TextNativeColumn, UnrecordedNativeColumn
 
 if TYPE_CHECKING:
     from .native_entries import NativeEvidenceScope
@@ -71,7 +72,8 @@ class CoverageInput(ABC):
 @dataclass(frozen=True)
 class NoInjectedInput(CoverageInput):
     def input_fields(self):
-        return dict(injected_seq=0, input_id=None, stage=None, session_id=None, request_generation=None)
+        return dict(injected_seq=0, input_id=UnrecordedNativeColumn(), stage=UnrecordedNativeColumn(),
+                    session_id=UnrecordedNativeColumn(), request_generation=UnrecordedNativeColumn())
 
     def injected_for(self, state):
         return state.injected_seq
@@ -90,9 +92,10 @@ class InjectedInput(CoverageInput):
     def input_fields(self):
         original = self.original
         return dict(
-            injected_seq=original.source_seq, input_id=original.input_id,
-            stage=type(original.execution), session_id=original.context.session_id,
-            request_generation=original.context.request_generation,
+            injected_seq=original.source_seq, input_id=TextNativeColumn(original.input_id),
+            stage=TextNativeColumn(FieldCodec.encode(type(original.execution))),
+            session_id=TextNativeColumn(original.context.session_id),
+            request_generation=NumberNativeColumn(original.context.request_generation),
         )
     def injected_for(self, state):
         return self.original.source_seq

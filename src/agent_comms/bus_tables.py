@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import sqlite3
 import time
-from dataclasses import Field, dataclass, field, fields, make_dataclass, replace
+from dataclasses import Field, dataclass, fields, make_dataclass, replace
 from functools import cache
 from inspect import get_annotations
-from typing import get_type_hints
+from typing import Annotated, get_type_hints
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, WireName, WireOrder
 from agent_comms.response_acknowledgement import KeyedResponseAcknowledgement
 from agent_comms.typed_table import AppendOnlyTables, Column, DurableTables, TypedTable
 
@@ -25,7 +25,7 @@ class BusTables(DurableTables, AppendOnlyTables):
 
 @dataclass(frozen=True)
 class BusRow(TypedTable, BusTables):
-    seq: int = field(metadata={"sql": Column(primary_key=True, auto_increment=True)})
+    seq: Annotated[int, Column(primary_key=True, auto_increment=True)]
     kind: type[BusRecord]
     at: float
 
@@ -41,8 +41,7 @@ class _CapabilityTable:
         hints = get_type_hints(owner, include_extras=True)
         return make_dataclass(
             BusTables.__name__.removesuffix("Tables") + owner.__name__ + "Row",
-            [("seq", int, field(metadata={"sql": Column(
-                primary_key=True, references=(BusRow, "seq"))})),
+            [("seq", Annotated[int, Column(primary_key=True, references=(BusRow, "seq"))]),
              *((item.name, hints[item.name], item) for item in BusCapability.declared_fields(owner))],
             bases=(TypedTable, BusTables),
             namespace={"__module__": owner.__module__},
@@ -91,13 +90,13 @@ class BusCapability(BusTables):
 
 @dataclass(frozen=True)
 class Addressed(BusCapability):
-    sender: str = field(metadata={"wire_name": "from", "wire_order": 2})
-    target: str = field(metadata={"wire_name": "to", "wire_order": 3, "sql": Column(index=True)})
+    sender: Annotated[str, WireName("from"), WireOrder(2)]
+    target: Annotated[str, WireName("to"), WireOrder(3), Column(index=True)]
 
 
 @dataclass(frozen=True)
 class KeyedPublication(BusCapability):
-    acknowledgement: KeyedResponseAcknowledgement = field(metadata={"sql": Column(unique=True)})
+    acknowledgement: Annotated[KeyedResponseAcknowledgement, Column(unique=True)]
 
     def append_to(self, db: sqlite3.Connection) -> int:
         """A keyed publication appended again answers with the sequence it first got."""

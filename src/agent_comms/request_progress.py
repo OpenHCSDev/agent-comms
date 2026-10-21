@@ -1,40 +1,64 @@
 """Native request measurements do not permit input, confirm completion or allow retry."""
-from dataclasses import dataclass, field
+
+from typing import Annotated
 from collections.abc import Callable
+from dataclasses import dataclass
+
+from agent_comms import field_codec
 
 from .child_process import ProcessIdentity
+from .pi_counts import PiCount, UnreportedCount
+from .pi_payloads import PiModel, PiPayload, UnreportedModel
 
-from .pi_payloads import PiModel, PiPayload
+
+@dataclass(frozen=True, slots=True)
+class UnreportedText(field_codec.NullMember):
+    """Pi did not report this text observation for the request."""
 
 
 @dataclass(frozen=True)
 class RequestProgress(PiPayload):
-    request_id: str = field(metadata={"wire_name": "requestId"})
-    session_id: str = field(metadata={"wire_name": "sessionId"})
-    input_id: str = field(metadata={"wire_name": "inputId"})
-    started_at_ms: int = field(metadata={"wire_name": "startedAtMs"})
-    observed_at_ms: int = field(metadata={"wire_name": "observedAtMs"})
-    monotonic_ns: str = field(metadata={"wire_name": "monotonicNs"})
-    elapsed_ms: float = field(metadata={"wire_name": "elapsedMs"})
-    callback_ms: float = field(metadata={"wire_name": "callbackMs"})
-    callback_count: int = field(metadata={"wire_name": "callbackCount"})
-    callback_max_ms: float = field(metadata={"wire_name": "callbackMaxMs"})
+    request_id: Annotated[str, field_codec.WireName("requestId")]
+    session_id: Annotated[str, field_codec.WireName("sessionId")]
+    input_id: Annotated[str, field_codec.WireName("inputId")]
+    started_at_ms: Annotated[int, field_codec.WireName("startedAtMs")]
+    observed_at_ms: Annotated[int, field_codec.WireName("observedAtMs")]
+    monotonic_ns: Annotated[str, field_codec.WireName("monotonicNs")]
+    elapsed_ms: Annotated[float, field_codec.WireName("elapsedMs")]
+    callback_ms: Annotated[float, field_codec.WireName("callbackMs")]
+    callback_count: Annotated[int, field_codec.WireName("callbackCount")]
+    callback_max_ms: Annotated[float, field_codec.WireName("callbackMaxMs")]
     stage: str
     detail: str = ""
     transport: str = ""
     attempt: int = 0
     status: int | None = None
-    response_id: str | None = field(default=None, metadata={"wire_name": "responseId"})
+    response_id: Annotated[str | UnreportedText, field_codec.WireName("responseId")] = (
+        UnreportedText()
+    )
     callback: str = ""
     # External request observations are optional at other stages and in original
     # records. Absence is unavailable evidence, never a registry/catalog lookup.
-    model: PiModel | None = field(default=None, metadata={"wire_omit_default": True})
-    estimated_input_tokens: int | None = field(default=None, metadata={"wire_name": "estimatedInputTokens", "wire_omit_default": True})
-    available_tokens: int | None = field(default=None, metadata={"wire_name": "availableTokens", "wire_omit_default": True})
-    output_token_field: str | None = field(default=None, metadata={"wire_name": "outputTokenField", "wire_omit_default": True})
-    requested_output_tokens: int | None = field(default=None, metadata={"wire_name": "requestedOutputTokens", "wire_omit_default": True})
-    allowed_output_tokens: int | None = field(default=None, metadata={"wire_name": "admittedOutputTokens", "wire_omit_default": True})
-    minimum_output_tokens: int | None = field(default=None, metadata={"wire_name": "minimumOutputTokens", "wire_omit_default": True})
+    model: Annotated[PiModel, field_codec.WireOmitDefault()] = UnreportedModel()
+    estimated_input_tokens: Annotated[
+        PiCount, field_codec.WireName("estimatedInputTokens"), field_codec.WireOmitDefault()
+    ] = UnreportedCount()
+    available_tokens: Annotated[
+        PiCount, field_codec.WireName("availableTokens"), field_codec.WireOmitDefault()
+    ] = UnreportedCount()
+    output_token_field: Annotated[
+        str | UnreportedText, field_codec.WireName("outputTokenField"),
+        field_codec.WireOmitDefault(),
+    ] = UnreportedText()
+    requested_output_tokens: Annotated[
+        PiCount, field_codec.WireName("requestedOutputTokens"), field_codec.WireOmitDefault()
+    ] = UnreportedCount()
+    allowed_output_tokens: Annotated[
+        PiCount, field_codec.WireName("admittedOutputTokens"), field_codec.WireOmitDefault()
+    ] = UnreportedCount()
+    minimum_output_tokens: Annotated[
+        PiCount, field_codec.WireName("minimumOutputTokens"), field_codec.WireOmitDefault()
+    ] = UnreportedCount()
 
     def __post_init__(self) -> None:
         if min(self.started_at_ms, self.observed_at_ms, self.elapsed_ms,

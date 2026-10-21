@@ -11,6 +11,7 @@ from agent_comms.message_page import PageBounds
 from agent_comms.page_traversal import HistoryCursor
 from agent_comms.mentions import ThreadMention
 from agent_comms.messages import Message, InfoKind
+from agent_comms.read_basis import NamedViewer
 from agent_comms.threads import Thread
 
 
@@ -85,7 +86,7 @@ def selected(kind, message):
 def reader(live, kind):
     if kind in ("dm", "dm-alias"):
         name = "alice-old" if kind == "dm-alias" else "alice"
-        return lambda bounds: live.views.history_page(CommandTarget.named("carol"), bounds, viewer=name)
+        return lambda bounds: live.views.history_page(CommandTarget.named("carol"), bounds, viewer=NamedViewer(name))
     if kind == "any-mode":
         live.channels.set_channel_any_mode("#api", True)
         return lambda bounds: live.views.channel_display_page("#api", bounds=bounds)

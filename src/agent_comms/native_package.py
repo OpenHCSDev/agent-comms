@@ -16,11 +16,11 @@ import json
 import os
 import stat
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Literal
 
-from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText, Sha256Text
+from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText, Sha256Text, WireName
 from agent_comms.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
 from agent_comms.private_path import PrivateDirectoryRole, TrustedAncestorRole
 
@@ -247,7 +247,7 @@ class NativeSourceDeclaration:
     path: Annotated[Path, PathText]
     snapshot: Annotated[Path, PathText]
     sha256: Annotated[str, Sha256Text]
-    byte_count: int = field(metadata={"wire_name": "bytes"})
+    byte_count: Annotated[int, WireName("bytes")]
 
     def __post_init__(self) -> None:
         if not self.path.is_absolute() or self.snapshot.is_absolute() or self.byte_count < 0:
@@ -276,9 +276,10 @@ class NativeExtensionEntry:
 @dataclass(frozen=True)
 class NativeImportsManifest:
     version: Literal[2]
-    extension_entries: tuple[NativeExtensionEntry, ...] = field(
-        metadata={"wire_name": "extensionEntries"})
-    peer_aliases: dict[str, str] = field(metadata={"wire_name": "peerAliases"})
+    extension_entries: Annotated[
+        tuple[NativeExtensionEntry, ...], WireName("extensionEntries")
+    ]
+    peer_aliases: Annotated[dict[str, str], WireName("peerAliases")]
 
 
 @dataclass(frozen=True)

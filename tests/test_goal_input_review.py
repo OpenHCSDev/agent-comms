@@ -19,6 +19,7 @@ from agent_comms.goal_actions import (
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.tools import CommsInboxTool, ToolRequest
 from agent_comms.tool_caller import ThreadCaller
+from agent_comms.read_basis import NamedViewer
 from stored_inputs import stored_inputs
 
 
@@ -144,7 +145,7 @@ def test_standby_excludes_retained_rebound_history_but_retains_rename(tmp_path, 
     comms.registry.rename("parent", "renamed-parent")
     review = comms.goals.goal_input_review("worker", goal.id, ["renamed-parent"])
     assert review.reviewed_inputs == (f"bus:{current.seq}",)
-    assert old in list(comms.views.history_page(CommandTarget.named("worker"), viewer="renamed-parent").messages)
+    assert old in list(comms.views.history_page(CommandTarget.named("worker"), viewer=NamedViewer("renamed-parent")).messages)
 
 
 def test_inbox_standby_is_one_record(wired, monkeypatch):

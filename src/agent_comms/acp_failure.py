@@ -8,20 +8,25 @@ from __future__ import annotations
 import json
 import re
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field, replace
-from typing import ClassVar, NoReturn, TYPE_CHECKING
+from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING, ClassVar, Literal, NoReturn, Annotated
+
 
 if TYPE_CHECKING:
     from acp import RequestError
 
     from .agent_events import Done, Error
     from .input_disposition import InputDocument
+    from .turn_failure import TurnFailure
     from .turn_input_source import OriginalTurnInput
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .delivery_presentation import DeliveryPresentation
+from .field_codec import (
+    FieldCodec, JsonShapeFamily, JsonShapeMember, NullMember, RecordMember, SubclassUnion,
+    WireName, WireOmitDefault, boundary_decoder,
+)
 from .input_attempt import InputAttempt
-from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember
 
 
 class FailureSource(DeclaredFamily, affix="FailureSource"):
@@ -96,35 +101,72 @@ class BackendDeliveryFailure(DeliveryFailure):
         return self.message
 
 
-@dataclass(frozen=True, kw_only=True)
-class ProviderRetryResult:
+class ProviderRetryResult(SubclassUnion, affix=""):
     """One decoded native retry end, retained by the turn output and its outcome."""
 
-    success: bool
+    @classmethod
+    @boundary_decoder
+    def from_optional(cls, result: ProviderRetryResult | None) -> ProviderRetryResult:
+        return NoRetry() if result is None else result
+
+    @abstractmethod
+    def refine_failure(self, failure: TurnFailure) -> TurnFailure: ...
+
+    @property
+    @abstractmethod
+    def summary(self) -> str: ...
+
+
+@dataclass(frozen=True, kw_only=True)
+class CountedRetry(RecordMember, ProviderRetryResult):
+    """Pi retried the request; the count is the native retry end's."""
+
     attempt: int
-    final_error: str | None = field(default=None, metadata={"wire_name": "finalError"})
 
     def __post_init__(self) -> None:
         if self.attempt < 0:
             raise ValueError("Native retry count must be nonnegative")
 
-    def for_failure(self, redact) -> ProviderRetryResult:
-        """Create the one privacy-safe result stored by this turn's output."""
-        return ProviderRetryResult(
-            success=self.success, attempt=self.attempt,
-            final_error=redact(self.final_error) if self.final_error else None,
-        )
+    @property
+    def retries(self) -> str:
+        return f"Provider request retries: {self.attempt}."
 
-    def refine_failure(self, failure):
-        return failure if self.success else failure.after_provider_retry_exhausted()
+
+@dataclass(frozen=True, kw_only=True)
+class RecoveredRetry(CountedRetry):
+    success: Literal[True] = True
+
+    def refine_failure(self, failure: TurnFailure) -> TurnFailure:
+        return failure
 
     @property
     def summary(self) -> str:
-        return " ".join(part for part in (
-            f"Provider request retries: {self.attempt}.",
-            "Recovery completed." if self.success else "",
-            f"Final provider response: {self.final_error}" if self.final_error else "",
-        ) if part)
+        return f"{self.retries} Recovery completed."
+
+
+@dataclass(frozen=True, kw_only=True)
+class ExhaustedRetry(CountedRetry):
+    success: Literal[False] = False
+    final_error: Annotated[str, WireName("finalError")]
+
+    def refine_failure(self, failure: TurnFailure) -> TurnFailure:
+        return failure.after_provider_retry_exhausted()
+
+    @property
+    def summary(self) -> str:
+        return f"{self.retries} Final provider response: {self.final_error}"
+
+
+@dataclass(frozen=True, slots=True)
+class NoRetry(NullMember, ProviderRetryResult):
+    """Pi reported no retry for this request."""
+
+    def refine_failure(self, failure: TurnFailure) -> TurnFailure:
+        return failure
+
+    @property
+    def summary(self) -> str:
+        return ""
 
 
 @dataclass(frozen=True)
@@ -135,9 +177,7 @@ class ACPFailure(DeliveryFailure):
     input_state: type[InputAttempt] | None = None
     diagnostics: tuple[PiDiagnostic, ...] = ()
     # Public failed-outcome projection of the turn-owned immutable result.
-    retry_result: ProviderRetryResult | None = field(
-        default=None, metadata={"wire_omit_default": True},
-    )
+    retry_result: Annotated[ProviderRetryResult, WireOmitDefault()] = NoRetry()
 
     @property
     def description(self) -> str:
@@ -160,7 +200,7 @@ class ACPFailure(DeliveryFailure):
     @property
     def action(self) -> str:
         return " ".join(part for part in (
-            self.retry_result.summary if self.retry_result is not None else "",
+            self.retry_result.summary,
             self.next_step,
         ) if part)
 
@@ -267,7 +307,7 @@ class FailedNativeTurnOutcome(NativeTurnOutcome):
             ACPFailure.from_detail(-32603, terminal.text or "Backend failed",
                                   diagnostics=error.diagnostics if error is not None else ()),
             input_state=document.shared_state(original.notice_keys),
-            retry_result=terminal.retry_result,
+            retry_result=ProviderRetryResult.from_optional(terminal.retry_result),
         )
         return cls(
             request=RequestFailure(failure, False),

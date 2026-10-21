@@ -15,22 +15,40 @@ whole edit on screen: a show piped into head or /dev/null yields no codes.
 A verdict without a reason is refused; a send-back must cite a real message from
 the commander to that unit. Nothing here judges code; it only refuses to let an edit pass unread.
 """
-import hashlib, json, os, re, sys, time
+
+import hashlib
+import json
+import os
+import re
+import sys
+import time
+from typing import Annotated
 from abc import abstractmethod
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
+
 
 from ..comms import Comms
 from ..change_report import FileLine
-from ..todos import AcceptedVerdict, PeerAcceptedVerdict, BluntText, ToolCallVerdict, SendBackVerdict, StrikeReason, Todo, Slop, Derivation, SupersededVerdict
+from ..field_codec import Argument, FieldCodec
+from ..todos import (
+    AcceptedVerdict,
+    BluntText,
+    Derivation,
+    PeerAcceptedVerdict,
+    SendBackVerdict,
+    Slop,
+    StrikeReason,
+    SupersededVerdict,
+    Todo,
+    ToolCallVerdict,
+)
 from ..tools import CommsUnjudgedTool, CommsVerdictTool
-from ..field_codec import FieldCodec, option
 from ..tool_caller import ThreadCaller
 from ..tool_declaration import EditCall, ReplacementEdit
 from . import order
 from .order import CommanderVerb
 
-
-BRANCH = re.compile(r'\bisinstance\(|\bhasattr\(|^\s*(if|elif|match|case)\b|\bif\b.*\belse\b')
+BRANCH = re.compile(r"\bisinstance\(|\bhasattr\(|^\s*(if|elif|match|case)\b|\bif\b.*\belse\b")
 
 
 class Hunk(ReplacementEdit):
@@ -118,7 +136,9 @@ class JudgeVerb(CommanderVerb):
 @dataclass(frozen=True, kw_only=True)
 class ShowVerb(JudgeVerb):
     help = "every unit's unjudged edits in full, beside its current orders"
-    thread: str = option("thread", nargs="?", default="")
+    thread: Annotated[
+        str, Argument(flags=("thread",), options={"nargs": "?"})
+    ] = ""
 
     def selects(self, edit: Edit) -> bool:
         return not self.thread or edit.thread == self.thread
@@ -138,11 +158,26 @@ class AlarmVerb(JudgeVerb):
 class VerdictVerb(JudgeVerb):
     """Every verdict, mine or a fork's, is made after reviewing paper 1's
     correct-maintenance results. Each member's required options are the facts its verdict carries."""
-    ids: tuple[str, ...] = option("ids", nargs="+", metavar="ID:CODE")
-    why: str = option()
-    msg: str = option(default="", help="BUSID of my order message to the unit")
-    lines: tuple[str, ...] = option(
-        "--line", action="append", metavar="LINE", help="an exact diff line; repeat for each")
+
+    ids: Annotated[
+        tuple[str, ...],
+        Argument(flags=("ids",), options={"nargs": "+", "metavar": "ID:CODE"}),
+    ]
+    why: str
+    msg: Annotated[
+        str, Argument(options={"help": "BUSID of my order message to the unit"})
+    ] = ""
+    lines: Annotated[
+        tuple[str, ...],
+        Argument(
+            flags=("--line",),
+            options={
+                "action": "append",
+                "metavar": "LINE",
+                "help": "an exact diff line; repeat for each",
+            },
+        ),
+    ]
 
     @abstractmethod
     def operation(self, ctx: order.Commander, todo: Todo, edit_id: str) -> ToolCallVerdict: ...
@@ -187,9 +222,22 @@ class VerdictVerb(JudgeVerb):
 @dataclass(frozen=True, kw_only=True)
 class OkVerb(VerdictVerb):
     help = "the edit serves the order"
-    serves: str = option(help="exact words of the order")
-    no_owner: str = option("--no-owner", default="", help="12+ words with because and absolute file:line")
-    peer: str = option("--peer", default="", help="another sender's retained order message to the unit")
+    serves: Annotated[
+        str, Argument(options={"help": "exact words of the order"})
+    ]
+    no_owner: Annotated[
+        str,
+        Argument(
+            flags=("--no-owner",), options={"help": "12+ words with because and absolute file:line"}
+        ),
+    ] = ""
+    peer: Annotated[
+        str,
+        Argument(
+            flags=("--peer",),
+            options={"help": "another sender's retained order message to the unit"},
+        ),
+    ] = ""
 
     def operation(self, ctx: order.Commander, todo: Todo, edit_id: str) -> AcceptedVerdict:
         actor = ctx.incarnation
@@ -213,7 +261,10 @@ class OkVerb(VerdictVerb):
 @dataclass(frozen=True, kw_only=True)
 class SupersededVerb(VerdictVerb):
     help = "the task moved to another unit; these edits are neither ok nor sent back"
-    by: str = option("--by", help="the replacing order's message")
+    by: Annotated[
+        str,
+        Argument(flags=("--by",), options={"help": "the replacing order's message"}),
+    ]
 
     def operation(self, ctx: order.Commander, todo: Todo, edit_id: str) -> SupersededVerdict:
         return SupersededVerdict(todo.revision,
@@ -230,14 +281,32 @@ class SupersededVerb(VerdictVerb):
 @dataclass(frozen=True, kw_only=True)
 class BackVerb(VerdictVerb):
     help = "send the edit back; the roast is posted to the verdict's audience"
-    msg: str = option(help="the required order message")
-    roast: str = option(help="blunt, why it is stupid, with because")
-    fix: str = option(help="owner and replacing shape")
-    pattern: str = option("--slop", help="pattern ID from the pinned refactor-audit catalog")
-    fact: str = option(help="the required fact, 4+ words")
-    at: str = option(help="PATH:LINE where it is restated")
-    derive: str = option(help="|".join(Derivation.names()))
-    by: str = option(help="PATH:LINE of the declaration that owns it")
+    # A bare annotation would inherit VerdictVerb's empty message; field() keeps it required.
+    msg: Annotated[
+        str, Argument(options={"help": "the required order message"})
+    ] = field()
+    roast: Annotated[
+        str, Argument(options={"help": "blunt, why it is stupid, with because"})
+    ]
+    fix: Annotated[str, Argument(options={"help": "owner and replacing shape"})]
+    pattern: Annotated[
+        str,
+        Argument(
+            flags=("--slop",), options={"help": "pattern ID from the pinned refactor-audit catalog"}
+        ),
+    ]
+    fact: Annotated[
+        str, Argument(options={"help": "the required fact, 4+ words"})
+    ]
+    at: Annotated[
+        str, Argument(options={"help": "PATH:LINE where it is restated"})
+    ]
+    derive: Annotated[
+        str, Argument(options={"help": "|".join(Derivation.names())})
+    ]
+    by: Annotated[
+        str, Argument(options={"help": "PATH:LINE of the declaration that owns it"})
+    ]
 
     def slop(self) -> Slop:
         return FieldCodec.decode(Slop, dict(pattern=self.pattern, fact=self.fact,

@@ -5,16 +5,21 @@ from __future__ import annotations
 import json
 import os
 import time
-from dataclasses import dataclass, field, fields, replace
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Annotated
+
 
 from .agent_backend import AgentBackend
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .cli_result import ThreadToolCatalogResult
 from .context_segments.wake_values import WakeWorkContext
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
+from .field_codec import (
+    Argument, Description, FieldCodec, NullMember, RegistrationPolicy,
+    SingleFieldValue, SubclassUnion, WireOmitDefault, WireRequired,
+)
 from .goals import (
     GoalDeclaration,
     NoGoal,
@@ -30,36 +35,107 @@ from .pi_vocabulary import (
     ThinkingLevelField,
 )
 from .registration_inheritance import (
+    InheritApplied,
     InheritEmpty,
-    InheritMissing,
     InheritPrevious,
-    InheritThinkingLevel,
 )
 from .storage_rules import StoragePath, StorageRoots, StorageRule
 from .store_files import _atomic_write_text
 from .task_sources import TaskScope
 from .thread_execution import NativeThreadExecution, ThreadExecution
+from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
+from .thread_text import NoParent, NoSessionFile, NoThreadText, SessionFile, ThreadParent, ThreadText
 from .thread_identity import (
     AgentThreadRole,
-    NoThreadText,
     ThreadProvenance,
     ThreadRole,
-    ThreadText,
     TurnFence,
     TurnId,
     TurnIdentity,
 )
-from .turn_lease import NoTurnRecord, TurnLeaseFence, TurnRecord, TurnState
+from .turn_lease import NoTurnRecord, TurnLease, TurnLeaseFence, TurnRecord, TurnState
 
 if TYPE_CHECKING:
     from .goal_management import Goals
     from .launch_runtime import ThreadLaunch
 
+
 class _GeneratedCreationTime(float):
     """Transient marker for default timestamps; never persisted as claim authority."""
 
+
 def _thread_creation_time() -> float:
     return _GeneratedCreationTime(time.time())
+
+
+class NextTurnSetting(ABC):
+    """One next-turn setting a configuration request either sets or keeps."""
+
+    @abstractmethod
+    def configured(self, thread: Thread) -> Thread: ...
+
+
+class KeptSetting(NextTurnSetting):
+    """The request leaves the thread's current value in place."""
+
+    def configured(self, thread: Thread) -> Thread:
+        return thread
+
+
+class ModelChoice(NextTurnSetting, SubclassUnion, affix="Model"):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class ChosenModel(SingleFieldValue, ModelChoice):
+    model: DeclaredModel
+
+    def configured(self, thread: Thread) -> Thread:
+        return replace(thread, model=self.model)
+
+
+@dataclass(frozen=True, slots=True)
+class KeptModel(NullMember, KeptSetting, ModelChoice):
+    pass
+
+
+class ServiceTierChoice(NextTurnSetting, SubclassUnion, affix="ServiceTier"):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class ChosenServiceTier(SingleFieldValue, ServiceTierChoice):
+    tier: ServiceTier
+
+    def configured(self, thread: Thread) -> Thread:
+        return replace(thread, service_tier=self.tier)
+
+
+@dataclass(frozen=True, slots=True)
+class KeptServiceTier(NullMember, KeptSetting, ServiceTierChoice):
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class NextTurnConfiguration:
+    """The model, thinking level and service tier one request sets or keeps for the next turn."""
+
+    model: Annotated[
+        ModelChoice, Description("Provider/model identifier"), Argument(flags=("--model",))
+    ] = KeptModel()
+    thinking_level: Annotated[
+        ThinkingLevelField, Description("Optional Pi thinking level"),
+        Argument(flags=("--thinking",)),
+    ] = NoThinkingOverride
+    service_tier: Annotated[
+        ServiceTierChoice, Description("Optional provider request service tier"),
+        Argument(flags=("--service-tier",)),
+    ] = KeptServiceTier()
+
+    def configured(self, thread: Thread) -> Thread:
+        thought = replace(thread, thinking_level=self.thinking_level.applied(thread.thinking_level))
+        return self.service_tier.configured(self.model.configured(thought))
+
 
 @dataclass(frozen=True, slots=True)
 class Thread(DurableFile, PatternFile, ThreadProvenance):
@@ -68,52 +144,64 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
     """Declares one agent thread's identity and provenance."""
 
     name: str = field(kw_only=False)
-    tags: frozenset[str] = field(kw_only=False, metadata={"registration_inheritance": InheritEmpty})
+    tags: Annotated[frozenset[str], RegistrationPolicy(InheritEmpty)] = field(
+        kw_only=False
+    )
     worktree: str = field(kw_only=False)
-    parent: str | None = None
+    parent: ThreadParent = field(default_factory=NoParent)
     task: ThreadText = field(default_factory=NoThreadText)
     process_identity: ProcessState = field(default_factory=NoProcess)
-    session_file: str | None = field(
-        default=None, kw_only=True, metadata={"registration_inheritance": InheritMissing}
+    session_file: Annotated[SessionFile, RegistrationPolicy(InheritApplied)] = (
+        field(default_factory=NoSessionFile, kw_only=True)
     )
-    model: str | None = field(default=None, metadata={"registration_inheritance": InheritMissing})
-    thinking_level: ThinkingLevelField = field(
-        default=NoThinkingOverride, metadata={"registration_inheritance": InheritThinkingLevel}
+    model: Annotated[ThreadModel, RegistrationPolicy(InheritApplied)] = field(
+        default_factory=UndeclaredModel
     )
-    service_tier: ServiceTier = field(
-        default=ServiceTier.PRIORITY, kw_only=True,
-        metadata={"registration_inheritance": InheritPrevious},
+    thinking_level: Annotated[
+        ThinkingLevelField, RegistrationPolicy(InheritApplied)
+    ] = NoThinkingOverride
+    service_tier: Annotated[ServiceTier, RegistrationPolicy(InheritPrevious)] = (
+        field(default=ServiceTier.PRIORITY, kw_only=True)
     )
-    goal: GoalDeclaration = field(default_factory=NoGoal, metadata={"registration_inheritance": GoalDeclaration})
-    created_at: float = field(default_factory=_thread_creation_time, kw_only=True,
-                              metadata={"wire_required": True})
+    goal: Annotated[GoalDeclaration, RegistrationPolicy(GoalDeclaration)] = (
+        field(default_factory=NoGoal)
+    )
+    created_at: Annotated[float, WireRequired()] = field(
+        default_factory=_thread_creation_time, kw_only=True
+    )
     _generated_created_at: bool = field(init=False, default=False, repr=False, compare=False)
-    storage_roots: StorageRoots = field(kw_only=True,
-        metadata={"registration_inheritance": InheritPrevious})
+    storage_roots: Annotated[
+        StorageRoots, RegistrationPolicy(InheritPrevious)
+    ] = field(kw_only=True)
     # Projects this conversation ran in before its current one: a saved session
     # resumes from them and a started turn finishes in one of them.
-    earlier_projects: tuple[StoragePath, ...] = field(default=(), kw_only=True,
-        metadata={"registration_inheritance": InheritPrevious, "wire_omit_default": True})
-    auto_title_pending: bool = field(
-        default=False, metadata={"registration_inheritance": InheritPrevious}
+    earlier_projects: Annotated[
+        tuple[StoragePath, ...],
+        RegistrationPolicy(InheritPrevious),
+        WireOmitDefault(),
+    ] = field(default=(), kw_only=True)
+    auto_title_pending: Annotated[bool, RegistrationPolicy(InheritPrevious)] = (
+        False
     )
     # The project changed during a turn, and no turn has started in it yet.
     # The next turn start clears this; an idle owner starts that turn itself.
-    project_resume_due: bool = field(
-        default=False,
-        metadata={"registration_inheritance": InheritPrevious, "wire_omit_default": True},
+    project_resume_due: Annotated[
+        bool, RegistrationPolicy(InheritPrevious), WireOmitDefault()
+    ] = False
+    title: Annotated[ThreadText, RegistrationPolicy(InheritApplied)] = field(
+        default_factory=NoThreadText, kw_only=True
     )
-    title: ThreadText = field(default_factory=NoThreadText, kw_only=True,
-                             metadata={"registration_inheritance": InheritMissing})
-    role: type[ThreadRole] = field(
-        default=AgentThreadRole, metadata={"registration_inheritance": InheritPrevious}
+    role: Annotated[type[ThreadRole], RegistrationPolicy(InheritPrevious)] = (
+        AgentThreadRole
     )
-    execution: type[ThreadExecution] = field(default=NativeThreadExecution, kw_only=True,
-                                            metadata={"wire_omit_default": True})
-    backend: type[AgentBackend] = field(
-        default_factory=AgentBackend.for_new_threads, kw_only=True,
-        metadata={"wire_omit_default": True, "registration_inheritance": InheritPrevious},
+    execution: Annotated[type[ThreadExecution], WireOmitDefault()] = field(
+        default=NativeThreadExecution, kw_only=True
     )
+    backend: Annotated[
+        type[AgentBackend],
+        WireOmitDefault(),
+        RegistrationPolicy(InheritPrevious),
+    ] = field(default_factory=AgentBackend.for_new_threads, kw_only=True)
     turn_record: TurnRecord = field(default_factory=NoTurnRecord)
     channel_scope_generation: int = 0
     turn_generation: int = 0
@@ -123,8 +211,8 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         if self.name in visited:
             return
         visited.add(self.name)
-        if self.parent is not None:
-            parent = registry.require(self.parent)
+        for name in self.parent.names():
+            parent = registry.require(name)
             for location, _ in parent.runtime.history_locations(parent, registry, visited):
                 yield location, True
 
@@ -227,10 +315,8 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
             or self.turn_generation == 0
         ):
             raise ValueError("Finished turn requires a prior turn generation and ID.")
-        if self.parent == self.name:
+        if self.parent.named(self.name):
             raise RelationViolationError(f"Thread {self.name!r} cannot be its own parent.")
-        if self.model is not None and not self.model.strip():
-            raise ValueError("Thread model cannot be empty.")
 
     def require_original_model_configuration(self, original: Thread) -> None:
         changed = any((
@@ -243,29 +329,13 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         if changed:
             raise RelationViolationError("Thread configuration changed before publication")
 
-    def with_model_configuration(
-        self, *, model: str | None = None,
-        thinking_level: type[ThinkingChoice] = NoThinkingOverride,
-        service_tier: ServiceTier | None = None,
-    ) -> Thread:
-        return replace(
-            self,
-            model=self.model if model is None else model.strip(),
-            thinking_level=thinking_level.applied(self.thinking_level),
-            service_tier=self.service_tier if service_tier is None else service_tier,
-        )
-
-    def needs_model_observation(self) -> bool:
-        """Only an unset declaration needs a saved or live model observation."""
-        return self.model is None
-
     def initialized_native_configuration(
-        self, *, model: str | None, thinking_level: type[ThinkingChoice],
+        self, *, model: ThreadModel, thinking_level: type[ThinkingChoice],
     ) -> Thread:
         """The native producer may fill unset fields, never replace a selection."""
         return replace(
             self,
-            model=model if self.needs_model_observation() else self.model,
+            model=self.model.applied(model),
             thinking_level=self.thinking_level.observed(thinking_level),
         )
 
@@ -300,8 +370,7 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         self.turn_record.read().require_current(claim_scope, self.turn_generation)
 
     def require_turn(self, turn_id: TurnId, claim_scope: int) -> None:
-        lease = self.turn_lease
-        if lease is None or not lease.can_attest(claim_scope) or TurnId(lease.turn_id) != turn_id:
+        if not self.turn_lease.attests(claim_scope, turn_id):
             raise RelationViolationError("live owner does not hold the requested turn")
 
     @property
@@ -365,34 +434,24 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         inherited = {}
         if previous is not None:
             inherited = {
-                declared.name: policy.choose(
-                    getattr(self, declared.name), getattr(previous, declared.name)
-                )
-                for declared in fields(self)
-                if (policy := declared.metadata.get("registration_inheritance")) is not None
+                plan.name: directive.value.choose(
+                    getattr(self, plan.name), getattr(previous, plan.name))
+                for plan in FieldCodec.field_plans(type(self))
+                for directive in RegistrationPolicy.single(plan.annotation)
             }
         resolved = replace(self, name=canonical_name, **inherited)
         return self if resolved == self else resolved
 
     @property
-    def turn_identity(self) -> TurnIdentity | None:
-        lease = self.turn_lease
-        return lease.identity if lease is not None else None
-
-    @property
-    def turn_lease(self) -> TurnLeaseFence | None:
+    def turn_lease(self) -> TurnLease:
         """Read this record's exact turn once; no phase is cached on the thread."""
         return self.turn_record.lease(self.incarnation, self.process_identity, self.turn_generation)
 
     def require_turn_lease(self) -> TurnLeaseFence:
-        lease = self.turn_lease
-        if lease is None:
-            raise RelationViolationError("An authorized original turn is required")
-        return lease
+        return self.turn_lease.require(RelationViolationError("An authorized original turn is required"))
 
     def has_authored_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
-        lease = self.turn_lease
-        return lease is not None and (lease.identity, lease.turn_id) == (identity, turn.value)
+        return self.turn_lease.authored(identity, turn)
 
     def has_observed_task_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
         """Check whether a task record can refer to this thread's current or preceding turn.
@@ -404,10 +463,9 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         """
         if identity.incarnation != self.incarnation:
             return False
-        lease = self.turn_lease
-        if lease is not None:
-            return self.has_authored_turn(identity, turn) or identity.generation == lease.identity.generation - 1
-        return identity.generation == self.turn_generation and self.last_finished_turn_id == turn.value
+        return self.turn_lease.observes_task_turn(
+            identity, turn,
+            idle=identity.generation == self.turn_generation and self.last_finished_turn_id == turn.value)
 
     def observed_turn(self, claim_scope: int) -> TurnFence | None:
         """Passive current/last-completed witness; never a begin-turn grant."""
@@ -422,7 +480,7 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
 
     @property
     def is_fork(self) -> bool:
-        return self.parent is not None
+        return self.parent.forked
 
     def turn_started_by(self, updated_at_ms: int) -> bool:
         """Read the original start only when this decision needs it."""
@@ -436,6 +494,7 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         """Schema-derived projection at a JSON boundary, not a hand-maintained mirror."""
         return FieldCodec.encode(self)
 
+
 def current_thread(registry) -> Thread:
     """Declare the current thread from its owner launch environment."""
     from .launch_runtime import ThreadLaunch
@@ -446,7 +505,7 @@ def current_thread(registry) -> Thread:
         tags=launch.tags,
         worktree=launch.worktree,
         parent=launch.parent,
-        task=NoThreadText.from_input(launch.task),
+        task=launch.task,
         process_identity=ProcessIdentity.capture(os.getpid()),
     )
 

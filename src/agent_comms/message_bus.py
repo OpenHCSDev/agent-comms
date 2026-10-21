@@ -34,7 +34,7 @@ from .message_page import (
     MessagePageRequest,
     PageBounds,
 )
-from .message_reference import MessageReference
+from .message_reference import AfterMessageStart, FirstUnreadStart, InboxStart, MessageReference
 from .messages import Message
 from .page_traversal import NewerTraversal
 from .read_basis import (
@@ -151,7 +151,7 @@ class MessageBus[Writes: Publisher](RuntimeFile, StoreLockOwner):
 
     def inbox(
         self, name: str, target: CommandTarget = ANY_CHANNEL, *,
-        after: MessageReference | None = None, bounds: PageBounds = PageBounds(),
+        after: InboxStart = FirstUnreadStart(), bounds: PageBounds = PageBounds(),
     ) -> Sequence[Message]:
         """Read one oldest-first unread page against a newly captured registry."""
         return list(self.inbox_at(
@@ -160,7 +160,7 @@ class MessageBus[Writes: Publisher](RuntimeFile, StoreLockOwner):
 
     def inbox_at(
         self, name: str, snapshot: RegistrySnapshot, target: CommandTarget = ANY_CHANNEL, *,
-        after: MessageReference | None = None, bounds: PageBounds = PageBounds(),
+        after: InboxStart = FirstUnreadStart(), bounds: PageBounds = PageBounds(),
     ) -> InboxPage:
         """Read unread deliveries using the caller's captured registry.
 
@@ -173,11 +173,11 @@ class MessageBus[Writes: Publisher](RuntimeFile, StoreLockOwner):
         document = self.reads.read()
         seen = self.reads.cursor(delivery.actor, snapshot, document=document)
         with self.log.opened_wire_snapshot() as source:
-            source.messages_for_references((after,) if after is not None else ())
+            source.messages_for_references(after.references())
             with self.projection(
                 self.log.path, source, snapshot, {delivery.actor: delivery}
             ) as index:
-                cursor = after.seq if after else 0
+                cursor = after.cursor()
                 unread = index.unseen_deliveries(
                     delivery.actor, seen, after=cursor, scope=selection, limit=bounds.limit + 1,
                 )
@@ -193,7 +193,10 @@ class MessageBus[Writes: Publisher](RuntimeFile, StoreLockOwner):
                 ).displayed(self.reads, document, delivery.actor, snapshot, snapshot, source)
                 return InboxPage(result.page, result.displayed, total - len(result.page.messages))
 
-    async def watch(self, name: str, *, acknowledgment: type[WatchAcknowledgment], after: MessageReference | None = None) -> AsyncIterator[Message]:
+    async def watch(
+        self, name: str, *, acknowledgment: type[WatchAcknowledgment],
+        after: InboxStart = FirstUnreadStart(),
+    ) -> AsyncIterator[Message]:
         """Yield unread messages, recording only messages the caller takes.
 
         Notifications and inbox reads use the same owners as native delivery.
@@ -216,7 +219,7 @@ class MessageBus[Writes: Publisher](RuntimeFile, StoreLockOwner):
                     for message in batch.page.messages:
                         yield message
                         acknowledgment.taken(self.reads, batch.displayed.through(message.seq))
-                        after = message.reference
+                        after = AfterMessageStart(message.reference)
                     if not batch.remaining:
                         break
 

@@ -33,6 +33,8 @@ from agent_comms.wake_candidate_index import (
 )
 from agent_comms.context_segments.wake import SelectedWakeSegment
 from agent_comms.turn_context import TurnContext
+from agent_comms.thread_text import GivenThreadText
+from agent_comms.thread_model import DeclaredModel
 
 
 @pytest.fixture
@@ -55,8 +57,8 @@ def _root(
     comms = Comms(root)
     people = [
         comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
-        comms.registry.new_thread('alpha', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), task='release notes; ignore arithmetic tasks', model='openai-codex/gpt-6-sol'),
-        comms.registry.new_thread('beta', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), task='arithmetic answers', model='openai-codex/gpt-6-sol', thinking_level=HighThinkingLevel),
+        comms.registry.new_thread('alpha', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), task=GivenThreadText('release notes; ignore arithmetic tasks'), model=DeclaredModel('openai-codex/gpt-6-sol')),
+        comms.registry.new_thread('beta', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), task=GivenThreadText('arithmetic answers'), model=DeclaredModel('openai-codex/gpt-6-sol'), thinking_level=HighThinkingLevel),
     ]
     for person in people:
         comms.registry.declare(person)

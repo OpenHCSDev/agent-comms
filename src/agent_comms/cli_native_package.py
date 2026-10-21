@@ -5,13 +5,14 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from typing import Annotated
 from abc import abstractmethod
 from dataclasses import dataclass
 
+from agent_comms import field_codec
 from agent_comms.cli_commands import DeclaredOptions
 from agent_comms.command import Command
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import option
 from agent_comms.native_package import (
     install_declared_sources,
     package_tree_digest,
@@ -43,7 +44,12 @@ class NativePackageVerb(DeclaredFamily, DeclaredOptions, Command, affix="Verb"):
 @dataclass(frozen=True, kw_only=True)
 class VerifyVerb(NativePackageVerb):
     help = "Verify a copied package against the source pin"
-    package: StoragePath = option("package", help="the pi-coding-agent package directory")
+    package: Annotated[
+        StoragePath,
+        field_codec.Argument(
+            flags=("package",), options={"help": "the pi-coding-agent package directory"}
+        ),
+    ]
 
     def apply(self, ctx: None = None) -> None:
         verify_native_package(self.package)
@@ -52,7 +58,12 @@ class VerifyVerb(NativePackageVerb):
 @dataclass(frozen=True, kw_only=True)
 class DigestVerb(NativePackageVerb):
     help = "Print a package tree's digest"
-    package: StoragePath = option("package", help="the pi-coding-agent package directory")
+    package: Annotated[
+        StoragePath,
+        field_codec.Argument(
+            flags=("package",), options={"help": "the pi-coding-agent package directory"}
+        ),
+    ]
 
     def apply(self, ctx: None = None) -> None:
         print(package_tree_digest(self.package))
@@ -61,7 +72,12 @@ class DigestVerb(NativePackageVerb):
 @dataclass(frozen=True, kw_only=True)
 class WriteManifestVerb(NativePackageVerb):
     help = "Write the source pin from a built package"
-    package: StoragePath = option("package", help="the pi-coding-agent package directory")
+    package: Annotated[
+        StoragePath,
+        field_codec.Argument(
+            flags=("package",), options={"help": "the pi-coding-agent package directory"}
+        ),
+    ]
 
     def apply(self, ctx: None = None) -> None:
         write_native_manifest(self.package)
@@ -70,8 +86,18 @@ class WriteManifestVerb(NativePackageVerb):
 @dataclass(frozen=True, kw_only=True)
 class ShareResourcesVerb(NativePackageVerb):
     help = "Share a new package's resources with the existing deployments"
-    package: StoragePath = option("package", help="the new pi-coding-agent package directory")
-    deployments: StoragePath = option("deployments", help="the directory holding the deployments")
+    package: Annotated[
+        StoragePath,
+        field_codec.Argument(
+            flags=("package",), options={"help": "the new pi-coding-agent package directory"}
+        ),
+    ]
+    deployments: Annotated[
+        StoragePath,
+        field_codec.Argument(
+            flags=("deployments",), options={"help": "the directory holding the deployments"}
+        ),
+    ]
 
     def apply(self, ctx: None = None) -> None:
         print(json.dumps(share_native_resources(self.package, self.deployments)), file=sys.stderr)
@@ -80,8 +106,18 @@ class ShareResourcesVerb(NativePackageVerb):
 @dataclass(frozen=True, kw_only=True)
 class InstallSourcesVerb(NativePackageVerb):
     help = "Install the declared agent-comms sources into a package"
-    package: StoragePath = option("package", help="the pi-coding-agent package directory")
-    snapshot: StoragePath = option("snapshot", help="the checkout the sources come from")
+    package: Annotated[
+        StoragePath,
+        field_codec.Argument(
+            flags=("package",), options={"help": "the pi-coding-agent package directory"}
+        ),
+    ]
+    snapshot: Annotated[
+        StoragePath,
+        field_codec.Argument(
+            flags=("snapshot",), options={"help": "the checkout the sources come from"}
+        ),
+    ]
 
     def apply(self, ctx: None = None) -> None:
         verify_native_package(self.package)

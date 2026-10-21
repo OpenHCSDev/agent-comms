@@ -7,7 +7,7 @@ description: Command a fleet of coding agents over agent-comms like an RTS comma
 
 The commander spends its tokens on judgment: what is stupid, what changes where and why, the board. Mechanical work goes to units by order; a fix cheaper to write than to order, the commander writes, commits and pushes itself. Every unit keeps moving toward an installed fix or deleted slop, and rotation never stops.
 
-All tools are `agent-comms-commander <tool> ...`, configured by `~/.config/agent-comms/commander.json`, which `agent-comms install` writes. Rerun install to change it; never edit the tools for one project.
+All tools are `agent-comms-commander <tool> ...`, configured by `~/.config/agent-comms/commander.json`, which `agent-comms install` writes. An install records the commander only from `--commander NAME` and replaces the repos only from `--repos A,B`; otherwise it keeps the bus's record. Rerun install to change it; never edit the tools for one project.
 
 ## Start of session, and after every compaction
 

@@ -37,6 +37,8 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from agent_comms.pi_payloads import RequestId
+
 from . import agent_events as events
 from . import pi_commands as commands
 from . import pi_events as pi
@@ -166,8 +168,8 @@ async def stream_agent_events(
                 TurnSession(
                     launch,
                     partial(commands.Prompt,
-                        id=f"agent-comms-prompt-{secrets.token_hex(16)}",
-                        input_id=Id128Text.mint(), message=task, images=tuple(images) or None,
+                        id=RequestId(f"agent-comms-prompt-{secrets.token_hex(16)}"),
+                        input_id=Id128Text.mint(), message=task, images=tuple(images),
                         context_contributions=context_contributions,
                     ),
                     tool_mode=tool_mode,
@@ -415,7 +417,7 @@ class NativeSession(MroDispatch, ABC):
             abort_deadline = self.loop.time() + max(0.0, self.rpc_abort_grace)
             try:
                 self.native.proc.stdin.write(
-                    self.native.reader.encode(commands.Abort(id="agent-comms-watchdog"))
+                    self.native.reader.encode(commands.Abort(id=RequestId("agent-comms-watchdog")))
                 )
                 remaining = max(0.0, abort_deadline - self.loop.time())
                 await asyncio.wait_for(self.native.proc.stdin.drain(), timeout=remaining)
@@ -612,7 +614,6 @@ class NativeSession(MroDispatch, ABC):
         self.output.retry_result = result
 
     async def initialize_rpc(self) -> None:
-        self.model_name: str | None = None
         self.active_session_file = self.launch.session.session_file
         self.watchdog.reading()
 
@@ -675,7 +676,7 @@ class TurnSession(NativeSession):
         self.tool_socket.tool_finished(event, self.command.input_id)
 
     def reject_prompt(self, response):
-        error = self.output.error(str(response.error or "Prompt was rejected"),
+        error = self.output.error(response.error.text_or("Prompt was rejected"),
                                   source=UnrecordedFailureSource())
         yield self.watchdog.state(
             "failed", "prompt_rejected", 0, phase=ShutdownPhase()

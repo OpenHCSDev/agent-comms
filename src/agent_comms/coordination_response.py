@@ -17,10 +17,10 @@ from __future__ import annotations
 
 import sqlite3
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Type
+from typing import Annotated, Type
 
 from agent_comms.cohort_schema import assert_cohort_schema
 from agent_comms.coordination_errors import (
@@ -81,18 +81,16 @@ class ResponseTable(SharedFileTables, DurableTables, PrivateRuntimeSchema):
 
 @dataclass(frozen=True)
 class PublicationAppendDispatches(ResponseTable, TypedTable):
-    execution_id: str = field(
-        metadata={"sql": Column(primary_key=True)}
-    )
-    exact_target: str = field(metadata={"sql": Column(primary_key=True, check="length(exact_target) BETWEEN 1 AND 256")})
-    wire_root_id: str = field(
-        metadata={
-            "sql": Column(check="length(wire_root_id)=32 AND wire_root_id NOT GLOB '*[^0-9a-f]*'")
-        }
-    )
-    owner_generation: int = field(metadata={"sql": Column(check="owner_generation>0")})
-    attempt_ordinal: int = field(metadata={"sql": Column(check="attempt_ordinal>0")})
-    dispatched_at_ms: int = field(metadata={"sql": Column(check="dispatched_at_ms>=0")})
+    execution_id: Annotated[str, Column(primary_key=True)]
+    exact_target: Annotated[
+        str, Column(primary_key=True, check="length(exact_target) BETWEEN 1 AND 256")
+    ]
+    wire_root_id: Annotated[
+        str, Column(check="length(wire_root_id)=32 AND wire_root_id NOT GLOB '*[^0-9a-f]*'")
+    ]
+    owner_generation: Annotated[int, Column(check="owner_generation>0")]
+    attempt_ordinal: Annotated[int, Column(check="attempt_ordinal>0")]
+    dispatched_at_ms: Annotated[int, Column(check="dispatched_at_ms>=0")]
     without_rowid = True
 
     @classmethod

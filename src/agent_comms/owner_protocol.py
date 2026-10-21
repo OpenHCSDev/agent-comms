@@ -14,8 +14,11 @@ from acp import RequestError
 from acp.schema import DeniedOutcome, RequestPermissionResponse
 from pydantic import BaseModel
 
+
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, MalformedRecord, Token256Text
+from .field_codec import (
+    FieldCodec, MalformedRecord, NullMember, RecordMember, SubclassUnion, Token256Text, WireName,
+)
 from .package_stamp import STAMP
 
 if TYPE_CHECKING:
@@ -80,9 +83,7 @@ class OwnerReady(OwnerLine):
     """The subscription line that completes attachment: session metadata and its controller."""
 
     ready: dict[str, object]
-    controller_token: Annotated[str, ControllerTokenText] = field(
-        metadata={"wire_name": "controllerToken"}
-    )
+    controller_token: Annotated[str, ControllerTokenText, WireName("controllerToken")]
 
     async def attach(self, proxy: RuntimeProxy) -> OwnerReady:
         return self
@@ -93,7 +94,9 @@ class OwnerUpdate(OwnerLine):
     """An ACP session update; its metadata is presented again for the attached session."""
 
     update: dict[str, object]
-    meta: dict[str, object] = field(default_factory=dict, metadata={"wire_name": "_meta"})
+    meta: Annotated[dict[str, object], WireName("_meta")] = field(
+        default_factory=dict
+    )
 
     @classmethod
     def of(cls, update: BaseModel) -> Self:
@@ -109,7 +112,7 @@ class OwnerPermissionRequest(OwnerLine):
     """A permission dialog for the attached controller, answered by its id."""
 
     id: str
-    tool_call: dict[str, object] = field(metadata={"wire_name": "toolCall"})
+    tool_call: Annotated[dict[str, object], WireName("toolCall")]
     options: list[dict[str, object]]
 
     async def deliver(self, proxy: RuntimeProxy) -> None:
@@ -126,11 +129,29 @@ class OwnerResult(OwnerLine):
         return self.result
 
 
+class RpcFailure(SubclassUnion, affix=""):
+    """How a failed request raises again on the client: as its JSON-RPC error, or as text."""
+
+    @abstractmethod
+    def raised(self, error: str) -> Exception: ...
+
+
 @dataclass(frozen=True)
-class OwnerRpcError:
+class OwnerRpcError(RecordMember, RpcFailure):
     code: int
     message: str
     data: object = None
+
+    def raised(self, error: str) -> Exception:
+        return RequestError(self.code, self.message, self.data)
+
+
+@dataclass(frozen=True, slots=True)
+class NoRpcError(NullMember, RpcFailure):
+    """The failure was not a JSON-RPC error; the client raises its text."""
+
+    def raised(self, error: str) -> Exception:
+        return RuntimeError(error)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -138,7 +159,7 @@ class OwnerFailure(OwnerLine):
     """A failed request. A JSON-RPC error raises again as itself on the client."""
 
     error: str
-    rpc_error: OwnerRpcError | None = field(default=None, metadata={"wire_name": "rpcError"})
+    rpc_error: Annotated[RpcFailure, WireName("rpcError")] = NoRpcError()
 
     @classmethod
     def of(cls, error: Exception) -> Self:
@@ -153,9 +174,7 @@ class OwnerFailure(OwnerLine):
         )
 
     def raised(self) -> Exception:
-        if self.rpc_error is None:
-            return RuntimeError(self.error)
-        return RequestError(self.rpc_error.code, self.rpc_error.message, self.rpc_error.data)
+        return self.rpc_error.raised(self.error)
 
     def announced(self, thread: str) -> None:
         raise self.raised()

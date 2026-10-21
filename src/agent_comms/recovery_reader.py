@@ -90,5 +90,5 @@ class RecoveryReader:
                 pointer.execution_id,
                 pointer.attempt_ordinal,
                 pointer.pointer_revision,
-                pointer.execution_id == execution_id,
+                pointer.execution_id.otherwise(None) == execution_id,
             )

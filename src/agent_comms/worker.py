@@ -15,7 +15,7 @@ from .coordination_database import CoordinationStore
 from .coordinator import Coordination
 from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, ThreadLaunch
-from .native_arguments import NativeArguments
+from .native_arguments import GivenBinary, NativeArguments
 from .turn_terminal import OwnerStop
 
 
@@ -36,7 +36,7 @@ async def run_owner(comms: Comms) -> None:
         agent = CommsAgent(
             comms,
             runtime_enabled=True,
-            agent_bin=NativeArguments.owner_launcher(LaunchRuntime.running()),
+            agent_bin=GivenBinary(NativeArguments.owner_launcher(LaunchRuntime.running())),
         )
         stopped = OwnerStop()
         loop = asyncio.get_running_loop()

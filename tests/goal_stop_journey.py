@@ -16,6 +16,7 @@ from agent_comms.goal_attempt_phase import FailedAttempt, SucceededAttempt
 from agent_comms.goal_generation import ReadyGeneration
 from agent_comms.goal_failure_observation import FailedTurnEvidence
 from agent_comms.native_package import VerifiedNativePackage
+from agent_comms.native_arguments import GivenArguments
 from native_backend_fixture import native_backend_fixture, wait_for
 from source_programs import SourcePrograms
 
@@ -37,7 +38,7 @@ async def stopped_goal_journey(
         # The real lifecycle registers the private participant before launch.
         # Running worker directly would bypass that required source owner.
         await asyncio.to_thread(comms.owners.start, "stop-copy",
-                                agent_args=fixture.native_arguments())
+                                agent_args=GivenArguments(fixture.native_arguments()))
         try:
             await wait_for(lambda: fixture.provider.posts > 0)
             before = FieldCodec.encode(comms.registry.require("stop-copy").goal)
@@ -57,7 +58,7 @@ async def stopped_goal_journey(
             assert attempt is not None and isinstance(attempt.phase, FailedAttempt)
             # A fresh continuation, not a resend of the interrupted input.
             await asyncio.to_thread(comms.owners.start, "stop-copy",
-                                    agent_args=fixture.native_arguments())
+                                    agent_args=GivenArguments(fixture.native_arguments()))
             await wait_for(lambda: fixture.provider.posts >= 2)
             resumed = store.snapshot(stopped.goal.require().id)
             assert resumed is not None and resumed.number == ready.number

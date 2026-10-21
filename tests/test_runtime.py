@@ -20,6 +20,8 @@ from agent_comms.owner_protocol import OwnerAnnouncement, OwnerReady, OwnerResul
 from agent_comms.runtime import RuntimeProxy, present_session, socket_path
 from agent_comms.private_path import PrivateSocketRole
 from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.thread_text import SavedSessionFile
+from agent_comms.native_arguments import GivenBinary
 from delivery_owner_fixture import canonical_agent
 
 
@@ -200,7 +202,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
         )
         # Session metadata may be filled in after initial owner attachment.
         comms.registry.register(
-            replace(comms.registry.require("worker"), session_file=str(tmp_path / "session.jsonl"))
+            replace(comms.registry.require("worker"), session_file=SavedSessionFile(str(tmp_path / "session.jsonl")))
         )
         assert await proxy.request("cancel") == {"owner": "old"}
         comms.threads.rename_managed_thread("worker", "renamed", owner_pid=old_pid)
@@ -269,7 +271,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
 @pytest.mark.asyncio
 async def test_new_session_metadata_has_a_display_title_before_first_switch(tmp_path):
     comms = wire(tmp_path / "wire")
-    agent = canonical_agent(comms, agent_bin="/bin/echo")
+    agent = canonical_agent(comms, agent_bin=GivenBinary("/bin/echo"))
     try:
         response = await agent.new_session(str(tmp_path / "project"))
         assert (

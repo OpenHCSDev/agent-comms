@@ -2,11 +2,13 @@
 
 import os
 import subprocess
+from pathlib import Path
 
 import pytest
 
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.change_report import ChangedFact, ChangeReport, FileLine
+from agent_comms.read_basis import NamedViewer
 from agent_comms.messages import (
     AckKind, AlertKind, ChangeReportKind, HandoffKind, InfoKind, Message,
     MessageKind, QuestionKind,
@@ -90,7 +92,7 @@ class TestChangeReportKind:
     def test_declared_report_publishes_and_round_trips(self, reporter, reporter_repo):
         committed = reporter.messaging.send(
             "reporter", "fixer", "review this", ChangeReportKind, report=report(reporter_repo)).message
-        stored, = list(reporter.views.history_page(CommandTarget.named("fixer"), viewer="reporter").messages)
+        stored, = list(reporter.views.history_page(CommandTarget.named("fixer"), viewer=NamedViewer("reporter")).messages)
         assert stored.report == report(reporter_repo)
         assert stored.type is ChangeReportKind
         assert Message.from_committed_wire(committed.to_wire()) == stored
@@ -149,7 +151,9 @@ class TestKindDeclarations:
             "seq": 3, "id": "ignored", "from": "a", "to": "b", "ts": 1.0,
             "text": "old handoff", "type": "handoff",
         })
-        assert stored.type is HandoffKind and stored.report is None
+        assert stored.type is HandoffKind
+        with pytest.raises(ValueError):
+            stored.report.require_references_exist(Path())
 
     def test_kind_selector_resolves_once(self):
         assert MessageKind.member_named("change-report") is ChangeReportKind

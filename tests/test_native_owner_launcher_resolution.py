@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 
+from agent_comms.thread_text import SavedSessionFile
 from agent_comms import native_package
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
@@ -38,7 +39,7 @@ async def test_fork_runs_selected_python_before_copying_saved_history(tmp_path, 
     parent = create_fresh_private_session(tmp_path / "sessions", worktree=tmp_path)
     original = parent.path.read_bytes()
     copied = await PiNativeBackend.fork(
-        thread_registration.new_thread('parent', tags=frozenset(), worktree=str(tmp_path), session_file=parent.session_file),
+        thread_registration.new_thread('parent', tags=frozenset(), worktree=str(tmp_path), session_file=SavedSessionFile(parent.session_file)),
         str(package.cli), LaunchRuntime(interpreter),
     )
     assert marker.read_text() == str(selected)

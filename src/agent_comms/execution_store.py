@@ -4,11 +4,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from agent_comms.reason_codes import GivenReasonCode, NoReasonCode
 from agent_comms.assignment_states import EngagedAssignment
 from agent_comms.assignment_store import AssignmentStore
-from agent_comms.coordination_contracts import (
-    _bounded_reason,
-)
 from agent_comms.coordination_errors import (
     IdentityConflict,
     StaleRevision,
@@ -132,7 +130,7 @@ class ExecutionStore:
             owner_lookup=owner_lookup,
             revision=1,
             max_attempts=max_attempts,
-            reason_code=None,
+            reason_code=NoReasonCode(),
             created_at_ms=now,
             updated_at_ms=now,
         ).insert(db)
@@ -197,12 +195,9 @@ class ExecutionStore:
         execution_id: str,
         *,
         expected_revision: int,
-        reason_code: str,
+        reason_code: GivenReasonCode,
     ) -> Applied[RecoverySnapshot]:
         """Fail queued/pending work; v2 cannot resume a pre-attempt deferral."""
-        _bounded_reason(reason_code)
-        if not reason_code:
-            raise ValueError("unstarted settlement requires a reason")
         with self.session.writing() as db:
             before = self.snapshots.get(execution_id)
             execution = before.execution

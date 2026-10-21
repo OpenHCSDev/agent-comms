@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import logging
 import os
-import shlex
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Annotated, TYPE_CHECKING
 from uuid import uuid4
+
+from agent_comms import field_codec
 
 from .active_route import resolve_comms_route
 from .child_process import (
@@ -28,10 +29,10 @@ from .commander_heartbeat import CommanderHeartbeat
 from .diagnostics import owner_process_output
 from .errors import RelationViolationError
 from .launch_root import LaunchRoot
-from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
+from .launch_runtime import LaunchRuntime, RestartEnvironment, SetVariable, ThreadLaunch
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
-from .native_arguments import NativeArguments
+from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary, NativeArguments
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .registration import Registration
 from .registry_document import RegistrySnapshot
@@ -39,8 +40,10 @@ from .restart_refusals import (
     OwnerGenerationChangedRefusal,
     OwnerSelectionChangedRefusal,
 )
+from .restart_scope import AllOwners, RestartScope
 from .store_files import StoreLock, _store_lock
 from .thread_identity import ClaimedIdentity, OwnerIdentity, ThreadIncarnationRecord
+from .thread_text import GivenThreadText, NoThreadText, ThreadText
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
 from .tool_result import ToolResult
@@ -55,7 +58,9 @@ _LOG = logging.getLogger(__name__)
 
 
 class LaunchInput:
-    text = ""
+    def thread_text(self) -> ThreadText:
+        """No first input, so the thread records no original assignment."""
+        return NoThreadText()
 
     def launch(self, launch: ThreadLaunch) -> ThreadLaunch:
         return launch
@@ -69,8 +74,11 @@ class TaskLaunchInput(LaunchInput):
     text: str = field()
     input_key: str = field(default_factory=lambda: f"acp:{uuid4().hex}", init=False)
 
+    def thread_text(self) -> GivenThreadText:
+        return GivenThreadText(self.text)
+
     def launch(self, launch: ThreadLaunch) -> ThreadLaunch:
-        return replace(launch, startup_input=self.input_key)
+        return replace(launch, startup_input=SetVariable(self.input_key))
 
     def record_first_input(self, record) -> None:
         record(self.input_key, seq=None, text=self.text)
@@ -80,7 +88,7 @@ class TaskLaunchInput(LaunchInput):
 class OwnerRestartSelection:
     identity: OwnerIdentity
     process: ProcessIdentity
-    claimed_generation: int = field(metadata={"wire_name": "admission_generation"})
+    claimed_generation: Annotated[int, field_codec.WireName("admission_generation")]
     interpreter: str
 
     @classmethod
@@ -163,9 +171,7 @@ class NoRelease(OwnerRelease):
 
 @dataclass(frozen=True)
 class ReleasedOwner(ThreadIncarnationRecord):
-    process_identity: ProcessState = field(
-        metadata={"sql": Column(storage=JsonStorage, nullable=True)},
-    )
+    process_identity: Annotated[ProcessState, Column(storage=JsonStorage, nullable=True)]
 
     def require_process(self) -> ProcessIdentity:
         return self.process_identity.require(f"Thread {self.name!r} has no released process")
@@ -176,7 +182,7 @@ class ReleasedOwner(ThreadIncarnationRecord):
 
 @dataclass(frozen=True)
 class OwnerReleaseEvidence(ReleasedOwner, OwnerRelease, TypedTable):
-    name: str = field(metadata={"sql": Column(primary_key=True)})
+    name: Annotated[str, Column(primary_key=True)]
     before: int
     after: int
 
@@ -190,7 +196,6 @@ class OwnerReleaseEvidence(ReleasedOwner, OwnerRelease, TypedTable):
         if not self.incarnation().current(snapshot) or not self.matches(snapshot.require(self.name)):
             return False
         return self.after == snapshot.claim_generation(self.name) and snapshot.status(self.name).stopped
-
 
     def require_native_loss(self, snapshot, source) -> None:
         """A recorded release confirms only its exact dead process and input generation.
@@ -313,7 +318,7 @@ class OwnerLifecycle:
 
     def ensure_owner(
         self, name: str, *, agent_bin: str = NativeArguments.default_binary,
-        agent_args: Sequence[str] | None = None,
+        agent_args: LaunchArguments = InheritedArguments(),
     ) -> Thread:
         with (self.registry.storage_rule.room_for_start(self.registry.require(name), self.root),
               _store_lock(self._wire_lock_path)):
@@ -332,7 +337,8 @@ class OwnerLifecycle:
             )
 
     def start(
-        self, name: str, *, agent_bin: str | None = None, agent_args: Sequence[str] | None = None
+        self, name: str, *, agent_bin: LaunchBinary = ConfiguredBinary(),
+        agent_args: LaunchArguments = InheritedArguments(),
     ) -> OwnerStartResult:
         with (self.registry.storage_rule.room_for_start(self.registry.require(name), self.root),
               _store_lock(self._wire_lock_path)):
@@ -349,7 +355,7 @@ class OwnerLifecycle:
                     raise RelationViolationError("Stopped owner has not exited yet.")
                 return OwnerStartResult(thread.name, thread.require_process().pid, False)
             owner = self._launch_owner_unlocked(
-                thread, NativeArguments.configured_binary(agent_bin), agent_args,
+                thread, agent_bin.configured(), agent_args,
                 launch_runtime=LaunchRuntime.running(),
             )
             return OwnerStartResult(owner.name, owner.require_process().pid, True)
@@ -377,10 +383,10 @@ class OwnerLifecycle:
 
     def restart_owners(
         self,
-        names: Sequence[str] | None = None,
+        scope: RestartScope = AllOwners(),
         *,
-        agent_bin: str | None = None,
-        agent_args: Sequence[str] | None = None,
+        agent_bin: LaunchBinary = ConfiguredBinary(),
+        agent_args: LaunchArguments = InheritedArguments(),
         expected: OwnerRestartSelection | None = None,
         runtime: RestartEnvironment | None = None,
         cutover: OwnerCutover = PreserveOwnerRuntime(),
@@ -393,11 +399,7 @@ class OwnerLifecycle:
         """
         from .owner_restart import OwnerRestartRequest
 
-        request = OwnerRestartRequest(
-            tuple(names) if names is not None else None, agent_bin,
-            tuple(agent_args) if agent_args is not None else None,
-            expected, runtime,
-        )
+        request = OwnerRestartRequest(scope, agent_bin, agent_args, expected, runtime)
         return cutover.restart(self, request)
 
     @contextmanager
@@ -475,7 +477,7 @@ class OwnerLifecycle:
         self,
         thread: Thread,
         agent_bin: str,
-        agent_args: Sequence[str] | None = None,
+        agent_args: LaunchArguments = InheritedArguments(),
         *,
         launch_runtime: LaunchRuntime,
         initial_input: LaunchInput = LaunchInput(),
@@ -489,8 +491,7 @@ class OwnerLifecycle:
         agent_bin = self.require_launch_authority().prepare_owner(thread, agent_bin, launch_runtime)
         env = initial_input.launch(thread.launch()).apply(env)
         env[NativeArguments.binary_key] = agent_bin
-        if agent_args is not None:
-            env[NativeArguments.arguments_key] = shlex.join(agent_args)
+        agent_args.apply(env)
         owned: Thread | None = None
 
         def reserve(identity: ProcessIdentity) -> None:

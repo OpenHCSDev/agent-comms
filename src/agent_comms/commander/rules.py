@@ -8,6 +8,7 @@ in `rules/`, and paper 1's correct-maintenance results (the packaged correct-mai
 import re
 from pathlib import Path
 
+from agent_comms import field_codec
 
 from .config import CommanderConfig
 from .order import Commander, CommanderVerb

@@ -11,7 +11,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Literal, Self, cast
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Self, cast
 
 from .errors import RelationViolationError, StoredHistoryUnreadable
 from .field_codec import (
@@ -37,7 +37,7 @@ from .turn_context import (
 
 if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
-from .typed_table import Column, DurableTables, Index, TypedStore, TypedTable
+from .typed_table import Column, DurableTables, Generated, Index, TypedStore, TypedTable
 
 
 @dataclass(frozen=True)
@@ -86,7 +86,7 @@ class UnrecordedContextSource(ContextSourceState):
 
 @dataclass(frozen=True)
 class ContextStoreInfo(ContextSourceState, TypedTable):
-    singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True)})
+    singleton: Annotated[Literal[1], Column(primary_key=True)]
     source: ContextStoreIdentity
 
     @classmethod
@@ -147,9 +147,9 @@ class ContextStoreInfo(ContextSourceState, TypedTable):
 
 @dataclass(frozen=True)
 class ContextEntry(TypedTable):
-    session_id: str = field(metadata={"sql": Column(primary_key=True)})
-    session_file: str = field(metadata={"sql": Column(primary_key=True)})
-    entry_id: str = field(metadata={"sql": Column(primary_key=True)})
+    session_id: Annotated[str, Column(primary_key=True)]
+    session_file: Annotated[str, Column(primary_key=True)]
+    entry_id: Annotated[str, Column(primary_key=True)]
     manifest: SegmentManifest
 
     @classmethod
@@ -173,7 +173,7 @@ class ContextEntry(TypedTable):
 
 @dataclass(frozen=True)
 class ContextSegmentVersion(TypedTable):
-    id: int = field(metadata={"sql": Column(primary_key=True, auto_increment=True)})
+    id: Annotated[int, Column(primary_key=True, auto_increment=True)]
     digest: str
     segment: RecordedSegmentManifest
     indexes = (Index(("digest",), unique=True),)
@@ -193,13 +193,15 @@ class ContextSegmentVersion(TypedTable):
 
 @dataclass(frozen=True)
 class ContextRequest(TypedTable):
-    id: int = field(metadata={"sql": Column(primary_key=True, auto_increment=True)})
+    id: Annotated[int, Column(primary_key=True, auto_increment=True)]
     identity: RecordedContextIdentity
-    thread_name: str = field(
-        metadata={"sql": Column(generated="json_extract(identity,'$.thread.name')")}
+    thread_name: ClassVar[Generated] = Generated(
+        str,
+        Column(generated="json_extract(identity,'$.thread.name')"),
     )
-    thread_birth: float = field(
-        metadata={"sql": Column(generated="json_extract(identity,'$.thread.created_at')")}
+    thread_birth: ClassVar[Generated] = Generated(
+        float,
+        Column(generated="json_extract(identity,'$.thread.created_at')"),
     )
     versions: tuple[int, ...]
     size: int

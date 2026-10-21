@@ -1,5 +1,6 @@
 """Partial external snapshots cannot claim a complete native session identity."""
 
+from agent_comms.pi_payloads import ReportedText
 import json
 
 import pytest
@@ -34,7 +35,9 @@ def snapshot(command, data):
     ],
 )
 def test_partial_native_snapshot_only_conflicts_on_known_components(command, partial, conflict):
-    selected = StateData(session_id="selected", session_file="/selected.jsonl")
+    selected = StateData(
+        session_id=ReportedText("selected"), session_file=ReportedText("/selected.jsonl")
+    )
     observed = snapshot(command, partial)
     assert observed.identity is None
     assert observed.conflicts(selected) is conflict

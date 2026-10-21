@@ -22,10 +22,17 @@ if TYPE_CHECKING:
 from uuid import uuid4
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
-from .field_codec import FieldCodec, MalformedRecord, RecordedTimestamp, TimestampText
+from .field_codec import (
+    FieldCodec,
+    MalformedRecord,
+    RecordedTimestamp,
+    TimestampText,
+    WireName,
+    WireOmitDefault,
+)
 from .importing import ImportedSessionMetadata
 from .native_input_record import NativeInputLocation
-from .pi_payloads import PiMessage, PiPayload
+from .pi_payloads import PiMessage, PiOmitted, PiPayload
 from .pi_vocabulary import PendingStopReason, ThinkingLevel
 from .recorded_time import GeneratedTimestamp
 from .routing import TurnRouting
@@ -40,11 +47,17 @@ class TranscriptProjection:
     input_display: InputDisplay | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class RootEntry(PiOmitted):
+    """Pi writes a null parentId on a session's first entry."""
+
+
 @dataclass(frozen=True, kw_only=True)
 class RecordedEntry(PiPayload):
     """Shared source identity and projection; each journal declares its own clock."""
+
     id: str | None = None
-    parent_id: str | None = field(default=None, metadata={"wire_name": "parentId"})
+    parent_id: Annotated[str | RootEntry, WireName("parentId")] = RootEntry()
     is_message: ClassVar[bool] = False
     assistant_message: ClassVar[bool] = False
     messages: ClassVar[tuple[PiMessage, ...]] = ()
@@ -489,13 +502,13 @@ class NativeEvidenceScope(ExitStack):
 class SessionEntry(NativeEntry):
     @property
     def child_parent(self) -> object:
-        return self.parent_id
+        return FieldCodec.encode(self.parent_id)
 
     version: int | None = None
-    cwd: str | None = field(default=None, metadata={"wire_omit_default": True})
-    parent_session: str | None = field(default=None, metadata={
-        "wire_name": "parentSession", "wire_omit_default": True,
-    })
+    cwd: Annotated[str | PiOmitted, WireOmitDefault()] = PiOmitted()
+    parent_session: Annotated[
+        str | PiOmitted, WireName("parentSession"), WireOmitDefault()
+    ] = PiOmitted()
 
     @classmethod
     def input_evidence(cls, raw: dict) -> tuple[NativeEntry, ...]:
@@ -542,19 +555,20 @@ class MessageEntry(NativeEntry):
 
     @property
     def input_id(self) -> str | None:
-        return self.message.input_id
+        # NativeEntry declares absence as None for every entry; this hands Pi's answer over.
+        return self.message.input_id.value_or(None)
 
     @property
     def tracked_user(self) -> MessageEntry | None:
         from .field_codec import Id128Text, Sha256Text
 
-        if self.message.input_id is None:
-            return None
-        Id128Text.decode(self.message.input_id)
-        if not self.message.user or self.message.input_digest is None or not self.id:
-            raise MalformedRecord("Native Pi session has ambiguous tracked user input")
-        Sha256Text.from_text(self.message.input_digest)
-        return self
+        for input_id in self.message.input_id.present():
+            Id128Text.decode(input_id)
+            if not self.message.user or not self.message.input_digest.reported or not self.id:
+                raise MalformedRecord("Native Pi session has ambiguous tracked user input")
+            Sha256Text.from_text(self.message.input_digest.require())
+            return self
+        return None
 
     def require_failed_terminal(self, parent_id: str) -> None:
         if self.parent_id != parent_id:
@@ -580,8 +594,9 @@ class CompactionEntry(NativeEntry):
 @dataclass(frozen=True, kw_only=True)
 class StoredEntry(RecordedEntry):
     """A committed Pi Durable entry owns zero or more ordinary Pi messages."""
+
     id: int = field()
-    messages: tuple[PiMessage, ...] = field(default=(), metadata={'wire_name': 'model'})
+    messages: Annotated[tuple[PiMessage, ...], WireName("model")] = ()
 
     def events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
         """Durable entries have no clock; their individual model messages do."""
@@ -600,7 +615,7 @@ class CustomEntry(NativeEntry):
 
 @dataclass(frozen=True, kw_only=True)
 class ImportedMetadataEntry(CustomEntry):
-    custom_type: Literal["agent-comms-import"] = field(metadata={"wire_name": "customType"})
+    custom_type: Annotated[Literal["agent-comms-import"], WireName("customType")]
     data: ImportedSessionMetadata
 
     def imported_sources(self):
@@ -619,7 +634,7 @@ class UnknownEntry(NativeEntry):
 @dataclass(frozen=True, kw_only=True)
 class ModelChangeEntry(NativeEntry):
     provider: str
-    model_id: str = field(metadata={"wire_name": "modelId"})
+    model_id: Annotated[str, WireName("modelId")]
 
     @property
     def model_choice(self) -> tuple[str, str] | None:
@@ -628,4 +643,4 @@ class ModelChangeEntry(NativeEntry):
 
 @dataclass(frozen=True, kw_only=True)
 class ThinkingLevelChangeEntry(NativeEntry):
-    thinking_level: type[ThinkingLevel] = field(metadata={"wire_name": "thinkingLevel"})
+    thinking_level: Annotated[type[ThinkingLevel], WireName("thinkingLevel")]

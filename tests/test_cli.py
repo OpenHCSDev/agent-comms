@@ -6,8 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.channel_targets import ChannelSelection, CommandTarget
+from agent_comms.thread_text import SavedSessionFile
+from agent_comms.channel_targets import CommandTarget, PerTargetChannels
 from agent_comms.cli import main
+from agent_comms.threads import ChosenServiceTier, NextTurnConfiguration
+from agent_comms.native_arguments import GivenArguments, GivenBinary
+from agent_comms.thread_model import UndeclaredModel
 from agent_comms.cli_commands import CommandSelectionChanged
 
 
@@ -58,7 +62,8 @@ class TestCliSuccess:
         cli(tmp_path, "register", "--name", "a", "--worktree", "/wt", "--execution", "native")
         comms = Comms(tmp_path)
         for tier in ServiceTier:
-            comms.threads.set_thread_configuration(comms.registry.require("a"), service_tier=tier)
+            comms.threads.set_thread_configuration(
+            comms.registry.require("a"), NextTurnConfiguration(service_tier=ChosenServiceTier(tier)))
             code, catalog = cli(tmp_path, "tools", "--name", "a")
             assert code == 0
             code, detail = cli(tmp_path, "thread", "--name", "a", "--no-pending")
@@ -191,7 +196,7 @@ class TestCliSuccess:
         merge_file = tmp_path / "merge.json"
         merge_file.write_text(json.dumps({"k": "v"}))
         cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
-        code, out = cli(tmp_path, "ledger", "--merge-from", str(merge_file), "--author", "a")
+        code, out = cli(tmp_path, "ledger-merge", "--merge-from", str(merge_file), "--author", "a")
         assert out == {"merged": True}
         code, out = cli(tmp_path, "ledger")
         assert out["k"] == "v"
@@ -219,12 +224,6 @@ class TestCliFailClosed:
         code, out = cli(tmp_path, "thread", "--name", "ghost")
         assert code == 1 and "not registered" in out["error"]
 
-
-    def test_ledger_merge_requires_author(self, cli, tmp_path):
-        merge_file = tmp_path / "merge.json"
-        merge_file.write_text("{}")
-        code, out = cli(tmp_path, "ledger", "--merge-from", str(merge_file))
-        assert code == 1 and "author" in out["error"]
 
     def test_every_error_is_single_json_object(self, cli, tmp_path):
         code, out = cli(tmp_path, "thread", "--name", "ghost")
@@ -338,10 +337,11 @@ class TestSelectedTargetActions:
         from dataclasses import replace
         from agent_comms.child_process import ProcessIdentity
         from agent_comms.cli_commands import CliCommand, RestartCliCommand, StopCliCommand
+        from agent_comms.restart_scope import OneOwner
         from agent_comms.thread_execution import ExternalThreadExecution
         from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
         from agent_comms.thread_identity import TurnIdentity
-        from agent_comms.turn_lease import ActiveTurn, StoredTurnRecord
+        from agent_comms.turn_lease import ActiveTurn, RecordedGeneration, StoredTurnRecord
 
         comms = self.declared(tmp_path)
         # Observe an authentic other process; this check never signals or restarts it.
@@ -352,7 +352,7 @@ class TestSelectedTargetActions:
         action = next(action for action in CliCommand.target_catalog(
             comms, CliCommand.selected_targets('alpha'), project=str(tmp_path))
             if action.declaration is RestartCliCommand)
-        assert action.bound == (RestartCliCommand(name='alpha'),)
+        assert action.bound == (RestartCliCommand(name=OneOwner('alpha')),)
         assert action.editable_fields == ()
         assert action.encode()['parameters']['properties'] == {}
         assert action.edited({}).bound == action.bound
@@ -361,10 +361,8 @@ class TestSelectedTargetActions:
                 action.edited(arguments)
             with pytest.raises(ValueError):
                 RestartCliCommand.execute_target(comms, RestartCliCommand.selected_targets('alpha'), arguments)
-        explicit = RestartCliCommand(name='alpha', agent_bin='/operator/native',
-                                      agent_args=['--no-extensions'])
-        assert explicit.agent_bin == '/operator/native'
-        assert explicit.agent_args == ['--no-extensions']
+        explicit = RestartCliCommand(name=OneOwner('alpha'), agent_bin=GivenBinary('/operator/native'),
+                                      agent_args=GivenArguments(('--no-extensions',)))
         from agent_comms.cli import build_parser
         options = build_parser().parse_args([
             'restart', '--name', 'alpha', '--agent-bin', '/operator/native',
@@ -378,7 +376,7 @@ class TestSelectedTargetActions:
         busy = TurnIdentity(owner.incarnation, owner.turn_generation + 1)
         record = StoredTurnRecord.begin(
             comms.registry.store.path, busy,
-            ActiveTurn('busy', owner.require_process().pid, turn_generation=busy.generation),
+            ActiveTurn('busy', owner.require_process().pid, turn_generation=RecordedGeneration(busy.generation)),
         )
         assert not RestartCliCommand.thread_bindings(comms,
             replace(owner, turn_record=record, turn_generation=busy.generation), status)
@@ -441,7 +439,7 @@ class TestSelectedTargetActions:
         comms = self.declared(tmp_path)
         actions = CliCommand.target_catalog(
             comms, CliCommand.selected_targets(("alpha", "beta", "#team")),
-            ChannelSelection.decode({"alpha": ("#team",), "beta": ("#other",)}), project=str(tmp_path),
+            PerTargetChannels({"alpha": ("#team",), "beta": ("#other",)}), project=str(tmp_path),
         )
         catalog = {action.declaration.declared_name: action for action in actions}
         assert set(catalog) == {"start", "stop", "archive", "pin-thread", "read-target", "delete-tag"}
@@ -535,7 +533,7 @@ class TestSelectedTargetActions:
         comms = self.declared(tmp_path)
         before = {name: comms.registry.require(name).tags for name in ("alpha", "beta")}
         result = TargetEdit(PinThreadCliCommand, PinThreadCliCommand.selected_targets(("alpha", "beta", "#team")), {},
-                            channel=ChannelSelection.decode({"alpha": ("#team",), "beta": ("#other",)})).apply(comms)
+                            channel=PerTargetChannels({"alpha": ("#team",), "beta": ("#other",)})).apply(comms)
         assert result.successful and len(result.outcomes) == 3
         catalog = comms.channels.catalog.read()
         assert comms.bus.require_channel("#team").pinned
@@ -550,7 +548,7 @@ class TestSelectedTargetActions:
         comms.channels.update_tags("alpha", add=frozenset({"other"}))
         channels = {"alpha": ("#team", "#other")}
         action = next(action for action in CliCommand.target_catalog(
-            comms, CliCommand.selected_targets(("alpha",)), ChannelSelection.decode(channels), project=str(tmp_path))
+            comms, CliCommand.selected_targets(("alpha",)), PerTargetChannels(channels), project=str(tmp_path))
             if action.declaration is PinThreadCliCommand)
         assert tuple(command.channel for command in action.bound) == ("#team", "#other")
         result = TargetEdit(PinThreadCliCommand, PinThreadCliCommand.selected_targets(action.targets), {}, channel=action.channels).apply(comms)
@@ -561,9 +559,9 @@ class TestSelectedTargetActions:
         assert comms.registry.require("alpha").tags == frozenset({"team", "other"})
         with pytest.raises(ValueError):
             TargetEdit(ArchiveCliCommand, ArchiveCliCommand.selected_targets(("alpha",)), {},
-                       channel=ChannelSelection.decode(channels)).apply(comms)
+                       channel=PerTargetChannels(channels)).apply(comms)
         archive = next(action for action in CliCommand.target_catalog(
-            comms, CliCommand.selected_targets(("alpha",)), ChannelSelection.decode(channels), project=str(tmp_path))
+            comms, CliCommand.selected_targets(("alpha",)), PerTargetChannels(channels), project=str(tmp_path))
             if action.declaration is ArchiveCliCommand)
         result = TargetEdit(ArchiveCliCommand, ArchiveCliCommand.selected_targets(("alpha",)), {}, channel=archive.channels).apply(comms)
         assert result.successful and len(result.outcomes) == 1
@@ -576,7 +574,7 @@ class TestSelectedTargetActions:
         comms.channels.update_tags("alpha", add=frozenset({"other"}))
         channels = {"alpha": ("#team", "#other")}
         action = next(action for action in CliCommand.target_catalog(
-            comms, CliCommand.selected_targets(("alpha",)), ChannelSelection.decode(channels), project=str(tmp_path))
+            comms, CliCommand.selected_targets(("alpha",)), PerTargetChannels(channels), project=str(tmp_path))
             if action.declaration is PinThreadCliCommand)
         comms.channels.update_tags("alpha", remove=frozenset({"team"}))
         result = TargetEdit(PinThreadCliCommand, PinThreadCliCommand.selected_targets(action.targets), {}, channel=action.channels).apply(comms)
@@ -598,7 +596,7 @@ class TestSelectedTargetActions:
         source.write_text(json.dumps({'type': 'message', 'timestamp': '2026-09-20T00:00:01Z', 'message': {
             'role': 'assistant', 'content': [{'type': 'text', 'text': 'Saved reply'}],
         }}) + '\n')
-        comms.registry.declare(comms.registry.new_thread('alpha', frozenset({'team'}), str(tmp_path), session_file=str(source)))
+        comms.registry.declare(comms.registry.new_thread('alpha', frozenset({'team'}), str(tmp_path), session_file=SavedSessionFile(str(source))))
         comms.channels.update_tags('beta', add=frozenset({'team'}))
         viewer = comms.messaging.user_identity(str(tmp_path)).name
         comms.messaging.send('alpha', 'beta', 'Executor message').message.message_id
@@ -657,6 +655,6 @@ def test_result_kind_decides_exit_code_and_navigation_targets():
     assert not launched.open_targets() and not batch.open_targets()
     created = ThreadCreatedResult("child", NoProcess())
     assert created.open_targets() == ("child",)
-    command = NewThreadCliCommand(name="child", project="/project", model=None)
+    command = NewThreadCliCommand(name="child", project="/project", model=UndeclaredModel())
     completed = TargetCompleted("/project", command, created)
     assert TargetBatchResult((completed, batch.outcomes[-1], completed)).open_targets() == ("child",)

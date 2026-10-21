@@ -6,8 +6,8 @@ import base64
 import binascii
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Literal
-
+from typing import Annotated, Literal
+from agent_comms import field_codec
 from acp.schema import (
     BlobResourceContents,
     EmbeddedResourceContentBlock,
@@ -16,7 +16,6 @@ from acp.schema import (
     TextResourceContents,
 )
 from pydantic import TypeAdapter
-
 from .mro_dispatch import MroDispatch, handles
 
 IMAGE_MIME_TYPES = frozenset({"image/png", "image/jpeg", "image/gif", "image/webp"})
@@ -27,8 +26,10 @@ MAX_PROMPT_IMAGES = 8
 @dataclass(frozen=True, slots=True)
 class ImageInput:
     data: str
-    mime_type: str = field(metadata={"wire_name": "mimeType"})
-    type: Literal["image"] = field(default="image", kw_only=True, metadata={"wire_required": True})
+    mime_type: Annotated[str, field_codec.WireName("mimeType")]
+    type: Annotated[Literal["image"], field_codec.WireRequired()] = field(
+        default="image", kw_only=True
+    )
 
     def __post_init__(self) -> None:
         if self.mime_type not in IMAGE_MIME_TYPES:

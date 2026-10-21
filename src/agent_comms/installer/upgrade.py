@@ -63,7 +63,7 @@ from agent_comms.installer.backup import (
 from agent_comms.installer.carry import STEPS, Carried, Carry, CarryChain, CarryLedger
 from agent_comms.installer.practice import PracticeMeasurement, practice_copy, prepare_runtime_home
 from agent_comms.installer.runtime_resolution import RuntimeResolution
-from agent_comms.todos import PlannedInstallDeadline
+from agent_comms.install_choices import InstallerChoice
 
 HOME = Path.home()
 CLIENT_IMPORTS = "import toad.app, agent_comms.acp"
@@ -479,8 +479,8 @@ def carry_all(
 
 
 def rehearse(root: Path, stack: Stack, tree: TargetTree, chain: CarryChain,
-             installer: str) -> CarriedRehearsal:
-    parent = StorageRule.load(root).initial_roots(installer).scratch
+             installer: InstallerChoice) -> CarriedRehearsal:
+    parent = installer.scratch(StorageRule.load(root))
     parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     with (
         tempfile.TemporaryDirectory(dir=parent, prefix="practice-") as scratch,
@@ -517,7 +517,7 @@ def carry_and_read(root: Path, before: dict[str, SavedFile], pending: tuple[type
     return CarriedPass(steps, files, reader.verify(root))
 
 
-def upgrade(checkout: Path, root: Path, target: str, installer: str, rehearse_only: bool,
+def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice, rehearse_only: bool,
             retire: bool, spill_dir: Path, scratch: Path,
             harnesses: Callable[[], InstallResult]) -> Upgrade:
     """``scratch`` holds the target's worktree the launcher runs this source from; this
@@ -568,7 +568,7 @@ class Install[Rehearsed: Rehearsal](ABC):
     installed: Stack
     staged: Stack
     tree: TargetTree
-    installer: str
+    installer: InstallerChoice
     spill_dir: Path
 
     @staticmethod
@@ -587,7 +587,7 @@ class Install[Rehearsed: Rehearsal](ABC):
     @classmethod
     def of(cls, checkout: Path, root: Path, current: str, target: str, chain: CarryChain,
            pending: tuple[type[Carry], ...], installed: Stack, staged: Stack, tree: TargetTree,
-           installer: str, spill_dir: Path) -> Install:
+           installer: InstallerChoice, spill_dir: Path) -> Install:
         """A bus already carried, on the target, built from the installed lock needs nothing."""
         unchanged = not pending and current == target and RuntimeResolution.installed().matches(
             staged.lock, staged.python, target)
@@ -634,7 +634,7 @@ class UnchangedInstall(Install[UnchangedRehearsal]):
 
     def live(self, rehearsal: UnchangedRehearsal) -> UnchangedRun:
         self.installed.publish()
-        PlannedInstallDeadline.after(self.installer, time.time()).plan(self.root)
+        self.installer.plan_next(self.root, time.time())
         return UnchangedRun()
 
 
@@ -649,7 +649,7 @@ class FreshInstall(Install[FreshRehearsal]):
     @classmethod
     def of(cls, checkout: Path, root: Path, current: str, target: str, chain: CarryChain,
            pending: tuple[type[Carry], ...], installed: Stack, staged: Stack, tree: TargetTree,
-           installer: str, spill_dir: Path) -> Install:
+           installer: InstallerChoice, spill_dir: Path) -> Install:
         return cls(checkout, root, current, target, chain, pending, installed, staged,
                    tree, installer, spill_dir)
 
@@ -666,7 +666,7 @@ class FreshInstall(Install[FreshRehearsal]):
         self.staged.publish()
         route = route_new_bus(ActiveRoute(self.root.absolute(), root_id), active_route_path())
         services = HostService.restart_running(self.staged.python)
-        PlannedInstallDeadline.after(self.installer, time.time()).plan(self.root)
+        self.installer.plan_next(self.root, time.time())
         return CreatedRun(services, route)
 
 
@@ -686,7 +686,7 @@ class RetiringInstall(FreshInstall):
 
 
 def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[type[Carry], ...],
-         installed: Stack, staged: Stack, tree: TargetTree, installer: str,
+         installed: Stack, staged: Stack, tree: TargetTree, installer: InstallerChoice,
          spill_dir: Path, rehearsal_files: RehearsalFiles) -> CarriedRun:
     """The rehearsal's passes under the rehearsal's stack; ``installed`` only stops, starts
     and reads back its own owners."""
@@ -723,7 +723,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
         staged.publish()
         maintenance.clear(held)
         services = HostService.restart_running(staged.python)
-        PlannedInstallDeadline.after(installer, time.time()).plan(root)
+        installer.plan_next(root, time.time())
     except BaseException as error:
         print(f"install: install failed ({type(error).__name__}: {error}); "
               "restoring original installation", file=sys.stderr)

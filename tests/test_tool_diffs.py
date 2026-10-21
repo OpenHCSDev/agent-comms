@@ -9,7 +9,7 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.pi_payloads import PiToolResult
 from agent_comms.tool_declaration import ToolDeclaration
-from agent_comms.tool_results import ToolDiff, tool_result_content
+from agent_comms.tool_results import NoSentMessage, NoToolDiff, ToolDiff, tool_result_content
 from agent_comms.native_entries import TranscriptProjection
 from conftest import transcript_records
 
@@ -35,11 +35,11 @@ def result(patch=PATCH):
             True,
             ToolDiff("-1 old\n+1 new", "numbered"),
         ),
-        ("edit", result(), False, None),
-        ("bash", result(), True, None),
-        ("edit", {"details": {"patch": 123}}, True, None),
-        ("edit", None, True, None),
-        ("edit", {"details": ["extension-defined", 3]}, True, None),
+        ("edit", result(), False, NoToolDiff()),
+        ("bash", result(), True, NoToolDiff()),
+        ("edit", {"details": {"patch": 123}}, True, NoToolDiff()),
+        ("edit", None, True, NoToolDiff()),
+        ("edit", {"details": ["extension-defined", 3]}, True, NoToolDiff()),
     ],
 )
 def test_native_edit_evidence(name, native, ok, expected):
@@ -66,7 +66,7 @@ def test_successful_send_preserves_original_publication_in_live_and_saved_conten
     result = PiToolResult.from_wire(raw)
     message, = read_history(comms)
     assert result.sent_message(True) == SentTranscript.from_message(message)
-    assert result.sent_message(False) is None
+    assert result.sent_message(False) == NoSentMessage()
     saved = ToolResultMessage.from_wire({
         "role": "toolResult", "toolCallId": "original-send", "toolName": "comms_send",
         **raw, "isError": False,
@@ -79,4 +79,4 @@ def test_successful_send_preserves_original_publication_in_live_and_saved_conten
     with pytest.raises(ValueError):
         PublishedMessageToolDetails.from_wire(invalid)
     # Older and unrelated untagged output has no original publication witness.
-    assert PiToolResult.from_wire({**raw, "details": {"id": published["id"]}}).sent_message(True) is None
+    assert PiToolResult.from_wire({**raw, "details": {"id": published["id"]}}).sent_message(True) == NoSentMessage()

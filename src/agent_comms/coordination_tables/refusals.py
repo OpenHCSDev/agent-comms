@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import sqlite3
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Annotated, TYPE_CHECKING
 
 from agent_comms.active_route import guard_original_root_write
 from agent_comms.coordination_database import CoordinationStore
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 class SendRefusal(CoordinatorTable, TypedTable, SharedFileTables, DurableTables):
     """One attempted send, with no fabricated message, audience or delivery identity."""
 
-    id: int = field(metadata={"sql": Column(primary_key=True)})
+    id: Annotated[int, Column(primary_key=True)]
     sender: str
     target: str
     reason: str

@@ -7,6 +7,8 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.coordination_tables.executions import NoPointedAttempt, NoPointedExecution
+from agent_comms.reason_codes import GivenReasonCode, NoReasonCode
 from agent_comms.attempt_states import (
     AbortingAttempt,
     AttemptFailedAttempt,
@@ -90,7 +92,7 @@ def test_unknown_settles_failed_in_current_store(tmp_path, authorized):
 ])
 def test_monitor_evidence_preserves_its_outcome_and_owned_replay_contribution(outcome, contribution):
     evidence = MonitorEvidence(
-        subprocess_dead=True, backend_done=True, reason_code="observed_exit",
+        subprocess_dead=True, backend_done=True, reason_code=GivenReasonCode("observed_exit"),
         observed_at_ms=1000, outcome=outcome,
     )
     assert evidence.outcome is outcome
@@ -121,13 +123,13 @@ def test_sql_retry_predecessor_is_not_every_unsuccessful_outcome(tmp_path, prede
             )
             CurrentExecutions.update(
                 db, where="owner_lookup=?", parameters=("owner",),
-                execution_id=None, attempt_ordinal=None, pointer_revision=snapshot.pointer_revision + 1,
+                execution_id=NoPointedExecution(), attempt_ordinal=NoPointedAttempt(), pointer_revision=snapshot.pointer_revision + 1,
             )
         store.participants.advance_generation("owner", "thread", expected_generation=1)
         next_attempt = replace(
             attempt, attempt_ordinal=2, owner_generation=2,
             owner_token_digest=prepare_fence_token(), lifecycle=PromptStartingAttempt(1000),
-            revision=1, last_progress_at_ms=None, reason_code=None,
+            revision=1, last_progress_at_ms=None, reason_code=NoReasonCode(),
         )
         if predecessor is UnknownOutcomeAttempt:
             with pytest.raises(sqlite3.IntegrityError):

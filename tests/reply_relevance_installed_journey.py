@@ -1,4 +1,5 @@
 """One configured saved-helper fork and fresh USER channel request, never a retry."""
+from agent_comms.thread_text import SavedSessionFile
 from agent_comms.native_entries import NativeEvidenceScope
 import asyncio
 import hashlib
@@ -10,6 +11,7 @@ import time
 
 import acp
 from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.thread_text import ForkedParent
 from agent_comms.comms import Comms, wire
 from agent_comms.coordinator import Coordination
 from agent_comms.coordination_tables.assignments import WakeAssignment
@@ -23,6 +25,7 @@ from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.selected_triage import FullSelectedTriage
 from agent_comms.threads import Thread
+from agent_comms.native_arguments import GivenArguments, GivenBinary
 from shared_bus_restart_native import attach
 
 
@@ -78,7 +81,7 @@ async def run(stage, package):
         environment.pop(key, None)
     os.environ.clear()
     os.environ.update(environment)
-    child = service.registry.new_thread('reply505', source.tags, source.worktree, parent=source.name, task=source.task, session_file=fork.session_file, model=source.model, thinking_level=source.thinking_level, execution=source.execution)
+    child = service.registry.new_thread('reply505', source.tags, source.worktree, parent=ForkedParent(source.name), task=source.task, session_file=SavedSessionFile(fork.session_file), model=source.model, thinking_level=source.thinking_level, execution=source.execution)
     service.registry.declare(child)
     assert 'openhcs' in child.tags
     packets = []
@@ -107,7 +110,7 @@ async def run(stage, package):
     persist('canonical-saved-fork-prepared-no-input')
     try:
         await asyncio.to_thread(service.owners.start, child.name,
-                                agent_bin=str(binary), agent_args=launch.arguments)
+                                agent_bin=GivenBinary(str(binary)), agent_args=GivenArguments(tuple(launch.arguments)))
         await attach(service, child.name)
         async with acp.spawn_agent_process(Observation(), sys.executable, '-m', 'agent_comms.acp',
                                            env=environment, cwd=source.worktree) as (client, process):

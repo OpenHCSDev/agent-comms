@@ -9,10 +9,10 @@ from __future__ import annotations
 import json
 from collections.abc import Generator, Iterator
 from contextlib import ExitStack, closing, contextmanager
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, BinaryIO, Literal
+from typing import TYPE_CHECKING, BinaryIO, Literal, Annotated
 
 from .bus_activity_index import ChannelActivity
 from .bus_display_index import DisplaySnapshot
@@ -51,7 +51,7 @@ class PageIndexTable:
 class BusPageSource(PageIndexTable, TypedTable):
     revision: FileRevision
     tail: str
-    singleton: Literal[1] = field(default=1, metadata={"sql": Column(primary_key=True)})
+    singleton: Annotated[Literal[1], Column(primary_key=True)] = 1
 
     def covers(self, snapshot: WireSnapshot) -> bool:
         return (snapshot.same_file(self.revision.identity)
@@ -61,14 +61,17 @@ class BusPageSource(PageIndexTable, TypedTable):
 
 @dataclass(frozen=True)
 class BusPageRow(PageIndexTable, TypedTable):
-    seq: int = field(metadata={"sql": Column(primary_key=True)})
+    seq: Annotated[int, Column(primary_key=True)]
     offset: int
     sender: str
     target: str
     timestamp: float
     human: bool
     mentions: tuple[str, ...]
-    indexes = (Index(("target", "seq")), Index(("offset",)),)
+    indexes = (
+        Index(("target", "seq")),
+        Index(("offset",)),
+    )
 
     def record(self, stream: BinaryIO, *, max_bytes: int) -> tuple[WireRecord, int]:
         if self.offset < 0 or max_bytes <= 0:
@@ -93,8 +96,10 @@ class BusPageRow(PageIndexTable, TypedTable):
 
 @dataclass(frozen=True)
 class BusPageMetrics(TypedRow):
-    last: float = field(metadata={"sql": Column(generated="MAX(0,COALESCE(MAX({timestamp}),0))")})
-    human: float = field(metadata={"sql": Column(generated="MAX(0,COALESCE(MAX(CASE WHEN {human} THEN {timestamp} END),0))")})
+    last: Annotated[float, Column(generated="MAX(0,COALESCE(MAX({timestamp}),0))")]
+    human: Annotated[
+        float, Column(generated="MAX(0,COALESCE(MAX(CASE WHEN {human} THEN {timestamp} END),0))")
+    ]
 
 
 @dataclass(frozen=True)

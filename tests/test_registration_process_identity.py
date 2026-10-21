@@ -15,6 +15,7 @@ from agent_comms.maintenance_barrier import (
     InstallingPhase, MaintenanceOperator, PausedPhase, ReadyPhase,
 )
 from agent_comms.thread_status import NoBridgeThreadStatus
+from agent_comms.thread_text import GivenThreadText
 
 
 @pytest.mark.parametrize('phases', [(), (PausedPhase,), (PausedPhase, InstallingPhase)])
@@ -119,7 +120,7 @@ def test_active_executor_cannot_be_replaced_by_same_pid_different_birth(tmp_path
     with pytest.raises(RelationViolationError):
         comms.registry.declare(replace(owner, process_identity=stale))
     assert comms.registry.require(owner.name) == leased
-    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path), title='metadata'))
+    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path), title=GivenThreadText('metadata')))
     current = comms.registry.require(owner.name)
     assert current.process_identity == identity and current.turn_record == leased.turn_record
     assert current.turn_record.read().id == 'active-turn'

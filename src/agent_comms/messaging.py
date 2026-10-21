@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .active_route import guard_original_root_write
 from .bus_publication import AgentOrigin, HumanOrigin
-from .change_report import ChangeReport
+from .change_report import NoChangeReport, ReportEvidence
 from .errors import MessageAcknowledgmentError, RelationViolationError, UnregisteredThreadError
 from .message_bus import MessageBus
 from .message_reference import MessageReference
@@ -47,7 +47,7 @@ class Messaging:
         *,
         role: MessageRole = ConversationRole(),
         task: TaskAttachment = NoTaskAttachment(),
-        report: ChangeReport | None = None,
+        report: ReportEvidence = NoChangeReport(),
         answers: Sequence[MessageReference] = (),
     ) -> SendResult:
         """Return the committed envelope and its separate wording-correction outcome."""
@@ -87,14 +87,13 @@ class Messaging:
 
     def _answered_by(self, owner: Thread, target: str) -> tuple[MessageReference, ...]:
         """What this owner's message to target answers among its running turn's inputs."""
-        lease = owner.turn_lease
-        if lease is None:
-            return ()
         from .input_disposition import InputDispositions
 
-        inputs = InputDispositions(self.root).in_turn(lease.turn_id)
-        with self.bus.log.checked_read() as source:
-            return inputs.answered_by(lease, source, self.registry.snapshot(), target)
+        for lease in owner.turn_lease.held():
+            inputs = InputDispositions(self.root).in_turn(lease.turn_id)
+            with self.bus.log.checked_read() as source:
+                return inputs.answered_by(lease, source, self.registry.snapshot(), target)
+        return ()
 
     def initialize_private_initial_protocol(self, *, history: Sequence[Message] = ()) -> str:
         """Initialize a fresh root; selected public history grants no delivery."""

@@ -11,6 +11,7 @@ import json
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.thread_identity import TurnId, TurnIdentity
+from agent_comms.turn_context import ObservedDispatchRequest
 from agent_comms.turn_context import (
     ContextManifest, JournalProvenance, NativeProvenance, RecordedContextPredecessor,
     RecordedContextTurn,
@@ -34,7 +35,8 @@ def context(owner, path, count, turn):
     return ContextManifest(owner.incarnation,
         RecordedContextTurn(TurnId(f'turn-{turn}'), TurnIdentity(owner.incarnation, turn)),
         (segment(SystemLayerSegment, 's' * 27000),
-         segment(ToolCatalogSegment, 't' * 64000), transcript), 'counter', f'request-{turn}')
+         segment(ToolCatalogSegment, 't' * 64000), transcript), 'counter',
+        ObservedDispatchRequest(f'request-{turn}'))
 
 
 def test_context_deltas_restore_original_text_and_incremental_membership(tmp_path):
@@ -43,7 +45,7 @@ def test_context_deltas_restore_original_text_and_incremental_membership(tmp_pat
     first = context(owner, tmp_path, 328, 1)
     second = context(owner, tmp_path, 330, 2)
     for manifest in (first, second, replace(second, turn=replace(second.turn, identity=TurnId('turn-3')),
-                                          request_id='request-3')):
+                                          request_id=ObservedDispatchRequest('request-3'))):
         comms.contexts.record(manifest)
     page = comms.contexts.page(owner.name, comms.registry)
     assert len(page.resources) == 3

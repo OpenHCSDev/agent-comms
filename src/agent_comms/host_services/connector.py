@@ -14,7 +14,7 @@ from ..active_route import ActiveRoute
 from ..comms import client_wire
 from ..connector import CALLER, LOOPBACK, PORT, ConnectorVerb, ToolCall, ToolsCallMessage, ToolsCallReply
 from ..connector_store import ConnectorStore
-from ..field_codec import FieldCodec, MalformedRecord, PathText, option
+from ..field_codec import Argument, FieldCodec, MalformedRecord, PathText
 from ..errors import RelationViolationError, ToolRefusedError
 from ..launch_root import LaunchRoot
 from ..tools import CommsChannelsTool
@@ -76,8 +76,12 @@ class RoundTripVerb(ConnectorVerb):
     """The same serving proof required after an install restarts the connector."""
 
     help = "Read the bus through the running connector service and compare"
-    root: Annotated[Path, PathText] = option("root", help="The comms root it proves")
-    port: int = option("--port", default=PORT, help="The service's loopback port")
+    root: Annotated[
+        Path, PathText, Argument(flags=("root",), options={"help": "The comms root it proves"})
+    ]
+    port: Annotated[
+        int, Argument(flags=("--port",), options={"help": "The service's loopback port"})
+    ] = PORT
 
     def apply(self, ctx: ConnectorStore) -> int | str:
         service = ConnectorService(launch=LaunchRoot.from_path(self.root), store=ctx, port=self.port)

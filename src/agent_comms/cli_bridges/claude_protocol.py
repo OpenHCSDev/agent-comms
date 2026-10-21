@@ -41,6 +41,7 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
+from agent_comms.thread_text import ThreadText
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 
 from .shared import (
@@ -836,7 +837,7 @@ class CustomTitle(MetadataRecord):
     customTitle: str
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return (SessionFacts(title=self.customTitle),)
+        return (SessionFacts(title=ThreadText.external(self.customTitle)),)
 
 
 class AgentName(MetadataRecord):
@@ -845,7 +846,7 @@ class AgentName(MetadataRecord):
     agentName: str
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return (SessionFacts(title=self.agentName),)
+        return (SessionFacts(title=ThreadText.external(self.agentName)),)
 
 
 class ContinuedIn(MetadataRecord):

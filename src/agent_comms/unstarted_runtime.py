@@ -42,7 +42,7 @@ class UnstartedRuntime(RuntimeLocation):
 
     def history_locations(self, thread, registry, visited):
         yield from thread.inherited_history(registry, visited)
-        yield self, bool(thread.parent)
+        yield self, thread.is_fork
 
     def external_records(self, root, incarnation):
         return self.history_source(root, incarnation)

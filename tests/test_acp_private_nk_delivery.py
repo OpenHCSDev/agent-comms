@@ -24,6 +24,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.errors import RelationViolationError
 from test_coordinated_runtime import tmp_path as private_root_fixture
+from agent_comms.thread_model import DeclaredModel
 
 tmp_path = private_root_fixture
 
@@ -34,7 +35,7 @@ def _private_comms(tmp_path):
     comms.registry.declare(
         comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
-    owner = comms.registry.new_thread('beta', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model='test/model')
+    owner = comms.registry.new_thread('beta', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('test/model'))
     comms.registry.declare(owner)
     root_id = comms.messaging.initialize_private_initial_protocol()
     with Coordination(str(root / "coordination.sqlite3")) as store:

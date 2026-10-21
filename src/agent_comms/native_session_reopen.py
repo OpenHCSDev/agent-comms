@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from .native_failures import NativePiUnavailable
 
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
-
-from .field_codec import MalformedRecord, boundary_decoder
+from typing import Annotated, TYPE_CHECKING
+from .field_codec import MalformedRecord, boundary_decoder, WireName
+from abc import ABC, abstractmethod
 from .private_path import FileRevision
 
 if TYPE_CHECKING:
@@ -44,8 +43,8 @@ class NoSessionRetention(SessionRetention):
 class NativeSessionIdentity(SessionRetention):
     """SessionManager's observed saved-session identity."""
 
-    session_id: str = field(metadata={"wire_name": "sessionId"})
-    session_file: str = field(metadata={"wire_name": "sessionFile"})
+    session_id: Annotated[str, WireName("sessionId")]
+    session_file: Annotated[str, WireName("sessionFile")]
 
     def __post_init__(self):
         if not self.session_id or not Path(self.session_file).is_absolute():

@@ -3,6 +3,8 @@ import asyncio
 import json
 
 import pytest
+from agent_comms.thread_text import SavedSessionFile
+from agent_comms.pi_payloads import ReportedText, RequestId
 from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.native_entries import NativeEntry, StoredEntry, TranscriptProjection
 from agent_comms.recorded_time import UnrecordedTimeError
@@ -25,7 +27,7 @@ from agent_comms.pi_durable_backend import (
     Settle,
 )
 from agent_comms.pi_events import PiEvent, UnknownPiEvent
-from agent_comms.pi_payloads import PiContextUsage
+from agent_comms.pi_payloads import PiContextUsage, ReportedContextUsage
 from agent_comms.pi_rpc import PiRpcChannel
 
 
@@ -79,7 +81,7 @@ def test_missing_delta_and_unknown_result_fields_fail_at_ingress():
 def test_result_kind_is_bound_to_its_pending_command():
     async def journey():
         channel = PiRpcChannel(asyncio.StreamReader(), event_type=DurablePiEvent)
-        command = CompactDurable(id='9')
+        command = CompactDurable(id=RequestId('9'))
         future = channel.track(command)
         with pytest.raises((TypeError, ValueError)):
             decode({'type': 'response', 'command': 'compact_durable', 'id': '9',
@@ -88,7 +90,7 @@ def test_result_kind_is_bound_to_its_pending_command():
         error = decode({'type': 'response', 'command': 'compact_durable', 'id': '9',
                         'success': False, 'error': 'failed'})
         assert channel.correlate(error) == command
-        assert (await future).error == 'failed'
+        assert (await future).error == ReportedText('failed')
         with pytest.raises(MalformedRecord):
             channel.correlate(error)
     asyncio.run(journey())
@@ -119,7 +121,7 @@ def test_real_host_context_and_request_error_remain_typed_and_live(tmp_path, thr
         backend = PiDurableBackend()
         location = DurableDatabase(str(tmp_path / 'records.sqlite3'))
         thread = thread_registration.new_thread('records', frozenset(), str(tmp_path), backend=PiDurableBackend,
-                        session_file=location.path)
+                        session_file=SavedSessionFile(location.path))
         try:
             outcome = await backend.compact(thread, 'retain the empty plan')
             assert isinstance(outcome, FailedCompaction)
@@ -131,7 +133,9 @@ def test_real_host_context_and_request_error_remain_typed_and_live(tmp_path, thr
             with pytest.raises(RuntimeError):
                 await backend.child.request(Settle('task:missing', 'ABANDON'))
             assert (await backend.child.request(Inspect())).work == ()
-            assert (await backend.child.request(GetSessionStats())).context_usage == PiContextUsage(UnreportedCount(), UnreportedCount())
+            assert (await backend.child.request(GetSessionStats())).context_usage == ReportedContextUsage(
+                PiContextUsage(UnreportedCount(), UnreportedCount())
+            )
             assert (await backend.child.request(Inspect())).work == ()
             assert backend.child.proc.alive()
         finally:

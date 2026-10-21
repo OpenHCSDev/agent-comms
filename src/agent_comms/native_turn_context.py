@@ -1,14 +1,24 @@
 """Native SDK input observations, decoded once by the existing Pi boundary."""
 
+from typing import Annotated
 from dataclasses import dataclass, field
 from functools import partial
 
-from .pi_payloads import PiResponseData
+from agent_comms import field_codec
+
 from .native_session_reopen import NativeSessionIdentity
+from .pi_payloads import PiResponseData
 from .tool_result import DeclaredReply
 from .turn_context import (
-    ContextManifest, ContextSourceText, MeasuredNativeSegment, PreviewProvenance,
-    Provenance, SegmentManifest, TurnContext,
+    ContextManifest,
+    ContextSourceText,
+    DispatchRequest,
+    MeasuredNativeSegment,
+    PreviewProvenance,
+    Provenance,
+    SegmentManifest,
+    TurnContext,
+    UnobservedDispatchRequest,
 )
 
 
@@ -17,7 +27,9 @@ class NativeContextManifestData(PiResponseData):
     strict_fields = True
     counter: str
     segments: tuple[SegmentManifest, ...]
-    request_id: str | None = field(default=None, metadata={"wire_name": "requestId", "wire_omit_default": True})
+    request_id: Annotated[
+        DispatchRequest, field_codec.WireName("requestId"), field_codec.WireOmitDefault()
+    ] = field(default_factory=UnobservedDispatchRequest)
     values: tuple[MeasuredNativeSegment, ...] = ()
 
     def for_turn(self, thread, turn):

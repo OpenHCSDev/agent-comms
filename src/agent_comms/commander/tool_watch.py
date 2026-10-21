@@ -11,8 +11,8 @@ from .order import Commander
 
 def thread_names(registry: Registration) -> dict[str, str]:
     """Session file -> thread name, from the registry snapshot's threads."""
-    return {thread.session_file: name for name, thread in registry.snapshot().threads.items()
-            if thread.session_file}
+    return {key: name for name, thread in registry.snapshot().threads.items()
+            for key in thread.runtime.read_keys()}
 
 
 def enforce_storage(ctx: Commander, thread: str, call_id: str,

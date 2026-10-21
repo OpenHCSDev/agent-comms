@@ -12,12 +12,21 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Self, Annotated
+
 
 from .bus_projection import NoCheckpoint
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, projected
+from .field_codec import (
+    FieldCodec,
+    NullMember,
+    projected,
+    ArtifactExclude,
+    WireName,
+    WireOmitDefault,
+    WireRequired,
+)
 from .locked_store import RuntimeFile
 from .private_path import FileRevision
 from .store_files import (
@@ -88,16 +97,40 @@ class ActivityState(Enum):
         return self.presentation_status.activity_presentation(title, self.value, detail)
 
 
+class DrainObservation(ABC):
+    """What an activity event recorded about its owner's drain: a failure, or none."""
+
+    # A recorded failure keeps its event current instead of aging it to idle.
+    holds_event_current: ClassVar[bool]
+
+    @abstractmethod
+    def readiness(self) -> DrainReadiness: ...
+
+    @abstractmethod
+    def recorded_by(self, owner: OwnerIdentity) -> bool: ...
+
+    @abstractmethod
+    def recorded_before(self, moment: float) -> bool: ...
+
+    @abstractmethod
+    def same_occurrence(self, other: DrainObservation) -> bool: ...
+
+    @abstractmethod
+    def occurrence_of(self, other: DrainDiagnostic) -> bool: ...
+
+    def readiness_for(self, owner: OwnerIdentity) -> DrainReadiness:
+        # A failure recorded by another process means ready.
+        return self.readiness() if self.recorded_by(owner) else ReadyDrainReadiness()
+
+
 @dataclass(frozen=True)
-class DrainDiagnostic(DeclaredFamily, affix="Diagnostic"):
+class DrainDiagnostic(DeclaredFamily, DrainObservation, affix="Diagnostic"):
     """An owner's observed failure, never delivery or retry authority."""
 
     owner: OwnerIdentity
     error_type: str
     reason: str
-    recorded_at: float = field(
-        compare=False, metadata={"artifact_exclude": True}
-    )
+    recorded_at: Annotated[float, ArtifactExclude()] = field(compare=False)
 
     @property
     @abstractmethod
@@ -119,6 +152,42 @@ class DrainDiagnostic(DeclaredFamily, affix="Diagnostic"):
 
     def readiness(self) -> DrainReadiness:
         return UnavailableDrainReadiness(self)
+
+    holds_event_current = True
+
+    def recorded_by(self, owner: OwnerIdentity) -> bool:
+        return self.owner == owner
+
+    def recorded_before(self, moment: float) -> bool:
+        return self.recorded_at < moment
+
+    def same_occurrence(self, other: DrainObservation) -> bool:
+        return other.occurrence_of(self)
+
+    def occurrence_of(self, other: DrainDiagnostic) -> bool:
+        return self == other and self.recorded_at == other.recorded_at
+
+
+@dataclass(frozen=True, slots=True)
+class NoDrainDiagnostic(NullMember, DrainObservation):
+    """The owner has recorded no drain failure for this activity."""
+
+    holds_event_current = False
+
+    def readiness(self) -> DrainReadiness:
+        return ReadyDrainReadiness()
+
+    def recorded_by(self, owner: OwnerIdentity) -> bool:
+        return False
+
+    def recorded_before(self, moment: float) -> bool:
+        return False
+
+    def same_occurrence(self, other: DrainObservation) -> bool:
+        return False
+
+    def occurrence_of(self, other: DrainDiagnostic) -> bool:
+        return False
 
 
 class UnavailableDrainDiagnostic(DrainDiagnostic):
@@ -153,15 +222,8 @@ class StoppedDrainDiagnostic(DrainDiagnostic):
 class DrainReadiness(DeclaredFamily, affix="DrainReadiness"):
     """Owner-fenced interpretation of the original activity event, not a store."""
 
-    @classmethod
-    def acquire(cls, diagnostic: DrainDiagnostic | None, owner: OwnerIdentity) -> DrainReadiness:
-        # Missing diagnostics and those from another process both mean ready.
-        if diagnostic is None or diagnostic.owner != owner:
-            return ReadyDrainReadiness()
-        return diagnostic.readiness()
-
     @abstractmethod
-    def source_diagnostic(self) -> DrainDiagnostic | None: ...
+    def source_diagnostic(self) -> DrainDiagnostic | NoDrainDiagnostic: ...
 
     @abstractmethod
     def presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation: ...
@@ -173,7 +235,7 @@ class DrainReadiness(DeclaredFamily, affix="DrainReadiness"):
 @dataclass(frozen=True)
 class ReadyDrainReadiness(DrainReadiness):
     def source_diagnostic(self):
-        return None
+        return NoDrainDiagnostic()
 
     def presentation(self, ordinary):
         return ordinary
@@ -195,6 +257,7 @@ class DiagnosticDrainReadiness(DrainReadiness):
 class NativeInputDrainReadiness(DiagnosticDrainReadiness, ReadyDrainReadiness):
     """Retain the failed request warning; new messages keep ordinary availability."""
 
+
 class UnavailableDrainReadiness(DiagnosticDrainReadiness):
     def require_available(self):
         raise RelationViolationError(self.diagnostic.summary)
@@ -209,9 +272,9 @@ class ActivityData:
     thread: str
     state: ActivityState
     detail: str = ""
-    timestamp: float = field(
-        default_factory=time.time, metadata={"wire_name": "ts", "wire_required": True}
-    )
+    timestamp: Annotated[
+        float, WireName("ts"), WireRequired()
+    ] = field(default_factory=time.time)
 
     @classmethod
     def format_detail(cls, detail: str) -> str:
@@ -242,7 +305,9 @@ class ActivityData:
 class Activity(ActivityData):
     """Original persisted event; its nullable diagnostic is external metadata."""
 
-    diagnostic: DrainDiagnostic | None = field(default=None, metadata={"wire_omit_default": True})
+    diagnostic: Annotated[DrainDiagnostic | NoDrainDiagnostic, WireOmitDefault()] = (
+        NoDrainDiagnostic()
+    )
 
     @classmethod
     def create(cls, thread: str, state: ActivityState, detail: str = "") -> Self:
@@ -275,7 +340,7 @@ class ObservedActivity(ActivityData):
     @classmethod
     def acquire(cls, event: Activity, owner: OwnerIdentity) -> ObservedActivity:
         return cls(event.thread, event.state, event.detail, event.timestamp,
-                   readiness=DrainReadiness.acquire(event.diagnostic, owner))
+                   readiness=event.diagnostic.readiness_for(owner))
 
     def source_event(self) -> Activity:
         """Write through the original event boundary; never persist a second state."""
@@ -293,6 +358,7 @@ class ActivitySnapshot:
 
     checkpoint: ActivityCheckpoint | NoCheckpoint = field(default_factory=NoCheckpoint)
     latest: Mapping[str, Activity] = field(default_factory=dict)
+
 
 @dataclass(slots=True)
 class ActivityReadState:
@@ -385,7 +451,7 @@ class ActivityLog(ThreadOwnedState, RuntimeFile):
             return Activity.absent(thread)
         latest = events[thread]
         if (
-            latest.diagnostic is None
+            not latest.diagnostic.holds_event_current
             and not active
             and now - latest.timestamp > self._stale_after
         ):

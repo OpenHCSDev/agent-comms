@@ -472,7 +472,7 @@ def test_message_taken_by_a_running_turn_is_delivered_once_and_stays_delivered(
     ).value
     assert type(delivered.lifecycle) is DeliveredAssignment
     assert delivered.lifecycle.mode == alice.lifecycle.mode
-    assert delivered.execution_id is None
+    assert delivered.lifecycle.execution_id is None
 
     # Delivered is final: no wake, no second delivery.
     for after in (DeferredAssignment, type(alice.lifecycle)):

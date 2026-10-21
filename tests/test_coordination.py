@@ -10,6 +10,8 @@ from dataclasses import FrozenInstanceError, replace
 
 import pytest
 
+from agent_comms.coordination_tables.executions import NoPointedAttempt, NoPointedExecution, PointedAttempt, PointedExecution
+from agent_comms.reason_codes import NoReasonCode
 from agent_comms.assignment_states import (
     CompletedAssignment,
     EngagedAssignment,
@@ -71,7 +73,7 @@ def execution(*, status=PendingExecution, ordinal=None, origin=ExecutionOrigin.A
         owner_lookup="owner-1",
         revision=1,
         max_attempts=3,
-        reason_code=None,
+        reason_code=NoReasonCode(),
         created_at_ms=100,
         updated_at_ms=100,
         lifecycle=status.load(ordinal),
@@ -88,7 +90,7 @@ def attempt(*, ordinal=1, phase=PromptStartingAttempt, generation=1, done=False,
         owner_token_digest=f"digest-{generation}",
         revision=1,
         last_progress_at_ms=None,
-        reason_code=None,
+        reason_code=NoReasonCode(),
         created_at_ms=100,
         updated_at_ms=100,
         lifecycle=phase.load(None if phase.terminal else 500, done, dead),
@@ -114,7 +116,7 @@ def obligation(state=PendingResponse):
     return ResponseObligation(
         execution_id="execution-1",
         exact_target="requester",
-        reason_code=None,
+        reason_code=NoReasonCode(),
         created_at_ms=100,
         updated_at_ms=100,
         revision=1,
@@ -162,8 +164,9 @@ def snapshot(
         publication_evidence=(),
         connectivity=None,
         last_recovery=None,
-        current_execution_id=record.execution_id if current else None,
-        current_attempt_ordinal=record.lifecycle.current_attempt_ordinal if current else None,
+        current_execution_id=PointedExecution(record.execution_id) if current else NoPointedExecution(),
+        current_attempt_ordinal=(PointedAttempt(record.lifecycle.current_attempt_ordinal) if current
+                                 else NoPointedAttempt()),
         pointer_revision=1,
         is_current=current,
     )
@@ -183,7 +186,7 @@ def sql_execution(
         execution_id=name, origin=ExecutionOrigin(origin),
         lifecycle=ExecutionState.member_named(status).load(ordinal),
         owner_thread=thread, owner_lookup=owner, revision=1,
-        max_attempts=max_attempts, reason_code=None, created_at_ms=0, updated_at_ms=0,
+        max_attempts=max_attempts, reason_code=NoReasonCode(), created_at_ms=0, updated_at_ms=0,
     ).insert(db)
 
 
@@ -215,14 +218,15 @@ def sql_attempt(db, name="e", ordinal=1, generation=1, owner="p", thread="worker
         owner_thread=thread, owner_generation=generation,
         owner_token_digest=digest if digest is not None else f"digest-{generation}",
         lifecycle=PromptStartingAttempt.load(500, False, False), revision=1,
-        last_progress_at_ms=None, reason_code=None, created_at_ms=0, updated_at_ms=0,
+        last_progress_at_ms=None, reason_code=NoReasonCode(), created_at_ms=0, updated_at_ms=0,
     ).insert(db)
 
 
 def owner(db):
     Participants(participant_lookup="p", display_name="worker", committed=True).insert(db)
     OwnerGenerations(owner_lookup="p", owner_thread="worker", generation=1).insert(db)
-    CurrentExecutions(owner_lookup="p", execution_id=None, attempt_ordinal=None, pointer_revision=0).insert(db)
+    CurrentExecutions(owner_lookup="p", execution_id=NoPointedExecution(), attempt_ordinal=NoPointedAttempt(),
+                      pointer_revision=0).insert(db)
 
 
 def activate(db, name="e", ordinal=1, generation=1):
@@ -345,9 +349,9 @@ def test_snapshot_projection_retry_and_inert_secrets():
     )
     assert active.is_current and not active.can_retry
     with pytest.raises(IntegrityViolationError):
-        replace(active, current_attempt_ordinal=2)
+        replace(active, current_attempt_ordinal=PointedAttempt(2))
     with pytest.raises(IntegrityViolationError):
-        replace(active, is_current=False, current_execution_id=None, current_attempt_ordinal=None)
+        replace(active, is_current=False, current_execution_id=NoPointedExecution(), current_attempt_ordinal=NoPointedAttempt())
 
 
 def test_wire_claim_obligation_and_publication_contract():
@@ -948,8 +952,8 @@ def test_missing_replay_cannot_later_reauthorize_failed(db):
             publication_evidence=(),
             connectivity=None,
             last_recovery=None,
-            current_execution_id=None,
-            current_attempt_ordinal=None,
+            current_execution_id=NoPointedExecution(),
+            current_attempt_ordinal=NoPointedAttempt(),
             pointer_revision=2,
             is_current=False,
         )
@@ -1059,8 +1063,8 @@ def test_completed_wire_requires_succeeded_attempt_and_terminal_obligation(
                                   lifecycle=SilentResponse())
     WakeAssignment.update(c, where="assignment_id='a'", revision=2,
                           lifecycle=CompletedAssignment.build(FullWake(), "e", "requester"))
-    CurrentExecutions.update(c, where="owner_lookup='p'", execution_id=None,
-                             attempt_ordinal=None, pointer_revision=2)
+    CurrentExecutions.update(c, where="owner_lookup='p'", execution_id=NoPointedExecution(),
+                             attempt_ordinal=NoPointedAttempt(), pointer_revision=2)
     completion = (
         "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','completed'),"
         "revision=revision+1 WHERE execution_id='e'"
@@ -1206,7 +1210,8 @@ def test_fence_digest_is_globally_unique_across_executions(db):
     activate(c)
     Participants(participant_lookup="q", display_name="other-worker", committed=True).insert(c)
     OwnerGenerations(owner_lookup="q", owner_thread="other-worker", generation=1).insert(c)
-    CurrentExecutions(owner_lookup="q", execution_id=None, attempt_ordinal=None, pointer_revision=0).insert(c)
+    CurrentExecutions(owner_lookup="q", execution_id=NoPointedExecution(), attempt_ordinal=NoPointedAttempt(),
+                      pointer_revision=0).insert(c)
     sql_execution(c, name="other-e", owner="q", thread="other-worker")
     c.execute("BEGIN IMMEDIATE")
     with pytest.raises(sqlite3.IntegrityError):

@@ -22,6 +22,7 @@ from .transcript_events import (
     ToolStartTranscript,
     TranscriptEvent,
 )
+from .thread_text import NoThreadText, ThreadText
 from .turn_phase import IdlePhase, ModelWaitPhase, TurnPhase
 
 if TYPE_CHECKING:
@@ -383,7 +384,7 @@ class SessionFacts(RuntimeUpdate):
 
     source_id: str = ""
     project: str = ""
-    title: str = ""
+    title: ThreadText = NoThreadText()
 
     def publish(self, output: ThreadOutput) -> None:
         pass

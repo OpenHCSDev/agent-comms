@@ -9,7 +9,9 @@ from typing import Literal
 from agent_comms.audience_manifest import FrozenAudience
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
-from agent_comms.response_acknowledgement import KeyedResponseAcknowledgement
+from agent_comms.response_acknowledgement import (
+    KeyedResponseAcknowledgement, NoResponseAcknowledgement, ResponseAcknowledgement,
+)
 from agent_comms.wake import ControlClassification, resolve_wake_cohort
 from agent_comms.wake_policy import MessageAudience, WakeDecision
 
@@ -42,12 +44,12 @@ class DeliveryPolicy(DeclaredFamily, affix="DeliveryPolicy"):
     @abstractmethod
     def resolve(message, audience, control): ...
 
-    def require_acknowledgement(self, root_id, message) -> KeyedResponseAcknowledgement | None:
-        return None
+    def require_acknowledgement(self, root_id, message) -> ResponseAcknowledgement:
+        return NoResponseAcknowledgement()
 
     @property
-    def acknowledgement(self) -> KeyedResponseAcknowledgement | None:
-        return None
+    def acknowledgement(self) -> ResponseAcknowledgement:
+        return NoResponseAcknowledgement()
 
 
 class InitialDeliveryPolicy(DeliveryPolicy):

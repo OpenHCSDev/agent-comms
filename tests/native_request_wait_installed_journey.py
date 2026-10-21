@@ -27,6 +27,7 @@ from l0a_native_installed_pilot import until, response_painted
 from runtime_fixture import stop_test_children, stop_test_owners
 from saved_state_user_journey_pilot import submit_editor
 from stored_inputs import stored_inputs
+from agent_comms.thread_model import DeclaredModel
 
 
 class ObservedApp(ToadApp):
@@ -110,7 +111,7 @@ async def run(arguments):
     for name in ("PYTHONPATH", "PI_PROMPT", "PI_TASK", "PI_PARENT_ID", "AGENT_COMMS_STARTUP_INPUT_KEY"):
         environment.pop(name, None)
     os.environ.clear(); os.environ.update(environment)
-    service.registry.declare(service.registry.new_thread('wait-native', frozenset(), str(project), model='wait-local/fixture', thinking_level=OffThinkingLevel))
+    service.registry.declare(service.registry.new_thread('wait-native', frozenset(), str(project), model=DeclaredModel('wait-local/fixture'), thinking_level=OffThinkingLevel))
     definition = AgentDefinition.decode({"name": "Native request wait", "identity": "wait",
         "short_name": "wait", "protocol": "acp",
         "run_command": {"*": shlex.join([sys.executable, "-m", "agent_comms.acp"])}})

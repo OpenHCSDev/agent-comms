@@ -6,6 +6,7 @@ from collections.abc import Mapping
 import pytest
 
 from agent_comms.field_codec import FieldCodec
+from agent_comms.tool_results import NoToolDiff
 from agent_comms.pi_commands import GetState, PiCommand, Prompt
 from agent_comms.pi_counts import PiCount, ReportedCount, UnreportedCount
 from agent_comms.pi_events import MessageEnd, MessageUpdate, Response, UnknownPiEvent
@@ -24,6 +25,7 @@ from agent_comms.pi_payloads import (
 )
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.turn_usage import UsageAccount
+from agent_comms.thread_model import DeclaredModel, UndeclaredModel
 
 
 def decode(record):
@@ -37,7 +39,7 @@ def test_selected_command_decodes_original_native_error_envelope(command):
                     "success": False, "error": "Selected preparation source changed"})
     assert isinstance(event, Response)
     assert event.command is PiCommand.member_named(command)
-    assert event.success is False and isinstance(event.data, MissingData)
+    assert event.refused and isinstance(event.data, MissingData)
     assert event.rejection_details() == {"command": command, "id": "original",
         "success": False, "error": "Selected preparation source changed"}
 
@@ -115,9 +117,9 @@ def test_optional_native_observations_have_named_absence_and_one_serialization()
     for state_wire in ({}, {"model": None}):
         state = StateData.from_wire(state_wire)
         assert isinstance(state.model, UnreportedModel)
-        assert not state.matches_model(("p", "m"))
+        assert state.model.thread_model() == UndeclaredModel()
         with pytest.raises(ValueError):
-            state.model.require_selection(None)
+            state.model.require_selection(UndeclaredModel())
         assert FieldCodec.decode(StateData, FieldCodec.encode(state)) == state
         assert "model" not in state.to_wire()
         assert StateData.from_wire(state.to_wire()) == state
@@ -127,15 +129,15 @@ def test_optional_native_observations_have_named_absence_and_one_serialization()
     assert StateData.from_wire(empty_reported.to_wire()) == empty_reported
     reported = StateData.from_wire({"model": {"provider": "p", "id": "m", "contextWindow": 1024}})
     assert isinstance(reported.model, ReportedModel)
-    assert reported.matches_model(("p", "m"))
-    assert reported.model.require_selection("p/m") is reported.model
+    assert reported.model.thread_model() == DeclaredModel("p/m")
+    assert reported.model.require_selection(DeclaredModel("p/m")) is reported.model
     with pytest.raises(ValueError):
-        reported.model.require_selection("p/other")
+        reported.model.require_selection(DeclaredModel("p/other"))
     for result_wire in ({}, {"result": None}, {"result": {"content": []}}):
         event = decode({"type": "tool_execution_end", **result_wire})
         assert isinstance(event.result, ProvidedToolResult if "result" in result_wire and result_wire["result"] == {"content": []} else MissingToolResult)
         assert event.result.text() == ""
-        assert event.result.edit_diff(True) is None
+        assert event.result.edit_diff(True) == NoToolDiff()
         assert FieldCodec.decode(type(event), FieldCodec.encode(event)) == event
 
 

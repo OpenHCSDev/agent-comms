@@ -5,16 +5,23 @@ hardcodes a home directory, a bus root or a unit name.
 """
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
-from typing import Self
+from typing import Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator
 
 from ..comms import Comms
 from ..errors import RelationViolationError
+from ..field_codec import (
+    BoundedText, FieldCodec, NullMember, SingleFieldValue, SubclassUnion, boundary_decoder,
+)
+from ..installer.backup import UpgradeRefused
 from ..native_arguments import NativeArguments
 from ..repo import Repo
+from ..thread_text import AbsentText, GivenText, TextChoice
 from ..threads import Thread
 
 
@@ -23,9 +30,9 @@ class CommanderRole:
 
     @staticmethod
     def require_commander(thread: Thread) -> None:
-        if not NativeArguments(()).with_model(thread.model).provider_type.may_command:
+        if not thread.model.native(NativeArguments(())).provider_type.may_command:
             raise RelationViolationError(
-                f"Thread {thread.name!r} with declared model {thread.model!r} "
+                f"Thread {thread.name!r} with declared model {thread.model.otherwise(None)!r} "
                 "cannot command: no Codex commander."
             )
 
@@ -90,6 +97,14 @@ class CommanderConfig(CommanderRole, BaseModel):
         return cls.model_validate_json(cls.root_path(root).read_text(), context=root)
 
     @classmethod
+    def on_machine(cls, commander: str, repos: tuple[Repo, ...], root: Path, home: Path,
+                   parked: frozenset[str] = frozenset()) -> Self:
+        """The recorded commander and repos, with the paths this machine derives."""
+        return cls(commander=commander, repos=repos, parked=parked, root=root,
+                   state=home / '.local/state/agent-comms/commander', worktrees=home / 'wt',
+                   scratch=home / '.cache/agent-scratch', disk=home)
+
+    @classmethod
     def packaged_rules_files(cls) -> tuple[Path, ...]:
         """All packaged rule files, shared by review and session context."""
         rules = tuple(sorted(path for path in cls.packaged_rules().iterdir() if path.is_file()))
@@ -122,3 +137,148 @@ class CommanderConfig(CommanderRole, BaseModel):
                           self.scratch):
             directory.mkdir(parents=True, exist_ok=True)
         return path
+
+
+class CommanderRecord(ABC):
+    """This bus's commander.json, or the bus has none; an install updates it through here."""
+
+    @staticmethod
+    @boundary_decoder
+    def read(root: Path) -> CommanderRecord:
+        root = root.resolve()
+        if CommanderConfig.root_path(root).is_file():
+            return RecordedCommander(CommanderConfig.read_root(root))
+        return NoCommanderRecord()
+
+    @abstractmethod
+    def commanded_by(self, name: str, repos: RepoChoice, root: Path, home: Path) -> RecordedCommander: ...
+
+    @abstractmethod
+    def rehomed(self, repos: RepoChoice, root: Path, home: Path) -> CommanderRecord: ...
+
+    @abstractmethod
+    def write(self, home: Path) -> CommanderConfigFile: ...
+
+
+@dataclass(frozen=True)
+class RecordedCommander(CommanderRecord):
+    config: CommanderConfig
+
+    def commanded_by(self, name: str, repos: RepoChoice, root: Path, home: Path) -> RecordedCommander:
+        return RecordedCommander(CommanderConfig.on_machine(
+            name, repos.applied(self.config.repos), root, home, self.config.parked))
+
+    def rehomed(self, repos: RepoChoice, root: Path, home: Path) -> RecordedCommander:
+        return self.commanded_by(self.config.commander, repos, root, home)
+
+    def write(self, home: Path) -> WrittenConfigFile:
+        return WrittenConfigFile(str(self.config.write(home)))
+
+
+@dataclass(frozen=True)
+class NoCommanderRecord(CommanderRecord):
+    """The bus records no commander; an install names none, so it writes no config."""
+
+    def commanded_by(self, name: str, repos: RepoChoice, root: Path, home: Path) -> RecordedCommander:
+        return repos.founding(name, root, home)
+
+    def rehomed(self, repos: RepoChoice, root: Path, home: Path) -> NoCommanderRecord:
+        repos.without_commander()
+        return self
+
+    def write(self, home: Path) -> NoConfigFile:
+        return NoConfigFile()
+
+
+class CommanderChoice(SubclassUnion, TextChoice, affix="Commander"):
+    """The thread an install names as this bus's commander, or none: the bus's record stands."""
+
+    @abstractmethod
+    def configured(
+        self, recorded: CommanderRecord, repos: RepoChoice, root: Path, home: Path,
+    ) -> CommanderRecord: ...
+
+
+@dataclass(frozen=True, slots=True)
+class NamedCommander(GivenText, CommanderChoice):
+    text: Annotated[str, BoundedText]
+
+    def configured(
+        self, recorded: CommanderRecord, repos: RepoChoice, root: Path, home: Path,
+    ) -> CommanderRecord:
+        return recorded.commanded_by(self.text, repos, root, home)
+
+
+@dataclass(frozen=True, slots=True)
+class KeptCommander(AbsentText, CommanderChoice):
+    def configured(
+        self, recorded: CommanderRecord, repos: RepoChoice, root: Path, home: Path,
+    ) -> CommanderRecord:
+        return recorded.rehomed(repos, root, home)
+
+
+class RepoChoice(SubclassUnion, affix="Repos"):
+    """The repositories the commander works on: the checkouts given, or the recorded ones."""
+
+    @abstractmethod
+    def applied(self, recorded: tuple[Repo, ...]) -> tuple[Repo, ...]: ...
+
+    @abstractmethod
+    def founding(self, commander: str, root: Path, home: Path) -> RecordedCommander:
+        """The first record of a bus that had none: a commander needs repositories to command."""
+
+    @abstractmethod
+    def without_commander(self) -> None:
+        """Refuse repositories given to a bus that records no commander to hold them."""
+
+
+@dataclass(frozen=True, slots=True)
+class GivenRepos(RepoChoice):
+    """Checkouts spelled as comma-separated paths on the command line."""
+
+    checkouts: tuple[Path, ...]
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        text = FieldCodec.decode(str, data)
+        return cls(tuple(Path(part.strip()) for part in text.split(",") if part.strip()))
+
+    def to_wire(self) -> str:
+        return ",".join(map(str, self.checkouts))
+
+    def applied(self, recorded: tuple[Repo, ...]) -> tuple[Repo, ...]:
+        return tuple(Repo.of(checkout) for checkout in self.checkouts)
+
+    def founding(self, commander: str, root: Path, home: Path) -> RecordedCommander:
+        return RecordedCommander(CommanderConfig.on_machine(commander, self.applied(()), root, home))
+
+    def without_commander(self) -> None:
+        raise UpgradeRefused("--repos names a commander's repositories; this bus records no "
+                             "commander, so name one with --commander")
+
+
+@dataclass(frozen=True, slots=True)
+class KeptRepos(NullMember, RepoChoice):
+    def applied(self, recorded: tuple[Repo, ...]) -> tuple[Repo, ...]:
+        return recorded
+
+    def founding(self, commander: str, root: Path, home: Path) -> RecordedCommander:
+        raise UpgradeRefused(f"--commander {commander} starts this bus's commander record, "
+                             "which needs the repositories it commands: pass --repos")
+
+    def without_commander(self) -> None:
+        pass
+
+
+class CommanderConfigFile(SubclassUnion, affix="ConfigFile"):
+    """What an install left for commander tools: the config it wrote, or none."""
+
+
+@dataclass(frozen=True, slots=True)
+class WrittenConfigFile(SingleFieldValue, CommanderConfigFile):
+    path: str
+
+
+@dataclass(frozen=True, slots=True)
+class NoConfigFile(NullMember, CommanderConfigFile):
+    pass

@@ -15,13 +15,14 @@ import sqlite3
 import sys
 from collections.abc import Iterator
 from contextlib import ExitStack, closing, contextmanager
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, Annotated
+
 
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text, boundary_decoder
+from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text, WireName, boundary_decoder
 from .native_failures import NativeRequestFailure, NativePiUnavailable
 from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
@@ -143,30 +144,24 @@ def main() -> int:
 @dataclass(frozen=True, slots=True)
 class NativeContextRecord(NativeInputCommit):
     """Native context facts extend the original committed input declaration."""
-    request_generation: int = field(
-        metadata={
-            "wire_name": "requestGeneration",
-            "sql": Column(
-                primary_key=True, check="request_generation BETWEEN 1 AND 9007199254740991"
-            ),
-        }
-    )
-    llm_context_digest: str = field(
-        metadata={
-            "wire_name": "llmContextDigest",
-            "sql": Column(
-                check="length(llm_context_digest)=64 AND llm_context_digest NOT GLOB '*[^a-f0-9]*'"
-            ),
-        }
-    )
+
+    request_generation: Annotated[
+        int,
+        WireName("requestGeneration"),
+        Column(primary_key=True, check="request_generation BETWEEN 1 AND 9007199254740991"),
+    ]
+    llm_context_digest: Annotated[
+        str,
+        WireName("llmContextDigest"),
+        Column(check="length(llm_context_digest)=64 AND llm_context_digest NOT GLOB '*[^a-f0-9]*'"),
+    ]
     # The native writer stamps the moment this context was committed for a
     # model request: the time the input was shown to the model.
-    committed_at_ms: int = field(
-        metadata={
-            "wire_name": "committedAtMs",
-            "sql": Column(check="committed_at_ms BETWEEN 1 AND 9007199254740991"),
-        }
-    )
+    committed_at_ms: Annotated[
+        int,
+        WireName("committedAtMs"),
+        Column(check="committed_at_ms BETWEEN 1 AND 9007199254740991"),
+    ]
 
     @classmethod
     def from_events(cls, input_id, session_id, input_event, context_event):
@@ -240,8 +235,7 @@ class NativeContextJournal(NativeContextRecord, TypedTable, DurableTables):
         return {
             "objects": cls.schema_objects(),
             "columns": [
-                {"name": item.name, "wire": FieldCodec.wire_key(item)}
-                for item in fields(cls)
+                {"name": plan.name, "wire": plan.key} for plan in FieldCodec.field_plans(cls)
             ],
             "insert": cls.insertion_statement(),
             "head": f"SELECT COALESCE(MAX(request_generation),0) AS generation FROM {table}",
@@ -353,6 +347,7 @@ class NativeContextProof(NativeContextRecord, NativeInputLocation):
             entry = evidence.read_input(location)
             return row.corroborate(session_file, evidence.header(), entry,
                                    session_entry_start=session_entry_start)
+
 
 class NativePiTerminalFailure(NativePiUnavailable):
     """A proved input ended in a failed terminal and its owned process was reaped."""
@@ -896,7 +891,7 @@ def read_tracked_input_commitment(
     with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
         evidence.observe()
         try:
-            return CommittedInput(evidence.tracked(input_id).message.input_digest)
+            return CommittedInput(evidence.tracked(input_id).message.input_digest.require())
         except NativeInputUncommitted:
             return UncommittedInput()
 

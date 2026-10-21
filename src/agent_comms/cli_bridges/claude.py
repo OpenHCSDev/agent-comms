@@ -14,9 +14,10 @@ from agent_comms.private_path import FileRevision
 from agent_comms.wire_watch import WatchSource, WireWatch
 from agent_comms_hooks.session import SessionHook
 from .claude_protocol import CLAUDE_RECORD, ClaudeRecord, ClaudeSession, ClaudeMonitorFrame
-from .history import ClaudeHistory, JsonLinesFile, OfflineHistory, OnlineHistory
+from .history import ClaudeHistory, HarnessAddress, JsonLinesFile, OfflineHistory, OnlineHistory
 from .shared import Binding, Enrol, LineMonitorBridge, Options, run_bridge
 from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts
+from agent_comms.thread_text import NoThreadText, ThreadText
 
 
 class SubagentMeta(WireModel):
@@ -41,7 +42,8 @@ class ClaudeJsonLines(JsonLinesFile):
     def facts(self, stream: BinaryIO, boundary: int) -> Iterator[RuntimeUpdate]:
         """The file is named by its session; a subagent's task description is beside it, not in it."""
         meta = self.source.with_suffix('.meta.json')
-        title = SubagentMeta.model_validate_json(meta.read_bytes()).description if meta.is_file() else ''
+        title = (ThreadText.external(SubagentMeta.model_validate_json(meta.read_bytes()).description)
+                 if meta.is_file() else NoThreadText())
         yield SessionFacts(source_id=self.source.stem, title=title)
 
 
@@ -52,7 +54,7 @@ class ClaudeTranscript(ClaudeJsonLines, ClaudeHistory, OfflineHistory):
     suffixes = frozenset({'.jsonl'})
 
     def facts(self, stream: BinaryIO, boundary: int) -> Iterator[RuntimeUpdate]:
-        if self.session_id not in (None, self.source.stem):
+        if not self.session.holds(self.source.stem):
             raise ValueError('The transcript belongs to a different Claude session.')
         return super().facts(stream, boundary)
 
@@ -78,7 +80,7 @@ class RunningClaude(ClaudeJsonLines, ClaudeHistory, OnlineHistory):
         return matches[0]
 
     @classmethod
-    def connected(cls, thread: str, address: str | None, directory: Path) -> Self:
+    def connected(cls, thread: str, address: HarnessAddress, directory: Path) -> Self:
         return cls(thread)
 
 
@@ -119,10 +121,11 @@ class ClaudeBridge(RunningClaude, LineMonitorBridge, declared_name=None):
                     yield update
                 async for _ in changes:
                     opened = FileRevision.from_file(stream)
-                    current = FileRevision.capture(source)
-                    if (current is None or current.identity != original.identity
+                    replaced = ValueError('Claude transcript was replaced or truncated')
+                    current = FileRevision.capture(source).require(replaced)
+                    if (current.identity != original.identity
                             or min(opened.size, current.size) < stream.tell()):
-                        raise ValueError('Claude transcript was replaced or truncated')
+                        raise replaced
                     for update in self.decoded(stream, stream.tell(), opened.size, session):
                         yield update
 

@@ -3,6 +3,7 @@
 Only the localhost provider is controlled. Worker, registry, bus, selected
 claim_scope, native process, source proof and response publication remain real.
 """
+from agent_comms.thread_text import SavedSessionFile
 from agent_comms.native_entries import NativeEvidenceScope
 from conftest import publish_initial
 from agent_comms.pi_vocabulary import OffThinkingLevel
@@ -43,7 +44,10 @@ from agent_comms.native_prompt_binding import PromptBinding, binding_store_path
 from agent_comms.private_sidecar import sidecar_connection
 from agent_comms.coordinator import Coordination
 from agent_comms.historical_native_inputs import read_historical_native_inputs
+from agent_comms.native_arguments import GivenArguments
 from bus_history import read_history
+from agent_comms.thread_text import ForkedParent, GivenThreadText
+from agent_comms.thread_model import DeclaredModel
 
 
 def configured_stage(arguments, configured, snapshot, *, continue_existing=False):
@@ -86,7 +90,7 @@ def configured_stage(arguments, configured, snapshot, *, continue_existing=False
     binary = Path(sys.executable).with_name('pi-comms-native')
     environment.update(AGENT_COMMS_ROOT=str(service.root),
         AGENT_COMMS_AGENT_BIN=str(binary),
-        AGENT_COMMS_AGENT_ARGS=shlex.join(retained.arguments or ()),
+        AGENT_COMMS_AGENT_ARGS=shlex.join(retained.arguments),
         AGENT_COMMS_RUNTIME_ROOT=str(binary.parent),
         VIRTUAL_ENV=str(binary.parent.parent),
         AGENT_COMMS_DEBUG_LOG=str(stage/'acp.log'),
@@ -132,7 +136,7 @@ async def configured_pure_channel(arguments):
     assert len(str(service.root/'native-sessions'/('0'*32)/'s')) < 108
     names, settings = [], []
     for index, source in enumerate(sources):
-        original = arguments.saved_source or Path(source.session_file)
+        original = arguments.saved_source or Path(source.runtime.read_key)
         before = hashlib.sha256(original.read_bytes()).hexdigest()
         # Existing SessionManager fork owns strict saved-history creation under
         # its native source lock. Its output stays under the owned profile.
@@ -144,7 +148,7 @@ async def configured_pure_channel(arguments):
         assert hashlib.sha256(original.read_bytes()).hexdigest() == before
         source_hashes[str(original)] = before
         name = f'purechannel-owner-{index}'
-        child = service.registry.new_thread(name, source.tags, source.worktree, parent=source.name, task=source.task, session_file=fork.session_file, model=source.model, thinking_level=source.thinking_level, execution=source.execution)
+        child = service.registry.new_thread(name, source.tags, source.worktree, parent=ForkedParent(source.name), task=source.task, session_file=SavedSessionFile(fork.session_file), model=source.model, thinking_level=source.thinking_level, execution=source.execution)
         service.registry.declare(child)
         names.append(name)
         settings.append({'source_owner':source.name, 'private_owner':name,
@@ -479,7 +483,7 @@ async def configured_mixed_routes(arguments):
     stage, project, service, root_id, source_hashes = configured_stage(arguments, configured, snapshot)
     name = 'batch-receiver'
     service.registry.declare(service.registry.new_thread('human', frozenset(), str(project), role=UserThreadRole))
-    service.registry.declare(service.registry.new_thread(name, frozenset({'team'}), str(project), model=configured.model, thinking_level=configured.thinking_level, task='Answer each original route accurately once; do not expose direct-message content to a channel.'))
+    service.registry.declare(service.registry.new_thread(name, frozenset({'team'}), str(project), model=configured.model, thinking_level=configured.thinking_level, task=GivenThreadText('Answer each original route accurately once; do not expose direct-message content to a channel.')))
     sender = service.registry.require('human')
     with _store_lock(service._wire_lock_path):
         originals = [service.bus.publisher.publish_ordinary(Message(sender.name, target, body,
@@ -638,7 +642,7 @@ async def retained_owner():
             wire_root_id=launch.wire_root_id,
             owner_name=name,
             native_package=launch.native_package,
-            session_file=Path(owner.session_file),
+            session_file=Path(owner.runtime.read_key),
             cursor_delivery=agent.cursors.delivery(name),
         )
         result = await agent.turns.run_selected(name, execution)
@@ -829,7 +833,7 @@ async def run(arguments):
     for index in range(arguments.registry_size):
         service.registry.declare(service.registry.new_thread(f'unrelated-{index}', frozenset(), str(project)))
     for name in names:
-        service.registry.declare(service.registry.new_thread(name, frozenset({'team'} if arguments.collective else ()), str(project), model='restart-local/fixture', thinking_level=OffThinkingLevel, task='Provider-free isolated restart acceptance; reply to each original once'))
+        service.registry.declare(service.registry.new_thread(name, frozenset({'team'} if arguments.collective else ()), str(project), model=DeclaredModel('restart-local/fixture'), thinking_level=OffThinkingLevel, task=GivenThreadText('Provider-free isolated restart acceptance; reply to each original once')))
     if arguments.saved_source:
         for name in names:
             owner = service.registry.require(name)
@@ -842,7 +846,7 @@ async def run(arguments):
                 with closing(sqlite3.connect(str(saved)+'.input-proof')) as copied:
                     original.backup(copied)
             Path(str(saved)+'.input-proof').chmod(0o600)
-            service.registry.register(replace(owner, session_file=str(saved)))
+            service.registry.register(replace(owner, session_file=SavedSessionFile(str(saved))))
     for index in range(arguments.history):
         publish_initial(service, 'fixture-sender','history-recipient',
             f'Retained unrelated canonical source {index}: ' + 'history '*250)
@@ -908,7 +912,7 @@ async def run(arguments):
                         open_files.append(os.readlink(descriptor))
                     except FileNotFoundError:
                         pass
-                if owner.session_file not in open_files:
+                if owner.runtime.read_key not in open_files:
                     break
                 opened_owners.append(owner)
             if len(opened_owners) != len(names):
@@ -957,8 +961,7 @@ async def run(arguments):
                         await asyncio.sleep(.03)
             else:
                 await asyncio.to_thread(service.owners.start,name,
-                    agent_args=['--offline','--no-extensions','--no-skills',
-                                '--no-context-files','--no-prompt-templates','--no-tools'])
+                    agent_args=GivenArguments(('--offline', '--no-extensions', '--no-skills', '--no-context-files', '--no-prompt-templates', '--no-tools',)))
             await attach(service,name)
         assert provider.posts == 0
         originals = [service.registry.require(name) for name in names]

@@ -7,6 +7,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from agent_comms.field_codec import FieldCodec
+from agent_comms.pi_payloads import RequestId
+
 from . import pi_commands as commands
 from . import turn_failure as failures
 from .native_pi import CAPABILITY
@@ -78,7 +81,7 @@ class PendingAttestation(NativeAttestation):
     expected: NativeSessionIdentity | None = None
     request: commands.GetState = field(
         default_factory=lambda: commands.GetState(
-            id=f"agent-comms-preflight-{secrets.token_hex(16)}"
+            id=RequestId(f"agent-comms-preflight-{secrets.token_hex(16)}")
         )
     )
 
@@ -91,7 +94,7 @@ class PendingAttestation(NativeAttestation):
         # the matching response may change whether this input can start.
         if not event.responds_to(self.request):
             return self
-        if event.success is not True:
+        if not event.succeeded:
             raise AttestationError(
                 failures.InputIdUnavailable("Pi native input-ID capability preflight failed.")
             )
@@ -133,11 +136,12 @@ class KnownSessionAttestation(NativeAttestation):
     def conflicts(self, data) -> bool:
         """Reject every reported component that differs from the known identity."""
         return any(
-            observed is not None and observed != expected
-            for expected, observed in (
+            observed != expected
+            for expected, reported in (
                 (self.identity.session_id, data.session_id),
                 (self.identity.session_file, data.session_file),
             )
+            for observed in reported.present()
         )
 
 
@@ -151,7 +155,10 @@ class ObservedAttestation(NativeAttestation):
 
     @property
     def diagnostic_evidence(self):
-        return {"session_id": self.state.session_id, "session_file": self.state.session_file}
+        return {
+            "session_id": FieldCodec.encode(self.state.session_id),
+            "session_file": FieldCodec.encode(self.state.session_file),
+        }
 
     @property
     def identity(self):

@@ -24,6 +24,8 @@ from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.session_load import ExistingSessionLoadPlan
 from agent_comms.storage_rules import StorageRoots
+from agent_comms.native_arguments import GivenArguments, GivenBinary
+from agent_comms.thread_model import DeclaredModel
 
 
 class Observer:
@@ -81,11 +83,10 @@ async def journey(arguments):
     comms.messaging.initialize_private_initial_protocol()
     name = 'scratch-sleeper'
     comms.registry.declare(replace(comms.registry.new_thread(
-        name, frozenset(), str(project), model=arguments.model, thinking_level=HighThinkingLevel),
+        name, frozenset(), str(project), model=DeclaredModel(arguments.model), thinking_level=HighThinkingLevel),
         storage_roots=StorageRoots(scratch=stage)))
-    agent = CommsAgent(comms, agent_bin=arguments.native_launcher,
-                       agent_args=['--offline', '--no-skills', '--no-context-files',
-                                   '--no-prompt-templates'],
+    agent = CommsAgent(comms, agent_bin=GivenBinary(arguments.native_launcher),
+                       agent_args=GivenArguments(('--offline', '--no-skills', '--no-context-files', '--no-prompt-templates',)),
                        runtime_enabled=True, auto_wake=False)
     results = []
     try:

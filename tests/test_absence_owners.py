@@ -1,12 +1,13 @@
 """Behaviour-bearing absence belongs to the state that owns the operation."""
 
+from agent_comms.pi_payloads import AnonymousRequest, RequestId
 import asyncio
 
 import pytest
 
 from agent_comms.agent_backend import InputId, SendNow, TurnInbox
 from agent_comms.backend import EventFinishSignal, FinishSignal, InputStartListener, NoFinishSignal, NoInputStartListener
-from agent_comms.change_report import FileLine, SourceReference
+from agent_comms.change_report import FileLine, NoSourceReference
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_drain import DrainedSession, NoPrivateObservation
 from agent_comms.native_child import NoInputForwarder
@@ -49,7 +50,7 @@ def test_absent_holder_and_attempt_preserve_refusals_without_runtime_probes():
 
     holder = NoTodoHolder()
     assert holder.current_assignments() == ()
-    holder.require_trace("first owner", SourceReference.from_optional(None))
+    holder.require_trace("first owner", NoSourceReference())
     with pytest.raises(TodoError):
         holder.previous_assignment()
     attempt = NoPreviousAttempt()
@@ -113,17 +114,19 @@ async def test_unobserved_private_state_and_unmeasured_session_have_no_authority
 
 
 def test_source_reference_owns_missing_trace_without_changing_file_line_wire():
-    missing = SourceReference.from_optional(None)
+    missing = NoSourceReference()
     with pytest.raises(ValueError):
         missing.require("read the failing path")
+    assert missing.located() == ()
     location = FileLine("source.py", 17)
-    assert SourceReference.from_optional(location).require("not missing") is location
+    assert location.require("not missing") is location
+    assert location.located() == (location,)
     assert FieldCodec.encode(location) == "source.py:17"
 
 
 def test_optional_rpc_id_is_refused_when_an_input_requires_correlation():
-    command = GetState(id=None)
+    command = GetState(id=AnonymousRequest())
     assert "id" not in command.to_rpc()
     with pytest.raises(ValueError):
         command.require_id()
-    assert GetState(id="correlated").require_id() == "correlated"
+    assert GetState(id=RequestId("correlated")).require_id() == "correlated"

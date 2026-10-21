@@ -10,6 +10,8 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from agent_comms.pi_payloads import RequestId
+
 from . import agent_events as events
 from . import pi_commands as commands
 from .agent_backend import (
@@ -66,10 +68,10 @@ class InputForwarding:
         return not self.uncertain and not self.unresolved
 
     def acknowledge(self, response: Response) -> None:
-        if response.success is True:
+        if response.succeeded:
             for item in self.pending.values():
                 public_id = item.require_id()
-                if public_id == response.id:
+                if item.id == response.id:
                     self.accepted.add(public_id)
         self.changed.set()
 
@@ -117,8 +119,10 @@ class InputForwarding:
             return True
         async with command.pending_response(session.native.reader, session.stdin) as future:
             response = await future
-        if not response.success:
-            raise RuntimeError(f"Native queue clear failed: {response.error}")
+        if not response.succeeded:
+            raise RuntimeError(
+                f"Native queue clear failed: {response.error.value_or('Pi gave no error text')}"
+            )
         for native_id in response.data.require_payload().require_requested(command.input_ids):
             removed = self.retire(native_id)
             session.rejected_commands.append(events.InputCleared(
@@ -128,11 +132,10 @@ class InputForwarding:
         return True
 
     async def use_settings(self, session: TurnSession, item: UseSettings) -> bool:
-        provider, model_id = item.model.split("/", 1)
         # Pi resets thinking to the new model's default, so the level follows the model.
         await self.write(
             session,
-            commands.SetModel(provider=provider, model_id=model_id),
+            item.model.set_model(commands.SetModel),
             *item.thinking_level.native_arguments(
                 lambda level: commands.SetThinkingLevel(level=level.wire_value())
             ),
@@ -158,10 +161,10 @@ class InputForwarding:
         native_id = Id128Text.mint()
         text = item.content.text
         command = commands.Prompt(
-            id=public_id,
+            id=RequestId(public_id),
             input_id=native_id,
             message=text,
-            images=item.content.images or None,
+            images=item.content.images,
             context_contributions=item.content.contributions,
             owner_tools=session.tool_socket.listener.connection,
             streaming_behavior=_PI_STREAMING_BEHAVIOR[item.when_busy],
@@ -185,11 +188,9 @@ class InputForwarding:
 
     def mark_started(self, session: TurnSession, payload: MessageStart) -> tuple[bool, str | None]:
         message = payload.message
-        if not message.user:
+        if not message.user or not message.input_id.reported:
             return False, None
-        native_id = message.input_id
-        if native_id is None:
-            return False, None
+        native_id = message.input_id.require()
         entry = self.pending.get(native_id)
         if entry is None or message.text != entry.message:
             return False, None

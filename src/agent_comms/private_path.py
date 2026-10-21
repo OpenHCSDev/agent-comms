@@ -19,6 +19,7 @@ from typing import BinaryIO, ClassVar
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
+from .field_codec import NullMember, RecordMember, SubclassUnion
 
 
 def fsync_directory(path: Path) -> None:
@@ -82,8 +83,67 @@ class PresentPath(ObservedPath):
         return self.identity == identity
 
 
+class FileObservation(SubclassUnion, affix=""):
+    """A path's stat revision when observed, or its absence."""
+
+    @abstractmethod
+    def contains_cut(self, earlier: FileRevision, cut: int) -> bool:
+        """Whether this observation still holds ``earlier``'s append-only byte cut."""
+
+    @abstractmethod
+    def lost_in(self, current: FileObservation) -> bool:
+        """A missing source, replacement or truncation does not preserve this cut."""
+
+    @abstractmethod
+    def revisions(self) -> tuple[FileRevision, ...]:
+        """The observed revision, or none for a missing file."""
+
+    @abstractmethod
+    def require(self, refusal: Exception) -> FileRevision:
+        """The observed revision; a missing file raises ``refusal``."""
+
+    @abstractmethod
+    def either[Answer](
+        self, present: Callable[[FileRevision], Answer], missing: Callable[[], Answer],
+    ) -> Answer:
+        """Answer from the observed revision, or for the missing file."""
+
+    @abstractmethod
+    def file_identity(self) -> FileIdentity | MissingFile:
+        """The file this observation saw, or the absence it saw."""
+
+    @abstractmethod
+    def holds_inode(self, inode: int) -> bool: ...
+
+
 @dataclass(frozen=True, slots=True)
-class FileRevision:
+class MissingFile(NullMember, FileObservation):
+    def contains_cut(self, earlier: FileRevision, cut: int) -> bool:
+        return False
+
+    def lost_in(self, current: FileObservation) -> bool:
+        return current != self
+
+    def revisions(self) -> tuple[FileRevision, ...]:
+        return ()
+
+    def require(self, refusal: Exception) -> FileRevision:
+        raise refusal
+
+    def either[Answer](
+        self, present: Callable[[FileRevision], Answer], missing: Callable[[], Answer],
+    ) -> Answer:
+        return missing()
+
+    def file_identity(self) -> MissingFile:
+        return self
+
+    def holds_inode(self, inode: int) -> bool:
+        return False
+
+
+@dataclass(frozen=True, slots=True)
+class FileRevision(RecordMember, FileObservation):
     identity: FileIdentity
     size: int
     mtime_ns: int
@@ -105,11 +165,11 @@ class FileRevision:
         return cls.from_stat(os.fstat(stream.fileno()))
 
     @classmethod
-    def capture(cls, path: Path) -> FileRevision | None:
+    def capture(cls, path: Path) -> FileObservation:
         try:
             return cls.from_stat(path.stat())
         except FileNotFoundError:
-            return None
+            return MissingFile()
 
     def holds_cut(self, current: FileRevision, cut: int) -> bool:
         """Whether current still contains this append-only captured byte cut."""
@@ -122,12 +182,28 @@ class FileRevision:
             )
         )
 
-    @staticmethod
-    def source_changed(earlier: FileRevision | None, current: FileRevision | None) -> bool:
-        """A missing source, replacement or truncation does not preserve its cut."""
-        if earlier is None or current is None:
-            return earlier != current
-        return not earlier.holds_cut(current, earlier.size)
+    def contains_cut(self, earlier: FileRevision, cut: int) -> bool:
+        return earlier.holds_cut(self, cut)
+
+    def lost_in(self, current: FileObservation) -> bool:
+        return not current.contains_cut(self, self.size)
+
+    def revisions(self) -> tuple[FileRevision, ...]:
+        return (self,)
+
+    def require(self, refusal: Exception) -> FileRevision:
+        return self
+
+    def either[Answer](
+        self, present: Callable[[FileRevision], Answer], missing: Callable[[], Answer],
+    ) -> Answer:
+        return present(self)
+
+    def file_identity(self) -> FileIdentity:
+        return self.identity
+
+    def holds_inode(self, inode: int) -> bool:
+        return self.identity.inode == inode
 
     def opened_by(self, stream: BinaryIO) -> bool:
         """Whether an opened file still contains this captured byte cut."""

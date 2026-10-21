@@ -1,5 +1,8 @@
 """Real release-before-exit: retirement keeps checking the exact owner fence."""
+from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.native_package import pinned_native_package
+from agent_comms.restart_scope import OwnersNamed
+from agent_comms.turn_lease import NoTurnLease
 
 import os
 import signal
@@ -112,7 +115,7 @@ print(json.dumps(FieldCodec.encode(result)), flush=True)
         target_environment.update(PATH=str(Path(sys.executable).parent)+os.pathsep+os.defpath,
                                   VIRTUAL_ENV=str(Path(sys.executable).parent.parent))
         results = await asyncio.to_thread(comms.owners.restart_owners, (name,),
-            agent_bin=str(Path(sys.executable).with_name('pi-comms-native')),
+            agent_bin=GivenBinary(str(Path(sys.executable).with_name('pi-comms-native'))),
             runtime=RestartEnvironment.inherit(target_environment), expected=selection)
         assert len(results) == 1 and results[0].previous_pid == original.require_process().pid
         assert not original.process_alive
@@ -124,7 +127,7 @@ print(json.dumps(FieldCodec.encode(result)), flush=True)
         assert current.worktree == original.worktree and current.session_file == original.session_file
         assert current.goal == original.goal and current.goal.state.declared_name == 'blocked'
         assert current.model == original.model and current.thinking_level == original.thinking_level
-        assert current.turn_lease is None and native.provider.posts == 0
+        assert current.turn_lease == NoTurnLease() and native.provider.posts == 0
         assert replacement.arguments == launch.arguments
         assert RestartEnvironment.inherit(replacement.environment).native_config == RestartEnvironment.inherit(launch.environment).native_config
         assert baseline == {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in files}
@@ -229,7 +232,7 @@ def test_released_process_must_exit_before_replacement(releasing_owner, mode):
         comms.owners.stop("worker")
     else:
         (result,) = comms.owners.restart_owners(
-            ["worker"], agent_bin=sys.executable, agent_args=["-c", "print('local')"], **arguments
+            OwnersNamed(("worker",)), agent_bin=GivenBinary(sys.executable), agent_args=GivenArguments(("-c", "print('local')",)), **arguments
         )
         replacement = comms.registry.require("worker")
         assert replacement.process_alive
@@ -258,7 +261,7 @@ def test_voluntary_exit_during_grace_is_reaped_without_force(releasing_owner):
 def test_changed_owner_after_release_refuses_escalation_and_replacement(releasing_owner, change):
     comms, child = releasing_owner
     with ThreadPoolExecutor(max_workers=1) as pool:
-        stopping = pool.submit(comms.owners.restart_owners, ["worker"], agent_bin=sys.executable)
+        stopping = pool.submit(comms.owners.restart_owners, ["worker"], agent_bin=GivenBinary(sys.executable))
         wait_for(comms.root / "released")
         current = comms.registry.require("worker")
         if change == "birth":

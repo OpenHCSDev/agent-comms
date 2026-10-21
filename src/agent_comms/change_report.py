@@ -15,7 +15,9 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from agent_comms.errors import ToolRefusedError
-from .field_codec import MalformedRecord, WireValue, boundary_decoder
+from .field_codec import (
+    MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue, boundary_decoder,
+)
 
 
 class MissingSourceLine(ToolRefusedError):
@@ -25,18 +27,23 @@ class MissingSourceLine(ToolRefusedError):
 class SourceReference(ABC):
     """A source reference either supplies its location or explains why it is required."""
 
-    @classmethod
-    @boundary_decoder
-    def from_optional(cls, location: FileLine | None) -> SourceReference:
-        return NoSourceReference() if location is None else location
-
     @abstractmethod
     def require(self, reason: str) -> FileLine: ...
 
+    @abstractmethod
+    def located(self) -> tuple[FileLine, ...]:
+        """The source lines this reference names, for an existence check."""
 
-class NoSourceReference(SourceReference):
+
+@dataclass(frozen=True, slots=True)
+class NoSourceReference(NullMember, SourceReference):
+    """No file:line was supplied; whoever requires one refuses."""
+
     def require(self, reason: str) -> FileLine:
         raise ValueError(reason)
+
+    def located(self) -> tuple[FileLine, ...]:
+        return ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +63,9 @@ class FileLine(WireValue, SourceReference):
 
     def require(self, reason: str) -> FileLine:
         return self
+
+    def located(self) -> tuple[FileLine, ...]:
+        return (self,)
 
     def same_file(self, other: FileLine, root: Path) -> bool:
         return (root / self.file).resolve() == (root / other.file).resolve()
@@ -123,8 +133,15 @@ class ChangedFact:
                 raise ValueError(f"The fact {self.fact!r} requires a nonnegative {name} count.")
 
 
+class ReportEvidence(SubclassUnion, affix=""):
+    """A message's change report, or none; only the change-report kind requires one."""
+
+    @abstractmethod
+    def require_references_exist(self, worktree: Path) -> None: ...
+
+
 @dataclass(frozen=True, slots=True)
-class ChangeReport:
+class ChangeReport(RecordMember, ReportEvidence):
     """The declared evidence of a change, verified at its named branch head."""
 
     branch: str
@@ -174,3 +191,15 @@ def _git(worktree: Path, *arguments: str, branch: str) -> str:
             f"Change report branch {branch!r} does not resolve in {worktree}: {detail}"
         )
     return result.stdout.decode(errors="replace").strip()
+
+
+@dataclass(frozen=True, slots=True)
+class NoChangeReport(NullMember, ReportEvidence):
+    """The message carries no change report; only the change-report kind requires one."""
+
+    def require_references_exist(self, worktree: Path) -> None:
+        raise ValueError(
+            "A change report requires its report: the branch, each touched fact, "
+            "its one owner and every consumer as file:line, the search command "
+            "showing the declaration is single, and the new-case edit counts."
+        )

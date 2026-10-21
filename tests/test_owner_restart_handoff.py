@@ -12,11 +12,12 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_launch import RetainedOwnerLaunch
-from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
+from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SetVariable, UnsetVariable
 from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.owner_restart import OwnerRestartHandoff, RetiredOwnerLaunch
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
+from agent_comms.native_arguments import ConfiguredBinary, InheritedArguments
 
 
 @pytest.mark.parametrize("source", [{}, {"PYTHONPATH": ""}, {"PYTHONPATH": "/source"}])
@@ -29,22 +30,22 @@ def test_import_path_preserves_absent_and_empty_then_removes_explicitly(source):
 
 
 @pytest.mark.parametrize(('inherited', 'expected'), [
-    (None, '/runtime/bin' + os.pathsep + os.defpath),
-    ('', '/runtime/bin:'),
-    ('/usr/bin', '/runtime/bin:/usr/bin'),
-    ('/runtime/bin:/usr/bin:/runtime/bin', '/runtime/bin:/usr/bin'),
+    (UnsetVariable(), '/runtime/bin' + os.pathsep + os.defpath),
+    (SetVariable(''), '/runtime/bin:'),
+    (SetVariable('/usr/bin'), '/runtime/bin:/usr/bin'),
+    (SetVariable('/runtime/bin:/usr/bin:/runtime/bin'), '/runtime/bin:/usr/bin'),
 ])
 def test_runtime_path_is_idempotent_and_keeps_other_search_entries(inherited, expected):
     interpreter = Path('/runtime/bin/python')
     original = RestartEnvironment(path=inherited)
     configured = original.for_interpreter(interpreter)
-    path = configured.path
+    path = configured.path.otherwise('')
     entries = path.split(os.pathsep)
     assert entries[0] == '/runtime/bin'
     assert entries.count('/runtime/bin') == 1
     assert path == expected
     assert configured.for_interpreter(interpreter) == configured
-    applied = configured.apply_runtime({'PATH': inherited or '', 'AUTHORED_CREDENTIAL': 'kept'})
+    applied = configured.apply_runtime({'PATH': inherited.otherwise(''), 'AUTHORED_CREDENTIAL': 'kept'})
     assert applied['PATH'] == expected
     assert applied['AUTHORED_CREDENTIAL'] == 'kept'
 
@@ -97,7 +98,7 @@ def test_handoff_codec_preserves_complete_stopped_witness_and_original_launch(*,
     launch = RetainedOwnerLaunch(thread.require_process(), "/authored/python", environment)
     owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)
     runtime = RestartEnvironment.inherit(environment)
-    original = OwnerRestartHandoff("/authored", (owner,), runtime, None, None, LaunchRuntime(Path("/target/bin/python")))
+    original = OwnerRestartHandoff("/authored", (owner,), runtime, ConfiguredBinary(), InheritedArguments(), LaunchRuntime(Path("/target/bin/python")))
     encoded = FieldCodec.encode(original)
     assert set(encoded["owners"][0]) == {"owner", "admission", "launch"}
     decoded = FieldCodec.decode(OwnerRestartHandoff, encoded)
@@ -109,6 +110,17 @@ def test_handoff_codec_preserves_complete_stopped_witness_and_original_launch(*,
     unrelated = replace(launch, process=ProcessIdentity(2147483646, 1))
     with pytest.raises(RelationViolationError):
         replace(owner, launch=unrelated).require_current(snapshot)
+
+
+@pytest.mark.parametrize(("environment", "arguments"), [
+    ({}, ()),
+    ({"AGENT_COMMS_AGENT_ARGS": ""}, ()),
+    ({"AGENT_COMMS_AGENT_ARGS": "--no-tools 'authored value'"}, ("--no-tools", "authored value")),
+])
+def test_retained_arguments_restart_from_the_original_environment(environment, arguments):
+    launch = RetainedOwnerLaunch(ProcessIdentity(2147483647, 1), "/authored/python", environment)
+    assert launch.arguments == arguments
+    assert InheritedArguments().restarted(launch.arguments).argv == arguments
 
 
 def test_retirement_capture_refuses_changed_original_incarnation(*, thread_registration):

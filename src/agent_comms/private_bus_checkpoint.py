@@ -23,7 +23,8 @@ from collections.abc import Iterator, Mapping
 from contextlib import ExitStack, closing, contextmanager, nullcontext
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, BinaryIO, ClassVar, Generic, Literal, TypeVar, cast
+from typing import TYPE_CHECKING, BinaryIO, ClassVar, Generic, Literal, TypeVar, cast, Annotated
+
 
 from .bus_source_page import AddressedPage
 from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, PrefixSource
@@ -39,17 +40,18 @@ from .envelope_claim_transitions import (
     UnclaimedResource,
 )
 from .errors import CheckpointNeedsRepairError, HumanClaimBlockedError, RelationViolationError
-from .field_codec import FieldCodec, MalformedRecord, boundary_decoder
+from .field_codec import FieldCodec, MalformedRecord, boundary_decoder, SealExclude
 from .locked_store import DurableFile, SQLiteFile
 from .message_reference import MessageReference
 from .messages import Message
-from .private_path import FileIdentity, FileRevision
+from .private_path import FileIdentity, FileObservation, FileRevision
 from .store_files import ExclusiveLock, LockMode
 from .thread_identity import ThreadIncarnation
 from .typed_table import (
     Column,
     DerivedTables,
     ForeignKey,
+    Generated,
     Index,
     SharedFileTables,
     SqlValue,
@@ -83,7 +85,9 @@ class CapturedWireSource[OriginalSource, Value = OriginalSource]:
 @dataclass(frozen=True)
 class PrefixWitness(PrefixSeal):
     # The high-water is a derived page fact, not a persistent seal field.
-    latest_source_seq: int = field(default=0, compare=False, metadata={"seal_exclude": True})
+    latest_source_seq: Annotated[int, SealExclude()] = field(
+        default=0, compare=False
+    )
 
     @property
     def device(self) -> int:
@@ -280,11 +284,11 @@ class CheckedRead:
         self.require_current()
         if bus.path.resolve() == self.path.resolve():
             raise RelationViolationError("Carry destination must differ from its source")
-        expected = replace(self.marker, checkpoint_version=None, checkpoint_seal=None)
+        expected = self.marker.unsealed()
         with bus.locked() as lock:
             prior = lock.checked_read
             prior.require_current_on(bus)
-            if replace(prior.marker, checkpoint_version=None, checkpoint_seal=None) != expected:
+            if prior.marker.unsealed() != expected:
                 raise RelationViolationError("Carry changed destination marker facts")
             with tempfile.TemporaryDirectory(prefix=".checkpoint-carry-", dir=bus.path.parent) as stage:
                 staged = Path(stage) / bus.path.name
@@ -588,17 +592,13 @@ class CheckedRead:
             return None
         # IDs can repeat across senders; only this publication key selects the answer.
         for original in DeliverySources.by_message_id(self, intent.expected_message_id):
-            acknowledgement = original.acknowledgement
-            if not acknowledgement or acknowledgement.publication_key != intent.publication_key:
+            if not original.acknowledgement.answers(intent.publication_key, intent.execution_id):
                 continue
-            if acknowledgement.execution_id != intent.execution_id:
-                raise RelationViolationError("Response publication identity conflicts.")
             if not intent.matches_publication(original.message):
                 raise RelationViolationError("Response publication intent conflicts.")
             self.require_current()
             return original.message
         raise RelationViolationError("checked response key has no original source row.")
-
 
 
 class CheckpointTable(DerivedTables):
@@ -607,7 +607,7 @@ class CheckpointTable(DerivedTables):
 
 @dataclass(frozen=True)
 class ResponseKeys(CheckpointTable, TypedTable):
-    key: str = field(metadata={"sql": Column(primary_key=True)})
+    key: Annotated[str, Column(primary_key=True)]
 
 
 @dataclass(frozen=True)
@@ -619,12 +619,18 @@ class ClaimCommits(CheckpointTable, TypedTable):
     """
 
     transition: ClaimTransition
-    seq: int | None = field(default=None, init=False, compare=False, metadata={
-        "sql": Column(unique=True, generated="json_extract(transition,'$.seq')"),
-    })
-    operation_id: str | None = field(default=None, init=False, compare=False, metadata={
-        "sql": Column(unique=True, generated=f"json_extract(transition,'$.{FieldCodec.record_key(ClaimOwner, 'claim_scope')}.operation_id')"),
-    })
+    seq: ClassVar[Generated] = Generated(
+        int,
+        Column(unique=True, generated="json_extract(transition,'$.seq')", nullable=True),
+    )
+    operation_id: ClassVar[Generated] = Generated(
+        str,
+        Column(
+            unique=True,
+            generated=f"json_extract(transition,'$.{FieldCodec.record_key(ClaimOwner, 'claim_scope')}.operation_id')",
+            nullable=True,
+        ),
+    )
 
     @classmethod
     def latest_sequence(cls, db: sqlite3.Connection) -> int:
@@ -671,8 +677,9 @@ class ClaimCommits(CheckpointTable, TypedTable):
 class ResourceClaims(CheckpointTable, TypedTable):
     """Current membership references its original typed acquisition, never a copy."""
 
-    resource: str = field(metadata={"sql": Column(primary_key=True)})
+    resource: Annotated[str, Column(primary_key=True)]
     claim_seq: int
+
     @classmethod
     def references(cls) -> tuple[ForeignKey, ...]:
         return (ForeignKey(("claim_seq",), ClaimCommits, ("seq",),
@@ -712,8 +719,8 @@ class ResourceClaims(CheckpointTable, TypedTable):
 class WireSourcePointer(Generic[OriginalSource], ABC):
     """Locate and read a stored row by its byte offset and length."""
 
-    offset: int = field(metadata={"sql": Column(check="offset>=0")})
-    length: int = field(metadata={"sql": Column(check="length>0")})
+    offset: Annotated[int, Column(check="offset>=0")]
+    length: Annotated[int, Column(check="length>0")]
 
     @abstractmethod
     def decode_bytes(self, raw: bytes, root_id: str) -> OriginalSource: ...
@@ -739,13 +746,16 @@ class PublicMessages(CheckpointTable, TypedTable):
     only gaps, so checking continuity never walks an intact message history.
     """
 
-    seq: int = field(metadata={"sql": Column(primary_key=True, check="seq>0")})
-    previous_seq: int = field(metadata={"sql": Column(check="previous_seq>=0 AND previous_seq<seq")})
+    seq: Annotated[int, Column(primary_key=True, check="seq>0")]
+    previous_seq: Annotated[int, Column(check="previous_seq>=0 AND previous_seq<seq")]
     sender: str
     message_id: str
     gap: ClassVar[str] = "seq != previous_seq + 1"
-    indexes = (Index(("sender", "message_id")), Index(("seq",), where=gap),
-               Index(("message_id", "seq")))
+    indexes = (
+        Index(("sender", "message_id")),
+        Index(("seq",), where=gap),
+        Index(("message_id", "seq")),
+    )
 
     @classmethod
     @boundary_decoder
@@ -794,7 +804,7 @@ class PublicMessages(CheckpointTable, TypedTable):
 
 @dataclass(frozen=True)
 class DeliverySources(WireSourcePointer["CommittedDelivery"], CheckpointTable, TypedTable):
-    seq: int = field(metadata={"sql": Column(primary_key=True, check="seq>0")})
+    seq: Annotated[int, Column(primary_key=True, check="seq>0")]
     message_id: str
     sender_lookup: str
     indexes = (Index(("sender_lookup", "seq")), Index(("message_id", "seq")))
@@ -844,13 +854,13 @@ class DeliverySources(WireSourcePointer["CommittedDelivery"], CheckpointTable, T
 
 @dataclass(frozen=True)
 class Addressed(CheckpointTable, TypedTable):
-    lookup: str = field(metadata={"sql": Column(primary_key=True)})
-    seq: int = field(metadata={"sql": Column(True, references=(DeliverySources, "seq"))})
+    lookup: Annotated[str, Column(primary_key=True)]
+    seq: Annotated[int, Column(True, references=(DeliverySources, "seq"))]
 
     @classmethod
     def observed_after(
         cls, bus: WireLog, revision: FileRevision, source: FileRevision,
-        marker_revision: FileRevision, lookup: str, after_seq: int,
+        marker_revision: FileObservation, lookup: str, after_seq: int,
     ) -> tuple[WireMetadata, bool]:
         """Read one recipient's indexed aggregate only at the captured revision.
 
@@ -884,15 +894,15 @@ class Addressed(CheckpointTable, TypedTable):
 class Replies(CheckpointTable, TypedTable):
     """A committed delivery that names an earlier message as the one it answers."""
 
-    answered_seq: int = field(metadata={"sql": Column(primary_key=True)})
-    seq: int = field(metadata={"sql": Column(True, references=(DeliverySources, "seq"))})
+    answered_seq: Annotated[int, Column(primary_key=True)]
+    seq: Annotated[int, Column(True, references=(DeliverySources, "seq"))]
 
 
 @dataclass(frozen=True)
 class CheckedPrefix(CheckpointTable, TypedTable, SharedFileTables, declared_name="prefix_certificate"):
     """The existing SQLite row, decoded once at its persistence boundary."""
 
-    singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True)})
+    singleton: Annotated[Literal[1], Column(primary_key=True)]
     version: Literal[2]
     root_id: str
     device: int
@@ -1147,7 +1157,7 @@ def install_private_bus_checkpoint(bus: WireLog, *, _bus_locked: bool = False) -
                 "Checkpoint installation needs a claim-enabled private root."
             )
         path = WritableCheckpoint.path_in(bus.path.parent)
-        if path.exists() or path.is_symlink() or marker.checkpoint_seal is not None:
+        if path.exists() or path.is_symlink() or marker.requires_checkpoint:
             raise RelationViolationError("Private bus checkpoint is already installed.")
         if not bus.path.exists():
             if marker.last_seq != 0:
@@ -1277,7 +1287,6 @@ def append_private_bus_checkpoint_unlocked(
             _tail(stream, info.st_size),
         )
         return CheckedPrefix.commit_tail(bus, marker, db, saved, expected, [(offset, raw, record)])
-
 
 
 def addressed_source_pointers_unlocked(

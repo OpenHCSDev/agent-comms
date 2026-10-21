@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Annotated, ClassVar
 from dataclasses import dataclass, replace
-from dataclasses import field as dataclass_field
 
 from agent_comms.assignment_states import AssignmentState
-from agent_comms.wake_policy import MessageAudience
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
     POLICY_VERSION,
@@ -18,14 +17,16 @@ from agent_comms.coordination_contracts import (
 )
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.envelope_claim_transitions import AssignmentBinding
-from agent_comms.field_codec import projected
+from agent_comms.field_codec import projected, SnapshotExclude, WireName
 from agent_comms.message_reference import MessageReference
 from agent_comms.typed_table import (
     Column,
     ForeignKey,
+    Generated,
     Index,
     TypedTable,
 )
+from agent_comms.wake_policy import MessageAudience
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,35 +106,26 @@ class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
             engagement.execution_id,
         )
 
-    assignment_id: str = dataclass_field(
-        metadata={
-            "wire_name": "claim_id",
-            "sql": Column(primary_key=True, check="length(assignment_id) BETWEEN 1 AND 256"),
-        }
-    )
-    recipient: str = dataclass_field(
-        metadata={"sql": Column(check="length(recipient) BETWEEN 1 AND 256")}
-    )
+    assignment_id: Annotated[
+        str,
+        WireName("claim_id"),
+        Column(primary_key=True, check="length(assignment_id) BETWEEN 1 AND 256"),
+    ]
+    recipient: Annotated[str, Column(check="length(recipient) BETWEEN 1 AND 256")]
     recipient_lookup: str
-    wire_seq: int = dataclass_field(metadata={"sql": Column(check="wire_seq > 0")})
-    message_id: str = dataclass_field(
-        metadata={"sql": Column(check="length(message_id) BETWEEN 1 AND 256")}
-    )
+    wire_seq: Annotated[int, Column(check="wire_seq > 0")]
+    message_id: Annotated[str, Column(check="length(message_id) BETWEEN 1 AND 256")]
     audience: MessageAudience
-    lifecycle: AssignmentState = dataclass_field(metadata={"snapshot_exclude": True})
-    accepted_at_ms: int = dataclass_field(metadata={"sql": Column(check="accepted_at_ms >= 0")})
-    updated_at_ms: int = dataclass_field(
-        metadata={"sql": Column(check="updated_at_ms >= accepted_at_ms")}
-    )
-    revision: int = dataclass_field(default=1, metadata={"sql": Column(check="revision > 0")})
-    resolver_version: str = dataclass_field(
-        default=RESOLVER_VERSION,
-        metadata={"sql": Column(check="length(resolver_version) BETWEEN 1 AND 256")},
-    )
-    policy_version: str = dataclass_field(
-        default=POLICY_VERSION,
-        metadata={"sql": Column(check="length(policy_version) BETWEEN 1 AND 256")},
-    )
+    lifecycle: Annotated[AssignmentState, SnapshotExclude()]
+    accepted_at_ms: Annotated[int, Column(check="accepted_at_ms >= 0")]
+    updated_at_ms: Annotated[int, Column(check="updated_at_ms >= accepted_at_ms")]
+    revision: Annotated[int, Column(check="revision > 0")] = 1
+    resolver_version: Annotated[
+        str, Column(check="length(resolver_version) BETWEEN 1 AND 256")
+    ] = RESOLVER_VERSION
+    policy_version: Annotated[
+        str, Column(check="length(policy_version) BETWEEN 1 AND 256")
+    ] = POLICY_VERSION
 
     @projected(view="snapshot", name="disposition")
     def snapshot_disposition(self):
@@ -180,75 +172,43 @@ class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
     def durable_key(self) -> tuple[str, int]:
         return (self.recipient_lookup, self.wire_seq)
 
-    exact_target: str | None = dataclass_field(
-        init=False,
-        compare=False,
-        repr=False,
-        default=None,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
-                generated="json_extract(lifecycle, '$.decision.exact_target')",
-                check="exact_target IS NULL OR length(exact_target) BETWEEN 1 AND 256",
-            ),
-        },
+    exact_target: ClassVar[Generated] = Generated(
+        str,
+        Column(
+            generated="json_extract(lifecycle, '$.decision.exact_target')",
+            check="exact_target IS NULL OR length(exact_target) BETWEEN 1 AND 256",
+            nullable=True,
+        ),
     )
-    wake_mode: str = dataclass_field(
-        init=False,
-        compare=False,
-        repr=False,
-        default=None,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(generated="({assignment_mode})", check="wake_mode IN ({wake_names})"),
-        },
+    wake_mode: ClassVar[Generated] = Generated(
+        str,
+        Column(generated="({assignment_mode})", check="wake_mode IN ({wake_names})"),
     )
-    triage_verdict: str | None = dataclass_field(
-        init=False,
-        compare=False,
-        repr=False,
-        default=None,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
-                generated="({assignment_verdict})",
-                check="triage_verdict IS NULL OR triage_verdict IN ('ignore', 'engage')",
-            ),
-        },
+    triage_verdict: ClassVar[Generated] = Generated(
+        str,
+        Column(
+            generated="({assignment_verdict})",
+            check="triage_verdict IS NULL OR triage_verdict IN ('ignore', 'engage')",
+            nullable=True,
+        ),
     )
-    disposition: str = dataclass_field(
-        init=False,
-        compare=False,
-        repr=False,
-        default=None,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
-                generated="json_extract(lifecycle, '$.kind')",
-                check="disposition IN ({assignment_names})",
-            ),
-        },
+    disposition: ClassVar[Generated] = Generated(
+        str,
+        Column(
+            generated="json_extract(lifecycle, '$.kind')",
+            check="disposition IN ({assignment_names})",
+        ),
     )
-    execution_id: str | None = dataclass_field(
-        init=False,
-        compare=False,
-        repr=False,
-        default=None,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
-                generated="json_extract(lifecycle, '$.decision.execution_id')",
-            ),
-        },
+    execution_id: ClassVar[Generated] = Generated(
+        str,
+        Column(
+            generated="json_extract(lifecycle, '$.decision.execution_id')",
+            nullable=True,
+        ),
     )
-    claim_status_kind: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(generated="CASE WHEN execution_id IS NOT NULL THEN disposition END"),
-        },
+    claim_status_kind: ClassVar[Generated] = Generated(
+        str,
+        Column(generated="CASE WHEN execution_id IS NOT NULL THEN disposition END", nullable=True),
     )
     checks = ("COALESCE(({assignment_binding}), 0)",)
     unique = (("recipient_lookup", "wire_seq"), ("assignment_id", "execution_id"))
@@ -333,11 +293,9 @@ END"""
 
 @dataclass(frozen=True, slots=True)
 class ExecutionAssignmentLink(CoordinatorTable, TypedTable, declared_name="execution_claims"):
-    execution_id: str = dataclass_field(metadata={"sql": Column(primary_key=True)})
-    assignment_id: str = dataclass_field(
-        metadata={"wire_name": "claim_id", "sql": Column(unique=True)}
-    )
-    ordinal: int = dataclass_field(metadata={"sql": Column(primary_key=True, check="ordinal>=0")})
+    execution_id: Annotated[str, Column(primary_key=True)]
+    assignment_id: Annotated[str, WireName("claim_id"), Column(unique=True)]
+    ordinal: Annotated[int, Column(primary_key=True, check="ordinal>=0")]
     unique = (("execution_id", "assignment_id"),)
 
     def __post_init__(self) -> None:

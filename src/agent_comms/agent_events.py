@@ -29,7 +29,8 @@ from .field_codec import NullMember
 from .input_attempt import InputAttempt
 from .mro_dispatch import MroDispatch, handles
 from .pi_counts import PiCount, UnreportedCount
-from .pi_payloads import McpLiveAcknowledgement, PiDiagnostic, PiUsage
+from .thread_model import ThreadModel, UndeclaredModel
+from .pi_payloads import McpLiveAcknowledgement, PiDiagnostic, PiRequestId, PiUsage
 from .pi_vocabulary import (
     CompactionReason,
     NoThinkingOverride,
@@ -37,7 +38,7 @@ from .pi_vocabulary import (
     UnknownCompactionReason,
 )
 from .tool_declaration import ToolDeclaration
-from .tool_results import ToolDiff
+from .tool_results import NoSentMessage, NoToolDiff, ToolDiff
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -168,7 +169,7 @@ class NativePhaseChanged(AgentEvent):
 
 @dataclass(frozen=True)
 class SettingChangeResult(AgentEvent):
-    id: str | None
+    id: PiRequestId
     ok: bool
     error: str | None = None
 
@@ -211,8 +212,8 @@ class ToolProgress(ToolEvent):
 class ToolEnd(ToolEvent):
     ok: bool
     output: str = ""
-    diff: ToolDiff | None = None
-    sent_message: SentTranscript | None = None
+    diff: ToolDiff | NoToolDiff = NoToolDiff()
+    sent_message: SentTranscript | NoSentMessage = NoSentMessage()
 
 
 @dataclass(frozen=True)
@@ -385,7 +386,7 @@ class ContextInfo(ContextUsageObservation, ContextSizeObservation):
 class NativeMetadataObservation(RuntimeInfoObservation):
     """Only native state snapshots carry identity/configuration observations."""
 
-    model: str | None = None
+    model: ThreadModel = UndeclaredModel()
     session_file: str | None = None
     thinking_level: ThinkingLevelField = NoThinkingOverride
 

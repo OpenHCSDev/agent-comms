@@ -1,6 +1,8 @@
 """S2 declaration extension and real stream-boundary invariants."""
 
 from __future__ import annotations
+
+from agent_comms.pi_payloads import AnonymousRequest, ReportedText, RequestId
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.selected_session import SelectedSession
 
@@ -81,16 +83,16 @@ def test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics():
     assert CompactionPhase.model_wait is ToolRunningPhase.model_wait
     # Compaction completion exits even if a tool was already present.
     assert isinstance(pi.CompactionEnd().on(phase), ModelWaitPhase)
-    phase = pi.ToolExecutionStart(tool_call_id="a").on(ModelWaitPhase())
-    phase = pi.ToolExecutionStart(tool_call_id="b").on(phase)
+    phase = pi.ToolExecutionStart(tool_call_id=ReportedText("a")).on(ModelWaitPhase())
+    phase = pi.ToolExecutionStart(tool_call_id=ReportedText("b")).on(phase)
     assert isinstance(phase, ToolRunningPhase)
     assert tuple(identity for identity, _ in phase.tools) == ("a", "b")
     assert phase.model_wait(bounded, unbounded) is unbounded
     assert phase.model_progress() is phase
-    phase = pi.ToolExecutionEnd(tool_call_id="a").on(phase)
+    phase = pi.ToolExecutionEnd(tool_call_id=ReportedText("a")).on(phase)
     assert isinstance(phase, ToolRunningPhase)
     assert tuple(identity for identity, _ in phase.tools) == ("b",)
-    finished = pi.ToolExecutionEnd(tool_call_id="b").on(phase)
+    finished = pi.ToolExecutionEnd(tool_call_id=ReportedText("b")).on(phase)
     assert isinstance(finished, ModelWaitPhase)
     assert finished.model_wait(bounded, unbounded) is bounded
 
@@ -128,14 +130,14 @@ def test_failure_precedence_text_and_uncertainty_have_one_owner(left, right):
 
 
 def test_external_formats_are_derived_and_pin_wire_spellings():
-    assert commands.Prompt(id="p", input_id="n", message="hello", owner_tools=OwnerToolConnection("/unused", "a" * 64)).to_rpc() == {
+    assert commands.Prompt(id=RequestId("p"), input_id="n", message="hello", owner_tools=OwnerToolConnection("/unused", "a" * 64)).to_rpc() == {
         "type": "prompt",
         "id": "p",
         "inputId": "n",
         "message": "hello",
         "ownerTools": {"path": "/unused", "token": "a" * 64},
     }
-    assert commands.SetModel(id="s", provider="configured", model_id="kept").to_rpc() == {
+    assert commands.SetModel(id=RequestId("s"), provider="configured", model_id="kept").to_rpc() == {
         "type": "set_model",
         "id": "s",
         "provider": "configured",
@@ -155,8 +157,8 @@ def test_external_formats_are_derived_and_pin_wire_spellings():
 
 async def test_correlation_handles_out_of_order_ids_and_anonymous_commands():
     channel = PiRpcChannel(asyncio.StreamReader())
-    first = commands.SetModel(id="a", provider="p", model_id="one")
-    second = commands.SetModel(id="b", provider="p", model_id="two")
+    first = commands.SetModel(id=RequestId("a"), provider="p", model_id="one")
+    second = commands.SetModel(id=RequestId("b"), provider="p", model_id="two")
     channel.encode(first)
     channel.encode(second)
 
@@ -169,7 +171,10 @@ async def test_correlation_handles_out_of_order_ids_and_anonymous_commands():
     assert channel.correlate(response("a")) is first
     with pytest.raises(MalformedRecord):
         channel.correlate(response("a"))
-    one, two = commands.InterruptSteering(id=None), commands.InterruptSteering(id=None)
+    one, two = (
+        commands.InterruptSteering(id=AnonymousRequest()),
+        commands.InterruptSteering(id=AnonymousRequest()),
+    )
     channel.encode(one)
     channel.encode(two)
     reply = PiRpcChannel.decode_record(b'{"type":"response","command":"interrupt_steering"}')

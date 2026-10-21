@@ -27,7 +27,7 @@ from pydantic import Field, TypeAdapter, model_validator
 
 from agent_comms import field_codec, messages
 from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesTranscript
-from agent_comms.change_report import ChangeReport
+from agent_comms.change_report import NoChangeReport, ReportEvidence
 from agent_comms.child_process import AttachedChild, ProcessIdentity, SpawnedProcess, StreamingChildStdio
 from agent_comms.cli_protocol import (
     DeliveredOutcome,
@@ -44,9 +44,9 @@ from agent_comms.config_options import CatalogConfigOption, CatalogSelection, Co
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec, PathText, option
+from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.message_reference import MessageReference
+from agent_comms.message_reference import AfterMessageStart, FirstUnreadStart, InboxStart
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
@@ -121,8 +121,8 @@ class StoredBinding(BindingRequest):
 @dataclass(frozen=True)
 class Binding(BridgeStateTable, TypedTable, BindingRequest):
     root: str
-    bus: str = field(metadata={'wire_name': 'bus_thread'})
-    thread: str = field(metadata={'wire_name': 'session'})
+    bus: Annotated[str, field_codec.WireName("bus_thread")]
+    thread: Annotated[str, field_codec.WireName("session")]
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
@@ -182,6 +182,7 @@ class Options:
         return cls(**{declared.name: vars(arguments)[key]
                       for declared, key in FieldCodec.record_fields(cls)})
 
+
 @dataclass(frozen=True)
 class MonitorEvidence(DeclaredFamily):
     """Unsent and terminal observations cannot accept another delivery."""
@@ -235,8 +236,8 @@ class ObservedMonitor(MonitorEvidence):
 
 @dataclass(frozen=True)
 class ObservedPart(BridgeStateTable, TypedTable):
-    id: str = field(metadata={'sql': Column(primary_key=True)})
-    number: int = field(metadata={'sql': Column(primary_key=True)})
+    id: Annotated[str, Column(primary_key=True)]
+    number: Annotated[int, Column(primary_key=True)]
     sender: str
     body: str
     record_id: str
@@ -249,16 +250,16 @@ class DeliveryRow(BridgeStateTable, TypedTable):
     indexes = (ExpressionIndex((sequence_sql,)),)
 
     @classmethod
-    def resume_after(cls, db: CoordinationStore) -> MessageReference | None:
+    def resume_after(cls, db: CoordinationStore) -> InboxStart:
         """The existing journal owns attempted progress, including uncertain emissions."""
         latest = cls.read(db.execute(
             f'SELECT {cls._column_list(tuple(cls.column_projection()))} FROM "{cls.declared_name}" '
             f'ORDER BY {cls._sql(cls.sequence_sql)} DESC LIMIT 1'))
-        return latest[0].message.reference if latest else None
+        return AfterMessageStart(latest[0].message.reference) if latest else FirstUnreadStart()
 
-    id: str = field(metadata={'sql': Column(primary_key=True)})
+    id: Annotated[str, Column(primary_key=True)]
     payload: str
-    outcome: type[Outcome] = field(metadata={'sql': Column(index=True)})
+    outcome: Annotated[type[Outcome], Column(index=True)]
     monitor: MonitorEvidence = field(default_factory=UnrecordedMonitor)
 
     @cached_property
@@ -268,8 +269,9 @@ class DeliveryRow(BridgeStateTable, TypedTable):
     async def finish(self, bridge: CliBridge, outcome: type[Outcome]) -> None:
         await self.outcome.finish(bridge, self, outcome)
 
-BridgeOptions = TypeVar('BridgeOptions', bound=Options)
-OperationBridge = TypeVar('OperationBridge', bound='CliBridge')
+
+BridgeOptions = TypeVar("BridgeOptions", bound=Options)
+OperationBridge = TypeVar("OperationBridge", bound="CliBridge")
 
 
 @dataclass(frozen=True)
@@ -308,13 +310,17 @@ class Operation(DeclaredOptions, ABC, Generic[OperationBridge]):
 @dataclass(frozen=True)
 class TargetField:
     """The declared field owns parsing, editor hints and requiredness."""
+
     plan: field_codec.FieldPlan
     value: object
 
     @classmethod
     def of(cls, plan: field_codec.FieldPlan, value: object) -> TargetField:
-        editor = (CatalogTargetField if 'catalog' in plan.declared.metadata
-                  else plan.setting('editor', cls))
+        editor = (
+            CatalogTargetField
+            if field_codec.Catalog.single(plan.annotation)
+            else plan.setting(field_codec.Editor, cls)
+        )
         return editor(plan, value)
 
     @property
@@ -327,7 +333,7 @@ class TargetField:
 
     @property
     def multiline(self) -> bool:
-        return self.plan.setting('multiline', False)
+        return self.plan.setting(field_codec.Multiline, False)
 
     @property
     def description(self) -> str:
@@ -384,7 +390,7 @@ class ChoiceTargetField(TargetField):
 class CatalogTargetField(ChoiceTargetField):
     @property
     def catalog(self) -> type[CatalogConfigOption]:
-        return self.plan.setting('catalog', CatalogConfigOption)
+        return self.plan.setting(field_codec.Catalog, CatalogConfigOption)
 
     @property
     def editor_declarations(self) -> tuple[object, ...]:
@@ -403,43 +409,37 @@ class CatalogTargetField(ChoiceTargetField):
                 'configuration': FieldCodec.encode(self.catalog)}
 
 
-
-
-
 class SendArguments(argparse.Namespace):
     command: str
-
-class SendReport(field_codec.SubclassUnion, affix=""):
-    def send(self, ctx: Comms, request: SendRequest) -> SendResult:
-        return self.emit(partial(ctx.messaging.send, request.sender, request.target,
-                                 request.body, request.type, role=request.role()))
-
-    @abstractmethod
-    def emit(self, send: Callable[..., SendResult]) -> SendResult: ...
-
-
-class MissingReport(field_codec.NullMember, SendReport):
-    def emit(self, send: Callable[..., SendResult]) -> SendResult:
-        return send()
-
-
-@dataclass(frozen=True)
-class SuppliedReport(ChangeReport, field_codec.RecordMember, SendReport):
-    def emit(self, send: Callable[..., SendResult]) -> SendResult:
-        return send(report=self)
 
 
 @dataclass(frozen=True, kw_only=True)
 class SendRequest(DeclaredOptions):
     help = "Send to a thread (DM), #channel, or #all"
-    sender: str = option("--from", default="")
-    target: str = option("--to")
-    body: str = option("--body")
-    type: builtins.type[messages.MessageKind] = option("--type", default=messages.InfoKind,
-        choices=messages.SendableMessageKind.names(), editor=ChoiceTargetField)
-    role: builtins.type[messages.SendableRole] = option("--role", default=messages.ConversationRole)
-    report: SendReport = option("--report", default=MissingReport(),
-        help="Change report fields as a JSON object", type=FieldCodec.parse)
+    sender: Annotated[str, field_codec.Argument(flags=("--from",))] = ""
+    target: Annotated[str, field_codec.Argument(flags=("--to",))]
+    body: Annotated[str, field_codec.Argument(flags=("--body",))]
+    type: Annotated[
+        builtins.type[messages.MessageKind],
+        field_codec.Editor(ChoiceTargetField),
+        field_codec.Argument(
+            flags=("--type",), options={"choices": messages.SendableMessageKind.names()}
+        ),
+    ] = messages.InfoKind
+    role: Annotated[
+        builtins.type[messages.SendableRole], field_codec.Argument(flags=("--role",))
+    ] = messages.ConversationRole
+    report: Annotated[
+        ReportEvidence,
+        field_codec.Argument(
+            flags=("--report",),
+            options={"help": "Change report fields as a JSON object", "type": FieldCodec.parse},
+        ),
+    ] = NoChangeReport()
+
+    def sent(self, comms: Comms) -> SendResult:
+        return comms.messaging.send(self.sender, self.target, self.body, self.type,
+                                    role=self.role(), report=self.report)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -447,7 +447,7 @@ class Send(SendRequest, Operation[OperationBridge]):
     async def execute(self, bridge: OperationBridge) -> None:
         request = replace(self, sender=bridge.binding.bus)
         await bridge.show_sent(await bridge.comms.bus.when_open(
-            partial(request.report.send, bridge.comms, request)))
+            partial(request.sent, bridge.comms)))
 
 
 class Inbox(Operation[OperationBridge]):
@@ -478,8 +478,11 @@ class Watch(Inbox):
 
 @dataclass(frozen=True, kw_only=True)
 class Serve(Watch):
-    owner: ProcessIdentity = option('--owner', type=FieldCodec.parse)
-    transcript: Annotated[Path, PathText] = option('--transcript')
+    owner: Annotated[
+        ProcessIdentity,
+        field_codec.Argument(flags=("--owner",), options={"type": FieldCodec.parse}),
+    ]
+    transcript: Annotated[Path, PathText, field_codec.Argument(flags=("--transcript",))]
 
     @classmethod
     def serves(cls, bridge: type[CliBridge]) -> bool:
@@ -792,6 +795,7 @@ class TranscriptBridge(PublishesTranscript, CliBridge[BridgeOptions]):
                 while not queue.empty():
                     pending.append(queue.get_nowait())
                 await comms.bus.when_open(partial(output.publish_batch, pending))
+
 
 class MonitorFrame(TaggedWire, ABC):
     """Our line protocol inside the harness's task-notification envelope."""

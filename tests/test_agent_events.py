@@ -1,5 +1,6 @@
 """Nominal extension, dispatch ordering, and shared settlement contracts."""
 
+from agent_comms.pi_payloads import ReportedFlag, ReportedText, RequestId
 import ast
 from dataclasses import FrozenInstanceError, dataclass, replace
 from pathlib import Path
@@ -187,17 +188,20 @@ async def test_request_correlation_separates_families_and_ignores_late_results()
     thinking = pending.add(SetThinkingLevel, "same", request=thinking_command)
     with pytest.raises(ValueError):
         pending.add(SetModel, "same")
-    refused = Response(id="same", command=SetModel, success=False, error="unavailable")
+    refused = Response(
+        id=RequestId("same"), command=SetModel, success=ReportedFlag(False),
+        error=ReportedText("unavailable"),
+    )
     assert pending.take(SetModel, "same", refused) is model_command
     assert await model is refused
     assert not thinking.done()
-    accepted = Response(id="same", command=SetThinkingLevel, success=True)
+    accepted = Response(id=RequestId("same"), command=SetThinkingLevel, success=ReportedFlag(True))
     assert pending.take(SetThinkingLevel, "same", accepted) is thinking_command
     assert await thinking is accepted
     assert pending.take(SetThinkingLevel, "same", refused) is None
-    cancelled = pending.add(SetModel, "cancelled", request=SetModel(id="cancelled"))
+    cancelled = pending.add(SetModel, "cancelled", request=SetModel(id=RequestId("cancelled")))
     cancelled.cancel()
-    assert pending.take(SetModel, "cancelled", refused).id == "cancelled"
+    assert pending.take(SetModel, "cancelled", refused).id == RequestId("cancelled")
 
 
 def test_internal_event_consumers_do_not_recover_string_tags():

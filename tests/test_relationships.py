@@ -12,6 +12,7 @@ from agent_comms.relationships import (
 )
 from agent_comms.comms import Comms
 from agent_comms.display_order import LastActivityThreadSort
+from agent_comms.thread_text import ForkedParent, NoParent
 from agent_comms.tools import invoke_tool
 
 
@@ -34,7 +35,8 @@ def change_shared_peer(root, instruction):
 
 def setup_wire(tmp_path):
     comms = Comms(tmp_path / "wire")
-    for name, parent in (("origin", None), ("owner", "origin"), ("peer", None), ("child", "owner")):
+    for name, parent in (("origin", NoParent()), ("owner", ForkedParent("origin")), ("peer", NoParent()),
+                         ("child", ForkedParent("owner"))):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path), parent=parent))
     return comms
 

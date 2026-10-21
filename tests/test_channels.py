@@ -1,3 +1,4 @@
+from agent_comms.thread_text import SavedSessionFile
 from agent_comms.pi_vocabulary import HighThinkingLevel
 import os
 from dataclasses import replace
@@ -20,8 +21,10 @@ from agent_comms.display_order import (
 )
 from agent_comms.errors import RelationViolationError
 from agent_comms.registry_document import RosterVisibility
-from agent_comms.thread_management import ForkSpec
+from agent_comms.thread_management import ForkSpec, GivenTags
 from agent_comms.thread_status import ArchivedThreadStatus, RunningThreadStatus, StoppedThreadStatus
+from agent_comms.thread_text import GivenThreadText
+from agent_comms.thread_model import DeclaredModel
 
 
 def setup_wire(path):
@@ -87,7 +90,7 @@ def test_exclusive_tag_deletion_uses_original_storage_and_preserves_survivors(tm
         path.write_text('{"original_saved_history":"' + name + '"}\n')
         saved[name] = path.read_bytes()
         process = ProcessIdentity.capture(os.getpid()) if name == 'active' else NoProcess()
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(tags), str(tmp_path), session_file=str(path), process_identity=process), status)
+        comms.registry.declare(comms.registry.new_thread(name, frozenset(tags), str(tmp_path), session_file=SavedSessionFile(str(path)), process_identity=process), status)
     comms.channels.set_channel_pinned('remove', True)
     comms.channels.set_thread_pinned('keep', 'multi', True)
     original_active = comms.registry.require('active')
@@ -137,7 +140,7 @@ def test_tag_removal_commits_cohort_once_and_preserves_current_records(tmp_path)
     for index in range(40):
         comms.registry.declare(comms.registry.new_thread(f'member-{index}', frozenset({'remove', 'keep'}), str(tmp_path)), StoppedThreadStatus())
     originals = tuple(comms.registry.all_threads().values())
-    current = replace(originals[0], title='new title', task='new task', model='selected/model')
+    current = replace(originals[0], title=GivenThreadText('new title'), task=GivenThreadText('new task'), model=DeclaredModel('selected/model'))
     comms.registry.register(current, ArchivedThreadStatus())
     before = comms.registry.snapshot()
     profile = cProfile.Profile()
@@ -316,7 +319,7 @@ def test_saved_view_names_are_reserved_for_tags_and_legacy_channels(tmp_path):
 def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path):
     import json
 
-    from agent_comms.cli_bridges.history import OfflineHistory
+    from agent_comms.cli_bridges.history import AnySession, OfflineHistory
     from agent_comms.harness_install import OpenCodeHarness
 
     comms = setup_wire(tmp_path)
@@ -339,18 +342,18 @@ def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path):
 
     with pytest.raises(ValueError):
         comms.threads.import_thread(
-            OfflineHistory.of(OpenCodeHarness, source, None),
+            OfflineHistory.of(OpenCodeHarness, source, AnySession()),
             name="imported",
             tags=frozenset({"reserved"}),
         )
     parent_session = tmp_path / "parent.jsonl"
     parent_session.write_text("{}\n")
     comms.registry.declare(
-        comms.registry.new_thread('parent', frozenset(), str(tmp_path), session_file=str(parent_session))
+        comms.registry.new_thread('parent', frozenset(), str(tmp_path), session_file=SavedSessionFile(str(parent_session)))
     )
     with pytest.raises(ValueError):
         comms.threads.create(
-            ForkSpec.from_task(name="child", parent="parent", project=str(tmp_path), model="test/model", thinking_level=HighThinkingLevel, task="task", tags=frozenset({"reserved"})),
+            ForkSpec.from_task(name="child", parent="parent", project=str(tmp_path), model=DeclaredModel('test/model'), thinking_level=HighThinkingLevel, task="task", tags=GivenTags(frozenset({"reserved"}))),
         )
 
     after = comms.registry.snapshot()

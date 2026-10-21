@@ -128,8 +128,7 @@ def test_canonical_response_reader_rejects_invalid_receipt(tmp_path, field, valu
         # Explicit cold certification must reject a corrupt candidate rather
         # than trusting a stale index or accepting a merely well-shaped acknowledgement.
         (case.comms.root / "private_bus_checkpoint.sqlite3").unlink()
-        marker.checkpoint_version = None
-        marker.checkpoint_seal = None
+        marker.unseal()
         case.bus.log.write_metadata_unlocked(marker)
         with pytest.raises((ValueError, RelationViolationError)):
             if reader == "unchecked":
@@ -168,8 +167,7 @@ def test_duplicate_response_bytes_cannot_recheck_a_missing_checkpoint(tmp_path):
             stream.write(json.dumps(duplicate) + "\n")
         (case.comms.root / "private_bus_checkpoint.sqlite3").unlink()
         marker.last_seq = response.seq + 1
-        marker.checkpoint_version = None
-        marker.checkpoint_seal = None
+        marker.unseal()
         case.bus.log.write_metadata_unlocked(marker)
         with pytest.raises(RelationViolationError):
             install_private_bus_checkpoint(case.bus.log)
@@ -226,8 +224,7 @@ def test_new_policy_declaration_uses_full_and_checked_record_readers(tmp_path):
                 ExtendedDeliveryPolicy(version=policy.version, initial=policy.initial)
             )
             (case.comms.root / "private_bus_checkpoint.sqlite3").unlink()
-            marker.checkpoint_version = None
-            marker.checkpoint_seal = None
+            marker.unseal()
             case.bus.log.write_metadata_unlocked(marker)
             case.bus.log.path.write_text(json.dumps(raw) + "\n")
             install_private_bus_checkpoint(case.bus.log, _bus_locked=True)
@@ -258,8 +255,7 @@ def test_duplicate_json_key_is_typed_and_never_enters_unchecked_read(tmp_path):
         marker = case.bus.log.private_marker_unlocked()
         row = json.loads(case.bus.log.path.read_bytes().splitlines()[0])
         (case.comms.root / "private_bus_checkpoint.sqlite3").unlink()
-        marker.checkpoint_version = None
-        marker.checkpoint_seal = None
+        marker.unseal()
         case.bus.log.write_metadata_unlocked(marker)
         raw = '{"seq":' + str(row["seq"]) + ',' + json.dumps(row)[1:] + '\n'
         case.bus.log.path.write_text(raw)

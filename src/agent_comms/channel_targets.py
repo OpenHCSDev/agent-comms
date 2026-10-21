@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, overload
 
 from .errors import RelationViolationError, UnregisteredThreadError
-from .field_codec import FieldCodec
+from .field_codec import NullMember, SingleFieldValue, SubclassUnion
 from .history_result import DmHistoryPageResult, HistoryPageResult
 from .response_policy import DirectPolicy, MentionedOnlyPolicy
 from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, UnmentionedWake
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from .channels import Channel
     from .historical_views import ChannelHistory, DMHistory, HistoryView
     from .messages import Message
-    from .read_basis import ChannelConversation, Conversation, DMConversation
+    from .read_basis import ChannelConversation, Conversation, DisplayViewer, DMConversation
     from .registry_provenance import RegistryProvenance
     from .thread_status import ThreadStatus
     from .threads import Thread
@@ -26,18 +26,6 @@ class ChannelSelection(ABC):
     """Decoded menu context; container shapes stop at this input boundary."""
     needs_catalog: ClassVar[bool] = True
 
-    @staticmethod
-    def decode(raw: str | dict[str, tuple[str, ...]] | None) -> ChannelSelection:
-        if raw is None:
-            return NoChannel()
-        if isinstance(raw, str):
-            return OneChannel(FieldCodec.decode(str, raw))
-        if isinstance(raw, dict):
-            values = FieldCodec.decode(dict[str, tuple[str, ...]],
-                FieldCodec.encode(raw, dict[str, tuple[str, ...]]))
-            return PerTargetChannels(values)
-        raise ValueError('Select no channel, one channel, or channels per target')
-
     @abstractmethod
     def channels_for(self, target: str) -> tuple[str | None, ...]: ...
 
@@ -45,8 +33,12 @@ class ChannelSelection(ABC):
         """Ordinary thread actions may ignore one surrounding channel."""
 
 
+class SurroundingChannel(SubclassUnion, ChannelSelection, affix="Channel"):
+    """The one channel a command line names around its targets, or none: null or the name."""
+
+
 @dataclass(frozen=True)
-class NoChannel(ChannelSelection):
+class NoChannel(NullMember, SurroundingChannel):
     needs_catalog: ClassVar[bool] = False
 
     def channels_for(self, target: str) -> tuple[str | None, ...]:
@@ -54,7 +46,7 @@ class NoChannel(ChannelSelection):
 
 
 @dataclass(frozen=True)
-class OneChannel(ChannelSelection):
+class OneChannel(SingleFieldValue, SurroundingChannel):
     name: str
 
     def channels_for(self, target: str) -> tuple[str | None, ...]:
@@ -132,7 +124,7 @@ class CommandTarget(ABC):
     @abstractmethod
     def bindings(self, declaration, comms, channel, resolved, *, snapshot, catalog): ...
 
-    def history_view(self, viewer: str | None, require_channel: Callable[[str], Channel],
+    def history_view(self, viewer: DisplayViewer, require_channel: Callable[[str], Channel],
                      channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
         raise ValueError("History requires a #channel or DM peer.")
 
@@ -217,11 +209,9 @@ class ThreadTarget(NamedTarget):
     def require_dm_peer(self):
         return self.name
 
-    def history_view(self, viewer: str | None, require_channel: Callable[[str], Channel],
+    def history_view(self, viewer: DisplayViewer, require_channel: Callable[[str], Channel],
                      channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
-        if viewer is None:
-            raise ValueError("DM history requires --as <participant>.")
-        return direct(viewer, self.name)
+        return viewer.direct_history(direct, self.name)
 
     def history_result(self, require_channel: Callable[[str], Channel], messages: tuple[Message, ...],
                        has_older: bool) -> HistoryPageResult:
@@ -307,7 +297,7 @@ class ChannelTarget(NamedTarget):
     def require_channel(self):
         return self
 
-    def history_view(self, viewer: str | None, require_channel: Callable[[str], Channel],
+    def history_view(self, viewer: DisplayViewer, require_channel: Callable[[str], Channel],
                      channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
         return channel(require_channel(self.name).history_scope())
 

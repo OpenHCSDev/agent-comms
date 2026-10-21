@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Mapping
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from dataclasses import dataclass
+from typing import Annotated, TYPE_CHECKING
+
 
 from .channel_targets import CommandTarget
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, WireOmitDefault
 from .message_reference import MessageReference
 from .messages import Message
 from .read_basis import DMDisplayScope, MessageDisplayScope, ReadCursor
@@ -49,9 +50,9 @@ class MessageRoute:
 class TurnRouting:
     requests: tuple[MessageReference, ...] = ()
     reply: MessageRoute | None = None
-    publications: tuple[MessageReference, ...] = field(
-        default=(), metadata={"wire_omit_default": True}
-    )
+    publications: Annotated[
+        tuple[MessageReference, ...], WireOmitDefault()
+    ] = ()
 
     def to_wire(self) -> dict[str, object]:
         return FieldCodec.encode(self)
@@ -158,7 +159,6 @@ class DeliveryMessage:
 
         verified = WireRecord.from_wire(record, root_id)
         yield from verified.delivery_messages()
-
 
 
 @dataclass(frozen=True, slots=True)

@@ -6,10 +6,12 @@ from abc import abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Annotated
 from uuid import uuid4
 
-from .change_report import FileLine
+from agent_comms import field_codec
+
+from .change_report import FileLine, NoSourceReference
 from .child_process import ProcessIdentity
 from .command import Command
 from .declared_family import DeclaredFamily
@@ -99,7 +101,6 @@ class GoalActionContext:
     @property
     def model_report(self) -> bool:
         return self.actor is ModelInvocable
-
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -335,18 +336,11 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
                 ctx.goals.bus.log.latest_sequence(),
                 wait_targets,
                 owner=thread.incarnation.require_recorded(),
-                report_turn_id=reporting_lease.turn_id if reporting_lease is not None else None,
-                report_turn_generation=(
-                    reporting_lease.identity.generation if reporting_lease is not None else None
-                ),
+                report_turn_id=reporting_lease.stored_turn_id(),
+                report_turn_generation=reporting_lease.stored_generation(),
                 target_turn_generations=tuple(
-                    (
-                        lease.identity.generation
-                        if (lease := snapshot.threads[
-                            snapshot.canonical_name(target.incarnation.name)
-                        ].turn_lease) is not None
-                        else None
-                    )
+                    snapshot.threads[snapshot.canonical_name(target.incarnation.name)]
+                    .turn_lease.stored_generation()
                     for target in wait_targets
                 ),
             )
@@ -550,8 +544,11 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
 @dataclass(frozen=True, kw_only=True)
 class OrderGoalAction(ProblemOrderGoalAction):
     """The order's commander gives the problem to this thread."""
+
     expected_revision: int
-    traced: FileLine | None = field(default=None, metadata={"wire_omit_default": True})
+    traced: Annotated[FileLine | NoSourceReference, field_codec.WireOmitDefault()] = (
+        NoSourceReference()
+    )
     assigner: ThreadIncarnation
 
     def bound_to(self, actor: ThreadIncarnation) -> OrderGoalAction:

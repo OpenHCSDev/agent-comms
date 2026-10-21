@@ -8,6 +8,7 @@ from agent_comms.field_codec import FieldCodec, compile_decoder
 from agent_comms.pi_vocabulary import HighThinkingLevel, NoThinkingOverride, ThinkingLevelField
 from agent_comms.read_basis import OnReadWatchAcknowledgment, WatchAcknowledgment
 from agent_comms.thread_execution import ExternalThreadExecution, ThreadExecution
+from agent_comms.thread_model import UndeclaredModel
 
 
 @pytest.mark.parametrize('annotation,value,encoded', (
@@ -30,7 +31,7 @@ def test_declared_default_editor_round_trip(annotation, value, encoded):
 
 def test_fork_default_retains_annotated_thinking_representation(tmp_path):
     command = ForkCliCommand(name='', parent='saved', project=str(tmp_path),
-                             model=None, thinking_level=NoThinkingOverride)
+                             model=UndeclaredModel(), thinking_level=NoThinkingOverride)
     editable = {entry.name: entry for entry in command.editable_fields}
     assert editable['thinking_level'].annotation == ThinkingLevelField
     assert editable['thinking_level'].editor_default == 'null'

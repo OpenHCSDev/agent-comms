@@ -10,6 +10,8 @@ from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.goals import Goal
 from agent_comms.thread_identity import UserThreadRole
+from agent_comms.thread_text import GivenThreadText
+from agent_comms.turn_lease import RecordedGeneration
 
 
 def registered(root):
@@ -26,7 +28,7 @@ def test_claim_claim_tolerates_metadata_and_finished_captured_turn(tmp_path, cap
     captured = initial if capture_idle else leased
     generation = registry.snapshot().owner_generations['owner']
     assert registry.release_turn(leased.turn_lease)[0]
-    registry.register(replace(registry.require('owner'), title='metadata', tags=frozenset({'new'})))
+    registry.register(replace(registry.require('owner'), title=GivenThreadText('metadata'), tags=frozenset({'new'})))
     with pytest.raises(
         RelationViolationError,
     ):
@@ -37,7 +39,7 @@ def test_claim_claim_tolerates_metadata_and_finished_captured_turn(tmp_path, cap
         captured, 'second', expected_generation=claim_scope,
     )
     assert current_claim == claim_scope
-    assert claimed.title == 'metadata'
+    assert claimed.title == GivenThreadText('metadata')
     assert claimed.turn_record.read().id == 'second'
     assert registry.release_turn(claimed.turn_lease)[0]
 
@@ -71,7 +73,7 @@ def test_live_owner_read_rejects_raw_stale_turn_witness(tmp_path):
     leased, _ = registry.lease_local_turn('owner', 'turn')
     with registry.store.editing() as edit:
         record = edit.document.threads['owner'].turn_record
-        record._publish_unlocked(replace(record.read(), claimed_generation=99))
+        record._publish_unlocked(replace(record.read(), claimed_generation=RecordedGeneration(99)))
         edit.commit()
     with pytest.raises(RelationViolationError):
         registry.live_owner_with_claim('owner')

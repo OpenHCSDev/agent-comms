@@ -4,17 +4,14 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
-from dataclasses import field as dataclass_field
 from enum import IntFlag
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, Annotated, ClassVar
 
 from agent_comms.attempt_states import AttemptState
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
-    MAX_REASON_CODE_CHARS,
     require_bounded,
     require_nonempty,
-    require_optional_nonempty,
     validate_execution_id,
 )
 from agent_comms.coordination_errors import (
@@ -25,11 +22,14 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_tables.participants import OwnerGenerations
-from agent_comms.field_codec import projected
+from agent_comms.field_codec import projected, SnapshotExclude
 from agent_comms.owner_fence import AttemptAuthority
+from agent_comms.reason_codes import ReasonCode
 from agent_comms.typed_table import (
+    TextStorage,
     Column,
     ForeignKey,
+    Generated,
     TypedTable,
 )
 
@@ -99,7 +99,7 @@ class AttemptRecord(CoordinatorTable, TypedTable, PreviousAttempt, declared_name
         backend_done: bool,
         process_dead: bool,
         progress: bool,
-        reason_code: str | None,
+        reason_code: ReasonCode,
     ) -> None:
         """Record a checked phase inside the caller's fenced transaction."""
         db = session._connection
@@ -135,35 +135,26 @@ class AttemptRecord(CoordinatorTable, TypedTable, PreviousAttempt, declared_name
             generation=self.owner_generation,
         )
 
-    execution_id: str = dataclass_field(
-        metadata={"snapshot_exclude": True, "sql": Column(primary_key=True)}
-    )
-    attempt_ordinal: int = dataclass_field(
-        metadata={"sql": Column(primary_key=True, check="attempt_ordinal > 0")}
-    )
+    execution_id: Annotated[str, SnapshotExclude(), Column(primary_key=True)]
+    attempt_ordinal: Annotated[int, Column(primary_key=True, check="attempt_ordinal > 0")]
     owner_lookup: str
-    owner_thread: str = dataclass_field(
-        metadata={"sql": Column(check="length(owner_thread) BETWEEN 1 AND 256")}
-    )
-    owner_generation: int = dataclass_field(metadata={"sql": Column(check="owner_generation > 0")})
-    owner_token_digest: str = dataclass_field(
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(unique=True, check="length(owner_token_digest) BETWEEN 1 AND 256"),
-        }
-    )
-    lifecycle: AttemptState = dataclass_field(metadata={"snapshot_exclude": True})
-    revision: int = dataclass_field(metadata={"sql": Column(check="revision > 0")})
+    owner_thread: Annotated[str, Column(check="length(owner_thread) BETWEEN 1 AND 256")]
+    owner_generation: Annotated[int, Column(check="owner_generation > 0")]
+    owner_token_digest: Annotated[
+        str,
+        SnapshotExclude(),
+        Column(unique=True, check="length(owner_token_digest) BETWEEN 1 AND 256"),
+    ]
+    lifecycle: Annotated[AttemptState, SnapshotExclude()]
+    revision: Annotated[int, Column(check="revision > 0")]
     last_progress_at_ms: int | None
-    reason_code: str | None = dataclass_field(
-        metadata={
-            "sql": Column(check="reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 64")
-        }
-    )
-    created_at_ms: int = dataclass_field(metadata={"sql": Column(check="created_at_ms >= 0")})
-    updated_at_ms: int = dataclass_field(
-        metadata={"sql": Column(check="updated_at_ms >= created_at_ms")}
-    )
+    reason_code: Annotated[
+        ReasonCode,
+        Column(storage=TextStorage, nullable=True,
+               check="reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 64"),
+    ]
+    created_at_ms: Annotated[int, Column(check="created_at_ms >= 0")]
+    updated_at_ms: Annotated[int, Column(check="updated_at_ms >= created_at_ms")]
 
     @projected(view="snapshot", name="phase")
     def snapshot_phase(self):
@@ -192,7 +183,6 @@ class AttemptRecord(CoordinatorTable, TypedTable, PreviousAttempt, declared_name
             require_bounded(value, field, MAX_IDENTIFIER_CHARS)
         if min(self.attempt_ordinal, self.owner_generation, self.revision) <= 0:
             raise ValueError("attempt identity/generation/revision must be positive")
-        require_optional_nonempty(self.reason_code, "reason_code", MAX_REASON_CODE_CHARS)
         if self.created_at_ms < 0 or self.updated_at_ms < self.created_at_ms:
             raise ValueError("attempt timestamps are inconsistent")
         if self.last_progress_at_ms is not None and not (
@@ -200,80 +190,44 @@ class AttemptRecord(CoordinatorTable, TypedTable, PreviousAttempt, declared_name
         ):
             raise ValueError("attempt progress time is inconsistent")
 
-    phase: str = dataclass_field(
-        init=False,
-        compare=False,
-        repr=False,
-        default=None,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
-                generated="json_extract(lifecycle, '$.kind')", check="phase IN ({attempt_names})"
-            ),
-        },
+    phase: ClassVar[Generated] = Generated(
+        str,
+        Column(generated="json_extract(lifecycle, '$.kind')", check="phase IN ({attempt_names})"),
     )
-    lease_expires_at_ms: int | None = dataclass_field(
-        init=False,
-        compare=False,
-        repr=False,
-        default=None,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
-                generated="json_extract(lifecycle, '$.lease_expires_at_ms')",
-                check="lease_expires_at_ms >= 0",
-            ),
-        },
+    lease_expires_at_ms: ClassVar[Generated] = Generated(
+        int,
+        Column(
+            generated="json_extract(lifecycle, '$.lease_expires_at_ms')",
+            check="lease_expires_at_ms >= 0",
+            nullable=True,
+        ),
     )
-    backend_done: bool = dataclass_field(
-        init=False,
-        compare=False,
-        repr=False,
-        default=None,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
-                generated="CASE WHEN json_extract(lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(lifecycle, '$.backend_done') END",
-                check="backend_done IN (0,1)",
-            ),
-        },
+    backend_done: ClassVar[Generated] = Generated(
+        bool,
+        Column(
+            generated="CASE WHEN json_extract(lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(lifecycle, '$.backend_done') END",
+            check="backend_done IN (0,1)",
+        ),
     )
-    process_dead: bool = dataclass_field(
-        init=False,
-        compare=False,
-        repr=False,
-        default=None,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
-                generated="CASE WHEN json_extract(lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(lifecycle, '$.process_dead') END",
-                check="process_dead IN (0,1)",
-            ),
-        },
+    process_dead: ClassVar[Generated] = Generated(
+        bool,
+        Column(
+            generated="CASE WHEN json_extract(lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(lifecycle, '$.process_dead') END",
+            check="process_dead IN (0,1)",
+        ),
     )
-    phase_kind: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
-                generated=(
-                    "CASE\n"
-                    "       WHEN phase IN ({terminal_attempt_names}) THEN phase ELSE "
-                    "'active' END"
-                )
+    phase_kind: ClassVar[Generated] = Generated(
+        str,
+        Column(
+            generated=(
+                "CASE\n       WHEN phase IN ({terminal_attempt_names}) THEN phase ELSE 'active' END"
             ),
-        },
+            nullable=True,
+        ),
     )
-    active_required_status: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(generated="CASE WHEN phase_kind = 'active' THEN 'active' END"),
-        },
+    active_required_status: ClassVar[Generated] = Generated(
+        str,
+        Column(generated="CASE WHEN phase_kind = 'active' THEN 'active' END", nullable=True),
     )
     checks = (
         (
@@ -385,15 +339,11 @@ class ReplayAssessments(CoordinatorTable, TypedTable):
     def allows_retry(self) -> bool:
         return self.replay_safe and self.facts == ReplayFact.NONE and not self.side_effects_possible
 
-    execution_id: str = dataclass_field(
-        metadata={"snapshot_exclude": True, "sql": Column(primary_key=True)}
-    )
-    facts: ReplayFact = dataclass_field(
-        metadata={"sql": Column(check="facts >= 0 AND facts <= 1023")}
-    )
-    replay_safe: bool = dataclass_field(metadata={"sql": Column()})
-    side_effects_possible: bool = dataclass_field(metadata={"sql": Column()})
-    revision: int = dataclass_field(metadata={"sql": Column(check="revision > 0")})
+    execution_id: Annotated[str, SnapshotExclude(), Column(primary_key=True)]
+    facts: Annotated[ReplayFact, Column(check="facts >= 0 AND facts <= 1023")]
+    replay_safe: Annotated[bool, Column()]
+    side_effects_possible: Annotated[bool, Column()]
+    revision: Annotated[int, Column(check="revision > 0")]
 
     @classmethod
     def accumulate(cls, db, execution_id: str, observed: ReplayFact) -> None:
@@ -406,8 +356,7 @@ class ReplayAssessments(CoordinatorTable, TypedTable):
         if not observed or cls.exists(
             db,
             where=(
-                "execution_id=? AND (facts & ?) = ? "
-                "AND replay_safe=0 AND side_effects_possible=1"
+                "execution_id=? AND (facts & ?) = ? AND replay_safe=0 AND side_effects_possible=1"
             ),
             parameters=(execution_id, int(observed), int(observed)),
         ):
@@ -484,19 +433,16 @@ class ReplayAssessments(CoordinatorTable, TypedTable):
         if self.facts != ReplayFact.NONE and self.replay_safe:
             raise IntegrityViolationError("an execution with ambiguity facts cannot be replay-safe")
 
-    retry_authorized: int | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "sql": Column(
-                generated=(
-                    "CASE WHEN facts = 0 AND replay_safe = 1 AND side_effects_possibl"
-                    "e = 0\n"
-                    "              THEN 1 ELSE 0 END"
-                )
-            )
-        },
+    retry_authorized: ClassVar[Generated] = Generated(
+        int,
+        Column(
+            generated=(
+                "CASE WHEN facts = 0 AND replay_safe = 1 AND side_effects_possibl"
+                "e = 0\n"
+                "              THEN 1 ELSE 0 END"
+            ),
+            nullable=True,
+        ),
     )
 
     checks = ("facts = 0 OR replay_safe = 0",)

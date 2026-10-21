@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import dataclasses
 import json
 import os
 import re
@@ -38,12 +39,16 @@ from .active_route import (
 from .activity import ActivityState
 from .catalog_document import CatalogDocument
 from .channel_management import KeepThreadsTagDisposition, TagChangeResult, TagDisposition
-from .channel_targets import ChannelSelection, CommandTarget, NoChannel, OneChannel, ResolvedChannel
+from .channel_targets import (
+    ChannelSelection, CommandTarget, NoChannel, OneChannel, ResolvedChannel, SurroundingChannel,
+)
 from .channels import ANY_CHANNEL, Channel
 from .check_root import CheckRoot
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .cli_bridges.claude import ClaudeTranscript
-from .cli_bridges.history import History, OfflineHistory, OnlineHistory
+from .cli_bridges.history import (
+    AnySession, DefaultAddress, ExpectedSession, HarnessAddress, History, OfflineHistory, OnlineHistory,
+)
 from .cli_bridges.shared import ChoiceTargetField, DeclaredOptions, SendRequest, TargetField
 from .cli_protocol import ArrivedMessage, EarlierItems
 from .cli_result import CliResult
@@ -59,16 +64,33 @@ from .coordination_database import CoordinationStore
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .exporting import (
-    ChannelScope,
-    DmScope,
     EverythingScope,
     FullLimit,
     JsonlFormat,
-    MaxBytesLimit,
-    RecentLimit,
+    LimitFlag,
+    ScopeFlag,
     SelectableWireExportFormat,
+    UnsetLimitFlag,
+    UnsetScopeFlag,
 )
-from .field_codec import FieldCodec, FieldPlan, PathText, WireForm, option
+from .field_codec import (
+    FieldCodec,
+    FieldPlan,
+    PathText,
+    WireForm,
+    Argument,
+    Catalog,
+    Editor,
+    EditorFormat,
+    FactoryArgumentDefault,
+    Multiline,
+    NamedArgumentGroup,
+    Normalize,
+    TargetBound,
+    WireName,
+    WireOmitDefault,
+    boundary_decoder,
+)
 from agent_comms.launch_root import LaunchRoot
 from .harness_install import Harness
 from .history_result import HistoryPageResult
@@ -76,19 +98,19 @@ from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
 from .maintenance_barrier import MaintenanceHeldError
 from .message_page import PageBounds
-from .message_reference import MessageReference
+from .message_reference import FirstUnreadStart, InboxStart, MessageReference
 from .messages import (
     Message,
 )
 from .native_settings import NativeThreadDefaults
 from .native_turn_context import NativeContextData
 from .owner_lifecycle import OwnerRestartResult, OwnerStartResult
-from .page_traversal import OlderTraversal, PageCursor
+from .restart_scope import AllOwners, OneOwner, RestartTarget
+from .page_traversal import NewestCursor, PageCursor
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
 from .presentation import CountedRead, InboxRead, ThreadRecord, ThreadView, UncountedRead
-from .read_basis import OnReadWatchAcknowledgment, WatchAcknowledgment
+from .read_basis import AnonymousViewer, DisplayViewer, OnReadWatchAcknowledgment, WatchAcknowledgment
 from .registry_document import RegistrySnapshot
-from .repo import Repo
 from .runtime import RuntimeConnection, socket_path
 from .schema_report import StoreSchemaReport, StoreSchemaReports
 from .send_result import SendResult
@@ -102,10 +124,18 @@ from .thread_execution import (
     ThreadCommandAvailability,
     ThreadExecution,
 )
-from .thread_identity import NoThreadText
-from .thread_management import ForkSpec, NewThreadSpec, ThreadDeleted
+from .thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
+from .commander.config import (
+    CommanderChoice, CommanderConfigFile, CommanderRecord, KeptCommander, KeptRepos, RepoChoice,
+)
+from .install_choices import InstallerChoice, UnnamedInstaller
+from .thread_model import ThreadModel
+from .thread_management import (
+    ForkSpec, GivenTags, ImportDirectory, InheritedTags, NewThreadSpec, SourceDirectory, TagChoice,
+    ThreadDeleted,
+)
 from .thread_status import ThreadStatus
-from .threads import Thread
+from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread
 from .tool_result import ToolResult
 from .turn_context import (
     CodexRolloutProvenance,
@@ -120,6 +150,7 @@ from .turn_context import (
 from .wire_log import WireLog
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
+from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary
 
 
 def _duration_seconds(value: str) -> float:
@@ -136,12 +167,18 @@ def _tags(value: str) -> list[str]:
     return [tag.strip() for tag in value.split(",") if tag.strip()]
 
 
+@boundary_decoder
+def _tag_choice_text(value: str | None) -> str | None:
+    """Command-line and editor text is the given tags' wire; no text inherits."""
+    return value
+
+
 def _tag_text(value: frozenset[str] | None) -> str | None:
     return None if value is None else ', '.join(sorted(value))
 
 
-def _shell_words(value: str | None) -> list[str] | None:
-    return shlex.split(value) if value is not None else None
+def _shell_words(value: str) -> list[str]:
+    return shlex.split(value)
 
 
 def _message_reference(value: str) -> dict[str, object]:
@@ -456,7 +493,7 @@ class UserMessageSentResult(CliResult):
 @dataclass(frozen=True)
 class ThreadConfiguredResult(CliResult):
     configured: str
-    model: str | None
+    model: ThreadModel
     thinking_level: ThinkingLevelField
     service_tier: ServiceTier
 
@@ -532,16 +569,50 @@ class HeartbeatResult(CliResult):
 class SessionAttachedResult(CliResult):
     attached: str
     session_file: str | None
-    pid: int | None = field(default=None, metadata={"wire_omit_default": True})
+    process: Annotated[ProcessState, WireOmitDefault()] = dataclasses.field(
+        default_factory=NoProcess
+    )
 
 
 @dataclass(frozen=True)
-class CheckpointResult(CliResult):
+class CheckpointResult(CliResult, DeclaredFamily, affix="Checkpoint"):
+    """What one checkpoint did with a thread's uncommitted work."""
+
+    family_discriminator = "checkpoint"
     thread: str
-    checkpoint: str
     branch: str
-    reason: str | None = field(default=None, metadata={"wire_omit_default": True})
-    commit: str | None = field(default=None, metadata={"wire_omit_default": True})
+
+
+@dataclass(frozen=True)
+class CleanCheckpoint(CheckpointResult):
+    """The worktree had nothing uncommitted."""
+
+
+@dataclass(frozen=True)
+class PushedCheckpoint(CheckpointResult):
+    commit: str
+
+
+@dataclass(frozen=True)
+class StoppedCheckpoint(CheckpointResult, declared_name=None):
+    """A checkpoint that stopped before a named push, and why."""
+
+    reason: str
+
+
+@dataclass(frozen=True)
+class RefusedCheckpoint(StoppedCheckpoint):
+    """The declared worktree is not a git worktree."""
+
+
+@dataclass(frozen=True)
+class FailedCheckpoint(StoppedCheckpoint):
+    """The commit failed."""
+
+
+@dataclass(frozen=True)
+class PushUnknownCheckpoint(StoppedCheckpoint):
+    """The commit exists locally; the push could not be named."""
 
 
 @dataclass(frozen=True)
@@ -572,7 +643,7 @@ class SubagentsImportedResult(CliResult):
 
 @dataclass(frozen=True)
 class InstallResult(CliResult):
-    config: str
+    config: CommanderConfigFile
     registered: dict[str, tuple[str, ...]]
 
 
@@ -646,7 +717,10 @@ class CliExecution(Command):
 
 @dataclass(frozen=True, kw_only=True)
 class CliCommand(
-    DeclaredFamily, DeclaredOptions, CliExecution, affix="CliCommand",
+    DeclaredFamily,
+    DeclaredOptions,
+    CliExecution,
+    affix="CliCommand",
     discovery_package="agent_comms.tools",
 ):
     multiple_targets: ClassVar[bool] = False
@@ -664,8 +738,11 @@ class CliCommand(
     @classmethod
     def channel_fields(cls) -> tuple[FieldPlan, ...]:
         """The declared target-bound channel parameters own membership scope."""
-        return tuple(entry for entry in FieldCodec.argument_fields(cls)
-                     if entry.key == 'channel' and entry.setting('target_bound', False))
+        return tuple(
+            entry
+            for entry in FieldCodec.argument_fields(cls)
+            if entry.key == "channel" and entry.setting(TargetBound, False)
+        )
 
     @classmethod
     def selection_channels(cls, channel: ChannelSelection,
@@ -731,9 +808,11 @@ class CliCommand(
     @property
     def editable_fields(self) -> tuple[TargetField, ...]:
         """The command owns the parameters offered by its target action."""
-        return tuple(TargetField.of(entry, entry.current(self))
-                     for entry in FieldCodec.argument_fields(type(self))
-                     if not entry.setting('target_bound', False))
+        return tuple(
+            TargetField.of(entry, entry.current(self))
+            for entry in FieldCodec.argument_fields(type(self))
+            if not entry.setting(TargetBound, False)
+        )
 
     async def prepare_fields(self) -> tuple[TargetField, ...]:
         catalogs = ConfigOptions.configured()
@@ -781,16 +860,24 @@ class CliCommand(
         return self
 
     def edited(self, arguments: dict[str, object]) -> Self:
-        bound = {entry.key for entry in FieldCodec.argument_fields(type(self))
-                 if entry.setting('target_bound', False)}
+        bound = {
+            entry.key
+            for entry in FieldCodec.argument_fields(type(self))
+            if entry.setting(TargetBound, False)
+        }
         if bound & arguments.keys():
-            raise ValueError('Target-bound parameters cannot be overridden')
+            raise ValueError("Target-bound parameters cannot be overridden")
         editable = {item.name for item in self.editable_fields}
         if arguments.keys() - editable:
-            raise ValueError('Parameters not offered by this target command cannot be overridden')
+            raise ValueError("Parameters not offered by this target command cannot be overridden")
         encoded = FieldCodec.encode(self)
-        return type(self).from_payload({**{key: encoded[key] for key in bound & encoded.keys()},
-                                       'kind': FieldCodec.encode(type(self)), **arguments})
+        return type(self).from_payload(
+            {
+                **{key: encoded[key] for key in bound & encoded.keys()},
+                "kind": FieldCodec.encode(type(self)),
+                **arguments,
+            }
+        )
 
     @classmethod
     def execute_target(cls, comms: Comms, target: TargetSelection, arguments: dict[str, object],
@@ -811,12 +898,26 @@ class CliCommand(
 @dataclass(frozen=True, kw_only=True)
 class CheckRootCliCommand(CliCommand, declared_name="check-root"):
     help = "Run a command against selected recent history, then remove its private root"
-    threads: tuple[str, ...] = option(normalize=_tags, help="Comma-separated source thread names")
-    into: Annotated[Path, PathText] = option(
-        help="New directory under your agent scratch directory"
-    )
-    argv: tuple[str, ...] = option("argv", nargs=argparse.REMAINDER,
-                                 help="-- COMMAND ARGS; use {root} for the private root argument")
+    threads: Annotated[
+        tuple[str, ...],
+        Normalize(_tags),
+        Argument(options={"help": "Comma-separated source thread names"}),
+    ]
+    into: Annotated[
+        Path,
+        PathText,
+        Argument(options={"help": "New directory under your agent scratch directory"}),
+    ]
+    argv: Annotated[
+        tuple[str, ...],
+        Argument(
+            flags=("argv",),
+            options={
+                "nargs": argparse.REMAINDER,
+                "help": "-- COMMAND ARGS; use {root} for the private root argument",
+            },
+        ),
+    ]
 
     def apply(self, ctx: Comms) -> CliResult:
         return CheckRoot(ctx, self.threads, self.into).run(self.argv)
@@ -825,20 +926,34 @@ class CheckRootCliCommand(CliCommand, declared_name="check-root"):
 @dataclass(frozen=True, kw_only=True)
 class ImportingCliCommand(CliCommand):
     """Where an imported thread works and how much of its source conversation it keeps."""
-    worktree: str | None = option(
-        "--worktree", help="Override the source project directory", default=None
+
+    worktree: Annotated[
+        ImportDirectory,
+        Argument(
+            flags=("--worktree",), options={"help": "Override the source project directory"}
+        ),
+    ] = SourceDirectory()
+    model: Annotated[
+        ModelChoice,
+        Argument(
+            flags=("--model",),
+            options={"help": "Target Pi provider/model; not inferred from foreign model IDs"},
+        ),
+    ] = KeptModel()
+    tags: Annotated[
+        frozenset[str],
+        Normalize(_tags),
+        Argument(flags=("--tags",)),
+    ] = dataclasses.field(default_factory=frozenset)
+    max_messages: Annotated[int, Argument(flags=("--max-messages",))] = (
+        200
     )
-    model: str | None = option(
-        "--model",
-        help="Target Pi provider/model; not inferred from foreign model IDs",
-        default=None,
+    max_characters: Annotated[int, Argument(flags=("--max-characters",))] = (
+        120000
     )
-    tags: frozenset[str] = option(
-        "--tags", default_factory=frozenset, parser_default="", normalize=_tags
-    )
-    max_messages: int = option("--max-messages", default=200)
-    max_characters: int = option("--max-characters", default=120000)
-    max_message_characters: int = option("--max-message-characters", default=12000)
+    max_message_characters: Annotated[
+        int, Argument(flags=("--max-message-characters",))
+    ] = 12000
 
     def imported(self, ctx: Comms, history: History, name: str) -> ThreadImported:
         return ctx.threads.import_thread(
@@ -850,38 +965,85 @@ class ImportingCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class ImportThreadCliCommand(ImportingCliCommand, declared_name="import-thread"):
     help = "Import a stored Claude Code, Codex or OpenCode session as a stopped thread"
-    harness: type[Harness] = option("--harness", editor=ChoiceTargetField)
-    source: Annotated[Path, PathText] = option(
-        "--source", help="Claude Code or Codex session JSONL, OpenCode export JSON or opencode.db")
-    session_id: str | None = option(
-        "--session-id", help="Required for OpenCode database imports", default=None
-    )
-    name: str = option("--name", help="New agent-comms thread name")
+    harness: Annotated[
+        type[Harness],
+        Editor(ChoiceTargetField),
+        Argument(flags=("--harness",)),
+    ]
+    source: Annotated[
+        Path,
+        PathText,
+        Argument(
+            flags=("--source",),
+            options={
+                "help": "Claude Code or Codex session JSONL, OpenCode export JSON or opencode.db"
+            },
+        ),
+    ]
+    session: Annotated[
+        ExpectedSession,
+        Argument(
+            flags=("--session-id",), options={"help": "Required for OpenCode database imports"}
+        ),
+    ] = AnySession()
+    name: Annotated[
+        str,
+        Argument(flags=("--name",), options={"help": "New agent-comms thread name"}),
+    ]
 
     def apply(self, ctx: Comms) -> CliResult:
         return self.imported(ctx, OfflineHistory.of(
-            self.harness, self.source.expanduser().resolve(), self.session_id), self.name)
+            self.harness, self.source.expanduser().resolve(), self.session), self.name)
 
 
 @dataclass(frozen=True, kw_only=True)
 class ImportRunningThreadCliCommand(ImportingCliCommand, declared_name="import-running-thread"):
     help = "Import a session a running Claude Code, Codex or OpenCode holds, as a stopped thread"
-    harness: type[Harness] = option("--harness", editor=ChoiceTargetField)
-    thread: str = option("--thread", help="The harness's own session or thread id")
-    address: str | None = option(
-        "--address", help="Codex app-server socket, or OpenCode server URL", default=None)
-    name: str = option("--name", help="New agent-comms thread name")
+    harness: Annotated[
+        type[Harness],
+        Editor(ChoiceTargetField),
+        Argument(flags=("--harness",)),
+    ]
+    thread: Annotated[
+        str,
+        Argument(
+            flags=("--thread",), options={"help": "The harness's own session or thread id"}
+        ),
+    ]
+    address: Annotated[
+        HarnessAddress,
+        Argument(
+            flags=("--address",),
+            options={"help": "Codex app-server socket, or OpenCode server URL"},
+        ),
+    ] = DefaultAddress()
+    name: Annotated[
+        str,
+        Argument(flags=("--name",), options={"help": "New agent-comms thread name"}),
+    ]
 
     def apply(self, ctx: Comms) -> CliResult:
-        directory = Path(self.worktree).expanduser() if self.worktree else Path.cwd()
-        return self.imported(ctx, OnlineHistory.of(self.harness, self.thread, self.address, directory), self.name)
+        return self.imported(ctx, OnlineHistory.of(
+            self.harness, self.thread, self.address, self.worktree.local_directory()), self.name)
 
 
 @dataclass(frozen=True, kw_only=True)
 class ImportSubagentsCliCommand(ImportingCliCommand, declared_name="import-subagents"):
     help = "Import every subagent of a stored Claude Code session, each as a stopped thread"
-    session: Annotated[Path, PathText] = option("--session", help="The Claude Code session JSONL")
-    prefix: str = option("--prefix", default="", help="Prepended to each subagent id to name its thread")
+    session: Annotated[
+        Path,
+        PathText,
+        Argument(
+            flags=("--session",), options={"help": "The Claude Code session JSONL"}
+        ),
+    ]
+    prefix: Annotated[
+        str,
+        Argument(
+            flags=("--prefix",),
+            options={"help": "Prepended to each subagent id to name its thread"},
+        ),
+    ] = ""
 
     def apply(self, ctx: Comms) -> SubagentsImportedResult:
         return SubagentsImportedResult(tuple(
@@ -901,18 +1063,21 @@ class PublishingCliCommand(HeldBusWrite, CliCommand, declared_name=None):
 
 @dataclass(frozen=True, kw_only=True)
 class SendCliCommand(SendRequest, PublishingCliCommand):
-    sender: str = option("--from")
+    # A bare annotation would inherit SendRequest's default; field() keeps --from required.
+    sender: Annotated[str, Argument(flags=("--from",))] = field()
 
     def publish(self, ctx: Comms) -> MessageSentResult:
-        return MessageSentResult(self.report.send(ctx, self))
+        return MessageSentResult(self.sent(ctx))
 
 
 @dataclass(frozen=True, kw_only=True)
 class UserSendCliCommand(PublishingCliCommand, declared_name="user-send"):
     help = "Send as the human user to a thread (DM), #channel, or #all"
-    target: str = option("--to")
-    body: str = option("--body")
-    worktree: str = option("--worktree", default_factory=os.getcwd)
+    target: Annotated[str, Argument(flags=("--to",))]
+    body: Annotated[str, Argument(flags=("--body",))]
+    worktree: Annotated[str, Argument(flags=("--worktree",))] = (
+        dataclasses.field(default_factory=os.getcwd)
+    )
 
     def publish(self, ctx: Comms) -> CliResult:
         message = ctx.messaging.send_user_message(self.target, self.body, worktree=self.worktree)
@@ -920,31 +1085,17 @@ class UserSendCliCommand(PublishingCliCommand, declared_name="user-send"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ConfigureCliCommand(CliCommand, declared_name="configure"):
+class ConfigureCliCommand(NextTurnConfiguration, CliCommand, declared_name="configure"):
     help = "Set a stopped thread's model, thinking level, or service tier for its next start"
-    name: str = option("--name")
-    model: str | None = option("--model", default=None)
-    thinking: str | None = option("--thinking", default=None)
-    service_tier: ServiceTier | None = option("--service-tier", default=None)
+    name: Annotated[str, Argument(flags=("--name",))]
 
     def apply(self, ctx: Comms) -> CliResult:
         thread = ctx.registry.require(self.name)
         if ctx.registry.status(thread.name).active:
             raise RelationViolationError(
                 f"{thread.name} is running; change its settings through its session")
-        level = FieldCodec.decode(ThinkingLevelField, self.thinking)
-        candidate = thread.with_model_configuration(
-            model=self.model,
-            thinking_level=level,
-            service_tier=self.service_tier,
-        )
-        asyncio.run(ConfigOptions.configured().validate(candidate))
-        updated = ctx.threads.set_thread_configuration(
-            thread,
-            model=candidate.model,
-            thinking_level=candidate.thinking_level,
-            service_tier=candidate.service_tier,
-        )
+        asyncio.run(ConfigOptions.configured().validate(self.configured(thread)))
+        updated = ctx.threads.set_thread_configuration(thread, self)
         return ThreadConfiguredResult(updated.name, updated.model, updated.thinking_level,
                                       updated.service_tier)
 
@@ -952,10 +1103,15 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
 @dataclass(frozen=True, kw_only=True)
 class PinConstraintCliCommand(CliCommand, declared_name="pin-constraint"):
     help = "Pin a checked original human message for its recipient"
-    thread: str = option("thread")
-    source: MessageReference = option("--source", normalize=_message_reference,
-                                      help="Original sequence:message_id")
-    worktree: str = option("--worktree", default_factory=os.getcwd)
+    thread: Annotated[str, Argument(flags=("thread",))]
+    source: Annotated[
+        MessageReference,
+        Normalize(_message_reference),
+        Argument(flags=("--source",), options={"help": "Original sequence:message_id"}),
+    ]
+    worktree: Annotated[str, Argument(flags=("--worktree",))] = (
+        dataclasses.field(default_factory=os.getcwd)
+    )
 
     def original_source(self, ctx: Comms):
         return self.source
@@ -973,7 +1129,10 @@ class PinConstraintCliCommand(CliCommand, declared_name="pin-constraint"):
 @dataclass(frozen=True, kw_only=True)
 class PinInputConstraintCliCommand(PinConstraintCliCommand, declared_name="pin-input-constraint"):
     help = "Pin an original human input for its recipient"
-    source: str = option("--source", help="Original durable input key")
+    source: Annotated[
+        str,
+        Argument(flags=("--source",), options={"help": "Original durable input key"}),
+    ]
 
     def original_source(self, ctx: Comms):
         from .input_disposition import InputDispositions
@@ -987,9 +1146,23 @@ class PinInputConstraintCliCommand(PinConstraintCliCommand, declared_name="pin-i
 @dataclass(frozen=True, kw_only=True)
 class ApproveAnnotationsCliCommand(PinConstraintCliCommand, declared_name="approve-annotations"):
     help = "Approve a pinned external classifier using original human wording and an hourly request budget"
-    per_hour: int = option("--per-hour", help="Maximum classifier requests in the rolling hour")
-    segments: tuple[type[ContextSegment], ...] = option("--segments", type=json.loads,
-        help="JSON list of original segment kinds permitted for disclosure")
+    per_hour: Annotated[
+        int,
+        Argument(
+            flags=("--per-hour",),
+            options={"help": "Maximum classifier requests in the rolling hour"},
+        ),
+    ]
+    segments: Annotated[
+        tuple[type[ContextSegment], ...],
+        Argument(
+            flags=("--segments",),
+            options={
+                "type": json.loads,
+                "help": "JSON list of original segment kinds permitted for disclosure",
+            },
+        ),
+    ]
 
     def pin_original(self, ctx: Comms, source):
         return ctx.messaging.approve_annotations(self.thread, source, worktree=self.worktree,
@@ -999,9 +1172,17 @@ class ApproveAnnotationsCliCommand(PinConstraintCliCommand, declared_name="appro
 @dataclass(frozen=True, kw_only=True)
 class CorrectAnnotationCliCommand(CliCommand, declared_name="correct-annotation"):
     help = "Correct one original stored model answer through the human identity owner"
-    label: ModelLabel = option("--label", type=json.loads)
-    answer: type[SpanAnswer] = option("--answer", editor=ChoiceTargetField)
-    worktree: str = option("--worktree", default_factory=os.getcwd)
+    label: Annotated[
+        ModelLabel, Argument(flags=("--label",), options={"type": json.loads})
+    ]
+    answer: Annotated[
+        type[SpanAnswer],
+        Editor(ChoiceTargetField),
+        Argument(flags=("--answer",)),
+    ]
+    worktree: Annotated[str, Argument(flags=("--worktree",))] = (
+        dataclasses.field(default_factory=os.getcwd)
+    )
 
     def apply(self, ctx: Comms) -> CliResult:
         from .coordinator import Coordination
@@ -1014,12 +1195,34 @@ class CorrectAnnotationCliCommand(CliCommand, declared_name="correct-annotation"
 
 @dataclass(frozen=True, kw_only=True)
 class AnnotationsCalibrationCliCommand(CliCommand, declared_name="annotations"):
-    help = "Report human-reviewed accuracy and probability frequencies for exact annotation versions"
-    operation: Literal["calibration"] = option("operation", help="calibration", editor=ChoiceTargetField)
-    question: QuestionVersion = option("--question", type=json.loads,
-        help="JSON of the original question member and version digest")
-    classifier: ClassifierVersion = option("--classifier", type=json.loads,
-        help="JSON of the original classifier member and pinned release")
+    help = (
+        "Report human-reviewed accuracy and probability frequencies for exact annotation versions"
+    )
+    operation: Annotated[
+        Literal["calibration"],
+        Editor(ChoiceTargetField),
+        Argument(flags=("operation",), options={"help": "calibration"}),
+    ]
+    question: Annotated[
+        QuestionVersion,
+        Argument(
+            flags=("--question",),
+            options={
+                "type": json.loads,
+                "help": "JSON of the original question member and version digest",
+            },
+        ),
+    ]
+    classifier: Annotated[
+        ClassifierVersion,
+        Argument(
+            flags=("--classifier",),
+            options={
+                "type": json.loads,
+                "help": "JSON of the original classifier member and pinned release",
+            },
+        ),
+    ]
 
     def apply(self, ctx: Comms) -> CliResult:
         from .working_memory_annotations import WorkingMemoryAnnotations
@@ -1031,10 +1234,16 @@ class AnnotationsCalibrationCliCommand(CliCommand, declared_name="annotations"):
 @dataclass(frozen=True, kw_only=True)
 class SupersedeConstraintCliCommand(CliCommand, declared_name="supersede-constraint"):
     help = "Publish a human's exact replacement for an authored constraint"
-    thread: str = option("thread")
-    source: MessageReference = option("--source", normalize=_message_reference)
-    body: str = option("--body")
-    worktree: str = option("--worktree", default_factory=os.getcwd)
+    thread: Annotated[str, Argument(flags=("thread",))]
+    source: Annotated[
+        MessageReference,
+        Normalize(_message_reference),
+        Argument(flags=("--source",)),
+    ]
+    body: Annotated[str, Argument(flags=("--body",))]
+    worktree: Annotated[str, Argument(flags=("--worktree",))] = (
+        dataclasses.field(default_factory=os.getcwd)
+    )
 
     def apply(self, ctx: Comms) -> CliResult:
         from .task_sources import CorrectionTaskChange, UserTaskSupersession
@@ -1047,9 +1256,15 @@ class SupersedeConstraintCliCommand(CliCommand, declared_name="supersede-constra
 @dataclass(frozen=True, kw_only=True)
 class DropConstraintCliCommand(CliCommand, declared_name="drop-constraint"):
     help = "Retire a constraint by original reference, preserving its evidence"
-    thread: str = option("thread")
-    source: MessageReference = option("--source", normalize=_message_reference)
-    worktree: str = option("--worktree", default_factory=os.getcwd)
+    thread: Annotated[str, Argument(flags=("thread",))]
+    source: Annotated[
+        MessageReference,
+        Normalize(_message_reference),
+        Argument(flags=("--source",)),
+    ]
+    worktree: Annotated[str, Argument(flags=("--worktree",))] = (
+        dataclasses.field(default_factory=os.getcwd)
+    )
 
     def apply(self, ctx: Comms) -> CliResult:
         from .task_sources import CorrectionTaskChange, UserTaskDrop
@@ -1063,9 +1278,11 @@ class DropConstraintCliCommand(CliCommand, declared_name="drop-constraint"):
 @dataclass(frozen=True, kw_only=True)
 class ExportRetainedCliCommand(CliCommand, declared_name="export-retained"):
     help = "Export current authored context from original checked sources"
-    thread: str = option("thread")
-    output: str = option("--output")
-    overwrite: bool = option("--overwrite", default=False)
+    thread: Annotated[str, Argument(flags=("thread",))]
+    output: Annotated[str, Argument(flags=("--output",))]
+    overwrite: Annotated[bool, Argument(flags=("--overwrite",))] = (
+        False
+    )
 
     def apply(self, ctx: Comms) -> CliResult:
         return ctx.bus.log.retained_context(self.thread, ctx.registry).export(
@@ -1075,7 +1292,7 @@ class ExportRetainedCliCommand(CliCommand, declared_name="export-retained"):
 @dataclass(frozen=True, kw_only=True)
 class InboxCliCommand(CliCommand):
     help = "Undelivered messages for a thread"
-    thread: str = option("--thread")
+    thread: Annotated[str, Argument(flags=("--thread",))]
 
     def apply(self, ctx: Comms) -> CliResult:
         return InboxResult(tuple(ctx.bus.inbox(self.thread)))
@@ -1084,9 +1301,22 @@ class InboxCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class WatchCliCommand(CliCommand, declared_name="watch"):
     help = "Stream unread and arriving messages as JSON lines"
-    thread: str = option("--thread")
-    after: MessageReference | None = option("--after", default=None, type=json.loads, help="Exclusive original message reference already attempted by this receiver (JSON)")
-    acknowledgment: type[WatchAcknowledgment] = option("--acknowledgment", default=OnReadWatchAcknowledgment, editor=ChoiceTargetField)
+    thread: Annotated[str, Argument(flags=("--thread",))]
+    after: Annotated[
+        InboxStart,
+        Argument(
+            flags=("--after",),
+            options={
+                "type": json.loads,
+                "help": "Exclusive original message reference already attempted by this receiver (JSON)",
+            },
+        ),
+    ] = FirstUnreadStart()
+    acknowledgment: Annotated[
+        type[WatchAcknowledgment],
+        Editor(ChoiceTargetField),
+        Argument(flags=("--acknowledgment",)),
+    ] = OnReadWatchAcknowledgment
 
     def apply(self, ctx: Comms) -> AsyncIterator[Message]:
         return ctx.bus.watch(self.thread, acknowledgment=self.acknowledgment, after=self.after)
@@ -1116,7 +1346,7 @@ class WatchCliCommand(CliCommand, declared_name="watch"):
 @dataclass(frozen=True, kw_only=True)
 class AckCliCommand(CliCommand):
     help = "Mark inbox delivered"
-    thread: str = option("--thread")
+    thread: Annotated[str, Argument(flags=("--thread",))]
 
     def apply(self, ctx: Comms) -> CliResult:
         messages = ctx.bus.inbox(self.thread)
@@ -1151,15 +1381,30 @@ class StatusCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class HistoryCliCommand(CliCommand):
     help = "Newest-first bounded history of a named target"
-    target: str = option("--target", help="#channel or @peer", default=ANY_CHANNEL.name)
-    me: str | None = option("--as", help="Participant, required only for DM history", default=None)
-    limit: int = option("--limit", help="Maximum messages in this page", default=20)
-    before: PageCursor | None = option("--before", help="Exclusive older-page cursor (JSON)", type=json.loads, default=None)
+    target: Annotated[
+        str, Argument(flags=("--target",), options={"help": "#channel or @peer"})
+    ] = ANY_CHANNEL.name
+    me: Annotated[
+        DisplayViewer,
+        Argument(
+            flags=("--as",), options={"help": "Participant, required only for DM history"}
+        ),
+    ] = AnonymousViewer()
+    limit: Annotated[
+        int,
+        Argument(flags=("--limit",), options={"help": "Maximum messages in this page"}),
+    ] = 20
+    before: Annotated[
+        PageCursor,
+        Argument(
+            flags=("--before",),
+            options={"help": "Exclusive older-page cursor (JSON)", "type": json.loads},
+        ),
+    ] = NewestCursor()
 
     def apply(self, ctx: Comms) -> HistoryPageResult:
         target = CommandTarget.named(self.target)
-        traversal = self.before.older() if self.before is not None else OlderTraversal()
-        bounds = PageBounds(traversal, self.limit)
+        bounds = PageBounds(self.before.older(), self.limit)
         page = ctx.views.history_page(target, bounds, viewer=self.me)
         return target.history_result(ctx.bus.require_channel, tuple(reversed(page.messages)), page.has_older)
 
@@ -1167,57 +1412,82 @@ class HistoryCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class ExportWireCliCommand(CliCommand, declared_name="export-wire"):
     help = "Export durable IRC/wire message history"
-    output: str = option("--output", help="Destination file")
-    format: SelectableWireExportFormat = option("--format", default=JsonlFormat(), editor=ChoiceTargetField)
-    everything: bool = option(
-        "--everything", help="Every wire message", group="scope", default=False
-    )
-    channel: str | None = option(
-        "--channel", help="One target-owned #channel", group="scope", default=None
-    )
-    dm: list[str] | None = option(
-        "--dm",
-        nargs=2,
-        metavar=("FIRST", "SECOND"),
-        help="One canonical DM",
-        group="scope",
-        default=None,
-    )
-    full: bool = option(
-        "--full", help="Export without a size/time cap", group="limit", default=False
-    )
-    max_bytes: int | None = option(
-        "--max-bytes", help="Hard UTF-8 artifact byte ceiling", group="limit", default=None
-    )
-    last: float | None = option(
-        "--last",
-        type=_duration_seconds,
-        metavar="DURATION",
-        help="Recent window, e.g. 24h",
-        group="limit",
-        default=None,
-    )
-    overwrite: bool = option("--overwrite", help="Replace an existing output", default=False)
+    output: Annotated[
+        str, Argument(flags=("--output",), options={"help": "Destination file"})
+    ]
+    format: Annotated[
+        SelectableWireExportFormat,
+        Editor(ChoiceTargetField),
+        Argument(flags=("--format",)),
+    ] = JsonlFormat()
+    everything: Annotated[
+        bool,
+        Argument(
+            flags=("--everything",),
+            group=NamedArgumentGroup("scope"),
+            options={"help": "Every wire message"},
+        ),
+    ] = False
+    channel: Annotated[
+        ScopeFlag,
+        Argument(
+            flags=("--channel",),
+            group=NamedArgumentGroup("scope"),
+            options={"help": "One target-owned #channel"},
+        ),
+    ] = UnsetScopeFlag()
+    dm: Annotated[
+        ScopeFlag,
+        Argument(
+            flags=("--dm",),
+            group=NamedArgumentGroup("scope"),
+            options={"nargs": 2, "metavar": ("FIRST", "SECOND"), "help": "One canonical DM"},
+        ),
+    ] = UnsetScopeFlag()
+    full: Annotated[
+        bool,
+        Argument(
+            flags=("--full",),
+            group=NamedArgumentGroup("limit"),
+            options={"help": "Export without a size/time cap"},
+        ),
+    ] = False
+    max_bytes: Annotated[
+        LimitFlag,
+        Argument(
+            flags=("--max-bytes",),
+            group=NamedArgumentGroup("limit"),
+            options={"type": int, "help": "Hard UTF-8 artifact byte ceiling"},
+        ),
+    ] = UnsetLimitFlag()
+    last: Annotated[
+        LimitFlag,
+        Argument(
+            flags=("--last",),
+            group=NamedArgumentGroup("limit"),
+            options={
+                "type": _duration_seconds,
+                "metavar": "DURATION",
+                "help": "Recent window, e.g. 24h",
+            },
+        ),
+    ] = UnsetLimitFlag()
+    overwrite: Annotated[
+        bool,
+        Argument(
+            flags=("--overwrite",), options={"help": "Replace an existing output"}
+        ),
+    ] = False
 
     def apply(self, ctx: Comms) -> CliResult:
         started_at = time.time()
-        if self.everything:
-            scope = EverythingScope()
-        elif self.channel:
-            scope = ChannelScope(self.channel)
-        else:
-            scope = DmScope(tuple(self.dm))
-        if self.full:
-            export_limit = FullLimit()
-        elif self.max_bytes is not None:
-            export_limit = MaxBytesLimit(self.max_bytes)
-        else:
-            export_limit = RecentLimit(started_at - self.last)
+        # The required argument groups hold exactly one flag each; --everything and --full
+        # are what remains when no other flag of their group names a choice.
         exported = ctx.views.export_wire(
             self.output,
             format=self.format,
-            scope=scope,
-            limit=export_limit,
+            scope=self.channel.chosen_or(self.dm.chosen_or(EverythingScope())),
+            limit=self.max_bytes.chosen_or(self.last.chosen_or(FullLimit(), started_at), started_at),
             overwrite=self.overwrite,
             export_started_at=started_at,
         )
@@ -1235,7 +1505,9 @@ class ChannelsCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class ThreadsCliCommand(CliCommand):
     help = "List threads"
-    active_only: bool = option("--active-only", default=False)
+    active_only: Annotated[bool, Argument(flags=("--active-only",))] = (
+        False
+    )
 
     def apply(self, ctx: Comms) -> CliResult:
         return ThreadsResult(ctx.views.list_threads(active_only=self.active_only))
@@ -1244,11 +1516,19 @@ class ThreadsCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class ThreadCliCommand(CliCommand):
     help = "Detail for one thread"
-    name: str = option("--name")
-    read: InboxRead = option(
-        "--no-pending", help="Skip the inbox count for fast metadata reads",
-        default_factory=CountedRead, parser_default=FieldCodec.encode(CountedRead()),
-        action="store_const", const=FieldCodec.encode(UncountedRead()), normalize=dict)
+    name: Annotated[str, Argument(flags=("--name",))]
+    read: Annotated[
+        InboxRead,
+        Normalize(dict),
+        Argument(
+            flags=("--no-pending",),
+            options={
+                "help": "Skip the inbox count for fast metadata reads",
+                "action": "store_const",
+                "const": FieldCodec.encode(UncountedRead()),
+            },
+        ),
+    ] = dataclasses.field(default_factory=CountedRead)
 
     def apply(self, ctx: Comms) -> CliResult:
         return ctx.views.thread_detail(self.name, self.read)
@@ -1257,17 +1537,29 @@ class ThreadCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class RegisterCliCommand(CliCommand):
     help = "Register a thread"
-    name: str = option("--name")
-    worktree: str = option("--worktree")
-    tags: frozenset[str] = option(
-        "--tags", default_factory=frozenset, parser_default="", normalize=_tags
-    )
-    parent: str | None = option("--parent", default=None)
-    task: str | None = option("--task", default=None)
-    process: ProcessState = option("--pid", default_factory=NoProcess,
-        parser_default=FieldCodec.encode(NoProcess()), type=ProcessIdentity.pid_argument)
-    execution: type[ThreadExecution] = option("--execution", default=ExternalThreadExecution, editor=ChoiceTargetField,
-                                            parser_default=FieldCodec.encode(ExternalThreadExecution))
+    name: Annotated[str, Argument(flags=("--name",))]
+    worktree: Annotated[str, Argument(flags=("--worktree",))]
+    tags: Annotated[
+        frozenset[str],
+        Normalize(_tags),
+        Argument(flags=("--tags",)),
+    ] = dataclasses.field(default_factory=frozenset)
+    parent: Annotated[ThreadParent, Argument(flags=("--parent",))] = NoParent()
+    task: Annotated[ThreadText, Argument(flags=("--task",))] = NoThreadText()
+    process: Annotated[
+        ProcessState,
+        Argument(
+            flags=("--pid",),
+            options={"type": ProcessIdentity.pid_argument},
+        ),
+    ] = dataclasses.field(default_factory=NoProcess)
+    execution: Annotated[
+        type[ThreadExecution],
+        Editor(ChoiceTargetField),
+        Argument(
+            flags=("--execution",),
+        ),
+    ] = ExternalThreadExecution
 
     def apply(self, ctx: Comms) -> CliResult:
 
@@ -1276,7 +1568,7 @@ class RegisterCliCommand(CliCommand):
             tags=self.tags,
             worktree=self.worktree,
             parent=self.parent,
-            task=NoThreadText.from_input(self.task),
+            task=self.task,
             process_identity=self.process,
             execution=self.execution,
         )
@@ -1288,21 +1580,51 @@ class RegisterCliCommand(CliCommand):
 class InstallCliCommand(CliCommand):
     help = ("Upgrade this machine's bus, checkout and runtime to --to, then set up every coding "
             "harness to use the bus, with the commander skill and tools")
-    checkout: Annotated[Path, PathText] = option("--checkout", default_factory=Path.cwd, parser_default=".")
-    to: str = option("--to", default="origin/main")
-    installer: str = option("--installer", default="claude-code",
-                            help="The unit running this install; the next install's plan names it")
-    rehearse: bool = option("--rehearse", default=False,
-                            help="Carry and read a copy of the bus; change nothing")
-    retire: bool = option("--retire", default=False,
-                          help="Move the bus aside, kept, and install a fresh one in its place")
-    spill_dir: Annotated[Path, PathText] = option(
-        "--spill-dir", default_factory=lambda: Path.home() / ".cache/agent-rehearsal",
-        parser_default=str(Path.home() / ".cache/agent-rehearsal"),
-        help="Parent directory for live backups")
-    project: Annotated[Path, PathText] = option("--project", default_factory=Path.cwd, parser_default=".")
-    repos: tuple[Annotated[Path, PathText], ...] = option("--repos", default=(), parser_default="", normalize=_tags)
-    commander: str = option("--commander", default="claude-code")
+    checkout: Annotated[
+        Path,
+        PathText,
+        Argument(flags=("--checkout",)),
+    ] = dataclasses.field(default_factory=Path.cwd)
+    to: Annotated[str, Argument(flags=("--to",))] = "origin/main"
+    installer: Annotated[
+        InstallerChoice,
+        Argument(
+            flags=("--installer",),
+            options={"help": "The unit running this install; the next install's plan names it"},
+        ),
+    ] = UnnamedInstaller()
+    rehearse: Annotated[
+        bool,
+        Argument(flags=("--rehearse",), options={"help": "Carry and read a copy of the bus; change nothing"}),
+    ] = False
+    retire: Annotated[
+        bool,
+        Argument(
+            flags=("--retire",),
+            options={"help": "Move the bus aside, kept, and install a fresh one in its place"},
+        ),
+    ] = False
+    spill_dir: Annotated[
+        Path,
+        PathText,
+        Argument(
+            flags=("--spill-dir",),
+            options={"help": "Parent directory for live backups"},
+        ),
+    ] = dataclasses.field(default_factory=lambda: Path.home() / ".cache/agent-rehearsal")
+    project: Annotated[
+        Path,
+        PathText,
+        Argument(flags=("--project",), options={"help": "The worktree harness threads register in"}),
+    ] = dataclasses.field(default_factory=Path.cwd)
+    repos: Annotated[
+        RepoChoice,
+        Argument(flags=("--repos",), options={"help": "Replace the commander's recorded repositories"}),
+    ] = KeptRepos()
+    commander: Annotated[
+        CommanderChoice,
+        Argument(flags=("--commander",), options={"help": "Record this thread as the bus's commander"}),
+    ] = KeptCommander()
 
     @classmethod
     def published_launch(cls) -> LaunchRoot:
@@ -1319,24 +1641,17 @@ class InstallCliCommand(CliCommand):
 
     def apply(self, ctx: Comms) -> CliResult:
         """The install child's last step, on the bus it carried or created."""
-        from .commander.config import CommanderConfig
-
         home = Path.home()
-        config = CommanderConfig(
-            commander=self.commander, root=ctx.root,
-            state=home / ".local/state/agent-comms/commander",
-            repos=tuple(Repo.of(repo) for repo in self.repos or (self.checkout,)),
-            worktrees=home / "wt", scratch=home / ".cache/agent-scratch", disk=home,
-        )
-        return InstallResult(str(config.write(home)), {
-            type(harness).declared_name: harness.register(ctx, self.commander, self.project)
+        record = self.commander.configured(CommanderRecord.read(ctx.root), self.repos, ctx.root, home)
+        return InstallResult(record.write(home), {
+            type(harness).declared_name: harness.register(ctx, self.project)
             for harness in Harness.present(home)})
 
 
 @dataclass(frozen=True, kw_only=True)
 class HeartbeatCliCommand(CliCommand):
     help = "Mark thread running"
-    name: str = option("--name")
+    name: Annotated[str, Argument(flags=("--name",))]
 
     def apply(self, ctx: Comms) -> CliResult:
         ctx.threads.heartbeat(self.name)
@@ -1346,10 +1661,15 @@ class HeartbeatCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class AttachSessionCliCommand(CliCommand, declared_name="attach-session"):
     help = "Attach a live Pi session to a registered thread"
-    name: str = option("--name")
-    session_file: str = option("--session-file")
-    process: ProcessState = option("--pid", default_factory=NoProcess,
-        parser_default=FieldCodec.encode(NoProcess()), type=ProcessIdentity.pid_argument)
+    name: Annotated[str, Argument(flags=("--name",))]
+    session_file: Annotated[str, Argument(flags=("--session-file",))]
+    process: Annotated[
+        ProcessState,
+        Argument(
+            flags=("--pid",),
+            options={"type": ProcessIdentity.pid_argument},
+        ),
+    ] = dataclasses.field(default_factory=NoProcess)
 
     def apply(self, ctx: Comms) -> CliResult:
         current = ctx.registry.require(self.name)
@@ -1357,8 +1677,7 @@ class AttachSessionCliCommand(CliCommand, declared_name="attach-session"):
             current, self.session_file,
             process=self.process.attachment_process(current.process_identity),
         )
-        return SessionAttachedResult(
-            attached.name, attached.session_file, **attached.process_identity.pid_fields())
+        return SessionAttachedResult(attached.name, attached.session_file, attached.process_identity)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1372,7 +1691,7 @@ class SchemaReportCliCommand(CliCommand, declared_name="schema-report"):
 @dataclass(frozen=True, kw_only=True)
 class CheckpointCliCommand(CliCommand, declared_name="checkpoint"):
     help = "Commit and push a thread's uncommitted worktree changes as a checkpoint branch"
-    name: str = option("--name")
+    name: Annotated[str, Argument(flags=("--name",))]
 
     def apply(self, ctx: Comms) -> CliResult:
         worktree = Path(ctx.registry.require(self.name).worktree).resolve()
@@ -1389,34 +1708,34 @@ class CheckpointCliCommand(CliCommand, declared_name="checkpoint"):
 
         code, out, _ = git("rev-parse", "--is-inside-work-tree")
         if code != 0 or out.strip() != "true":
-            return CheckpointResult(
-                self.name, "refused", branch,
-                reason="the thread declaration's worktree is not a git worktree")
+            return RefusedCheckpoint(
+                self.name, branch, "the thread declaration's worktree is not a git worktree")
         if not git("status", "--porcelain")[1].strip():
-            return CheckpointResult(self.name, "clean", branch)
+            return CleanCheckpoint(self.name, branch)
         git("add", "-A")
         code, out, err = git("commit", "-m", f"Checkpoint {self.name} before compaction")
         if code != 0 and "nothing to commit" in (out + err):
-            return CheckpointResult(self.name, "clean", branch)
+            return CleanCheckpoint(self.name, branch)
         if code != 0:
-            return CheckpointResult(self.name, "failed", branch,
-                                    reason=(err.strip() or out.strip())[:400])
+            return FailedCheckpoint(self.name, branch, (err.strip() or out.strip())[:400])
         # The transport can fail mid-flight; the named state is what survives,
         # never a silent skip and never a block on compaction.
         code, out, err = git("push", "--force", "origin", f"HEAD:refs/heads/{branch}", timeout=120)
         if code != 0:
-            return CheckpointResult(self.name, "push-unknown", branch,
-                                    reason=(err.strip() or out.strip())[:400])
-        commit = git("rev-parse", "--short", "HEAD")[1].strip()
-        return CheckpointResult(self.name, "pushed", branch, commit=commit)
+            return PushUnknownCheckpoint(self.name, branch, (err.strip() or out.strip())[:400])
+        return PushedCheckpoint(self.name, branch, git("rev-parse", "--short", "HEAD")[1].strip())
 
 
 @dataclass(frozen=True, kw_only=True)
 class ActivityCliCommand(CliCommand):
     help = "Publish current thread activity"
-    name: str = option("--name")
-    state: ActivityState = option("--state", editor=ChoiceTargetField)
-    detail: str = option("--detail", default="")
+    name: Annotated[str, Argument(flags=("--name",))]
+    state: Annotated[
+        ActivityState,
+        Editor(ChoiceTargetField),
+        Argument(flags=("--state",)),
+    ]
+    detail: Annotated[str, Argument(flags=("--detail",))] = ""
 
     def apply(self, ctx: Comms) -> CliResult:
         ctx.agents.set_activity(self.name, self.state, self.detail)
@@ -1439,7 +1758,9 @@ class ThreadBoundCliCommand(ThreadCommandAvailability, CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class ThreadLifecycleCliCommand(ThreadBoundCliCommand):
     multiple_targets = True
-    name: str = option("--name", target_bound=True)
+    name: Annotated[
+        str, TargetBound(), Argument(flags=("--name",))
+    ]
 
     @classmethod
     def thread_binding(cls, thread):
@@ -1469,24 +1790,31 @@ class StopCliCommand(AppliedTogether, NativeOwnerCommand, OwnerLifecycleControl,
 @dataclass(frozen=True, kw_only=True)
 class RestartCliCommand(CliCommand):
     help = "Restart process"
-    name: str | None = option(
-        "--name", help="One running thread (aliases supported)", group="scope", default=None,
-        target_bound=True,
-    )
-    all_: bool = option(
-        "--all",
-        help="All running owners; excludes stopped threads",
-        group="scope",
-        default=False,
-        wire_name="all",
-        target_bound=True,
-    )
-    agent_bin: str | None = option("--agent-bin", default=None)
-    agent_args: list[str] | None = option(
-        "--agent-args",
-        default=None,
-        normalize=_shell_words,
-    )
+    name: Annotated[
+        RestartTarget,
+        TargetBound(),
+        Argument(
+            flags=("--name",),
+            group=NamedArgumentGroup("scope"),
+            options={"help": "One running thread (aliases supported)"},
+        ),
+    ] = AllOwners()
+    all_: Annotated[
+        bool,
+        WireName("all"),
+        TargetBound(),
+        Argument(
+            flags=("--all",),
+            group=NamedArgumentGroup("scope"),
+            options={"help": "All running owners; excludes stopped threads"},
+        ),
+    ] = False
+    agent_bin: Annotated[LaunchBinary, Argument(flags=("--agent-bin",))] = ConfiguredBinary()
+    agent_args: Annotated[
+        LaunchArguments,
+        Normalize(_shell_words),
+        Argument(flags=("--agent-args",)),
+    ] = InheritedArguments()
 
     @property
     def editable_fields(self) -> tuple[TargetField, ...]:
@@ -1498,19 +1826,17 @@ class RestartCliCommand(CliCommand):
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
         if thread.turn_record.executing:
             return ()
-        return (cls(name=thread.name),) if thread.restart_candidates(status) else ()
+        return (cls(name=OneOwner(thread.name)),) if thread.restart_candidates(status) else ()
 
     def apply(self, ctx: Comms) -> CliResult:
-        results = ctx.owners.restart_owners(
-            None if self.all_ else [self.name], agent_bin=self.agent_bin, agent_args=self.agent_args
-        )
+        results = ctx.owners.restart_owners(self.name, agent_bin=self.agent_bin, agent_args=self.agent_args)
         return OwnersRestartedResult(results)
 
 
 @dataclass(frozen=True, kw_only=True)
 class ReleaseCliCommand(CliCommand):
     help = "Voluntarily mark the calling thread stopped"
-    name: str = option("--name")
+    name: Annotated[str, Argument(flags=("--name",))]
 
     def apply(self, ctx: Comms) -> CliResult:
         ctx.owners.release(self.name)
@@ -1521,7 +1847,9 @@ class ReleaseCliCommand(CliCommand):
 class ArchiveCliCommand(ArchiveOwnerControl, ThreadBoundCliCommand):
     help = "Archive a stopped thread"
     multiple_targets = True
-    name: str = option("--name", target_bound=True)
+    name: Annotated[
+        str, TargetBound(), Argument(flags=("--name",))
+    ]
 
     @classmethod
     def thread_binding(cls, thread):
@@ -1535,29 +1863,40 @@ class ArchiveCliCommand(ArchiveOwnerControl, ThreadBoundCliCommand):
 @dataclass(frozen=True, kw_only=True)
 class DeleteCliCommand(CliCommand, declared_name="delete"):
     help = "Permanently delete a stopped or archived thread; its bus history stays"
-    name: str = option("--name")
+    name: Annotated[str, Argument(flags=("--name",))]
 
     def apply(self, ctx: Comms) -> ThreadDeleted:
         return ctx.threads.delete(self.name)
-
-
 
 
 @dataclass(frozen=True, kw_only=True)
 class NewThreadCliCommand(CliCommand, declared_name="new"):
     help = "Create a new pi thread"
     spec_type: ClassVar[type[NewThreadSpec]] = NewThreadSpec
-    name: str = option("--name")
-    task: str = option("--task", default="", multiline=True)
-    tags: frozenset[str] | None = option(
-        "--tags", default=None, editor_format=_tag_text, normalize=lambda value: _tags(value) if value is not None else None
-    )
-    project: str = option("--project", parser_default_factory=os.getcwd)
-    model: str | None = option("--model", parser_default=NativeThreadDefaults.model,
-                        catalog=ModelConfigOption)
-    thinking_level: ThinkingLevelField = option(
-        "--thinking-level", default=NativeThreadDefaults.thinking_level,
-        catalog=ThinkingLevelConfigOption)
+    name: Annotated[str, Argument(flags=("--name",))]
+    task: Annotated[
+        str, Multiline(), Argument(flags=("--task",))
+    ] = ""
+    tags: Annotated[
+        TagChoice,
+        EditorFormat(FieldCodec.encode),
+        Normalize(_tag_choice_text),
+        Argument(flags=("--tags",)),
+    ] = InheritedTags()
+    project: Annotated[
+        str,
+        Argument(
+            flags=("--project",), default=FactoryArgumentDefault(os.getcwd)
+        ),
+    ]
+    model: Annotated[
+        ThreadModel, Catalog(ModelConfigOption), Argument(flags=("--model",)),
+    ] = NativeThreadDefaults.model
+    thinking_level: Annotated[
+        ThinkingLevelField,
+        Catalog(ThinkingLevelConfigOption),
+        Argument(flags=("--thinking-level",)),
+    ] = NativeThreadDefaults.thinking_level
 
     @classmethod
     def project_bindings(cls, comms, project):
@@ -1577,7 +1916,9 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
 class ForkCliCommand(NativeOwnerCommand, ThreadBoundCliCommand, NewThreadCliCommand):
     help = "Fork a child pi thread"
     spec_type = ForkSpec
-    parent: str = option("--parent", target_bound=True)
+    parent: Annotated[
+        str, TargetBound(), Argument(flags=("--parent",))
+    ]
 
     @classmethod
     def project_bindings(cls, comms, project):
@@ -1585,35 +1926,41 @@ class ForkCliCommand(NativeOwnerCommand, ThreadBoundCliCommand, NewThreadCliComm
 
     @classmethod
     def thread_binding(cls, thread):
-        return cls(name='', parent=thread.name, tags=thread.tags, project=thread.worktree,
+        return cls(name='', parent=thread.name, tags=GivenTags(thread.tags), project=thread.worktree,
                    model=thread.model, thinking_level=thread.thinking_level)
 
 
 @dataclass(frozen=True, kw_only=True)
 class LedgerCliCommand(CliCommand):
-    help = "Read or merge ledger state"
-    merge_from: str | None = option("--merge-from", default=None)
-    author: str | None = option("--author", default=None)
+    help = "Read ledger state"
 
-    def apply(self, ctx: Comms) -> CliResult:
-        if self.merge_from is not None:
-            if not self.author:
-                raise ValueError("ledger merge requires --author")
-            updates = json.loads(Path(self.merge_from).read_text())
-            ctx.ledger.merge(updates, self.author)
-            return LedgerMergedResult()
-        else:
-            document: LedgerDocument = ctx.ledger.read()
-            return document
+    def apply(self, ctx: Comms) -> LedgerDocument:
+        return ctx.ledger.read()
+
+
+@dataclass(frozen=True, kw_only=True)
+class LedgerMergeCliCommand(CliCommand, declared_name="ledger-merge"):
+    help = "Merge ledger updates from a JSON file"
+    merge_from: Annotated[str, Argument(flags=("--merge-from",))]
+    author: Annotated[str, Argument(flags=("--author",))]
+
+    def apply(self, ctx: Comms) -> LedgerMergedResult:
+        ctx.ledger.merge(json.loads(Path(self.merge_from).read_text()), self.author)
+        return LedgerMergedResult()
 
 
 @dataclass(frozen=True, kw_only=True)
 class PollCliCommand(CliCommand):
     help = "Status snapshot: thread, inbox, ledger, peers"
     # --thread names a thread; without it the poll is the calling thread's. Both parse to records.
-    thread: PollTarget = option("--thread", default_factory=CallingThreadTarget, action="store",
-        parser_default=FieldCodec.encode(CallingThreadTarget()), type=NamedThreadTarget.argument,
-        normalize=dict)
+    thread: Annotated[
+        PollTarget,
+        Normalize(dict),
+        Argument(
+            flags=("--thread",),
+            options={"action": "store", "type": NamedThreadTarget.argument},
+        ),
+    ] = dataclasses.field(default_factory=CallingThreadTarget)
 
     def apply(self, ctx: Comms) -> CliResult:
         return ctx.views.poll(self.thread)
@@ -1622,7 +1969,8 @@ class PollCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class ContextCliCommand(CliCommand):
     help = "Inspect original context contributors without sending an input"
-    thread: str = option("thread")
+    thread: Annotated[str, Argument(flags=("thread",))]
+
     @classmethod
     def add_parser(cls, subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
         super().add_parser(subparsers)
@@ -1740,36 +2088,64 @@ class TurnDiffContextCliCommand(SelectedContextCliCommand, DiffContextCliCommand
 
 
 @dataclass(frozen=True, kw_only=True)
-class TargetActionsCliCommand(CliCommand, declared_name='target-actions'):
-    project: str = option('--project', default_factory=os.getcwd)
-    channel: str | None = option('--channel', default=None)
-    help = 'List applicable operations and their declared parameters'
-    target: tuple[str, ...] = option('--target', '--targets', nargs='+', default_factory=tuple,
-        normalize=list)
+class TargetActionsCliCommand(CliCommand, declared_name="target-actions"):
+    project: Annotated[str, Argument(flags=("--project",))] = dataclasses.field(
+        default_factory=os.getcwd
+    )
+    channel: Annotated[SurroundingChannel, Argument(flags=("--channel",))] = NoChannel()
+    help = "List applicable operations and their declared parameters"
+    target: Annotated[
+        tuple[str, ...],
+        Normalize(list),
+        Argument(
+            flags=(
+                "--target",
+                "--targets",
+            ),
+            options={"nargs": "+"},
+        ),
+    ] = dataclasses.field(default_factory=tuple)
 
     def apply(self, ctx: Comms) -> TargetCatalogResult:
         return TargetCatalogResult(CliCommand.target_catalog(
             ctx, CliCommand.selected_targets(CommandTarget.arguments(self.target, self.project)),
-            ChannelSelection.decode(self.channel), project=self.project))
+            self.channel, project=self.project))
 
 
 @dataclass(frozen=True, kw_only=True)
-class TargetActionCliCommand(CliCommand, declared_name='target-action'):
-    channel: str | None = option('--channel', default=None)
-    help = 'Execute a declared operation against its current target'
-    project: str = option('--project', default_factory=os.getcwd)
-    target: tuple[str, ...] = option('--target', '--targets', nargs='+', default_factory=tuple,
-        normalize=list)
-    operation: str = option('--operation')
-    arguments: dict[str, Any] = option('--arguments', default_factory=dict,
-                                     parser_default='{}')
-    confirmed: bool = option('--confirmed', default=False)
+class TargetActionCliCommand(CliCommand, declared_name="target-action"):
+    channel: Annotated[SurroundingChannel, Argument(flags=("--channel",))] = NoChannel()
+    help = "Execute a declared operation against its current target"
+    project: Annotated[str, Argument(flags=("--project",))] = dataclasses.field(
+        default_factory=os.getcwd
+    )
+    target: Annotated[
+        tuple[str, ...],
+        Normalize(list),
+        Argument(
+            flags=(
+                "--target",
+                "--targets",
+            ),
+            options={"nargs": "+"},
+        ),
+    ] = dataclasses.field(default_factory=tuple)
+    operation: Annotated[str, Argument(flags=("--operation",))]
+    arguments: Annotated[
+        dict[str, Any],
+        Argument(
+            flags=("--arguments",)
+        ),
+    ] = dataclasses.field(default_factory=dict)
+    confirmed: Annotated[bool, Argument(flags=("--confirmed",))] = (
+        False
+    )
 
     def apply(self, ctx: Comms) -> CliResult:
         declaration = CliCommand.member_named(self.operation)
         return declaration.execute_target(
             ctx, declaration.selected_targets(CommandTarget.arguments(self.target, self.project)), self.arguments,
-            confirmed=self.confirmed, channel=ChannelSelection.decode(self.channel), project=self.project)
+            confirmed=self.confirmed, channel=self.channel, project=self.project)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1781,11 +2157,19 @@ class StartCliCommand(NativeOwnerCommand, StartOwnerControl, ThreadLifecycleCliC
 
 
 @dataclass(frozen=True, kw_only=True)
-class ThreadTagsCliCommand(CliCommand, declared_name='thread-tags'):
-    help = 'Edit thread tags'
-    name: str = option('--name', target_bound=True)
-    tags: frozenset[str] = option('--tags', normalize=_tags, editor_format=_tag_text,
-                                help='Complete tags, separated by commas')
+class ThreadTagsCliCommand(CliCommand, declared_name="thread-tags"):
+    help = "Edit thread tags"
+    name: Annotated[
+        str, TargetBound(), Argument(flags=("--name",))
+    ]
+    tags: Annotated[
+        frozenset[str],
+        Normalize(_tags),
+        EditorFormat(_tag_text),
+        Argument(
+            flags=("--tags",), options={"help": "Complete tags, separated by commas"}
+        ),
+    ]
 
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
@@ -1798,7 +2182,9 @@ class ThreadTagsCliCommand(CliCommand, declared_name='thread-tags'):
 
 @dataclass(frozen=True, kw_only=True)
 class ExactTagCliCommand(CliCommand):
-    name: str = option('--name', target_bound=True)
+    name: Annotated[
+        str, TargetBound(), Argument(flags=("--name",))
+    ]
 
     @classmethod
     def for_tag(cls, name: str) -> Self:
@@ -1810,9 +2196,11 @@ class ExactTagCliCommand(CliCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class RenameTagCliCommand(ExactTagCliCommand, declared_name='rename-tag'):
-    help = 'Rename channel tag'
-    new_name: str = option('--to', help='New tag name')
+class RenameTagCliCommand(ExactTagCliCommand, declared_name="rename-tag"):
+    help = "Rename channel tag"
+    new_name: Annotated[
+        str, Argument(flags=("--to",), options={"help": "New tag name"})
+    ]
 
     @classmethod
     def for_tag(cls, name: str) -> Self:
@@ -1824,12 +2212,19 @@ class RenameTagCliCommand(ExactTagCliCommand, declared_name='rename-tag'):
 
 
 @dataclass(frozen=True, kw_only=True)
-class DeleteTagCliCommand(ExactTagCliCommand, declared_name='delete-tag'):
-    help = 'Remove tag, archive tagged threads, or delete tagged threads'
+class DeleteTagCliCommand(ExactTagCliCommand, declared_name="delete-tag"):
+    help = "Remove tag, archive tagged threads, or delete tagged threads"
     multiple_targets = True
-    disposition: TagDisposition = option('--disposition', default_factory=KeepThreadsTagDisposition, editor=ChoiceTargetField,
-                                        help='Choose what happens to tagged threads')
-    confirmed: bool = option('--confirmed', default=False, target_bound=True)
+    disposition: Annotated[
+        TagDisposition,
+        Editor(ChoiceTargetField),
+        Argument(
+            flags=("--disposition",), options={"help": "Choose what happens to tagged threads"}
+        ),
+    ] = dataclasses.field(default_factory=KeepThreadsTagDisposition)
+    confirmed: Annotated[
+        bool, TargetBound(), Argument(flags=("--confirmed",))
+    ] = False
 
     def confirmation(self):
         return self.disposition.confirmation(self.name)
@@ -1850,11 +2245,15 @@ class DeleteTagCliCommand(ExactTagCliCommand, declared_name='delete-tag'):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ArchiveChannelCliCommand(CliCommand, declared_name='archive-channel'):
-    help = 'Archive channel'
+class ArchiveChannelCliCommand(CliCommand, declared_name="archive-channel"):
+    help = "Archive channel"
     multiple_targets = True
-    name: str = option('--name', target_bound=True)
-    archived: bool = option('--archived', default=True, target_bound=True)
+    name: Annotated[
+        str, TargetBound(), Argument(flags=("--name",))
+    ]
+    archived: Annotated[
+        bool, TargetBound(), Argument(flags=("--archived",))
+    ] = True
 
     @classmethod
     def catalog_declaration(cls):
@@ -1873,9 +2272,11 @@ class ArchiveChannelCliCommand(CliCommand, declared_name='archive-channel'):
 
 
 @dataclass(frozen=True, kw_only=True)
-class RestoreChannelCliCommand(ArchiveChannelCliCommand, declared_name='restore-channel'):
-    help = 'Restore archived channel'
-    archived: bool = option('--archived', default=False, target_bound=True)
+class RestoreChannelCliCommand(ArchiveChannelCliCommand, declared_name="restore-channel"):
+    help = "Restore archived channel"
+    archived: Annotated[
+        bool, TargetBound(), Argument(flags=("--archived",))
+    ] = False
 
     @classmethod
     def catalog_declaration(cls):
@@ -1883,9 +2284,11 @@ class RestoreChannelCliCommand(ArchiveChannelCliCommand, declared_name='restore-
 
 
 @dataclass(frozen=True, kw_only=True)
-class DeleteViewCliCommand(CliCommand, declared_name='delete-view'):
-    help = 'Delete saved view'
-    name: str = option('--name', target_bound=True)
+class DeleteViewCliCommand(CliCommand, declared_name="delete-view"):
+    help = "Delete saved view"
+    name: Annotated[
+        str, TargetBound(), Argument(flags=("--name",))
+    ]
 
     @classmethod
     def channel_bindings(cls, comms, resolved: ResolvedChannel, *, snapshot, catalog):
@@ -1900,11 +2303,15 @@ class DeleteViewCliCommand(CliCommand, declared_name='delete-view'):
 
 
 @dataclass(frozen=True, kw_only=True)
-class PinChannelCliCommand(CliCommand, declared_name='pin-channel'):
-    help = 'Set channel pin'
+class PinChannelCliCommand(CliCommand, declared_name="pin-channel"):
+    help = "Set channel pin"
     multiple_targets = True
-    name: str = option('--name', target_bound=True)
-    pinned: bool = option('--pinned', default=False, target_bound=True)
+    name: Annotated[
+        str, TargetBound(), Argument(flags=("--name",))
+    ]
+    pinned: Annotated[
+        bool, TargetBound(), Argument(flags=("--pinned",))
+    ] = False
 
     @classmethod
     def catalog_declaration(cls):
@@ -1919,10 +2326,14 @@ class PinChannelCliCommand(CliCommand, declared_name='pin-channel'):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ChannelActivityCliCommand(CliCommand, declared_name='channel-activity'):
-    help = 'Toggle member activity'
-    name: str = option('--name', target_bound=True)
-    enabled: bool = option('--enabled', default=False, target_bound=True)
+class ChannelActivityCliCommand(CliCommand, declared_name="channel-activity"):
+    help = "Toggle member activity"
+    name: Annotated[
+        str, TargetBound(), Argument(flags=("--name",))
+    ]
+    enabled: Annotated[
+        bool, TargetBound(), Argument(flags=("--enabled",))
+    ] = False
 
     @classmethod
     def channel_bindings(cls, comms, resolved: ResolvedChannel, *, snapshot, catalog):
@@ -1940,15 +2351,19 @@ class TargetEditCliCommand(TargetActionCliCommand, declared_name='target-edit'):
         declaration = CliCommand.member_named(self.operation)
         return TargetEdit(declaration,
                           declaration.selected_targets(CommandTarget.arguments(self.target, self.project)), self.arguments,
-                          self.confirmed, ChannelSelection.decode(self.channel), self.project).apply(ctx)
+                          self.confirmed, self.channel, self.project).apply(ctx)
 
 
 @dataclass(frozen=True, kw_only=True)
-class ReadTargetCliCommand(CliCommand, declared_name='read-target'):
-    help = 'Mark view read'
+class ReadTargetCliCommand(CliCommand, declared_name="read-target"):
+    help = "Mark view read"
     multiple_targets = True
-    target: str = option('--target', target_bound=True)
-    worktree: str = option('--worktree', default_factory=os.getcwd, target_bound=True)
+    target: Annotated[
+        str, TargetBound(), Argument(flags=("--target",))
+    ]
+    worktree: Annotated[
+        str, TargetBound(), Argument(flags=("--worktree",))
+    ] = dataclasses.field(default_factory=os.getcwd)
 
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
@@ -1967,12 +2382,18 @@ class ReadTargetCliCommand(CliCommand, declared_name='read-target'):
 
 
 @dataclass(frozen=True, kw_only=True)
-class PinThreadCliCommand(CliCommand, declared_name='pin-thread'):
-    help = 'Toggle thread pin in channel'
+class PinThreadCliCommand(CliCommand, declared_name="pin-thread"):
+    help = "Toggle thread pin in channel"
     multiple_targets = True
-    name: str = option('--name', target_bound=True)
-    channel: str = option('--channel', target_bound=True)
-    pinned: bool = option('--pinned', default=False, target_bound=True)
+    name: Annotated[
+        str, TargetBound(), Argument(flags=("--name",))
+    ]
+    channel: Annotated[
+        str, TargetBound(), Argument(flags=("--channel",))
+    ]
+    pinned: Annotated[
+        bool, TargetBound(), Argument(flags=("--pinned",))
+    ] = False
 
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog: CatalogDocument):

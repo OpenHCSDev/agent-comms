@@ -6,6 +6,7 @@ from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.registry_document import NoUserThread, RegistryDocument
 from agent_comms.thread_identity import UserThreadRole
+from agent_comms.thread_text import GivenThreadText
 
 
 def test_user_answer_follows_revisions_and_stays_out_of_wire_fields(tmp_path):
@@ -14,8 +15,8 @@ def test_user_answer_follows_revisions_and_stays_out_of_wire_fields(tmp_path):
     comms.registry.rename(human.name, 'renamed-human')
     assert comms.registry.user_thread().existing()[0].name == 'renamed-human'
     selected = comms.registry.user_thread().existing()[0]
-    comms.registry.register(replace(selected, title='current human title'))
-    assert comms.registry.user_thread().existing()[0].title == 'current human title'
+    comms.registry.register(replace(selected, title=GivenThreadText('current human title')))
+    assert comms.registry.user_thread().existing()[0].title == GivenThreadText('current human title')
     raw = FieldCodec.encode(comms.registry.store.read())
     assert '_human' not in raw
     assert RegistryDocument.from_wire(raw).user_thread().existing()[0].name == 'renamed-human'

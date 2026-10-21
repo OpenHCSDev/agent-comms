@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from .cli_options import JsonFlagRecord
 from .pi_vocabulary import HighThinkingLevel, ThinkingLevelField
+from .thread_model import DeclaredModel
 
 
 @dataclass(frozen=True)
@@ -12,5 +13,5 @@ class NativeThreadDefaults(JsonFlagRecord):
     """Creation bindings and CLI defaults borrow this declared selection."""
 
     value_flag: ClassVar[str] = "--native-settings"
-    model: str = "openai-codex/gpt-6.1-sol"
+    model: DeclaredModel = DeclaredModel("openai-codex/gpt-6.1-sol")
     thinking_level: ThinkingLevelField = HighThinkingLevel

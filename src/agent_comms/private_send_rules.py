@@ -51,10 +51,10 @@ class RegistryClaimCheck(RegistryIdentityCheck):
     """
 
     def model_matches(self) -> bool:
-        return self.expected.turn_lease is not None or super().model_matches()
+        return self.expected.turn_lease.leased or super().model_matches()
 
     def thinking_matches(self) -> bool:
-        return self.expected.turn_lease is not None or super().thinking_matches()
+        return self.expected.turn_lease.leased or super().thinking_matches()
 
 
 class RunningTurnRegistryCheck(RegistryClaimCheck):
@@ -241,7 +241,7 @@ class NativeAlreadyDecidedRule(ReservationRule):
     explanation = "The native triage input already has a verdict."
 
     def violated(self, check: NativeReservationCheck) -> bool:
-        return check.row.verdict is not None
+        return check.row.verdict.decided
 
 
 class NativeBindingRootRule(ReservationRule):

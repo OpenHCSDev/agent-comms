@@ -5,21 +5,23 @@ from __future__ import annotations
 import hashlib
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from dataclasses import field, dataclass
-from typing import TYPE_CHECKING, Final
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Final, Annotated
+
 
 from agent_comms.audience_manifest import FrozenAudience
 from agent_comms.bus_tables import BusCapability
 from agent_comms.response_acknowledgement import (
-    KeyedResponseAcknowledgement, _PRIVATE_WIRE_PREFIX, _canonical, has_private_wire_fields,
+    NoResponseAcknowledgement, ResponseAcknowledgement,
+    _PRIVATE_WIRE_PREFIX, _canonical, has_private_wire_fields,
 )
 
 from .delivery_policy import DeliveryPolicy
+from .errors import HumanInitialUnknownError, RelationViolationError
+from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text, WireName
 from .messages import Message
 from .wake_policy import RecipientDecision
 from .wire_record import MessageWireRecord
-from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text
-from .errors import HumanInitialUnknownError, RelationViolationError
 
 if TYPE_CHECKING:
     from .audience_manifest import FrozenAudience
@@ -75,7 +77,9 @@ class CommittedDelivery(MessageWireRecord):
     resolver_version: str
     policy_version: str
     manifest_codec: str = INITIAL_CODEC
-    acknowledgement: KeyedResponseAcknowledgement | None = field(default=None, metadata={"wire_name": 'receipt'})
+    acknowledgement: Annotated[
+        ResponseAcknowledgement, WireName("receipt")
+    ] = NoResponseAcknowledgement()
 
     def direct_for(self, recipient_lookup: str) -> bool:
         """Direct reply semantics and its original addressed incarnation agree."""
@@ -152,7 +156,7 @@ class CommittedDelivery(MessageWireRecord):
     def proved(
         cls, wire_root_id: str, message: Message, policy: DeliveryPolicy,
         decisions: tuple[RecipientDecision, ...],
-        acknowledgement: KeyedResponseAcknowledgement | None,
+        acknowledgement: ResponseAcknowledgement,
     ) -> CommittedDelivery:
         """The delivery a proved policy declares for its message."""
         raw = policy.initial
@@ -179,8 +183,8 @@ class CommittedDelivery(MessageWireRecord):
         from .private_bus_checkpoint import Addressed, DeliverySources, Replies, ResponseKeys
 
         yield from super().checkpoint_rows(offset, length, previous_sequence, claimed_after_seq)
-        if self.acknowledgement is not None:
-            yield ResponseKeys(self.acknowledgement.publication_key)
+        for key in self.acknowledgement.publication_keys():
+            yield ResponseKeys(key)
         yield DeliverySources(self.message.seq, self.message.message_id,
                               self.audience.sender_lookup, offset=offset, length=length)
         for recipient in self.audience.recipients:

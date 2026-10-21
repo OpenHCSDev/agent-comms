@@ -8,16 +8,17 @@ from collections import defaultdict
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Annotated
+
 
 from .channel_targets import ChannelTarget, Tag
 from .cli_result import CliResult
 from .declared_family import DeclaredFamily
 from .display_order import CreatedThreadSort, ThreadSort
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
-from .messages import MembershipChange
+from .field_codec import FieldCodec, CatalogExclude
 from .history_result import ChannelHistoryPageResult, EverythingHistoryPageResult, HistoryPageResult
+from .messages import MembershipChange
 from .read_basis import AllChannelDisplayScope, ChannelDisplayScope, MemberActivityDisplayScope
 from .tool_result import ToolResult
 
@@ -392,7 +393,7 @@ class ViewPredicate:
 class SavedView(ToolResult):
     """A named non-routable projection over authoritative channels or activity."""
 
-    name: str = field(metadata={"catalog_exclude": True})
+    name: Annotated[str, CatalogExclude()]
     kind: ViewKind
     predicate: ViewPredicate
     created_at: float = field(default_factory=time.time)

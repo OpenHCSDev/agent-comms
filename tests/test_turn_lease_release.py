@@ -7,7 +7,7 @@ from agent_comms.comms import wire
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.field_codec import FieldCodec
 from agent_comms.threads import Thread
-from agent_comms.turn_lease import FinishedTurnFence, NoFinishedTurn
+from agent_comms.turn_lease import FinishedTurnFence, NoFinishedTurn, NoTurnLease
 
 
 def test_old_lease_cannot_clear_same_id_after_delete_rebind(tmp_path):
@@ -46,4 +46,4 @@ def test_unattested_saved_turn_remains_data_without_a_lease(tmp_path, *, thread_
         FieldCodec.decode(Thread, FieldCodec.encode(retained))
     )
     assert restored.turn_record.read() == expected
-    assert restored.turn_lease is None
+    assert restored.turn_lease == NoTurnLease()

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import dataclasses
 import enum
 import importlib
 import io
@@ -16,7 +17,9 @@ import sys
 import tempfile
 import tokenize
 import tomllib
+import types
 import typing
+from typing import Annotated
 from abc import abstractmethod
 from collections import Counter
 from collections.abc import Callable, Iterator
@@ -25,12 +28,24 @@ from dataclasses import dataclass
 from functools import cache, cached_property, partial
 from pathlib import Path
 
-sys.path.insert(0, str(
-    Path(__file__).resolve().parents[1] / subprocess.check_output(
-        ["git", "config", "--file", str(Path(__file__).resolve().parents[1] / ".gitmodules"),
-         "--get", "submodule.src/agent_comms/skills/refactor-audit.path"], text=True,
-    ).strip() / "scripts"
-))
+sys.path.insert(
+    0,
+    str(
+        Path(__file__).resolve().parents[1]
+        / subprocess.check_output(
+            [
+                "git",
+                "config",
+                "--file",
+                str(Path(__file__).resolve().parents[1] / ".gitmodules"),
+                "--get",
+                "submodule.src/agent_comms/skills/refactor-audit.path",
+            ],
+            text=True,
+        ).strip()
+        / "scripts"
+    ),
+)
 
 import audit
 from audit.findings import Package as AuditPackage, ParsedModule as AuditModule, RawShape
@@ -278,6 +293,45 @@ class PerFileMeasure(CountedSource):
 
 class PerFileOccurrenceMeasure(PerFileMeasure, OccurrenceMeasure):
     """A per-node count, kept separately for each file."""
+
+
+class MetadataKeys(ast.NodeVisitor):
+    """The Python AST owns dispatch for literal and opaque metadata keys."""
+
+    def generic_visit(self, node: ast.AST) -> int:
+        return 1
+
+    def visit_Dict(self, node: ast.Dict) -> int:
+        return sum(typing.cast(int, self.visit(key)) if key else 1 for key in node.keys)
+
+    def visit_Constant(self, node: ast.Constant) -> int:
+        return int(isinstance(node.value, str))
+
+
+class StringFieldMetadata(PerFileOccurrenceMeasure):
+    """Dataclass instructions belong to typed annotations, not metadata dictionaries.
+
+    Imported aliases are resolved at this Python boundary. Dynamic rebinding is
+    outside this syntactic guard's proof scope, as with the existing import guards.
+    """
+
+    @staticmethod
+    def sites(tree: ast.AST, filename: str) -> Iterator[ast.AST]:
+        binding = DecoratorBinding.of(dataclasses.field, tree, filename)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and binding.marks(node.func):
+                yield node
+
+    @staticmethod
+    def occurrences(node: ast.AST) -> int:
+        metadata = typing.cast(
+            types.MemberDescriptorType, typing.cast(typing.Any, dataclasses.Field).metadata
+        ).__name__
+        return sum(
+            typing.cast(int, MetadataKeys().visit(keyword.value))
+            for keyword in typing.cast(ast.Call, node).keywords
+            if keyword.arg == metadata
+        )
 
 
 class CheckedRevision(Measure):
@@ -1444,7 +1498,7 @@ class AnyInTypeExpression(MroDispatch):
         members = [node.slice]
         if origin is typing.Literal:
             members = []  # Literal members are values, not types.
-        if origin is typing.Annotated:
+        if origin is Annotated:
             members = getattr(node.slice, "elts", members)[:1]  # The rest is metadata.
         for member in members:
             self.dispatch_sync(member)
@@ -1639,6 +1693,7 @@ class UncarriedRecordFormat(ChangeMeasure):
         uncarried = sum(before[name].version == form.version or not carried
                         for name, form in after.items() if name in before and before[name] != form)
         return {cls.__name__: 0}, {cls.__name__: uncarried}
+
 
 def git(repo: Path, *args: str, input: bytes = b"") -> bytes:
     return subprocess.check_output(["git", "-C", str(repo), *args], input=input, timeout=20)

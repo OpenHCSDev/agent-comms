@@ -8,6 +8,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.thread_text import SavedSessionFile
 from agent_comms.native_entries import CompactionEntry, ModelChangeEntry
 from agent_comms.channel_targets import ChannelTarget, CommandTarget, ThreadTarget
 from agent_comms.channels import ANY_CHANNEL
@@ -26,6 +27,9 @@ from agent_comms.presentation import CountedRead, UncountedRead
 from agent_comms.read_basis import NamedViewer
 from agent_comms.thread_management import ForkSpec
 from agent_comms.tool_caller import ThreadCaller
+from agent_comms.threads import ChosenModel, NextTurnConfiguration
+from agent_comms.thread_text import ForkedParent, GivenThreadText
+from agent_comms.thread_model import DeclaredModel
 
 
 def test_calling_thread_is_declared_by_owner_launch_environment():
@@ -171,7 +175,7 @@ class TestThreadOps:
         ]
         session_file.write_text("\n".join(json.dumps(record) for record in records) + "\n")
         wired.registry.declare(
-            wired.registry.new_thread(name='transcript-thread', tags=frozenset(), worktree=str(tmp_path), session_file=str(session_file))
+            wired.registry.new_thread(name='transcript-thread', tags=frozenset(), worktree=str(tmp_path), session_file=SavedSessionFile(str(session_file)))
         )
 
         events = wired.transcripts.thread_transcript_page("transcript-thread").events
@@ -197,7 +201,7 @@ class TestThreadOps:
             + "\n"
         )
         wired.registry.declare(
-            wired.registry.new_thread(name='compacted-thread', tags=frozenset(), worktree=str(tmp_path), session_file=str(session_file))
+            wired.registry.new_thread(name='compacted-thread', tags=frozenset(), worktree=str(tmp_path), session_file=SavedSessionFile(str(session_file)))
         )
 
         events = wired.transcripts.thread_transcript_page("compacted-thread").events
@@ -219,11 +223,11 @@ class TestThreadOps:
 
     def test_presence_uses_configured_model_with_runtime_context(self, wired):
         wired.threads.set_thread_configuration(
-            wired.registry.require("fixer"), model="configured/model"
+            wired.registry.require("fixer"), NextTurnConfiguration(model=ChosenModel(DeclaredModel('configured/model')))
         )
         wired.agents.observe_runtime_info("fixer", ContextUsageObservation(context_used=PiCount.from_wire(25)))
         wired.agents.observe_runtime_info(
-            "fixer", AgentInfo(model="observed/model", context_size=PiCount.from_wire(100))
+            "fixer", AgentInfo(model=DeclaredModel('observed/model'), context_size=PiCount.from_wire(100))
         )
         row = next(row.to_wire() for row in wired.views.who() if row.thread.name == "fixer")
         assert row["model"] == "configured/model"
@@ -232,12 +236,12 @@ class TestThreadOps:
 
     def test_configuration_names_the_resolved_model(self, wired):
         wired.agents.observe_runtime_info("fixer", ContextUsageObservation(context_used=PiCount.from_wire(25)))
-        wired.agents.observe_runtime_info("fixer", AgentInfo(model="observed/model", context_size=PiCount.from_wire(100)))
+        wired.agents.observe_runtime_info("fixer", AgentInfo(model=DeclaredModel('observed/model'), context_size=PiCount.from_wire(100)))
         answer = wired.configuration.answer("fixer")
         assert answer.model == "observed/model"
         assert answer.context_usage.label == "25/100 tokens (25.0%)"
         wired.threads.set_thread_configuration(
-            wired.registry.require("fixer"), model="configured/model"
+            wired.registry.require("fixer"), NextTurnConfiguration(model=ChosenModel(DeclaredModel('configured/model')))
         )
         answer = wired.configuration.answer("fixer")
         assert answer.model == "configured/model"
@@ -245,13 +249,13 @@ class TestThreadOps:
 
     def test_runtime_info_rejects_unknown_thread(self, wired):
         with pytest.raises(UnregisteredThreadError):
-            wired.agents.observe_runtime_info("ghost", AgentInfo(model="model"))
+            wired.agents.observe_runtime_info("ghost", AgentInfo(model=DeclaredModel('model')))
 
     def test_list_threads_shape(self, wired):
         rows = {row.thread.name: row for row in wired.views.list_threads()}
         assert set(rows) == {"PR111", "fixer"}
         assert rows["fixer"].status.declared_name == "running"
-        assert rows["fixer"].thread.parent == "PR111"
+        assert rows["fixer"].thread.parent == ForkedParent("PR111")
         assert rows["fixer"].pending.value == 0
 
     def test_list_active_only(self, wired):
@@ -295,10 +299,10 @@ class TestThreadOps:
         )
 
         assert attached.tags == frozenset({"auth"})
-        assert attached.parent == "PR111"
-        assert attached.task == "fix auth"
+        assert attached.parent == ForkedParent("PR111")
+        assert attached.task == GivenThreadText("fix auth")
         assert attached.process_identity == ProcessIdentity.capture(os.getpid())
-        assert attached.session_file == str(session_file.resolve())
+        assert attached.session_file == SavedSessionFile(str(session_file.resolve()))
         assert wired.registry.status("fixer").declared_name == "running"
 
 
@@ -334,7 +338,7 @@ class TestThreadOps:
         assert wired.registry.status("fixer").declared_name == "archived"
         assert not any(row.thread.name == "fixer" for row in wired.views.who())
         assert "fixer" not in wired.registry.active_threads()
-        assert [message.body for message in list(wired.views.history_page(CommandTarget.named("fixer"), viewer="PR111").messages)] == [
+        assert [message.body for message in list(wired.views.history_page(CommandTarget.named("fixer"), viewer=NamedViewer("PR111")).messages)] == [
             "kept after archive"
         ]
 
@@ -343,7 +347,7 @@ class TestThreadOps:
         references = tuple(message.reference for message in wired.bus.inbox("PR111", CommandTarget.named("fixer")))
         assert wired.messaging.acknowledge("PR111", references) == 1
         wired.agents.set_activity("PR111", ActivityState.WORKING, "renaming")
-        wired.agents.observe_runtime_info("PR111", AgentInfo(model="test/model"))
+        wired.agents.observe_runtime_info("PR111", AgentInfo(model=DeclaredModel('test/model')))
         wired.ledger.merge({"owner": "PR111", "members": ["PR111", "fixer"]}, author="PR111")
         monkeypatch.setenv("AGENT_COMMS_THREAD", "PR111")
 
@@ -354,9 +358,9 @@ class TestThreadOps:
         assert result.changed
         assert wired.registry.require("PR111").name == "planner"
         assert wired.registry.require("planner").tags == frozenset({"base"})
-        assert wired.registry.require("fixer").parent == "planner"
+        assert wired.registry.require("fixer").parent == ForkedParent("planner")
         assert wired.agents.activity.current_for(("planner",), active=frozenset({"planner"}))["planner"].detail == "renaming"
-        assert wired.agents.agent_info_of("planner").model == "test/model"
+        assert wired.agents.agent_info_of("planner").model == DeclaredModel("test/model")
         assert wired.ledger.read().entries["owner"] == "planner"
         assert wired.bus.pending_count("planner", CommandTarget.named("fixer")) == 0
 
@@ -365,7 +369,7 @@ class TestThreadOps:
         assert [message.body for message in wired.bus.inbox("planner", CommandTarget.named("fixer"))] == [
             "old alias routes"
         ]
-        history = list(wired.views.history_page(CommandTarget.named("fixer"), viewer="PR111").messages)
+        history = list(wired.views.history_page(CommandTarget.named("fixer"), viewer=NamedViewer("PR111")).messages)
         assert [message.body for message in history] == [
             "before rename",
             "old alias routes",
@@ -389,7 +393,7 @@ class TestThreadOps:
         assert wired.threads.rename_self("pr17", caller=ThreadCaller("PR111")).current == "pr17"
         assert wired.threads.rename_self("PR111", caller=ThreadCaller("PR111")).current == "PR111"
         assert wired.registry.snapshot().aliases == {"pr17": "PR111"}
-        assert wired.registry.require("fixer").parent == "PR111"
+        assert wired.registry.require("fixer").parent == ForkedParent("PR111")
 
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
         with pytest.raises(RelationViolationError):
@@ -467,11 +471,11 @@ class TestThreadOps:
 class TestFork:
     def test_fork_requires_parent_session(self, wired):
         with pytest.raises(ValueError):
-            wired.threads.create(ForkSpec.from_task(name="child", parent="PR111", project="/project", model="test/model", thinking_level=HighThinkingLevel, task="t"))
+            wired.threads.create(ForkSpec.from_task(name="child", parent="PR111", project="/project", model=DeclaredModel('test/model'), thinking_level=HighThinkingLevel, task="t"))
 
     def test_fork_fail_closed_unknown_parent(self, wired):
         with pytest.raises(UnregisteredThreadError):
-            wired.threads.create(ForkSpec.from_task(name="child", parent="ghost", project="/project", model="test/model", thinking_level=HighThinkingLevel, task="t"))
+            wired.threads.create(ForkSpec.from_task(name="child", parent="ghost", project="/project", model=DeclaredModel('test/model'), thinking_level=HighThinkingLevel, task="t"))
 
 
 class TestLedgerOps:
@@ -507,7 +511,7 @@ class TestLedgerOps:
                     + "\n"
                 )
         wired.registry.declare(
-            wired.registry.new_thread(name='large', tags=frozenset(), worktree=str(tmp_path), session_file=str(path))
+            wired.registry.new_thread(name='large', tags=frozenset(), worktree=str(tmp_path), session_file=SavedSessionFile(str(path)))
         )
         page = wired.transcripts.thread_transcript_page("large")
         assert page.has_older
@@ -576,10 +580,10 @@ class TestReDeclarationPreservesProvenance:
 
     def test_missing_session_file_inherits_previous(self, wired, tmp_path):
         wired.registry.declare(
-            wired.registry.new_thread(name='PR111', tags=frozenset({'base'}), worktree='/tmp/wt1', session_file=str(tmp_path / 's.json'))
+            wired.registry.new_thread(name='PR111', tags=frozenset({'base'}), worktree='/tmp/wt1', session_file=SavedSessionFile(str(tmp_path / 's.json')))
         )
         wired.registry.declare(wired.registry.new_thread(name='PR111', tags=frozenset({'base'}), worktree='/tmp/wt1'))
-        assert wired.registry.require("PR111").session_file == str(tmp_path / "s.json")
+        assert wired.registry.require("PR111").session_file == SavedSessionFile(str(tmp_path / "s.json"))
 
     def test_fresh_declaration_is_unaffected(self, wired):
         wired.registry.declare(wired.registry.new_thread(name='fresh', tags=frozenset(), worktree='/wt'))

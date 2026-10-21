@@ -269,12 +269,8 @@ class InitialWrites(PrivateWrites):
             guard = PrivateRegistryGuard(self._registry.store.path, root_id)
             guard.create_pending()
             self.log.write_metadata_unlocked(
-                WireMetadata(
-                    last_seq=previous,
-                    claimed_after_seq=previous,
-                    writer_protocol_version=1,
-                    wire_root_id=root_id,
-                    claim_envelopes_version=1,
+                WireMetadata.private_root(
+                    root_id, claims=True, last_seq=previous, claimed_after_seq=previous,
                 )
             )
             install_private_bus_checkpoint(self.log, _bus_locked=True)

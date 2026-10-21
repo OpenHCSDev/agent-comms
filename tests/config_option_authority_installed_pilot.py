@@ -21,6 +21,9 @@ from agent_comms.comms import Comms
 from agent_comms.pi_vocabulary import OffThinkingLevel, HighThinkingLevel
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.threads import Thread
+from agent_comms.native_arguments import GivenArguments, GivenBinary
+from agent_comms.thread_text import GivenThreadText
+from agent_comms.thread_model import DeclaredModel
 
 
 def thinking(options):
@@ -115,10 +118,10 @@ async def run(stage, package, models, ui, menu_contention=False):
     rows = []
     for index, model in enumerate(models):
         name = f'configuration-{index}'
-        service.registry.declare(service.registry.new_thread(name, frozenset(), str(project), model=model, thinking_level=OffThinkingLevel, task='Private provider-free configuration acceptance; never send a prompt'))
+        service.registry.declare(service.registry.new_thread(name, frozenset(), str(project), model=DeclaredModel(model), thinking_level=OffThinkingLevel, task=GivenThreadText('Private provider-free configuration acceptance; never send a prompt')))
         service.owners.start(
-            name, agent_bin=str(Path(sys.executable).with_name('pi-comms-native')),
-            agent_args=[],
+            name, agent_bin=GivenBinary(str(Path(sys.executable).with_name('pi-comms-native'))),
+            agent_args=GivenArguments(()),
         )
         owner = service.registry.require(name)
         try:
@@ -139,7 +142,7 @@ async def run(stage, package, models, ui, menu_contention=False):
                     continue
                 async with asyncio.timeout(15):
                     await proxy.request('set_config_option', config_id='model', value=model)
-                assert service.registry.require(name).model == model
+                assert service.registry.require(name).model == DeclaredModel(model)
                 option = thinking(ready['configOptions'])
                 assert option['currentValue'] == 'off'
                 assert service.registry.require(name).thinking_level is OffThinkingLevel
@@ -170,7 +173,7 @@ async def run(stage, package, models, ui, menu_contention=False):
                 async with asyncio.timeout(15):
                     final = await refreshed.subscribe()
                 assert thinking(final['configOptions'])['currentValue'] == 'high'
-                assert service.registry.require(name).model == model
+                assert service.registry.require(name).model == DeclaredModel(model)
                 assert not service.registry.require(name).active_turn.executing
                 assert not list((service.root / 'native-sessions').rglob('*.jsonl'))
                 rows.append({

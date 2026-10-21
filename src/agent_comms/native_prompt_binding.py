@@ -11,9 +11,9 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Annotated, TYPE_CHECKING
 
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.assignments import WakeAssignment
@@ -26,17 +26,18 @@ from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .locked_store import DurableFile, SQLiteFile
 from .native_entries import NativeEvidenceRead
 from .native_input_owner import ParticipantOwner
-from .native_input_record import NativeInputExecution, NativeInputRecord
+from .native_input_record import NativeColumn, NativeInputExecution, NativeInputRecord
 from .native_pi import read_tracked_input_commitment
 from .native_runtime_input import NativeRuntimeInput
 from .private_send_rules import NativeIdentityCheck
 from .private_sidecar import create_sidecar_file, native_request_digest, sidecar_connection
 from .reservation_rules import ReservationViolationError
 from .threads import Thread
-from .typed_table import Column, TypedRow, TypedTable
+from .typed_table import Column, IntegerStorage, TextStorage, TypedRow, TypedTable
 
 if TYPE_CHECKING:
     from .private_send_stage import NativeSendStage
+
 
 def binding_store_path(store: Coordination) -> Path:
     """Sidecar store beside the private coordination database."""
@@ -46,26 +47,24 @@ def binding_store_path(store: Coordination) -> Path:
 @dataclass(frozen=True, slots=True)
 class PromptBinding(DurableFile, SQLiteFile, NativeInputRecord, TypedTable, PrivateRuntimeSchema):
     filename = "native_prompt_bindings.sqlite3"
+
     @classmethod
     def install(cls, store) -> None:
         install_prompt_binding_schema(store)
 
-    input_id: str = field(
-        metadata={
-            "sql": Column(
-                primary_key=True, check="length(input_id)=32 AND input_id NOT GLOB '*[^0-9a-f]*'"
-            )
-        }
-    )
+    input_id: Annotated[
+        str,
+        Column(primary_key=True, check="length(input_id)=32 AND input_id NOT GLOB '*[^0-9a-f]*'"),
+    ]
     stage: type[NativeInputExecution]
-    execution_id: str | None
-    attempt_ordinal: int | None
+    execution_id: Annotated[NativeColumn, Column(storage=TextStorage, nullable=True)]
+    attempt_ordinal: Annotated[NativeColumn, Column(storage=IntegerStorage, nullable=True)]
     owner_lookup: str
     owner_thread: str
-    owner_generation: int = field(metadata={"sql": Column(check="owner_generation>0")})
+    owner_generation: Annotated[int, Column(check="owner_generation>0")]
     wire_root_id: str
     expected_prompt_digest: str
-    bound_at_ms: int = field(metadata={"sql": Column(check="bound_at_ms>0")})
+    bound_at_ms: Annotated[int, Column(check="bound_at_ms>0")]
 
     def __post_init__(self):
         # Original durable SQL is validated on acquisition, not at each caller.

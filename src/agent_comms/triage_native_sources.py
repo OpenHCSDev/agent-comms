@@ -4,7 +4,8 @@ Full inputs derive membership from existing execution claims. This relation is
 only for triage, before an execution exists. It contains no handling state.
 """
 
-from dataclasses import dataclass, field
+from typing import Annotated
+from dataclasses import dataclass
 
 from .coordination_errors import IdentityConflict
 from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
@@ -12,8 +13,12 @@ from .typed_table import Column, TypedTable
 
 
 @dataclass(frozen=True)
-class TriageNativeSources(NativeRuntimeTable, TypedTable, declared_name="native_runtime_triage_sources"):
-    input_id: str = field(metadata={"sql": Column(primary_key=True, references=(NativeRuntimeInput, "input_id"))})
+class TriageNativeSources(
+    NativeRuntimeTable, TypedTable, declared_name="native_runtime_triage_sources"
+):
+    input_id: Annotated[
+        str, Column(primary_key=True, references=(NativeRuntimeInput, "input_id"))
+    ]
     assignment_ids: tuple[str, ...]
 
     without_rowid = True
@@ -50,4 +55,3 @@ class TriageNativeSources(NativeRuntimeTable, TypedTable, declared_name="native_
             "BEGIN SELECT RAISE(ABORT,'triage source is absent, belongs to another owner or was reserved'); END"
         )
         return guards
-

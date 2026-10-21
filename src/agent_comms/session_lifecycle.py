@@ -38,8 +38,10 @@ from .config_options import SessionConfigOptions
 from .native_arguments import NativeArguments
 from .runtime import RuntimeProxy, RuntimeServer
 from .session_effects import SessionEffects
+from .thread_model import ThreadModel
 from .threads import Thread
-from .thread_identity import NO_THREAD_TEXT, AcpThreadRole, ThreadText
+from .thread_identity import AcpThreadRole
+from .thread_text import NoThreadText, ThreadText
 from .registry_document import RegistryEntry
 from .transcript_updates import TranscriptReplay
 from .owner_protocol import IncompatibleOwner, IncompatibleOwnerError
@@ -151,7 +153,7 @@ class SessionLifecycle:
             Path(cwd).name,
             tags=frozenset({"acp"}),
             worktree=cwd,
-            model=self.agent_args.model,
+            model=ThreadModel.selected_by(self.agent_args),
             thinking_level=self.agent_args.thinking,
             auto_title_pending=True,
             role=AcpThreadRole,
@@ -312,7 +314,7 @@ class SessionLifecycle:
 
     @boundary_decoder
     async def publish_metadata(
-        self, session_id: str, *, title: ThreadText = NO_THREAD_TEXT,
+        self, session_id: str, *, title: ThreadText = NoThreadText(),
     ) -> None:
         """Encode the thread's title once for the ACP metadata boundary."""
         await self.runtime.session_update(

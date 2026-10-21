@@ -2,16 +2,17 @@
 
 import sqlite3
 from dataclasses import dataclass, field, replace
+from typing import Annotated, ClassVar, Type
 
 import pytest
-from typing import Type
 
-from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.field_codec import FieldCodec, MalformedRecord, NullMember
 from agent_comms.messages import InfoKind, MessageKind
 from agent_comms.typed_table import (
     Column,
     ExactStorage,
     ForeignKey,
+    Generated,
     Index,
     IntegerStorage,
     SqlStorage,
@@ -23,14 +24,14 @@ from agent_comms.typed_table import (
 
 @dataclass(frozen=True)
 class TableParentRow(TypedTable):
-    key: str = field(metadata={"sql": Column(primary_key=True)})
+    key: Annotated[str, Column(primary_key=True)]
     count: int = 0
     unique = (("key", "count"),)
 
 
 @dataclass(frozen=True)
 class TableChildRow(TypedTable):
-    key: str = field(metadata={"sql": Column(primary_key=True)})
+    key: Annotated[str, Column(primary_key=True)]
     parent: str
     enabled: bool
     detail: tuple[str, ...]
@@ -125,13 +126,13 @@ def test_index_owns_unique_partial_creation():
 def test_adding_an_index_renames_no_other_index():
     @dataclass(frozen=True)
     class IndexedRow(TypedTable):
-        name: str = field(metadata={'sql': Column(primary_key=True)})
+        name: Annotated[str, Column(primary_key=True)]
         count: int
         indexes = (Index(('count',)), Index(('name', 'count'), where='count > 0'))
 
     @dataclass(frozen=True)
     class MoreIndexedRow(TypedTable, declared_name=IndexedRow.declared_name + '_more'):
-        name: str = field(metadata={'sql': Column(primary_key=True)})
+        name: Annotated[str, Column(primary_key=True)]
         count: int
         indexes = (Index(('name',), unique=True), *IndexedRow.indexes)
 
@@ -147,22 +148,13 @@ def test_adding_an_index_renames_no_other_index():
 def test_new_row_declaration_needs_no_other_edit():
     @dataclass(frozen=True)
     class AddedTableRow(TypedTable):
-        label: str = field(metadata={"sql": Column(unique=True, index=True)})
+        label: Annotated[str, Column(unique=True, index=True)]
         child: TableChildRow
         event: Type[MessageKind] = InfoKind
         representation: type[SqlStorage] = IntegerStorage
-        exact: int = field(default=7, metadata={"sql": Column(storage=ExactStorage)})
-        ordinal: int | None = field(
-            default=None,
-            compare=False,
-            metadata={"sql": Column(primary_key=True, auto_increment=True)},
-        )
-        label_size: int | None = field(
-            default=None,
-            init=False,
-            compare=False,
-            metadata={"sql": Column(generated="length(label)")},
-        )
+        exact: Annotated[int, Column(storage=ExactStorage)] = 7
+        ordinal: Annotated[int | None, Column(primary_key=True, auto_increment=True)] = field(default=None, compare=False)
+        label_size: ClassVar[Generated] = Generated(int, Column(generated="length(label)"))
 
     @dataclass(frozen=True)
     class Projection(TypedRow):
@@ -175,7 +167,9 @@ def test_new_row_declaration_needs_no_other_edit():
         value.insert(db)
         assert AddedTableRow.select(db) == [value]
         stored = AddedTableRow.one(db, label="new")
-        assert stored.ordinal == 1 and stored.label_size == 3
+        assert stored.ordinal == 1 and AddedTableRow.count(db, label_size=3) == 1
+        with pytest.raises(AttributeError):
+            stored.label_size
         assert stored.representation is IntegerStorage and stored.event is InfoKind
         assert AddedTableRow.count(db, exact=7) == 1
         with pytest.raises(ValueError):
@@ -201,6 +195,37 @@ def test_new_row_declaration_needs_no_other_edit():
             AddedTableRow.update(db, where="1", child=FieldCodec.decode(
                 TableChildRow, {TableChildRow.family_discriminator: TableChildRow.declared_name}
             ))
+
+
+@dataclass(frozen=True)
+class NoTableNote(NullMember):
+    """The row was stored without a note."""
+
+
+def test_null_member_column_stores_sql_null():
+    @dataclass(frozen=True)
+    class NotedTableRow(TypedTable):
+        key: Annotated[str, Column(primary_key=True)]
+        note: str | NoTableNote = field(default_factory=NoTableNote)
+
+    with sqlite3.connect(":memory:") as db:
+        NotedTableRow.create(db)
+        assert '"note" TEXT,' in NotedTableRow.ddl()[0] + ","
+        NotedTableRow("silent").insert(db)
+        NotedTableRow("said", "hello").insert(db)
+        assert db.execute("SELECT key FROM noted_table WHERE note IS NULL").fetchall() == [("silent",)]
+        assert NotedTableRow.one(db, key="silent") == NotedTableRow("silent")
+        assert NotedTableRow.one(db, key="said").note == "hello"
+
+
+def test_generated_column_is_declared_by_the_table_not_a_record_field():
+    @dataclass(frozen=True)
+    class FieldGeneratedTableRow(TypedTable, declared_name=None):
+        label: str
+        label_size: Annotated[int, Column(generated="length(label)")] = field(init=False)
+
+    with pytest.raises(TypeError):
+        FieldGeneratedTableRow.ddl()
 
 
 def test_declared_values_and_partial_insertions_share_the_sqlite_boundary():

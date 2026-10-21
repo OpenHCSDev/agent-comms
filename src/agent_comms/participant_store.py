@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from typing import Annotated
+from dataclasses import dataclass
 
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
@@ -16,13 +17,15 @@ from agent_comms.coordination_results import AlreadyApplied, Applied
 from agent_comms.coordination_session import CoordinationSession
 from agent_comms.coordination_tables.executions import (
     CurrentExecutions,
+    NoPointedAttempt,
+    NoPointedExecution,
 )
 from agent_comms.coordination_tables.participants import (
     OwnerGenerations,
     ParticipantAliases,
     Participants,
 )
-from agent_comms.field_codec import MalformedRecord
+from agent_comms.field_codec import MalformedRecord, WireName
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,7 +42,7 @@ class ParticipantSnapshot:
     committed: bool
     aliases: tuple[str, ...]
     owner_thread: str
-    participant_generation: int = field(metadata={"wire_name": "generation"})
+    participant_generation: Annotated[int, WireName("generation")]
     pointer: CurrentExecutions
 
     @property
@@ -119,7 +122,8 @@ class ParticipantStore:
                 db
             )
             CurrentExecutions(
-                owner_lookup=lookup, execution_id=None, attempt_ordinal=None, pointer_revision=0
+                owner_lookup=lookup, execution_id=NoPointedExecution(), attempt_ordinal=NoPointedAttempt(),
+                pointer_revision=0,
             ).insert(db)
             return Applied(self.get(lookup))
 

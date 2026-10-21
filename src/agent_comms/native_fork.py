@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import os
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
+from typing import Annotated, ClassVar
+
+from agent_comms import field_codec
 
 from .child_process import ChildResult, SignaledOutcome, TimedOutOutcome
 from .launch_runtime import LaunchRuntime
@@ -58,8 +60,7 @@ class ForkSessionHelper(PiHelper):
 
 @dataclass(frozen=True, kw_only=True)
 class RuntimeForkRequest(ForkSessionRequest):
-    runtime: LaunchRuntime = field(metadata={"wire_exclude": True})
-
+    runtime: Annotated[LaunchRuntime, field_codec.WireExclude()]
 
     @property
     def launch_runtime(self) -> LaunchRuntime:

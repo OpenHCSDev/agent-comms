@@ -6,7 +6,9 @@ import sqlite3
 from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Annotated
+
+from agent_comms import field_codec
 
 from .channel_targets import CommandTarget
 from .errors import RelationViolationError
@@ -27,7 +29,7 @@ from .message_reference import MessageReference
 from .messages import Message
 from .threads import Thread
 from .tool_result import ToolResult
-from .typed_table import Column, DurableTables, Index, TypedStore, TypedTable, sql_literal
+from .typed_table import Column, DurableTables, Generated, Index, TypedStore, TypedTable, sql_literal
 
 if TYPE_CHECKING:
     from .channel_input_batch import SingleInputBatch
@@ -42,11 +44,16 @@ class DeliveryOverview(ToolResult):
     against the owner."""
 
     inputs: tuple[UnresolvedInput, ...]
-    historical_count: int = field(metadata={"wire_name": "historicalCount"})
-    dismissed_historical_count: int = field(metadata={"wire_name": "dismissedHistoricalCount"})
-    historical_inputs: tuple[HistoricalInput, ...] = field(
-        metadata={"wire_name": "historicalInputs"})
-    current_scope: type[InputDeliveryScope] = field(metadata={"wire_name": "currentScope"})
+    historical_count: Annotated[int, field_codec.WireName("historicalCount")]
+    dismissed_historical_count: Annotated[
+        int, field_codec.WireName("dismissedHistoricalCount")
+    ]
+    historical_inputs: Annotated[
+        tuple[HistoricalInput, ...], field_codec.WireName("historicalInputs")
+    ]
+    current_scope: Annotated[
+        type[InputDeliveryScope], field_codec.WireName("currentScope")
+    ]
 
 
 @dataclass(frozen=True, slots=True)
@@ -177,16 +184,21 @@ def _unresolved_kinds() -> str:
 class InputDispositionRow(TypedTable):
     """One stored input; its lookup columns are generated from the stored row."""
 
-    key: str = field(metadata={"sql": Column(primary_key=True)})
+    key: Annotated[str, Column(primary_key=True)]
     attempt: StoredInput
-    owner: str = field(init=False, default=None, compare=False, repr=False, metadata={
-        "sql": Column(generated="json_extract(attempt,'$.owner')")})
-    turn_id: str | None = field(init=False, default=None, compare=False, repr=False, metadata={
-        "sql": Column(generated="json_extract(attempt,'$.turn_id')")})
-    sequence: int | None = field(init=False, default=None, compare=False, repr=False, metadata={
-        "sql": Column(generated="json_extract(attempt,'$.sequence')")})
-    unresolved: bool = field(init=False, default=None, compare=False, repr=False, metadata={
-        "sql": Column(generated=f"json_extract(attempt,'$.kind') IN {_unresolved_kinds()}")})
+    owner: ClassVar[Generated] = Generated(str, Column(generated="json_extract(attempt,'$.owner')"))
+    turn_id: ClassVar[Generated] = Generated(
+        str,
+        Column(generated="json_extract(attempt,'$.turn_id')", nullable=True),
+    )
+    sequence: ClassVar[Generated] = Generated(
+        int,
+        Column(generated="json_extract(attempt,'$.sequence')", nullable=True),
+    )
+    unresolved: ClassVar[Generated] = Generated(
+        bool,
+        Column(generated=f"json_extract(attempt,'$.kind') IN {_unresolved_kinds()}"),
+    )
     checks = ("key = json_extract(attempt,'$.key')",)
     indexes = (
         Index(("owner", "unresolved")),

@@ -6,20 +6,32 @@ import math
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from dataclasses import Field, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, Annotated
+
 
 from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
-from .field_codec import FieldCodec, MalformedRecord
+from .field_codec import (
+    FieldCodec,
+    MalformedRecord,
+    FieldPlan,
+    SlicePolicy,
+    WireName,
+    WireRequired,
+)
 from .registration_change import (
     InitialRegistration,
     RegistrationChange,
     UpdatedRegistration,
 )
 from .registry_provenance import (
-    DeletedThread, RegisteredRecipient, RegistryNames, RegistryProvenance, RetiredRecipient,
+    DeletedThread,
+    RegisteredRecipient,
+    RegistryNames,
+    RegistryProvenance,
+    RetiredRecipient,
 )
 from .restart_refusals import (
     OwnerBusyRefusal,
@@ -27,7 +39,11 @@ from .restart_refusals import (
     OwnerGenerationChangedRefusal,
 )
 from .thread_identity import (
-    ClaimedIdentity, GenerationCounter, OwnerIdentity, RecordedThreadIncarnation, TurnIdentity,
+    ClaimedIdentity,
+    GenerationCounter,
+    OwnerIdentity,
+    RecordedThreadIncarnation,
+    TurnIdentity,
 )
 from .thread_presentation import ThreadOwnerBinding
 from .thread_status import (
@@ -35,6 +51,7 @@ from .thread_status import (
     StoppedThreadStatus,
     ThreadStatus,
 )
+from .thread_text import ForkedParent, NoParent
 from .threads import Thread
 from .turn_lease import FinishedTurnFence, NoFinishedTurn, TurnCompletion, TurnLeaseFence
 
@@ -168,16 +185,18 @@ class ThreadSlice[Value](ABC):
         """A copy an edit can change without changing ``value``."""
 
     @staticmethod
-    def of(declared: Field) -> type[ThreadSlice]:
-        kind: type[ThreadSlice] = declared.metadata["thread_slice"]
-        return kind
+    def of(plan: FieldPlan) -> type[ThreadSlice]:
+        for policy in SlicePolicy.single(plan.annotation):
+            if issubclass(policy.value, ThreadSlice):
+                return policy.value
+        raise TypeError(f"{plan.name} declares no thread slice")
 
     @staticmethod
     def required[Document: type](document: Document) -> Document:
         """Refuse, at class definition, a document field without a slice kind."""
-        for declared, _ in FieldCodec.record_fields(document):
-            if not issubclass(declared.metadata.get("thread_slice", type), ThreadSlice):
-                raise TypeError(f"{document.__name__}.{declared.name} declares no thread slice")
+        for plan in FieldCodec.field_plans(document):
+            if plan.declared.init and plan.records:
+                ThreadSlice.of(plan)
         return document
 
 
@@ -232,18 +251,27 @@ class WholeDocumentValue(ThreadSlice[int]):
 @ThreadSlice.required
 @dataclass(slots=True)
 class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
-    version: Literal[1] = field(
-        default=1, metadata={"thread_slice": WholeDocumentValue, "wire_required": True})
-    threads: dict[str, Thread] = field(default_factory=dict, metadata={"thread_slice": OwnRow})
-    statuses: dict[str, ThreadStatus] = field(
-        default_factory=dict, metadata={"thread_slice": OwnRow})
-    last_seen: dict[str, float] = field(default_factory=dict, metadata={"thread_slice": OwnRow})
-    aliases: dict[str, str] = field(default_factory=dict, metadata={"thread_slice": AliasesOf})
-    owners: GenerationCounter = field(
-        default_factory=GenerationCounter, metadata={"thread_slice": GenerationOf})
-    claims: GenerationCounter = field(
-        default_factory=GenerationCounter,
-        metadata={"wire_name": 'admissions', "thread_slice": GenerationOf})
+    version: Annotated[
+        Literal[1], SlicePolicy(WholeDocumentValue), WireRequired()
+    ] = 1
+    threads: Annotated[dict[str, Thread], SlicePolicy(OwnRow)] = field(
+        default_factory=dict
+    )
+    statuses: Annotated[dict[str, ThreadStatus], SlicePolicy(OwnRow)] = field(
+        default_factory=dict
+    )
+    last_seen: Annotated[dict[str, float], SlicePolicy(OwnRow)] = field(
+        default_factory=dict
+    )
+    aliases: Annotated[dict[str, str], SlicePolicy(AliasesOf)] = field(
+        default_factory=dict
+    )
+    owners: Annotated[GenerationCounter, SlicePolicy(GenerationOf)] = field(
+        default_factory=GenerationCounter
+    )
+    claims: Annotated[
+        GenerationCounter, WireName("admissions"), SlicePolicy(GenerationOf)
+    ] = field(default_factory=GenerationCounter)
 
     _human: UserThreadLookup[str] = field(init=False, repr=False, compare=False)
 
@@ -261,8 +289,9 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         return replace(
             self,
             **{
-                declared.name: ThreadSlice.of(declared).copy(getattr(self, declared.name))
-                for declared, _ in FieldCodec.record_fields(cast(type, type(self)))
+                plan.name: ThreadSlice.of(plan).copy(getattr(self, plan.name))
+                for plan in FieldCodec.field_plans(type(self))
+                if plan.declared.init and plan.records
             },
         )
 
@@ -305,8 +334,11 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         thread's declaration is neither decoded nor validated here.
         """
         try:
-            keyed = [(ThreadSlice.of(declared), key)
-                     for declared, key in FieldCodec.record_fields(cast(type, cls))]
+            keyed = [
+                (ThreadSlice.of(plan), plan.key)
+                for plan in FieldCodec.field_plans(cls)
+                if plan.declared.init and plan.records
+            ]
             canonical = name
             for kind, key in keyed:
                 canonical = kind.canonical(raw[key], canonical)
@@ -318,8 +350,11 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
     @classmethod
     def thread_rows(cls) -> tuple[str, ...]:
         """The sections that hold one row per thread name."""
-        return tuple(declared.name for declared, _ in FieldCodec.record_fields(cast(type, cls))
-                     if ThreadSlice.of(declared) is OwnRow)
+        return tuple(
+            plan.name
+            for plan in FieldCodec.field_plans(cls)
+            if plan.declared.init and plan.records and ThreadSlice.of(plan) is OwnRow
+        )
 
     @classmethod
     def from_wire(cls, raw: dict, earlier: tuple[dict, RegistryDocument] | None = None
@@ -482,8 +517,8 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         self.set_status(new_name, status)
         self.last_seen[new_name] = last_seen
         for child_name, child in tuple(self.threads.items()):
-            if child.parent == canonical:
-                self.threads[child_name] = replace(child, parent=new_name)
+            if child.parent.named(canonical):
+                self.threads[child_name] = replace(child, parent=ForkedParent(new_name))
         for alias, target in tuple(self.aliases.items()):
             if target == canonical:
                 self.aliases[alias] = new_name
@@ -570,10 +605,10 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         """Remove a declaration and atomically detach its surviving children."""
         name = self.require(name).name
         detached = tuple(
-            sorted(child.name for child in self.threads.values() if child.parent == name)
+            sorted(child.name for child in self.threads.values() if child.parent.named(name))
         )
         for child_name in detached:
-            self.threads[child_name] = replace(self.threads[child_name], parent=None)
+            self.threads[child_name] = replace(self.threads[child_name], parent=NoParent())
         if self.status(name).active:
             self.owners.advance(name)
         self.advance_claim(name)

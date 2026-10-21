@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Self
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Annotated, Self
 
-from ..field_codec import NullMember, RecordMember, SubclassUnion
+from ..field_codec import NullMember, RecordMember, SubclassUnion, WireName
 from ..goal_states import GoalState
-from ..thread_identity import ThreadText
+from ..thread_text import ThreadText
 
 if TYPE_CHECKING:
     from ..goal_management import Goals
@@ -25,7 +25,7 @@ class NoWakeGoalContext(NullMember, WakeGoalValue):
 @dataclass(frozen=True)
 class WakeGoalContext(RecordMember, WakeGoalValue):
     text: str
-    state: GoalState = field(metadata={"wire_name": "status"})
+    state: Annotated[GoalState, WireName("status")]
     progress: str
 
 

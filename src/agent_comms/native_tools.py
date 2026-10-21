@@ -6,10 +6,11 @@ import json
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Annotated, Literal
+
 
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, NullMember, WireContext, WireOmitDefault
 from .native_tool_call import CodingCall, SelectedToolDenied
 from .recorded_time import EventTime
 from .storage_rules import WriteStorageEffect, physical_path, shell_storage_effects
@@ -18,6 +19,11 @@ from .tool_declaration import EditCall, ReplacementEdit, ToolDeclaration, one_li
 if TYPE_CHECKING:
     from .pi_payloads import PiToolResult
     from .turn_goal_permission import TurnGoalPermission
+
+
+@dataclass(frozen=True, slots=True)
+class UnsuppliedArgument(NullMember):
+    """The model left this optional tool argument out; Pi applies its own default."""
 
 
 class NativeToolDeclaration(ToolDeclaration):
@@ -50,7 +56,7 @@ class NativeToolDeclaration(ToolDeclaration):
 class NativeExecutableTool(NativeToolDeclaration, CodingCall):
     """A decoded tool is the live call; runtime fields are not model arguments."""
 
-    call_id: str = field(metadata={"wire_context": True})
+    call_id: Annotated[str, WireContext()]
     claim: ClassVar[None] = None
 
     def allowed_claim(self) -> FileClaimPath | None:
@@ -118,8 +124,7 @@ class PathTool:
 class PatternSearchTool:
     acp_kind = "search"
     pattern: str
-    path: str | None = field(
-        default=None, metadata={"wire_omit_default": True})
+    path: Annotated[str | UnsuppliedArgument, WireOmitDefault()] = UnsuppliedArgument()
 
     def reads(self) -> str:
         return self.pattern
@@ -149,8 +154,8 @@ class CodingTool(ArgumentTool, NativeExecutableTool):
 class ReadTool(PathTool, CodingTool):
     acp_kind = "read"
     label = "Read"
-    offset: float | None = field(default=None, metadata={"wire_omit_default": True})
-    limit: float | None = field(default=None, metadata={"wire_omit_default": True})
+    offset: Annotated[float | UnsuppliedArgument, WireOmitDefault()] = UnsuppliedArgument()
+    limit: Annotated[float | UnsuppliedArgument, WireOmitDefault()] = UnsuppliedArgument()
 
     def _parse_resource(self) -> None:
         return None
@@ -161,7 +166,7 @@ class BashTool(CodingTool):
     acp_kind = "execute"
     label = "Run"
     command: str
-    timeout: float | None = field(default=None, metadata={"wire_omit_default": True})
+    timeout: Annotated[float | UnsuppliedArgument, WireOmitDefault()] = UnsuppliedArgument()
 
     def reads(self) -> str:
         return self.command

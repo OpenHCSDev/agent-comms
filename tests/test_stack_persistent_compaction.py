@@ -26,6 +26,7 @@ from agent_comms.comms import wire
 from agent_comms.pi_vocabulary import ManualCompactionReason
 from agent_comms.launch_runtime import RestartEnvironment
 from agent_comms.runtime import socket_path
+from agent_comms.native_arguments import GivenArguments, GivenBinary
 from delivery_owner_fixture import canonical_agent
 
 
@@ -190,15 +191,8 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
         comms = wire(root / "wire")
         owner = canonical_agent(
             comms,
-            agent_bin=native,
-            agent_args=[
-                "--provider",
-                "openrouter",
-                "--model",
-                "z-ai/glm-5.3-flash",
-                "--thinking",
-                "off",
-            ],
+            agent_bin=GivenBinary(native),
+            agent_args=GivenArguments(("--provider", "openrouter", "--model", "z-ai/glm-5.3-flash", "--thinking", "off",)),
             runtime_enabled=True,
             auto_wake=False,
         )
@@ -211,7 +205,7 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
         owner.on_connect(Client())
         attachment = CommsClient(
             comms,
-            agent_bin=native,
+            agent_bin=GivenBinary(native),
             auto_wake=False,
         )
         attached_facts = []

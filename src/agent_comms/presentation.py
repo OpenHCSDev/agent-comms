@@ -6,10 +6,11 @@ from abc import ABC, abstractmethod
 from collections import OrderedDict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
-from dataclasses import dataclass, field, fields, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
+
 
 from . import relationships
 from .activity import Activity, ActivityData, ActivityState, ObservedActivity
@@ -20,13 +21,25 @@ from .bus_route_counts import BusRouteCounts
 from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
 from .cli_result import CliResult
-from .coordination_errors import DMPaintedBoundChanged, StaleRevision
 from .coordination_database import CoordinationStore
+from .coordination_errors import DMPaintedBoundChanged, StaleRevision
+from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, NameChannelSort
 from .display_references import DisplayReferences
 from .external_transcript import ExternalTranscript
-from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember, projected
+from .field_codec import (
+    FieldCodec,
+    JsonShapeFamily,
+    JsonShapeMember,
+    projected,
+    Differs,
+    PresenceExclude,
+    WatchPaths,
+    WatchViews,
+    WireExclude,
+    WireInline,
+    WireOmitDefault,
+)
 from .goal_presentation import ThreadGoalExecution
 from .goal_waits import GoalWaits
 from .mentions import MentionCandidate
@@ -40,15 +53,26 @@ from .messages import Message
 from .notification_progress import DeliveryProgress, HumanReadProgress, ReadDelivery
 from .pi_counts import PiCount
 from .private_path import FileRevision
-from .ui_model.unread import ExactUnread, IndexingUnread, UnreadPresentation, UnobservedUnread
-from .read_basis import (AnonymousViewer, CapturedSelection, ChannelDisplayScope, DisplayViewer,
-                         NamedViewer)
+from .read_basis import (
+    AnonymousViewer,
+    CapturedSelection,
+    ChannelDisplayScope,
+    DisplayViewer,
+    NamedViewer,
+)
 from .read_ledger import NoReadNotice, ReadLedger, ReadNotice
 from .recorded_bus import RecordedBusIdentity
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
-from .revision_views import (STATUS_SOURCE, BusSourceView, ExternalTranscriptsView,
-                             NotificationsView, RegistrationsView, RevisionView,
-                             SidebarView, StoresView)
+from .revision_views import (
+    STATUS_SOURCE,
+    BusSourceView,
+    ExternalTranscriptsView,
+    NotificationsView,
+    RegistrationsView,
+    RevisionView,
+    SidebarView,
+    StoresView,
+)
 from .runtime_info import RuntimeInfo
 from .storage_room import RoomLedger
 from .store_files import SharedLock, _store_lock
@@ -61,6 +85,7 @@ from .thread_presentation import (
 from .thread_status import ThreadStatus, ThreadStatusName
 from .threads import Thread
 from .tool_result import ToolResult
+from .ui_model.unread import ExactUnread, IndexingUnread, UnobservedUnread, UnreadPresentation
 from .wire_log import WireLog, WireSnapshot
 
 if TYPE_CHECKING:
@@ -494,17 +519,17 @@ class BusPresentation:
         return snapshot.activity, unread
 
 
-
 @dataclass(frozen=True, slots=True)
 class ChannelView(ToolResult):
     """Wire form: the channel's own fields beside its roster; agent counts stay in process."""
-    channel: Channel = field(metadata={"wire_inline": True})
+
+    channel: Annotated[Channel, WireInline()]
     members: tuple[str, ...]
     last_activity: float = 0
     last_user_input: float = 0
     pinned_members: frozenset[str] = frozenset()
-    active_agents: int = field(default=0, metadata={"wire_exclude": True})
-    registered_agents: int = field(default=0, metadata={"wire_exclude": True})
+    active_agents: Annotated[int, WireExclude()] = 0
+    registered_agents: Annotated[int, WireExclude()] = 0
 
     @classmethod
     def roster(cls, snapshot: RegistrySnapshot, channels: Iterable[Channel],
@@ -540,7 +565,6 @@ class ChannelView(ToolResult):
             history.last_user_input, pins & frozenset(members),
             sum(snapshot.status(thread.name).active for thread in registered), len(registered),
         )
-
 
 
 @dataclass(frozen=True)
@@ -582,12 +606,14 @@ class UncountedRead(InboxRead):
 @dataclass(frozen=True, slots=True)
 class ThreadRecord(CliResult):
     """A thread's wire record; every reader of one thread writes these fields from here."""
-    thread: Thread = field(metadata={"wire_inline": True})
+
+    thread: Annotated[Thread, WireInline()]
     status: Annotated[ThreadStatus, ThreadStatusName]
-    activity: ActivityData = field(metadata={"presence_exclude": True})
+    activity: Annotated[ActivityData, PresenceExclude()]
     goal_execution: ThreadGoalExecution
-    pending: InboxCount = field(
-        default=UncountedInbox(), kw_only=True, metadata={"wire_omit_default": True})
+    pending: Annotated[InboxCount, WireOmitDefault()] = field(
+        default=UncountedInbox(), kw_only=True
+    )
 
     @classmethod
     def read(cls, snapshot: RegistrySnapshot, agents: AgentActivity,
@@ -624,11 +650,10 @@ class ThreadRecord(CliResult):
 
 @dataclass(frozen=True, slots=True)
 class ThreadView(ThreadRecord):
-    activity: ObservedActivity = field(metadata={"presence_exclude": True})
-    runtime: RuntimeInfo = field(metadata={"presence_exclude": True})
+    activity: Annotated[ObservedActivity, PresenceExclude()]
+    runtime: Annotated[RuntimeInfo, PresenceExclude()]
     last_seen: float
-    binding: ThreadOwnerBinding = field(
-        default=UnavailableThreadOwnerBinding(), metadata={"presence_exclude": True})
+    binding: Annotated[ThreadOwnerBinding, PresenceExclude()] = UnavailableThreadOwnerBinding()
 
     @classmethod
     def roster(
@@ -683,7 +708,6 @@ class ThreadView(ThreadRecord):
     @projected(view="presence")
     def context_size(self) -> PiCount:
         return self.runtime.context_size
-
 
 
 @dataclass(frozen=True, slots=True)
@@ -762,7 +786,7 @@ class CoordinationSnapshot:
 
 
 def revision_source(paths: Callable[[HistoryViews], tuple[Path, ...]], *views: type[RevisionView]):
-    return field(metadata={"paths": paths, "views": views})
+    return WatchPaths(paths), WatchViews(views)
 
 
 class ReadState:
@@ -780,65 +804,140 @@ class NoRevision(ReadState):
     __slots__ = ()
 
 
+# typing evaluates class annotations with the class namespace as globals, so a
+# lambda written inside one cannot see this module; named functions can.
+def bus_route_paths(views: HistoryViews) -> tuple[Path, ...]:
+    return BusRouteCounts.source_paths(views.bus.log.path.parent)
+
+
+def room_ledger_paths(views: HistoryViews) -> tuple[Path, ...]:
+    return RoomLedger.source_paths(views.registry.storage_rule.room_ledger.root)
+
+
+def goal_wait_paths(views: HistoryViews) -> tuple[Path, ...]:
+    return GoalWaits.source_paths(views.root)
+
+
+def relationship_paths(views: HistoryViews) -> tuple[Path, ...]:
+    return (relationships.RelationshipStore.path_in(views.root),)
+
+
+def notification_paths(views: HistoryViews) -> tuple[Path, ...]:
+    return CoordinationStore.source_paths(views.root)
+
+
+def external_transcript_paths(views: HistoryViews) -> tuple[Path, ...]:
+    return ExternalTranscript.source_paths(views.root)
+
+
+def expiry_period_changed(before: int, now: int) -> bool:
+    return before // WireRevision.expiry_seconds != now // WireRevision.expiry_seconds
+
+
 @dataclass(frozen=True, slots=True)
 class WireRevision(ReadState):
     """One observation of every Comms store a view derives from, by name."""
 
-    registry: tuple[FileRevision, ...] = revision_source(lambda views: (views.registry.store.path,),
-        *STATUS_SOURCE, RegistrationsView, NotificationsView)
-    catalog: tuple[FileRevision, ...] = revision_source(lambda views: (views.channels.catalog.path,),
-        *STATUS_SOURCE, RegistrationsView)
-    bus_log: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.log.path,),
-        *STATUS_SOURCE, BusSourceView)
-    bus_routes: tuple[FileRevision, ...] = revision_source(
-        lambda views: BusRouteCounts.source_paths(views.bus.log.path.parent),  # type: ignore[has-type]
-        StoresView, SidebarView)
-    history: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.history.path,),
-        *STATUS_SOURCE)
-    activity: tuple[FileRevision, ...] = revision_source(lambda views: (views.agents.activity._path,),
-        *STATUS_SOURCE)
-    runtime_info: tuple[FileRevision, ...] = revision_source(lambda views: (views.agents.runtime_info.path,),
-        *STATUS_SOURCE)
-    work_room: tuple[FileRevision, ...] = revision_source(
-        lambda views: RoomLedger.source_paths(views.registry.storage_rule.room_ledger.root),
-        *STATUS_SOURCE)
-    reads: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.reads.path,),
-        *STATUS_SOURCE, NotificationsView)
-    native_unread: tuple[FileRevision, ...] = revision_source(lambda views: (views.transcript_reads.index_path,),
-        StoresView, SidebarView)
-    goal_waits: tuple[FileRevision, ...] = revision_source(lambda views: GoalWaits.source_paths(views.root),
-        *STATUS_SOURCE)
-    relationships: tuple[FileRevision, ...] = revision_source(lambda views: (relationships.RelationshipStore.path_in(views.root),),
-        *STATUS_SOURCE)
-    notifications: tuple[FileRevision, ...] = revision_source(lambda views: CoordinationStore.source_paths(views.root),
-        *STATUS_SOURCE, NotificationsView)
-    external_transcripts: tuple[FileRevision, ...] = revision_source(lambda views: ExternalTranscript.source_paths(views.root),
-        StoresView, ExternalTranscriptsView)
+    registry: Annotated[
+        tuple[FileRevision, ...],
+        *revision_source(
+            lambda views: (views.registry.store.path,),
+            *STATUS_SOURCE,
+            RegistrationsView,
+            NotificationsView,
+        ),
+    ]
+    catalog: Annotated[
+        tuple[FileRevision, ...],
+        *revision_source(
+            lambda views: (views.channels.catalog.path,), *STATUS_SOURCE, RegistrationsView
+        ),
+    ]
+    bus_log: Annotated[
+        tuple[FileRevision, ...],
+        *revision_source(lambda views: (views.bus.log.path,), *STATUS_SOURCE, BusSourceView),
+    ]
+    bus_routes: Annotated[
+        tuple[FileRevision, ...],
+        *revision_source(bus_route_paths, StoresView, SidebarView),
+    ]
+    history: Annotated[
+        tuple[FileRevision, ...],
+        *revision_source(lambda views: (views.bus.history.path,), *STATUS_SOURCE),
+    ]
+    activity: Annotated[
+        tuple[FileRevision, ...],
+        *revision_source(lambda views: (views.agents.activity._path,), *STATUS_SOURCE),
+    ]
+    runtime_info: Annotated[
+        tuple[FileRevision, ...],
+        *revision_source(lambda views: (views.agents.runtime_info.path,), *STATUS_SOURCE),
+    ]
+    work_room: Annotated[
+        tuple[FileRevision, ...],
+        *revision_source(room_ledger_paths, *STATUS_SOURCE),
+    ]
+    reads: Annotated[
+        tuple[FileRevision, ...],
+        *revision_source(lambda views: (views.bus.reads.path,), *STATUS_SOURCE, NotificationsView),
+    ]
+    native_unread: Annotated[
+        tuple[FileRevision, ...],
+        *revision_source(
+            lambda views: (views.transcript_reads.index_path,), StoresView, SidebarView
+        ),
+    ]
+    goal_waits: Annotated[
+        tuple[FileRevision, ...],
+        *revision_source(goal_wait_paths, *STATUS_SOURCE),
+    ]
+    relationships: Annotated[
+        tuple[FileRevision, ...],
+        *revision_source(relationship_paths, *STATUS_SOURCE),
+    ]
+    notifications: Annotated[
+        tuple[FileRevision, ...],
+        *revision_source(notification_paths, *STATUS_SOURCE, NotificationsView),
+    ]
+    external_transcripts: Annotated[
+        tuple[FileRevision, ...],
+        *revision_source(external_transcript_paths, StoresView, ExternalTranscriptsView),
+    ]
     # Notifications change once per expiry period, not per tick.
-    expiry_tick: int = field(metadata={
-        "views": (NotificationsView,),
-        "differs": lambda before, now: (
-            before // WireRevision.expiry_seconds != now // WireRevision.expiry_seconds)})
+    expiry_tick: Annotated[
+        int,
+        WatchViews((NotificationsView,)),
+        Differs(expiry_period_changed),
+    ]
 
     expiry_seconds: ClassVar[int] = 30
 
     @classmethod
     def empty(cls) -> WireRevision:
-        return cls(**{source.name: () for source in fields(cls) if "paths" in source.metadata},
-                   expiry_tick=0)
+        return cls(
+            **{
+                plan.name: ()
+                for plan in FieldCodec.field_plans(cls)
+                if WatchPaths.single(plan.annotation)
+            },
+            expiry_tick=0,
+        )
 
     @classmethod
     def source_paths(cls, views: HistoryViews) -> dict[str, tuple[Path, ...]]:
         """Stat and watch the sources declared by the revision fields themselves."""
-        return {source.name: paths(views) for source in fields(cls)
-                if (paths := source.metadata.get("paths")) is not None}
+        return {
+            plan.name: source.value(views)
+            for plan in FieldCodec.field_plans(cls)
+            for source in WatchPaths.single(plan.annotation)
+        }
 
     @classmethod
     def capture(cls, views: HistoryViews, *, expiry_tick: int) -> WireRevision:
         """Stat sources only; strict content reads belong to the requesting view."""
         captured = {
             name: tuple(revision for path in group
-                        if (revision := FileRevision.capture(path)) is not None)
+                        for revision in FileRevision.capture(path).revisions())
             for name, group in cls.source_paths(views).items()
         }
         return cls(**captured, expiry_tick=expiry_tick)
@@ -908,6 +1007,10 @@ class WireRevision(ReadState):
 
     def changed_before(self, view: RevisionView, later: WireRevision) -> bool:
         """Whether any source feeding `view` differs, by the view's comparison."""
-        return any(source.metadata.get("differs", view.differs)(
-            getattr(self, source.name), getattr(later, source.name))
-            for source in fields(self) if isinstance(view, source.metadata.get("views", ())))
+        return any(
+            plan.setting(Differs, view.differs)(
+                getattr(self, plan.name), getattr(later, plan.name)
+            )
+            for plan in FieldCodec.field_plans(type(self))
+            if isinstance(view, plan.setting(WatchViews, ()))
+        )

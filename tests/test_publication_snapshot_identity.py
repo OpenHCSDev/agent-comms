@@ -1,10 +1,12 @@
 """Publication content identity, separate from actual bus delivery evidence."""
 
 import json
-from dataclasses import dataclass, field, replace
+from typing import Annotated
+from dataclasses import dataclass, replace
 
 import pytest
 
+from agent_comms import field_codec
 from agent_comms.coordination_response import prepare_fenced_response, publish_fenced_response
 from agent_comms.errors import RelationViolationError
 from agent_comms.mentions import ThreadMention
@@ -38,7 +40,7 @@ def test_publication_snapshot_is_frozen_content_not_delivery_enrichment():
 def test_new_declared_delivery_field_inherits_snapshot_without_consumer_edit():
     @dataclass(frozen=True, slots=True)
     class DeliveredMessage(Message):
-        delivery_observation: int = field(default=0, metadata={"publication_exclude": True})
+        delivery_observation: Annotated[int, field_codec.PublicationExclude()] = 0
         annotation: str = "original"
 
     original = DeliveredMessage("owner", "#team", "answer", InfoKind, timestamp=42.0)
@@ -91,8 +93,7 @@ def test_valid_durable_receipt_cannot_substitute_different_publication_content(t
             # Certify the isolated changed source while its original writer
             # remains held, never by reopening a missing live checkpoint.
             (case.comms.root / "private_bus_checkpoint.sqlite3").unlink()
-            marker.checkpoint_version = None
-            marker.checkpoint_seal = None
+            marker.unseal()
             case.bus.log.write_metadata_unlocked(marker)
             install_private_bus_checkpoint(case.bus.log, _bus_locked=True)
         before = case.bus.log.path.read_bytes()

@@ -36,6 +36,7 @@ from agent_comms.native_session_files import NativeSessionFiles
 from .native_package import VerifiedNativePackage
 from .selected_result import CoordinatedTurn
 from .store_files import _store_lock
+from .thread_text import GivenThreadText
 from .threads import Thread
 
 _MAX_GO_WAIT_SECONDS = 120
@@ -105,7 +106,7 @@ def reserve_foreground_owner(
     if marker.root_id != wire_root_id:
         raise RelationViolationError("Private wire root changed before owner reservation")
     owner = comms.registry.new_thread(
-        name, tags, str(worktree), process_identity=ProcessIdentity.capture(os.getpid()), task=task,
+        name, tags, str(worktree), process_identity=ProcessIdentity.capture(os.getpid()), task=GivenThreadText(task),
     )
     # Ordinary Comms.register intentionally supports replacing idle owners. That
     # is NOT safe for a private foreground attempt: serialize the exact fresh

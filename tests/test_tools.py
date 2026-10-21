@@ -15,6 +15,7 @@ class TestToolCatalog:
         from agent_comms.pi_vocabulary import ServiceTier
         from agent_comms.native_arguments import NativeArguments
         from agent_comms.tools import ToolsCliCommand
+        from agent_comms.tool_caller import ThreadCaller
 
         monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(tmp_path / "config"))
 
@@ -25,7 +26,7 @@ class TestToolCatalog:
         flag, path = thread.native_launch_arguments(NativeArguments(()), tmp_path / "package", comms.root)
         assert flag == "--comms-catalog"
         payload = json.loads(Path(path).read_text())
-        assert payload == ToolsCliCommand(name=thread.name).apply(comms).to_wire()
+        assert payload == ToolsCliCommand(name=ThreadCaller(thread.name)).apply(comms).to_wire()
         assert payload["service_tier"] == "standard"
         assert {tool["name"] for tool in payload["tools"]} == {
             tool["name"] for tool in NativeRequestTools.catalog()

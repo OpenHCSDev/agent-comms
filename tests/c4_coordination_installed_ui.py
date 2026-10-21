@@ -1,5 +1,6 @@
 """Installed snapshot values, original notification evidences and real sidebar rows."""
 from conftest import publish_initial
+from agent_comms.thread_text import SavedSessionFile
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.read_basis import NamedViewer
 from agent_comms.presentation import ReadThrough
@@ -43,7 +44,7 @@ async def main():
     for name in (owner, 'stopped', 'archived'):
         source = root / (name + '.jsonl')
         source.touch()
-        comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(root), session_file=str(source)))
+        comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(root), session_file=SavedSessionFile(str(source))))
     comms.owners.stop('stopped')
     comms.owners.stop('archived')
     comms.threads.archive('archived')

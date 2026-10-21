@@ -35,7 +35,7 @@ def retained_source(root, count, *, access=ArchivedAccess()):
         comms.bus.log.path.chmod(0o600)
         marker = comms.bus.log.read_metadata_unlocked(required=True)
         marker.last_seq = marker.claimed_after_seq = count
-        marker.checkpoint_version = marker.checkpoint_seal = None
+        marker.unseal()
         comms.bus.log.write_metadata_unlocked(marker)
         (root / "private_bus_checkpoint.sqlite3").unlink()
         install_private_bus_checkpoint(comms.bus.log, _bus_locked=True)
