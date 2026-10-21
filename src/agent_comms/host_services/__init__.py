@@ -19,7 +19,7 @@ from ..declared_family import DeclaredFamily
 
 
 class ServiceNotServingError(RuntimeError):
-    """A restarted service did not come back on the installed runtime."""
+    """A restarted service did not serve its installed runtime's contract."""
 
 
 class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
@@ -41,6 +41,10 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
     def runtime(self) -> Path:
         """The interpreter this instance runs."""
 
+    @abstractmethod
+    def serves(self) -> None:
+        """Prove the service answers; raise ServiceNotServingError naming a failure."""
+
     @classmethod
     def restart_running(cls, installed: Path) -> tuple[str, ...]:
         """Restart every declared service running on this host onto ``installed``."""
@@ -58,6 +62,7 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
                 if instance != self:
                     runtime = instance.runtime()
                     if runtime == installed:
+                        instance.serves()
                         return f"{instance} restarted onto {installed}"
                     failure = f"{instance} runs {runtime}, not the installed {installed}"
             time.sleep(1)
