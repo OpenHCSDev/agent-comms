@@ -3,7 +3,7 @@ import json
 import pytest
 
 from agent_comms.channel_targets import CommandTarget
-from agent_comms.channels import ANY_CHANNEL
+from agent_comms.channels import AnyChannel
 from agent_comms.tool_caller import ThreadCaller, NoThreadCaller
 from agent_comms.tools import context_tool_catalog, invoke_tool
 from agent_comms.native_tools import NativeRequestTools
@@ -63,7 +63,7 @@ class TestToolCatalog:
         assert invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller("a"))["collaborations"][0]["peer"] == "b"
         invoke_tool(comms, "comms_collaboration", {"action": "remove", "peer": "b"}, caller=ThreadCaller("a"))
         assert comms.registry.snapshot() == before
-        assert not list(comms.views.history_page(ANY_CHANNEL).messages)
+        assert not list(comms.views.history_page(AnyChannel.target()).messages)
 
     def test_collaboration_tool_rejects_bad_arguments_before_writes(self, comms, monkeypatch):
         monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)

@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 from .bus_activity_index import ActivityClocks, BusActivityIndex
 from .bus_route_counts import OpenedRouteCounts
 from .channel_targets import CommandTarget
-from .channels import ANY_CHANNEL
+from .channels import AnyChannel
 from .coordinator import Coordination
 from .errors import UnregisteredThreadError
 from .historical_views import HistoryArchive
@@ -150,7 +150,7 @@ class MessageBus[Writes: Publisher](RuntimeFile, StoreLockOwner):
             yield basis, source
 
     def inbox(
-        self, name: str, target: CommandTarget = ANY_CHANNEL, *,
+        self, name: str, target: CommandTarget = AnyChannel.target(), *,
         after: InboxStart = FirstUnreadStart(), bounds: PageBounds = PageBounds(),
     ) -> Sequence[Message]:
         """Read one oldest-first unread page against a newly captured registry."""
@@ -159,7 +159,7 @@ class MessageBus[Writes: Publisher](RuntimeFile, StoreLockOwner):
         ).page.messages)
 
     def inbox_at(
-        self, name: str, snapshot: RegistrySnapshot, target: CommandTarget = ANY_CHANNEL, *,
+        self, name: str, snapshot: RegistrySnapshot, target: CommandTarget = AnyChannel.target(), *,
         after: InboxStart = FirstUnreadStart(), bounds: PageBounds = PageBounds(),
     ) -> InboxPage:
         """Read unread deliveries using the caller's captured registry.
@@ -255,7 +255,7 @@ class MessageBus[Writes: Publisher](RuntimeFile, StoreLockOwner):
                 if not maintenance.read().turn_pending:
                     return
 
-    def pending_count(self, name: str, target: CommandTarget = ANY_CHANNEL) -> int:
+    def pending_count(self, name: str, target: CommandTarget = AnyChannel.target()) -> int:
         """Count unread messages without retaining their bodies."""
         with self.snapshot() as (basis, source):
             counts = self._pending_projection(source, basis, [name])[name]
@@ -334,7 +334,7 @@ class MessageBus[Writes: Publisher](RuntimeFile, StoreLockOwner):
         return basis.message_count
 
     def mark_delivered_through(
-        self, name: str, sequence: int, *, target: CommandTarget = ANY_CHANNEL,
+        self, name: str, sequence: int, *, target: CommandTarget = AnyChannel.target(),
     ) -> None:
         """Mark the selected inbox through one captured cut, without loading its messages."""
         if sequence < 0:

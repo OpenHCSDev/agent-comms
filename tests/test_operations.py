@@ -11,7 +11,7 @@ import pytest
 from agent_comms.thread_text import SavedSessionFile
 from agent_comms.native_entries import CompactionEntry, ModelChangeEntry
 from agent_comms.channel_targets import ChannelTarget, CommandTarget, ThreadTarget
-from agent_comms.channels import ANY_CHANNEL
+from agent_comms.channels import AnyChannel
 from agent_comms.activity import ActivityState
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.child_process import ProcessIdentity
@@ -97,7 +97,7 @@ class TestMessaging:
         wired.messaging.send("PR111", "fixer", "direct")
         wired.messaging.send("PR111", "#all", "global")
 
-        expected = {ANY_CHANNEL: {"direct", "global"}, ThreadTarget("PR111"): {"direct"},
+        expected = {AnyChannel.target(): {"direct", "global"}, ThreadTarget("PR111"): {"direct"},
                     ChannelTarget("#all"): {"global"}}
         for target, bodies in expected.items():
             assert {message.body for message in wired.bus.inbox("fixer", target)} == bodies

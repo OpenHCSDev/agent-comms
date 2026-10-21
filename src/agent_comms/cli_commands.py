@@ -42,7 +42,7 @@ from .channel_management import KeepThreadsTagDisposition, TagChangeResult, TagD
 from .channel_targets import (
     ChannelSelection, CommandTarget, NoChannel, OneChannel, ResolvedChannel, SurroundingChannel,
 )
-from .channels import ANY_CHANNEL, Channel
+from .channels import AnyChannel, Channel
 from .check_root import CheckRoot
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .cli_bridges.claude import ClaudeTranscript
@@ -1383,7 +1383,7 @@ class HistoryCliCommand(CliCommand):
     help = "Newest-first bounded history of a named target"
     target: Annotated[
         str, Argument(flags=("--target",), options={"help": "#channel or @peer"})
-    ] = ANY_CHANNEL.name
+    ] = AnyChannel.declared_name
     me: Annotated[
         DisplayViewer,
         Argument(
