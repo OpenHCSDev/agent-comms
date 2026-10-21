@@ -59,9 +59,7 @@ def execute(arguments: Sequence[str], output: TextIO) -> int:
     declaration = CliCommand.member_named(args.command)
     LaunchRoot.startup(
         arguments,
-        lambda: (
-            LaunchRoot.from_path(args.root) if args.root else declaration.published_launch()
-        ),
+        lambda: (LaunchRoot.from_path(args.root) if args.root else declaration.published_launch()),
     )
     route = resolve_comms_route(args.root)
     with LaunchRoot.from_path(route.root).selected():

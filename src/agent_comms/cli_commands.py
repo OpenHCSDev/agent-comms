@@ -41,7 +41,7 @@ from .check_root import CheckRoot
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .cli_bridges.claude import ClaudeTranscript
 from .cli_bridges.history import History, OfflineHistory, OnlineHistory
-from .cli_bridges.shared import ChoiceTargetField, CliBridge, DeclaredOptions, Send, TargetField
+from .cli_bridges.shared import ChoiceTargetField, DeclaredOptions, SendRequest, TargetField
 from .cli_protocol import ArrivedMessage, EarlierItems
 from .cli_result import CliResult
 from .command import Command
@@ -887,12 +887,8 @@ class ImportSubagentsCliCommand(ImportingCliCommand, declared_name="import-subag
 
 
 @dataclass(frozen=True, kw_only=True)
-class SendCliCommand(CliCommand, Send):
+class SendCliCommand(SendRequest, CliCommand):
     sender: str = option("--from")
-
-    @classmethod
-    def serves(cls, bridge: type[CliBridge]) -> bool:
-        return False
 
     def apply(self, ctx: Comms) -> MessageSentResult:
         return MessageSentResult(self.report.send(ctx, self))

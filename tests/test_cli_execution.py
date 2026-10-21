@@ -44,7 +44,7 @@ def isolated_cli(tmp_path):
 def test_every_registered_command_runs_through_dispatcher_with_parser_defaults(tmp_path):
     # Import once with HOME already isolated, then use the real dispatcher for
     # every declaration. Required options keep their genuine parser refusals.
-    # Install is an explicit negative case: its default cwd is not a checkout.
+    # The default install refuses this non-Git cwd before doing any installation.
     home = tmp_path / "home"
     home.mkdir()
     worker = r'''
@@ -53,24 +53,18 @@ import json
 import sys
 from contextlib import redirect_stdout
 from pathlib import Path
-import pytest
 from agent_comms.cli import main
-from agent_comms.cli_commands import CliCommand, InstallCliCommand
-from agent_comms.installer.backup import UpgradeRefused
+from agent_comms.cli_commands import CliCommand
 
 visited = []
 for declaration in CliCommand.members_with(CliCommand):
     output = io.StringIO()
     arguments = ['--root', str(Path(sys.argv[1]) / declaration.declared_name),
                  declaration.declared_name]
-    if declaration is InstallCliCommand:
-        with redirect_stdout(output), pytest.raises(UpgradeRefused):
-            main(arguments)
-    else:
-        with redirect_stdout(output):
-            code = main(arguments)
-        assert code in (0, 1)
-        json.loads(output.getvalue())
+    with redirect_stdout(output):
+        code = main(arguments)
+    assert code in (0, 1)
+    json.loads(output.getvalue())
     visited.append(declaration.declared_name)
 print(json.dumps(visited))
 '''
