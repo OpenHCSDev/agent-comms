@@ -13,7 +13,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import ClassVar
 
-from agent_comms.commander.standing import PlanIdle
+from agent_comms.commander.standing import PlanIdle, PlanStalled
 
 from .child_process import CountPrinted, NoIntegerPrinted
 from .declared_family import DeclaredFamily
@@ -304,6 +304,16 @@ class UnansweredAskFailure(PostmortemFailure):
     )
 
 
+class HeldPlanFailure(PostmortemFailure):
+    number = 23
+    title = "It held plan work for hours while nothing reached main"
+    evidence = (
+        "October 21: every virtual bus step had a holder and none merged for 22 hours, because "
+        "the steps only land together and nobody owned integrating them; Tristan caught it "
+        "(claude-ai #comms 2dde16189509)."
+    )
+
+
 @dataclass(frozen=True)
 class CommanderRule(PatternSource):
     lead: str
@@ -395,6 +405,15 @@ class PlanIdlePattern(BehaviourPattern):
     )
     checks = (RuleCheck(PlanIdle),)
     sources = (ProblemFix("P83", "34ba68c81"),)
+
+
+class PlanStalledPattern(BehaviourPattern):
+    signature = (
+        "A plan phase whose earlier phases are all done is held by a unit, and main still lacks"
+        " it two hours after the phase was first ordered."
+    )
+    checks = (RuleCheck(PlanStalled),)
+    sources = (HeldPlanFailure(),)
 
 
 class BoardDisagreesPattern(BehaviourPattern):
