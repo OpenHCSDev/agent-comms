@@ -20,6 +20,7 @@ from agent_comms.locked_store import SQLiteFile
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.order import Commander, SayVerb
 from agent_comms.commander.standing import (
+    HeartbeatSilent,
     Blocked, Detached, HolderCannotRun, UnitAskUnanswered, UnownedWheelSpin, UnresolvedBlock,
 )
 from agent_comms.commander_heartbeat import CommanderHeartbeat
@@ -390,3 +391,31 @@ def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus):
     assert all(line in message.body for line in expected)
     assert question.reference.message_id in message.body
     print(message.body)
+
+
+def test_every_pass_beats_and_a_stale_beat_is_heartbeat_silent(held_bus, monkeypatch):
+    """10:08 on 2026-10-21: the heartbeat sent only on change, so 31 failed passes read as calm."""
+    from agent_comms.commander_heartbeat import CommanderReview
+
+    commander = held_bus.registry.require("lead")
+    held_bus.registry.register(replace(commander, process_identity=ProcessIdentity.capture(os.getpid())))
+    commander = held_bus.registry.require("lead")
+    review = CommanderReview(frozenset())
+    CommanderHeartbeat.register(held_bus.registry)
+    assert HeartbeatSilent.violations(held_bus, "lead") == ()
+    with held_bus.bus.locked():
+        review.wake(held_bus, CommanderHeartbeat.sender, commander, ())
+        review.wake(held_bus, CommanderHeartbeat.sender, commander, ())
+    page = held_bus.bus.log.read_page(MessagePageRequest(DMDisplayScope.capture(
+        CommanderHeartbeat.sender, "lead", held_bus.registry.snapshot(),
+    )))
+    changed, unchanged = (message for message in page.messages
+                          if message.sender == CommanderHeartbeat.sender)
+    assert "Standing rules clear." in changed.body
+    assert unchanged.body == f"COMMANDER HEARTBEAT: unchanged since seq {changed.seq}, 0 violations."
+    assert HeartbeatSilent.violations(held_bus, "lead") == ()
+    later = unchanged.timestamp + HeartbeatSilent.seconds + 1
+    monkeypatch.setattr(time, "time", lambda: later)
+    silent, = HeartbeatSilent.violations(held_bus, "lead")
+    assert silent.beat == unchanged.seq
+    assert silent.line().startswith(f"HEARTBEAT SILENT: no beat since seq {unchanged.seq}")
