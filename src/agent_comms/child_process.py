@@ -934,8 +934,8 @@ class ChildLaunch(ABC):
         """Record the launch handle before the platform allows exec."""
         with self.children_store.launching(self.runtime) as reservation:
             process = subprocess.Popen(
-                self.argv, cwd=cwd, env=env, stdin=stdin, stdout=stdout,
-                stderr=stderr, **self.options,
+                self.argv, cwd=cwd, env=self.runtime.child_environment(env), stdin=stdin,
+                stdout=stdout, stderr=stderr, **self.options,
             )
             identity = Platform.current().identity(process.pid)
             child = SpawnedProcess(process, identity, reservation.store)
@@ -950,7 +950,8 @@ class ChildLaunch(ABC):
     async def spawn_async(self, *, cwd, env, stdio: ChildStdio) -> AttachedChild:
         async with self.children_store.launching_async(self.runtime) as reservation:
             process = await asyncio.create_subprocess_exec(
-                self.argv[0], *self.argv[1:], cwd=cwd, env=env, **stdio.options, **self.options,
+                self.argv[0], *self.argv[1:], cwd=cwd, env=self.runtime.child_environment(env),
+                **stdio.options, **self.options,
             )
             identity = Platform.current().identity(process.pid)
             child = AttachedChild(process, identity, reservation.store)

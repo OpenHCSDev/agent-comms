@@ -81,6 +81,22 @@ def test_synchronous_run_collects_both_streams_and_returncode(tmp_path: Path) ->
     assert (result.returncode, result.stdout, result.stderr) == (7, b"out\n", b"err\n")
 
 
+def test_child_imports_the_checkout_its_parent_imported(tmp_path: Path) -> None:
+    import agent_comms
+
+    # No inherited import path: only the owner can point the child at this checkout,
+    # not the editable install's .pth, which may name another worktree.
+    environment = {name: value for name, value in os.environ.items() if name != "PYTHONPATH"}
+    result = SpawnedProcess.run(
+        (sys.executable, "-c", "import agent_comms; print(agent_comms.__file__)"),
+        timeout=30, cwd=tmp_path, env=environment,
+    )
+    assert result.returncode == 0, result.stderr
+    checkout = Path(__file__).resolve().parents[1]
+    assert Path(agent_comms.__file__).resolve().is_relative_to(checkout)
+    assert Path(result.stdout.decode().strip()).resolve().is_relative_to(checkout)
+
+
 @pytest.mark.asyncio
 async def test_detached_mismatch_refuses_signal_without_harming_real_child() -> None:
     child = SpawnedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))

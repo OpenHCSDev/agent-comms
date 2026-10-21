@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping, MutableMapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -77,6 +78,47 @@ class LaunchRuntime:
     def require_available(self) -> None:
         if not self.interpreter.is_file() or not os.access(self.interpreter, os.X_OK):
             raise ValueError("Target interpreter is unavailable")
+
+    def child_environment(self, env: Mapping[str, str] | None) -> Mapping[str, str] | None:
+        """A child of the running interpreter imports the source its parent imported."""
+        return RunningSource.current().environment(env) if self == LaunchRuntime.running() else env
+
+
+@dataclass(frozen=True)
+class RunningSource(ABC):
+    """Where this process imported agent_comms from.
+
+    An editable install's .pth names one checkout; a parent running another
+    checkout's source must not hand its children the .pth's copy.
+    """
+
+    root: Path
+
+    @staticmethod
+    def current() -> RunningSource:
+        root = Path(__file__).resolve().parents[1]
+        prefix = Path(sys.prefix).resolve()
+        return (InstalledSource if root.is_relative_to(prefix) else CheckoutSource)(root)
+
+    @abstractmethod
+    def environment(self, env: Mapping[str, str] | None) -> Mapping[str, str] | None: ...
+
+
+class InstalledSource(RunningSource):
+    """The interpreter's own site-packages: every child of it already imports this copy."""
+
+    def environment(self, env: Mapping[str, str] | None) -> Mapping[str, str] | None:
+        return env
+
+
+class CheckoutSource(RunningSource):
+    """A source checkout: its root goes first on the child's import path."""
+
+    def environment(self, env: Mapping[str, str] | None) -> Mapping[str, str] | None:
+        environment = dict(os.environ if env is None else env)
+        inherited = environment.get("PYTHONPATH")
+        environment["PYTHONPATH"] = os.pathsep.join(filter(None, (str(self.root), inherited)))
+        return environment
 
 
 class RestoredRuntime(LaunchRuntime):
