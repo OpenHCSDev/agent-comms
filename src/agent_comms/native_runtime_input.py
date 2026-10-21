@@ -125,7 +125,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         from .native_pi import NativeContextRecord
 
         self.reference.require_recorded()
-        values = {item.name: getattr(self, item.name)
+        values = {item.name: self.context_value(item.name)
                   for item, _wire in FieldCodec.record_fields(NativeContextRecord)}
         return FieldCodec.construct(NativeContextRecord, values).at(
             self.require_session_identity().path,

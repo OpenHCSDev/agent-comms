@@ -1,6 +1,7 @@
 ---
 name: coordination
 description: "one order per owner holding every problem on its surface; fixes go to bus units, test and mechanical work to forks; check open PRs first; never block on a question; mind Claude usage; record new owner targets at once"
+audience: commander
 type: hard-rule
 ---
 

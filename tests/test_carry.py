@@ -12,6 +12,8 @@ import pytest
 
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
 from agent_comms.installer.carry import (
     STEPS, Carried, CarryChain, CarryLedger,
 )
@@ -66,7 +68,7 @@ def test_the_chain_is_every_declared_step_the_ledger_lacks():
     """Each carry module's one step is in the chain; a recorded name with no step is a
     finished step whose file was deleted, so it is ignored."""
     chain = CarryChain.at(REPO)
-    assert [step.name() for step in chain.steps] == sorted(
+    assert sorted(step.name() for step in chain.steps) == sorted(
         path.stem for path in (REPO / STEPS).glob("carry_*.py"))
     assert chain.pending(("carry_long_deleted",)) == chain.steps
     assert chain.pending(tuple(step.name() for step in chain.steps)) == ()
@@ -136,7 +138,13 @@ def test_a_store_compares_by_its_rows_and_not_by_its_companion_files(tmp_path):
             carried(tmp_path, before, steps, RehearsalFiles.declared(steps))
 
 
-def test_restart_selection_uses_receiving_declaration_with_connected_cli_inbox(comms):
+@pytest.fixture
+def stack(tmp_path):
+    """Use the test interpreter, not an unrelated installed runtime under HOME."""
+    return Stack(REPO, home=tmp_path, runtime=LaunchRuntime.running())
+
+
+def test_restart_selection_uses_receiving_declaration_with_connected_cli_inbox(comms, stack):
     from agent_comms.child_process import ProcessIdentity
 
     process = ProcessIdentity.capture(os.getpid())
@@ -145,36 +153,31 @@ def test_restart_selection_uses_receiving_declaration_with_connected_cli_inbox(c
     external = comms.registry.declare(comms.registry.new_thread(
         'cli-inbox-copy', frozenset(), str(comms.root), execution=ExternalThreadExecution))
     with comms.registry.external_process(external.name, process):
-        assert Stack(REPO).running_owners(comms.root) == [native.name]
+        assert stack.running_owners(comms.root) == [native.name]
         native.execution.require_native()
         with pytest.raises(ValueError):
             external.execution.require_native()
 
 
-def test_owner_request_failure_joins_the_entire_set_before_propagating(tmp_path):
-    from threading import Barrier
-
+def test_owner_request_failure_joins_the_entire_set_before_propagating(comms, stack):
+    comms.messaging.initialize_private_initial_protocol()
     names = ["failed", "other", "last"]
-    admitted = Barrier(len(names), timeout=10)
-    finished = []
+    for name in names[1:]:
+        comms.registry.declare(
+            comms.registry.new_thread(name, frozenset(), str(comms.root)), StoppedThreadStatus()
+        )
 
-    class Installed(Stack):
-        def cli(self, root, *arguments):
-            admitted.wait()
-            name = arguments[-1]
-            finished.append(name)
-            if name == "failed":
-                raise UpgradeRefused("stop failed")
-            return {}
-
-    with pytest.raises(UpgradeRefused):
-        Installed(REPO).owners(tmp_path, "stop", names)
-    assert sorted(finished) == sorted(names)
+    # The first real CLI request fails; both other children must finish their writes
+    # before owners propagates that failure. No replacement Stack.cli is involved.
+    with pytest.raises(UpgradeRefused, match="failed"):
+        stack.owners(comms.root, "archive", names)
+    saved = comms.registry.snapshot()
+    assert tuple(saved.status(name) for name in names[1:]) == (ArchivedThreadStatus(),) * 2
 
 
-def test_upgrade_refuses_at_start_without_its_own_uv(tmp_path):
-    """The 22:20 install ran a uv from another agent's scratch; the installer names its own."""
-    stack = Stack(REPO, tmp_path)
+def test_upgrade_refuses_at_start_without_its_own_uv(stack):
+    """The installer names its own uv, even when no installed runtime exists."""
+    assert not stack.uv.exists()
     with pytest.raises(UpgradeRefused):
         stack.require_uv()
 

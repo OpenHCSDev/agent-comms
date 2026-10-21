@@ -126,13 +126,13 @@ def test_index_owns_unique_partial_creation():
 def test_adding_an_index_renames_no_other_index():
     @dataclass(frozen=True)
     class IndexedRow(TypedTable):
-        name: str = field(metadata={'sql': Column(primary_key=True)})
+        name: Annotated[str, Column(primary_key=True)]
         count: int
         indexes = (Index(('count',)), Index(('name', 'count'), where='count > 0'))
 
     @dataclass(frozen=True)
     class MoreIndexedRow(TypedTable, declared_name=IndexedRow.declared_name + '_more'):
-        name: str = field(metadata={'sql': Column(primary_key=True)})
+        name: Annotated[str, Column(primary_key=True)]
         count: int
         indexes = (Index(('name',), unique=True), *IndexedRow.indexes)
 

@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable, Iterable, Sequence
-from contextlib import AbstractContextManager
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import ClassVar
 
 from ..comms import Comms
 from ..goal_actions import OrderGoalAction
 from ..goals import Goal
+from ..message_bus import WatchPass
 from ..standing_rules import ReasonedStandingRule, UndatedStandingRule
 from ..thread_identity import CoreWatcherIncarnation, ThreadIncarnation
 from ..threads import Thread
@@ -137,20 +137,17 @@ class UnownedWheelSpin(UndatedStandingRule):
         return (f"WHEEL SPIN: {self.unit} holds no order while {self.todo.id} is unowned"
                 f" -> Core gives it to {self.unit}")
 
-    @classmethod
-    def after_release(cls, comms: Comms) -> None:
-        """Hand work Core released to idle units; refused replacements preserve the row."""
+class UnownedOrderWatch(WatchPass):
+    """Hand released work to idle units after the scheduled pass enters the bus."""
+
+    def pass_body(self, comms: Comms) -> None:
         available = comms.goals.todos.reassignable()
         for commander in {todo.creator_identity.name for todo in available}:
             mine = (todo for todo in available if todo.creator_identity.name == commander)
-            for rule in cls.paired(comms, commander, mine, CoreWatcherIncarnation.watcher()):
+            for rule in UnownedWheelSpin.paired(
+                comms, commander, mine, CoreWatcherIncarnation.watcher()
+            ):
                 rule.enforce(comms, commander)
-
-    @classmethod
-    def watch_pass(cls, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
-        """The worker borrows the root for this pass, never while the timer is idle."""
-        with opened_wire() as comms:
-            cls.after_release(comms)
 
 
 class WaitingUnownedWheelSpin(UnownedWheelSpin, declared_name=None):

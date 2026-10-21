@@ -18,7 +18,7 @@ from agent_comms import field_codec
 from .active_route import resolve_comms_route
 from .child_process import (
     ObservedProcess,
-    ParentedProcess,
+    SpawnedProcess,
     Platform,
     ProcessIdentity,
     ProcessState,
@@ -499,7 +499,7 @@ class OwnerLifecycle:
             owned = self._register_owner_unlocked(thread, identity)
 
         with owner_process_output(self.root, thread) as output:
-            ParentedProcess.launch(
+            SpawnedProcess.launch(
                 (str(launch_runtime.interpreter), "-m", "agent_comms.worker",
                  *LaunchRoot.from_path(self.launch_authority.child_root).arguments()),
                 env=env,

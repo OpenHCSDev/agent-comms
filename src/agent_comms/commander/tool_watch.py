@@ -6,6 +6,7 @@ from ..native_entries import NativeEntry
 from ..pi_payloads import PiMessage, StorageDenialToolDetails, TextContent
 from ..tool_declaration import one_line
 from ..registration import Registration
+from ..selected_triage import SelectedTriage
 from .order import Commander
 
 def thread_names(registry: Registration) -> dict[str, str]:
@@ -24,7 +25,9 @@ def enforce_storage(ctx: Commander, thread: str, call_id: str,
 
 def emit(turns, thread, final=''):
     calls = turns.pop(thread, [])
-    if not calls and (not final or final.strip() == '{"decision":"IGNORE"}'):
+    if SelectedTriage.recognizes(final):
+        final = ''
+    if not calls and not final:
         return
     lines = [f'TURN {thread} ({len(calls)} calls)']
     lines += [f'  {c}' for c in calls[-14:]]

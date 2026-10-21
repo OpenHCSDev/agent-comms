@@ -10,6 +10,8 @@ from agent_comms.comms import wire
 from agent_comms.pi_payloads import PiToolResult
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.tool_results import NoToolDiff, ToolDiff, tool_result_content
+from agent_comms.native_entries import TranscriptProjection
+from conftest import transcript_records
 
 PATCH = "--- src/example.py\n+++ src/example.py\n@@ -40,2 +40,2 @@\n context\n-old = 1\n+new = 2\n"
 
@@ -68,7 +70,8 @@ def test_successful_send_preserves_original_publication_in_live_and_saved_conten
     saved = ToolResultMessage.from_wire({
         "role": "toolResult", "toolCallId": "original-send", "toolName": "comms_send",
         **raw, "isError": False,
-    }).transcript_events(None)[0]
+    }).transcript_events(TranscriptProjection(position=0),
+                         transcript_records.timestamp.at.timestamp())[0]
     assert saved.sent_message == result.sent_message(True)
     assert tool_result_content("original-send", saved.text, saved.diff, saved.sent_message) == (
         tool_result_content("original-send", result.text(), sent_message=result.sent_message(True)))

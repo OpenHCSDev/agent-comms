@@ -17,7 +17,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, WireBind, WireOmitDefault
 from .message_reference import MessageReference
 from .messages import Message
-from .recorded_time import EventTime
+from .recorded_time import EventTime, UnrecordedEventTime
 from .routing import MessageRoute, TurnRouting
 from .tool_results import SENT_MESSAGE_MIME, NoSentMessage, NoToolDiff, ToolDiff, ToolText
 from .transcript_merge import EventMerge, StreamingMerge
@@ -454,3 +454,15 @@ class TurnDigest:
     def before(self, at: float) -> bool:
         """The turn's last recorded event precedes ``at``; an empty turn is never before."""
         return bool(self.events) and self.events[-1].before(at)
+
+    @property
+    def start(self) -> EventTime:
+        """The source-recorded first event, or an explicitly unrecorded start.
+
+        Eventless external items store positions but no timestamp. Reading one must
+        not invent a time from that position or from the current clock.
+        """
+        return EventTime.capture(self.events[0].timestamp) if self.events else UnrecordedEventTime()
+
+    def starts_before(self, at: float) -> bool:
+        return self.start.before(at)

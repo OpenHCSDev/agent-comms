@@ -73,6 +73,10 @@ class CommanderConfig(CommanderRole, BaseModel):
     def packaged_voice() -> Path:
         return Path(str(files(__package__) / 'voice.md'))
 
+    @staticmethod
+    def packaged_drift() -> Path:
+        return Path(str(files(__package__) / 'drift.md'))
+
     @field_validator('root')
     @classmethod
     def selected_root(cls, root: Path, info: ValidationInfo) -> Path:
@@ -112,6 +116,13 @@ class CommanderConfig(CommanderRole, BaseModel):
         """A configured repository name takes precedence over a directory spelling."""
         return next((repo.checkout for repo in self.repos
                      if repo.github.named(name)), Path(name)).resolve()
+
+    def module_repo(self, module: str) -> Repo:
+        """The configured repository whose checkout holds ``module``; none is an error."""
+        for repo in self.repos:
+            if (repo.checkout / repo.module_file(module)).is_file():
+                return repo
+        raise ValueError(f'No configured repository holds {module}')
 
     def write(self, home: Path) -> Path:
         """Record the config and start each state file empty, so every tool reads a real file."""

@@ -4,8 +4,6 @@ from agent_comms.queued_input import InitialInput
 import asyncio
 import json
 import os
-import shlex
-import shutil
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -26,6 +24,7 @@ from agent_comms.acp_extension import (
 from agent_comms.agent_events import CompactionEnd
 from agent_comms.comms import wire
 from agent_comms.pi_vocabulary import ManualCompactionReason
+from agent_comms.launch_runtime import RestartEnvironment
 from agent_comms.runtime import socket_path
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from delivery_owner_fixture import canonical_agent
@@ -100,8 +99,6 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
     native = os.environ.get("AC_NATIVE_STACK_BIN")
     if not native:
         pytest.skip("Requires prepared native Pi stack")
-    node = shutil.which("node")
-    assert node is not None
     with TemporaryDirectory(prefix="ac-persistent-compact-", dir="/var/tmp") as directory:
         root = Path(directory)
         requests = []
@@ -164,19 +161,9 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
                 }
             )
         )
-        # A transparent node shim installs localhost provider config;
-        # it executes the same installed native CLI and never replaces its RPC.
-        preload = Path(__file__).with_name("native_local_provider.cjs")
-        monkeypatch.setenv(
-            "AC_NATIVE_LOCAL_PROVIDER_URL", f"http://127.0.0.1:{server.server_port}/v1"
-        )
-        binaries = root / "bin"
-        binaries.mkdir()
-        shim = binaries / "node"
-        shim.write_text(
-            f'#!/bin/sh\nexec {shlex.quote(node)} --require={shlex.quote(str(preload))} "$@"\n'
-        )
-        shim.chmod(0o700)
+        (config / "models.json").write_text(json.dumps({"providers": {"openrouter": {
+            "baseUrl": f"http://127.0.0.1:{server.server_port}/v1",
+        }}}))
         for key in (
             "PI_PARENT_ID",
             "PI_WORKTREE",
@@ -186,12 +173,11 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
         ):
             monkeypatch.delenv(key, raising=False)
         for key, value in {
-            "PATH": f"{binaries}{os.pathsep}{os.environ['PATH']}",
-            "PI_CODING_AGENT_DIR": str(config),
+            **RestartEnvironment(native_config=config, agent_directory=config).encode_native(),
+            "AGENT_COMMS_NATIVE_ORIGIN": f"http://127.0.0.1:{server.server_port}",
             "PI_OFFLINE": "1",
             "PI_TELEMETRY": "0",
             "OPENROUTER_API_KEY": "local-only",
-            "NODE_OPTIONS": "",
             "AGENT_COMMS_ROOT": str(root / "wire"),
             "AGENT_COMMS_AGENT_MODELS": "openrouter/z-ai/glm-5.3-flash",
             # Core's task brief: Pi adds it to every compaction's instructions.

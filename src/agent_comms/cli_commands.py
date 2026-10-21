@@ -19,12 +19,15 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping
 from contextlib import aclosing
 from dataclasses import dataclass, field, fields, replace
+from functools import partial
 from inspect import iscoroutinefunction, signature
 from itertools import dropwhile, takewhile
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Literal, Self, TextIO
 
 from acp.exceptions import RequestError
+from agent_comms.errors import ToolRefusedError
+from agent_comms.message_bus import HeldBusWrite
 
 from .active_route import (
     ActiveRoute,
@@ -59,7 +62,7 @@ from .config_options import (
 from .context_store import LATEST_CONTEXT, ContextManifestCursor
 from .coordination_database import CoordinationStore
 from .declared_family import DeclaredFamily
-from .errors import RelationViolationError, UnregisteredThreadError
+from .errors import RelationViolationError
 from .exporting import (
     EverythingScope,
     FullLimit,
@@ -287,7 +290,7 @@ class TargetBatchResult(CliResult):
         return int(not self.successful)
 
 
-class CommandSelectionChanged(ValueError):
+class CommandSelectionChanged(ToolRefusedError):
     """The selected command is no longer bound to the captured target."""
 
 
@@ -347,7 +350,7 @@ class TargetBatch(TargetSelection):
         for name in self.targets:
             try:
                 resolved = name.resolve(snapshot, comms.bus.require_channel)
-            except UnregisteredThreadError as error:
+            except ToolRefusedError as error:
                 outcomes.append((len(planned) + len(outcomes),
                                  TargetFailed(name.name, type(error).__name__, str(error))))
                 continue
@@ -359,7 +362,7 @@ class TargetBatch(TargetSelection):
                     if not bindings:
                         scope = f' in {context}' if context is not None else ''
                         raise CommandSelectionChanged(f'This action is no longer available for {name}{scope}')
-                except (CommandSelectionChanged, UnregisteredThreadError) as error:
+                except ToolRefusedError as error:
                     outcomes.append((len(planned) + len(outcomes),
                                      TargetFailed(name.name, type(error).__name__, str(error))))
                     continue
@@ -382,7 +385,7 @@ class TargetBatch(TargetSelection):
                     together.setdefault(type(command), []).append((position, name, command))
                     continue
                 result = TargetCompleted(name.name, command, command.apply(comms))
-            except (CommandSelectionChanged, UnregisteredThreadError) as error:
+            except ToolRefusedError as error:
                 result = TargetFailed(name.name, type(error).__name__, str(error))
             outcomes.append((position, result))
         for declaration, members in together.items():
@@ -1048,17 +1051,27 @@ class ImportSubagentsCliCommand(ImportingCliCommand, declared_name="import-subag
             for path in ClaudeTranscript.subagents(self.session.expanduser().resolve())))
 
 
+class PublishingCliCommand(HeldBusWrite, CliCommand, declared_name=None):
+    """Wait for maintenance to clear before running a CLI publication."""
+
+    def apply(self, ctx: Comms) -> CliResult:
+        return self.write_when_open(ctx, partial(self.publish, ctx))
+
+    @abstractmethod
+    def publish(self, ctx: Comms) -> CliResult: ...
+
+
 @dataclass(frozen=True, kw_only=True)
-class SendCliCommand(SendRequest, CliCommand):
+class SendCliCommand(SendRequest, PublishingCliCommand):
     # A bare annotation would inherit SendRequest's default; field() keeps --from required.
     sender: Annotated[str, Argument(flags=("--from",))] = field()
 
-    def apply(self, ctx: Comms) -> MessageSentResult:
+    def publish(self, ctx: Comms) -> MessageSentResult:
         return MessageSentResult(self.sent(ctx))
 
 
 @dataclass(frozen=True, kw_only=True)
-class UserSendCliCommand(CliCommand, declared_name="user-send"):
+class UserSendCliCommand(PublishingCliCommand, declared_name="user-send"):
     help = "Send as the human user to a thread (DM), #channel, or #all"
     target: Annotated[str, Argument(flags=("--to",))]
     body: Annotated[str, Argument(flags=("--body",))]
@@ -1066,8 +1079,7 @@ class UserSendCliCommand(CliCommand, declared_name="user-send"):
         dataclasses.field(default_factory=os.getcwd)
     )
 
-    def apply(self, ctx: Comms) -> CliResult:
-
+    def publish(self, ctx: Comms) -> CliResult:
         message = ctx.messaging.send_user_message(self.target, self.body, worktree=self.worktree)
         return UserMessageSentResult(message.reference)
 

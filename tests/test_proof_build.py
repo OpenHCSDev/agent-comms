@@ -1,7 +1,8 @@
 """Build-bound close uses real native tools and a retained-history bus copy."""
 
 import subprocess
-from dataclasses import replace
+import sys
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,7 @@ from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
 from agent_comms.launch_runtime import (
     DeliveredCommitNotInstalledError,
+    InstalledBuildManifest,
     ProofBuildMismatchError,
     RecordedBuildIdentity,
 )
@@ -23,16 +25,72 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsOrderDoneTool, CommsProblemCloseTool, CommsTodoCreateTool
 from agent_comms.todos import (
-    ApplicationOrderRun,
     CommitDelivery,
     FileDeliveryEvidence,
     OperationDelivery,
     PendingProblemOrder,
     Todo,
 )
+from agent_comms.order_runs import ApplicationOrderRun
+from agent_comms.work_branches import WorkBranches
 
 
-def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(tmp_path):
+@dataclass(frozen=True)
+class ProofBuildCheckout:
+    checkout: Path
+    oldest: str
+    installed: str
+    newer: str
+
+
+@pytest.fixture
+def proof_build_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> ProofBuildCheckout:
+    """Own the commit graph and installed manifest, never the developer's install."""
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    checkout = tmp_path / "checkout"
+    subprocess.run(("git", "init", str(checkout)), check=True, capture_output=True)
+    commits: list[str] = []
+    for _ in range(3):
+        subprocess.run(
+            (
+                "git", "-c", "user.name=Proof Build", "-c", "user.email=proof@example.invalid",
+                "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "Proof build",
+            ),
+            cwd=checkout,
+            check=True,
+            capture_output=True,
+        )
+        commits.append(
+            subprocess.check_output(("git", "rev-parse", "HEAD"), cwd=checkout, text=True).strip()
+        )
+    builds = ProofBuildCheckout(checkout, *commits)
+    subprocess.run(
+        ("git", "update-ref", f"refs/remotes/origin/{WorkBranches.main}", builds.newer),
+        cwd=checkout,
+        check=True,
+        capture_output=True,
+    )
+    runtime = tmp_path / "runtime"
+    (runtime / "bin").mkdir(parents=True)
+    (runtime / "bin/python").symlink_to(sys.executable)
+    (runtime / "build.json").write_text(
+        InstalledBuildManifest(
+            core_commit=builds.installed, toad_commit=builds.installed
+        ).model_dump_json()
+    )
+    current = home / ".local/share/agent-comms/current"
+    current.parent.mkdir(parents=True)
+    current.symlink_to(runtime, target_is_directory=True)
+    return builds
+
+
+def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
+    tmp_path, proof_build_checkout
+):
     source = Comms(tmp_path / "source")
     source.messaging.initialize_private_initial_protocol()
     for number, name in enumerate(("lead", "worker"), 1):
@@ -42,31 +100,11 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(tmp_pat
             )
         )
     installed = RecordedBuildIdentity.installed()
-    older_core = subprocess.check_output(
-        ("git", "rev-parse", f"{installed.core}^"),
-        cwd=Path(__file__).resolve().parents[1],
-        text=True,
-    ).strip()
-    older = replace(installed, core=older_core)
-    checkout = Path(__file__).resolve().parents[1]
-    checked = subprocess.check_output(
-        ("git", "rev-parse", "origin/main"),
-        cwd=checkout,
-        text=True,
-    ).strip()
-    contained = subprocess.check_output(
-        ("git", "rev-list", "--no-merges", "--max-count=1", installed.core),
-        cwd=checkout,
-        text=True,
-    ).strip()
-    missing = subprocess.check_output(
-        ("git", "rev-list", "--no-merges", "--max-count=1", checked, "--not", installed.core),
-        cwd=checkout,
-        text=True,
-    ).strip()
-    assert contained and missing, (
-        "The real checkout must have commits inside and outside this install"
-    )
+    older = replace(installed, core=proof_build_checkout.oldest)
+    checkout = proof_build_checkout.checkout
+    checked = proof_build_checkout.newer
+    contained = proof_build_checkout.installed
+    missing = proof_build_checkout.newer
     caller = ThreadCaller("lead")
     works = "Open the installed application and confirm the copied goal keeps its source location."
     artifact = tmp_path / "proof.txt"
@@ -151,8 +189,10 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(tmp_pat
     assert not source.goals.todos.for_commander(source.registry.require("lead").incarnation)
 
 
-def test_build_containment_does_not_turn_git_failure_into_absence_or_success():
+def test_build_containment_does_not_turn_git_failure_into_absence_or_success(
+    proof_build_checkout,
+):
     installed = RecordedBuildIdentity.installed()
-    checkout = Path(__file__).resolve().parents[1]
+    checkout = proof_build_checkout.checkout
     with pytest.raises(subprocess.CalledProcessError):
         installed.contains("0" * 40, checkout)

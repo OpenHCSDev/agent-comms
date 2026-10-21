@@ -76,6 +76,7 @@ def test_checkout_resources_remain_owned_by_stack_when_build_artifacts_exist(tmp
     namespace = load_resource_module(module)
     assert namespace["MANIFEST"] == tmp_path / "stack/pi-native.sha256"
     assert namespace["OWNER_INSTRUCTIONS"] == tmp_path / "stack/APPEND_SYSTEM.md"
+    assert namespace["UNIT_INSTRUCTIONS"] == tmp_path / "stack/UNIT_SYSTEM.md"
 
 
 @pytest.fixture
@@ -96,6 +97,7 @@ def launcher(tmp_path):
     interpreter.chmod(0o755)
     for name in ("pi-native", "prepare-pi-native", "native-source"):
         shutil.copy2(repo / "stack/bin" / name, stack / "bin" / name)
+    shutil.copyfile(repo / "stack/APPEND_SYSTEM.md", stack / "APPEND_SYSTEM.md")
     staged = tmp_path / "staged"
     (staged / "dist").mkdir(parents=True)
     (staged / "dist/cli.js").write_text(

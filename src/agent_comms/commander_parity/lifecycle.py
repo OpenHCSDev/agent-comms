@@ -31,13 +31,13 @@ from agent_comms.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from agent_comms.launch_runtime import ProofBuildMismatchError, RecordedBuildIdentity
 from agent_comms.progress_claims import WorkingClaim
 from agent_comms.todos import (
-    ApplicationOrderRun,
     DeliveredProblemOrder,
     FileDeliveryEvidence,
     OperationDelivery,
     PendingProblemOrder,
     Todo,
 )
+from agent_comms.order_runs import ApplicationOrderRun
 from agent_comms.tool_caller import ThreadCaller, ToolCaller
 from agent_comms.tool_result import ToolResult
 from agent_comms.tools import (
@@ -150,11 +150,10 @@ class LifecycleRun:
                     f"print(len(json.loads(Path({str(decisions)!r}).read_text())))",
                 )
             )
+            repo = config.module_repo(__name__)
             order = PendingProblemOrder(
-                owner=FileLine(str(Path(__file__).resolve()), 1),
-                check=OrderCheck(
-                    str(Path(__file__).resolve().parents[3]), command, CountCheckResult(0)
-                ),
+                owner=FileLine(str(repo.module_file(__name__)), 1),
+                check=OrderCheck(str(repo.checkout), command, CountCheckResult(0)),
                 edits=(
                     "Remove the copied workflow decision and verify its native order completes.",
                 ),
@@ -187,7 +186,8 @@ class LifecycleRun:
 
     @staticmethod
     def python_environment() -> dict[str, str]:
-        return {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[2])}
+        """The child runs this interpreter, which already imports this package."""
+        return dict(os.environ)
 
     @classmethod
     def invoke(cls, program: str, *arguments: str) -> ChildResult:
@@ -201,9 +201,8 @@ class LifecycleRun:
         return asyncio.run(BoundedRun.run(command, timeout=120, **options))
 
     def create(self) -> Todo:
-        self.commander.problem(
-            str(self.document), self.worker, f"{Path(__file__).resolve()}:1"
-        )
+        owner = OrderFile.read(self.document.read_text()).order.owner
+        self.commander.problem(str(self.document), self.worker, owner.to_wire())
         rows = tuple(self.commander.comms.goals.todos.for_commander(self.commander.incarnation))
         if len(rows) != 1:
             raise ValueError(f"A fresh copied workflow must create one problem, got {len(rows)}")

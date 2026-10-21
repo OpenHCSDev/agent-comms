@@ -17,6 +17,7 @@ from .child_process import NoProcess
 from .cli_result import CliResult
 from .comms import Comms
 from .fresh_private_session import create_fresh_private_session
+from .native_session_files import CheckSession
 from .goals import NoGoal
 from .launch_root import LaunchRoot
 from .launch_runtime import ThreadLaunch
@@ -113,7 +114,7 @@ class CheckRoot:
             slot = original.incarnation.require_recorded().lookup
             project = copied.root / "projects" / slot
             project.mkdir(parents=True, mode=0o700)
-            session = self._session(original, copied.root / "native-sessions" / slot, project)
+            session = self._session(original, copied.root, slot, project)
             declarations[name] = replace(
                 original.without_turn(),
                 worktree=str(project),
@@ -142,8 +143,8 @@ class CheckRoot:
             for name in names:
                 copied.messaging.acknowledge_through(name, messages[-1].seq)
 
-    def _session(self, original: Thread, directory: Path, project: Path) -> str:
-        session = create_fresh_private_session(directory, worktree=project)
+    def _session(self, original: Thread, root: Path, slot: str, project: Path) -> str:
+        session = create_fresh_private_session(root, worktree=project, location=CheckSession, slot=slot)
         source = original.runtime.history_source(self.source.root, original.incarnation)
         with source.reading() as reader, session.path.open("r+") as output:
             writer = ImportedSessionWriter(output, NativeEntry.read(output.readline().encode()))

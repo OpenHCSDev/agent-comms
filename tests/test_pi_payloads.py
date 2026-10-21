@@ -145,7 +145,7 @@ def test_tracked_commit_observations_preserve_original_receipt_and_refuse_repeti
     from agent_comms.native_pi import NativePiUnavailable
     from agent_comms.tracked_turn import ObservedNativeCommit, PendingNativeCommit
 
-    event = decode({"type": "input_committed", "inputId": "a" * 32, "sessionId": "session", "sessionEntryId": "entry"})
+    event = decode({"type": "input_committed", "inputId": "a" * 32, "sessionId": "session", "sessionEntryId": "entry", "sessionEntryStart": 128})
     pending = PendingNativeCommit()
     with pytest.raises(NativePiUnavailable):
         pending.require()

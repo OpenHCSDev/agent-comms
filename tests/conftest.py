@@ -6,12 +6,14 @@ import os
 import subprocess
 import sys
 import tempfile
+import uuid
 from collections.abc import Awaitable, Iterator
 from contextlib import AsyncExitStack, contextmanager
 from pathlib import Path
 
 import pytest
 from xdist import is_xdist_worker
+from source_programs import SourcePrograms
 
 from agent_comms import candidate_maintenance
 from agent_comms.bus_publication import AgentOrigin
@@ -53,6 +55,25 @@ class TranscriptRecords:
 
 
 transcript_records = TranscriptRecords()
+
+
+@pytest.fixture
+def source_programs(tmp_path):
+    return SourcePrograms.create(tmp_path)
+
+
+@pytest.fixture
+def bridge_home(tmp_path, monkeypatch):
+    """Short per-worker socket addresses; all state stays in persistent test scratch."""
+    destination = tmp_path / 'home'
+    destination.mkdir()
+    monkeypatch.chdir(Path(__file__).resolve().parents[1])
+    home = Path(f'.bridge-home-{uuid.uuid4().hex[:8]}')
+    home.symlink_to(destination, target_is_directory=True)
+    try:
+        yield home
+    finally:
+        home.unlink()
 
 
 _MANAGED_RUNTIME_ENVIRONMENT = frozenset({
@@ -107,8 +128,9 @@ def pytest_sessionstart(session):
 
     prepare-pi-native keys its build by the pin and reuses a verified one, so an
     unchanged pin costs nothing and a changed pin rebuilds without anyone remembering.
+    Collection loads declarations only; it neither starts workers nor needs a native build.
     """
-    if is_xdist_worker(session) or pinned_location().is_dir():
+    if session.config.option.collectonly or is_xdist_worker(session) or pinned_location().is_dir():
         return
     root = Path(__file__).resolve().parents[1]
     subprocess.run([str(root / "stack/bin/prepare-pi-native"), "--python", sys.executable], check=True)
@@ -123,6 +145,17 @@ async def tool_listener():
             resources.push_async_callback(listener.close)
             return listener
         yield create
+
+
+@pytest.fixture
+def durable_home(tmp_path, monkeypatch):
+    """A credential-free durable host never reads the developer's Pi account."""
+    home = tmp_path / "home"
+    config = home / ".pi" / "agent"
+    config.mkdir(parents=True)
+    (config / "auth.json").write_text("{}")
+    monkeypatch.setenv("HOME", str(home))
+    return home
 
 
 @pytest.fixture
@@ -142,10 +175,13 @@ def cursor_delivery(source_reads):
 
 @pytest.fixture(scope="session")
 def native_runtime_package():
-    """The artifact of this checkout's own pin, never the installed package's."""
+    """The artifact of this checkout's own pin, prepared as installation prepares it."""
     from agent_comms.native_package import VerifiedNativePackage
+    from agent_comms.unit_instructions import UnitInstructions
 
-    return VerifiedNativePackage.acquire(pinned_native_package())
+    package = VerifiedNativePackage.acquire(pinned_native_package())
+    UnitInstructions.prepare()
+    return package
 
 
 @pytest.fixture(autouse=True)
@@ -153,9 +189,10 @@ def _managed_runtime_environment_is_explicit(monkeypatch: pytest.MonkeyPatch) ->
     """A developer's live managed process is not a test wire or native child."""
     from agent_comms.launch_root import LaunchRoot
 
-    monkeypatch.setattr(LaunchRoot, "_current", LaunchRoot.unstarted())
-    for name in _MANAGED_RUNTIME_ENVIRONMENT:
-        monkeypatch.delenv(name, raising=False)
+    with LaunchRoot.unstarted().selected():
+        for name in _MANAGED_RUNTIME_ENVIRONMENT:
+            monkeypatch.delenv(name, raising=False)
+        yield
 
 
 @contextmanager
@@ -171,6 +208,22 @@ def _root_lifetime(root: Path) -> Iterator[Path]:
 def tmp_path(tmp_path: Path) -> Iterator[Path]:
     """Join bus workers before pytest applies its passed-directory retention policy."""
     with _root_lifetime(tmp_path) as root:
+        yield root
+
+
+@pytest.fixture
+def scratch_root(tmp_path_factory):
+    from agent_comms.storage_rules import StorageRule
+
+    base = tmp_path_factory.getbasetemp()
+    scratch = StorageRule().scratch_base.resolve()
+    if not base.resolve().is_relative_to(scratch):
+        base = scratch / "pytest"
+        base.mkdir(parents=True, exist_ok=True)
+    with (
+        tempfile.TemporaryDirectory(prefix="check-root-", dir=base) as directory,
+        _root_lifetime(Path(directory)) as root,
+    ):
         yield root
 
 

@@ -370,6 +370,8 @@ class SessionLifecycle:
 
     def release_registered_owner(self, name: str) -> None:
         snapshot = self.comms.registry.snapshot()
+        if snapshot.retired(snapshot.canonical_name(name)):
+            return
         thread = snapshot.require(name)
         if thread.process_identity.runs_here() and snapshot.status(thread.name).running:
             self.comms.owners.stop(thread.name)

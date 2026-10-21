@@ -10,7 +10,8 @@ from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Literal, NoReturn, TextIO, Type, Annotated
+from functools import partial
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, NoReturn, TextIO, Type
 
 from pydantic import JsonValue
 
@@ -74,6 +75,7 @@ from .goal_history import RecordedGoalRevision
 from .goal_presentation import GoalSnapshot, ThreadGoalExecution
 from .goal_waits import NoStandbyReview, StandbyReview
 from .goals import Goal, GoalDeclaration, OrderCheck
+from .message_bus import HeldBusWrite
 from .standing_rules import StandingRule
 from .plan_phases import OrderPhase
 from .message_reference import MessageReference
@@ -132,7 +134,6 @@ from .task_sources import (
 from .order_story import FleetStory, OrderStory
 from .order_work import OrderWork
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
-from .plan_phases import OrderPhase
 from .progress_claims import ProgressClaim
 from .relationships import RelationshipEdit
 from .thread_execution import (
@@ -147,6 +148,7 @@ from .turn_digests import (
     LastTurns,
     OrderEditsRead,
     ThreadTurns,
+    TurnBound,
     TurnsSince,
     UnjudgedEdits,
 )
@@ -454,6 +456,18 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
         self: ToolRequest[ToolCaller], comms: Comms, caller: NoThreadCaller
     ) -> ToolResult:
         return self.apply(comms, caller)
+
+
+class PublishingToolRequest[Caller: ToolCaller = ToolCaller](
+    HeldBusWrite, ToolRequest[Caller], declared_name=None
+):
+    """A publication waits at the bus owner before any caller or message mutation."""
+
+    def apply(self, comms: Comms, caller: Caller) -> ToolResult:
+        return self.write_when_open(comms, partial(self.publish, comms, caller))
+
+    @abstractmethod
+    def publish(self, comms: Comms, caller: Caller) -> ToolResult: ...
 
 
 class LiveOwnerTool:
@@ -1092,12 +1106,15 @@ class CommsProblemCloseTool(CommsTodoTool):
 
 @dataclass(frozen=True, kw_only=True)
 class CommsTurnsTool(ThreadReadTool):
-    label = "Recent turns"
-    description = "Read a unit's recent turns with ordered original transcript facts."
-    last: Annotated[int, *tool_field("Number of newest turns")] = LastTurns.count
+    label = "Read turns"
+    description = ("Read a unit's ordered original transcript facts in bounded pages. "
+                   "Send the returned older window to read the next older page.")
+    window: Annotated[
+        TurnBound, *tool_field("Turn window; send back older for the next page")
+    ] = field(default_factory=LastTurns)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadTurns:
-        return comms.transcripts.turns(caller.subject(self.thread), LastTurns(self.last))
+        return comms.transcripts.turns(caller.subject(self.thread), self.window)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1252,7 +1269,7 @@ class CommsSendRefusalsTool(ReadTool, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSendTool(ToolRequest):
+class CommsSendTool(PublishingToolRequest):
     label = "Comms Send"
     description = (
         "Send a message to another thread or channel. Address specific threads with "
@@ -1273,7 +1290,7 @@ class CommsSendTool(ToolRequest):
         *tool_field("Change report fields; required for the change-report kind"),
     ] = NoChangeReport()
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
+    def publish(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
         try:
             caller.require_directive(comms, self.body)
             body = VerdictAudience(self.audience).addressed(self.target, self.body)
@@ -1288,7 +1305,7 @@ class CommsSendTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsAuthoredTaskTool(ThreadToolRequest):
+class CommsAuthoredTaskTool(ThreadToolRequest, PublishingToolRequest[ThreadCaller]):
     """One original authorized publication path for authored task declarations."""
 
     target: Annotated[
@@ -1307,7 +1324,7 @@ class CommsAuthoredTaskTool(ThreadToolRequest):
     @abstractmethod
     def original_body(self, declaration): ...
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> TaskPublished:
+    def publish(self, comms: Comms, caller: ThreadCaller) -> TaskPublished:
         owner = comms.registry.require(caller.name)
         declaration = self.declaration(owner)
         result = comms.messaging.send(

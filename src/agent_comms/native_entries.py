@@ -5,12 +5,15 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from contextlib import ExitStack, contextmanager
+from collections.abc import Iterable
+from itertools import repeat
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, TextIO, cast
 
-from .locked_store import DurableFile, PatternFile
+from .locked_store import DurableFile
+from .native_session_files import SavedSessionFile
 
 if TYPE_CHECKING:
     from .native_pi import NativeContextProof
@@ -49,11 +52,10 @@ class RootEntry(PiOmitted):
 
 @dataclass(frozen=True, kw_only=True)
 class RecordedEntry(PiPayload):
-    """Original external ancestry fields; opaque entries project this same owner."""
+    """Shared source identity and projection; each journal declares its own clock."""
 
     id: str | None = None
     parent_id: Annotated[str | RootEntry, WireName("parentId")] = RootEntry()
-    timestamp: Annotated[RecordedTimestamp, TimestampText]
     is_message: ClassVar[bool] = False
     assistant_message: ClassVar[bool] = False
     messages: ClassVar[tuple[PiMessage, ...]] = ()
@@ -81,16 +83,12 @@ class RecordedEntry(PiPayload):
     def source_coordinates(self):
         return self
 
-    def events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
-        """Project one journal clock onto every display part without inventing time.
+    @abstractmethod
+    def events(self, context: TranscriptProjection) -> list[TranscriptEvent]: ...
 
-        Decode it once, before splitting into message/tool/routing events; ACP
-        consumers receive Unix seconds.
-        """
-        return self._events(context, self.timestamp.at.timestamp())
-
-    def _events(self, context: TranscriptProjection, timestamp: float) -> list[TranscriptEvent]:
-        return [event for message in self.messages for event in message.transcript_events(context, timestamp)]
+    def project_messages(self, context: TranscriptProjection, timestamps: Iterable[float]) -> list[TranscriptEvent]:
+        return [event for message, timestamp in zip(self.messages, timestamps, strict=True)
+                for event in message.transcript_events(context, timestamp)]
 
     @property
     def original_id(self):
@@ -102,6 +100,14 @@ class RecordedEntry(PiPayload):
 @dataclass(frozen=True, kw_only=True)
 class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
     wire_tag = "type"
+    timestamp: Annotated[RecordedTimestamp, TimestampText]
+
+    def events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
+        """Every part of a native record shares its original journal clock."""
+        return self._events(context, self.timestamp.at.timestamp())
+
+    def _events(self, context: TranscriptProjection, timestamp: float) -> list[TranscriptEvent]:
+        return self.project_messages(context, repeat(timestamp, len(self.messages)))
 
     def imported_sources(self):
         return ()
@@ -186,7 +192,7 @@ class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
 
 
 @dataclass
-class ImportedSessionWriter(DurableFile, PatternFile):
+class ImportedSessionWriter(DurableFile, SavedSessionFile):
     filename = "imported_sessions/{session_id}.jsonl"
     stream: TextIO
     parent: NativeEntry
@@ -596,6 +602,12 @@ class StoredEntry(RecordedEntry):
 
     id: int = field()
     messages: Annotated[tuple[PiMessage, ...], WireName("model")] = ()
+
+    def events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
+        """Durable entries have no clock; their individual model messages do."""
+        return self.project_messages(context, (
+            message.timestamp.recorded_at("Durable message") for message in self.messages
+        ))
 
 
 class CustomEntry(NativeEntry):

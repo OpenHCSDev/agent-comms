@@ -29,6 +29,9 @@ class RegistryIdentityCheck(RuleCheck):
     process: ProcessIdentity
     goal_permission: GoalPermission
 
+    def name_matches(self) -> bool:
+        return self.actual.name == self.expected.name
+
     def worktree_matches(self) -> bool:
         return self.actual.worktree == self.expected.worktree
 
@@ -63,6 +66,11 @@ class RunningTurnRegistryCheck(RegistryClaimCheck):
     must be one this conversation ran in. This accepts no new input.
     """
 
+    def name_matches(self) -> bool:
+        # RegistryOwner resolved the captured name through the registry's
+        # retained alias. Recording this turn accepts no input under a new name.
+        return True
+
     def worktree_matches(self) -> bool:
         return super().worktree_matches() or (
             self.actual.project_resume_due
@@ -81,13 +89,10 @@ class GoalRegistryClaimCheck(GoalRegistryIdentityCheck, RegistryClaimCheck):
 
 class RegistryIncarnationRule(ReservationRule):
     check_type = RegistryIdentityCheck
-    explanation = "The registered thread incarnation or name changed before native send."
+    explanation = "The registered thread incarnation changed before native send."
 
     def violated(self, check: RegistryIdentityCheck) -> bool:
-        return (
-            check.actual.incarnation != check.expected.incarnation
-            or check.actual.name != check.expected.name
-        )
+        return check.actual.incarnation != check.expected.incarnation
 
 
 class RegistryNameRule(ReservationRule):
@@ -95,7 +100,7 @@ class RegistryNameRule(ReservationRule):
     explanation = "The captured owner name changed."
 
     def violated(self, check: RegistryIdentityCheck) -> bool:
-        return check.actual.name != check.expected.name
+        return not check.name_matches()
 
 
 class RegistryProcessRule(ReservationRule):

@@ -21,6 +21,7 @@ from agent_comms.native_package import (
     write_native_manifest,
 )
 from agent_comms.storage_rules import StoragePath
+from agent_comms.unit_instructions import UnitInstructions
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -121,6 +122,14 @@ class InstallSourcesVerb(NativePackageVerb):
     def apply(self, ctx: None = None) -> None:
         verify_native_package(self.package)
         install_declared_sources(self.package, self.snapshot)
+
+
+@dataclass(frozen=True, kw_only=True)
+class UnitInstructionsVerb(NativePackageVerb):
+    help = "Render the unit system prompt beside the native resources"
+
+    def apply(self, ctx: None = None) -> None:
+        print(UnitInstructions.prepare(), file=sys.stderr)
 
 
 if __name__ == "__main__":

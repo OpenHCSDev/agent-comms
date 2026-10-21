@@ -352,7 +352,7 @@ class TranscriptSource:
         with self.reading() as reader:
             cut = reader.cut()
             if cut.offset == 0:
-                return ()
+                return bound.take(())
             with closing(reader.reverse(cut.offset)) as records:
                 turns = bound.take(self._newest_turns(records))
             if not cut.holds(reader.cut(), cut.offset):

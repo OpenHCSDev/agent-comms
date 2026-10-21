@@ -343,7 +343,7 @@ class MaintenanceBarrier(MaintenanceIngress):
         ))
         raise MaintenanceHeldError(
             f"Maintenance released dead holder pid={expected.operator.pid} "
-            f"start_time={expected.operator.start_time}; retry the input"
+            f"start_time={expected.operator.start_time}; ingress reopened"
         )
 
     def release_dead(self, expected: MaintenanceState) -> MaintenanceStatus:

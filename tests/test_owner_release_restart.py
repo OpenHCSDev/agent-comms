@@ -15,10 +15,12 @@ from pathlib import Path
 
 import pytest
 
+from stored_inputs import stored_inputs
+
 from agent_comms.child_process import (
     ExitedOutcome,
     ObservedProcess,
-    ParentedProcess,
+    SpawnedProcess,
     SignaledOutcome,
 )
 
@@ -153,35 +155,18 @@ def releasing_owner(tmp_path):
     if sys.platform == "win32":
         pytest.skip("Release handler uses POSIX TERM")
     root = tmp_path / "wire"
-    script = tmp_path / "owner.py"
-    script.write_text("""import os, signal, time
-from pathlib import Path
-from agent_comms.comms import Comms
-from agent_comms.threads import current_thread
-from stored_inputs import stored_inputs
-root = Path(os.environ['AGENT_COMMS_ROOT'])
-comms = Comms(root)
-def release(signum, frame):
-    comms.owners.release('worker')
-    (root / 'released').touch()
-    while not (root / 'exit').exists(): time.sleep(0.01)
-    raise SystemExit(0)
-signal.signal(signal.SIGTERM, release)
-comms.registry.declare(current_thread(comms.registry))
-(root / 'ready').touch()
-while True: time.sleep(0.01)
-""")
+    script = Path(__file__).with_name('releasing_owner_child.py')
+    arguments = (str(script), str(root))
     env = {
         **os.environ,
-        "AGENT_COMMS_ROOT": str(root),
         "AGENT_COMMS_THREAD": "worker",
         "PI_WORKTREE": str(tmp_path),
         # This real source process must declare the command it actually runs.
         # Restart capture cannot infer extinct launch arguments from its PID.
         "AGENT_COMMS_AGENT_BIN": sys.executable,
-        "AGENT_COMMS_AGENT_ARGS": shlex.join((str(script),)),
+        "AGENT_COMMS_AGENT_ARGS": shlex.join(arguments),
     }
-    child = ParentedProcess.launch((sys.executable, str(script)), env=env)
+    child = SpawnedProcess.launch((sys.executable, *arguments), env=env)
     comms = Comms(root)
     try:
         wait_for(root / "ready")

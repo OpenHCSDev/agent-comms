@@ -1,4 +1,4 @@
-"""A packaged rule owns its metadata, reason, rendering and review membership."""
+"""A packaged rule owns its metadata, reason, rendering, review membership and audience."""
 
 from __future__ import annotations
 
@@ -9,9 +9,33 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, Self
 
-from ..declared_family import DeclaredFamily
-from ..field_codec import FieldCodec, boundary_decoder
-from .config import CommanderConfig
+from agent_comms.commander.config import CommanderConfig
+from agent_comms.declared_family import DeclaredFamily
+from agent_comms.field_codec import FieldCodec, boundary_decoder
+
+
+class RuleAudience(DeclaredFamily, affix="Audience"):
+    """Who a packaged rule governs; each audience owns what it adds to a unit's system prompt."""
+
+    @classmethod
+    @abstractmethod
+    def unit_rules(cls, rule: RuleFile) -> tuple[str, ...]: ...
+
+
+class CommanderAudience(RuleAudience):
+    """The commander's own process (roasts, strikes, timers, coordination): units never carry it."""
+
+    @classmethod
+    def unit_rules(cls, rule: RuleFile) -> tuple[str, ...]:
+        return ()
+
+
+class FleetAudience(RuleAudience):
+    """How code and reports are judged: every unit carries it, and so does the commander."""
+
+    @classmethod
+    def unit_rules(cls, rule: RuleFile) -> tuple[str, ...]:
+        return (rule.render(),)
 
 
 @dataclass(frozen=True)
@@ -19,6 +43,7 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
     family_discriminator = "type"
     name: str
     description: str
+    audience: type[RuleAudience]
     why: str
     body: str
     priority: ClassVar[int]
@@ -75,6 +100,9 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
 
     def render(self) -> str:
         return f"{self.summary}\n\n{self.body}".rstrip()
+
+    def unit_rules(self) -> tuple[str, ...]:
+        return self.audience.unit_rules(self)
 
     @abstractmethod
     def review_rules(self) -> tuple[str, ...]: ...

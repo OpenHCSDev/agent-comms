@@ -59,6 +59,7 @@ from .tool_declaration import ToolDeclaration
 from .tool_results import NoSentMessage, NoToolDiff, ToolDiff
 from .transcript_events import SentTranscript
 from .turn_failure import ProviderTransportFailed
+from .recorded_time import EventTime, EventMilliseconds, UnrecordedEventTime
 
 if TYPE_CHECKING:
     from .agent_events import AgentEvent, ProviderUsage
@@ -791,6 +792,7 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
         PiField[ReportedText | PiOmitted], WireName("errorMessage")
     ] = PiOmitted()
     diagnostics: tuple[PiDiagnostic, ...] = ()
+    timestamp: Annotated[PiField[EventTime], EventMilliseconds] = UnrecordedEventTime()
 
     def __post_init__(self):
         if isinstance(self.stop_reason, str):

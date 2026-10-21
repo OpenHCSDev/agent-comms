@@ -1,6 +1,7 @@
 ---
 name: evidence-not-claims
 description: "a claim counts only with its artifact (diff, count, measurement, search); merged, installed and seen working are different states, and agreement is not evidence"
+audience: fleet
 type: feedback
 ---
 

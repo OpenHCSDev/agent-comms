@@ -22,7 +22,7 @@ from agent_comms.cli_protocol import Outcome, TaggedWire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.messages import Message
-from agent_comms_hooks.watch import WatchClaim, WatchRecord
+from agent_comms_hooks.watch import SessionRefusedError, WatchClaim, WatchRecord
 
 if TYPE_CHECKING:
     from .shared import LineMonitorBridge, MonitorProbe, Serve
@@ -62,7 +62,7 @@ class BridgeReplacement(BridgeExit):
             print(f"Session bridge owner {operation.owner.pid} exited; left stopped",
                   file=sys.stderr)
             return
-        operation.owner.require_ancestor_of(os.getpid())
+        operation.owner.require_alive()
         runtime.require_available()
         command = operation.command(record, runtime)
         os.execve(command[0], command, runtime.environment(os.environ))
@@ -220,7 +220,7 @@ class SessionRefused(SessionReply):
     error: str
 
     def require(self) -> None:
-        raise ValueError(self.error)
+        raise SessionRefusedError(self.error)
 
 
 class PeerGone(SessionReply):
@@ -269,9 +269,9 @@ class VerifySession(SessionRequest):
     owner: ProcessIdentity
 
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
-        if self.owner != service.owner:
+        if self.owner != service.owner or not service.owner.alive():
             return SessionRefused.model_validate(
-                dict(error="This bridge belongs to a different Claude process incarnation")
+                dict(error="This bridge belongs to a different or exited Claude process incarnation")
             )
         return SessionReady()
 

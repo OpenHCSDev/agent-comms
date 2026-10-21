@@ -37,7 +37,8 @@ from agent_comms.repo import Repo
 from agent_comms.storage_rules import StorageRule
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.todos import MechanicalOrderRun, OperationDelivery, PendingProblemOrder
+from agent_comms.todos import OperationDelivery, PendingProblemOrder
+from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsHistoryTool, CommsOrderDoneTool, CommsStandingRulesTool
 from agent_comms.wire_watch import WatchSource, WireWatch

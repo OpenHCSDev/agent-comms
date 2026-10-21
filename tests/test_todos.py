@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 from contextlib import chdir
@@ -16,7 +17,9 @@ import pytest
 
 from agent_comms.change_report import FileLine
 from agent_comms.commander.order import Commander, PullRequestVerb
+from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import FieldCodec
+from agent_comms.installer.practice import practice_copy
 from agent_comms.goals import OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
@@ -25,12 +28,30 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.registration import Registration
 from agent_comms.threads import Thread
 from agent_comms.todos import (
-    Assignment, ChangeTodoState, DoneTodoState, GoalRef,
-    ClosedListedPullRequest, MechanicalOrderRun, MergedListedPullRequest,
-    PendingProblemOrder, PullRequestLink, PullRequests, UnmergedListedPullRequest,
-    DeliverTodo, OperationDelivery, ReleaseTodo, StrikeReason,
-    Todo, TodoConflict, TodoError, TodoState, TodoStore, WithdrawTodo,
+    Assignment,
+    ChangeTodoState,
+    DoneTodoState,
+    GoalRef,
+    ClosedListedPullRequest,
+    MergedListedPullRequest,
+    PullRequestCommit,
+    PendingProblemOrder,
+    PullRequestLink,
+    PullRequests,
+    UnmergedListedPullRequest,
+    DeliverTodo,
+    OperationDelivery,
+    ReleaseTodo,
+    StrikeReason,
+    Todo,
+    TodoConflict,
+    TodoError,
+    TodoState,
+    TodoStore,
+    WithdrawTodo,
 )
+from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
+from agent_comms.work_branches import WorkBranches
 
 
 
@@ -193,9 +214,38 @@ def test_merged_order_keeps_its_checked_fields(tmp_path: Path) -> None:
 
 
 @pytest.fixture
-def pr_commander(tmp_path):
-    """Real bus/store and real source checkout; GitHub is read, never changed."""
-    source = Repo.of(Path(__file__).resolve().parents[1])
+def pr_commander(tmp_path, monkeypatch):
+    """Real Git, CLI command and bus; only the external GitHub answers are synthetic."""
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    checkout = tmp_path / "lead"
+    checkout.mkdir()
+    source = Repo(checkout=checkout, github=RepositoryName.from_wire("fixture/orders"))
+    source.git(checkout, "init", "-q", "-b", WorkBranches.main)
+    source.git(checkout, "-c", "user.name=Order fixture", "-c", "user.email=orders@example.invalid",
+               "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-qm", "Local merge")
+    source.git(checkout, "remote", "add", "origin", f"https://github.com/{source.github.to_wire()}.git")
+    merged = source.git(checkout, "rev-parse", "HEAD").strip()
+    source.git(checkout, "update-ref", f"refs/remotes/origin/{WorkBranches.main}", merged)
+    common = dict(branch="feature/orders", head=merged, updated="2026-10-20T12:00:00Z",
+                  base=WorkBranches.main)
+    requests = (
+        (MergedListedPullRequest(number=1, merge=PullRequestCommit(merged),
+                                 merged="2026-10-20T12:00:00Z", **common), "No order metadata."),
+        (MergedListedPullRequest(number=2, merge=PullRequestCommit(merged),
+                                 merged="2026-10-20T12:00:00Z", **common), "## P343\n\n## P344"),
+        (ClosedListedPullRequest(number=3, **common), "Closed without merging."),
+    )
+    binaries = tmp_path / "bin"
+    binaries.mkdir()
+    (binaries / "gh").symlink_to(Path(__file__).with_name("github_cli_stub.py"))
+    (binaries / "pull_requests.json").write_text(json.dumps({
+        "repo": source.github.to_wire(),
+        "requests": {str(row.number): {"body": body, "listed": FieldCodec.encode(row)}
+                     for row, body in requests},
+    }))
+    monkeypatch.setenv("PATH", os.pathsep.join((str(binaries), os.environ["PATH"])))
     lead = thread(source.checkout.name, tmp_path, 1.0)
     rule = StorageRule(checkout_base=source.checkout.parent)
     (tmp_path / "storage.json").write_text(json.dumps(FieldCodec.encode(rule)))
@@ -232,45 +282,38 @@ def github_body(ctx, number):
         capture_output=True, text=True, timeout=60, check=True).stdout
 
 
-def test_existing_pr_without_body_identity_merges_its_recorded_order(pr_commander):
+@pytest.mark.parametrize("number,problems,body_identities", (
+    pytest.param(1, ("P1",), (), id="without-body-identity"),
+    pytest.param(2, ("P343", "P344"), ("P343", "P344"), id="shared-request"),
+))
+def test_recorded_merged_request_closes_all_linked_orders(pr_commander, number, problems, body_identities):
     ctx = pr_commander
-    # Retained real GitHub merge: no problem number or order identity in its body.
-    assert not re.search(r"\bP[1-9][0-9]*\b|Agent-Comms-Order:", github_body(ctx, 2347))
-    original = pr_order(ctx, "P1")
-    linked = adopt_pr(ctx, original.id, 2347)
-    link = PullRequestLink(ctx.repos[0].github, 2347)
-    assert linked.order.checked().pull_requests == (link,)
-    assert linked.revision == original.revision + 1
-    assert adopt_pr(ctx, original.id, 2347) == linked
-    store = TodoStore(ctx.root)
-    assert store.get(original.id) == linked
-    store.reconcile_merges(ctx.incarnation, ctx.comms.registry.storage_rule)
-    done = store.get(original.id)
-    assert done.state is DoneTodoState
-    assert done.order.checked().pull_requests == (link,)
-    assert ctx.repos[0].contains(done.order.sha)
-
-
-def test_one_pr_linked_to_two_orders_closes_both(pr_commander):
-    ctx = pr_commander
-    body = github_body(ctx, 2249)
-    assert "## P343" in body and "## P344" in body
-    originals = tuple(pr_order(ctx, pid) for pid in ("P343", "P344"))
-    linked = tuple(adopt_pr(ctx, todo.id, 2249) for todo in originals)
+    assert tuple(re.findall(r"\bP[1-9][0-9]*\b|Agent-Comms-Order:", github_body(ctx, number))) == body_identities
+    originals = tuple(pr_order(ctx, pid) for pid in problems)
+    linked = tuple(adopt_pr(ctx, todo.id, number) for todo in originals)
+    link = PullRequestLink(ctx.repos[0].github, number)
+    for original, saved in zip(originals, linked):
+        assert saved.order.checked().pull_requests == (link,)
+        assert saved.revision == original.revision + 1
+        assert adopt_pr(ctx, original.id, number) == saved
     requests = PullRequests(linked).listed(ctx.repos[0].github, MergedListedPullRequest, linked[0])
     assert len(requests) == 1
     assert requests[0].problems == tuple(todo.id for todo in linked)
     assert requests[0].orders == tuple(todo.order.id for todo in linked)
     store = TodoStore(ctx.root)
+    assert tuple(store.get(todo.id) for todo in originals) == linked
     store.reconcile_merges(ctx.incarnation, ctx.comms.registry.storage_rule)
     done = tuple(store.get(todo.id) for todo in originals)
     assert all(todo.state is DoneTodoState for todo in done)
     assert len({todo.order.sha for todo in done}) == 1
+    for todo in done:
+        assert todo.order.checked().pull_requests == (link,)
+        assert ctx.repos[0].contains(todo.order.sha)
 
 
 def test_unlinked_pr_with_matching_problem_heading_closes_nothing(pr_commander):
     ctx = pr_commander
-    assert "## P343" in github_body(ctx, 2249)
+    assert "## P343" in github_body(ctx, 2)
     original = pr_order(ctx, "P343")
     assert PullRequests((original,)).listed(original.repo, MergedListedPullRequest, original) == ()
     store = TodoStore(ctx.root)
@@ -282,7 +325,7 @@ def test_unlinked_pr_with_matching_problem_heading_closes_nothing(pr_commander):
 def test_recorded_closed_request_is_not_open_or_merged(pr_commander):
     ctx = pr_commander
     original = pr_order(ctx, "P1")
-    linked = adopt_pr(ctx, original.id, 2236)
+    linked = adopt_pr(ctx, original.id, 3)
     pulls = PullRequests((linked,))
     assert pulls.listed(linked.repo, UnmergedListedPullRequest, linked) == ()
     assert pulls.listed(linked.repo, MergedListedPullRequest, linked) == ()
@@ -290,6 +333,71 @@ def test_recorded_closed_request_is_not_open_or_merged(pr_commander):
     store = TodoStore(ctx.root)
     store.reconcile_merges(ctx.incarnation, ctx.comms.registry.storage_rule)
     assert store.get(original.id) == linked
+
+
+def test_installed_merge_closes_only_the_run_that_has_been_proven(pr_commander):
+    """Local forge fixture, copied SQLite stores, board and real commander close entrypoint."""
+    ctx = pr_commander
+    source = ctx.repos[0]
+    lead = ctx.comms.registry.require(ctx.commander)
+    worker = thread("merge-worker", ctx.root, 2.0)
+    ctx.comms.registry.register(worker)
+    planned = "Read the copied board and confirm its application order remains assigned after merge"
+    link = PullRequestLink(source.github, 1)  # the fixture's locally contained merge
+    originals = tuple(
+        ctx.comms.goals.todos.create(
+            f"P{index}", source.github, "Keep application work held until its run is recorded",
+            creator=lead, owner=worker, generation="merge-run",
+            goal=GoalRef(lead.name, lead.created_at, "merge-run"),
+            review_at=RecordedEventTime(1000),
+            order=replace(order(source.checkout), id=f"merge-order-{index}", run=run,
+                          pull_requests=(link,)))
+        for index, run in enumerate((MechanicalOrderRun(), ApplicationOrderRun(planned)), 1))
+    copied_path = ctx.root.parent / f"{ctx.root.name}-copied"
+    with practice_copy(ctx.root, copied_path) as (copied, measurement):
+        checked = ctx.model_copy(update={"root": copied, "state": copied / "state"})
+        store = checked.comms.goals.todos
+        store.reconcile_merges(checked.incarnation, checked.comms.registry.storage_rule)
+        mechanical, application = tuple(store.get(todo.id) for todo in originals)
+        assert mechanical.state is DoneTodoState
+        assert mechanical.assignment is None
+        assert source.contains(mechanical.order.sha)
+        assert application.state is originals[1].state
+        assert application.assignment == originals[1].assignment
+        assert application.holder == worker.name
+        assert application.order.sha == mechanical.order.sha
+        assert not application.order.accepted
+        assert application.order.line == application.order.checked().run.merged_line
+        board = checked.board_text()
+        assert application.order.line in board
+        assert worker.name in board
+        print("APPLICATION BOARD:", next(line for line in board.splitlines()
+                                          if line.startswith(f"| {application.id}:")))
+        store.reconcile_merges(checked.incarnation, checked.comms.registry.storage_rule)
+        assert store.get(application.id) == application  # no heartbeat revision churn
+        assert FieldCodec.decode(Todo, FieldCodec.encode(application)) == application
+        with pytest.raises(ToolRefusedError) as refused:
+            store.apply(application.id, ChangeTodoState(
+                application.revision, DoneTodoState, checked.incarnation, "merge-run"))
+        print("CLOSE REFUSAL:", refused.value)
+        artifact = copied / "run.txt"
+        artifact.write_text(board)
+        with pytest.raises(ToolRefusedError):
+            checked.close(application.id,
+                          "The source grep passed and the merge commit exists in main.",
+                          str(artifact))
+        assert store.get(application.id) == application
+        works = f"{planned}; the copied store and board both retained {worker.name}."
+        checked.close(application.id, works, str(artifact))
+        installed = store.get(application.id)
+        assert installed.state is DoneTodoState
+        assert installed.assignment is None
+        assert installed.order.accepted
+        assert installed.order.works == works
+        assert installed.order.artifact == str(artifact)
+        assert installed.order.installed(works, str(artifact)) is installed.order
+        assert FieldCodec.decode(Todo, FieldCodec.encode(installed)) == installed
+        assert tuple(ctx.comms.goals.todos.get(todo.id) for todo in originals) == originals
 
 
 @pytest.mark.parametrize("number", (0, -1))

@@ -1,6 +1,7 @@
 ---
 name: plain-reporting
 description: "use plain names and short updates; answer the owner once, in the session; talk while working, commit to a stance instead of handing back routine choices, and report unseen facts unasked"
+audience: fleet
 type: feedback
 ---
 

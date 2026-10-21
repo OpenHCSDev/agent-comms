@@ -12,6 +12,7 @@ from agent_comms.cli import main
 from agent_comms.threads import ChosenServiceTier, NextTurnConfiguration
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.thread_model import UndeclaredModel
+from agent_comms.cli_commands import CommandSelectionChanged
 
 
 @pytest.fixture
@@ -464,7 +465,7 @@ class TestSelectedTargetActions:
         assert code == 1
         assert [outcome["target"] for outcome in result["outcomes"]] == ["alpha", "active", "#team"]
         assert result["outcomes"][0]["result"] == {"archived": "alpha"}
-        assert result["outcomes"][1]["error_type"] == "ValueError"
+        assert result["outcomes"][1]["error_type"] == CommandSelectionChanged.__name__
         assert "no longer available" in result["outcomes"][1]["error"]
         assert result["outcomes"][2]["result"]["archived"] is True
         assert not comms.registry.status("alpha").visible

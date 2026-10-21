@@ -1,6 +1,7 @@
 ---
 name: blunt-reviews
 description: "review like Linus: name the defect, reason and fix; use the owner's word, call stupid work stupid; parry with evidence, never fold, flee or say fine"
+audience: commander
 type: feedback
 ---
 

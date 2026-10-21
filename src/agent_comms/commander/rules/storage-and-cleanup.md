@@ -1,6 +1,7 @@
 ---
 name: storage-and-cleanup
 description: "/home filling under the fleet is the commander's failure: retire worktrees and scratch per run and clean before 30 GB free is lost; but delete a unit's scratch or worktree only when its owner lists it as disposable and nothing running uses it"
+audience: fleet
 type: feedback
 ---
 

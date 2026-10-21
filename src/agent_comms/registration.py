@@ -394,6 +394,13 @@ class Registration:
         with self.store.reading() as document:
             return dict(document.threads)
 
+    def schema_paths(self) -> frozenset[Path]:
+        """Every SQLite file a registered thread's runtime keeps beside its saved session."""
+        return frozenset(
+            path for thread in self.all_threads().values()
+            for files in thread.runtime.storage_files() for path in files.schema_paths
+        )
+
     def entry(self, name: str) -> RegistryEntryRevision:
         """This thread's registry entry and the revision it was read from.
 

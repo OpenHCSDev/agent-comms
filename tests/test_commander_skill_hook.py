@@ -12,7 +12,7 @@ from agent_comms.behaviour_patterns import PostmortemFailure
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.rule_file import RuleFile
 from agent_comms.todos import Slop
-from agent_comms_hooks.reread import CommanderReread, VoiceReminder
+from agent_comms_hooks.reread import DriftCheck, ToolUseReminder
 
 
 @pytest.mark.parametrize("source", ["startup", "resume", "compact"])
@@ -88,7 +88,7 @@ def hook_record(transcript):
     return {"hook_event_name": "PostToolUse", "session_id": "s", "transcript_path": str(transcript)}
 
 
-@pytest.mark.parametrize("member", [CommanderReread, VoiceReminder], ids=lambda member: member.__name__)
+@pytest.mark.parametrize("member", ToolUseReminder.__subclasses__(), ids=lambda member: member.__name__)
 def test_each_reminder_keeps_its_own_cadence_and_resets_at_compaction(tmp_path, member):
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
@@ -97,10 +97,21 @@ def test_each_reminder_keeps_its_own_cadence_and_resets_at_compaction(tmp_path, 
     hook.parts.mkdir()
     (hook.parts / "01.md").write_text("sources")
     hook.voice.write_text("voice")
+    hook.drift.write_text("tell")
     assert hook.take(250_000)
     assert hook.take(250_000 + member.every - 1) == ()
     assert hook.take(250_000 + member.every)
     assert hook.take(20_000)  # compaction shrank the context below the mark
+
+
+def test_drift_check_rotates_through_the_packaged_tells(tmp_path):
+    transcript = tmp_path / "session.jsonl"
+    hook = DriftCheck.decode(hook_record(transcript))
+    tells = [line for line in CommanderConfig.packaged_drift().read_text().splitlines() if line.strip()]
+    hook.drift.write_text("\n".join(tells))
+    shown = {line for step in range(len(tells)) for line in
+             hook.message(step * DriftCheck.every).splitlines()[1:]}
+    assert shown == set(tells)
 
 
 def run_hook(program, transcript, event, monkeypatch, capsys, *lines):
@@ -123,7 +134,9 @@ def test_every_due_reminder_goes_out_in_one_hook_output_with_the_voice_inline(
     assert run_hook(skill, transcript, "SessionStart", monkeypatch, capsys, usage(250_000))
     first = run_hook(reread, transcript, "PostToolUse", monkeypatch, capsys, usage(250_001))
     (document,) = first.splitlines()
-    assert json.loads(document)["hookSpecificOutput"]["additionalContext"] == CommanderConfig.packaged_voice().read_text()
+    first_context = json.loads(document)["hookSpecificOutput"]["additionalContext"]
+    assert first_context.startswith(CommanderConfig.packaged_voice().read_text())
+    assert "Drift check:" in first_context
     both = run_hook(reread, transcript, "PostToolUse", monkeypatch, capsys, usage(350_000))
     (document,) = both.splitlines()
     context = json.loads(document)["hookSpecificOutput"]["additionalContext"]

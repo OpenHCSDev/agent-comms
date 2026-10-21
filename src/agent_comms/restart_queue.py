@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Annotated, ClassVar
 
 
-from .child_process import ParentedProcess, ProcessIdentity
+from .child_process import ProcessIdentity, SpawnedProcess
 from .comms import Comms, wire
 from .coordination_database import CoordinationStore
 from .coordination_errors import CoordinationError
@@ -284,9 +284,9 @@ def enqueue(comms: Comms, selection: OwnerRestartSelection, *,
     return result
 
 
-def _start_watcher(root: Path, target: RestartTarget) -> ParentedProcess:
+def _start_watcher(root: Path, target: RestartTarget) -> SpawnedProcess:
     # The resident watcher inherits only its declared runtime configuration.
-    return ParentedProcess.launch(
+    return SpawnedProcess.launch(
         (str(target.launch_runtime.interpreter), "-m", "agent_comms.restart_queue", str(root.resolve())),
         env=target.runtime.encode(),
         runtime=target.launch_runtime,

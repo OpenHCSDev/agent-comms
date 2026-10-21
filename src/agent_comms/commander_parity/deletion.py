@@ -28,9 +28,9 @@ from ..todos import (
     DeliveredProblemOrder,
     FailedCheckStrike,
     FamilyDeletion,
-    MechanicalOrderRun,
     Todo,
 )
+from agent_comms.order_runs import MechanicalOrderRun
 from ..tool_caller import ThreadCaller
 from ..tools import CommsOrderDoneTool, CommsTodoCreateTool, ProblemOrdered
 from . import ParityComparison, ParityRow
@@ -126,6 +126,7 @@ class DeletionPath(ABC):
         initial = OrderFile.read(run.document.read_text())
         order = replace(
             initial.order,
+            owner=FileLine("family.py", 1),
             check=OrderCheck(
                 str(repository),
                 shlex.join((sys.executable, "-c", "import family;assert not family.decisions()")),

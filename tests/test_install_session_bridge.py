@@ -21,20 +21,6 @@ from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms_hooks.watch import LapsedWatch, WatchClaim, WatchRecord
 
 
-@pytest.fixture
-def bridge_home(tmp_path):
-    # sockaddr_un is bounded; the short alias still points into owned persistent scratch.
-    destination = tmp_path / 'home/.local'
-    destination.mkdir(parents=True)
-    home = Path(__file__).resolve().parents[1]
-    alias = home / '.local'
-    alias.symlink_to(destination, target_is_directory=True)
-    try:
-        yield home
-    finally:
-        alias.unlink()
-
-
 @contextmanager
 def session_bridge(tmp_path, home):
     comms = Comms(tmp_path / 'bus')

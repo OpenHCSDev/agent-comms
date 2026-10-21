@@ -58,15 +58,30 @@ def prepare_runtime_home(home: Path) -> None:
         (home / ".npm").mkdir(mode=0o700)
 
 
+def _copy_saved(root: Path, into: Path, name: str, databases: set[str]) -> str:
+    """Copy one saved file: a database through SQLite's backup, its WAL never, the rest
+    byte for byte."""
+    source, copy = root / name, into / name
+    copy.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if name in databases:
+        with (closing(sqlite3.connect(f"file:{source}?mode=ro", uri=True)) as original,
+              closing(sqlite3.connect(copy)) as copied):
+            original.backup(copied)
+        shutil.copymode(source, copy)  # SQLite creates the copy under the umask
+    elif name.removesuffix("-wal") not in databases:
+        shutil.copy2(source, copy)
+    return name
+
+
 @contextmanager
 def practice_copy(root: Path, into: Path) -> Iterator[tuple[Path, PracticeMeasurement]]:
     """Copy the bus as files, so no runtime's code reads it to build the copy: the outgoing
     runtime's bugs cannot block the install of their fix, and the target cannot read a
-    format its carries have not run on yet. SQLite stores copy through SQLite's backup, the
-    log under its own lock, the registry and its guard together under the registry's read
-    lock, every other saved file byte for byte. The maintenance witnesses
-    stay behind: the rehearsal holds its copy itself. Stored paths keep naming the live bus,
-    and every step writes only inside the root it is given."""
+    format its carries have not run on yet. SQLite stores copy through SQLite's backup; the
+    log, its marker and its checkpoint together under the log's lock; the registry and its
+    guard together under the registry's read lock; every other saved file byte for byte.
+    The maintenance witnesses stay behind: the rehearsal holds its copy itself. Stored
+    paths keep naming the live bus, and every step writes only inside the root it is given."""
     floor = StorageRule.load(root).floor_gib * 2**30
     into.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     if shutil.disk_usage(into.parent).free < floor:
@@ -80,24 +95,18 @@ def practice_copy(root: Path, into: Path) -> Iterator[tuple[Path, PracticeMeasur
     databases = {name for name in saved if CoordinationStore.is_database(root / name)}
     into.mkdir(mode=0o700)
     # The log's own file lock, never WireLog.locked(): that checks the index with the
-    # target's code, which refuses a bus whose carries have not run yet.
-    locked_copies = ((_store_lock(log.path), (log.path, log.metadata_path)),
+    # target's code, which refuses a bus whose carries have not run yet. Each group is one
+    # cut: a writer advancing the log between its copy and its checkpoint's would leave
+    # a checkpoint past the end of the copied log.
+    locked_copies = ((_store_lock(log.path), log.cut_paths),
                      (registry.locked(mode=SharedLock()),
                       (registry.path, PrivateRegistryGuard.path_in(root))))
+    copied: set[str] = set()
     for lock, paths in locked_copies:
         with lock:
             for path in paths:
                 if path.exists():
-                    shutil.copy2(path, into / path.name)
-    copied = {path.name for _, paths in locked_copies for path in paths}
+                    copied.add(_copy_saved(root, into, str(path.relative_to(root)), databases))
     for name in saved.keys() - witnesses - copied:
-        source, copy = root / name, into / name
-        copy.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        if name in databases:
-            with (closing(sqlite3.connect(f"file:{source}?mode=ro", uri=True)) as original,
-                  closing(sqlite3.connect(copy)) as copied):
-                original.backup(copied)
-            shutil.copymode(source, copy)  # SQLite creates the copy under the umask
-        elif name.removesuffix("-wal") not in databases:
-            shutil.copy2(source, copy)
+        _copy_saved(root, into, name, databases)
     yield into, PracticeMeasurement.of(into, time.monotonic() - started, floor)

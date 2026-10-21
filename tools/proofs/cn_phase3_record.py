@@ -23,12 +23,12 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
     AcceptedVerdict,
     CommitDelivery,
-    MechanicalOrderRun,
     PendingProblemOrder,
     StrikeReason,
     StrikeTodo,
     VoidStrikeTodo,
 )
+from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.tool_caller import ToolCaller
 from agent_comms.tools import (
     CommsChangeProblemTool,

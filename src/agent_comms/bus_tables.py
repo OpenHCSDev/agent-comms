@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from dataclasses import Field, dataclass, fields, make_dataclass
+import sqlite3
+import time
+from dataclasses import Field, dataclass, fields, make_dataclass, replace
 from functools import cache
 from inspect import get_annotations
 from typing import Annotated, get_type_hints
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import WireName, WireOrder
+from agent_comms.field_codec import FieldCodec, WireName, WireOrder
 from agent_comms.response_acknowledgement import KeyedResponseAcknowledgement
 from agent_comms.typed_table import AppendOnlyTables, Column, DurableTables, TypedTable
 
@@ -67,6 +69,24 @@ class BusCapability(BusTables):
         return tuple(base.table for base in cls.__mro__
                      if issubclass(base, BusCapability) and BusCapability.declared_fields(base))
 
+    def rows(self) -> tuple[TypedTable, ...]:
+        """One row per capability table, each cut from this record's own encoding by the
+        table's declared keys. The table reuses the record's fields, so a key the encoding
+        omits for its default decodes to the same default."""
+        encoded = FieldCodec.encode_fields(self)
+        return tuple(
+            FieldCodec.decode_record(table, {
+                key: encoded[key] for _, key in FieldCodec.record_fields(table) if key in encoded})
+            for table in self.tables())
+
+    def append_to(self, db: sqlite3.Connection) -> int:
+        """Write the header, then this record's rows under the sequence the header got."""
+        cursor = BusRow.insert_values(db, kind=type(self), at=time.time())
+        stored = replace(self, seq=FieldCodec.decode(int, cursor.lastrowid))
+        for row in stored.rows():
+            row.insert(db)
+        return stored.seq
+
 
 @dataclass(frozen=True)
 class Addressed(BusCapability):
@@ -77,3 +97,8 @@ class Addressed(BusCapability):
 @dataclass(frozen=True)
 class KeyedPublication(BusCapability):
     acknowledgement: Annotated[KeyedResponseAcknowledgement, Column(unique=True)]
+
+    def append_to(self, db: sqlite3.Connection) -> int:
+        """A keyed publication appended again answers with the sequence it first got."""
+        prior = KeyedPublication.table.select(db, acknowledgement=self.acknowledgement)
+        return prior[0].seq if prior else super().append_to(db)

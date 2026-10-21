@@ -1,5 +1,6 @@
 """Acquired original native fixture shared by pytest and installed drivers."""
 from agent_comms.native_package import VerifiedNativePackage
+from agent_comms.native_arguments import NativeArguments
 
 import asyncio
 import json
@@ -250,6 +251,7 @@ async def native_backend_fixture(tmp_path, *, package: VerifiedNativePackage,
     )))
     Comms(root).messaging.initialize_private_initial_protocol()
     environment = {
+        NativeArguments.binary_key: NativeArguments.default_binary,
         "AGENT_COMMS_ROOT": str(root),
         "AGENT_COMMS_NATIVE_CONFIG_DIR": str(config),
         "PI_CODING_AGENT_DIR": str(config),

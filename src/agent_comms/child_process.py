@@ -249,6 +249,10 @@ class ProcessIdentity(RecordMember, ProcessState):
     def alive(self) -> bool:
         return Platform.current().matches(self)
 
+    def require_alive(self) -> ProcessIdentity:
+        """Validate this recorded PID and start time against the live process."""
+        return Platform.current().require(self)
+
     def runs_here(self) -> bool:
         return os.getpid() == self.pid
 
@@ -358,6 +362,18 @@ class NamespaceReady:
     pid: int
 
 
+@dataclass(frozen=True, eq=False)
+class PidNamespace(ProcessIdentity):
+    """The exact host identity of PID 1 owns the namespace's executing lifetime.
+
+    Linux kills and reaps every remaining member before PID 1 finishes exiting.
+    A pidfd for this init therefore observes the whole namespace, without asking
+    for permission to inspect unrelated processes on the machine.
+    """
+
+    namespace: str
+
+
 @dataclass(frozen=True)
 class NamespaceLaunch:
     command: tuple[str, ...]
@@ -385,19 +401,14 @@ class NamespaceContainment:
         )
 
     @staticmethod
-    def namespace_alive(namespace: str) -> bool:
-        for entry in Path("/proc").iterdir():
-            if not entry.name.isdecimal():
-                continue
-            try:
-                if os.readlink(entry / "ns/pid") != namespace:
-                    continue
-                state = (entry / "stat").read_text().rsplit(") ", 1)[1].split()[0]
-                if state not in {"Z", "X"}:
-                    return True
-            except FileNotFoundError:
-                continue
-        return False
+    def namespace_owner(parent: ProcessIdentity, proof: NamespaceReady) -> PidNamespace:
+        """Resolve only unshare's gated init, before it can exec business code."""
+        parent.require_alive()
+        children = Path(f'/proc/{parent.pid}/task/{parent.pid}/children').read_text().split()
+        (pid,) = map(int, children)
+        init = ProcessIdentity.capture(pid)
+        parent.require_alive()
+        return PidNamespace(init.pid, init.start_time, proof.namespace)
 
 
 class Platform(DeclaredFamily, affix="Platform"):
@@ -915,15 +926,15 @@ class ChildLaunch(ABC):
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-    ) -> ParentedProcess:
-        """Record the parent's process handle before the platform allows exec."""
+    ) -> SpawnedProcess:
+        """Record the launch handle before the platform allows exec."""
         with self.children_store.launching(self.runtime) as reservation:
             process = subprocess.Popen(
                 self.argv, cwd=cwd, env=env, stdin=stdin, stdout=stdout,
                 stderr=stderr, **self.options,
             )
             identity = Platform.current().identity(process.pid)
-            child = ParentedProcess(process, identity, reservation.store)
+            child = SpawnedProcess(process, identity, reservation.store)
             try:
                 self.record(identity, reservation)
             except BaseException:
@@ -1728,8 +1739,8 @@ class RecordedRuntimeGroup(ObservedProcess):
         self.platform.group_members(self.identity)
 
 
-class ParentedProcess(SynchronousProcess):
-    """Owns the OS child handle, its reap result, and any captured pipe streams."""
+class SpawnedProcess(SynchronousProcess):
+    """A launched process handle; surviving the launcher does not preserve its parent."""
 
     def __init__(self, process: subprocess.Popen[bytes], identity: ProcessIdentity,
                  registration: ChildRegistration = NO_CHILD_REGISTRATION):
@@ -1746,7 +1757,7 @@ class ParentedProcess(SynchronousProcess):
         output: Any = subprocess.DEVNULL,
         before_start: Callable[[ProcessIdentity], None] | None = None,
         runtime: LaunchRuntime = LaunchRuntime.running(),
-    ) -> ParentedProcess:
+    ) -> SpawnedProcess:
         if not command:
             raise ValueError("A child command is required")
         with Platform.current().launch(command, (), runtime) as launch:
@@ -1786,7 +1797,7 @@ class ParentedProcess(SynchronousProcess):
         finally:
             self.close_streams()
 
-    def __enter__(self) -> ParentedProcess:
+    def __enter__(self) -> SpawnedProcess:
         return self
 
     def __exit__(self, *_):
@@ -1815,7 +1826,7 @@ class NamespacedChild(ChildProcess):
     Business input/UNKNOWN journals stay with the caller.
     """
 
-    def __init__(self, child: AttachedChild, watchdog: AttachedChild, namespace: str):
+    def __init__(self, child: AttachedChild, watchdog: AttachedChild, namespace: PidNamespace):
         super().__init__(child.identity)
         self.child = child
         self.watchdog = watchdog
@@ -1884,8 +1895,9 @@ class NamespacedChild(ChildProcess):
                     or not child.alive()
                 ):
                     raise RuntimeError("Namespace readiness identity mismatch")
+                namespace = platform.namespace_owner(child.identity, proof)
                 os.write(release_w, b"G")
-                return cls(child, watchdog, proof.namespace)
+                return cls(child, watchdog, namespace)
         except BaseException:
             if child is not None:
                 await child.stop()
@@ -1899,16 +1911,15 @@ class NamespacedChild(ChildProcess):
                 os.close(descriptor)
 
     async def wait(self) -> ChildOutcome:
-        return await self.child.wait()
+        return await self._retire(await self.child.wait())
 
     async def _stop(self) -> ChildOutcome:
-        result = await self.child.stop()
+        return await self._retire(await self.child.stop())
+
+    async def _retire(self, result: ChildOutcome) -> ChildOutcome:
         await self.watchdog.stop()
-        deadline = time.monotonic() + STOP_GRACE_SECONDS
-        while NamespaceContainment.namespace_alive(self.namespace):
-            if time.monotonic() >= deadline:
-                raise RuntimeError("Child PID namespace did not retire")
-            await asyncio.sleep(STOP_POLL_SECONDS)
+        async with asyncio.timeout(STOP_GRACE_SECONDS):
+            await self.namespace.wait_exited()
         return result
 
 

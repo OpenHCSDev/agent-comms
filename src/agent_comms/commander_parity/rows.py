@@ -1,17 +1,9 @@
 """Each native/current workflow declares its identity once."""
 
-from ..plan_phases import (
-    CommanderPagePhase,
-    ControlPlanePhase,
-    CutoverPhase,
-    OneOrderOwnerPhase,
-    ReviewQueuePhase,
-    StoryPhase,
-)
-from . import ParityComparison, ParityRow, UnverifiedParity
-from .delivery import DeliveredCommitCase
-from .handoff import FinishedHandoffCase
-from .lifecycle import (
+from agent_comms.commander_parity import ParityComparison, ParityRow, UnverifiedParity
+from agent_comms.commander_parity.delivery import DeliveredCommitCase
+from agent_comms.commander_parity.handoff import FinishedHandoffCase
+from agent_comms.commander_parity.lifecycle import (
     AssignOrderCase,
     BuildBoundProofCase,
     CreateProblemCase,
@@ -19,17 +11,25 @@ from .lifecycle import (
     StrikeLimitCase,
     verify_order_progress,
 )
-from .load import LoadComparison
-from .measurements import StorageComparison, measured_load
-from .story import StoryCase
-from .wording import (
+from agent_comms.commander_parity.load import LoadComparison
+from agent_comms.commander_parity.measurements import StorageComparison, measured_load
+from agent_comms.commander_parity.story import StoryCase
+from agent_comms.commander_parity.verdicts import VerdictComparison
+from agent_comms.commander_parity.wording import (
     ApplicationRunComparison,
     DecisionAlertsComparison,
     OrderWordingComparison,
     PlainWordsComparison,
     UnitWordingComparison,
 )
-from agent_comms.commander_parity.verdicts import VerdictComparison
+from agent_comms.plan_phases import (
+    CommanderPagePhase,
+    ControlPlanePhase,
+    CutoverPhase,
+    OneOrderOwnerPhase,
+    ReviewQueuePhase,
+    StoryPhase,
+)
 
 
 class CreateProblemParityRow(ParityRow):
@@ -197,7 +197,7 @@ class StorageHygieneParityRow(ParityRow):
     number = 19
     capability = "Storage hygiene"
     current = "`StandingRule.broken` storage delivery (formerly `storage.py`)"
-    native = "`UnitStorage.violations`, `DiskLow.violations`; live `StorageRule` thresholds"
+    native = "`StorageViolation.violations`, `DiskLow.violations`; live `StorageRule` thresholds"
     phases = (ControlPlanePhase,)
 
     @classmethod

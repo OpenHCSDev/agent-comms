@@ -1,7 +1,11 @@
 """A published native reply automatically reaches the original channel sender."""
 from bus_history import read_history
 from agent_comms.pi_vocabulary import OffThinkingLevel
-from agent_comms.native_package import pinned_native_package
+from agent_comms.native_arguments import NativeArguments
+from agent_comms.launch_runtime import RestoredRuntime
+from agent_comms.owner_restart import OwnerRestartRequest
+from agent_comms.owner_cutover import PreserveOwnerRuntime
+from acp.schema import SessionNotification
 
 import asyncio
 import hashlib
@@ -36,6 +40,22 @@ from agent_comms.thread_model import DeclaredModel
 tmp_path = private_root_fixture
 
 
+def start_source_owner(comms, name, runtime: RestoredRuntime):
+    """Use the shared interpreter, but retain this fixture's exact source imports.
+
+    Ordinary owner starts intentionally discard PYTHONPATH and would launch
+    shared main, making the branch client a read-only other-build attachment.
+    The retained restart request uses this same explicit source-runtime policy.
+    """
+    thread = comms.registry.require(name)
+    with (comms.registry.storage_rule.room_for_start(thread, comms.root),
+          _store_lock(comms.owners._wire_lock_path)):
+        return comms.owners._launch_owner_unlocked(
+            thread, NativeArguments.default_binary,
+            launch_runtime=runtime,
+        )
+
+
 @pytest.mark.parametrize(
     ("restart_after_reply", "contend_cursor", "reject_triage", "broadcast"),
     [(False, False, False, False), (True, False, False, False),
@@ -43,8 +63,9 @@ tmp_path = private_root_fixture
      (False, False, False, True)],
     ids=["reply", "saved-restart", "contended-reply", "rejected-triage-continuity", "parallel-channel"],
 )
-async def test_native_channel_reply_automatically_reaches_original_sender(tmp_path, monkeypatch, restart_after_reply, contend_cursor, reject_triage, broadcast, *, source_reads):
-    package = pinned_native_package()
+async def test_native_channel_reply_automatically_reaches_original_sender(tmp_path, monkeypatch, restart_after_reply, contend_cursor, reject_triage, broadcast, *, source_reads, native_runtime_package):
+    package = native_runtime_package.path
+    runtime = RestoredRuntime(Path(sys.executable))
     requests = []
     failures = []
     request_times = []
@@ -233,7 +254,8 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
 
     class Client:
         async def session_update(self, **kwargs):
-            facts.extend(decode_updates(kwargs["update"].get("_meta")))
+            notification = SessionNotification.model_validate(kwargs)
+            facts.extend(decode_updates(notification.update.field_meta))
 
     attachment.on_connect(Client())
 
@@ -245,6 +267,10 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                     await asyncio.sleep(0.05)
         except TimeoutError:
             print("TIMEOUT", description, "ACP facts", repr(facts), flush=True)
+            print("wire history", read_history(comms), flush=True)
+            for diagnostic in sorted((comms.root / "diagnostics").glob("*")):
+                if diagnostic.is_file():
+                    print(diagnostic.name, diagnostic.read_text(), flush=True)
             with sqlite3.connect(comms.root / "coordination.sqlite3") as db:
                 print(
                     "native receipts",
@@ -256,7 +282,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
 
     try:
         for name in projects:
-            await asyncio.to_thread(comms.owners.start, name)
+            await asyncio.to_thread(start_source_owner, comms, name, runtime)
         await attachment.load_session(cwd=str(projects["questioner"]), session_id="questioner")
         if restart_after_reply:
             for name, project in projects.items():
@@ -309,7 +335,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
             assert {row["native"]["inputId"] for row in native} == {
                 row["input_id"] for row in request_inputs
             }
-            for original in request_inputs:
+            for index, original in enumerate(request_inputs):
                 samples = [row for row in native
                            if row["native"]["inputId"] == original["input_id"]]
                 assert {"preparing", "dispatch", "first_event", "finished"} <= {
@@ -323,7 +349,14 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                                 and "acquisition" in row]
                 assert len(acquisitions) == 1
                 selection = acquisitions[0]["operations"]["native_launch_selection"]
-                assert selection["count"] == 1 and selection["total_ns"] > 0
+                # CursorDelivery owns session-cumulative timing counters. Each
+                # original input must add exactly one launch selection, even
+                # after that owner has already handled another peer's reply.
+                expected_count = sum(
+                    earlier["owner"] == original["owner"]
+                    for earlier in request_inputs[:index + 1]
+                )
+                assert selection["count"] == expected_count and selection["total_ns"] > 0
             print("Native original timing samples", len(native), "inputs", len(request_inputs),
                   "maximum parent acknowledgement lag seconds",
                   max((row["recorded_monotonic_ns"] - int(row["native"]["monotonicNs"])) / 1e9
@@ -365,7 +398,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
 
         def selected_turn_finished():
             states = [fact.state for fact in facts if isinstance(fact, TurnChangedUpdate)]
-            return any(state.active is None and state.finished_turn_id for state in states)
+            return any(not state.active.executing and state.finished_turn_id for state in states)
 
         await until(selected_turn_finished, "Selected turn end published to the open session")
         await until(
@@ -445,7 +478,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
         if restart_after_reply:
             # Continue the same real owner/ACP/native journey from saved state.
             await until(
-                lambda: all(not comms.registry.require(name).active_turn.executing for name in projects),
+                lambda: all(not comms.registry.require(name).executing for name in projects),
                 "Both native turns released before guarded restart",
             )
             before = comms.registry.snapshot()
@@ -453,7 +486,8 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                 name: Path(before.threads[name].session_file).read_bytes() for name in projects
             }
             await attachment.shutdown()
-            await asyncio.to_thread(comms.owners.restart_owners, list(projects))
+            restart = OwnerRestartRequest(tuple(projects), launch_runtime=runtime)
+            await asyncio.to_thread(PreserveOwnerRuntime().restart, comms.owners, restart)
             after = comms.registry.snapshot()
             for name in projects:
                 old, current = before.threads[name], after.threads[name]

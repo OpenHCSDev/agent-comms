@@ -3,22 +3,25 @@
 import asyncio
 import json
 import os
+from contextlib import ExitStack
 from dataclasses import replace
 
 import pytest
 
-from agent_comms.thread_text import SavedSessionFile
 from agent_comms.acp_extension import (
     CoordinationChangedUpdate,
     TranscriptSnapshotUpdate,
     decode_updates,
+    encode_updates,
 )
-from agent_comms.child_process import ParentedProcess, ProcessIdentity
+from agent_comms.child_process import ProcessIdentity, SpawnedProcess
 from agent_comms.comms import wire
 from agent_comms.owner_protocol import OwnerAnnouncement, OwnerReady, OwnerResult, OwnerUpdate
 from agent_comms.runtime import RuntimeProxy, present_session, socket_path
+from agent_comms.private_path import PrivateSocketRole
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.native_arguments import GivenArguments, GivenBinary
+from agent_comms.thread_text import SavedSessionFile
+from agent_comms.native_arguments import GivenBinary
 from delivery_owner_fixture import canonical_agent
 
 
@@ -30,7 +33,7 @@ def runtime_processes():
     try:
         for _ in range(2):
             children.append(
-                ParentedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
+                SpawnedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
             )
         yield tuple(child.identity for child in children)
     finally:
@@ -108,6 +111,12 @@ async def test_subscription_replay_uses_requested_alias(tmp_path, request_origin
         snapshots = [(session, fact) for session, update in updates
                      for fact in decode_updates(update.get("_meta"))
                      if isinstance(fact, TranscriptSnapshotUpdate)]
+        ordered = [fact for _, update in updates for fact in decode_updates(update.get('_meta'))]
+        identity_position = next(index for index, fact in enumerate(ordered)
+                                 if isinstance(fact, CoordinationChangedUpdate))
+        replay_position = next(index for index, fact in enumerate(ordered)
+                               if isinstance(fact, TranscriptSnapshotUpdate))
+        assert identity_position < replay_position
         assert len(snapshots) == 1
         session, snapshot = snapshots[0]
         assert session == requested == snapshot.identity.requested_name
@@ -161,10 +170,13 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
                 writer.write(
                     OwnerReady(
                         ready={"agentComms": {"updates": []}},
-                        config_options=[{"id": "model", "currentValue": owner}],
                         controller_token="a" * 64,
                     ).wire()
                 )
+                writer.write(OwnerUpdate(update={
+                    'sessionUpdate': 'config_option_update',
+                    'configOptions': [{'id': 'model', 'currentValue': owner}],
+                }).wire())
                 writer.write(OwnerUpdate(update={"owner": owner}).wire())
                 await writer.drain()
                 await reader.read()
@@ -175,7 +187,10 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
 
         return receive
 
-    old_server = await asyncio.start_unix_server(handler("old"), path=old_path)
+    addresses = ExitStack()
+    old_address = addresses.enter_context(PrivateSocketRole.address(old_path))
+    new_address = addresses.enter_context(PrivateSocketRole.address(new_path))
+    old_server = await asyncio.start_unix_server(handler("old"), path=old_address)
     new_server = None
     proxy = RuntimeProxy(client, "worker", old_path)
     try:
@@ -190,7 +205,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
             replace(comms.registry.require("worker"), session_file=SavedSessionFile(str(tmp_path / "session.jsonl")))
         )
         assert await proxy.request("cancel") == {"owner": "old"}
-        comms.registry.rename("worker", "renamed")
+        comms.threads.rename_managed_thread("worker", "renamed", owner_pid=old_pid)
         comms.registry.register(replace(comms.registry.require("renamed"), process_identity=new))
         old_server.close()
         for writer in connections:
@@ -200,7 +215,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
         # A request made before the replacement socket starts is still unsent.
         request = asyncio.create_task(proxy.request("cancel"))
         await asyncio.sleep(0.15)
-        new_server = await asyncio.start_unix_server(handler("new"), path=new_path)
+        new_server = await asyncio.start_unix_server(handler("new"), path=new_address)
         assert await asyncio.wait_for(request, 3) == {"owner": "new"}
         await until(
             lambda: any(
@@ -214,6 +229,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
                     {
                         "sessionUpdate": "config_option_update",
                         "configOptions": [{"id": "model", "currentValue": "new"}],
+                        "_meta": encode_updates(),
                     },
                 )
                 in updates
@@ -245,51 +261,9 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
             await new_server.wait_closed()
         old_path.unlink(missing_ok=True)
         new_path.unlink(missing_ok=True)
+        addresses.close()
 
 
-@pytest.mark.asyncio
-@pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime")
-async def test_subscriber_receives_identity_before_transcript_replay(tmp_path):
-    comms = wire(tmp_path / "wire")
-    owner = canonical_agent(comms, agent_bin=GivenBinary("/bin/echo"), agent_args=GivenArguments(()), runtime_enabled=True)
-    client = canonical_agent(comms)
-    updates = []
-
-    class Client:
-        async def session_update(self, session_id, update):
-            updates.append(update)
-
-    client.on_connect(Client())
-    response = await owner.new_session(str(tmp_path))
-    entered, release = asyncio.Event(), asyncio.Event()
-
-    async def delayed_replay(*args, **kwargs):
-        entered.set()
-        await release.wait()
-
-    owner.sessions.transcript.replay = delayed_replay
-    proxy = RuntimeProxy(client, response.session_id, socket_path(comms.root, os.getpid()))
-    task = asyncio.create_task(proxy.subscribe())
-    try:
-        await asyncio.wait_for(entered.wait(), 2)
-        await until(
-            lambda: any(
-                any(
-                    isinstance(f, CoordinationChangedUpdate)
-                    and f.wire_root == str(comms.root.resolve())
-                    for f in decode_updates(update.get("_meta"))
-                )
-                for update in updates
-            ),
-            timeout=2,
-        )
-        assert not task.done()
-        release.set()
-        await asyncio.wait_for(task, 2)
-    finally:
-        release.set()
-        await proxy.close()
-        await owner.shutdown()
 
 
 

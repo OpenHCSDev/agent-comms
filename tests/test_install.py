@@ -96,6 +96,45 @@ def test_practice_copy_is_the_bus_as_files_without_its_maintenance_witnesses(pri
     assert bus_files(root) == saved
 
 
+def test_a_message_sent_while_the_bus_is_copied_never_splits_the_log_from_its_checkpoint(
+        private_directory, monkeypatch, capsys):
+    # The live install of 0d81f55e2 refused its practice copy ("Private bus checkpoint
+    # root/size changed."): the commander heartbeat appended between the log's copy and
+    # its checkpoint's, so the copied checkpoint pointed past the end of the copied log.
+    import shutil
+    import threading
+
+    from agent_comms.cli import main
+    from agent_comms.installer import practice
+    from agent_comms.private_bus_checkpoint import WritableCheckpoint
+
+    root, _ = bus(private_directory)
+    (root / "storage.json").write_text(json.dumps({"floor_gib": 0}))
+    log = WireLog(WireLog.path_in(root))
+    writer = threading.Thread(target=lambda: Comms(root).messaging.send("worker", "#team", "late"))
+    copy2, connect = shutil.copy2, sqlite3.connect
+
+    def copy_then_write(source, target, *args, **kwargs):
+        result = copy2(source, target, *args, **kwargs)
+        if Path(source) == log.path:
+            writer.start()
+        return result
+
+    def connect_after_writer(database, *args, **kwargs):
+        if (str(WritableCheckpoint.path_in(root)) in str(database)
+                and threading.current_thread() is not writer):
+            writer.join(timeout=2)  # a writer held off by the bus lock stays out of the cut
+        return connect(database, *args, **kwargs)
+
+    monkeypatch.setattr(practice.shutil, "copy2", copy_then_write)
+    monkeypatch.setattr(practice.sqlite3, "connect", connect_after_writer)
+    with practice_copy(root, private_directory / "practice/bus") as (copy, _):
+        monkeypatch.undo()
+        writer.join(timeout=30)
+        assert main(["--root", str(copy), "history", "--limit", "50"]) == 0
+        assert '"failed"' not in capsys.readouterr().out
+
+
 def test_install_report_encodes_its_registered_harnesses() -> None:
     # The live install printed nothing: its report's field type had no codec.
     from agent_comms.cli_commands import InstallResult

@@ -1,6 +1,7 @@
 ---
 name: commander-self-correction
 description: "every rule serves its reason, not its letter, and may be overridden when its reason stays intact; settle decisions with tools; catch and report slips plainly; apologize only for confident errors"
+audience: commander
 type: feedback
 ---
 

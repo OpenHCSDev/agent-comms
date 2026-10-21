@@ -2,7 +2,6 @@
 import json
 from pathlib import Path
 import sys
-from tempfile import TemporaryDirectory
 
 import pytest
 
@@ -12,19 +11,7 @@ from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript, UserTranscript
 from agent_comms.native_entries import NativeEntry
-from agent_comms.storage_rules import StorageRule
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
-
-
-@pytest.fixture
-def scratch_root(tmp_path_factory):
-    base = tmp_path_factory.getbasetemp()
-    scratch = StorageRule().scratch_base.resolve()
-    if not base.resolve().is_relative_to(scratch):
-        base = scratch / "pytest"
-        base.mkdir(parents=True, exist_ok=True)
-    with TemporaryDirectory(prefix="check-root-", dir=base) as directory:
-        yield Path(directory)
 
 
 @pytest.fixture

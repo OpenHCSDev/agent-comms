@@ -29,6 +29,10 @@ class Repo(BaseModel):
     ]
     source: str = "src"
 
+    def module_file(self, module: str) -> Path:
+        """Where the dotted ``module`` sits under this checkout's source root, relative to it."""
+        return Path(self.source, *module.split(".")).with_suffix(".py")
+
     def holds(self, todo: Todo) -> bool:
         return self.github == todo.repo
 
