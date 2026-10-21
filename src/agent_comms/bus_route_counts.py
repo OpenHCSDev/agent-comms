@@ -5,7 +5,7 @@ import json
 from dataclasses import dataclass
 from typing import Annotated, ClassVar
 
-from .bus_tables import BusProjectionTables, BusRow
+from .bus_tables import BusProjectionTables, BusRow, ReceivedSource
 from .messages import Message
 from .read_basis import ReadCursor
 from .typed_table import Column, Index, TypedRow, TypedTable
@@ -47,7 +47,7 @@ class RouteCounts:
     """Bus readers share delivery queries and their existing observing lifetime."""
 
     _requests = f'''arguments AS MATERIALIZED (
-        SELECT ? AS targets,? AS senders,? AS unrecorded,? AS through,? AS after
+        SELECT ? AS targets,? AS recipients,? AS senders,? AS unrecorded,? AS through,? AS after
     ), request_targets AS MATERIALIZED (
         SELECT DISTINCT target.value AS target
         FROM arguments,json_each(arguments.targets) AS owner,json_each(owner.value) AS target
@@ -68,9 +68,12 @@ class RouteCounts:
         SELECT owner.key AS actor,row.*,
             delivery_since(owner.key,row.sender,row.target,row.sender_lookup) AS since
         FROM arguments,json_each(arguments.targets) AS owner,json_each(owner.value) AS target
+        JOIN json_each(arguments.recipients) AS recipient ON recipient.key=owner.key
         JOIN route_keys AS route ON route.target=target.value
         JOIN "{BusRouteCounts.declared_name}" AS row ON row.target=route.target
             AND row.sender=route.sender AND row.sender_lookup=route.sender_lookup
+        JOIN "{ReceivedSource.declared_name}" AS addressed
+            ON addressed.lookup=recipient.value AND addressed.seq=row.seq
         WHERE row.seq>(SELECT after FROM arguments) AND row.seq<=(SELECT through FROM arguments)
     ), requests AS MATERIALIZED (
         SELECT * FROM candidates WHERE since IS NOT NULL AND timestamp>=since
@@ -87,6 +90,8 @@ class RouteCounts:
             bindings = (
                 json.dumps({actor: sorted(delivery.index_targets)
                             for actor, delivery in deliveries.items()}),
+                json.dumps({actor: registry.require(actor).incarnation.require_recorded().lookup
+                            for actor in deliveries}),
                 senders["senders"], senders["unrecorded"], BusRow.last_seq(db), after,
                 *ReadCursor.sql_bindings(registry,
                     {actor: seen[actor].counted(delivery, registry)

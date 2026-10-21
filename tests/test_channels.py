@@ -40,6 +40,26 @@ def setup_wire(path):
     return comms
 
 
+def test_current_membership_cannot_create_an_unfrozen_delivery(tmp_path):
+    from agent_comms.bus import PublicRecord
+    from agent_comms.messages import InfoKind, Message
+
+    comms = setup_wire(tmp_path)
+    before_join = comms.messaging.send("a", "#api", "before other joined").message
+    comms.channels.update_tags("other", add=frozenset({"api"}))
+    addressed = comms.messaging.send("a", "#api", "frozen for other").message
+    historical = comms.bus.bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("a", "#api", "public history is not input", InfoKind, seq=seq),
+    ))
+    target = CommandTarget.named("#api")
+    assert [message.seq for message in comms.bus.inbox("other", target)] == [addressed.seq]
+    assert comms.bus.pending_count("other", target) == 1
+    assert comms.bus.pending_counts_all(("other",)) == {"other": 1}
+    received = comms.bus.bus.received(comms.registry.require("other").incarnation.lookup)
+    assert addressed.seq in {record.seq for record in received}
+    assert not {before_join.seq, historical.seq} & {record.seq for record in received}
+
+
 def test_tag_delta_and_replacement_use_the_current_registration(tmp_path):
     comms = setup_wire(tmp_path)
     changed = comms.channels.update_tags(
