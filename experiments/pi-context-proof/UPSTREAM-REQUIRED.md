@@ -1,6 +1,6 @@
 # Pi 0.85.1: stock input-ID blocker and disposable native patch (NOT activation)
 
-Stock Pi 0.85.1 still has no trustworthy attempt-bound context identity. This directory now also contains `pi-0.85.1-native-input.patch`, an opt-in, pinned-byte **copied-package native patch**, `prepare-copied-pi.sh`, and offline + real-RPC tests. It never modifies globally installed Pi or existing sessions. See `PATCHED-FORK.md` for exact runtime scope and remaining integration gates.
+Stock Pi 0.85.1 still has no trustworthy attempt-bound context identity. This directory now also contains `native-input.patch`, an opt-in, pinned-byte **copied-package native patch**, `prepare-copied-pi.sh`, and offline + real-RPC tests. It never modifies globally installed Pi or existing sessions. See `PATCHED-FORK.md` for exact runtime scope and remaining integration gates.
 
 `required-contract.test.mjs` is an executable **failing target contract on STOCK Pi**; it passes on the copied patch. The current copied patch advertises `pi-native-input-v1-live-only`: journal JSONL on restart is NOT an offline `CONTEXT_COMMITTED` proof because complete records can survive a failed fsync. Production requires a separately committed coordinator attestation of a live event; uncertain outcomes stay unresolved without automatic retry. Stock produces 4 expected failures without network, live session, or global package modification. Run:
 

@@ -1076,6 +1076,23 @@ with suppress(Exception): raise RuntimeError()
     assert report["delta"][identity] == 1
 
 
+def test_broad_handler_carrying_its_error_into_a_typed_outcome_is_not_a_swallow():
+    source = b"""for pid in pids:
+    try: read(pid)
+    except (OSError, IdentityMismatchError) as error:
+        outcomes.append(UnreadableRuntimeProcess(pid, str(error)))
+        continue
+    try: read(pid)
+    except OSError as error:
+        log.warning(str(error))
+        continue
+    try: read(pid)
+    except OSError as error:
+        return Missing()
+"""
+    assert BroadSwallow.count(source, "read.py") == 2
+
+
 def test_field_spelling_rosters_count_loops_not_declarations():
     source = b"""fields = ("path", "file_path", "filePath")\nfor key in ("path", "file_path", "filePath"):\n    value = data[key]\nvalue = next(data[key] for key in ("path", "file_path", "filePath") if key in data)\n"""
     assert ForeignFieldSpellings.count(source, "read.py") == 2
