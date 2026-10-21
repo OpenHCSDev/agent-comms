@@ -26,14 +26,14 @@ from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .locked_store import DurableFile, SQLiteFile
 from .native_entries import NativeEvidenceRead
 from .native_input_owner import ParticipantOwner
-from .native_input_record import NativeInputExecution, NativeInputRecord
+from .native_input_record import NativeColumn, NativeInputExecution, NativeInputRecord
 from .native_pi import read_tracked_input_commitment
 from .native_runtime_input import NativeRuntimeInput
 from .private_send_rules import NativeIdentityCheck
 from .private_sidecar import create_sidecar_file, native_request_digest, sidecar_connection
 from .reservation_rules import ReservationViolationError
 from .threads import Thread
-from .typed_table import Column, TypedRow, TypedTable
+from .typed_table import Column, IntegerStorage, TextStorage, TypedRow, TypedTable
 
 if TYPE_CHECKING:
     from .private_send_stage import NativeSendStage
@@ -57,8 +57,8 @@ class PromptBinding(DurableFile, SQLiteFile, NativeInputRecord, TypedTable, Priv
         Column(primary_key=True, check="length(input_id)=32 AND input_id NOT GLOB '*[^0-9a-f]*'"),
     ]
     stage: type[NativeInputExecution]
-    execution_id: str | None
-    attempt_ordinal: int | None
+    execution_id: Annotated[NativeColumn, Column(storage=TextStorage, nullable=True)]
+    attempt_ordinal: Annotated[NativeColumn, Column(storage=IntegerStorage, nullable=True)]
     owner_lookup: str
     owner_thread: str
     owner_generation: Annotated[int, Column(check="owner_generation>0")]

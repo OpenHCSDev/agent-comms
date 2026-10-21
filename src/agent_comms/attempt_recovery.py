@@ -34,6 +34,7 @@ from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.recovery_states import DeferredRecovery, FailedRecovery
 
 from .coordination_database import CoordinationStore
+from .native_input_record import FullNativeExecution
 from .field_codec import MalformedRecord
 from .input_disposition import InputDispositions
 from .locked_store import RegistryFile
@@ -90,8 +91,7 @@ class VerifiedOwnerLoss:
                 raise RecoveryBlocked("native recovery requires the current attempted execution")
             source = NativeRuntimeInput.one(
                 store.session._connection,
-                execution_id=execution_id,
-                attempt_ordinal=attempt.attempt_ordinal,
+                **FullNativeExecution(execution_id, attempt.attempt_ordinal).binding_fields(),
             )
             if source is None or source.owner_identity != attempt.owner_identity:
                 raise RecoveryBlocked("native attempt has no matching dispatched owner")
@@ -291,18 +291,18 @@ class RecoveryMonitorCapability:
         from .native_pi import NativeContextProof, NativePiUnavailable
         from .native_prompt_binding import expected_prompt_bindings, expected_prompt_matches_journal
         from .pi_vocabulary import PendingStopReason
-        from .private_path import FileRevision
+        from .private_path import FileRevision, MissingFile
 
         snapshot = store.snapshots.get(execution_id)
         attempt = snapshot.require_current_attempt()
         source = NativeRuntimeInput.one(
-            store.session._connection, execution_id=execution_id,
-            attempt_ordinal=attempt.attempt_ordinal,
+            store.session._connection,
+            **FullNativeExecution(execution_id, attempt.attempt_ordinal).binding_fields(),
         )
         if source is None:
             raise RecoveryBlocked("native attempt has no original input")
         terminal = PendingStopReason
-        revision = None
+        revision = MissingFile()
         session = source.selected_session
         if session is not None:
             with expected_prompt_bindings(store, (source.input_id,)) as bindings:

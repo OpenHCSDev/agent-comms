@@ -329,14 +329,17 @@ class TurnLease(ABC):
         """During a turn, its exact ID or the preceding generation; idle, the caller's answer."""
 
     @abstractmethod
+    @boundary_decoder
     def reports(self, turn_id: str | None, generation: int | None) -> bool:
         """A stored wait's reporting turn is this lease's turn."""
 
     @abstractmethod
+    @boundary_decoder
     def stored_turn_id(self) -> str | None:
         """The reporting turn ID a stored goal wait records."""
 
     @abstractmethod
+    @boundary_decoder
     def stored_generation(self) -> int | None:
         """The turn generation a stored goal wait records."""
 

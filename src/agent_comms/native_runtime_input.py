@@ -23,16 +23,26 @@ from .native_input_record import (
     NativeInputExecution,
     NativeInputLocation,
     NativeInputPosition,
+    NativeStageStorage,
     NativeInputRecord,
+    NativeColumn,
+    NumberNativeColumn,
     RecordedNativePosition,
+    TextNativeColumn,
+    UnrecordedNativeColumn,
     UnrecordedNativePosition,
 )
-from .selected_triage import RecordedTriageText, SelectedTriage
+from .selected_triage import (
+    AbsentTriageDecisionRecord,
+    RecordedTriageText,
+    TriageDecisionRecord,
+)
 from .typed_table import (
     Column,
     DurableTables,
     IntegerStorage,
     SharedFileTables,
+    TextStorage,
     TypedRow,
     TypedTable,
 )
@@ -95,7 +105,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         return None if self.session_id is None else self.require_session_identity()
 
     @property
-    def context_anchor(self) -> str | None:
+    def context_anchor(self) -> NativeColumn:
         return self.session_entry_id
 
     def require_session_identity(self) -> NativeSessionIdentity:
@@ -143,7 +153,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         )
         for row in rows:
             user.require_tracked_user()
-            if row.reference.recorded and row.session_entry_id != user.id:
+            if row.reference.recorded and not row.session_entry_id.holds(user.id):
                 raise IdentityConflict("Native transcript input conflicts with its original entry")
         return rows
 
@@ -198,7 +208,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
 
     def published_replies(self, db, user, owner_lookup):
         """Only this original acknowledgement can lend its execution publication."""
-        if (self.owner_lookup, self.session_entry_id) != (owner_lookup, user.id):
+        if self.owner_lookup != owner_lookup or not self.session_entry_id.holds(user.id):
             return ()
         return self.execution.published_replies(db, owner_lookup)
 
@@ -209,8 +219,11 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
     stage: Annotated[
         type[NativeInputExecution], Column(check=NativeInputExecution.sql_constraint("stage"))
     ]
-    execution_id: Annotated[str | None, Column(references=(ExecutionRecord, "execution_id"))]
-    attempt_ordinal: int | None
+    execution_id: Annotated[
+        NativeColumn,
+        Column(references=(ExecutionRecord, "execution_id"), storage=TextStorage, nullable=True),
+    ]
+    attempt_ordinal: Annotated[NativeColumn, Column(storage=IntegerStorage, nullable=True)]
     owner_lookup: Annotated[str, Column(references=(Participants, "participant_lookup"))]
     owner_thread: str
     owner_generation: Annotated[int, Column(check="owner_generation>0")]
@@ -227,20 +240,19 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
     ] = field(default_factory=UnrecordedNativeClaim)
     session_id: str | None = None
     session_file: str | None = None
-    session_entry_id: Annotated[str | None, NativeContext(str)] = None
+    session_entry_id: Annotated[NativeColumn, NativeContext(str), Column(storage=TextStorage, nullable=True)] = UnrecordedNativeColumn()
     session_entry_start: Annotated[
         NativeInputPosition,
         NativeInputLocation.position_column,
         NativeContext(RecordedNativePosition),
     ] = field(default_factory=UnrecordedNativePosition)
-    request_generation: Annotated[int | None, NativeContext(int)] = None
-    llm_context_digest: Annotated[str | None, NativeContext(str)] = None
-    committed_at_ms: Annotated[int | None, NativeContext(int)] = None
+    request_generation: Annotated[NativeColumn, NativeContext(int), Column(storage=IntegerStorage, nullable=True)] = UnrecordedNativeColumn()
+    llm_context_digest: Annotated[NativeColumn, NativeContext(str), Column(storage=TextStorage, nullable=True)] = UnrecordedNativeColumn()
+    committed_at_ms: Annotated[NativeColumn, NativeContext(int), Column(storage=IntegerStorage, nullable=True)] = UnrecordedNativeColumn()
     verdict: Annotated[
-        type[SelectedTriage] | None,
-        RecordedTriageText,
-        Column(check=RecordedTriageText.sql_constraint("verdict")),
-    ] = None
+        TriageDecisionRecord,
+        Column(check=RecordedTriageText.sql_constraint("verdict"), storage=TextStorage, nullable=True),
+    ] = AbsentTriageDecisionRecord()
 
     without_rowid = True
     unique = (("execution_id", "attempt_ordinal"),)
@@ -269,7 +281,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         db: sqlite3.Connection,
         context: NativeContextProof,
         *,
-        verdict: type[SelectedTriage] | None = None,
+        verdict: TriageDecisionRecord = AbsentTriageDecisionRecord(),
     ) -> None:
         """Commit the context acknowledgement once against the original selected session."""
         if context.input_id != self.input_id:
@@ -279,11 +291,11 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
             db,
             where="input_id=? AND session_entry_id IS NULL",
             parameters=(self.input_id,),
-            session_entry_id=context.session_entry_id,
+            session_entry_id=TextNativeColumn(context.session_entry_id),
             session_entry_start=RecordedNativePosition(context.session_entry_start),
-            request_generation=context.request_generation,
-            llm_context_digest=context.llm_context_digest,
-            committed_at_ms=context.committed_at_ms,
+            request_generation=NumberNativeColumn(context.request_generation),
+            llm_context_digest=TextNativeColumn(context.llm_context_digest),
+            committed_at_ms=NumberNativeColumn(context.committed_at_ms),
             verdict=verdict,
         )
         if updated.rowcount != 1:
@@ -320,7 +332,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
 @dataclass(frozen=True)
 class CurrentNativeCursor(NativeInputContext, NativeRuntimeTable, TypedTable):
     @property
-    def context_anchor(self) -> str | None:
+    def context_anchor(self) -> NativeColumn:
         return self.session_id
 
     wire_root_id: Annotated[
@@ -352,17 +364,19 @@ class CurrentNativeCursor(NativeInputContext, NativeRuntimeTable, TypedTable):
         int, Column(check="injected_seq>=0 AND injected_seq<=covered_seq")
     ]
     input_id: Annotated[
-        str | None,
-        Column(references=(NativeRuntimeInput, "input_id")),
+        NativeColumn,
+        Column(references=(NativeRuntimeInput, "input_id"), storage=TextStorage, nullable=True),
         NativeContext(str),
     ]
     stage: Annotated[
-        type[NativeInputExecution] | None,
-        Column(check=NativeInputExecution.sql_constraint("stage")),
+        NativeColumn,
+        Column(
+            check=NativeInputExecution.sql_constraint("stage"), storage=NativeStageStorage, nullable=True
+        ),
         NativeContext(type[NativeInputExecution]),
     ]
-    session_id: Annotated[str | None, NativeContext(str)]
-    request_generation: Annotated[int | None, NativeContext(int)]
+    session_id: Annotated[NativeColumn, NativeContext(str), Column(storage=TextStorage, nullable=True)]
+    request_generation: Annotated[NativeColumn, NativeContext(int), Column(storage=IntegerStorage, nullable=True)]
 
     without_rowid = True
     checks = (

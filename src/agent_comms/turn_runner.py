@@ -237,8 +237,10 @@ class TurnRunner:
             await Coordination.run_worker(partial(self.pause_active_goal, thread))
         task = self.turn_tasks.get(session_id)
         if task is not None:
-            current = await Coordination.run_worker(partial(self.comms.registry.require, name)) if name else None
-            leases = current.turn_lease.held() if current is not None else ()
+            leases = ()
+            if name:
+                current = await Coordination.run_worker(partial(self.comms.registry.require, name))
+                leases = current.turn_lease.held()
             for lease in leases:
                 await self.transition_turn(session_id, lease, CancellingPhase())
             task.cancel()

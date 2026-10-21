@@ -6,7 +6,7 @@ import json
 from abc import abstractmethod
 from dataclasses import dataclass
 from functools import partial
-from typing import Literal
+from typing import ClassVar, Literal
 
 from .assignment_states import FailedAssignment, IgnoredAssignment, TriagePendingAssignment
 from .coordination_tables.assignments import WakeAssignment
@@ -165,8 +165,13 @@ class RejectedTriageOutcome(SelectedTriageOutcome):
 class TriageDecisionRecord(DeclaredFamily, JsonShapeFamily, affix="TriageDecisionRecord"):
     """Decode the original nullable SQL scalar once, without inventing a verdict."""
 
+    decided: ClassVar[bool] = True
+
     @abstractmethod
     def historical_proof(self, record, lifecycle, execution, **source): ...
+
+    def require_undecided(self) -> None:
+        raise MalformedRecord("A full native input records no triage verdict")
 
 
 @dataclass(frozen=True)
@@ -175,7 +180,7 @@ class TriageDecisionText(TriageDecisionRecord, JsonShapeMember):
 
     @classmethod
     def from_json_value(cls, value):
-        return DecidedTriageRecord(FieldCodec.decode(type[SelectedTriage], value))
+        return DecidedTriageRecord(RecordedTriageText.from_text(value))
 
     def historical_proof(self, record, lifecycle, execution, **source):
         raise TypeError("Triage decision text must be decoded at ingress")
@@ -184,6 +189,9 @@ class TriageDecisionText(TriageDecisionRecord, JsonShapeMember):
 @dataclass(frozen=True)
 class DecidedTriageRecord(TriageDecisionRecord):
     decision: type[SelectedTriage]
+
+    def to_wire(self):
+        return RecordedTriageText.encode(self.decision)
 
     def historical_proof(self, record, lifecycle, execution, **source):
         from .historical_native_inputs import TriageHistoricalNativeInput
@@ -194,6 +202,10 @@ class DecidedTriageRecord(TriageDecisionRecord):
 @dataclass(frozen=True)
 class AbsentTriageDecisionRecord(TriageDecisionRecord, JsonShapeMember):
     value: None = None
+    decided = False
+
+    def require_undecided(self) -> None:
+        pass
 
     def historical_proof(self, record, lifecycle, execution, **source):
         return lifecycle.rejected_triage_history(execution, **source)

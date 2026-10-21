@@ -25,7 +25,7 @@ from .field_codec import (
     NativeContext,
     WireName,
 )
-from .typed_table import Column, IntegerStorage, TextStorage
+from .typed_table import Column, IntegerStorage, SqlStorage, TextStorage
 
 if TYPE_CHECKING:
     from agent_comms.coordination_tables.executions import ExecutionRecord
@@ -84,6 +84,69 @@ class RecordedNativePosition(NativeInputPosition, JsonShapeMember):
     @property
     def offset(self) -> int:
         return self.value
+
+
+class NativeStageStorage(SqlStorage):
+    """A nullable stage column keeps the execution family's generated name CHECK."""
+
+    sql_type = "TEXT"
+
+    @classmethod
+    def accepts(cls, annotation: object) -> bool:
+        return False  # Declared on the column; a NativeColumn names no family itself.
+
+    @classmethod
+    def constraints(cls, column: str, annotation: object = None) -> tuple[str, ...]:
+        return (NativeInputExecution.sql_constraint(column),)
+
+
+class NativeColumn(DeclaredFamily, JsonShapeFamily, affix="NativeColumn"):
+    """One nullable column of an original native row: SQL NULL until its group is recorded.
+
+    The group's owner (the stage, or the context acknowledgement) decides what a
+    recorded value means; the member answers only whether the column holds one.
+    """
+
+    def require_unrecorded(self) -> None:
+        raise MalformedRecord("Native column holds a value its group does not record")
+
+    def reference_of(self, row: NativeInputContext) -> NativeContextReference:
+        """A recorded context anchor requires the whole recorded group."""
+        return row.recorded_reference()
+
+    @abstractmethod
+    def holds(self, value: object) -> bool:
+        """This column records exactly ``value``."""
+
+
+@dataclass(frozen=True)
+class UnrecordedNativeColumn(NativeColumn, JsonShapeMember):
+    value: None = None
+
+    def require_unrecorded(self) -> None:
+        pass
+
+    def reference_of(self, row: NativeInputContext) -> NativeContextReference:
+        return row.unrecorded_reference()
+
+    def holds(self, value: object) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
+class TextNativeColumn(NativeColumn, JsonShapeMember):
+    value: str
+
+    def holds(self, value: object) -> bool:
+        return self.value == value
+
+
+@dataclass(frozen=True)
+class NumberNativeColumn(NativeColumn, JsonShapeMember):
+    value: int
+
+    def holds(self, value: object) -> bool:
+        return self.value == value
 
 
 class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
@@ -153,7 +216,7 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
 
     @classmethod
     @abstractmethod
-    def from_columns(cls, execution_id, attempt_ordinal) -> NativeInputExecution:
+    def from_columns(cls, execution_id: NativeColumn, attempt_ordinal: NativeColumn) -> NativeInputExecution:
         """Acquire the original durable binding's external SQL projection."""
         raise NotImplementedError
 
@@ -184,19 +247,16 @@ class TriageNativeExecution(NativeInputExecution):
         TriageNativeSources(input_id, tuple(row.assignment_id for row in assignments)).insert(db)
 
     @classmethod
-    def from_columns(cls, execution_id, attempt_ordinal) -> TriageNativeExecution:
-        FieldCodec.decode(type(None), execution_id)
-        FieldCodec.decode(type(None), attempt_ordinal)
+    def from_columns(cls, execution_id: NativeColumn, attempt_ordinal: NativeColumn) -> TriageNativeExecution:
+        execution_id.require_unrecorded()
+        attempt_ordinal.require_unrecorded()
         return cls()
 
     def binding_fields(self):
-        return {"execution_id": None, "attempt_ordinal": None}
+        return {"execution_id": UnrecordedNativeColumn(), "attempt_ordinal": UnrecordedNativeColumn()}
 
     def historical_proof(self, record, *, lifecycle, **source):
-        from .selected_triage import TriageDecisionRecord
-
-        decision = FieldCodec.decode(TriageDecisionRecord, FieldCodec.encode(record.verdict))
-        return decision.historical_proof(record, lifecycle, self, **source)
+        return record.verdict.historical_proof(record, lifecycle, self, **source)
 
 
 @dataclass(frozen=True)
@@ -226,15 +286,16 @@ class FullNativeExecution(NativeInputExecution):
             raise IdentityConflict("Native full input requires an original attempt")
 
     @classmethod
-    def from_columns(cls, execution_id, attempt_ordinal) -> FullNativeExecution:
+    def from_columns(cls, execution_id: NativeColumn, attempt_ordinal: NativeColumn) -> FullNativeExecution:
         return FieldCodec.decode(cls, {
             cls.family_discriminator: cls.declared_name,
-            "execution_id": execution_id,
-            "attempt_ordinal": attempt_ordinal,
+            "execution_id": FieldCodec.encode(execution_id),
+            "attempt_ordinal": FieldCodec.encode(attempt_ordinal),
         })
 
     def binding_fields(self):
-        return FieldCodec.encode_fields(self)
+        return {"execution_id": TextNativeColumn(self.execution_id),
+                "attempt_ordinal": NumberNativeColumn(self.attempt_ordinal)}
 
     def require_attempt(self) -> FullNativeExecution:
         return self
@@ -275,7 +336,7 @@ class FullNativeExecution(NativeInputExecution):
     def historical_proof(self, record, *, lifecycle, **source):
         from .historical_native_inputs import FullHistoricalNativeInput
 
-        FieldCodec.decode(type(None), record.verdict)
+        record.verdict.require_undecided()
         return FullHistoricalNativeInput(execution=self, **source)
 
     def proves_full_source(self, proof) -> bool:
@@ -327,10 +388,10 @@ class NativeInputReference(NativeContextReference):
         """Decode the complete original SQL reference, never a partial projection."""
         try:
             result = FieldCodec.construct(cls, dict(
-                input_id=row.input_id,
+                input_id=row.context_value("input_id"),
                 stage=row.reference_stage,
-                session_id=row.session_id,
-                request_generation=row.request_generation,
+                session_id=row.context_value("session_id"),
+                request_generation=row.context_value("request_generation"),
             ))
             result = FieldCodec.decode(cls, FieldCodec.encode(result, cls))
             if not 0 < result.request_generation <= 2**53 - 1:
@@ -382,40 +443,48 @@ class NativeInputRecord(ABC):
 class NativeInputContext:
     """Decode the declared nullable SQL context group into its original state."""
 
-    input_id: str | None
-    stage: type[NativeInputExecution] | None
-    session_id: str | None
-    request_generation: int | None
+    input_id: str | NativeColumn
+    stage: type[NativeInputExecution] | NativeColumn
+    session_id: str | NativeColumn
+    request_generation: NativeColumn
 
     @property
     @abstractmethod
-    def context_anchor(self) -> str | None:
+    def context_anchor(self) -> NativeColumn:
         """Original storage member that distinguishes unrecorded context."""
 
     @property
-    def reference_stage(self) -> type[NativeInputExecution] | None:
-        return self.stage
+    def reference_stage(self) -> type[NativeInputExecution]:
+        return self.context_value("stage")
+
+    def context_value(self, name: str) -> object:
+        """A context field decoded as its NativeContext directive declares it."""
+        plan = next(plan for plan in FieldCodec.field_plans(type(self)) if plan.name == name)
+        for directive in NativeContext.single(plan.annotation):
+            return FieldCodec.decode(directive.value, FieldCodec.encode(getattr(self, name)))
+        return getattr(self, name)
 
     @property
     def reference(self) -> NativeContextReference:
-        # SQL NULL is classified at this original storage boundary only. An
-        # absent context anchor must have the entire declared context group absent;
-        # a partial group is corruption, never an unrecorded reference.
-        if self.context_anchor is None:
-            try:
-                for plan in FieldCodec.field_plans(type(self)):
-                    if plan.setting(NativeContext, None):
-                        FieldCodec.decode(type(None), FieldCodec.encode(getattr(self, plan.name)))
-            except MalformedRecord as error:
-                raise IdentityConflict("Native unrecorded context group is partial") from error
-            return UnrecordedNativeInputReference()
+        # SQL NULL is classified at this original storage boundary only: the
+        # context anchor's member decides which group shape the row must hold.
+        return self.context_anchor.reference_of(self)
+
+    def unrecorded_reference(self) -> NativeContextReference:
+        """An absent anchor needs the whole group absent; a partial group is corruption."""
         try:
             for plan in FieldCodec.field_plans(type(self)):
-                annotation = plan.setting(NativeContext, None)
-                if annotation is not None:
-                    FieldCodec.decode(
-                        annotation, FieldCodec.encode(getattr(self, plan.name), annotation)
-                    )
+                for _directive in NativeContext.single(plan.annotation):
+                    FieldCodec.decode(type(None), FieldCodec.encode(getattr(self, plan.name)))
+        except MalformedRecord as error:
+            raise IdentityConflict("Native unrecorded context group is partial") from error
+        return UnrecordedNativeInputReference()
+
+    def recorded_reference(self) -> NativeContextReference:
+        try:
+            for plan in FieldCodec.field_plans(type(self)):
+                for directive in NativeContext.single(plan.annotation):
+                    FieldCodec.decode(directive.value, FieldCodec.encode(getattr(self, plan.name)))
         except MalformedRecord as error:
             raise IdentityConflict("Native recorded context group is partial") from error
         return NativeInputReference.acquire(self)

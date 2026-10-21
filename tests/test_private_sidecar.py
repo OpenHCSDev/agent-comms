@@ -10,7 +10,7 @@ import sys
 import pytest
 
 import agent_comms.private_sidecar as sidecar
-from agent_comms.native_input_record import TriageNativeExecution
+from agent_comms.native_input_record import TriageNativeExecution, UnrecordedNativeColumn
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.native_prompt_binding import PromptBinding
 
@@ -38,8 +38,8 @@ def _insert(db, key="1"):
     return PromptBinding(
         input_id=key * 32,
         stage=TriageNativeExecution,
-        execution_id=None,
-        attempt_ordinal=None,
+        execution_id=UnrecordedNativeColumn(),
+        attempt_ordinal=UnrecordedNativeColumn(),
         owner_lookup="2" * 32,
         owner_thread="owner",
         owner_generation=1,
@@ -201,7 +201,7 @@ _WORKER = r"""
 import os, signal, sys
 from pathlib import Path
 import agent_comms.private_sidecar as s
-from agent_comms.native_input_record import TriageNativeExecution
+from agent_comms.native_input_record import TriageNativeExecution, UnrecordedNativeColumn
 from agent_comms.native_prompt_binding import PromptBinding
 p = Path(sys.argv[1])
 print('READY', flush=True)
@@ -219,7 +219,7 @@ if len(sys.argv) > 2:
     s.os.fsync = crash
     with s.sidecar_connection(p, PromptBinding) as db:
         PromptBinding(input_id='1'*32,stage=TriageNativeExecution,
-            execution_id=None,attempt_ordinal=None,owner_lookup='2'*32,
+            execution_id=UnrecordedNativeColumn(),attempt_ordinal=UnrecordedNativeColumn(),owner_lookup='2'*32,
             owner_thread='owner',owner_generation=1,wire_root_id='3'*32,
             expected_prompt_digest='a'*64,
             bound_at_ms=1).insert(db)
