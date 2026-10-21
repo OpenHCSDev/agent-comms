@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar
 
+from .message_bus import WatchPass
 from .registration import Registration
 
 if TYPE_CHECKING:
@@ -48,7 +47,7 @@ class CommanderReview:
 
 
 @dataclass
-class CommanderHeartbeat:
+class CommanderHeartbeat(WatchPass):
     sender: ClassVar[str] = "commander-heartbeat"
     reviews: dict[ThreadIncarnation, CommanderReview] = field(default_factory=dict)
 
@@ -77,21 +76,20 @@ class CommanderHeartbeat:
             )
         )
 
-    def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
-        """Borrow the bus in run_worker; inactive commanders retire their review."""
-        with opened_wire() as comms:
-            self.register(comms.registry)
-            commanders = self.commanders(comms.registry, comms.goals)
-            live = {thread.incarnation for thread in commanders}
-            self.reviews = {
-                owner: review for owner, review in self.reviews.items() if owner in live
-            }
-            for thread in commanders:
-                comms.goals.todos.reconcile_merges(thread.incarnation, comms.registry.storage_rule)
-                if thread.incarnation not in self.reviews:
-                    # First observation, including connector startup, only establishes a baseline.
-                    self.reviews[thread.incarnation] = CommanderReview(
-                        frozenset(StandingRule.broken(comms, thread.name))
-                    )
-                else:
-                    self.reviews[thread.incarnation].wake(comms, self.sender, thread)
+    def pass_body(self, comms: Comms) -> None:
+        """Inactive commanders retire their review after the pass enters the bus."""
+        self.register(comms.registry)
+        commanders = self.commanders(comms.registry, comms.goals)
+        live = {thread.incarnation for thread in commanders}
+        self.reviews = {
+            owner: review for owner, review in self.reviews.items() if owner in live
+        }
+        for thread in commanders:
+            comms.goals.todos.reconcile_merges(thread.incarnation, comms.registry.storage_rule)
+            if thread.incarnation not in self.reviews:
+                # First observation, including connector startup, only establishes a baseline.
+                self.reviews[thread.incarnation] = CommanderReview(
+                    frozenset(StandingRule.broken(comms, thread.name))
+                )
+            else:
+                self.reviews[thread.incarnation].wake(comms, self.sender, thread)
