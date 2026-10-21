@@ -600,6 +600,18 @@ class TableSchema(ABC):
         return tuple(TypedTable.members_with(cls))
 
     @classmethod
+    def declares_schema(cls) -> bool:
+        """Whether this class names a file's tables, not only a parent of such classes."""
+        return True
+
+    @classmethod
+    def schema_members(cls) -> tuple[type[TableSchema], ...]:
+        """Every descendant that declares a schema, parents of stores passed through."""
+        descendants = (kind for child in cls.__subclasses__()
+                       for kind in (child, *child.schema_members()))
+        return tuple(dict.fromkeys(kind for kind in descendants if kind.declares_schema()))
+
+    @classmethod
     def declared_schema(cls) -> dict[str, str]:
         return {name: sql for row in cls.schema_rows() for name, sql in row.schema_objects().items()}
 
@@ -1174,6 +1186,10 @@ class TypedStore(StoreWriter, TableSchema):
     @classmethod
     def schema_rows(cls) -> tuple[type[TypedTable], ...]:
         return cls.rows
+
+    @classmethod
+    def declares_schema(cls) -> bool:
+        return "rows" in vars(cls)
 
     @contextmanager
     def _attached(
