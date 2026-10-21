@@ -87,7 +87,7 @@ from ..tools import (
     TodoList,
 )
 from .config import CommanderConfig, CommanderRole
-from agent_comms.commander.standing import WheelSpin
+from agent_comms.commander.standing import UnownedWheelSpin
 
 OUTGOING = DirectiveText.OUTGOING  # every commander text passes each one
 
@@ -1002,7 +1002,7 @@ class IdleVerb(OrderVerb):
     help = "print the units Core counts idle: a recent turn and no order"
 
     def run(self, ctx: Commander) -> None:
-        for thread in WheelSpin.idle(ctx.comms, ctx.commander):
+        for thread in UnownedWheelSpin.idle(ctx.comms, ctx.commander):
             print(thread.name)
 
 
