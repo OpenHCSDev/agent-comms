@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import time
 from abc import abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 from uuid import uuid4
 
 from agent_comms import field_codec
@@ -34,7 +35,6 @@ from .goal_mentions import bind_goal_mentions
 from .goal_states import (
     ActiveGoal,
     BlockedGoal,
-    BlockedState,
     ChokeholdPause,
     CompletedGoal,
     GoalState,
@@ -237,6 +237,26 @@ class ActiveGoalAction(
     def before_transition(self, goal: Goal, ctx: GoalActionContext) -> None:
         generation = ctx.goals.open_goal_store().require_generation(goal.id)
         generation.lifecycle.resume_status(generation, goal, ctx)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CompliedGoalAction(TransitionGoalAction, OwnerInvocable):
+    """The commander complied, so a unit its chokehold paused works again. The compliant answer
+    is a witness the way an order is: a generation an interruption left unresolved continues
+    as a fresh order continues it (continue_work), where a status-only resume is refused.
+    Only Core's release takes it; no model or control surface can name a witness."""
+
+    witness: str
+
+    def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
+        return ActiveGoal()
+
+    def before_transition(self, goal: Goal, ctx: GoalActionContext) -> None:
+        store = ctx.goals.open_goal_store()
+        generation = store.require_generation(goal.id)
+        generation.lifecycle.continue_work(store, generation, self.witness)
+        resumed = store.require_generation(goal.id)
+        resumed.lifecycle.resume_status(resumed, goal, ctx)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -499,9 +519,12 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
     request: str
     review_at: EventTime
     commander: str
+    assigner: ThreadIncarnation
 
-    @abstractmethod
-    def bound_to(self, actor: ThreadIncarnation) -> ProblemOrderGoalAction: ...
+    def bound_to(
+        self, actor: ThreadIncarnation, commander: ThreadIncarnation,
+    ) -> ProblemOrderGoalAction:
+        return replace(self, commander=commander.name, assigner=actor)
 
     @abstractmethod
     def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo: ...
@@ -512,6 +535,9 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
     def continue_goal(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         request = self.request_ref(ctx)
         self.reserve(ctx, goal.id, request)
+        store = ctx.goals.open_goal_store()
+        generation = store.require_generation(goal.id)
+        generation.lifecycle.continue_work(store, generation, self.order.id)
         revision = goal.revision + 1
         return replace(goal, order=ProblemGoalOrder(), text=ProblemGoalOrder.text, progress="",
                        revision=revision, mention_source=bind_goal_mentions(
@@ -548,11 +574,6 @@ class OrderGoalAction(ProblemOrderGoalAction):
     traced: Annotated[FileLine | NoSourceReference, field_codec.WireOmitDefault()] = (
         NoSourceReference()
     )
-    assigner: ThreadIncarnation
-
-    def bound_to(self, actor: ThreadIncarnation) -> OrderGoalAction:
-        return replace(self, commander=actor.name, assigner=actor)
-
     def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo:
         return ctx.goals.todos.assign(self.problem, expected_revision=self.expected_revision,
             owner=ctx.thread, assigner=self.assigner,
@@ -568,6 +589,19 @@ class ReissuedOrderGoalAction(OrderGoalAction):
     since, so they are not checked again against the moved tree.
     """
 
+    @classmethod
+    def for_todo(cls, todo: Todo, commander: str) -> Self:
+        """The order the Todo already accepted, handed again with a fresh review window, by the
+        actor that assigned it."""
+        now = time.time()
+        order = todo.order.reissued(now)
+        return cls(
+            problem=todo.id, expected_revision=todo.revision,
+            order=order, request=todo.goal.request(),
+            review_at=todo.reissued_review(now), commander=commander,
+            assigner=todo.acting_assigner,
+            traced=order.owner)
+
     def require_sendable(self) -> None:
         pass
 
@@ -577,13 +611,11 @@ class CreateProblemGoalAction(ProblemOrderGoalAction):
     repo: RepositoryName
     text: str
 
-    def bound_to(self, actor: ThreadIncarnation) -> CreateProblemGoalAction:
-        return replace(self, commander=actor.name)
-
     def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo:
         return ctx.goals.todos.create(self.problem, self.repo, self.text,
             creator=ctx.goals.registry.require(self.commander), owner=ctx.thread,
-            generation=generation, goal=goal, review_at=self.review_at, order=self.order)
+            assigner=self.assigner, generation=generation, goal=goal,
+            review_at=self.review_at, order=self.order)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -653,7 +685,5 @@ class RetryGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Runt
 
     def require_transition(self, goal: Goal, state: GoalState, ctx: GoalActionContext) -> None:
         """A blocked goal leaves its state machine only through the attempt ledger's retry."""
-        if not isinstance(goal.state, BlockedState):
-            raise ValueError("The blocked goal changed; refresh its state.")
         store = ctx.goals.open_goal_store()
         store.authorize_current_retry(goal.id, uuid4().hex)

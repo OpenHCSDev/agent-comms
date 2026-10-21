@@ -224,10 +224,16 @@ class OwnerReleaseEvidence(ReleasedOwner, OwnerRelease, TypedTable):
         process = self.require_process()
         if process.alive():
             raise RelationViolationError("Released native owner process is still alive")
+        if snapshot.status(current.name).active and self.matches(current):
+            raise RelationViolationError("Released native process is still the registry owner")
         actual = snapshot.claimed_identity(current.name)
         released = ClaimedIdentity(self.incarnation(), self.after)
         if not actual.includes(released):
             raise RelationViolationError("Native release claim_scope regressed")
+        if actual == released and not self.matches(current):
+            raise RelationViolationError(
+                "Native release process differs from its original declaration"
+            )
         return self
 
 
@@ -310,7 +316,7 @@ class OwnerLifecycle:
             orders = tuple(
                 todo
                 for commander in CommanderHeartbeat.commanders(self.registry, self.goals)
-                for todo in self.goals.todos.held_by(commander.incarnation, owned.name)
+                for todo in self.goals.todos.held_by(commander.incarnation, owned.incarnation)
                 if todo.pending and todo.held().owner_identity == owned.incarnation
             )
             if orders:
