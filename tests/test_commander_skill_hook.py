@@ -12,7 +12,8 @@ from agent_comms.behaviour_patterns import PostmortemFailure
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.rule_file import RuleFile
 from agent_comms.todos import Slop
-from agent_comms_hooks.reread import DriftCheck, ToolUseReminder
+from agent_comms_hooks.reread import CommanderReread, DriftCheck, SourcesOrder, ToolUseReminder
+from agent_comms_hooks.skill import CommanderStart
 
 
 @pytest.mark.parametrize("source", ["startup", "resume", "compact"])
@@ -84,11 +85,14 @@ def usage(tokens):
         separators=(",", ":"))
 
 
-def hook_record(transcript):
-    return {"hook_event_name": "PostToolUse", "session_id": "s", "transcript_path": str(transcript)}
+def hook_record(transcript, tool="Bash", **tool_input):
+    return {"hook_event_name": "PostToolUse", "session_id": "s", "transcript_path": str(transcript),
+            "tool_name": tool, "tool_input": tool_input}
 
 
-@pytest.mark.parametrize("member", ToolUseReminder.__subclasses__(), ids=lambda member: member.__name__)
+@pytest.mark.parametrize("member", [
+    member for member in ToolUseReminder.__subclasses__() if not issubclass(member, SourcesOrder)
+], ids=lambda member: member.__name__)
 def test_each_reminder_keeps_its_own_cadence_and_resets_at_compaction(tmp_path, member):
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
@@ -102,6 +106,38 @@ def test_each_reminder_keeps_its_own_cadence_and_resets_at_compaction(tmp_path, 
     assert hook.take(250_000 + member.every - 1) == ()
     assert hook.take(250_000 + member.every)
     assert hook.take(20_000)  # compaction shrank the context below the mark
+
+
+def test_reread_counts_from_the_reply_after_its_parts_were_read(tmp_path):
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    bash = CommanderReread.decode(hook_record(transcript))
+    bash.parts.mkdir()
+    parts = [bash.parts / "01.md", bash.parts / "02.md"]
+    for part in parts:
+        part.write_text("sources")
+    assert bash.take(250_000)
+    assert bash.take(250_001)  # another action before the reads repeats the order
+    for part in parts:
+        read = CommanderReread.decode(hook_record(transcript, "Read", file_path=str(part)))
+        assert read.take(250_001) == ()
+    assert bash.take(250_001) == ()  # the reply that issued the reads does not hold them yet
+    assert bash.take(340_000) == ()  # the reads landed: the next order counts from here
+    assert bash.take(340_000 + CommanderReread.every - 1) == ()
+    assert bash.take(340_000 + CommanderReread.every)
+
+
+def test_compaction_orders_the_sources_read_once(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    start = CommanderStart.decode(
+        {"hook_event_name": "SessionStart", "session_id": "s", "transcript_path": str(transcript)})
+    assert start.take(324_000)  # the transcript still ends with the reply before compaction
+    for part in sorted(start.parts.iterdir()):
+        read = CommanderReread.decode(hook_record(transcript, "Read", file_path=str(part)))
+        assert read.take(106_000) == ()
+    assert CommanderReread.decode(hook_record(transcript)).take(173_000) == ()
 
 
 def test_drift_check_rotates_through_the_packaged_tells(tmp_path):
@@ -119,7 +155,8 @@ def run_hook(program, transcript, event, monkeypatch, capsys, *lines):
 
     transcript.write_text("".join(line + "\n" for line in lines))
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(
-        {"hook_event_name": event, "session_id": "s", "transcript_path": str(transcript)})))
+        {"hook_event_name": event, "session_id": "s", "transcript_path": str(transcript),
+         "tool_name": "Bash", "tool_input": {}})))
     program.main()
     return capsys.readouterr().out
 
@@ -135,8 +172,11 @@ def test_every_due_reminder_goes_out_in_one_hook_output_with_the_voice_inline(
     first = run_hook(reread, transcript, "PostToolUse", monkeypatch, capsys, usage(250_001))
     (document,) = first.splitlines()
     first_context = json.loads(document)["hookSpecificOutput"]["additionalContext"]
-    assert first_context.startswith(CommanderConfig.packaged_voice().read_text())
+    assert CommanderConfig.packaged_voice().read_text() in first_context
     assert "Drift check:" in first_context
+    # A tool call before the ordered reads repeats the order in the same output.
+    parts = sorted(transcript.with_suffix(".reread").iterdir())
+    assert all(str(part) in first_context for part in parts)
     both = run_hook(reread, transcript, "PostToolUse", monkeypatch, capsys, usage(350_000))
     (document,) = both.splitlines()
     context = json.loads(document)["hookSpecificOutput"]["additionalContext"]
