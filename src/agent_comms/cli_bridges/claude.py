@@ -121,10 +121,11 @@ class ClaudeBridge(RunningClaude, LineMonitorBridge, declared_name=None):
                     yield update
                 async for _ in changes:
                     opened = FileRevision.from_file(stream)
-                    current = FileRevision.capture(source)
-                    if (current is None or current.identity != original.identity
+                    replaced = ValueError('Claude transcript was replaced or truncated')
+                    current = FileRevision.capture(source).require(replaced)
+                    if (current.identity != original.identity
                             or min(opened.size, current.size) < stream.tell()):
-                        raise ValueError('Claude transcript was replaced or truncated')
+                        raise replaced
                     for update in self.decoded(stream, stream.tell(), opened.size, session):
                         yield update
 

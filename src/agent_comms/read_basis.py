@@ -26,7 +26,7 @@ from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged, Historic
 from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
-from .private_path import FileRevision
+from .private_path import FileObservation, MissingFile
 from .recorded_bus import RecordedBusIdentity
 from .store_files import SharedLock, _store_lock
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
@@ -119,7 +119,7 @@ class DisplayIdentity:
     """The scope observation compared between pages, independent of paint evidence."""
 
     viewer: ThreadIncarnation
-    history_revision: FileRevision | None
+    history_revision: FileObservation
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,7 +142,7 @@ class DMDisplayIdentity(DisplayIdentity):
 class SelectedDisplay(ABC):
     """The builder's declared read proof; never recovered from a page's fields."""
 
-    history_revision: FileRevision | None = None
+    history_revision: FileObservation = MissingFile()
     has_evidence: ClassVar[bool] = True
 
     @property
@@ -699,7 +699,7 @@ class DMDisplayBasis:
                     snapshot, RecordedBusIdentity.capture(bus.log.path), registry.user_thread())
             return replace(page, selection=DMSelection(basis))
 
-    def identity(self, history_revision: FileRevision | None) -> DMDisplayIdentity:
+    def identity(self, history_revision: FileObservation) -> DMDisplayIdentity:
         return DMDisplayIdentity(
             root_identity=self.root_identity, bus_identity=self.bus_identity,
             worktree=self.worktree, requested_peer=self.requested_peer,
@@ -943,7 +943,7 @@ class ChannelDisplayScope(MessageDisplayScope):
         targets = tuple(self.index_targets)
         return "target IN (" + ",".join("?" for _ in targets) + ")", targets
 
-    def identity(self, history_revision: FileRevision | None) -> ChannelDisplayIdentity:
+    def identity(self, history_revision: FileObservation) -> ChannelDisplayIdentity:
         displayed = self.require_displayed()
         return ChannelDisplayIdentity(
             viewer=displayed.viewer_identity, bus_identity=displayed.bus_identity,

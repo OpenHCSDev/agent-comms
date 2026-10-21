@@ -12,7 +12,7 @@ from pathlib import Path
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .field_codec import MalformedRecord
-from .private_path import FileRevision
+from .private_path import FileObservation, FileRevision
 from .routing import TurnRouting
 from .store_files import _store_lock
 from .typed_table import Column, DurableTables, StoreWriter, TypedTable
@@ -99,7 +99,7 @@ class TranscriptRoutes(StoreWriter):
         super().__init__(self.path_in(root))
         self._initialized = False
 
-    def revision(self) -> FileRevision | None:
+    def revision(self) -> FileObservation:
         return FileRevision.capture(self.source_paths(self.path.parent)[0])
 
     def snapshot(self, destination: Path) -> None:
@@ -187,9 +187,8 @@ class TranscriptRoutes(StoreWriter):
         if thread.turn_lease != lease:
             raise RelationViolationError("Native publication has no current original turn")
         path = Path(thread.runtime.path)
-        revision = FileRevision.capture(path)
-        if revision is None:
-            raise RelationViolationError("Native publication has no retained session")
+        revision = FileRevision.capture(path).require(
+            RelationViolationError("Native publication has no retained session"))
         reader = NativeTranscript(path)
         floor = checkpoint.offset if thread.runtime.read_key == checkpoint.session_file else 0
         try:

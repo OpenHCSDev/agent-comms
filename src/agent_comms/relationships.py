@@ -35,7 +35,7 @@ from .peer_relevance import (
     PeerRelevance,
     StrangerRelevance,
 )
-from .private_path import FileRevision
+from .private_path import FileObservation, FileRevision, MissingFile
 from .registry_document import RegistrySnapshot, RosterVisibility
 from .routing import DeliveryScope
 from .store_files import SharedLock, _store_lock
@@ -697,7 +697,7 @@ class ThreadRelationships:
         self._wire_lock_path = root / "wire"
         self.store = RelationshipStore.at(root)
         self._lock = RLock()
-        self._recent_revision: FileRevision | None = None
+        self._recent_revision: FileObservation = MissingFile()
         self._recent: tuple[Message, ...] = ()
         self._limited = False
 
@@ -882,13 +882,14 @@ class ThreadRelationships:
     def _opened_recent_messages(self, source) -> tuple[tuple[Message, ...], bool]:
         if not source.changed_since(self._recent_revision):
             return self._recent, self._limited
-        previous = self._recent_revision
-        if (previous is not None and source.same_file(previous.identity)
-                and source.boundary > previous.size
-                and previous.holds_cut(source.revision, previous.size)):
-            start = max(previous.size, source.boundary - self.RECENT_BYTES)
-            data, start = source.tail_bytes(source.boundary - start)
-            contiguous = start == previous.size
+        for previous in self._recent_revision.revisions():
+            if (source.same_file(previous.identity)
+                    and source.boundary > previous.size
+                    and previous.holds_cut(source.revision, previous.size)):
+                start = max(previous.size, source.boundary - self.RECENT_BYTES)
+                data, start = source.tail_bytes(source.boundary - start)
+                contiguous = start == previous.size
+                break
         else:
             data, start = source.tail_bytes(self.RECENT_BYTES)
             contiguous = False
@@ -903,7 +904,7 @@ class ThreadRelationships:
         )
         limited = (self._limited if contiguous else bool(start)) or len(messages) > self.RECENT_MESSAGES
         messages = messages[-self.RECENT_MESSAGES :]
-        self._recent_revision = source.revision if source.boundary else None
+        self._recent_revision = source.revision if source.boundary else MissingFile()
         self._recent, self._limited = messages, limited
         return messages, limited
 

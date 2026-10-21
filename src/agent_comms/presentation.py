@@ -937,7 +937,7 @@ class WireRevision(ReadState):
         """Stat sources only; strict content reads belong to the requesting view."""
         captured = {
             name: tuple(revision for path in group
-                        if (revision := FileRevision.capture(path)) is not None)
+                        for revision in FileRevision.capture(path).revisions())
             for name, group in cls.source_paths(views).items()
         }
         return cls(**captured, expiry_tick=expiry_tick)

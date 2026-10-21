@@ -53,7 +53,7 @@ from .locked_store import DurableFile, RegistryFile, WireWakeFile
 from .maintenance_barrier import MaintenanceBarrier
 from .messages import Message
 from .private_bus_checkpoint import CheckedRead
-from .private_path import AbsentPath, FileIdentity, FileRevision, ObservedPath
+from .private_path import AbsentPath, FileIdentity, FileRevision, MissingFile, ObservedPath
 from .recorded_bus import NoRecordedBus, RecordedBus, RecordedBusIdentity
 from .store_files import (
     UNBOUNDED_STORE_READ,
@@ -195,7 +195,7 @@ class AbsentWireSnapshot(WireSnapshot, AbsentPath):
         return NoRecordedBus()
 
     def changed_since(self, revision) -> bool:
-        return revision is not None
+        return MissingFile().lost_in(revision)
 
 
 

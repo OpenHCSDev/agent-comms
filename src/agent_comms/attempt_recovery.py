@@ -328,8 +328,9 @@ class RecoveryMonitorCapability:
             if loss.native_input != source:
                 raise StaleRevision("native input changed during recovery")
             loss.require_native_exit()
-            if revision is not None and FileRevision.capture(session.path) != revision:
-                raise StaleRevision("native journal changed during recovery")
+            for kept in revision.revisions():
+                if FileRevision.capture(session.path) != kept:
+                    raise StaleRevision("native journal changed during recovery")
             current = store.snapshots.get(execution_id)
             attempt = current.require_current_attempt()
             outcome, replay_facts = terminal.unpublished_attempt()

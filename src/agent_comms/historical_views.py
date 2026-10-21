@@ -26,7 +26,7 @@ from .message_page import (
 )
 from .messages import Message
 from .page_traversal import HistoryCursor, NewerTraversal, OlderTraversal
-from .private_path import FileIdentity, FileRevision, PresentPath
+from .private_path import FileIdentity, FileObservation, FileRevision, PresentPath
 from .private_registry_guard import PrivateRegistryGuard
 from .read_basis import (
     AnonymousViewer,
@@ -143,7 +143,7 @@ class ConversationHistoryView:
     @abstractmethod
     def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
                    viewer: str, target: str, worktree: str,
-                   history_revision: FileRevision | None) -> DisplayIdentity: ...
+                   history_revision: FileObservation) -> DisplayIdentity: ...
 
     def page_request(self, scope, bounds: PageBounds) -> MessagePageRequest:
         return ConversationMessagePageRequest(scope, bounds)
@@ -165,7 +165,7 @@ class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
     @classmethod
     def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
                    viewer: str, target: str, worktree: str,
-                   history_revision: FileRevision | None) -> ChannelDisplayIdentity:
+                   history_revision: FileObservation) -> ChannelDisplayIdentity:
         with views.bus.opened_activity() as activity:
             channel = catalog.require_channel(target, activity)
         return ChannelDisplayIdentity(
@@ -197,7 +197,7 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
     @classmethod
     def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
                    viewer: str, target: str, worktree: str,
-                   history_revision: FileRevision | None) -> DMDisplayIdentity:
+                   history_revision: FileObservation) -> DMDisplayIdentity:
         try:
             peer = snapshot.participant(target).incarnation
         except UnregisteredThreadError:
@@ -241,8 +241,8 @@ class HistorySource:
     wire_root_id: str
     bus_identity: RecordedBusIdentity
     size: int
-    snapshot_bus_revision: FileRevision
-    snapshot_registry_revision: FileRevision
+    snapshot_bus_revision: FileObservation
+    snapshot_registry_revision: FileObservation
     provenance: RegistryProvenance
 
     @property

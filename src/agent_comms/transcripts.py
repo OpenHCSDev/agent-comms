@@ -30,7 +30,7 @@ from .messaging import Messaging
 from .native_runtime_input import PublishedReplyRevision
 from .native_transcript import NativeTranscript, RecordsCut
 from .presentation import MessageNotification
-from .private_path import FileRevision
+from .private_path import FileObservation, FileRevision
 from .registration import Registration
 from .routing import TurnRouting
 from .thread_identity import ThreadProvenance
@@ -237,11 +237,11 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     thread: Annotated[ThreadProvenance, ContentExclude()]
     runtime: RuntimeLocation
     records_cut: Annotated[RecordsCut, ContentExclude()]
-    route_revision: FileRevision | None
-    bus_revision: Annotated[FileRevision | None, ContentExclude()]
-    coordination_revision: Annotated[FileRevision | None, ContentExclude()]
+    route_revision: FileObservation
+    bus_revision: Annotated[FileObservation, ContentExclude()]
+    coordination_revision: Annotated[FileObservation, ContentExclude()]
     reply_revision: PublishedReplyRevision
-    read_revision: Annotated[FileRevision | None, ContentExclude()]
+    read_revision: Annotated[FileObservation, ContentExclude()]
     wire_frontier: WireFrontier
     before: TranscriptCursor | None
     after: TranscriptCursor | None
@@ -282,7 +282,7 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     def content_bus(self):
         # Appends beyond this page's assigned messages do not change its content.
         # Replacing the bus file does.
-        return self.bus_revision.identity if self.bus_revision is not None else None
+        return self.bus_revision.file_identity()
 
     @property
     def page_bound(self) -> TranscriptCursor:
