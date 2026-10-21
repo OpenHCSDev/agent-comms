@@ -4,6 +4,7 @@ from dataclasses import replace
 import json
 import shlex
 import time
+from pathlib import Path
 
 import pytest
 
@@ -15,9 +16,13 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.practice import practice_copy
 from agent_comms.goals import OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.repo import Repo
 from agent_comms.todos import DeliveredProblemOrder, GoalRef, OrderMessage
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsChannelsTool
+
+
+pytest_plugins = ("test_todos",)
 
 
 @pytest.fixture
@@ -36,7 +41,10 @@ def held_commander(pr_commander):
     source.comms.goals.todos.apply(todo.id, OrderMessage(todo.revision, lead.incarnation, published.message.message_id))
     original = source.comms.goals.todos.get(todo.id)
     with practice_copy(source.root, source.root.parent / f"{source.root.name}-copied") as (root, _):
-        ctx = source.model_copy(update={"root": root, "state": root / "state"})
+        ctx = source.model_copy(update={
+            "root": root, "state": root / "state",
+            "repos": (*source.repos, Repo.of(Path(__file__).resolve().parents[1])),
+        })
         yield ctx
     assert source.comms.goals.todos.get(todo.id) == original
 
@@ -68,6 +76,38 @@ def test_clean_resend_derives_the_existing_order_and_leaves_no_strike(held_comma
     assert saved.strikes == original.strikes == ()
     assert ctx.comms.registry.require("worker").goal.require().id == saved.held().generation
     ThreadCaller("worker").invoke(CommsChannelsTool(), ctx.comms)
+
+
+def test_second_unplanned_order_is_refused_without_recording(held_commander):
+    ctx = held_commander
+    original = ctx.comms.goals.todos.get("P1")
+    marker = ctx.root / "unfinished"
+    marker.touch()
+    document = OrderFile(
+        replace(order(ctx.repos[0]), id="second-order",
+                check=OrderCheck(str(ctx.repos[0].checkout), f"test ! -e {shlex.quote(str(marker))}")),
+        "The copied workflow still contains an unfinished decision that prevents completion",
+        "This is stupid because assigning another order hides the already unfinished work",
+        unplanned_reason="This isolated workflow verifies refusal rather than advancing the production plan.",
+        problems=("P2",),
+    )
+    lead = ctx.comms.registry.require(ctx.commander)
+    ctx.comms.goals.todos.create(
+        "P2", ctx.repos[0].github, "Repair the second workflow", creator=lead, owner=lead,
+        generation="second-workflow", goal=GoalRef(lead.name, lead.created_at, lead.goal.require().id),
+        review_at=RecordedEventTime(time.time() + 1000), order=document.order,
+    )
+    path = ctx.root / "second-order.json"
+    path.write_text(json.dumps(FieldCodec.encode(document)))
+    before = ctx.comms.goals.todos.for_commander(ctx.incarnation)
+    goal = ctx.comms.registry.require("worker").goal
+    with pytest.raises(SystemExit) as refused:
+        main(["send", "worker", str(path)], ctx)
+    assert "worker already holds orders P1; running units holding no order:" in str(refused.value)
+    assert ctx.comms.goals.todos.for_commander(ctx.incarnation) == before
+    assert ctx.comms.goals.todos.get("P1") == original
+    assert ctx.comms.registry.require("worker").goal == goal
+    print(str(refused.value))
 
 
 def test_done_problem_delivers_the_units_held_order(held_commander):
