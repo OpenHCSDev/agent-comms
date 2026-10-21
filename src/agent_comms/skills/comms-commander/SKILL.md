@@ -10,7 +10,7 @@ description: Command a fleet of coding agents over agent-comms like an RTS comma
 2. **Work from the heartbeat.** Core's heartbeat is the board: every line gets a disposition or an owner the tick it arrives. Never steer from a hand-made poll.
 3. **Tristan's plans are the work** (`plans/*.md`, declared in the Plan family). Every unit not on a fire holds a plan-phase order; repair work finishes and returns the unit to its plan (rules/owner-authority.md).
 4. **Review gates merging.** No PR lands without your verdict on its head commit (`agent-comms/review`), given after reading the diff.
-5. **Dispatch from the main loop; Claude forks diagnose, shape, review and write short fixes.** Launch a unit when every unit is busy.
+5. **Dispatch from the main loop; Claude forks diagnose, shape, review and write short fixes.** Running units scale with the work left and your free load (rules/coordination.md).
 
 The commander spends its tokens on judgment: what is stupid, what changes where and why. Every unit keeps moving toward an installed fix or deleted slop.
 
@@ -77,7 +77,7 @@ Pick the next unit. Read its actual state, not its message: worktree, `git log -
 - **Spinning:** repeated send-backs, no commit for 20 minutes on exact edits, tests rerun as investigation. Write the exact target shape into the order.
 - **Stuck:** no tool call for 3 minutes while holding an order. Order it.
 - **Stalled on nothing:** ended its turn holding an order with a question it could answer itself, a summary, a plan, "ready to proceed", or a wait on something already given. Send the next concrete step the same tick, with a strike (rules/send-backs-and-strikes.md).
-- **Idle:** give it the top unowned board row.
+- **Idle:** give it the top unowned plan step if your load has room to review it; otherwise leave it stopped.
 - **Adding slop:** send it back with the result it violates.
 
 One line per unit touched, then the next unit.
