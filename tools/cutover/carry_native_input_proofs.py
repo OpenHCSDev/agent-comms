@@ -25,7 +25,6 @@ from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.native_session_files import NativeInputProof, NativeSessionFiles
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.private_path import NativeSessionFileRole, fsync_directory
-from cutover import carry_declared_schema
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -293,23 +292,32 @@ class NativeInputProofs(Carry):
         )
 
     @classmethod
-    def carry(cls, root: Path, *, apply: bool) -> Carried:
-        root = root.resolve(strict=True)
-        plans = cls.relocations(root)
-        if not apply:
-            return Carried(len(plans))
-        written = {path for plan in plans for path in plan.relocate()}
-        converted = 0
+    def differing(cls, root: Path) -> tuple[Path, ...]:
+        """Proof journals whose stored schema is not their declaration; a dry run counts them
+        too, since a step's dry run is what says whether it runs."""
+        found = []
         for path in sorted(NativeInputProof.matching_in(root)):
             cls.require_confined(root, path)
             NativeSessionFileRole.require(path.lstat())
             with closing(CoordinationStore.recovering_snapshot(path)) as db:
-                differs = NativeContextJournal.schema_differs(db)
-            if differs:
-                carry_declared_schema.carry(path)
-                converted += 1
-                written.update(SQLiteFile.files(path))
-        return Carried(len(plans) + converted, {"proofs": len(plans), "schemas": converted},
+                if NativeContextJournal.schema_differs(db):
+                    found.append(path)
+        return tuple(found)
+
+    @classmethod
+    def carry(cls, root: Path, *, apply: bool) -> Carried:
+        root = root.resolve(strict=True)
+        plans = cls.relocations(root)
+        if not apply:
+            return Carried(len(plans) + len(cls.differing(root)))
+        written = {path for plan in plans for path in plan.relocate()}
+        converted = cls.differing(root)
+        for path in converted:
+            with closing(CoordinationStore.writer(path, isolation_level=None)) as db:
+                NativeContextJournal.reconcile_schema(db)
+            written.update(SQLiteFile.files(path))
+        return Carried(len(plans) + len(converted),
+                       {"proofs": len(plans), "schemas": len(converted)},
                        tuple(str(path.relative_to(root)) for path in sorted(written)))
 
 

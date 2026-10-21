@@ -591,9 +591,6 @@ class SQLiteTableName(TypedRow):
 class CatalogKind(DeclaredFamily, affix="Kind"):
     """What SQLite's catalog calls an entry; each kind owns how a schema carry treats it."""
 
-    holds_rows: ClassVar[bool] = False
-    named_by_coverage: ClassVar[bool] = False
-
     @classmethod
     def drop(cls, db: sqlite3.Connection, name: str) -> None:
         db.execute(f"DROP {cls.declared_name.upper()} IF EXISTS {_identifier(name)}")
@@ -608,8 +605,6 @@ class CatalogKind(DeclaredFamily, affix="Kind"):
 
 
 class TableKind(CatalogKind):
-    holds_rows = True
-
     @classmethod
     def derive(cls, db: sqlite3.Connection, item: SQLiteCatalogObject,
                declared: Mapping[str, str]) -> None:
@@ -618,7 +613,7 @@ class TableKind(CatalogKind):
 
 
 class IndexKind(CatalogKind):
-    named_by_coverage = True
+    pass
 
 
 class TriggerKind(CatalogKind):
