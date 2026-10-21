@@ -641,7 +641,7 @@ class ClaimMessage(Claimed, Message):
     def retained_task_facts(self) -> Iterator[ExactTaskFact]:
         from .retained_task_facts import ClaimTaskFact
         yield from super().retained_task_facts()
-        yield ClaimTaskFact(ClaimMessage.from_message(self))
+        yield ClaimTaskFact(ClaimMessage.of(self, self.claim_transition))
 
     def require_retained_claim(self, claimed_after_seq: int) -> None:
         """The envelope carries its own committed claim facts."""

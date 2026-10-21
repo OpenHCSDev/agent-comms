@@ -213,8 +213,8 @@ async def original_input_consumer_journey(tmp_path, command):
                            "--overwrite")
     assert code == 0 and result["exported_messages"] == 1
     assert wording not in destination.read_text() and replacement in destination.read_text()
-    assert snapshot.original_text_source(snapshot.retained.current_authored_sources(
-        comms.registry.require("renamed-beta"), comms.registry.snapshot())[0]) == originals[0]
+    assert snapshot.retained.original_text_source(snapshot.retained.current_authored_sources(
+        comms.registry.require("renamed-beta"), comms.registry.snapshot())[0].reference) == originals[0]
     from agent_comms.comms import Comms
     reopened = Comms(comms.root)
     assert reopened.bus.log.retained_context("renamed-beta", reopened.registry).text() == (

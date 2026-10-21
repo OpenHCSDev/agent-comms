@@ -477,7 +477,7 @@ class HumanConstraintPin(ScopedTaskDeclaration):
         return self
 
     def annotation_rules(self, message: Message, facts) -> tuple[str, ...]:
-        return (self.original_wording(facts.original_text_source(message)),)
+        return (self.original_wording(facts.original_text_source(message.reference)),)
 
     def require_previous(self, original):
         return original.task.require_human_constraint()

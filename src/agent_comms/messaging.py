@@ -152,11 +152,10 @@ class Messaging:
                 task, role=NoticeRole())
 
     def _publish_user(self, user, target, body, task, *, role=ConversationRole()):
-        record = self.bus.publisher.publish_ordinary(
+        return self.bus.publisher.publish_ordinary(
             Message(user.name, target, body, InfoKind, task=task, role=role),
             origin=HumanOrigin(user.name, user.created_at, user.worktree),
         )
-        return Message.from_message(record)
 
     def acknowledge(
         self, name: str, references: Sequence[MessageReference]

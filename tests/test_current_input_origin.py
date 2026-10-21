@@ -1,7 +1,7 @@
 """Original authored ingress and neutral historical evidence share one input store."""
 
 from agent_comms.lifecycle_capability import Unresolved
-from agent_comms.messages import NoticeRole
+from agent_comms.messages import Message, NoticeRole
 from contextlib import ExitStack
 
 from dataclasses import replace
@@ -232,15 +232,15 @@ async def test_direct_human_input_pin_shares_original_source_lineage_without_rep
 
     snapshot = comms.registry.snapshot()
     retained = captured('beta')
-    assert retained.current_authored_sources(snapshot.require('beta'), snapshot) == (pin,)
-    assert retained.original_text_source(pin) == row
+    assert retained.current_authored_sources(snapshot.require('beta'), snapshot) == (Message.from_message(pin),)
+    assert retained.original_text_source(pin.reference) == row
     assert FieldCodec.decode(RetainedTaskFacts, FieldCodec.encode(retained)) == retained
     with comms.bus.bus.reading() as source:
         wire_only = RetainedTaskFacts.capture(source, snapshot.require('beta').incarnation).facts
     with pytest.raises(RelationViolationError):
         RetainedTaskFacts(wire_only).for_owner(snapshot.require('beta'), snapshot)
     repeated = comms.messaging.pin_input_constraint('beta', subject, worktree=origin.project)
-    assert captured('beta').current_authored_sources(snapshot.require('beta'), snapshot) == (repeated,)
+    assert captured('beta').current_authored_sources(snapshot.require('beta'), snapshot) == (Message.from_message(repeated),)
     before = comms.bus.bus.revision()
     comms.registry.declare(comms.registry.new_thread('unaddressed', frozenset(), origin.project))
     with pytest.raises(RelationViolationError):
@@ -266,18 +266,22 @@ async def test_direct_human_input_pin_shares_original_source_lineage_without_rep
     second_subject = stored_inputs(inputs.root).lookup(second.key).context_provenance()
     second_pin = comms.messaging.pin_input_constraint('beta', second_subject, worktree=origin.project)
     assert second_subject != subject
-    assert captured('beta').current_authored_sources(snapshot.require('beta'), snapshot) == (repeated, second_pin)
+    assert captured('beta').current_authored_sources(snapshot.require('beta'), snapshot) == (
+        Message.from_message(repeated), Message.from_message(second_pin),
+    )
     comms.registry.rename('beta', 'renamed-beta')
     owner = comms.registry.require('renamed-beta')
     assert row.matches_owner(owner.incarnation)
     assert not row.matches_owner(replace(owner.incarnation, created_at=owner.created_at + 1))
-    assert captured(owner.name).original_text_source(second_pin) == stored_inputs(inputs.root).lookup(second.key)
+    assert captured(owner.name).original_text_source(second_pin.reference) == stored_inputs(inputs.root).lookup(second.key)
     revised = comms.messaging.send_user_message(owner.name, 'Exact human correction.', worktree=origin.project,
         task=UserTaskSupersession(CorrectionTaskChange(repeated.reference)))
     current = captured(owner.name)
-    assert current.current_authored_sources(owner, comms.registry.snapshot()) == (revised, second_pin)
+    assert current.current_authored_sources(owner, comms.registry.snapshot()) == (
+        Message.from_message(revised), Message.from_message(second_pin),
+    )
     comms.messaging.send_user_message(owner.name, 'Drop the second original.', worktree=origin.project,
         task=UserTaskDrop(CorrectionTaskChange(second_pin.reference)))
-    assert captured(owner.name).current_authored_sources(owner, comms.registry.snapshot()) == (revised,)
+    assert captured(owner.name).current_authored_sources(owner, comms.registry.snapshot()) == (Message.from_message(revised),)
     assert stored_inputs(inputs.root).lookup(row.key) == row
     stored_inputs(inputs.root).lookup(second.key).require(Unresolved, ValueError("review required"))

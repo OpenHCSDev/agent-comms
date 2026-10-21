@@ -168,8 +168,8 @@ class OwnedTurn:
         self.bus_origins = tuple(origin for origin in self.origins if origin.seq > 0)
         if self.bus_origins:
             with self.runner.comms.registry.store.locked():
+                privacy = self.runner.comms.registry.store.private_guard_unlocked()
                 snapshot = self.runner.comms.registry.snapshot()
-                metadata = self.runner.comms.bus.log.read_metadata_unlocked()
                 originals = tuple(
                     ReservedInput(
                         key=self.runner.inputs.dispositions.bus_key(origin, self.thread),
@@ -181,7 +181,7 @@ class OwnedTurn:
                             origin, aliases=snapshot.aliases
                         ).prompt,
                         origin=WireInputOrigin(
-                            metadata.root_id,
+                            privacy.namespace,
                             origin.reference,
                         ),
                     )
