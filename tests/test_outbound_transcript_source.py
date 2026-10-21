@@ -2,7 +2,7 @@
 
 from dataclasses import replace
 
-from agent_comms.channels import ANY_CHANNEL
+from agent_comms.channels import AnyChannel
 from agent_comms.tools import invoke_tool
 from agent_comms.tool_caller import NoThreadCaller
 from agent_comms.thread_identity import RecordedThreadIncarnation
@@ -186,7 +186,7 @@ def test_open_sender_source_advances_without_a_native_tool_copy(tmp_path):  # no
     comms.registry.rename("beta", "renamed")
     reopened = wire(comms.root).transcripts.capture_page_read("renamed").read()
     assert reopened.events == (replace(events[0], reader="renamed"), events[1])
-    assert list(comms.views.history_page(ANY_CHANNEL).messages)[-1] == message
+    assert list(comms.views.history_page(AnyChannel.target()).messages)[-1] == message
 
 
 def test_unrelated_canonical_append_keeps_open_source_content(tmp_path):  # noqa: F811

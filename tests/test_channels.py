@@ -7,7 +7,7 @@ import pytest
 
 from agent_comms.tools import invoke_tool
 from agent_comms.tool_caller import ThreadCaller, NoThreadCaller
-from agent_comms.channels import AllOfMatch, AnyOfMatch, ChannelMemberIndex, RetiredTagChannel, TagChannel, SavedView, ViewKind, ViewPredicate
+from agent_comms.channels import AllOfMatch, AnyOfMatch, BuiltinChannelView, ChannelMemberIndex, RetiredTagChannel, TagChannel, SavedView, ViewKind, ViewPredicate
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.channel_management import (
@@ -25,6 +25,12 @@ from agent_comms.thread_management import ForkSpec, GivenTags
 from agent_comms.thread_status import ArchivedThreadStatus, RunningThreadStatus, StoppedThreadStatus
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.thread_model import DeclaredModel
+
+
+@pytest.mark.parametrize("channel", BuiltinChannelView.members_with(BuiltinChannelView))
+def test_builtin_channel_target_decodes_to_declaring_member(channel):
+    target = channel.target()
+    assert FieldCodec.decode(type[BuiltinChannelView], target.name) is channel
 
 
 def setup_wire(path):
