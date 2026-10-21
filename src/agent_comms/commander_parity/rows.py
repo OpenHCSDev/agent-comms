@@ -316,7 +316,7 @@ class BuildBoundProofParityRow(ParityRow):
     number = 30
     capability = "A proof is bound to the build it ran on"
     current = "none; screenshots and logs are bare paths"
-    native = "`DeliveredProblemOrder.require_installation`, `RecordedBuildIdentity.require_installed`"
+    native = "`DeliveredProblemOrder.require_installation`, `RecordedBuildIdentity.installation`"
     phases = ()
 
     comparison = BuildBoundProofCase.read
