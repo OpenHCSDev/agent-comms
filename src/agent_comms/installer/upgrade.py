@@ -215,10 +215,16 @@ class CarriedPass(Extendable):
 class StoppedOwners:
     stopped: tuple[str, ...]
 
+    def stopped_lines(self) -> tuple[str, ...]:
+        return (f"Stopped owners: {', '.join(self.stopped) or 'none'}",)
+
 
 @dataclass(frozen=True)
 class RestartedServices:
     services: tuple[str, ...]
+
+    def service_lines(self) -> tuple[str, ...]:
+        return (f"Restarted services: {', '.join(self.services) or 'none'}",)
 
 
 class Rehearsal(DeclaredFamily, affix="Rehearsal"):
@@ -262,9 +268,9 @@ class CarriedRun(CarriedPass, StoppedOwners, RestartedServices, LiveRun):
     def lines(self) -> tuple[str, ...]:
         return (
             *(f"Carried {step.carry}: {step.carried.changed} changed" for step in self.steps),
-            f"Stopped owners: {', '.join(self.stopped) or 'none'}",
+            *self.stopped_lines(),
             *(line for owner in self.started for line in owner.lines()),
-            f"Restarted services: {', '.join(self.services) or 'none'}",
+            *self.service_lines(),
             f"Backup: {self.backup.backup} ({self.backup.bytes} bytes)",
         )
 
@@ -282,8 +288,7 @@ class CreatedRun(RestartedServices, LiveRun, Extendable):
     route: str
 
     def lines(self) -> tuple[str, ...]:
-        return (f"Created bus; route: {self.route}",
-                f"Restarted services: {', '.join(self.services) or 'none'}")
+        return (f"Created bus; route: {self.route}", *self.service_lines())
 
 
 @dataclass(frozen=True)
@@ -291,8 +296,7 @@ class RetiredRun(CreatedRun, StoppedOwners):
     retired: Annotated[Path, PathText]
 
     def lines(self) -> tuple[str, ...]:
-        return (*super().lines(), f"Stopped owners: {', '.join(self.stopped) or 'none'}",
-                f"Retired bus: {self.retired}")
+        return (*super().lines(), *self.stopped_lines(), f"Retired bus: {self.retired}")
 
 
 @dataclass(frozen=True)
