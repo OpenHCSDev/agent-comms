@@ -606,21 +606,6 @@ async def retained_owner():
     from agent_comms.coordinated_runtime import SelectedExecution
     from agent_comms.active_route import resolve_comms_route
     from agent_comms.private_nk_entrypoint import RootLaunch
-    from agent_comms.native_source_cursor import NativeSourceCursor
-    import traceback
-    original_advance = NativeSourceCursor._advance_proven
-    def observe_advance(*args, **kwargs):
-        begun = time.perf_counter_ns()
-        try:
-            value = original_advance(*args, **kwargs)
-        except BaseException as error:
-            print(json.dumps({'cursor_probe_ms':(time.perf_counter_ns()-begun)/1e6,
-                'error':type(error).__name__, 'site':traceback.extract_tb(error.__traceback__)[-1].name}), flush=True)
-            raise
-        print(json.dumps({'cursor_probe_ms':(time.perf_counter_ns()-begun)/1e6,
-                         'result':'original_completed'}), flush=True)
-        return value
-    NativeSourceCursor._advance_proven = observe_advance
     launch = RootLaunch.derive(resolve_comms_route(os.environ['AGENT_COMMS_ROOT'])).require_private()
     launch.validate()
     service = Comms(launch.validated_root)

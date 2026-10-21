@@ -248,6 +248,24 @@ class HistoryViews:
             canonical[name] = max(canonical.get(name, 0.0), timestamp)
         return canonical
 
+    def retained_context(self, name: str):
+        """Project authored context and its export boundary from one captured bus read."""
+        from .context_segments.retained import RetainedSegment
+        from .input_disposition import InputDispositions
+        from .retained_task_facts import RetainedTaskFacts
+
+        snapshot = self.registry.snapshot()
+        owner = snapshot.require(name)
+        with self.bus.bus.reading() as source:
+            facts = RetainedTaskFacts.capture(source, owner.incarnation)
+            retained = RetainedTaskFacts((
+                *facts.facts, *facts.original_input_facts(InputDispositions(self.root)),
+            ))
+            boundary = WireExportBoundary(source.revision(), time.time())
+        return RetainedSegment.capture(
+            retained.for_owner(owner, snapshot), owner, snapshot, boundary,
+        )
+
     def export_wire(
         self,
         destination: Path | str,

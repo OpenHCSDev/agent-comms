@@ -275,7 +275,7 @@ def test_unanswered_pages_match_the_complete_answer_reference(held_bus):
     answered = (questions[1].reference, questions[-1].reference)
     held_bus.messaging.send("lead", "outsider", "Answers retain their original references",
                             answers=answered)
-    assert tuple(item.reference for item in UnitAskUnanswered.violations(held_bus, "lead")) == tuple(
+    assert tuple(item.message.reference for item in UnitAskUnanswered.violations(held_bus, "lead")) == tuple(
         question.reference for question in reversed(questions) if question.reference not in answered
     )
 
