@@ -105,6 +105,14 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
     return copied_bus
 
 
+def test_stop_rejects_a_human_before_any_registry_change(comms, tmp_path):
+    reader = comms.messaging.user_identity(str(tmp_path))
+    before = comms.registry.store.path.read_bytes()
+    with pytest.raises(RelationViolationError, match="Only agent threads can be stopped"):
+        comms.owners.stop(reader.name)
+    assert comms.registry.store.path.read_bytes() == before
+
+
 def blocked_holder(comms):
     """Settle a real failed turn; never manufacture a stored backend block."""
     owner = comms.registry.require("worker")
