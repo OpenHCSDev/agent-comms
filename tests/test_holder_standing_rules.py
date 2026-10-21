@@ -13,6 +13,7 @@ from uuid import uuid4
 import pytest
 
 from source_revision_fixture import SourceRepository
+from conftest import declare_test_bus
 
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.comms import Comms
@@ -37,7 +38,6 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.messages import InfoKind, Message
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.read_basis import DMDisplayScope
-from agent_comms.repo import Repo
 from agent_comms.field_codec import FieldCodec
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
@@ -57,13 +57,14 @@ from cutover.carry_goal_work_decision import GoalWorkDecisions, RETIRED_TABLE
 
 
 @pytest.fixture
-def held_bus(comms, tmp_path, source_repository):
+def held_bus(comms, tmp_path, source_repository, durable_home):
     """One setup owner: real declarations, checked orders, UNKNOWN row, then a copy."""
     source = source_repository
     scope = source.scope()
-    comms.channels.create_tag('comms')
-    for name in ("lead", "worker", "outsider"):
-        comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset({'comms'}), worktree=str(source.checkout)))
+    declare_test_bus(comms, channels=('comms',), threads=tuple(
+        comms.registry.new_thread(name=name, tags=frozenset({'comms'}), worktree=str(source.checkout))
+        for name in ('lead', 'worker', 'outsider')
+    ))
     comms.goals.update_goal("lead", SetGoalAction(
         text="Repair the held work", goal_id="request", order=RequestGoalOrder(),
     ))
@@ -86,13 +87,10 @@ def held_bus(comms, tmp_path, source_repository):
                   target="worker", text="Do not replay this input")
     assert inputs.bind("unresolved-input", claim_scope=1, turn_id="old-turn",
                        native_id=uuid4().hex, text="Do not replay this input")
-    config = CommanderConfig(
-        commander="lead", root=comms.root, state=tmp_path, repos=(Repo.of(Path.cwd()),),
-        worktrees=tmp_path, scratch=tmp_path, disk=tmp_path,
-    )
-    config.root_path(comms.root).write_text(config.model_dump_json())
+    CommanderConfig.on_machine('lead', (source,), comms.root, durable_home).write(durable_home)
     copied = tmp_path / "copied-bus"
     StoreBackup.copy_tree(comms.root, copied)
+    CommanderConfig.read_root(copied).write(durable_home)
     return Comms(copied)
 
 
@@ -314,7 +312,7 @@ def test_channel_messages_without_a_commander_addressee_are_not_a_question(held_
     assert UnitAskUnanswered.asks(held_bus, 'lead', time.time()) == ()
 
 
-def test_send_and_check_accept_a_deletion_check_on_fresh_main(held_bus, source_repository, tmp_path):
+def test_send_and_check_accept_a_deletion_check_on_fresh_main(held_bus, source_repository, tmp_path, durable_home):
     source = source_repository
     # Advance only the remote: the configured tree stays stale and dirty throughout.
     content = source.main_source + 'obsolete = 1\n' * 4
@@ -327,16 +325,8 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(held_bus, source_r
     local.write_text(source.main_source + '# Uncommitted user work\n')
     before = local.read_bytes()
     head = source.git(source.checkout, 'rev-parse', 'HEAD')
-    worktrees = tmp_path / 'checks'
-    config = CommanderConfig.read_root(held_bus.root).model_copy(update={
-        'repos': (source, Repo.of(Path.cwd())), 'worktrees': worktrees,
-    })
-    config.root_path(held_bus.root).write_text(config.model_dump_json())
+    worktrees = CommanderConfig.read_root(held_bus.root).worktrees
     original = held_bus.goals.todos.get('P1')
-    message = held_bus.messaging.send('lead', 'worker', original.order.instructions(original))
-    held_bus.goals.todos.apply('P1', OrderMessage(
-        original.revision, held_bus.registry.require('lead').incarnation, message.message.message_id,
-    ))
     check = OrderCheck(str(source.checkout), 'grep -c obsolete owner.py', CountCheckResult(0))
     order = replace(original.order.checked(), id='delete-obsolete', check=check,
                     banned=('optional guards', 'maybe.py'), report='Report optional examples')
@@ -349,7 +339,7 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(held_bus, source_r
 
     def cli(*arguments):
         run = subprocess.run((sys.executable, '-c',
-            'from agent_comms.commander.cli import main; main()', '--root', str(held_bus.root),
+            'from agent_comms.commander.cli import main; main()', '--config', str(CommanderConfig.path(durable_home)),
             'order', *arguments), capture_output=True, text=True, timeout=90)
         assert run.returncode == 0, run.stdout + run.stderr
         print(run.stdout)
