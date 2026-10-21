@@ -1,4 +1,4 @@
-"""A replaced order defers following input to a new turn, and a new original captures the current goal."""
+"""A replaced order keeps the running turn's authority, so following input joins that turn; a new original captures the current goal."""
 
 import asyncio
 import os
@@ -16,7 +16,6 @@ from agent_comms.comms import Comms
 from agent_comms.field_codec import Id128Text
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction, SetGoalAction
 from agent_comms.goals import RequestGoalOrder
-from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.owned_send import OwnedSend
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.queued_input import InitialInput, QueuedInput
@@ -77,8 +76,8 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
                     commander='lead', request='request', review_at=RecordedEventTime(2000),
                     order=replace(order(saved.project), id='replacement'),
                 ))
-                with pytest.raises(SelectedToolDenied, match='captured goal permission no longer applies'):
-                    sender.goal_permission.require_current(replaced)
+                # A replaced order keeps the running turn's authority; only following input waits.
+                sender.goal_permission.require_current(replaced)
                 async with QueuedInput.reserve(
                     agent.inputs, session_id, worker, text='Following input after replacement',
                     prompt='Following input after replacement', echo=True, images=(), controller=None,
@@ -91,13 +90,13 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
                 async with asyncio.timeout(40):
                     await task
                 started = agent.inputs.dispositions.lookup(item.key)
-                assert started.turn_id != original_turn
-                assert comms.registry.require(worker).turn_generation == 2
+                assert started.turn_id == original_turn
+                assert comms.registry.require(worker).turn_generation == 1
                 assert comms.registry.require(worker).process_identity == original_process
                 assert comms.registry.require(worker).goal == replaced
                 assert not comms.registry.require(worker).executing
                 assert not agent.inputs.state(session_id).queued
-                assert saved.provider.posts == 3  # original, new original with read, tool reply
+                assert saved.provider.posts == 3  # original, following input with read, tool reply
                 messages = saved.session.read_text()
                 assert 'following input reached the new turn' in messages
                 assert 'captured goal permission no longer applies' not in messages
@@ -137,8 +136,7 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
             commander='lead', request='request', review_at=RecordedEventTime(2000),
             order=replace(order(tmp_path), id='replacement'),
         ))
-        with pytest.raises(SelectedToolDenied, match='captured goal permission no longer applies'):
-            old.original.goal_permission.require_current(replaced)
+        old.original.goal_permission.require_current(replaced)
 
     # Exercise the real lease-to-reservation boundary without replacing any methods.
     # A second commander publication during preparation makes the leased snapshot stale.
