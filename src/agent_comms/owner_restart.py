@@ -20,6 +20,7 @@ from .launch_runtime import LaunchRuntime, RestartEnvironment, RestoredRuntime
 from .owner_launch import RetainedOwnerLaunch
 from .owner_lifecycle import OwnerRestartSelection
 from .restart_refusals import OwnerSelectionChangedRefusal
+from .restart_scope import AllOwners, RestartScope
 from .store_files import store_lock_path
 from .thread_identity import ClaimedIdentity, OwnerIdentity
 from .native_arguments import ConfiguredBinary, GivenArguments, InheritedArguments, LaunchArguments, LaunchBinary
@@ -33,19 +34,12 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class OwnerRestartRequest:
-    names: tuple[str, ...] | None = None
+    scope: RestartScope = AllOwners()
     agent_bin: LaunchBinary = ConfiguredBinary()
     agent_args: LaunchArguments = InheritedArguments()
     expected: OwnerRestartSelection | None = None
     runtime: RestartEnvironment | None = None
     launch_runtime: LaunchRuntime = field(default_factory=LaunchRuntime.running, kw_only=True)
-
-    def threads(self, snapshot: RegistrySnapshot) -> list[Thread]:
-        if self.names is None:
-            return [candidate for thread in snapshot.threads.values()
-                    for candidate in thread.restart_candidates(snapshot.status(thread.name))]
-        return list({snapshot.require_active(name).name: snapshot.require_active(name)
-                     for name in self.names}.values())
 
     def owner_selection(self, snapshot: RegistrySnapshot, owner: Thread) -> OwnerRestartSelection:
         return self.expected or OwnerRestartSelection.capture(snapshot, owner.name)
@@ -299,7 +293,7 @@ class ClaimedOwnerBatch:
         with lifecycle.restart_wire():
             cutover.require_restart_phase(lifecycle)
             snapshot = lifecycle.registry.snapshot()
-            threads = request.threads(snapshot)
+            threads = request.scope.threads(snapshot)
             request.require_selection(snapshot, threads)
             cutover.require_selection(snapshot, threads)
             captured = []

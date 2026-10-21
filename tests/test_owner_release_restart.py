@@ -1,6 +1,7 @@
 """Real release-before-exit: retirement keeps checking the exact owner fence."""
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.native_package import pinned_native_package
+from agent_comms.restart_scope import OwnersNamed
 
 import os
 import signal
@@ -245,7 +246,7 @@ def test_released_process_must_exit_before_replacement(releasing_owner, mode):
         comms.owners.stop("worker")
     else:
         (result,) = comms.owners.restart_owners(
-            ["worker"], agent_bin=GivenBinary(sys.executable), agent_args=GivenArguments(("-c", "print('local')",)), **arguments
+            OwnersNamed(("worker",)), agent_bin=GivenBinary(sys.executable), agent_args=GivenArguments(("-c", "print('local')",)), **arguments
         )
         replacement = comms.registry.require("worker")
         assert replacement.process_alive

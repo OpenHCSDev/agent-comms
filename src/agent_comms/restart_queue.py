@@ -36,6 +36,7 @@ from .owner_lifecycle import OwnerRestartSelection
 from .owner_restart import OwnerRestartRequest, StoppedOwnerFailure
 from .private_path import PrivateDirectoryRole
 from .restart_refusals import RestartRefusal
+from .restart_scope import OwnersNamed
 from .store_files import _atomic_write_text, _store_lock
 from .thread_identity import RecordedThreadIncarnation
 from .wire_watch import DirectoryWatchSource, WatchSource, WireWatch
@@ -350,7 +351,7 @@ def step(comms: Comms) -> None:
             continue
         try:
             request = OwnerRestartRequest(
-                (owner.name,),
+                OwnersNamed((owner.name,)),
                 expected=record.selection,
                 runtime=record.target.runtime,
                 agent_bin=GivenBinary(record.target.agent_bin),

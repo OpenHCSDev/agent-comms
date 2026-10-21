@@ -40,6 +40,7 @@ from .restart_refusals import (
     OwnerGenerationChangedRefusal,
     OwnerSelectionChangedRefusal,
 )
+from .restart_scope import AllOwners, RestartScope
 from .store_files import StoreLock, _store_lock
 from .thread_identity import ClaimedIdentity, OwnerIdentity, ThreadIncarnationRecord
 from .thread_text import GivenThreadText, NoThreadText, ThreadText
@@ -382,7 +383,7 @@ class OwnerLifecycle:
 
     def restart_owners(
         self,
-        names: Sequence[str] | None = None,
+        scope: RestartScope = AllOwners(),
         *,
         agent_bin: LaunchBinary = ConfiguredBinary(),
         agent_args: LaunchArguments = InheritedArguments(),
@@ -398,10 +399,7 @@ class OwnerLifecycle:
         """
         from .owner_restart import OwnerRestartRequest
 
-        request = OwnerRestartRequest(
-            tuple(names) if names is not None else None, agent_bin, agent_args,
-            expected, runtime,
-        )
+        request = OwnerRestartRequest(scope, agent_bin, agent_args, expected, runtime)
         return cutover.restart(self, request)
 
     @contextmanager

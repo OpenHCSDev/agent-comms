@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, overload
 
 from .errors import RelationViolationError, UnregisteredThreadError
-from .field_codec import FieldCodec
+from .field_codec import NullMember, SingleFieldValue, SubclassUnion
 from .history_result import DmHistoryPageResult, HistoryPageResult
 from .response_policy import DirectPolicy, MentionedOnlyPolicy
 from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, UnmentionedWake
@@ -26,18 +26,6 @@ class ChannelSelection(ABC):
     """Decoded menu context; container shapes stop at this input boundary."""
     needs_catalog: ClassVar[bool] = True
 
-    @staticmethod
-    def decode(raw: str | dict[str, tuple[str, ...]] | None) -> ChannelSelection:
-        if raw is None:
-            return NoChannel()
-        if isinstance(raw, str):
-            return OneChannel(FieldCodec.decode(str, raw))
-        if isinstance(raw, dict):
-            values = FieldCodec.decode(dict[str, tuple[str, ...]],
-                FieldCodec.encode(raw, dict[str, tuple[str, ...]]))
-            return PerTargetChannels(values)
-        raise ValueError('Select no channel, one channel, or channels per target')
-
     @abstractmethod
     def channels_for(self, target: str) -> tuple[str | None, ...]: ...
 
@@ -45,8 +33,12 @@ class ChannelSelection(ABC):
         """Ordinary thread actions may ignore one surrounding channel."""
 
 
+class SurroundingChannel(SubclassUnion, ChannelSelection, affix="Channel"):
+    """The one channel a command line names around its targets, or none: null or the name."""
+
+
 @dataclass(frozen=True)
-class NoChannel(ChannelSelection):
+class NoChannel(NullMember, SurroundingChannel):
     needs_catalog: ClassVar[bool] = False
 
     def channels_for(self, target: str) -> tuple[str | None, ...]:
@@ -54,7 +46,7 @@ class NoChannel(ChannelSelection):
 
 
 @dataclass(frozen=True)
-class OneChannel(ChannelSelection):
+class OneChannel(SingleFieldValue, SurroundingChannel):
     name: str
 
     def channels_for(self, target: str) -> tuple[str | None, ...]:

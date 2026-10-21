@@ -35,7 +35,9 @@ from .active_route import (
 from .activity import ActivityState
 from .catalog_document import CatalogDocument
 from .channel_management import KeepThreadsTagDisposition, TagChangeResult, TagDisposition
-from .channel_targets import ChannelSelection, CommandTarget, NoChannel, OneChannel, ResolvedChannel
+from .channel_targets import (
+    ChannelSelection, CommandTarget, NoChannel, OneChannel, ResolvedChannel, SurroundingChannel,
+)
 from .channels import ANY_CHANNEL, Channel
 from .check_root import CheckRoot
 from .child_process import NoProcess, ProcessIdentity, ProcessState
@@ -99,6 +101,7 @@ from .messages import (
 from .native_settings import NativeThreadDefaults
 from .native_turn_context import NativeContextData
 from .owner_lifecycle import OwnerRestartResult, OwnerStartResult
+from .restart_scope import AllOwners, OneOwner, RestartTarget
 from .page_traversal import NewestCursor, PageCursor
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
 from .presentation import CountedRead, InboxRead, ThreadRecord, ThreadView, UncountedRead
@@ -1760,14 +1763,14 @@ class StopCliCommand(AppliedTogether, NativeOwnerCommand, OwnerLifecycleControl,
 class RestartCliCommand(CliCommand):
     help = "Restart process"
     name: Annotated[
-        str | None,
+        RestartTarget,
         TargetBound(),
         Argument(
             flags=("--name",),
             group=NamedArgumentGroup("scope"),
             options={"help": "One running thread (aliases supported)"},
         ),
-    ] = None
+    ] = AllOwners()
     all_: Annotated[
         bool,
         WireName("all"),
@@ -1795,12 +1798,10 @@ class RestartCliCommand(CliCommand):
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
         if thread.turn_record.executing:
             return ()
-        return (cls(name=thread.name),) if thread.restart_candidates(status) else ()
+        return (cls(name=OneOwner(thread.name)),) if thread.restart_candidates(status) else ()
 
     def apply(self, ctx: Comms) -> CliResult:
-        results = ctx.owners.restart_owners(
-            None if self.all_ else [self.name], agent_bin=self.agent_bin, agent_args=self.agent_args
-        )
+        results = ctx.owners.restart_owners(self.name, agent_bin=self.agent_bin, agent_args=self.agent_args)
         return OwnersRestartedResult(results)
 
 
@@ -2063,9 +2064,7 @@ class TargetActionsCliCommand(CliCommand, declared_name="target-actions"):
     project: Annotated[str, Argument(flags=("--project",))] = dataclasses.field(
         default_factory=os.getcwd
     )
-    channel: Annotated[str | None, Argument(flags=("--channel",))] = (
-        None
-    )
+    channel: Annotated[SurroundingChannel, Argument(flags=("--channel",))] = NoChannel()
     help = "List applicable operations and their declared parameters"
     target: Annotated[
         tuple[str, ...],
@@ -2082,14 +2081,12 @@ class TargetActionsCliCommand(CliCommand, declared_name="target-actions"):
     def apply(self, ctx: Comms) -> TargetCatalogResult:
         return TargetCatalogResult(CliCommand.target_catalog(
             ctx, CliCommand.selected_targets(CommandTarget.arguments(self.target, self.project)),
-            ChannelSelection.decode(self.channel), project=self.project))
+            self.channel, project=self.project))
 
 
 @dataclass(frozen=True, kw_only=True)
 class TargetActionCliCommand(CliCommand, declared_name="target-action"):
-    channel: Annotated[str | None, Argument(flags=("--channel",))] = (
-        None
-    )
+    channel: Annotated[SurroundingChannel, Argument(flags=("--channel",))] = NoChannel()
     help = "Execute a declared operation against its current target"
     project: Annotated[str, Argument(flags=("--project",))] = dataclasses.field(
         default_factory=os.getcwd
@@ -2120,7 +2117,7 @@ class TargetActionCliCommand(CliCommand, declared_name="target-action"):
         declaration = CliCommand.member_named(self.operation)
         return declaration.execute_target(
             ctx, declaration.selected_targets(CommandTarget.arguments(self.target, self.project)), self.arguments,
-            confirmed=self.confirmed, channel=ChannelSelection.decode(self.channel), project=self.project)
+            confirmed=self.confirmed, channel=self.channel, project=self.project)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -2326,7 +2323,7 @@ class TargetEditCliCommand(TargetActionCliCommand, declared_name='target-edit'):
         declaration = CliCommand.member_named(self.operation)
         return TargetEdit(declaration,
                           declaration.selected_targets(CommandTarget.arguments(self.target, self.project)), self.arguments,
-                          self.confirmed, ChannelSelection.decode(self.channel), self.project).apply(ctx)
+                          self.confirmed, self.channel, self.project).apply(ctx)
 
 
 @dataclass(frozen=True, kw_only=True)
