@@ -13,6 +13,7 @@ from agent_comms.commander.order import OrderFile, main
 from agent_comms.commander.request import RequestAddVerb
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.practice import practice_copy
+from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.goals import OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import DeliveredProblemOrder, GoalRef, OrderMessage
@@ -20,8 +21,13 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsChannelsTool
 
 
+@pytest.fixture(scope="session")
+def existing_runtime():
+    return LaunchRuntime.installed()
+
+
 @pytest.fixture
-def held_commander(pr_commander):
+def held_commander(existing_runtime, pr_commander):
     source = pr_commander
     worker = thread("worker", source.root, 2.0)
     source.comms.registry.register(worker)
@@ -37,6 +43,9 @@ def held_commander(pr_commander):
     original = source.comms.goals.todos.get(todo.id)
     with practice_copy(source.root, source.root.parent / f"{source.root.name}-copied") as (root, _):
         ctx = source.model_copy(update={"root": root, "state": root / "state"})
+        current = LaunchRuntime.current_pointer()
+        current.parent.mkdir(parents=True)
+        current.symlink_to(existing_runtime.prefix, target_is_directory=True)
         yield ctx
     assert source.comms.goals.todos.get(todo.id) == original
 
