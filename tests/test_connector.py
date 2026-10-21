@@ -39,6 +39,8 @@ from agent_comms.connector_store import (
 )
 from agent_comms.coordinator import Coordination
 from agent_comms.message_bus import WatchPass
+from agent_comms.service_passes import ServicePassStore
+from agent_comms.standing_rules import ServicePassFailing
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.maintenance_barrier import (
@@ -322,7 +324,8 @@ async def test_watch_pass_waits_for_install_then_runs_once(comms, copied_connect
             yield wire
 
     watch = PublishingWatch()
-    pending = asyncio.create_task(Coordination.watch_worker(watch, opened_wire))
+    passes = ServicePassStore.at(connector.root)
+    pending = asyncio.create_task(Coordination.watch_worker(watch, opened_wire, passes))
     try:
         try:
             assert await asyncio.to_thread(opened.wait, 3)
@@ -339,6 +342,7 @@ async def test_watch_pass_waits_for_install_then_runs_once(comms, copied_connect
             await pending
     assert watch.calls == 1
     assert [message.body for message in copied.bus.inbox("worker")] == ["One watch pass"]
+    assert passes.read().failing == {}
     assert comms.bus.log.latest_sequence() == original.seq
     assert not [record for record in caplog.records if record.levelno >= logging.ERROR]
 
@@ -362,9 +366,13 @@ async def test_watch_pass_logs_real_failures_with_tracebacks(connector, caplog):
     handler = ObservedError()
     logger = logging.getLogger()
     logger.addHandler(handler)
-    pending = asyncio.create_task(Coordination.watch_worker(FailingWatch(), connector.service_wire))
+    passes = ServicePassStore.at(connector.root)
+    pending = asyncio.create_task(
+        Coordination.watch_worker(FailingWatch(), connector.service_wire, passes))
     try:
         await asyncio.wait_for(logged.wait(), 3)
+        while not passes.read().failing:
+            await asyncio.sleep(.01)
     finally:
         pending.cancel()
         with suppress(asyncio.CancelledError):
@@ -374,6 +382,12 @@ async def test_watch_pass_logs_real_failures_with_tracebacks(connector, caplog):
     assert error.exc_info[0] is RuntimeError
     assert str(error.exc_info[1]) == "A real watch failure"
     assert error.exc_info[2] is not None
+    failing, = ServicePassFailing.violations(Comms(connector.root), "worker")
+    assert failing.watch == "FailingWatch"
+    assert failing.line().endswith(
+        ": RuntimeError: A real watch failure -> fix the owner of the failing read this wake")
+    passes.passed("FailingWatch")
+    assert ServicePassFailing.violations(Comms(connector.root), "worker") == ()
 
 
 async def test_registration_accepts_only_the_claude_callback(client):
