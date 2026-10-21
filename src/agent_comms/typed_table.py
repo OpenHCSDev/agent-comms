@@ -549,19 +549,29 @@ class TableSchema(ABC):
         """The writer's answer to a stored schema that differs from the declaration."""
 
 
+class RowMutation(Enum):
+    """SQLite's destructive row events own their immutable-history guards."""
+
+    UPDATE = "UPDATE"
+    DELETE = "DELETE"
+
+    def abort_trigger(self, row: type[TypedTable]) -> SQLiteSchemaObject:
+        name = f"{row.declared_name}_{self.value.lower()}_abort"
+        return SQLiteSchemaObject(
+            name,
+            f'CREATE TRIGGER "{name}" BEFORE {self.value} ON "{row.declared_name}" '
+            "BEGIN SELECT RAISE(ABORT, 'Bus history is append-only'); END",
+        )
+
+
 class AppendOnlyTables(TableSchema):
     """Declared history tables reject UPDATE and DELETE, even from raw SQL."""
 
     @classmethod
     def _append_only_triggers(cls) -> dict[str, str]:
-        return {
-            f"{row.declared_name}_{operation.lower()}_abort":
-                f'CREATE TRIGGER "{row.declared_name}_{operation.lower()}_abort" '
-                f'BEFORE {operation} ON "{row.declared_name}" '
-                "BEGIN SELECT RAISE(ABORT, 'Bus history is append-only'); END"
-            for row in cls.schema_rows()
-            for operation in ("UPDATE", "DELETE")
-        }
+        triggers = (mutation.abort_trigger(row)
+                    for row in cls.schema_rows() for mutation in RowMutation)
+        return {trigger.name: trigger.sql for trigger in triggers}
 
     @classmethod
     def declared_schema(cls) -> dict[str, str]:
