@@ -504,7 +504,9 @@ class Connector:
                 web.get("/.well-known/oauth-authorization-server", self.server_metadata),
                 web.post("/register", self.register),
                 web.get("/authorize", self.authorize),
-                web.get("/approve/{request_id}/{secret}", self.approve),
+                web.get(
+                    "/approve/{request_id}/{secret}", self.approve, name=self.approve.__name__
+                ),
                 web.post("/token", self.token),
                 web.post("/mcp", self.mcp),
             ]
@@ -605,9 +607,11 @@ class Connector:
 
         grants = await asyncio.to_thread(self.store.update, decided)
         for pending in notices:
-            link = f"{self.issuer}/approve/{pending.query.request_id}/{approval}"
+            path = request.app.router[self.approve.__name__].url_for(
+                request_id=pending.query.request_id, secret=approval
+            )
             await asyncio.to_thread(
-                self.request_approval, grants.clients[query.client_id].name, link
+                self.request_approval, grants.clients[query.client_id].name, f"{self.issuer}{path}"
             )
         if query.request_id in grants.requests:
             return web.Response(
