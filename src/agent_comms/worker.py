@@ -12,8 +12,6 @@ from .acp import CommsAgent
 from .active_route import ActiveRoute
 from .comms import Comms, wire
 from .coordination_database import CoordinationStore
-from .coordination_errors import RecoveryBlocked
-from .attempt_recovery import RecoveryMonitorCapability
 from .coordinator import Coordination
 from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, ThreadLaunch
@@ -46,13 +44,7 @@ async def run_owner(comms: Comms) -> None:
             loop.add_signal_handler(sig, stopped.request)
         async with AsyncExitStack() as ownership:
             ownership.push_async_callback(lambda: agent.shutdown(stopped.terminal))
-            try:
-                await agent.sessions.start_owner(thread.worktree, name)
-            except RecoveryBlocked as error:
-                await Coordination.run_worker(partial(
-                    RecoveryMonitorCapability.report_blocked_owner, comms, thread, error,
-                ))
-                raise
+            await agent.sessions.start_owner(thread.worktree, name)
             if key := ThreadLaunch.take_startup_input():
                 initial = asyncio.create_task(run_startup_input(agent, name, key))
                 ownership.push_async_callback(asyncio.gather, initial, return_exceptions=True)

@@ -16,7 +16,7 @@ from uuid import uuid4
 from agent_comms import field_codec
 
 from .active_route import resolve_comms_route
-from .attempt_recovery import RecoveryMonitorCapability
+from agent_comms.attempt_recovery import RecoveryMonitorCapability
 from .child_process import (
     ObservedProcess,
     Platform,

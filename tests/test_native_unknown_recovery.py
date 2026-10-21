@@ -12,6 +12,14 @@ from pathlib import Path
 import pytest
 
 from agent_comms.attempt_recovery import RecoveryMonitorCapability
+from agent_comms.cli import main as cli_main
+from agent_comms.cli_protocol import CoreError
+from agent_comms.native_arguments import GivenBinary
+from agent_comms.launch_root import LaunchRoot
+from agent_comms.runtime import socket_path
+from agent_comms.thread_model import DeclaredModel
+from functools import partial
+from test_owner_process import native_workers  # noqa: F401
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import RecoveryBlocked
@@ -28,6 +36,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.execution_states import FailedExecution
 from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from agent_comms.owner_lifecycle import OwnerReleaseEvidence
+from agent_comms.reason_codes import GivenReasonCode
 from test_native_failure_recovery import NativeSendHistory, UnknownHistory, release_native_input
 from test_coordinated_runtime import tmp_path  # noqa: F401
 
@@ -93,7 +102,7 @@ def test_recover_owner_without_an_input_settles_unknown_and_clears_pointer(relea
     with Coordination(released_starting / "coordination.sqlite3") as store:
         after = store.snapshots.get(execution_id)
         assert not after.is_current and after.attempt.lifecycle.failed
-        assert after.attempt.reason_code.value == "released_native_unknown"
+        assert after.attempt.reason_code == GivenReasonCode("released_native_unknown")
         assert after.replay.facts & ReplayFact.UNKNOWN_EFFECTS
         assert not after.replay.replay_safe
         assert not CurrentExecutions.require(store.session._connection,
@@ -103,7 +112,34 @@ def test_recover_owner_without_an_input_settles_unknown_and_clears_pointer(relea
     assert (released_starting / "bus.jsonl").read_bytes() == bus
 
 
-def test_recover_owner_refuses_a_conflicting_input_identity(released_starting):
+async def test_launch_recovers_before_reserving_replacement_pid(released_starting, native_workers):  # noqa: F811
+    comms = Comms(released_starting)
+    old = comms.registry.require("beta")
+    comms.registry.register(replace(old, model=DeclaredModel("response-local/fixture")))
+    with Coordination(released_starting / "coordination.sqlite3") as store:
+        pointer = CurrentExecutions.require(store.session._connection, owner_lookup=old.incarnation.lookup)
+        execution_id = pointer.execution_id.require("fixture must hold a starting attempt")
+    with LaunchRoot.from_path(released_starting).selected():
+        result = await Coordination.run_worker(partial(
+            comms.owners.start, "beta", agent_bin=GivenBinary("pi"),
+        ))
+        owner = comms.registry.require("beta")
+        try:
+            async with asyncio.timeout(15):
+                while not socket_path(comms.root, result.pid).exists():
+                    assert owner.process_alive
+                    await asyncio.sleep(0.02)
+            with Coordination(released_starting / "coordination.sqlite3") as store:
+                after = store.snapshots.get(execution_id)
+                assert not after.is_current
+                assert after.attempt.reason_code == GivenReasonCode("released_native_unknown")
+                assert NativeRuntimeInput.count(store.session._connection) == 0
+            assert owner.process_alive and owner.process_identity != old.process_identity
+        finally:
+            await Coordination.run_worker(partial(comms.owners.stop, "beta"))
+
+
+def test_recover_owner_refuses_a_conflicting_input_identity(released_starting, capsys):
     comms = Comms(released_starting)
     owner = comms.registry.require("beta")
     with Coordination(released_starting / "coordination.sqlite3") as store:
@@ -120,8 +156,10 @@ def test_recover_owner_refuses_a_conflicting_input_identity(released_starting):
                 owner_token_digest="e" * 64,
             ).insert(db)
         inputs = input_evidence(store)
-    with pytest.raises(RecoveryBlocked):
+    with pytest.raises(RecoveryBlocked) as blocked:
         RecoveryMonitorCapability.recover_owner(released_starting, owner)
+    assert cli_main(["--root", str(released_starting), "start", "--name", "beta"]) == 1
+    assert CoreError.model_validate_json(capsys.readouterr().out) == CoreError.from_exception(blocked.value)
     with Coordination(released_starting / "coordination.sqlite3") as store:
         assert store.snapshots.get(execution_id) == before
         assert input_evidence(store) == inputs

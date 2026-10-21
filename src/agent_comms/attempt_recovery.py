@@ -40,7 +40,7 @@ from agent_comms.recovery_states import DeferredRecovery, FailedRecovery
 
 from .coordination_database import CoordinationStore
 from .native_input_record import FullNativeExecution
-from .native_claim_epoch import UnrecordedNativeClaim
+from agent_comms.native_claim_epoch import UnrecordedNativeClaim
 from .field_codec import MalformedRecord
 from .input_disposition import InputDispositions
 from .locked_store import RegistryFile
@@ -182,7 +182,7 @@ class DispatchedOwnerLoss(VerifiedOwnerLoss):
         return self.native_input
 
     def settle(self, recovery_cls, store: Coordination, execution_id: str, owner) -> None:
-        from .coordination_response import PublicationAppendDispatches
+        from agent_comms.coordination_response import PublicationAppendDispatches
 
         self.require_native_exit()
         PublicationAppendDispatches.resolve_retained(
@@ -324,18 +324,6 @@ class RecoveryMonitorCapability:
             execution_id = pointer.execution_id.require("the owner pointer names no execution")
             with VerifiedOwnerLoss.observe_native_release(store, execution_id) as loss:
                 loss.settle(cls, store, execution_id, owner)
-
-    @classmethod
-    def report_blocked_owner(cls, comms, owner, error: RecoveryBlocked) -> None:
-        """Put startup refusal on the held work's bus before the worker exits."""
-        with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
-            pointer = CurrentExecutions.require(store.session._connection,
-                                                owner_lookup=owner.incarnation.lookup)
-            execution_id = pointer.execution_id.require("the blocked owner pointer names no execution")
-        for commander in comms.registry.all_threads().values():
-            if comms.goals.todos.held_by(commander.incarnation, owner.name):
-                comms.messaging.send(owner.name, commander.name,
-                    f"Worker recovery blocked for {execution_id}: {error}")
 
     @classmethod
     def recover_released_native_attempt(cls, store, execution_id):
