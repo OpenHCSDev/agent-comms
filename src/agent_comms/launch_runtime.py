@@ -142,7 +142,10 @@ class RecordedBuildIdentity(BuildIdentity):
         """Prove membership in this exact Core build, not the checkout's current head."""
         result = subprocess.run(
             ("git", "merge-base", "--is-ancestor", commit, self.core),
-            cwd=directory, capture_output=True, text=True, timeout=60,
+            cwd=directory,
+            capture_output=True,
+            text=True,
+            timeout=60,
         )
         if result.returncode not in (0, 1):
             result.check_returncode()
