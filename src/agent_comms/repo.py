@@ -88,7 +88,7 @@ class Repo(BaseModel):
         return cls(checkout=checkout.resolve(), github=RepositoryName.from_wire("/".join(github)))
 
 
-class CheckoutHoldsWork(Exception):
+class CheckoutHoldsWorkError(Exception):
     """A checkout cannot be retired: it holds changes that removing it would lose."""
 
     def __init__(self, path: Path, changes: str):
@@ -227,7 +227,7 @@ class Checkout:
         so this owner checks for held work itself and then forces."""
         held = self.held_work()
         if held:
-            raise CheckoutHoldsWork(self.path, held)
+            raise CheckoutHoldsWorkError(self.path, held)
         common = Path(
             Repo.git(self.path, "rev-parse", "--path-format=absolute", "--git-common-dir").strip()
         )

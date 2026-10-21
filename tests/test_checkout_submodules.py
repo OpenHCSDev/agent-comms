@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.repo import Checkout, CheckoutHoldsWork, ScratchCheckout
+from agent_comms.repo import Checkout, CheckoutHoldsWorkError, ScratchCheckout
 
 
 def git(path: Path, *args: str) -> str:
@@ -104,7 +104,7 @@ def test_retiring_a_checkout_with_submodules_keeps_held_work_and_drops_scratch(
 ):
     held = Checkout.add(repository, tmp_path / "unit--P1", "HEAD", "--detach")
     (held.path / "owner.py").write_text("edited\n")
-    with pytest.raises(CheckoutHoldsWork):
+    with pytest.raises(CheckoutHoldsWorkError):
         held.retire()
     assert held.path.is_dir()
     scratch = ScratchCheckout.add(repository, tmp_path / "check", "HEAD", "--detach")
