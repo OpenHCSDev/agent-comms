@@ -188,7 +188,7 @@ def native_runtime_package():
     from agent_comms.native_package import VerifiedNativePackage
     from agent_comms.unit_instructions import UnitInstructions
 
-    package = VerifiedNativePackage.acquire(pinned_native_package())
+    package = VerifiedNativePackage.qualify(pinned_native_package())
     UnitInstructions.prepare()
     return package
 
@@ -233,7 +233,7 @@ def private_directory():
 
 @pytest.fixture
 def private_comms(private_directory):
-    """Install one isolated SQLite bus and select it for this check's lifetime."""
+    """Install one isolated SQLite bus; native consumers acquire their own package."""
     from bus_record_fixture import prepare_native_comms
 
     root = private_directory / "wire"
