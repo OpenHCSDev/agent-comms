@@ -17,7 +17,9 @@ from agent_comms.acp_extension import (
 from agent_comms.child_process import ProcessIdentity, SpawnedProcess
 from agent_comms.comms import wire
 from agent_comms.owner_protocol import OwnerAnnouncement, OwnerReady, OwnerResult, OwnerUpdate
-from agent_comms.runtime import RuntimeProxy, present_session, socket_path
+from agent_comms.runtime import (
+    OwnerReplyLostError, RuntimeConnection, RuntimeProxy, present_session, socket_path,
+)
 from agent_comms.private_path import PrivateSocketRole
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_text import SavedSessionFile
@@ -39,6 +41,36 @@ def runtime_processes():
     finally:
         for child in children:
             child.stop_sync()
+
+
+async def test_dispatched_request_without_a_reply_remains_unknown_and_is_not_replayed(comms):
+    process = ProcessIdentity.capture(os.getpid())
+    comms.registry.declare(comms.registry.new_thread(
+        "reply-loss", frozenset(), str(comms.root.parent), process_identity=process,
+    ))
+    path = socket_path(comms.root, process.pid)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    received = []
+
+    async def disconnect_after_request(reader, writer):
+        received.append(json.loads(await reader.readline()))
+        writer.close()
+        await writer.wait_closed()
+
+    with PrivateSocketRole.address(path) as address:
+        server = await asyncio.start_unix_server(disconnect_after_request, path=address)
+        connection = RuntimeConnection(comms, "reply-loss", path)
+        try:
+            with pytest.raises(OwnerReplyLostError) as lost:
+                await connection.request("cancel")
+            assert isinstance(lost.value, RuntimeError)
+            assert isinstance(lost.value, ConnectionError)
+            assert [request["action"] for request in received] == ["cancel"]
+        finally:
+            await connection.close()
+            server.close()
+            await server.wait_closed()
+            path.unlink(missing_ok=True)
 
 
 def test_owner_cursor_scope_rebases_only_attachment_session_alias():

@@ -9,9 +9,14 @@ import signal
 import pytest
 
 from agent_comms.active_route import LocalRoute
-from agent_comms.errors import RelationViolationError
+from agent_comms.coordination_errors import StaleRevision
+from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.runtime import OwnerIdentityChangedError
 from agent_comms.message_reference import MessageReference
-from agent_comms.ui_model.observation import ObservationProcess, ObserverDied, ReadNotifications, StopSidebar
+from agent_comms.ui_model.observation import (
+    ObservationProcess, ObserverDied, OwnerRead, ReadNotifications, StopSidebar,
+)
 
 
 async def readable(process: ObservationProcess) -> None:
@@ -60,6 +65,37 @@ async def test_an_invalid_notification_reference_does_not_kill_the_observer(comm
                 str(comms.root), (MessageReference(1, "not-the-original"),)
             ))
         assert await process.read(ReadNotifications(str(comms.root), ())) == {}
+
+
+@pytest.mark.parametrize("read_type", OwnerRead.__subclasses__())
+@pytest.mark.parametrize("declared, refusal", [
+    (True, RelationViolationError), (False, UnregisteredThreadError),
+])
+async def test_unavailable_owner_reads_preserve_the_observer(
+    comms, durable_home, read_type, declared, refusal,
+):
+    owner = comms.registry.new_thread("read-subject", frozenset(), str(comms.root.parent))
+    if declared:
+        comms.registry.declare(owner)
+    with ObservationProcess.awaited(comms.route) as process:
+        with pytest.raises(refusal):
+            await process.read(read_type(str(comms.root), owner.incarnation))
+        assert await process.read(ReadNotifications(str(comms.root), ())) == {}
+        assert process.process.is_alive() and process.died is None
+
+
+@pytest.mark.parametrize("read_type", OwnerRead.__subclasses__())
+@pytest.mark.parametrize("other_root", [False, True])
+async def test_stale_owner_reads_preserve_the_observer(comms, durable_home, read_type, other_root):
+    owner = comms.registry.new_thread("read-subject", frozenset(), str(comms.root.parent))
+    comms.registry.declare(owner)
+    root = str(comms.root.parent / "another-wire") if other_root else str(comms.root)
+    identity = owner.incarnation if other_root else RecordedThreadIncarnation(owner.name, 1.0)
+    with ObservationProcess.awaited(comms.route) as process:
+        with pytest.raises(StaleRevision if other_root else OwnerIdentityChangedError):
+            await process.read(read_type(root, identity))
+        assert await process.read(ReadNotifications(str(comms.root), ())) == {}
+        assert process.process.is_alive() and process.died is None
 
 
 async def test_an_observer_that_failed_is_reported_with_its_own_traceback_and_exit_status(tmp_path, durable_home):

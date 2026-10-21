@@ -146,8 +146,12 @@ class SocketClient:
         await self.send(OwnerUpdate.of(update))
 
 
-class OwnerIdentityChangedError(RuntimeError):
-    """A saved attachment must not follow a reused thread name."""
+class OwnerIdentityChangedError(RuntimeError, ConnectionError):
+    """A saved attachment lost its root or thread identity and cannot reconnect."""
+
+
+class OwnerReplyLostError(RuntimeError, ConnectionError):
+    """The owner disconnected after dispatch; a mutating request remains uncertain."""
 
 
 class SessionClients(dict[str, set[SocketClient]]):
@@ -427,7 +431,7 @@ class RuntimeConnection:
             await writer.drain()
             line = await self._read_response(reader)
             if not line:
-                raise RuntimeError("Thread owner disconnected after request; outcome unknown.")
+                raise OwnerReplyLostError("Thread owner disconnected after request; outcome unknown.")
             return OwnerLine.read(line).reply()
         finally:
             try:

@@ -20,7 +20,8 @@ from agent_comms.coordination_errors import (
     TranscriptChanged,
 )
 from agent_comms.field_codec import FieldCodec
-from agent_comms.errors import StoredHistoryUnreadable
+from agent_comms.errors import RelationViolationError, StoredHistoryUnreadable, ToolRefusedError
+from agent_comms.runtime import OwnerIdentityChangedError, OwnerReplyLostError
 from agent_comms.context_store import ContextRequest
 from agent_comms.presentation import WireRevision
 from agent_comms.ui_model.observation import (
@@ -138,10 +139,14 @@ def test_a_read_that_defers_staleness_answers_a_reload(comms, error, answered):
     assert isinstance(DeferringRead(str(comms.root)).answer(comms), answered)
 
 
-@pytest.mark.parametrize(
-    "error_type", [SchemaVersionError, CoordinationReadUnavailable, StaleRevision]
-)
-async def test_owner_reply_preserves_its_own_failure_type(comms, error_type):
+@pytest.mark.parametrize("error_type, refused", [
+    (SchemaVersionError, True), (CoordinationReadUnavailable, True), (StaleRevision, True),
+    (ToolRefusedError, True), (RelationViolationError, True),
+    (ConnectionError, True), (TimeoutError, True),
+    (OwnerIdentityChangedError, True), (OwnerReplyLostError, True),
+    (RuntimeError, False), (ValueError, False), (TypeError, False),
+])
+async def test_owner_reply_preserves_its_own_failure_type(comms, error_type, refused):
     @dataclass(frozen=True)
     class FailingOwnerRead(OwnerRead):
         async def read(self, owner):
@@ -151,9 +156,12 @@ async def test_owner_reply_preserves_its_own_failure_type(comms, error_type):
             raise error_type("original owner read explanation")
 
     saved_row(comms)
-    answer = await FailingOwnerRead(
-        str(comms.root), comms.registry.require("saved").incarnation
-    ).answer(comms)
+    request = FailingOwnerRead(str(comms.root), comms.registry.require("saved").incarnation)
+    if not refused:
+        with pytest.raises(error_type):
+            await request.answer(comms)
+        return
+    answer = await request.answer(comms)
     assert isinstance(answer, ReadRefused)
     assert isinstance(answer.error, error_type)
     assert not isinstance(answer.error, UnreadableHistory)

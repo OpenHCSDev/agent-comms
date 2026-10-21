@@ -41,7 +41,7 @@ from agent_comms.coordination_errors import (
     ReloadRequired,
     StaleRevision,
 )
-from agent_comms.errors import RelationViolationError
+from agent_comms.errors import RelationViolationError, ToolRefusedError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.presentation import NoRevision, ReadState, WireRevision
 from agent_comms.registry_document import RosterVisibility
@@ -371,8 +371,8 @@ class OwnerRead(AwaitedRead):
     """A read the live owner of thread incarnation ``owner`` answers over its socket.
 
     Served as it arrives, beside store reads; the owner's reply is decoded
-    here. The owner's refusals and a changed owner identity reach the UI as
-    ValueError, as the UI's owner actions report them.
+    here. Expected owner loss and refusals reach the caller with their original
+    error types, without ending observation or inventing a successful snapshot.
     """
 
     owner: ThreadIncarnation
@@ -388,18 +388,19 @@ class OwnerRead(AwaitedRead):
         service.send(answer)
 
     async def answer(self, comms: Comms) -> ReadAnswered | ReadRefused:
-        self.require_root(comms)
         try:
+            self.require_root(comms)
             return ReadAnswered(self.request_id, await self.ask(comms))
-        except (RequestError, CoordinationError) as error:
+        except (RequestError, CoordinationError, ToolRefusedError,
+                RelationViolationError, ConnectionError, TimeoutError) as error:
             return self.refused(error)
 
     def connect(self, comms: Comms) -> RuntimeConnection:
-        from agent_comms.runtime import OwnerReplyConnection, socket_path
+        from agent_comms.runtime import OwnerIdentityChangedError, OwnerReplyConnection, socket_path
 
         owner = comms.registry.require(self.owner.name)
         if owner.incarnation != self.owner:
-            raise ValueError("The owner incarnation changed while preparing the request.")
+            raise OwnerIdentityChangedError("The owner incarnation changed while preparing the request.")
         return OwnerReplyConnection(
             comms, owner.name, socket_path(comms.root, owner.require_process().pid),
         )
