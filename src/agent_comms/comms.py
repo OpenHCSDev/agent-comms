@@ -16,6 +16,8 @@ from .collaboration_ledger import CollaborationLedger
 from .context_store import ContextStore
 from .goal_management import Goals
 from .history_views import HistoryViews
+from .launch_runtime import LaunchRuntime
+from .root_runtime import RootRuntime
 from .locked_store import RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
@@ -36,6 +38,7 @@ class Comms:
         projection: type[OpenedRouteCounts] = OpenedRouteCounts,
     ) -> None:
         self.route = resolve_comms_route(root)
+        RootRuntime.require_attachable(self.route.root, LaunchRuntime.running())
         self.route.observe_root()
         publisher.prepare_root(self.root)
         self._wire_lock_path = self.root / "wire"

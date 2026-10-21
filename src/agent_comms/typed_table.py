@@ -8,7 +8,6 @@ the declared columns and field types without upgrading existing storage.
 from __future__ import annotations
 
 import annotationlib
-import hashlib
 import json
 import os
 import re
@@ -1292,14 +1291,8 @@ class DurableStore(TypedStore, DurableTables, DurableFile):
 class DerivedStore(TypedStore, DerivedTables, RuntimeFile):
     """Rows rebuilt from another source, in a file running owners rewrite at any time,
     maintenance included, so no installation backs it up, carries it or checks it.
-
-    The file is named by its declared schema: a runtime on another schema keeps its own
-    file instead of rebuilding this one under the writer's lock.
     """
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
-        schema = json.dumps(cls.declared_schema(), sort_keys=True).encode()
-        cls.filename = (
-            f"{declared_words(cls.__name__)}.{hashlib.sha256(schema).hexdigest()[:12]}.sqlite3"
-        )
+        cls.filename = f"{declared_words(cls.__name__)}.sqlite3"

@@ -20,6 +20,7 @@ start and result through the bus's ordinary publisher.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
@@ -49,6 +50,8 @@ from agent_comms.host_services import HostService
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
 from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, MaintenanceOperator
 from agent_comms.registry_store import RegistryStore
+from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
+from agent_comms.runtime_processes import RuntimeProcesses, RuntimeRetirement
 from agent_comms.store_files import _store_lock
 from agent_comms.wire_log import WireLog
 from agent_comms.installer import publication, step_worker
@@ -250,11 +253,21 @@ class RetiringRehearsal(FreshRehearsal):
     """The bus at the root moves aside before a fresh one is created there."""
 
 
+@dataclass(frozen=True, kw_only=True)
 class LiveRun(DeclaredFamily, affix="Run"):
-    """What a live install changed."""
+    """What a live install changed, including every old-runtime process outcome."""
+
+    processes: tuple[RuntimeRetirement, ...] = ()
+
+    @property
+    def successful(self) -> bool:
+        return all(process.successful for process in self.processes)
+
+    def lines(self) -> tuple[str, ...]:
+        return (*self.change_lines(), *(process.line() for process in self.processes))
 
     @abstractmethod
-    def lines(self) -> tuple[str, ...]: ...
+    def change_lines(self) -> tuple[str, ...]: ...
 
 
 @dataclass(frozen=True)
@@ -264,7 +277,7 @@ class CarriedRun(CarriedPass, StoppedOwners, RestartedServices, LiveRun):
     backup: BackupReport
     retired_backups: tuple[Annotated[Path, PathText], ...]
 
-    def lines(self) -> tuple[str, ...]:
+    def change_lines(self) -> tuple[str, ...]:
         return (
             *(f"Carried {step.carry}: {step.carried.changed} changed" for step in self.steps),
             *self.stopped_lines(),
@@ -278,7 +291,7 @@ class CarriedRun(CarriedPass, StoppedOwners, RestartedServices, LiveRun):
 class UnchangedRun(LiveRun):
     """Published the installed runtime again and planned the next install."""
 
-    def lines(self) -> tuple[str, ...]:
+    def change_lines(self) -> tuple[str, ...]:
         return ("Runtime republished; nothing carried",)
 
 
@@ -286,7 +299,7 @@ class UnchangedRun(LiveRun):
 class CreatedRun(RestartedServices, LiveRun, Extendable):
     route: str
 
-    def lines(self) -> tuple[str, ...]:
+    def change_lines(self) -> tuple[str, ...]:
         return (f"Created bus; route: {self.route}", *self.service_lines())
 
 
@@ -294,8 +307,8 @@ class CreatedRun(RestartedServices, LiveRun, Extendable):
 class RetiredRun(CreatedRun, StoppedOwners):
     retired: Annotated[Path, PathText]
 
-    def lines(self) -> tuple[str, ...]:
-        return (*super().lines(), *self.stopped_lines(), f"Retired bus: {self.retired}")
+    def change_lines(self) -> tuple[str, ...]:
+        return (*super().change_lines(), *self.stopped_lines(), f"Retired bus: {self.retired}")
 
 
 @dataclass(frozen=True)
@@ -566,7 +579,7 @@ def rehearse(root: Path, stack: Stack, installed: Stack, tree: TargetTree, chain
         stopping = before_stop(copied, pending, stack, tree)
         installed.running_owners(copied)
         os.environ[HOLDER_NONCE] = MaintenanceBarrier(copied / "registry.json").begin(
-            MaintenanceOperator.current()).nonce
+            MaintenanceOperator.current(), target=stack.runtime).nonce
         with transcripts_held(copied):
             before = bus_files(copied)
         passed = carry_and_read(copied, before, pending, stack, stack, tree, stopping)
@@ -686,7 +699,11 @@ class Install[Rehearsed: Rehearsal](ABC):
             for bridge in Serve.running(self.installed.home):
                 for paused in bridge.pause(resources):
                     resources.callback(paused.resume)
-            return self.live(rehearsal)
+            result = self.live(rehearsal)
+        # ExitStack resumes every bridge onto the published runtime before discovery.
+        # The installer worker must already run on that runtime; it is not exempted.
+        processes = asyncio.run(RuntimeProcesses.observe(self.staged.runtime).retire(10))
+        return replace(result, processes=processes)
 
     @abstractmethod
     def live(self, rehearsal: Rehearsed) -> LiveRun: ...
@@ -712,6 +729,7 @@ class UnchangedInstall(Install[UnchangedRehearsal]):
 
     def live(self, rehearsal: UnchangedRehearsal) -> UnchangedRun:
         self.installed.publish()
+        RootRuntime.publish(self.root, self.installed.runtime)
         self.installer.plan_next(self.root, time.time())
         return UnchangedRun()
 
@@ -745,6 +763,7 @@ class FreshInstall(Install[FreshRehearsal]):
         root_id = Comms(self.root).messaging.initialize_private_initial_protocol()
         CarryLedger(self.root).start(self.chain)
         self.staged.publish()
+        RootRuntime.publish(self.root, self.staged.runtime)
         route = route_new_bus(ActiveRoute(self.root.absolute(), root_id), active_route_path())
         services = HostService.restart_running(self.staged.python)
         self.installer.plan_next(self.root, time.time())
@@ -779,12 +798,13 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
         sum(path.stat().st_size for path in selected if path.exists()),
     ), root.parent)
     restore.require()
-    stopping = before_stop(root, pending, staged, tree)
+    RootRuntimeStore.at(root).owner(installed.runtime)
     running = installed.running_owners(root)
     maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
-    held = maintenance.begin(MaintenanceOperator.current())
+    held = maintenance.begin(MaintenanceOperator.current(), target=staged.runtime)
     os.environ[HOLDER_NONCE] = held.nonce  # this run's own CLI calls read under its hold
     try:
+        stopping = before_stop(root, pending, staged, tree)
         installed.owners(root, "stop", running)
         with transcripts_held(root):
             before = bus_files(root)
@@ -802,6 +822,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
         passed = carry_and_read(root, before, pending, staged, staged, tree, stopping)
         passed.files.require_rehearsal(rehearsal_files)
         staged.publish()
+        RootRuntime.publish(root, staged.runtime)
         maintenance.clear(held)
         services = HostService.restart_running(staged.python)
         installer.plan_next(root, time.time())
@@ -822,6 +843,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
         # Republish only when current moved: the outgoing runtime may predate this publisher.
         if LaunchRuntime.installed().prefix.resolve() != installed.runtime.prefix.resolve():
             installed.publish()
+        RootRuntime.publish(root, installed.runtime)
         maintenance.clear(restored_hold)
         started = installed.start(root, running)
         print(f"install: restored after failure ({type(error).__name__}: {error}); "

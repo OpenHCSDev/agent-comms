@@ -15,7 +15,7 @@ import stat
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Literal, Self
 
@@ -24,6 +24,7 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, ToolRefusedError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .lifecycle import LifecycleState
+from .launch_runtime import LaunchRuntime
 from .locked_store import DurableFile
 from .send_outcome import GrantedSend, HeldSend
 from .store_files import (
@@ -73,6 +74,10 @@ class GrantedSends:
 
 class MaintenancePhase(DeclaredFamily, LifecycleState, affix="Phase"):
     new_sends = running_sends = HeldSends
+
+    @classmethod
+    def allows_runtime(cls, state: MaintenanceState, runtime: LaunchRuntime) -> bool:
+        return state.target.prefix == runtime.prefix
 
     @classmethod
     def holder_dead(cls, state: MaintenanceState) -> bool:
@@ -130,6 +135,10 @@ class ReadyPhase(MaintenancePhase):
     new_sends = running_sends = GrantedSends
 
     @classmethod
+    def allows_runtime(cls, state: MaintenanceState, runtime: LaunchRuntime) -> bool:
+        return False
+
+    @classmethod
     def holder_dead(cls, state: MaintenanceState) -> bool:
         return False
 
@@ -168,6 +177,9 @@ class MaintenanceStatus:
     @property
     def turn_pending(self) -> bool:
         return self.phase.new_sends.pending()
+
+    def allows_runtime(self, runtime: LaunchRuntime) -> bool:
+        return False
 
     def observed(self, barrier: MaintenanceBarrier) -> MaintenanceStatus:
         return self
@@ -211,6 +223,10 @@ class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
     operator: MaintenanceOperator
     nonce: str
     phase: type[MaintenancePhase]
+    target: LaunchRuntime = field(default_factory=LaunchRuntime.running)
+
+    def allows_runtime(self, runtime: LaunchRuntime) -> bool:
+        return self.phase.allows_runtime(self, runtime)
 
     def __post_init__(self):
         super().__post_init__()
@@ -240,9 +256,7 @@ class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
     def successor(self, phase: type[MaintenancePhase], nonce: str) -> MaintenanceState:
         if not self.phase().may_become(phase()):
             raise ValueError('Maintenance transition requires a valid expected successor')
-        return MaintenanceState(version=self.version, root=self.root,
-                                generation=self.generation + 1, operator=self.operator,
-                                nonce=nonce, phase=phase)
+        return replace(self, generation=self.generation + 1, nonce=nonce, phase=phase)
 
     def require_open_to(self, holder: str) -> None:
         if holder != self.nonce:
@@ -375,14 +389,16 @@ class MaintenanceBarrier(MaintenanceIngress):
         _atomic_write_text(self.marker_path, marker_text, fsync_parent=True)
         _atomic_write_text(self.state_path, state_text, fsync_parent=True)
 
-    def begin(self, operator: MaintenanceOperator) -> MaintenanceState:
+    def begin(self, operator: MaintenanceOperator, *,
+              target: LaunchRuntime = LaunchRuntime.running()) -> MaintenanceState:
         """Hold new turns before fleet drain; an uncertain write stays closed."""
         with _store_lock(self.wire_path), _store_lock(self.registry_path):
             current = self.current_unlocked()
             current.require_open()
             hold = MaintenanceState(version=2, root=str(self.registry_path.parent.resolve()),
                                     generation=current.generation + 1, operator=operator,
-                                    nonce=Id128Text.mint(), phase=DrainingPhase)
+                                    nonce=Id128Text.mint(), phase=DrainingPhase,
+                                    target=target)
             self._write_unlocked(hold)
             return hold
 
