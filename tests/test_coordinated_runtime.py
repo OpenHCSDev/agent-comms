@@ -14,6 +14,7 @@ import pytest
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.bus import Bus
 from agent_comms.comms import Comms
 from agent_comms.notification_progress import HumanReadProgress
 from agent_comms.coordinated_runtime import SelectedExecution, SessionSetupFailed
@@ -51,6 +52,7 @@ def _root(
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     (root / "runtime").mkdir(mode=0o700)
+    Bus.install(Bus.path_in(root))
     comms = Comms(root)
     people = [
         comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),

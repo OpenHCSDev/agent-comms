@@ -11,6 +11,7 @@ import pytest
 
 from agent_comms.active_route import ActiveRoute, read_active_route, route_new_bus
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.bus import Bus
 from agent_comms.comms import Comms, wire
 from agent_comms.commander.config import (
     CommanderConfig, GivenRepos, NamedCommander, NoConfigFile, WrittenConfigFile,
@@ -29,6 +30,7 @@ def bus(directory: Path) -> tuple[Path, str]:
     """A private bus holding one thread and one message, as production writes one."""
     root = directory / "wire"
     root.mkdir(mode=0o700)
+    Bus.install(Bus.path_in(root))
     comms = Comms(root)
     comms.registry.declare(comms.registry.new_thread("worker", frozenset({"team"}), str(directory)))
     root_id = comms.messaging.initialize_private_initial_protocol()
@@ -41,6 +43,7 @@ def test_a_bus_install_creates_is_fresh_until_marked_and_runs_no_carry(private_d
     root.mkdir(mode=0o700)
     log = WireLog(WireLog.path_in(root))
     assert log.fresh()
+    Bus.install(Bus.path_in(root))
     Comms(root).messaging.initialize_private_initial_protocol()
     assert not log.fresh()
     chain = CarryChain.at(REPO)
@@ -217,6 +220,7 @@ def test_a_practice_copy_of_a_bus_without_messages_reads_its_history_twice(priva
 
     root = private_directory / "wire"
     root.mkdir(mode=0o700)
+    Bus.install(Bus.path_in(root))
     Comms(root).messaging.initialize_private_initial_protocol()
     (root / "storage.json").write_text(json.dumps({"floor_gib": 0}))
     with practice_copy(root, private_directory / "practice/bus") as (copy, _):
@@ -227,6 +231,7 @@ def test_a_practice_copy_of_a_bus_without_messages_reads_its_history_twice(priva
 
 def test_practice_copy_takes_turn_files_in_the_registry_cut(private_directory):
     root = private_directory / "bus"
+    Bus.install(Bus.path_in(root))
     comms = wire(root)
     (root / "storage.json").write_text(json.dumps({"floor_gib": 0}))
     comms.registry.declare(comms.registry.new_thread(

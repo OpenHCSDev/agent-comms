@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_comms.bus import BusRecord, PrivateRecord, PublicRecord
+from agent_comms.bus import Bus, BusRecord, PrivateRecord, PublicRecord
 from agent_comms.bus_source_page import CoveragePage
 from agent_comms.comms import Comms
 from agent_comms.coordination_database import CoordinationStore
@@ -17,6 +17,7 @@ from test_bus import record_from
 
 @pytest.fixture
 def coverage(tmp_path):
+    Bus.install(Bus.path_in(tmp_path))
     comms = Comms(tmp_path, ResponseWrites)
     with Coordination(str(CoordinationStore.path_in(tmp_path))) as store:
         store.install_private_runtime()
