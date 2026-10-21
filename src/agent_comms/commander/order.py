@@ -390,12 +390,8 @@ class OrderFile:
 
     def send_back(self, context: Commander, unit: str, group: Sequence[str],
                   replacing: bool, clean: bool, reassign: Reassignment, struck_already: bool) -> None:
-        if replacing and not clean and struck_already:
-            print(f'{unit} already struck on this order of {group[0]}; '
-                  'the send-back counts that one miss once')
-        elif replacing and not clean and reassign.strikes_send_back:
-            context.strike(unit, group[0], f'sent back on {group[0]}: {self.prose.strip()}',
-                           evidence=(self.order.owner,))
+        if replacing and not clean:
+            reassign.send_back(context, self, unit, group[0], struck_already)
 
 
 STAGES = (
@@ -493,8 +489,17 @@ class CommanderContext(CommanderConfig):
 class Reassignment(SubclassUnion, affix="Reassignment"):
     """Why a held problem changes owner, or no change of owner."""
 
-    # A resend to the same unit is a send-back strike unless it reassigns.
-    strikes_send_back: ClassVar[bool]
+    def send_back(self, context: Commander, document: OrderFile, unit: str,
+                  problem: str, struck_already: bool) -> None:
+        if struck_already:
+            print(f'{unit} already struck on this order of {problem}; '
+                  'the send-back counts that one miss once')
+        else:
+            self.record_strike(context, document, unit, problem)
+
+    @abstractmethod
+    def record_strike(self, context: Commander, document: OrderFile,
+                      unit: str, problem: str) -> None: ...
 
     @abstractmethod
     def refusals(self, holders: Sequence[str]) -> tuple[str, ...]: ...
@@ -511,7 +516,10 @@ class Reassignment(SubclassUnion, affix="Reassignment"):
 @dataclass(frozen=True, slots=True)
 class ReassignReason(SingleFieldValue, Reassignment):
     text: str
-    strikes_send_back = False
+
+    def record_strike(self, context: Commander, document: OrderFile,
+                      unit: str, problem: str) -> None:
+        """Taking over work does not charge a mistake."""
 
     def refusals(self, holders: Sequence[str]) -> tuple[str, ...]:
         return () if len(self.text.split()) >= 8 else (
@@ -527,7 +535,10 @@ class ReassignReason(SingleFieldValue, Reassignment):
 
 @dataclass(frozen=True, slots=True)
 class NoReassignment(NullMember, Reassignment):
-    strikes_send_back = True
+    def record_strike(self, context: Commander, document: OrderFile,
+                      unit: str, problem: str) -> None:
+        context.strike(unit, problem, f'sent back on {problem}: {document.prose.strip()}',
+                       evidence=(document.order.owner,))
 
     def refusals(self, holders: Sequence[str]) -> tuple[str, ...]:
         return () if not holders else (
@@ -588,9 +599,9 @@ class Commander(CommanderContext):
         struck_already = replacing and listed[group[0]].struck_on_order(unit)
         measured = MeasuredReview.read(self.comms.goals.todos)
         review_at = measured.review_at(document.order)
+        message = document.message(self, unit, group, replacing, reassign)
         document.record(self, unit, group, new, traced, review_at)
-        sent = self.post(VerdictAudience((unit,)),
-                         document.message(self, unit, group, replacing, reassign), answers)
+        sent = self.post(VerdictAudience((unit,)), message, answers)
         for pid in group:
             self.call(CommsChangeProblemTool(problem=pid, operation=OrderMessage(
                 self.comms.goals.todos.get(pid).revision, self.incarnation, sent)))

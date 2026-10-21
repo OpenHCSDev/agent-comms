@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 import json
+from pathlib import Path
 import time
 
 import pytest
@@ -11,6 +12,7 @@ from agent_comms.commander.request import RequestAddVerb
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.repo import Repo
 from test_todos import order, pr_commander, thread
 
 pytest_plugins = ("test_proof_build",)
@@ -45,8 +47,11 @@ def test_override_scan_excludes_nested_and_qualified_names():
 
 
 def test_problem_and_send_share_field_refusals_and_record_only_valid_documents(pr_commander):
-    ctx = pr_commander
+    ctx = pr_commander.model_copy(update={
+        'repos': (*pr_commander.repos, Repo.of(Path(__file__).resolve().parents[1])),
+    })
     ctx.comms.registry.register(thread('worker', ctx.root, 2.0))
+    ctx.comms.channels.create_tag('comms')
     RequestAddVerb(text='Repair the copied order workflow without changing original retained state').run(ctx)
     now = time.time()
     planned = replace(order(ctx.repos[0]),
@@ -94,3 +99,10 @@ def test_problem_and_send_share_field_refusals_and_record_only_valid_documents(p
             resent, = ctx.todos()
             assert resent.holder == 'worker' and not resent.strikes
             assert resent.messages[-1] != original_message
+            main(['send', 'worker', str(path), '--reassign',
+                  'The old attempt failed before recording the required source change'], ctx)
+            assert not ctx.comms.goals.todos.get(created.id).strikes
+            main(['send', 'worker', str(path)], ctx)
+            assert len(ctx.comms.goals.todos.get(created.id).strikes) == 1
+            main(['send', 'worker', str(path)], ctx)
+            assert len(ctx.comms.goals.todos.get(created.id).strikes) == 1

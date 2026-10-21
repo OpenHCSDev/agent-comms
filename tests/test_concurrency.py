@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import multiprocessing
 from collections.abc import Callable, Sequence
+from contextlib import ExitStack
 from multiprocessing.context import BaseContext
 from multiprocessing.synchronize import Event
 from pathlib import Path
@@ -65,15 +66,16 @@ def _run_concurrently(
 ) -> None:
     start = ctx.Event()
     processes = [ctx.Process(target=target, args=(*args, start)) for args in arguments]
-    for process in processes:
-        process.start()
-    start.set()
-    for process in processes:
-        process.join(timeout=30)
-        if process.is_alive():
-            process.terminate()
-            process.join()
-        assert process.exitcode == 0
+    with ExitStack() as running:
+        for process in processes:
+            process.start()
+            running.callback(process.close)
+            running.callback(process.join, 5)
+            running.callback(process.kill)
+        start.set()
+        for process in processes:
+            process.join(timeout=30)
+            assert process.exitcode == 0
 
 
 class TestConcurrentWire:
