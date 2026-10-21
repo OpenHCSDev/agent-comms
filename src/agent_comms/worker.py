@@ -19,39 +19,39 @@ from .native_arguments import NativeArguments
 
 
 async def run() -> None:
-    # Both entry points (python -m agent_comms.worker, agent-comms-agent) run here.
-    lower_priority()
+    # The module/programmatic entrypoint selects its root exactly once.
     LaunchRoot.startup(sys.argv, ActiveRoute.published_launch)
-    comms = wire()
-    # Fail before attach; the check verifies the native package once.
-    comms.owners.launch_authority.check()
-    async with Coordination.worker(CoordinationStore.path_in(comms.root)):
-        await run_owner(comms)
+    await run_owner(wire())
 
 
 async def run_owner(comms: Comms) -> None:
-    name = ThreadLaunch.current().name
-    thread = await Coordination.run_worker(partial(comms.registry.require, name))
-    agent = CommsAgent(
-        comms,
-        runtime_enabled=True,
-        agent_bin=NativeArguments.owner_launcher(LaunchRuntime.running()),
-    )
-    stopped = asyncio.Event()
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, stopped.set)
-    initial: asyncio.Task | None = None
-    try:
-        await agent.sessions.start_owner(thread.worktree, name)
-        if key := ThreadLaunch.take_startup_input():
-            initial = asyncio.create_task(run_startup_input(agent, name, key))
-        await stopped.wait()
-    finally:
-        if initial is not None:
-            initial.cancel()
-            await asyncio.gather(initial, return_exceptions=True)
-        await agent.shutdown()
+    """Own the worker lifecycle on the entrypoint's already-selected wire."""
+    lower_priority()
+    # Fail before attach; the check verifies the native package once.
+    comms.owners.launch_authority.check()
+    async with Coordination.worker(CoordinationStore.path_in(comms.root)):
+        name = ThreadLaunch.current().name
+        thread = await Coordination.run_worker(partial(comms.registry.require, name))
+        agent = CommsAgent(
+            comms,
+            runtime_enabled=True,
+            agent_bin=NativeArguments.owner_launcher(LaunchRuntime.running()),
+        )
+        stopped = asyncio.Event()
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.add_signal_handler(sig, stopped.set)
+        initial: asyncio.Task | None = None
+        try:
+            await agent.sessions.start_owner(thread.worktree, name)
+            if key := ThreadLaunch.take_startup_input():
+                initial = asyncio.create_task(run_startup_input(agent, name, key))
+            await stopped.wait()
+        finally:
+            if initial is not None:
+                initial.cancel()
+                await asyncio.gather(initial, return_exceptions=True)
+            await agent.shutdown()
 
 
 async def run_startup_input(agent: CommsAgent, name: str, key: str) -> None:
@@ -115,7 +115,7 @@ def main() -> int:
     if thread.process_identity.alive():
         raise ValueError(f"Thread {thread.name!r} already has a live owner")
     with suppress(KeyboardInterrupt):
-        asyncio.run(run())
+        asyncio.run(run_owner(comms))
     return 0
 
 

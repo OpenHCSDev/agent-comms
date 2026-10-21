@@ -334,7 +334,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
             assert {row["native"]["inputId"] for row in native} == {
                 row["input_id"] for row in request_inputs
             }
-            for original in request_inputs:
+            for index, original in enumerate(request_inputs):
                 samples = [row for row in native
                            if row["native"]["inputId"] == original["input_id"]]
                 assert {"preparing", "dispatch", "first_event", "finished"} <= {
@@ -348,7 +348,14 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                                 and "acquisition" in row]
                 assert len(acquisitions) == 1
                 selection = acquisitions[0]["operations"]["native_launch_selection"]
-                assert selection["count"] == 1 and selection["total_ns"] > 0
+                # CursorDelivery owns session-cumulative timing counters. Each
+                # original input must add exactly one launch selection, even
+                # after that owner has already handled another peer's reply.
+                expected_count = sum(
+                    earlier["owner"] == original["owner"]
+                    for earlier in request_inputs[:index + 1]
+                )
+                assert selection["count"] == expected_count and selection["total_ns"] > 0
             print("Native original timing samples", len(native), "inputs", len(request_inputs),
                   "maximum parent acknowledgement lag seconds",
                   max((row["recorded_monotonic_ns"] - int(row["native"]["monotonicNs"])) / 1e9

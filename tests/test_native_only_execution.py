@@ -75,7 +75,7 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
             async with asyncio.timeout(12):
                 while not socket_path(comms.root, child.pid).exists():
                     if child.returncode is not None:
-                        raise AssertionError((await child.stderr.read()).decode())
+                        raise AssertionError(await child.stderr_tail())
                     await asyncio.sleep(0.05)
             registered = comms.registry.require("headless")
             assert registered.pid == child.pid
