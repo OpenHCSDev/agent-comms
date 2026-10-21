@@ -11,7 +11,9 @@ from collections import defaultdict
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from importlib import import_module
 from pathlib import Path
+from pkgutil import walk_packages
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, Self, TypeVar
 
 from .field_codec import FieldCodec, MalformedRecord
@@ -161,6 +163,15 @@ class RootFile:
         return frozenset((path,)) if path.is_file() else frozenset()
 
     @classmethod
+    def load_declarations(cls) -> None:
+        """Import every module of the package, so ``declarations_in`` walks the whole family
+        and not only the owners some caller happened to import."""
+        package = import_module(__package__)
+        for module in walk_packages(package.__path__, f"{package.__name__}."):
+            if not module.name.startswith(f"{package.__name__}.skills"):
+                import_module(module.name)
+
+    @classmethod
     def declarations_in(cls, root: Path) -> Iterator[tuple[type[RootFile], Path]]:
         """Each declaring owner and its directory, once across composed capabilities."""
         pending: list[type[RootFile]] = [cls]
@@ -245,11 +256,11 @@ class SQLiteFile(RootFile):
     """A database and SQLite's companion files share their existing file owner."""
 
     __slots__ = ()
+    companion_suffixes: ClassVar[tuple[str, ...]] = ("-wal", "-shm", "-journal")
 
-    @staticmethod
-    def files(path: Path) -> tuple[Path, ...]:
-        companions = ("-wal", "-shm", "-journal")
-        return (path, *(path.with_name(path.name + suffix) for suffix in companions))
+    @classmethod
+    def files(cls, path: Path) -> tuple[Path, ...]:
+        return (path, *(path.with_name(path.name + suffix) for suffix in cls.companion_suffixes))
 
     @classmethod
     def member_paths(cls, path: Path) -> frozenset[Path]:
