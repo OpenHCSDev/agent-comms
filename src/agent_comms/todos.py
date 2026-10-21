@@ -56,6 +56,7 @@ from agent_comms.child_process import (
 )
 from agent_comms.command import Command
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.lifecycle_capability import LifecycleCapability, Pending
 from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import (
     FieldCodec,
@@ -1406,10 +1407,8 @@ class NoSuccessor(NullMember, Successor):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ProblemOrder(DeclaredFamily, StorySource, affix="ProblemOrder"):
+class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="ProblemOrder"):
     """A problem's order state; an unassigned finding is not a fabricated order."""
-
-    pending: ClassVar[bool] = False
 
     @property
     def line(self) -> str:
@@ -1481,7 +1480,7 @@ class ProblemOrder(DeclaredFamily, StorySource, affix="ProblemOrder"):
         raise ValueError("This problem already has an order; drop it before linking another.")
 
     def folded(self, into: str, why: str) -> ProblemOrder:
-        if self.pending:
+        if self.items_with(Pending, self):
             raise ValueError("The problem has open orders; link or drop them first.")
         return FoldedProblemOrder(original=self, into=into, why=why)
 
@@ -1883,7 +1882,7 @@ class DeliverableProblemOrder(CheckedProblemOrder, declared_name=None):
 
 
 @dataclass(frozen=True, kw_only=True)
-class PendingProblemOrder(DeliverableProblemOrder):
+class PendingProblemOrder(Pending, DeliverableProblemOrder):
     id: str = field(default_factory=lambda: uuid4().hex[:12])
     at: EventTime = field(default_factory=lambda: RecordedEventTime(time.time()))
     first_call_deadline: EventTime = field(
@@ -1895,7 +1894,6 @@ class PendingProblemOrder(DeliverableProblemOrder):
     def claimed(self, claim: OrderClaim) -> ClaimedProblemOrder:
         return self.copy_as(ClaimedProblemOrder, claim=claim)
 
-    pending: ClassVar[bool] = True
     line: ClassVar[str] = "Open"
 
     def require_transfer(self, todo: Todo) -> None:
@@ -1956,7 +1954,6 @@ class ClaimedProblemOrder(DeliverableProblemOrder):
 @dataclass(frozen=True, kw_only=True)
 class DeliveredProblemOrder(AwaitingInstallationProblemOrder):
     delivery: OrderDelivery
-    pending: ClassVar[bool] = False
 
     @property
     def line(self) -> str:
@@ -2100,7 +2097,6 @@ class WithdrawnProblemOrder(CheckedProblemOrder):
     previous: Assignment
     why: str
     superseded_by: Annotated[Successor, WireOmitDefault()] = NoSuccessor()
-    pending: ClassVar[bool] = False
     line: ClassVar[str] = "Withdrawn"
 
     def require_close(self) -> None:
@@ -3114,7 +3110,7 @@ class Todo(TypedTable):
 
     @property
     def pending(self):
-        return self.order.pending
+        return bool(self.order.items_with(Pending, self))
 
     def story(self) -> ProblemStory:
         implied = frozenset(strike for verdict in self.verdicts
