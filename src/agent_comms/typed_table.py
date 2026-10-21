@@ -22,6 +22,7 @@ from enum import Enum, IntEnum, IntFlag
 from functools import lru_cache
 from pathlib import Path
 from typing import (
+    TYPE_CHECKING,
     Annotated,
     ClassVar,
     Literal,
@@ -49,6 +50,9 @@ from .field_codec import (
 )
 from .locked_store import DurableFile, FileStore, RuntimeFile, SQLiteFile
 from .lifecycle import LifecycleState
+
+if TYPE_CHECKING:
+    from .execution_states import ExecutionState
 
 RelatedRow = TypeVar("RelatedRow", bound="TypedRow")
 
@@ -946,11 +950,9 @@ class OrdinalTransitions(MutationCapability):
 
     @classmethod
     def mutation_guards(cls, row: type[TypedTable]) -> tuple[SQLiteSchemaObject, ...]:
-        from .execution_states import ExecutionState
-
         (state,) = row._fields_named(("lifecycle",))
         (ordinal,) = row._fields_named((row.ordinal_column,))
-        family = cast(type[ExecutionState], state.lifecycle_family)
+        family = cast("type[ExecutionState]", state.lifecycle_family)
         violations = []
         for member in family.members_with(family):
             rule = member.ordinal_rule
