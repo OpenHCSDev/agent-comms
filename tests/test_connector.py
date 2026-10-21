@@ -91,7 +91,7 @@ def test_connector_round_trip_reads_this_bus_as_its_caller(comms, tmp_path, regi
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
-    readiness = ConnectorReadiness(tmp_path)
+    readiness = ConnectorReadiness()
     environment = readiness.environment({**os.environ, "HOME": str(tmp_path / "home"), "PYTHONUNBUFFERED": "1",
         "PYTHONPATH": os.pathsep.join((str(Path(__file__).resolve().parents[1] / "src"),
                                        *site.getsitepackages()))})

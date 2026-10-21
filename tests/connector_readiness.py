@@ -2,12 +2,12 @@
 from __future__ import annotations
 
 import os
+import secrets
 import selectors
 import socket
 import subprocess
 import time
 from collections.abc import Mapping
-from pathlib import Path
 
 from agent_comms.host_services import ServiceNotServingError
 
@@ -15,13 +15,14 @@ from agent_comms.host_services import ServiceNotServingError
 class ConnectorReadiness:
     """One notification socket; the connector reports READY=1 on it after binding its port."""
 
-    def __init__(self, directory: Path):
-        self.path = directory / "notify"
+    def __init__(self):
+        # An abstract socket, as systemd may use: no file, and no sun_path limit on long scratch paths.
+        self.name = f"agent-comms-readiness-{secrets.token_hex(8)}"
         self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
-        self.socket.bind(str(self.path))
+        self.socket.bind("\0" + self.name)
 
     def environment(self, base: Mapping[str, str]) -> dict[str, str]:
-        return {**base, "NOTIFY_SOCKET": str(self.path)}
+        return {**base, "NOTIFY_SOCKET": "@" + self.name}
 
     def wait(self, process: subprocess.Popen, port: int, timeout: float = 20) -> None:
         """Return once the connector reported ready and its port accepts; fail on early exit."""

@@ -84,10 +84,12 @@ class SystemdUserService(HostService, declared_name=None):
 
     @classmethod
     def ready(cls) -> None:
-        """Tell systemd this process serves; outside systemd there is no socket to tell."""
-        address = os.environ.get("NOTIFY_SOCKET")
-        if address is None:
-            return
+        """Tell the supervisor this process serves.
+
+        Every launch has one: systemd for the installed unit, ``tests/connector_readiness.py``
+        for a test. A launch without NOTIFY_SOCKET has nobody to tell and fails here, loudly.
+        """
+        address = os.environ["NOTIFY_SOCKET"]
         target = "\0" + address[1:] if address.startswith("@") else address
         with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as notify:
             notify.connect(target)

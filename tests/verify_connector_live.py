@@ -101,7 +101,7 @@ def main(scratch: Path):
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", 0))
             port = probe.getsockname()[1]
-        readiness = ConnectorReadiness(base)
+        readiness = ConnectorReadiness()
         environment = readiness.environment({**os.environ, "HOME": str(home), "PYTHONUNBUFFERED": "1"})
         # Keep installed entrypoint and interpreter, changing only the source
         # path selected by the caller. Never publish or restart the live service.

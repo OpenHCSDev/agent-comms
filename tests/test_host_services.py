@@ -39,7 +39,7 @@ def connector_service(comms, tmp_path, monkeypatch):
         port = reserved.getsockname()[1]
     children: list[subprocess.Popen] = []
     project = Path(__file__).resolve().parents[1]
-    readiness = ConnectorReadiness(tmp_path)
+    readiness = ConnectorReadiness()
     environment = readiness.environment({**os.environ, "PYTHONPATH": str(project / "src")})
     command = (
         sys.executable, "-u", str(Path(sys.executable).parent / "agent-comms-connector"),
