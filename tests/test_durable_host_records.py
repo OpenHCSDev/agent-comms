@@ -3,7 +3,9 @@ import asyncio
 import json
 
 import pytest
-from agent_comms.field_codec import MalformedRecord
+from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.native_entries import NativeEntry, StoredEntry, TranscriptProjection
+from agent_comms.recorded_time import UnrecordedTimeError
 
 from agent_comms.agent_backend import (
     FailedCompaction,
@@ -92,7 +94,27 @@ def test_result_kind_is_bound_to_its_pending_command():
     asyncio.run(journey())
 
 
-def test_real_host_context_and_request_error_remain_typed_and_live(tmp_path, thread_registration):
+def test_native_and_durable_entries_keep_their_original_clock_owners():
+    messages = (
+        {"role": "user", "timestamp": 1760000000123, "content": "first"},
+        {"role": "assistant", "timestamp": 1760000000456,
+         "content": [{"type": "text", "text": "second"}]},
+    )
+    with pytest.raises(ValueError):
+        NativeEntry.from_wire({"type": "message", "id": "native", "message": messages[0]})
+    entry = StoredEntry.from_wire({"id": 1, "model": list(messages)})
+    events = entry.events(TranscriptProjection(position=1))
+    assert [event.text for event in events] == ["first", "second"]
+    assert [event.timestamp for event in events] == [1760000000.123, 1760000000.456]
+    assert [FieldCodec.encode(message)["timestamp"] for message in entry.messages] == [
+        message["timestamp"] for message in messages
+    ]
+    undated = StoredEntry.from_wire({"id": 2, "model": [{"role": "user", "content": "undated"}]})
+    with pytest.raises(UnrecordedTimeError):
+        undated.events(TranscriptProjection(position=2))
+
+
+def test_real_host_context_and_request_error_remain_typed_and_live(tmp_path, thread_registration, durable_home):
     async def journey():
         backend = PiDurableBackend()
         location = DurableDatabase(str(tmp_path / 'records.sqlite3'))
