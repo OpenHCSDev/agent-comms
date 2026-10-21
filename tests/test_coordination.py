@@ -26,10 +26,7 @@ from agent_comms.attempt_states import (
 )
 from agent_comms.coordination_database import CoordinationStore, StoreBusy
 from agent_comms.coordination_errors import IntegrityViolationError, SchemaVersionError
-from agent_comms.coordination_schema import (
-    COORDINATION_SCHEMA_VERSION,
-    COORDINATION_SNAPSHOT_VERSION,
-)
+from agent_comms.coordination_schema import COORDINATION_SNAPSHOT_VERSION, CoordinatorTable
 from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.assignments import (
     ExecutionAssignmentLink,
@@ -441,13 +438,13 @@ def db(tmp_path):
 def test_database_version_privacy_and_reopen(db):
     connection, path = db
     assert connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
-    assert connection.execute("PRAGMA user_version").fetchone()[0] == COORDINATION_SCHEMA_VERSION
+    assert not CoordinatorTable.schema_differs(connection)
     assert COORDINATION_SNAPSHOT_VERSION == 3
     if os.name != "nt":  # NTFS access is governed by ACLs, not POSIX mode bits.
         assert os.stat(path).st_mode & 0o777 == 0o600
     with CoordinationStore(path) as reopened:
         reopened._connection.row_factory = None
-        assert reopened.schema_version == COORDINATION_SCHEMA_VERSION
+        assert not CoordinatorTable.schema_differs(reopened._connection)
         assert (
             reopened._connection.execute("SELECT participant_lookup FROM participants").fetchone()[
                 0
@@ -464,11 +461,11 @@ def test_current_schema_open_is_read_only_while_readers_and_writer_are_live(db):
         closing(sqlite3.connect(path, isolation_level=None, timeout=0)) as writer,
     ):
         reader.execute("BEGIN")
-        reader.execute("SELECT * FROM schema_meta").fetchall()
+        reader.execute("SELECT * FROM participants").fetchall()
         writer.execute("BEGIN IMMEDIATE")
         try:
             with CoordinationStore(path, StoreBusy()) as reopened:
-                assert reopened.schema_version == COORDINATION_SCHEMA_VERSION
+                assert not CoordinatorTable.schema_differs(reopened._connection)
                 assert not reopened._connection.in_transaction
                 assert reopened._connection.total_changes == 0
         finally:
@@ -479,11 +476,10 @@ def test_current_schema_open_is_read_only_while_readers_and_writer_are_live(db):
 def test_concurrent_fresh_initializers_serialize_and_reopen(tmp_path):
     script = """import sys
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.coordination_schema import COORDINATION_SCHEMA_VERSION
+from agent_comms.coordination_schema import CoordinatorTable
 sys.stdin.buffer.read(1)
 with CoordinationStore(sys.argv[1]) as store:
-    assert store.schema_version == COORDINATION_SCHEMA_VERSION
-    assert store._connection.execute("SELECT count(*) FROM schema_meta").fetchone()[0] == 1
+    assert not CoordinatorTable.schema_differs(store._connection)
 print("ready")
 """
     for wave in range(8):
@@ -514,10 +510,7 @@ print("ready")
                     child.kill()
                     child.wait()
         with CoordinationStore(path) as reopened:
-            assert reopened.schema_version == COORDINATION_SCHEMA_VERSION
-            assert (
-                reopened._connection.execute("SELECT count(*) FROM schema_meta").fetchone()[0] == 1
-            )
+            assert not CoordinatorTable.schema_differs(reopened._connection)
             assert reopened._connection.execute("PRAGMA journal_mode").fetchone()[0] == "delete"
 
 
@@ -539,7 +532,7 @@ def test_first_create_never_closes_a_published_target_fd(tmp_path, monkeypatch):
     def creator():
         try:
             with CoordinationStore(path) as store:
-                assert store.schema_version == COORDINATION_SCHEMA_VERSION
+                assert not CoordinatorTable.schema_differs(store._connection)
         except BaseException as exc:
             errors.append(exc)
 
@@ -1263,7 +1256,6 @@ def test_populated_durable_authorities_reject_delete_and_survive_reopen(db):
         "VALUES ('e','model_stalled','timeout',NULL,1,100,100)"
     )
     tables = (
-        "schema_meta",
         "participants",
         "participant_aliases",
         "owner_generations",
@@ -1403,7 +1395,6 @@ def test_recovery_and_connectivity_monotonic_reopen(db):
 @pytest.mark.parametrize(
     "table",
     [
-        "schema_meta",
         "participants",
         "owner_generations",
         "executions",
@@ -1430,12 +1421,12 @@ def test_all_durable_tables_reject_delete_even_when_empty(db, table):
     assert triggers, f"{table} lacks fail-loud delete authority"
 
 
-def test_version_mismatch_and_symlink_rejected(tmp_path):
+def test_schema_drift_and_symlink_rejected(tmp_path):
     path = tmp_path / "db"
     with CoordinationStore(path):
         pass
     with sqlite3.connect(path) as c:
-        c.execute("PRAGMA user_version=100")
+        c.execute("CREATE INDEX stray ON participants(participant_lookup)")
     with pytest.raises(SchemaVersionError):
         CoordinationStore(path)
     link = tmp_path / "link"

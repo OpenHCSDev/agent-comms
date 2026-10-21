@@ -222,7 +222,7 @@ def test_reader_never_creates_repairs_or_migrates(bound, tmp_path, mode):
         else:
             with sqlite3.connect(path) as conn:
                 if mode == "invalid_schema":
-                    conn.execute("DROP TABLE goal_attempt_schema")
+                    conn.execute("DROP TABLE goal_provider_usage")
                 else:
                     conn.execute("PRAGMA journal_mode=WAL")
     before = {str(p): p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}

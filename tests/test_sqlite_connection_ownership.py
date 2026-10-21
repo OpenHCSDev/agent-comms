@@ -50,7 +50,7 @@ async def test_scoped_reader_releases_for_owner_commit(tmp_path):
 
     def read(store):
         with store.session.read():
-            store.session._connection.execute("SELECT schema_version FROM schema_meta").fetchone()
+            store.session._connection.execute("SELECT count(*) FROM participants").fetchone()
             acquired.set()
             assert release.wait(2)
 

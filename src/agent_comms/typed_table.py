@@ -7,14 +7,13 @@ the declared columns and field types without upgrading existing storage.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
 import sqlite3
 import types
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Generator, Iterator, Mapping
+from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, fields
 from enum import Enum, IntEnum, IntFlag
@@ -537,13 +536,6 @@ class TableSchema(ABC):
         return {name: sql for row in cls.schema_rows() for name, sql in row.schema_objects().items()}
 
     @classmethod
-    def schema_digest(cls) -> str:
-        """Identity of the actual declarations, including generated family checks."""
-        return hashlib.sha256(
-            json.dumps(cls.declared_schema(), sort_keys=True, separators=(",", ":")).encode()
-        ).hexdigest()
-
-    @classmethod
     def stored_schema(cls, db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
         """The objects this file's kind compares: by default every object the file owns.
 
@@ -582,7 +574,7 @@ class SharedFileTables(TableSchema):
 
     @classmethod
     def stored_schema(cls, db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
-        return [item for row in cls.schema_rows() for item in row.stored_objects(db)]
+        return TypedTable.objects_of(db, cls.schema_rows())
 
 
 class AllObjectsTables(TableSchema):
@@ -623,6 +615,12 @@ class DurableTables(TableSchema):
     @classmethod
     def reconcile_schema(cls, db: sqlite3.Connection) -> None:
         cls.require_schema(db)
+
+
+@lru_cache(maxsize=4)
+def _claimed_names(members: tuple[type[TypedTable], ...]) -> frozenset[str]:
+    """Every object name any row declares; keyed by the registry, so a new member refreshes it."""
+    return frozenset(name for row in members for name in row.schema_objects())
 
 
 @dataclass(frozen=True)
@@ -841,12 +839,25 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
 
     @classmethod
     def stored_objects(cls, db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
-        """Every object this row declares, whichever table a trigger guards, and any attached to its table."""
-        declared = tuple(cls.schema_objects())
-        return SQLiteSchemaObject.read(db.execute(
-            "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL AND (tbl_name=? OR name IN ("
-            + ",".join("?" for _ in declared) + "))",
-            (cls.declared_name, *declared)))
+        return TypedTable.objects_of(db, (cls,))
+
+    @staticmethod
+    def objects_of(db: sqlite3.Connection, rows: Iterable[type[TypedTable]]) -> list[SQLiteSchemaObject]:
+        """The rows' own stored objects, in one catalog read.
+
+        Every object they declare, whichever table a trigger guards, and any object
+        attached to their tables that no row's declaration claims: a stray.
+        """
+        rows = tuple(rows)
+        declared = {name for row in rows for name in row.schema_objects()}
+        tables = tuple(row.declared_name for row in rows)
+        claimed = _claimed_names(TypedTable.members_with(TypedTable))
+        stored = SQLiteSchemaObject.read(db.execute(
+            "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL AND (name IN ("
+            + ",".join("?" for _ in declared) + ") OR tbl_name IN ("
+            + ",".join("?" for _ in tables) + "))",
+            (*declared, *tables)))
+        return [item for item in stored if item.name in declared or item.name not in claimed]
 
     @classmethod
     def present(cls, db: sqlite3.Connection) -> bool:

@@ -36,7 +36,7 @@ class CoordinationReadUnavailable(CoordinationError):
 
 
 class SchemaVersionError(CoordinationError):
-    """The durable store has an unsupported schema version."""
+    """The durable store's schema differs from its declaration."""
 
 
 class IntegrityViolationError(CoordinationError):

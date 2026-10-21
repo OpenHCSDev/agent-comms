@@ -16,8 +16,7 @@ from agent_comms.assignment_states import (
     EngagedAssignment,
 )
 from agent_comms.comms import Comms
-from agent_comms.coordination_errors import DMScopeChanged
-from agent_comms.coordination_schema import COORDINATION_SCHEMA_VERSION
+from agent_comms.coordination_errors import DMScopeChanged, SchemaVersionError
 from agent_comms.read_basis import HistoricalDisplay, ReadCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
@@ -103,10 +102,10 @@ def test_recorded_assignment_schema_refusal_is_read_only(archived_notification):
     _old, live, source, messages, _root_id = archived_notification
     database = Path(source.root) / "coordination.sqlite3"
     with sqlite3.connect(database) as connection:
-        connection.execute(f"PRAGMA user_version = {COORDINATION_SCHEMA_VERSION - 1}")
+        connection.execute("CREATE TABLE wake_claims (x INTEGER)")
     database.chmod(0o600)
     original = database.read_bytes()
-    with pytest.raises(ValueError), live.bus.history.read_sources() as sources:
+    with pytest.raises(SchemaVersionError), live.bus.history.read_sources() as sources:
         source.notification_references(sources, (messages[0].reference,))
     assert database.read_bytes() == original
 
