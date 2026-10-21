@@ -92,6 +92,7 @@ from agent_comms.tools import (
     CommsFireTool,
     CommsOrderCheckTool,
     CommsOrderDoneTool,
+    CommsOrderDeliverTool,
     CommsOrderServeTool,
     CommsOrderTool,
     CommsProblemCloseTool,
@@ -651,8 +652,9 @@ class Commander(CommanderContext):
         """Core runs the delivery's check at its checked commit and strikes a late delivered commit
         in the same revision; this posts the strikes Core recorded."""
         todo = self.comms.goals.todos.get(pid)
-        if not todo.state.open or not todo.pending:
-            sys.exit(f'Refused: {pid} has no pending order')
+        if not todo.state.open:
+            sys.exit(f'Refused: {pid} has no open order')
+        todo.order.checked().require_delivery(todo.order.id)
         unit = todo.held().owner
         repo = str(self.repo_directory(todo.order.check.directory))
         operation = sha == 'op'  # an operation on live state, not a commit: the check runs now and now is delivery
@@ -929,6 +931,29 @@ class WithdrawVerb(OrderVerb):
 
     def run(self, ctx: Commander) -> None:
         ctx.withdraw(self.pid, self.why, self.superseded_by)
+
+
+@dataclass(frozen=True, kw_only=True)
+class DeliverVerb(OrderVerb):
+    help = "record your delivery claim and answer the commander"
+    problem: Annotated[str, Argument(flags=("problem",), options={"metavar": "PROBLEM"})]
+    pull_request: Annotated[int, Argument(flags=("--pr",))]
+    head: Annotated[str, Argument(flags=("--sha",))]
+    report_file: Annotated[str, Argument(flags=("--report-file",))]
+
+    def gate(self, ctx: Commander) -> None:
+        ctx.comms.registry.require(self.who(ctx)).role.require_executable(
+            ValueError("A delivery claim requires a registered unit.")
+        )
+
+    def run(self, ctx: Commander) -> None:
+        result = ThreadCaller(self.who(ctx)).invoke(
+            CommsOrderDeliverTool(
+                problem=self.problem, pull_request=self.pull_request,
+                head=self.head, report=Path(self.report_file).read_text(),
+            ), ctx.comms,
+        )
+        print(f'{result.todo.id}: {result.todo.order.line}')
 
 
 @dataclass(frozen=True, kw_only=True)

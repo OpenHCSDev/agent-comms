@@ -99,7 +99,10 @@ from .thread_management import InheritedTags, RenameThreadResult, TagChoice
 from .threads import NextTurnConfiguration
 from .thread_model import ThreadModel
 from .transcript_events import SentTranscript
-from .todos import (
+from agent_comms.todos import (
+    ClaimOrder,
+    OrderClaim,
+    PullRequestLink,
     CorrectCheckTodo,
     ServeTodo,
     DeliverTodo,
@@ -1034,6 +1037,39 @@ class CommsTodoCreateTool(CommsOrderTool):
     order: Annotated[
         CreateProblemGoalAction, *tool_field("Typed problem creation and order")
     ]
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolRequest):
+    label = "Claim order delivery"
+    description = (
+        "Record the holder's delivery claim and answer its commander. "
+        "Only the holder may claim a pending order; this does not accept its delivery."
+    )
+    problem: Annotated[str, *tool_field("Held problem ID")]
+    pull_request: Annotated[int, *tool_field("Pull request number in the problem's repository")]
+    head: Annotated[str, *tool_field("Claimed head commit")]
+    report: Annotated[str, *tool_field("Delivery report text")]
+
+    def publish(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
+        from agent_comms.private_bus_checkpoint import PublicMessages
+
+        todo = comms.goals.todos.get(self.problem)
+        todo.require_replacement()
+        actor = comms.registry.require(caller.name).incarnation
+        with comms.bus.log.checked_read() as source:
+            original = PublicMessages.require(
+                source.connection, message_id=todo.messages[-1].message_id
+            )
+        message = Message(
+            actor.name, todo.creator, self.report, InfoKind,
+            answers=(MessageReference(original.seq, original.message_id),),
+        )
+        claim = OrderClaim(PullRequestLink(todo.repo, self.pull_request), self.head, message)
+        changed = ClaimOrder(
+            todo.revision, actor, todo.held().generation, claim
+        ).record(comms.goals, todo.id)
+        return TodoChanged(changed, changed.strike_count)
 
 
 @dataclass(frozen=True, kw_only=True)
