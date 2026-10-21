@@ -50,21 +50,23 @@ from .errors import ToolRefusedError, UnregisteredThreadError
 from .field_codec import (
     Argument, FieldCodec, MalformedRecord, PathText, WireName, WireOmitDefault, boundary_decoder,
 )
-from .goal_actions import DirectiveGoalAction
+from agent_comms.channel_targets import CommandTarget
+from agent_comms.owner_requests import NewestOpenRequest, RequestDirective, RequestSelection
 from .host_services import HostService, SystemdUserService
 from .connector_store import (
     CODE_SECONDS, ApprovalQueueFull, ApprovalRefused, AuthorizationQuery,
     AuthorizationRequest, ClaudeCallback,
     ConnectorGrants, ConnectorStore, IssuedTokens, RegisteredClient, TrustedBrowser, digest,
 )
-from .messages import Message, QuestionKind
+from agent_comms.messages import QuestionKind
 from .commander.standing import UnownedOrderWatch
 from .commander_heartbeat import CommanderHeartbeat
 from .coordinator import Coordination
 from .todos import DirectiveText, ReviewedHeadVerdict
-from .tool_caller import ThreadCaller
+from agent_comms.tool_caller import ThreadCaller, ToolCaller
 from .tools import (
-    CommsVerdictTool, ReadTool, TodoChanged, ToolRequest, tool_field,
+    CommsSendTool, CommsVerdictTool, MessagePublished, ReadTool, SendTool,
+    TodoChanged, ToolRequest, tool_field,
 )
 
 LOOPBACK = "127.0.0.1"
@@ -73,24 +75,33 @@ PORT = 18766
 
 @dataclass(frozen=True)
 class DirectorCaller(ThreadCaller):
-    """claude-ai speaks for the owner: each message it sends a thread is a directive, recorded as a
-    request when that thread holds owner requests."""
+    """claude-ai speaks for the owner; its sends must pass the directive wording check."""
 
     def require_directive(self, comms: Comms, body: str) -> None:
         """A directive passes DirectiveText. claude-ai directs the commanders, so the
         commander rules review does not gate it."""
         DirectiveText.require(body)
 
-    def sent(self, comms: Comms, message: Message) -> None:
-        if message.target in comms.registry:  # a channel holds no requests
-            comms.goals.update_goal(
-                message.target,
-                DirectiveGoalAction(text=message.body, seq=message.seq, at=message.timestamp),
-            )
-
-
 class ConnectorTool(ToolRequest[DirectorCaller], affix="ConnectorTool"):
     """Connector-only declarations are absent from the native/CLI tool registry."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class ConnectorSendTool(SendTool, ConnectorTool, declared_name=CommsSendTool.declared_name):
+    request: Annotated[
+        RequestSelection,
+        *tool_field("Owner request ID; omitted selects the recipient's newest open request"),
+    ] = NewestOpenRequest()
+
+    def publish(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
+        store = comms.goals.todos
+        requests = self.request.for_message(store, CommandTarget.named(self.target), comms.registry)
+        result = super().publish(comms, caller)
+        directive = RequestDirective(result.message.source.seq,
+                                     result.message.timestamp + RequestDirective.window)
+        for request in requests:
+            store.record_directive(request, directive)
+        return result
 
 
 @dataclass(frozen=True, kw_only=True)

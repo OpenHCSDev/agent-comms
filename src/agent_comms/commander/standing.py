@@ -27,7 +27,7 @@ from agent_comms.standing_rules import ReasonedStandingRule, StandingRule, Undat
 from agent_comms.storage_rules import OrderCheckoutWork
 from agent_comms.thread_identity import CoreWatcherIncarnation, ThreadIncarnation
 from agent_comms.threads import Thread
-from agent_comms.todos import Todo
+from agent_comms.todos import OwnerRequest, Todo
 from agent_comms.turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
 from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
 from agent_comms.commander.config import CommanderConfig
@@ -155,18 +155,17 @@ class Blocked(BlockedHolder):
 
 @dataclass(frozen=True)
 class RequestStalled(UndatedStandingRule):
-    goal: Goal
+    request: OwnerRequest
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[RequestStalled, ...]:
         thread = comms.registry.require(commander)
-        return tuple(cls(request) for goal in thread.goal.active()
-                     for request, served in goal.order.open_requests(
-                         goal, comms.goals, thread.incarnation)
-                     if not served)
+        store = comms.goals.todos
+        return tuple(cls(request) for request in store.open_requests(thread.incarnation)
+                     if not store.serving_orders(request.id))
 
     def line(self) -> str:
-        return (f"REQUEST STALLED: {self.goal.id} {self.goal.text}"
+        return (f"REQUEST STALLED: {self.request.id.value} {self.request.text}"
                 " -> order its next step or mark it done")
 
 
@@ -250,7 +249,7 @@ class UnownedWheelSpin(UndatedStandingRule):
         now = time.time()
         return ReissuedOrderGoalAction(
             problem=todo.id, expected_revision=todo.revision,
-            order=todo.order.reissued(now), request=todo.goal.request(),
+            order=todo.order.reissued(now), request=todo.request.require(),
             review_at=todo.reissued_review(now), commander=commander, assigner=assigner,
             traced=todo.order.owner)
 

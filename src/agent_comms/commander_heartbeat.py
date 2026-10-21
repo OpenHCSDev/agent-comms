@@ -74,9 +74,7 @@ class CommanderHeartbeat(ServiceSender, WatchPass[tuple[CommanderObservation, ..
             thread
             for thread in registry.all_threads().values()
             if thread.process_alive
-            and any(
-                goal.order.open_requests(goal, goals, thread.incarnation) for goal in thread.goal
-            )
+            and goals.todos.open_requests(thread.incarnation, limit=1)
         )
 
     def observe(self, comms: Comms) -> tuple[CommanderObservation, ...]:

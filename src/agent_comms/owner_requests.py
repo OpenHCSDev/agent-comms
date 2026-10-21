@@ -3,28 +3,89 @@
 from __future__ import annotations
 
 import time
+from abc import abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 from uuid import uuid4
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import BoundedText, SingleFieldValue
+from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import BoundedText, NullMember, SingleFieldValue, SubclassUnion
 
 if TYPE_CHECKING:
+    from agent_comms.channel_targets import NamedTarget
     from agent_comms.goal_management import Goals
     from agent_comms.messages import Message
+    from agent_comms.registration import Registration
     from agent_comms.thread_identity import ThreadIncarnation
-    from agent_comms.todos import Todo
+    from agent_comms.todos import OwnerRequest, Todo, TodoStore
+
+
+class RequestValue(SubclassUnion, affix=""):
+    """One id can be a stored link and an explicitly selected request."""
+
+
+class RequestLink(RequestValue, declared_name=None):
+    @abstractmethod
+    def require(self) -> OwnerRequestId: ...
+
+
+class RequestSelection(RequestValue, declared_name=None):
+    def for_message(
+        self, store: TodoStore, target: NamedTarget, registry: Registration,
+    ) -> tuple[OwnerRequest, ...]:
+        return tuple(request for name in target.direct_names
+                     for request in self.select(store, registry.require(name).incarnation))
+
+    def for_order(self, store: TodoStore, commander: ThreadIncarnation) -> OwnerRequestId:
+        selected = self.select(store, commander)
+        if len(selected) != 1:
+            raise RelationViolationError("An order needs exactly one open owner request.")
+        return selected[0].id
+
+    @abstractmethod
+    def select(
+        self, store: TodoStore, commander: ThreadIncarnation,
+    ) -> tuple[OwnerRequest, ...]: ...
 
 
 @dataclass(frozen=True, slots=True)
-class OwnerRequestId(SingleFieldValue):
+class OwnerRequestId(SingleFieldValue, RequestLink, RequestSelection):
     value: Annotated[str, BoundedText]
 
     @classmethod
     def new(cls) -> Self:
         return cls(uuid4().hex)
+
+    def require(self) -> Self:
+        return self
+
+    def for_message(
+        self, store: TodoStore, target: NamedTarget, registry: Registration,
+    ) -> tuple[OwnerRequest, ...]:
+        return self.select(store, registry.require(target.require_dm_peer()).incarnation)
+
+    def select(
+        self, store: TodoStore, commander: ThreadIncarnation,
+    ) -> tuple[OwnerRequest, ...]:
+        request = store.owner_request(self)
+        request.require_open(commander)
+        return (request,)
+
+
+@dataclass(frozen=True)
+class NoRequestLink(NullMember, RequestLink):
+    def require(self) -> OwnerRequestId:
+        raise RelationViolationError("An unordered problem has no owner request.")
+
+
+@dataclass(frozen=True)
+class NewestOpenRequest(NullMember, RequestSelection):
+    def select(
+        self, store: TodoStore, commander: ThreadIncarnation,
+    ) -> tuple[OwnerRequest, ...]:
+        return store.open_requests(commander, limit=1)
 
 
 class RequestState(DeclaredFamily, affix="RequestState"):

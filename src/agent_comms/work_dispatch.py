@@ -14,6 +14,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Self
 
+from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.goal_actions import (
     CreateProblemGoalAction,
     GoalActionContext,
@@ -66,7 +67,7 @@ class WorkDispatch:
             model=defaults.model,
             thinking_level=defaults.thinking_level,
         )
-        self.action.request_ref(GoalActionContext(comms.goals, candidate))
+        self.action.require_ready(GoalActionContext(comms.goals, candidate))
         comms.registry.require_declaration_available(candidate, StoppedThreadStatus())
         CheckoutStorageEffect(checkout).check(StorageProjection(storage, candidate))
         subprocess.run(
@@ -143,7 +144,7 @@ class CheckedPhaseTask(PhaseTask):
             repo=self.repo,
             text=self.text,
             order=order,
-            request=order.request(commander, (self.problem,)),
+            request=NewestOpenRequest().for_order(comms.goals.todos, commander.incarnation),
             commander=commander.name,
             review_at=RecordedEventTime(now + self.review_seconds),
         )

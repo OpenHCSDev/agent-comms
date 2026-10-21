@@ -462,9 +462,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
         return self.apply(comms, caller)
 
 
-class PublishingToolRequest[Caller: ToolCaller = ToolCaller](
-    HeldBusWrite, ToolRequest[Caller], declared_name=None
-):
+class PublishingTool[Caller: ToolCaller = ToolCaller](HeldBusWrite):
     """A publication waits at the bus owner before any caller or message mutation."""
 
     def apply(self, comms: Comms, caller: Caller) -> ToolResult:
@@ -472,6 +470,12 @@ class PublishingToolRequest[Caller: ToolCaller = ToolCaller](
 
     @abstractmethod
     def publish(self, comms: Comms, caller: Caller) -> ToolResult: ...
+
+
+class PublishingToolRequest[Caller: ToolCaller = ToolCaller](
+    PublishingTool[Caller], ToolRequest[Caller], declared_name=None,
+):
+    """Native declarations using the shared publication capability."""
 
 
 class LiveOwnerTool:
@@ -1280,7 +1284,7 @@ class CommsSendRefusalsTool(ReadTool, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSendTool(PublishingToolRequest):
+class SendTool(PublishingTool):
     label = "Comms Send"
     description = (
         "Send a message to another thread or channel. Address specific threads with "
@@ -1311,8 +1315,11 @@ class CommsSendTool(PublishingToolRequest):
             threading.Thread(target=SendRefusal.record,
                              args=(comms.root, self.sender, self.target, error)).start()
             raise
-        caller.sent(comms, result.message)
         return MessagePublished.from_send(result)
+
+
+class CommsSendTool(SendTool, ToolRequest):
+    """The native send declaration; its fields and publication belong to SendTool."""
 
 
 @dataclass(frozen=True, kw_only=True)

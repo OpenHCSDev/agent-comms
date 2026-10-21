@@ -59,6 +59,7 @@ from agent_comms.repo import Repo
 from agent_comms.standing_rules import HuntDue
 from agent_comms.storage_rules import UnitStorage
 from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.owner_requests import NewestOpenRequest, RequestSelection
 from agent_comms.todos import (
     BluntText,
     CleanHunt,
@@ -394,7 +395,7 @@ class Commander(CommanderContext):
              reassign: Reassignment = NoReassignment(), new=None,
              traced: FileLine | NoSourceReference = NoSourceReference(),
              disk=False, finding=UnlocatedProblemFinding(),
-             answers: tuple[MessageReference, ...] = ()):
+             answers: tuple[MessageReference, ...] = (), *, request: RequestSelection):
         """Record the decoded order, or report every failed prerequisite before any write."""
         problems = document.problems_found(clean)
         check = replace(document.order.check,
@@ -500,16 +501,16 @@ class Commander(CommanderContext):
         struck_already = replacing and listed[group[0]].struck_on_order(unit)
         measured = MeasuredReview.read(self.comms.goals.todos)
         review_at = measured.review_at(order)
-        request = order.request(self.comms.registry.require(self.commander), tuple(group))
+        request_id = request.for_order(self.comms.goals.todos, self.incarnation)
         if new:
             self.call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
                 problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1],
-                order=order, request=request, review_at=review_at, commander=self.commander)))
+                order=order, request=request_id, review_at=review_at, commander=self.commander)))
         for pid in [] if new else group:
             self.call(CommsOrderTool(owner=unit, order=OrderGoalAction(
                 problem=pid, expected_revision=self.comms.goals.todos.get(pid).revision,
                 assigner=self.incarnation, traced=traced,
-                order=order, request=request, review_at=review_at, commander=self.commander)))
+                order=order, request=request_id, review_at=review_at, commander=self.commander)))
         message += "\n" + "\n".join(line for pid in group for line in order.scope.instructions(pid))
         sent = self.post(VerdictAudience((unit,)), message, answers)
         # The message is each order's recorded link; a verdict citing it lands on that order.
@@ -561,7 +562,7 @@ class Commander(CommanderContext):
         print(self.post(VerdictAudience(tuple(units.split(','))), body.rstrip(), answers))
 
     def problem(self, order_file, unit, where, disk=False,
-                answers: tuple[MessageReference, ...] = ()):
+                answers: tuple[MessageReference, ...] = (), *, request: RequestSelection):
         """A problem is born owned: Core records it with its order in one step, or not at all."""
         document = OrderFile.read(Path(order_file).read_text())
         location = FileLine.from_wire(where)
@@ -572,7 +573,8 @@ class Commander(CommanderContext):
         history = self.comms.goals.todos.history_for_commander(self.incarnation)
         pid = f'P{max([int(t.id[1:]) for t in history if t.id[1:].isdigit()] + [0]) + 1}'
         self.send(unit, document, new=(pid, document.defect),
-             disk=disk, finding=LocatedProblemFinding(location), answers=answers)
+             disk=disk, finding=LocatedProblemFinding(location), answers=answers,
+             request=request)
         print(pid)
 
     def close(self, pid, works, artifact=''):
@@ -645,7 +647,8 @@ class Commander(CommanderContext):
         n = struck(todo, unit)
         line = (f'{time.strftime("%Y-%m-%d")} {strike.at.clock()} {unit} (strike {n} on {todo.id}'
                 f'{f", {todo.id} taken away" if n >= 2 else ""}): {strike.reason}')
-        self.on_record(line, 'Strike', VerdictAudience.of(unit, todo.goal), answers)
+        self.on_record(line, 'Strike', VerdictAudience.of(
+            unit, self.comms.goals.todos.owner_request(todo.request.require())), answers)
         print(f'{unit}: {n} strike(s) on {todo.id}' + (f'. Reassign {todo.id} now and freeze its branch.' if n >= 2 else ''))
 
     def done(self, pid, sha, screenshot='', seen=''):
@@ -716,7 +719,8 @@ class Commander(CommanderContext):
         n = struck(self.comms.goals.todos.get(task), unit)
         line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike voided on {task}, '
                 f'recorded {voided.at.clock()}; {n} strike(s) remain): {why}')
-        self.on_record(line, 'Void', VerdictAudience.of(unit, todo.goal))
+        self.on_record(line, 'Void', VerdictAudience.of(
+            unit, self.comms.goals.todos.owner_request(todo.request.require())))
         print(f'{unit}: {n} strike(s) on {task}')
 
     def withdraw(self, pid: str, why: str, superseded_by: Successor = NoSuccessor()) -> None:
@@ -733,7 +737,8 @@ class Commander(CommanderContext):
         unit = previous.owner
         withdrawal, = self.comms.goals.todos.get(pid).order.withdrawals(todo)
         self.on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {withdrawal}', 'Withdrawal',
-                  VerdictAudience.of(unit, todo.goal))
+                  VerdictAudience.of(
+                      unit, self.comms.goals.todos.owner_request(todo.request.require())))
         self.post(VerdictAudience((unit,)),
              f'Withdrawn: {withdrawal}. Stop that work; it counts against no one.')
         print(withdrawal)
@@ -808,8 +813,8 @@ class DirectiveVerb(CommanderVerb):
 
     def answer_references(self, ctx: Commander) -> tuple[MessageReference, ...]:
         thread = ctx.comms.registry.require(self.who(ctx))
-        answerable = (*(message for goal in thread.goal.active()
-                        for message in goal.order.directive_messages(ctx.comms.goals)),
+        answerable = (*(message for request in ctx.comms.goals.todos.open_requests(thread.incarnation)
+                        for message in request.directive_messages(ctx.comms.goals)),
                       *UnitAskUnanswered.asks(ctx.comms, thread.name, time.time()))
         originals = tuple(message for message in answerable if message.message_id in self.answers)
         if set(self.answers) != {message.message_id for message in originals}:
@@ -821,9 +826,8 @@ class DirectiveVerb(CommanderVerb):
         answers = self.answer_references(ctx)
         thread = ctx.comms.registry.require(self.who(ctx))
         overdue = tuple(directive.original(ctx.comms.goals)
-                        for goal in thread.goal.active()
-                        for directive in goal.order.overdue_directives(
-                            goal, ctx.comms.goals, thread.incarnation, time.time()))
+                        for request in ctx.comms.goals.todos.open_requests(thread.incarnation)
+                        for directive in request.overdue_directives(ctx.comms.goals, time.time()))
         if overdue and not answers:
             lines = '\n'.join(f'{message.message_id}: {message.body[:80]}' for message in overdue)
             sys.exit('REFUSED, nothing recorded: overdue owner directives:\n' + lines
@@ -836,7 +840,15 @@ class OrderVerb(CommanderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SendVerb(OrderVerb, DirectiveVerb):
+class RequestedOrderVerb(OrderVerb, DirectiveVerb, declared_name=None):
+    request: Annotated[
+        RequestSelection, Argument(flags=("--request",),
+                                   options={"help": "owner request ID; defaults to newest open"}),
+    ] = NewestOpenRequest()
+
+
+@dataclass(frozen=True, kw_only=True)
+class SendVerb(RequestedOrderVerb):
     help = "record the order in Core and send it"
     unit: Annotated[str, Argument(flags=("unit",))]
     body_file: Annotated[
@@ -875,7 +887,7 @@ class SendVerb(OrderVerb, DirectiveVerb):
     def run(self, ctx: Commander) -> None:
         ctx.send(self.unit, OrderFile.read(Path(self.body_file).read_text()), clean=self.clean,
              reassign=self.reassign, traced=self.traced,
-             disk=self.disk, answers=self.answer_references(ctx))
+             disk=self.disk, answers=self.answer_references(ctx), request=self.request)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1119,7 +1131,7 @@ class SayVerb(OrderVerb, DirectiveVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ProblemVerb(OrderVerb, DirectiveVerb):
+class ProblemVerb(RequestedOrderVerb):
     help = "Core records the problem with its order, or nothing"
     order: Annotated[
         str, Argument(flags=("order",), options={"metavar": "ORDER.json"})
@@ -1135,7 +1147,7 @@ class ProblemVerb(OrderVerb, DirectiveVerb):
 
     def run(self, ctx: Commander) -> None:
         ctx.problem(self.order, self.to, self.where, self.disk,
-                    self.answer_references(ctx))
+                    self.answer_references(ctx), request=self.request)
 
 
 @dataclass(frozen=True, kw_only=True)

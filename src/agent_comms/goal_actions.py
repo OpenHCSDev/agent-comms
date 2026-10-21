@@ -37,17 +37,16 @@ from agent_comms.goals import (
     NoGoal,
     ProblemGoalOrder,
     ReportedTurn,
-    RequestGoalOrder,
     UnorderedGoalOrder,
     UnobservedGoalCheckpoint,
 )
-from agent_comms.owner_requests import RequestDirective
+from agent_comms.owner_requests import OwnerRequestId
 from .progress_claims import ProgressClaim
 from .recorded_time import EventTime
 from .repository_name import RepositoryName
 from .thread_identity import ThreadIncarnation
 from .threads import Thread
-from .todos import GoalRef, PendingProblemOrder, SendBackVerdict, Todo, TodoOperation
+from agent_comms.todos import PendingProblemOrder, SendBackVerdict, Todo, TodoOperation
 
 if TYPE_CHECKING:
     from .goal_management import Goals
@@ -478,33 +477,10 @@ class SetGoalAction(ReplacementGoalAction[Goal], OwnerInvocable, RuntimeInvocabl
 
 
 @dataclass(frozen=True, kw_only=True)
-class DirectiveGoalAction(GoalAction[GoalDeclaration], RuntimeInvocable):
-    """A claude-ai message to a thread that holds owner requests becomes one of its requests."""
-
-    text: str
-    seq: int
-    at: float
-
-    def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
-        return goal.order.directed(goal, self, ctx)
-
-    def create(self, ctx: GoalActionContext) -> GoalDeclaration:
-        return ctx.thread.goal
-
-    def directive(self) -> RequestDirective:
-        return RequestDirective(self.seq, self.at + RequestDirective.window)
-
-    def request(self, goal: Goal, ctx: GoalActionContext) -> Goal:
-        ReplacementGoalAction.retire(goal, ctx)
-        order = RequestGoalOrder((self.directive(),))
-        return SetGoalAction(text=self.text, order=order).change(goal, ctx)
-
-
-@dataclass(frozen=True, kw_only=True)
 class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
     problem: str
     order: PendingProblemOrder
-    request: str
+    request: OwnerRequestId
     review_at: EventTime
     commander: str
 
@@ -512,28 +488,26 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
     def bound_to(self, actor: ThreadIncarnation) -> ProblemOrderGoalAction: ...
 
     @abstractmethod
-    def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo: ...
+    def reserve(self, ctx: GoalActionContext, generation: str) -> Todo: ...
 
     def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         return goal.state.accept_order(self, goal, ctx)
 
     def continue_goal(self, goal: Goal, ctx: GoalActionContext) -> Goal:
-        request = self.request_ref(ctx)
-        self.reserve(ctx, goal.id, request)
+        self.require_ready(ctx)
+        self.reserve(ctx, goal.id)
         revision = goal.revision + 1
         return replace(goal, order=ProblemGoalOrder(), text=ProblemGoalOrder.text, progress="",
                        revision=revision, mention_source=bind_goal_mentions(
                            ProblemGoalOrder.text, goal.id, revision, ctx.thread,
                            ctx.goals.registry.snapshot()))
 
-    def request_ref(self, ctx: GoalActionContext) -> GoalRef:
-        """Refuse invalid orders before reserving their Todo."""
+    def require_ready(self, ctx: GoalActionContext) -> None:
+        """Refuse an invalid request before goal reservation or allocating a child."""
         self.require_sendable()
         commander = ctx.goals.registry.require(self.commander)
-        commander.goal.require().require_id(self.request).require_active().order.require_request()
+        ctx.goals.todos.owner_request(self.request).require_open(commander.incarnation)
         self.review_at.require_recorded("A review time")
-        request = GoalRef(commander.name, commander.created_at, self.request)
-        return request
 
     def require_sendable(self) -> None:
         """A new order's wording and source references hold at its declared revision."""
@@ -542,9 +516,9 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
         self.order.check.require_directory()
 
     def create(self, ctx: GoalActionContext) -> Goal:
-        request = self.request_ref(ctx)
+        self.require_ready(ctx)
         fresh = SetGoalAction(text=ProblemGoalOrder.text, order=ProblemGoalOrder())
-        self.reserve(ctx, fresh.goal_id, request)
+        self.reserve(ctx, fresh.goal_id)
         return fresh.create(ctx)
 
 
@@ -561,10 +535,10 @@ class OrderGoalAction(ProblemOrderGoalAction):
     def bound_to(self, actor: ThreadIncarnation) -> OrderGoalAction:
         return replace(self, commander=actor.name, assigner=actor)
 
-    def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo:
+    def reserve(self, ctx: GoalActionContext, generation: str) -> Todo:
         return ctx.goals.todos.assign(self.problem, expected_revision=self.expected_revision,
             owner=ctx.thread, assigner=self.assigner,
-            generation=generation, goal=goal, review_at=self.review_at, order=self.order,
+            generation=generation, request=self.request, review_at=self.review_at, order=self.order,
             traced=self.traced)
 
 
@@ -588,10 +562,10 @@ class CreateProblemGoalAction(ProblemOrderGoalAction):
     def bound_to(self, actor: ThreadIncarnation) -> CreateProblemGoalAction:
         return replace(self, commander=actor.name)
 
-    def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo:
+    def reserve(self, ctx: GoalActionContext, generation: str) -> Todo:
         return ctx.goals.todos.create(self.problem, self.repo, self.text,
             creator=ctx.goals.registry.require(self.commander), owner=ctx.thread,
-            generation=generation, goal=goal, review_at=self.review_at, order=self.order)
+            generation=generation, request=self.request, review_at=self.review_at, order=self.order)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -33,10 +33,9 @@ from .repo import Checkout
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .text_digest import TextDigest
 from .ui_model.goal import GoalDisplay
-from agent_comms.owner_requests import RequestDirective
 
 if TYPE_CHECKING:
-    from .goal_actions import DirectiveGoalAction, GoalAction, GoalActionContext
+    from agent_comms.goal_actions import GoalAction, GoalActionContext
     from .goal_presentation import ThreadGoalExecution
     from .goal_waits import GoalWait, GoalWaits
     from .agent_activity import AgentActivity
@@ -52,7 +51,6 @@ if TYPE_CHECKING:
     from .turn_goal_account import VerifiedGoalSettlement
     from .thread_identity import TurnId
     from .todos import Todo
-    from .messages import Message
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -462,14 +460,6 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
     def require_completion(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
         pass
 
-    def require_request(self) -> None:
-        raise ValueError("An order serves an open owner request: request add records one.")
-
-    def open_requests(
-        self, goal: Goal, goals: Goals, owner: ThreadIncarnation
-    ) -> tuple[tuple[Goal, tuple[Todo, ...]], ...]:
-        return ()
-
     def instructions(self, todos: Sequence[Todo]) -> str:
         return ""
 
@@ -488,17 +478,6 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
     def require_model_block(self) -> None:
         pass
 
-    def directed(self, goal: Goal, directive: DirectiveGoalAction, ctx: GoalActionContext) -> Goal:
-        """Only a thread holding owner requests records a claude-ai directive."""
-        return goal
-
-    def directive_messages(self, goals: Goals) -> tuple[Message, ...]:
-        return ()
-
-    def overdue_directives(self, goal: Goal, goals: Goals, owner: ThreadIncarnation,
-                           now: float) -> tuple[RequestDirective, ...]:
-        return ()
-
     @abstractmethod
     def require_order(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None: ...
 
@@ -513,52 +492,6 @@ class UnorderedGoalOrder(GoalOrder):
 
     def require_replacement(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
         pass
-
-
-@dataclass(frozen=True)
-class RequestGoalOrder(GoalOrder):
-    """An owner request on the commander's own Goal: each order names the one it serves, and the
-    request stays open until no order serving it is open. Each claude-ai directive the commander
-    receives is recorded on it when it arrives."""
-
-    directives: tuple[RequestDirective, ...] = ()
-
-    def require_order(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
-        pass
-
-    def require_replacement(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
-        if not goal.state.terminal:
-            raise ValueError(f"Request {goal.id} is still open; mark it done first.")
-
-    def require_completion(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
-        if self.serving(goal, goals, owner):
-            raise ValueError(f"Request {goal.id} still has open orders.")
-
-    def require_request(self) -> None:
-        pass
-
-    def serving(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> tuple[Todo, ...]:
-        return tuple(todo for todo in goals.todos.for_request(owner, goal.id) if todo.pending)
-
-    def directed(self, goal: Goal, directive: DirectiveGoalAction, ctx: GoalActionContext) -> Goal:
-        """A closed request is replaced by one the directive opens; an open one records it."""
-        if goal.state.terminal:
-            return directive.request(goal, ctx)
-        return replace(goal, revision=goal.revision + 1, order=replace(
-            self, directives=(*self.directives, directive.directive())))
-
-    def directive_messages(self, goals: Goals) -> tuple[Message, ...]:
-        return tuple(directive.original(goals) for directive in self.directives)
-
-    def overdue_directives(self, goal: Goal, goals: Goals, owner: ThreadIncarnation,
-                           now: float) -> tuple[RequestDirective, ...]:
-        return tuple(directive for directive in self.directives
-                     if directive.overdue(goals, owner, now))
-
-    def open_requests(
-        self, goal: Goal, goals: Goals, owner: ThreadIncarnation
-    ) -> tuple[tuple[Goal, tuple[Todo, ...]], ...]:
-        return ((goal, self.serving(goal, goals, owner)),)
 
 
 @dataclass(frozen=True)

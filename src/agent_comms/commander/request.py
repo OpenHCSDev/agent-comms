@@ -7,10 +7,12 @@ replaces the commander's current goal or another request.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import partial
 from typing import Annotated
 
 from agent_comms import field_codec
 from agent_comms.commander.order import Commander, CommanderVerb
+from agent_comms.message_bus import HeldBusWrite
 from agent_comms.owner_requests import OwnerRequestId
 
 
@@ -18,8 +20,15 @@ class RequestVerb(CommanderVerb):
     """A verb of `request`."""
 
 
+class RequestMutation(HeldBusWrite, RequestVerb, declared_name=None):
+    """Request mutations share the same admission as order and directive publication."""
+
+    def apply(self, ctx: Commander) -> None:
+        self.write_when_open(ctx.comms, partial(super().apply, ctx))
+
+
 @dataclass(frozen=True, kw_only=True)
-class RequestAddVerb(RequestVerb, declared_name="add"):
+class RequestAddVerb(RequestMutation, declared_name="add"):
     help = "record an owner request; prints its id"
     text: Annotated[str, field_codec.Argument(flags=("text",))]
 
@@ -30,7 +39,7 @@ class RequestAddVerb(RequestVerb, declared_name="add"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class RequestCompleteVerb(RequestVerb, declared_name="complete"):
+class RequestCompleteVerb(RequestMutation, declared_name="complete"):
     help = "close a request; refused while an order serving it is pending"
     id: Annotated[OwnerRequestId, field_codec.Argument(flags=("id",))]
     why: Annotated[str, field_codec.Argument(flags=("--why",))]
@@ -52,8 +61,7 @@ class RequestListVerb(RequestVerb, declared_name="list"):
             print("No open request.")
         for request in requests:
             print(f"{request.id.value} {request.text}")
-            for todo in (todo for todo in store.for_request(commander, request.id.value)
-                         if todo.pending):
+            for todo in store.serving_orders(request.id):
                 print(f"  {todo.id} review {todo.review_at.clock()}: {todo.text}")
 
 

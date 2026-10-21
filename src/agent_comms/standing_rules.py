@@ -23,7 +23,7 @@ from agent_comms.repo import Repo
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
-    from agent_comms.owner_requests import RequestDirective
+    from agent_comms.owner_requests import OwnerRequestId, RequestDirective
     from agent_comms.storage_rules import MemoryUse, StorageRule
     from agent_comms.todos import Todo
 
@@ -293,18 +293,16 @@ class LocatedHuntDue(HuntDue, declared_name=None):
 class DirectiveUnacted(DatedStandingRule):
     """A claude-ai directive recorded on an open request, past its deadline with no order since."""
 
-    request: str
+    request: OwnerRequestId
     directive: RequestDirective
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         thread, now = comms.registry.require(commander), time.time()
         return tuple(
-            cls(goal.id, directive)
-            for goal in thread.goal.active()
-            for directive in goal.order.overdue_directives(
-                goal, comms.goals, thread.incarnation, now
-            )
+            cls(request.id, directive)
+            for request in comms.goals.todos.open_requests(thread.incarnation)
+            for directive in request.overdue_directives(comms.goals, now)
         )
 
     def began(self) -> float:
@@ -312,7 +310,7 @@ class DirectiveUnacted(DatedStandingRule):
 
     def line(self) -> str:
         return (
-            f"DIRECTIVE UNACTED: claude-ai {self.directive.seq} on request {self.request},"
+            f"DIRECTIVE UNACTED: claude-ai {self.directive.seq} on request {self.request.value},"
             f" due {self.directive.due_time} -> order its next step or mark the request done"
         )
 
