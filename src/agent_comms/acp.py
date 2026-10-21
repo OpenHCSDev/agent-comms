@@ -48,11 +48,9 @@ from agent_comms.coordinator import Coordination
 from . import agent_events as events
 from .acp_extension import (
     CompactRequest,
-    TextRouteUpdate,
     encode_updates,
 )
 from .acp_failure import NativeTurnError
-from .agent_event_updates import AcpEventConsumer
 from .cohort_foreground import _accept_visible_deliveries
 from .turn_terminal import EndedWithoutResult, TurnTerminal
 from .comms import Comms, wire
@@ -67,7 +65,6 @@ from .launch_root import LaunchRoot
 from .message_bus import MessageBus
 from .publisher import ResponseWrites
 from .queued_input import DeliveredInput
-from .routing import MessageRoute
 from .runtime import (
     UNBOUND_CONTROLLER,
     RuntimeProxy,
@@ -78,7 +75,6 @@ from .schedule_rules import SelectedWakeCheck
 from .session_effects import SessionEffects
 from .session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
 from .threads import Thread
-from .transcript_updates import TranscriptUpdate
 from .turn_effects import TurnEffects
 from .turn_runner import TurnRunner
 from .wire_log import WireLog
@@ -440,41 +436,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             retirement.push_async_callback(self.sessions.close_proxies)
             retirement.push_async_callback(self.inputs.close, terminal)
             retirement.push_async_callback(self.annotations.close)
-
-    async def _emit_text(
-        self, session_id: str, text: str, client: Any = None, route: MessageRoute | None = None
-    ) -> None:
-        if not text:
-            return
-        await (client or self._runtime).session_update(
-            session_id=session_id,
-            update=AgentMessageChunk(
-                session_update="agent_message_chunk",
-                content=TextContentBlock(type="text", text=text),
-                field_meta=encode_updates(TextRouteUpdate(route)),
-            ),
-        )
-
-    # ─── Unified event forwarding ─────────────────────────────────────────────
-    # One abstraction maps server events to ACP session updates. Toad, Zed,
-    # and VS Code render these natively; the same events also feed the
-    # wire-level activity log for headless clients.
-
-    async def _emit_event(
-        self,
-        session_id: str,
-        event: events.AgentEvent | TranscriptUpdate,
-        client: Any = None,
-        *,
-        turn_id: str | None = None,
-        route: MessageRoute | None = None,
-    ) -> events.AgentEvent | TranscriptUpdate:
-        """Publish and return the observation with its actual delivery result."""
-        client = client or self._runtime
-        if isinstance(event, events.AgentEvent):
-            return await AcpEventConsumer(self, session_id, client, turn_id, route).dispatch(event)
-        await event.publish(session_id, client)
-        return event
 
     @staticmethod
     def _prompt_text(prompt: list[Any]) -> str:

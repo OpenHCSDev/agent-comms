@@ -10,6 +10,7 @@ import pytest
 from acp.schema import ToolCallStart
 
 import agent_comms.agent_events as events
+from agent_comms.agent_event_updates import AcpEventConsumer
 from agent_comms.comms import Comms
 from agent_comms.native_tools import BashTool, CodingTool, EditTool, ReadTool, WriteTool
 from agent_comms.tool_declaration import ReplacementEdit
@@ -30,7 +31,7 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
     event = events.ToolStart.from_call("case", "inspect_fixture", {"query": "new declaration"})
     assert (event.title, event.kind) == ("Inspect new declaration", "search")
     owner, received = acp_tools
-    await owner._emit_event("declared-tool", event, owner.sessions.client)
+    await AcpEventConsumer(owner, "declared-tool", owner.sessions.client).dispatch(event)
     async with asyncio.timeout(3):
         update = await received.get()
     assert isinstance(update, ToolCallStart)
@@ -69,7 +70,7 @@ async def test_pattern_search_metadata_reaches_official_acp(acp_tools, name, lab
     assert (event.title, event.kind) == (f"{label} shared preview", "search")
     assert (recorded.title, recorded.kind) == (event.title, event.kind)
     owner, received = acp_tools
-    await owner._emit_event("pattern-tool", event, owner.sessions.client)
+    await AcpEventConsumer(owner, "pattern-tool", owner.sessions.client).dispatch(event)
     async with asyncio.timeout(3):
         update = await received.get()
     assert isinstance(update, ToolCallStart)

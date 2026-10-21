@@ -4,6 +4,8 @@ import pytest
 from acp.schema import NewSessionResponse
 
 from agent_comms.acp import CommsAgent
+from agent_comms.agent_event_updates import Routed
+from agent_comms.agent_events import Chunk
 from agent_comms.acp_extension import CoordinationChangedUpdate, TextRouteUpdate, decode_updates
 from agent_comms.comms import Comms, wire
 from agent_comms.goals import Goal
@@ -41,7 +43,7 @@ async def test_toad_public_types_and_acp_agent_comms_metadata(tmp_path) -> None:
             updates.append(update.model_dump(by_alias=True, exclude_none=True))
 
     route = MessageRoute("worker", ("#team",))
-    await agent._emit_text("worker", "routed reply", Client(), route)
+    await Routed(agent, "worker", Client(), route).dispatch(Chunk(text="routed reply"))
     assert len(updates) == 1
     update = updates[0]
     assert update["content"]["text"] == "routed reply"

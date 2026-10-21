@@ -12,6 +12,7 @@ from acp.exceptions import RequestError
 from acp.schema import AgentMessageChunk, PromptResponse, TextContentBlock
 
 from . import agent_events as events
+from .agent_event_updates import TurnEventConsumer
 from .acp_extension import CompactionCommittedUpdate, TranscriptChangedUpdate, encode_updates
 from .agent_backend import (
     CompactionOutcome,
@@ -89,9 +90,8 @@ async def _compact_started(runner, session_id, thread_name, instructions):
         await runner.transition_turn(
             session_id, owner.turn_lease, CompactionPhase(resume=PublishingPhase())
         )
-        await runner.effects._emit_event(
-            session_id, events.CompactionStart(reason=ManualCompactionReason)
-        )
+        consumer = TurnEventConsumer(runner.effects, session_id, runner.runtime, owner.turn_lease.turn_id)
+        await consumer.dispatch(events.CompactionStart(reason=ManualCompactionReason))
         outcome = FailedCompaction("Compaction did not finish.")
         try:
             outcome = await runner.backend_for(session_id, owner.thread).compact(
@@ -99,7 +99,7 @@ async def _compact_started(runner, session_id, thread_name, instructions):
             )
         finally:
             placed = isinstance(outcome, PlacedCompaction)
-            await runner.effects._emit_event(session_id, events.CompactionEnd(
+            await consumer.dispatch(events.CompactionEnd(
                 reason=ManualCompactionReason,
                 aborted=not placed,
                 summary=outcome.summary if placed else None,
