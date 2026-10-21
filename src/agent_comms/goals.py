@@ -510,7 +510,7 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
         return ()
 
     def overdue_directives(self, goal: Goal, goals: Goals, owner: ThreadIncarnation,
-                           now: float) -> tuple[RequestDirective, ...]:
+                           now: float) -> tuple[tuple[RequestDirective, Message], ...]:
         return ()
 
     @abstractmethod
@@ -545,19 +545,8 @@ class RequestDirective:
     def due_time(self) -> str:
         return time.strftime("%H:%M", time.localtime(self.deadline))
 
-    def original(self, goals: Goals) -> Message:
-        source: CheckedRead
-        with goals.bus.log.checked_read() as source:
-            return source.delivery(self.seq).message
-
-    def overdue(self, goals: Goals, owner: ThreadIncarnation, now: float) -> bool:
-        if self.deadline >= now:
-            return False
-        original = self.original(goals).reference
-        with goals.bus.log.checked_read() as source:
-            replies = source.replies((original,))
-        return not any(reply.message.sender == owner.name and original in reply.message.answers
-                       for reply in replies)
+    def original(self, source: CheckedRead) -> Message:
+        return source.delivery(self.seq).message
 
 
 @dataclass(frozen=True)
@@ -593,12 +582,27 @@ class RequestGoalOrder(GoalOrder):
         return directive.request(goal, ctx)
 
     def directive_messages(self, goals: Goals) -> tuple[Message, ...]:
-        return tuple(directive.original(goals) for directive in self.directives)
+        """Every directive's original, read in one checked read: a read per directive held the
+        wire lock once per message the owner ever sent (2,258 holds, 20 s per order call)."""
+        source: CheckedRead
+        with goals.bus.log.checked_read() as source:
+            return tuple(directive.original(source) for directive in self.directives)
 
     def overdue_directives(self, goal: Goal, goals: Goals, owner: ThreadIncarnation,
-                           now: float) -> tuple[RequestDirective, ...]:
-        return tuple(directive for directive in self.directives
-                     if directive.overdue(goals, owner, now))
+                           now: float) -> tuple[tuple[RequestDirective, Message], ...]:
+        """Each directive past its deadline that the owner has not answered, with its original;
+        the originals and every reply to them come from one checked read."""
+        due = tuple(directive for directive in self.directives if directive.deadline < now)
+        if not due:
+            return ()
+        source: CheckedRead
+        with goals.bus.log.checked_read() as source:
+            originals = tuple((directive, directive.original(source)) for directive in due)
+            answered = {answer for reply in source.replies(tuple(
+                message.reference for _, message in originals))
+                if reply.message.sender == owner.name for answer in reply.message.answers}
+        return tuple((directive, message) for directive, message in originals
+                     if message.reference not in answered)
 
     def open_requests(
         self, goal: Goal, goals: Goals, owner: ThreadIncarnation

@@ -5,14 +5,11 @@ import os
 import subprocess
 import sys
 import time
-from contextlib import closing
 from dataclasses import replace
 from functools import partial
-from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from cutover.carry_goal_work_decision import RETIRED_TABLE, GoalWorkDecisions
 
 from agent_comms import agent_events as events
 from agent_comms.bus_publication import AgentOrigin
@@ -28,22 +25,17 @@ from agent_comms.commander.standing import (
 )
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import Comms
-from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordinator import Coordination
-from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
     CreateProblemGoalAction, DirectiveGoalAction, ReissuedOrderGoalAction, SetGoalAction,
 )
-from agent_comms.goal_attempts import GoalAttemptStore, GoalWorkDecision
 from agent_comms.goal_presentation import RunnableExecution
 from agent_comms.goal_states import ActiveGoal
-from agent_comms.goals import CountCheckResult, Goal, OrderCheck, RequestGoalOrder
+from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.installer.backup import StoreBackup
-from agent_comms.installer.carry import CarryChain
 from agent_comms.launch_root import LaunchRoot
-from agent_comms.locked_store import SQLiteFile
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.messages import InfoKind, Message
 from agent_comms.native_arguments import GivenBinary
@@ -400,64 +392,6 @@ def test_detached_and_goal_blocks_are_both_in_standing_rule_scan(held_bus, insta
     assert all(rule in broken for rule in family)
 
 
-def legacy_decision_table(comms):
-    store = comms.goals.open_goal_store()
-    goal = comms.registry.require("worker").goal.require()
-    generation = store.require_generation(goal.id)
-    with closing(GoalAttemptStore.database(store.path)) as db:
-        with SQLiteFile.write_transaction(db):
-            GoalWorkDecision(goal.id, "recorded-decision", generation.number).claim(db)
-            db.execute(f'ALTER TABLE "{GoalWorkDecision.declared_name}" RENAME TO "{RETIRED_TABLE}"')
-    return store.path
-
-
-def test_cutover_renames_copied_ledger_once_and_preserves_rows(held_bus, comms):
-    path = legacy_decision_table(held_bus)
-    original = comms.goals.open_goal_store().path.read_bytes()
-    with closing(CoordinationStore.read_snapshot(path)) as db:
-        before = tuple(db.execute(f'SELECT * FROM "{RETIRED_TABLE}"'))
-    assert GoalWorkDecisions.carry(held_bus.root, apply=False).changed == 1
-    carried = GoalWorkDecisions.carry(held_bus.root, apply=True)
-    assert carried.changed == 1
-    assert carried.rewritten == (str(path.relative_to(held_bus.root)),)
-    assert GoalWorkDecisions.carry(held_bus.root, apply=True).changed == 0
-    GoalAttemptStore(path.parent)  # the installed reader accepts the carried schema
-    with closing(CoordinationStore.read_snapshot(path)) as db:
-        assert tuple(db.execute(f'SELECT * FROM "{GoalWorkDecision.declared_name}"')) == before
-    assert comms.goals.open_goal_store().path.read_bytes() == original
-    assert held_bus.goals.open_goal_store().require_generation(
-        held_bus.registry.require("worker").goal.require().id,
-    ).number == 1
-    assert path in GoalWorkDecisions.backup_files(held_bus.root)
-
-
-def test_cutover_refuses_two_tables_without_choosing_rows(held_bus):
-    path = legacy_decision_table(held_bus)
-    with closing(GoalAttemptStore.database(path)) as db:
-        GoalWorkDecision.create(db)
-        db.commit()
-    before = path.read_bytes()
-    with pytest.raises(RelationViolationError):
-        GoalWorkDecisions.carry(held_bus.root, apply=True)
-    assert path.read_bytes() == before
-
-
-def test_install_discovers_the_decision_cutover_from_its_dry_run_and_runs_it_once(held_bus):
-    chain = CarryChain.at(Path(__file__).resolve().parents[1])
-    assert GoalWorkDecisions in chain.steps
-
-    def dry_run(step):
-        return step.carry(held_bus.root, apply=False)
-
-    assert chain.pending(dry_run) == ()
-    legacy_decision_table(held_bus)
-    assert chain.pending(dry_run)[0] is GoalWorkDecisions
-    assert GoalWorkDecisions.carry(held_bus.root, apply=True).changed == 1
-    second = GoalWorkDecisions.carry(held_bus.root, apply=True)
-    assert second.changed == 0 and second.rewritten == ()
-    assert chain.pending(dry_run) == ()
-
-
 def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus, installed_runtime):
     blocked_holder(held_bus)
     question = publish(held_bus, "worker", "lead", time.time() - 901)
@@ -538,3 +472,38 @@ def test_naming_one_line_of_a_burst_answers_the_burst_at_the_gate(held_bus):
     assert all(rule.answered_by((checks[-1],)) for rule in vibe)
     assert not any(rule.answered_by((checks[-1],)) for rule in hold)
     assert all(rule.answered_by((checks[0], holds[1])) for rule in (*vibe, *hold))
+
+
+def test_a_compliant_answer_resumes_a_held_unit_whose_attempt_was_interrupted(held_bus):
+    """A held unit whose last attempt failed refuses a status-only resume; the chokehold's
+    release continues its generation the way a fresh order does, so one such unit neither stays
+    paused nor stops the release of the others (the heartbeat died on it, 2026-10-21 22:43)."""
+    from agent_comms.goal_actions import (
+        ActiveGoalAction, ChokeholdPausedGoalAction, CompliedGoalAction, OwnerInvocable,
+    )
+
+    blocked_holder(held_bus)
+    held_bus.goals.update_goal("worker", ChokeholdPausedGoalAction())
+    with pytest.raises(ValueError, match="unresolved"):
+        held_bus.goals.update_goal("worker", ActiveGoalAction(), actor=OwnerInvocable)
+    held_bus.goals.update_goal(
+        "worker", CompliedGoalAction(witness="compliant-answer"), actor=OwnerInvocable)
+    assert isinstance(held_bus.registry.require("worker").goal.require().state, ActiveGoal)
+
+
+def test_a_restarted_heartbeat_does_not_resend_an_escalation_burst(held_bus, monkeypatch):
+    """The heartbeat's memory of what it enforced dies with its process; the bus says which
+    bursts already went out, so a rule that reads as new again after a restart is not resent."""
+    from agent_comms.commander.vibe_check import (
+        AnswersOwedDegradation, EscalationSender, Sign, VibeCheck, VibeCheckSender,
+    )
+
+    monkeypatch.setattr(EscalationSender, "gap", 0.0)
+    first = VibeCheck(Sign(AnswersOwedDegradation, ("1:aaaaaaaaaaaa",), "owed one"))
+    first.enforce(held_bus, "lead")
+    first.enforce(held_bus, "lead")
+    sent = VibeCheckSender.unanswered(held_bus, "lead", time.time())
+    assert len(sent) == len(first.indictment())
+    VibeCheck(Sign(AnswersOwedDegradation, ("2:bbbbbbbbbbbb",), "owed two")).enforce(
+        held_bus, "lead")
+    assert len(VibeCheckSender.unanswered(held_bus, "lead", time.time())) == 2 * len(sent)

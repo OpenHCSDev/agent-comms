@@ -167,7 +167,7 @@ class Binding(BridgeStateTable, TypedTable, BindingRequest):
             with SQLiteFile.write_transaction(db):
                 if not BridgeStateTable.stored_schema(db):
                     BridgeStateTable.create_schema(db)
-                BridgeStateTable.reconcile_schema(db)
+            BridgeStateTable.reconcile_schema(db)
             yield db
 
     def bind(self, db: CoordinationStore) -> Binding:
