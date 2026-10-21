@@ -10,6 +10,8 @@ from contextlib import nullcontext
 
 import pytest
 
+from order_scope_fixture import FIX_SCOPE
+
 from agent_comms.candidate_maintenance import drain_candidate_catchup
 from agent_comms.change_report import FileLine
 from agent_comms.commander.config import CommanderConfig
@@ -78,7 +80,7 @@ def checkout_bus(tmp_path: Path) -> Comms:
     lead, worker = c.registry.require('lead'), c.registry.require('worker')
     now = time.time()
     order = PendingProblemOrder(
-        id='shared-work', owner=FileLine('work.py', 1), run=MechanicalOrderRun(),
+        id='shared-work', owner=FileLine('work.py', 1), scope=FIX_SCOPE, run=MechanicalOrderRun(),
         check=OrderCheck(str(home), 'true'),
         edits=('Keep the changes with their author until they have been pushed.',),
         banned=('No second store of checkout holders.',), report='Report the actual checkout.',

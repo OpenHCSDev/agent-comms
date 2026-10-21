@@ -6,8 +6,10 @@ import argparse
 import json
 import os
 import re
+import shlex
+import shutil
 import subprocess
-from contextlib import chdir
+from contextlib import chdir, nullcontext
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import replace
 from multiprocessing import Manager
@@ -19,13 +21,21 @@ from order_scope_fixture import FIX_SCOPE
 
 from agent_comms.change_report import FileLine
 from agent_comms.commander.order import Commander, PullRequestVerb
+from agent_comms.commander.standing import UnownedOrderWatch
+from agent_comms.commander_heartbeat import CommanderHeartbeat
+from agent_comms.comms import Comms
 from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.practice import practice_copy
-from agent_comms.goals import OrderCheck
+from agent_comms.goal_actions import SetGoalAction
+from agent_comms.goals import OrderCheck, RequestGoalOrder
+from agent_comms.launch_root import LaunchRoot
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.storage_rules import StorageRule
+from agent_comms.store_files import store_lock_path
+from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.repository_name import RepositoryName
 from agent_comms.registration import Registration
 from agent_comms.threads import Thread
@@ -52,7 +62,7 @@ from agent_comms.todos import (
     TodoStore,
     WithdrawTodo,
 )
-from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
+from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun, OrderRun
 from agent_comms.work_branches import WorkBranches
 
 
@@ -258,14 +268,14 @@ def pr_commander(tmp_path, monkeypatch):
                      scratch=tmp_path, disk=tmp_path)
 
 
-def pr_order(ctx, pid):
+def pr_order(ctx, pid, run: OrderRun = MechanicalOrderRun()):
     source = ctx.repos[0]
     lead = ctx.comms.registry.require(ctx.commander)
     return ctx.comms.goals.todos.create(
         pid, source.github, "Fix the sidebar", creator=lead, owner=lead,
         generation="pr-work", goal=GoalRef(lead.name, 1.0, "pr-work"),
         review_at=RecordedEventTime(1000),
-        order=replace(order(source.checkout), id=f"order-{pid}"))
+        order=replace(order(source.checkout), id=f"order-{pid}", run=run))
 
 
 def adopt_pr(ctx, pid, number):
@@ -336,6 +346,76 @@ def test_recorded_closed_request_is_not_open_or_merged(pr_commander):
     store = TodoStore(ctx.root)
     store.record_merges(store.merged_orders(ctx.incarnation, ctx.comms.registry))
     assert store.get(original.id) == linked
+
+
+def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch):
+    """Both real watcher entrypoints, a copied bus, real Git and the external forge stub."""
+    print("WATCHPASS SOURCE:", CommanderHeartbeat.watch_pass.__code__.co_filename)
+    ctx = pr_commander
+    source = ctx.repos[0]
+    with LaunchRoot.from_path(ctx.root).selected():
+        c = ctx.comms
+        c.messaging.initialize_private_initial_protocol()
+        ctx.write(ctx.root / "config-home")
+        c.goals.update_goal(ctx.commander, SetGoalAction(
+            text="Keep the commander request active for both watcher passes",
+            order=RequestGoalOrder(), goal_id="pr-work"))
+        lead = c.registry.require(ctx.commander)
+        c.registry.register(replace(lead, process_identity=ProcessIdentity.capture(os.getpid())))
+        originals = tuple(
+            adopt_pr(ctx, pr_order(ctx, f"P{index}", run).id, 1)
+            for index, run in enumerate((MechanicalOrderRun(), ApplicationOrderRun(
+                "Read the copied board and confirm the application order remains assigned")), 1))
+        released = pr_order(ctx, "P3")
+        c.goals.todos.apply(released.id, ReleaseTodo(
+            released.revision, CoreWatcherIncarnation.watcher(), released.held(),
+            StrikeReason("The worker stopped before this order was completed and published.")))
+        checkout = c.registry.storage_rule.order_checkout(lead.name, released.id)
+        source.git(source.checkout, "worktree", "add", "-q", "-b", "released-work", str(checkout))
+        merged = source.git(source.checkout, "rev-parse", "HEAD").strip()
+        copied_path = ctx.root.parent / f"{ctx.root.name}-watchers"
+        with practice_copy(ctx.root, copied_path) as (root, _measurement):
+            copied = Comms(root)
+            with LaunchRoot.from_path(root).selected():
+                # Create the declared inode before the external probes open it read-only.
+                with copied.bus.locked():
+                    pass
+                lock = shlex.quote(str(store_lock_path(copied.bus.path)))
+                calls = ctx.root / "watcher-children.txt"
+                calls.write_text("")
+                binaries = ctx.root / "watcher-bin"
+                binaries.mkdir()
+                for name in ("gh", "git"):
+                    executable = shutil.which(name)
+                    assert executable
+                    shim = binaries / name
+                    shim.write_text(
+                        "#!/bin/sh\n"
+                        f"exec 9<{lock}\n"
+                        "if flock -n 9; then state=free; flock -u 9; else state=held; fi\n"
+                        f"printf '{name} %s %s\\n' \"$state\" \"$*\" >> {shlex.quote(str(calls))}\n"
+                        "exec 9<&-\n"
+                        f"exec {shlex.quote(executable)} \"$@\"\n")
+                    shim.chmod(0o755)
+                monkeypatch.setenv("PATH", os.pathsep.join((str(binaries), os.environ["PATH"])))
+                observed = []
+                for watch in (CommanderHeartbeat(), UnownedOrderWatch()):
+                    start = calls.stat().st_size
+                    watch.watch_pass(lambda: nullcontext(copied))
+                    readings = calls.read_text()[start:].splitlines()
+                    assert readings, type(watch).__name__
+                    print(type(watch).__name__, *readings, sep="\n")
+                    observed.extend(readings)
+                mechanical, application = (copied.goals.todos.get(todo.id) for todo in originals)
+                assert mechanical.state is DoneTodoState
+                assert mechanical.order.sha == merged
+                assert application.order.sha == merged and not application.order.accepted
+                assert copied.goals.todos.get(released.id).holder is None
+                assert any(line.startswith("gh ") for line in observed)
+                assert any(line.startswith("git ") for line in observed)
+                held = [line for line in observed if line.split()[1] != "free"]
+                assert not held, "Watcher children ran under the wire lock:\n" + "\n".join(held)
+        assert tuple(c.goals.todos.get(todo.id) for todo in originals) == originals
 
 
 def test_installed_merge_closes_only_the_run_that_has_been_proven(pr_commander):
