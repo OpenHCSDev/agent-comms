@@ -310,7 +310,6 @@ class InitialWrites(PrivateWrites):
             selected = [snapshot.threads[name] for name in names]
             lookups = [thread.incarnation.lookup for thread in selected]
             sender_lookup = snapshot.threads[sender].incarnation.lookup
-<<<<<<< HEAD
             def build(seq: int, db: sqlite3.Connection) -> PrivateRecord:
                 stored = self._prepare_message_unlocked(
                     message, sender=sender, target=target, sequence=seq,
@@ -319,8 +318,8 @@ class InitialWrites(PrivateWrites):
                 origin.require_source(source, sender, stored.message_id)
                 revision = hashlib.sha256(
                     repr((
-                        FileRevision.capture(self._registry.store.path),
-                        self._channels.revision(),
+                        FileRevision.capture(self.registry.store.path),
+                        self.channels.revision(),
                         sorted((name, thread.created_at, sorted(thread.tags))
                                for name, thread in snapshot.threads.items()),
                     )).encode()
@@ -346,66 +345,6 @@ class InitialWrites(PrivateWrites):
                 )
 
             return origin.append(self.bus, build)
-=======
-            stored = self._prepare_message_unlocked(
-                message,
-                sender=sender,
-                target=target,
-                sequence=max(metadata.last_seq, previous_sequence) + 1,
-                snapshot=snapshot,
-                original_source=source,
-            )
-            origin.require_source(source, sender, stored.message_id)
-            revision = hashlib.sha256(
-                repr(
-                    (
-                        FileRevision.capture(self.registry.store.path),
-                        self.channels.revision(),
-                        sorted(
-                            (name, thread.created_at, sorted(thread.tags))
-                            for name, thread in snapshot.threads.items()
-                        ),
-                    )
-                ).encode()
-            ).hexdigest()
-            audience = freeze_audience(
-                stored,
-                tuple(
-                    FrozenRecipient(lookup, name)
-                    for lookup, name in zip(lookups, names, strict=True)
-                ),
-                revision,
-                sender_lookup=sender_lookup,
-                sender_name=sender,
-            )
-            decisions = resolve_wake_cohort(
-                stored, frozen_audience=audience, control=ControlClassification.ORDINARY
-            )
-            row = {
-                **stored.to_wire(),
-                PRIVATE_WIRE_FIELD: FieldCodec.encode(
-                    InitialDeliveryPolicy(
-                        version=1,
-                        initial=initial_sideband(
-                            metadata.root_id,
-                            stored,
-                            audience,
-                            decisions,
-                            control=ControlClassification.ORDINARY.value,
-                        ),
-                    )
-                ),
-            }
-            # Every frozen subscriber needs an identity, including stopped
-            # observers. Register from this authoritative registry snapshot,
-            # before publishing; an inbox must never invent owners from a row.
-            with Coordination(str(CoordinationStore.path_in(self.log.path.parent))) as store:
-                sender_thread.role.register_sender(store.participants, sender_lookup, sender)
-                for thread, lookup in zip(selected, lookups, strict=True):
-                    store.participants.register(lookup, thread.name, thread.name, committed=True)
-            origin.append(self.log, metadata, row, stored)
-            return stored
->>>>>>> origin/main
 
 
 class ResponseWrites(PrivateWrites):
