@@ -51,7 +51,7 @@ from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
 from agent_comms.typed_table import Column, DurableTables, ExpressionIndex, TypedTable
-from agent_comms_hooks.watch import LiveWatch, RecordedWatch, WatchClaim, WatchRecord
+from agent_comms_hooks.watch import WatchClaim, WatchRecord
 
 from ..locked_store import RegistryFile, SQLiteFile
 from .monitor import (
@@ -65,6 +65,7 @@ from .monitor import (
     PauseSession,
     ReaderState,
     SessionInformation,
+    SessionRequest,
     VerifySession,
     read_monitor,
 )
@@ -501,41 +502,30 @@ class Serve(Watch):
     def launch(cls, claim: WatchClaim, owner: Callable[[], ProcessIdentity],
                transcript: Path) -> None:
         """The session hook supplies its identity; Serve owns launch and readiness."""
-        if not isinstance(claim.state(), RecordedWatch):
-            return
-        operation = cls(owner=owner(), transcript=transcript)
-        operation.owner.require_alive()
-        request = VerifySession(owner=operation.owner)
-        with claim.launching():
-            state = claim.state()
-            if not isinstance(state, RecordedWatch):
-                return
+        claim.state().connect(
+            lambda: cls(owner=owner(), transcript=transcript),
+            lambda operation: VerifySession(owner=operation.owner),
+        )
+
+    def launch_record(self, claim: WatchClaim, record: WatchRecord,
+                      request: SessionRequest) -> None:
+        runtime = LaunchRuntime.installed()
+        command = self.command(record, runtime)
+        log = claim.path.with_suffix('.log')
+        with log.open('ab') as output:
+            child = SpawnedProcess.launch(
+                command, env=runtime.environment(os.environ), output=output, runtime=runtime)
+        deadline = time.monotonic() + 30
+        while child.alive() and time.monotonic() < deadline:
             try:
                 request.exchange(claim)
                 return
-            except (FileNotFoundError, ConnectionRefusedError) as error:
-                if isinstance(state, LiveWatch):
-                    raise RuntimeError(
-                        'An older watch still owns this session. '
-                        'Stop that Monitor once, then connect.'
-                    ) from error
-            runtime = LaunchRuntime.installed()
-            command = operation.command(state.record, runtime)
-            log = claim.path.with_suffix('.log')
-            with log.open('ab') as output:
-                child = SpawnedProcess.launch(
-                    command, env=runtime.environment(os.environ), output=output, runtime=runtime)
-            deadline = time.monotonic() + 30
-            while child.alive() and time.monotonic() < deadline:
-                try:
-                    request.exchange(claim)
-                    return
-                except (FileNotFoundError, ConnectionRefusedError):
-                    time.sleep(.05)
-            raise RuntimeError(
-                f'Session bridge startup not observed (PID {child.pid}); inspect {log}. '
-                'No launch retry.'
-            )
+            except (FileNotFoundError, ConnectionRefusedError):
+                time.sleep(.05)
+        raise RuntimeError(
+            f'Session bridge startup not observed (PID {child.pid}); inspect {log}. '
+            'No launch retry.'
+        )
 
     @staticmethod
     def running(home: Path) -> tuple[SessionBridge, ...]:
@@ -548,8 +538,7 @@ class Serve(Watch):
                 bindings = Binding.select(db)
             for binding in bindings:
                 claim = WatchClaim(binding.thread, home)
-                if isinstance(claim.state(), LiveWatch) and claim.socket_path.exists():
-                    claims.add(claim)
+                claims.update(claim.state().serving_claims())
         return tuple(SessionBridge(claim, InspectSession().information(claim))
                      for claim in sorted(claims, key=lambda claim: claim.thread))
 

@@ -22,7 +22,7 @@ from agent_comms.cli_protocol import Outcome, TaggedWire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.messages import Message
-from agent_comms_hooks.watch import WatchClaim, WatchRecord
+from agent_comms_hooks.watch import SessionRefusedError, WatchClaim, WatchRecord
 
 if TYPE_CHECKING:
     from .shared import LineMonitorBridge, MonitorProbe, Serve
@@ -220,7 +220,7 @@ class SessionRefused(SessionReply):
     error: str
 
     def require(self) -> None:
-        raise ValueError(self.error)
+        raise SessionRefusedError(self.error)
 
 
 class PeerGone(SessionReply):

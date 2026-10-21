@@ -10,7 +10,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_bridges.monitor import EndSession
 from agent_comms.cli_bridges.shared import Serve
 from agent_comms_hooks import ClaudeHookProgram, ClaudeTranscriptHook
-from agent_comms_hooks.watch import LiveWatch, WatchClaim
+from agent_comms_hooks.watch import WatchClaim
 
 
 @dataclass(frozen=True)
@@ -34,9 +34,7 @@ class SessionHook(ClaudeTranscriptHook):
 
     def end(self) -> None:
         claim = WatchClaim(self.session_id)
-        if not isinstance(claim.state(), LiveWatch):
-            return
-        EndSession.model_validate(dict(owner=self.owner())).exchange(claim)
+        claim.state().end(lambda: EndSession(owner=self.owner()))
 
 
 class SessionStarted(ClaudeHookProgram):
