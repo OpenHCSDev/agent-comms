@@ -174,11 +174,16 @@ class WireNonNull(FlagDirective, NullPolicy):
         return self.value
 
 
+@boundary_decoder
+def default_holds_value(declared: Field) -> bool:
+    """A dataclass spells a declared ``= None`` default as None; that, or a declared null
+    member, is a default holding no value."""
+    return declared.default is not None and not isinstance(declared.default, NullMember)
+
+
 class DefaultNonNull(NullPolicy):
-    @boundary_decoder
     def rejects_null(self, declared: Field) -> bool:
-        """A dataclass spells a declared ``= None`` default as None; any other default rejects null."""
-        return declared.default is not None
+        return default_holds_value(declared)
 
 
 class WireChoices(ValueDirective[Callable[[], Iterable[str]]]):
@@ -510,7 +515,7 @@ class FieldPlan:
             schema["description"] = description.value
         for choices in WireChoices.single(annotation):
             schema["enum"] = list(choices.value())
-        if declared.default is not MISSING and declared.default is not None:
+        if declared.default is not MISSING and default_holds_value(declared):
             schema["default"] = FieldCodec.encode(declared.default, annotation)
         return {self.key: schema}
 

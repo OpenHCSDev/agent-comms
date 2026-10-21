@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, ClassVar, Annotated
 
 from .bus_publication import CommittedDelivery
 from .declared_family import DeclaredFamily
+from .field_codec import NullMember
 from .goal_presentation import (
     GoalExecution,
     GoalExecutionState,
@@ -192,6 +193,11 @@ class ExcludedInput(UnresolvedInput):
             sequence=row.sequence, target=row.target, text=row.source_text,
             input_id=row.public_id, status=row.public_status,
             reviewed_for_goals=tuple(sorted(row.goal_reviews)), reason=reason)
+
+
+@dataclass(frozen=True)
+class NoStandbyReview(NullMember):
+    """No standby was asked for, so the page carries no review."""
 
 
 @dataclass(frozen=True)

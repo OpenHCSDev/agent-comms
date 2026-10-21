@@ -72,7 +72,7 @@ from .goal_actions import (
 )
 from .goal_history import RecordedGoalRevision
 from .goal_presentation import GoalSnapshot, ThreadGoalExecution
-from .goal_waits import StandbyReview
+from .goal_waits import NoStandbyReview, StandbyReview
 from .goals import Goal, GoalDeclaration, OrderCheck
 from .standing_rules import StandingRule
 from .plan_phases import OrderPhase
@@ -322,8 +322,8 @@ class InboxPageRead(ToolResult):
     acknowledged: int
     remaining: int
     unresolved_inputs: tuple[UnresolvedInput, ...]
-    standby_review: Annotated[StandbyReview | None, WireOmitDefault()] = (
-        None
+    standby_review: Annotated[StandbyReview | NoStandbyReview, WireOmitDefault()] = (
+        NoStandbyReview()
     )
 
 
@@ -372,6 +372,20 @@ def tool_field(
     if choices is not None:
         directives.append(WireChoices(choices))
     return tuple(directives)
+
+
+@dataclass(frozen=True)
+class ListedNames(SingleFieldValue):
+    """Names a tool call listed for an optional argument."""
+
+    names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class OmittedNames(NullMember):
+    """A tool call left an optional list of names out, or sent null."""
+
+    names: ClassVar[tuple[str, ...]] = ()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -737,14 +751,14 @@ class CommsGoalTool(ThreadToolRequest):
         str, *tool_field("Progress summary; blocked requires a nonempty explicit reason")
     ]
     wait_for: Annotated[
-        tuple[str, ...] | None, *tool_field("Explicit thread names or @names; required for standby")
-    ] = None
+        ListedNames | OmittedNames, *tool_field("Explicit thread names or @names; required for standby")
+    ] = OmittedNames()
     reviewed_inputs: Annotated[
-        tuple[str, ...] | None,
+        ListedNames | OmittedNames,
         *tool_field(
             "Exact unresolved inputId keys inspected and handled for this goal; standby only"
         ),
-    ] = None
+    ] = OmittedNames()
     claims: Annotated[
         tuple[ProgressClaim, ...],
         *tool_field(
@@ -760,9 +774,9 @@ class CommsGoalTool(ThreadToolRequest):
         command = replace(
             self.status(progress=self.progress),
             expect=self.status.model_precondition(self.goal_id),
-            **{key: value for key, value in (
-                ("wait_for", self.wait_for), ("reviewed_inputs", self.reviewed_inputs),
-            ) if value},
+            **{key: names for key, names in (
+                ("wait_for", self.wait_for.names), ("reviewed_inputs", self.reviewed_inputs.names),
+            ) if names},
         )
         return GoalProgress.from_snapshot(
             comms.goals.update_goal_snapshot(name, command, actor=ModelInvocable))
@@ -1376,6 +1390,17 @@ class StandbyRequest:
         tuple[str, ...], *tool_field("Declared dependencies for standby review")
     ]
 
+    def review(self, comms: Comms, thread: str) -> StandbyReview:
+        return comms.goals.goal_input_review(thread, self.goal_id, self.wait_for)
+
+
+@dataclass(frozen=True)
+class NoStandby(NullMember):
+    """The inbox read asked for no standby review."""
+
+    def review(self, comms: Comms, thread: str) -> NoStandbyReview:
+        return NoStandbyReview()
+
 
 @dataclass(frozen=True, kw_only=True)
 class CommsHistoryTool(ReadTool, ToolRequest):
@@ -1424,19 +1449,14 @@ class CommsInboxTool(ToolRequest):
         100
     )
     standby: Annotated[
-        StandbyRequest | None, *tool_field("Goal and dependencies to review")
-    ] = None
+        StandbyRequest | NoStandby, *tool_field("Goal and dependencies to review")
+    ] = NoStandby()
 
     def apply(self, comms: Comms, caller: ToolCaller) -> InboxPageRead:
         thread = self.thread
         if not (target := self.target.strip()):
             raise ToolRefusedError("An inbox target cannot be empty.")
-        standby = self.standby
-        review = (
-            comms.goals.goal_input_review(thread, standby.goal_id, standby.wait_for)
-            if standby is not None
-            else None
-        )
+        review = self.standby.review(comms, thread)
         page = comms.bus.inbox_at(
             thread, comms.registry.snapshot(), CommandTarget.named(target),
             bounds=PageBounds(limit=self.limit, max_bytes=MAX_INLINE_OUTPUT_BYTES // 2),

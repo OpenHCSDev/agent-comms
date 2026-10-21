@@ -291,7 +291,7 @@ def test_detached_recorded_witness_cannot_rebind_to_same_name_live_thread(migrat
 
 def test_normal_comms_api_contains_history_and_execution_stays_live(migrated):
     _, _, live, _ = migrated
-    viewer = live.messaging.user_identity(str(live.root)).name
+    viewer = NamedViewer(live.messaging.user_identity(str(live.root)).name)
     assert len(collect(live, "history_page", CommandTarget.named("#team"))) == 9
     assert len(collect(live, "history_page", CommandTarget.named("alice"), viewer=viewer)) == 9
     assert len(collect(live, "history_page", CommandTarget.named("#any"))) == 18
