@@ -321,10 +321,10 @@ class OrderCheck:
         if not Path(self.directory).is_dir():
             raise ValueError("The order check directory does not exist.")
 
-    LINE: ClassVar[re.Pattern] = re.compile(r"(\S+)\s*::\s*(.+?)\s*->\s*(\d+)")
+    LINE: ClassVar[re.Pattern] = re.compile(r"(\S+)\s*::\s*(.+?)\s*->\s*(\d+)", re.DOTALL)
     # The revision is the run's parameter; a check line that chooses one is refused.
     REVISION_COMMANDS: ClassVar[frozenset[str]] = frozenset({"checkout", "switch"})
-    SEPARATORS: ClassVar[frozenset[str]] = frozenset({"&&", "||", ";", "|", "&"})
+    SEPARATORS: ClassVar[frozenset[str]] = frozenset({"&&", "||", ";", "|", "&", "\n"})
     timeout: ClassVar[int] = 300
 
     @classmethod
@@ -340,11 +340,12 @@ class OrderCheck:
     @classmethod
     def simple_commands(cls, command: str) -> list[list[str]]:
         """The shell words of each simple command in ``command``."""
-        lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
+        lexer = shlex.shlex(command, posix=True, punctuation_chars="();<>|&\n")
+        lexer.whitespace = " \t\r"
         lexer.whitespace_split = True
         commands: list[list[str]] = [[]]
         for word in lexer:
-            if word in cls.SEPARATORS:
+            if word in cls.SEPARATORS or not word.strip("\n"):
                 commands.append([])
             else:
                 commands[-1].append(word)
@@ -363,6 +364,17 @@ class OrderCheck:
                 return word
         return ""
 
+    def require_acceptance(self, checkout_base: Path) -> None:
+        """A new or corrected check must distinguish origin/main from delivered work."""
+        self.require_writable()
+        CheckedCommit.git(self.directory, "fetch", "-q", "origin", "main")
+        try:
+            ran = self.run_at("origin/main", self.directory, checkout_base)
+        except subprocess.TimeoutExpired as error:
+            raise ValueError("The order check timed out on origin/main.") from error
+        if refused := self.result.distance(ran).unproven(self.command, 0):
+            raise ValueError("; ".join(refused))
+
     async def run(self) -> ChildResult:
         """The check on its directory's live state."""
         return await BoundedRun.run(("bash", "-c", self.command), cwd=self.directory,
@@ -378,21 +390,27 @@ class OrderCheck:
         sha = CheckedCommit.git(repository, "rev-parse", f"{revision}^{{commit}}").strip()
         for recorded in self.recorded(sha, repository):
             return recorded
+        try:
+            result = self.run_at(sha, repository, checkout_base)
+        except subprocess.TimeoutExpired:
+            return ChildResult(TimedOutOutcome(SignaledOutcome(signal.SIGKILL)))
+        checked = CheckedCommit(
+            self.command, result.outcome, result.stdout.decode(errors="replace"))
+        checked.store(repository, sha)
+        return checked.result
+
+    def run_at(self, revision: str, repository: str, checkout_base: Path) -> ChildResult:
+        """Run in a fresh detached tree, never in the configured checkout."""
         checkout_base.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix="order-check-", dir=checkout_base) as scratch:
             tree = str(Path(scratch) / "tree")
-            checkout = ScratchCheckout.add(repository, tree, sha, "--detach")
+            checkout = ScratchCheckout.add(repository, tree, revision, "--detach")
             try:
                 run = subprocess.run(("bash", "-c", self.command), cwd=tree, capture_output=True,
                                      timeout=self.timeout)
-            except subprocess.TimeoutExpired:
-                return ChildResult(TimedOutOutcome(SignaledOutcome(signal.SIGKILL)))
             finally:
                 checkout.retire()
-        checked = CheckedCommit(self.command, ChildOutcome.from_returncode(run.returncode),
-                                run.stdout.decode(errors="replace"))
-        checked.store(repository, sha)
-        return checked.result
+        return ChildResult(ChildOutcome.from_returncode(run.returncode), run.stdout)
 
 
 class GitCommandFailed(RuntimeError):
@@ -506,6 +524,10 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
     @abstractmethod
     def require_replacement(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None: ...
 
+    def require_edit(self) -> None:
+        """Editing keeps the goal's identity, order and directives, so only text an order
+        derives itself refuses a new wording."""
+
 
 @dataclass(frozen=True)
 class UnorderedGoalOrder(GoalOrder):
@@ -615,6 +637,9 @@ class ProblemGoalOrder(GoalOrder):
 
     def goal_text(self, goal: Goal) -> str:
         return self.text
+
+    def require_edit(self) -> None:
+        raise ValueError("A problem Goal's text is derived from its assigned problems.")
 
     def progress(self, goal: Goal, todos: Sequence[Todo]) -> str:
         """Each problem's order state and latest verdict, as Core records them on its Todo."""

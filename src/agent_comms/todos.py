@@ -1285,7 +1285,7 @@ class DirectiveText:
     connector's send refuse a text failing any of these."""
 
     OUTGOING: ClassVar[tuple[type[OrderWords], ...]] = (
-        FairText, HierarchyText, PlainText, OrderText)
+        FairText, HierarchyText, PlainText)
 
     @classmethod
     def refused(cls, text: str) -> tuple[str, ...]:
