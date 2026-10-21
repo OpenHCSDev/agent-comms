@@ -2,20 +2,16 @@
 
 from __future__ import annotations
 
-import json
-import os
-import threading
+import sqlite3
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from contextlib import contextmanager
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self, Annotated
 
 
-from .bus_projection import NoCheckpoint
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import (
@@ -27,14 +23,7 @@ from .field_codec import (
     WireOmitDefault,
     WireRequired,
 )
-from .locked_store import RuntimeFile
-from .private_path import FileRevision
-from .store_files import (
-    _append_jsonl,
-    _atomic_write_text,
-    _jsonl_records,
-    _store_lock,
-)
+from agent_comms.typed_table import Column, DerivedStore, TypedTable
 from .thread_identity import OwnerIdentity
 from .thread_owned_state import ThreadOwnedState
 from .thread_presentation import (
@@ -45,7 +34,6 @@ from .thread_presentation import (
 )
 
 if TYPE_CHECKING:
-    from .activity_checkpoint import ActivityCheckpoint
     from .agent_activity import AgentActivity
     from .threads import Thread
     from .turn_phase import TurnPhase
@@ -81,8 +69,7 @@ class ActivityState(Enum):
     THINKING = ("thinking", WorkingThreadPresentationStatus())
     WORKING = ("working", WorkingThreadPresentationStatus())
     WAITING_FOR_ROOM = ("waiting for room", WorkingThreadPresentationStatus())
-    # Appended once when the thread is permanently deleted. The log stays
-    # append-only; the latest-per-thread fold drops the thread on this record.
+    # Permanent deletion removes the thread's current activity row.
     DELETED = ("deleted", IdleThreadPresentationStatus())
 
     @property
@@ -319,13 +306,6 @@ class Activity(ActivityData):
         """No event: idle, with no historical clock."""
         return cls(thread, ActivityState.IDLE, timestamp=0.0)
 
-    def fold_into(self, latest: dict[str, Activity]) -> None:
-        """Apply this event to the latest-per-thread map; a deletion leaves no entry."""
-        if self.state.retires_thread:
-            latest.pop(self.thread, None)
-        else:
-            latest[self.thread] = self
-
     @classmethod
     def from_wire(cls, data: Mapping) -> Activity:
         return FieldCodec.decode(cls, data)
@@ -352,97 +332,50 @@ class ObservedActivity(ActivityData):
         return self.readiness.presentation(self.ordinary_presentation(title))
 
 
-@dataclass(frozen=True, slots=True)
-class ActivitySnapshot:
-    """One inseparable source cut and its visible events, including a partial EOF."""
+@dataclass(frozen=True)
+class ActivityRow(TypedTable, Activity):
+    """Current activity, with storage derived from the Activity declaration."""
 
-    checkpoint: ActivityCheckpoint | NoCheckpoint = field(default_factory=NoCheckpoint)
-    latest: Mapping[str, Activity] = field(default_factory=dict)
-
-
-@dataclass(slots=True)
-class ActivityReadState:
-    """What a process has read of one activity log: shared by every reader.
-
-    Each Comms builds its own ActivityLog; the decoded latest events belong
-    to the file, so a new reader continues from what this process already
-    read instead of decoding the log again. The lock captures and publishes
-    cuts; concurrent readers decode without holding it.
-    """
-
-    snapshot: ActivitySnapshot = field(default_factory=ActivitySnapshot)
-    lock: threading.Lock = field(default_factory=threading.Lock)
-
-    _by_path: ClassVar[dict[str, ActivityReadState]] = {}
+    thread: Annotated[str, Column(primary_key=True)]
 
     @classmethod
-    def for_path(cls, path: Path) -> ActivityReadState:
-        return cls._by_path.setdefault(os.path.abspath(path), cls())
+    def of(cls, activity: Activity) -> Self:
+        return cls(**{item.name: getattr(activity, item.name) for item in fields(Activity)})
 
 
-class ActivityLog(ThreadOwnedState, RuntimeFile):
-    """Persists Activity events as an append-only JSONL log.
+class ActivityStore(ThreadOwnedState, DerivedStore):
+    """One current row per thread; no event history or parallel projection."""
 
-    The latest event per thread is its current activity; stale events
-    (older than ``stale_after`` seconds) read as idle. Activity is runtime
-    state: units' bridges and hooks write it during maintenance.
-    """
-
-    filename: ClassVar[str] = "activity.jsonl"
+    rows = (ActivityRow,)
 
     def __init__(self, store_path: Path, stale_after: float = 120.0):
-        self._path = store_path
-        from .activity_checkpoint import ActivityCheckpointStore
-
-        self.checkpoint = ActivityCheckpointStore.at(store_path.parent, source_path=store_path)
+        self.root = store_path.parent
         self._stale_after = stale_after
-        self._read = ActivityReadState.for_path(store_path)
 
-    @contextmanager
-    def _writing(self):
-        """Prepare outside the source lock; commit only against the exact cut.
-
-        The transition runs once, under the append lock, after its captured
-        events are proved current. Missing/invalid checkpoints and long suffixes
-        are decoded outside that lock, as is the subsequent projection write.
-        """
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        # A writer captures an actual empty source before its first append.
-        # NoCheckpoint never qualifies a missing file as a saved source cut.
-        self._path.open("ab").close()
-        while True:
-            snapshot = self._read_snapshot()
-            with _store_lock(self._path):
-                if not snapshot.checkpoint.current_at(FileRevision.capture(self._path)):
-                    continue
-                yield snapshot
-                after = FileRevision.capture(self._path)
-                break
-        if not snapshot.checkpoint.current_at(after):
-            self._read_snapshot().checkpoint.publish(self.checkpoint)
+    @staticmethod
+    def _emit_in(db: sqlite3.Connection, activity: Activity) -> None:
+        if activity.state.retires_thread:
+            ActivityRow.delete(db, thread=activity.thread)
+        else:
+            ActivityRow.of(activity).upsert(db)
 
     def emit(self, activity: Activity) -> None:
-        with self._writing():
-            _append_jsonl(self._path, FieldCodec.encode(activity))
+        with self.writing() as db:
+            self._emit_in(db, activity)
 
     def update(self, thread: str, transition: Callable[[Activity], Activity | None]) -> bool:
-        """Read and change one thread under the existing activity writer lock.
-
-        The activity owner supplies the transition. Returning no event leaves
-        the log unchanged; an append cannot overtake its own comparison.
-        """
-        with self._writing() as snapshot:
-            event = transition(self._observed(
-                thread, snapshot.latest, active=True, now=time.time()
-            ))
+        """Apply the transition once, against the row in this write transaction."""
+        with self.writing() as db:
+            latest = {row.thread: row for row in ActivityRow.select(db, thread=thread)}
+            event = transition(self._observed(thread, latest, active=True, now=time.time()))
             if event is None:
                 return False
-            _append_jsonl(self._path, FieldCodec.encode(event))
+            self._emit_in(db, event)
             return True
 
     def current(self, thread: str, *, active: bool = False) -> Activity:
         """Latest activity for one thread; idle when stale or unknown."""
-        return self._observed(thread, self._read_snapshot().latest, active=active, now=time.time())
+        return self.current_for((thread,), active=frozenset((thread,)) if active else frozenset())[thread]
 
     def _observed(self, thread: str, events: Mapping[str, Activity], *,
                   active: bool, now: float) -> Activity:
@@ -460,13 +393,18 @@ class ActivityLog(ThreadOwnedState, RuntimeFile):
 
     def all_current(self, *, active: frozenset[str] = frozenset()) -> dict[str, Activity]:
         """Latest activity for every observed thread."""
-        latest = self._read_snapshot().latest
+        with self.snapshot() as db:
+            latest = {row.thread: row for row in ActivityRow.stream(db)}
         return self._current_for(latest, latest, active)
 
     def current_for(self, threads: Iterable[str], *,
                     active: frozenset[str] = frozenset()) -> dict[str, Activity]:
-        """Latest activity for the selected thread names, including absent ones."""
-        return self._current_for(threads, self._read_snapshot().latest, active)
+        """Read only the requested threads, including absent ones."""
+        threads = tuple(dict.fromkeys(threads))
+        with self.snapshot() as db:
+            latest = {row.thread: row for thread in threads
+                      for row in ActivityRow.stream(db, thread=thread)}
+        return self._current_for(threads, latest, active)
 
     def _current_for(self, threads: Iterable[str], events: Mapping[str, Activity],
                      active: frozenset[str]) -> dict[str, Activity]:
@@ -476,75 +414,11 @@ class ActivityLog(ThreadOwnedState, RuntimeFile):
             for thread in dict.fromkeys(threads)
         }
 
-    def _read_snapshot(self) -> ActivitySnapshot:
-        from .activity_checkpoint import ActivityCheckpoint
-
-        read = self._read
-        while True:
-            with read.lock:
-                started_from = read.snapshot
-            try:
-                with self._path.open("rb") as stream:
-                    revision = FileRevision.from_stat(os.fstat(stream.fileno()))
-                    if started_from.checkpoint.current_at(revision):
-                        return started_from
-                    checkpoint = started_from.checkpoint.prepare(self.checkpoint).validated(revision, stream)
-                    complete = {}
-                    offset = checkpoint.restore_into(complete)
-                    latest = complete
-                    stream.seek(offset)
-                    while stream.tell() < revision.size:
-                        raw = stream.readline(revision.size - stream.tell())
-                        if not raw:
-                            break
-                        terminated = raw.endswith((b"\n", b"\r"))
-                        if line := raw.strip():
-                            try:
-                                record = json.loads(line)
-                            except (json.JSONDecodeError, UnicodeDecodeError):
-                                if not terminated:
-                                    break
-                                raise
-                            if not isinstance(record, Mapping):
-                                raise ValueError(
-                                    f"JSONL record in {self._path} must be an object."
-                                )
-                            event = Activity.from_wire(record)
-                            if terminated:
-                                event.fold_into(complete)
-                            else:
-                                # The writer repairs an interrupted final row before its
-                                # next append (store_files.py:_append_jsonl).
-                                latest = dict(complete)
-                                event.fold_into(latest)
-                        if terminated:
-                            offset = stream.tell()
-                    captured = ActivityCheckpoint.capture(stream, revision, complete, offset)
-            except FileNotFoundError:
-                latest, captured = {}, NoCheckpoint()
-            with read.lock:
-                if read.snapshot is not started_from:
-                    # Another reader may have published a cut taken before this
-                    # one. Reacquire the actual current file, not that older cut.
-                    continue
-                read.snapshot = ActivitySnapshot(captured, latest)
-                return read.snapshot
-
     def remove_threads(self, threads: Sequence[Thread]) -> None:
-        """Append one deletion record per thread with current activity.
-
-        Never rewrite this append-only log: every reader then folds the
-        record incrementally instead of decoding the whole file again.
-        """
-        latest = self._read_snapshot().latest
-        for thread in threads:
-            if thread.name in latest:
-                self.emit(Activity(thread.name, ActivityState.DELETED))
+        with self.writing() as db:
+            for thread in threads:
+                ActivityRow.delete(db, thread=thread.name)
 
     def rename_thread(self, old_name: str, new_name: str) -> None:
-        with self._writing():
-            events = (Activity.from_wire(record) for record in _jsonl_records(self._path))
-            renamed = (replace(event, thread=new_name) if event.thread == old_name else event
-                       for event in events)
-            text = "".join(f"{json.dumps(FieldCodec.encode(event))}\n" for event in renamed)
-            _atomic_write_text(self._path, text)
+        with self.writing() as db:
+            ActivityRow.update(db, where="thread=?", parameters=(old_name,), thread=new_name)

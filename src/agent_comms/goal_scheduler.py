@@ -24,10 +24,7 @@ from .goal_actions import (
     RetryGoalAction,
     SetGoalAction,
 )
-from .goal_attempts import (
-    GoalAttemptError,
-    StaleAttemptError,
-)
+from .goal_attempts import GoalAttemptError
 from .goal_presentation import GoalPublicationSnapshot, UnpublishedGoalSnapshot
 from .goals import Goal, GoalDeclaration, GoalRevision
 from .reservation_rules import ReservationViolationError
@@ -92,7 +89,7 @@ class GoalScheduler:
             return
         scheduled = await Coordination.run_worker(partial(self.prepare_goal, session_id))
         if scheduled is None:
-            # Preparing this grant may itself have blocked the goal.
+            # The goal may have changed while its storage worker was preparing.
             await self._retain_current_goal_turns(session_id)
             return
         # A worker wait cannot reserve the process-local queue. Its original
@@ -119,14 +116,8 @@ class GoalScheduler:
                 scheduled = (turn for goal in thread.goal.active()
                              for turn in self._prepare_declared_goal(goal, thread, snapshot))
                 return next(iter(scheduled), None)
-            except StaleAttemptError:
+            except GoalAttemptError:
                 return
-            except GoalAttemptError as error:
-                diagnostic = error.diagnostic()
-        self.comms.goals.block_goal_after_failed_turn(
-            thread.name, started_goal=thread.goal, expected_worktree=thread.worktree,
-            diagnostic=diagnostic,
-        )
 
     def _prepare_declared_goal(self, goal: Goal, thread: Thread,
                                snapshot: RegistrySnapshot) -> tuple[ScheduledTurn, ...]:

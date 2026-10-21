@@ -34,6 +34,10 @@ class Repo(BaseModel):
         """Where the dotted ``module`` sits under this checkout's source root, relative to it."""
         return Path(self.source, *module.split(".")).with_suffix(".py")
 
+    def named(self, name: str) -> bool:
+        """A repository name or path identifies this declared checkout, not another worktree."""
+        return self.github.named(name) or self.checkout == Path(name).resolve()
+
     def holds(self, todo: Todo) -> bool:
         return self.github == todo.repo
 
