@@ -162,15 +162,15 @@ class OpenCodeConnection:
             await response.read()
 
 
+@dataclass(eq=False, repr=False)
 class OpenCodeServer(OpenCodeHistory, OnlineHistory):
     """A session the running OpenCode server holds, read through its message list."""
 
     query: ClassVar[dict[str, str]] = {}
 
-    def __init__(self, session: str, server: str, directory: Path) -> None:
-        self.session = session
-        self.server = server
-        self.directory = directory
+    session: str
+    server: str
+    directory: Path
 
     @classmethod
     def connected(cls, thread: str, address: HarnessAddress, directory: Path) -> Self:

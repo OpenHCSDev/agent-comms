@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
+from functools import partialmethod
 from pathlib import Path
+from typing import Concatenate
 
 from .catalog_store import ChannelCatalog
 from .child_process import NoProcess, ProcessIdentity
@@ -14,7 +16,7 @@ from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .maintenance_barrier import MaintenanceBarrier
 from .native_input_owner import RegistryOwner
 from .registration_change import RegistrationChange
-from .registry_document import RegistrySnapshot, UserThreadLookup
+from .registry_document import RegistryDocument, RegistrySnapshot, UserThreadLookup
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import TurnRouting
 from .storage_rules import StorageProjection, StorageRule
@@ -28,7 +30,6 @@ from .thread_status import (
     ThreadStatus,
 )
 from .threads import Thread
-from .turn_lease import TurnCompletion, TurnLeaseFence
 
 _RUNNING_STATUS = RunningThreadStatus()
 
@@ -194,17 +195,17 @@ class Registration:
         for effect in effects:
             effect.check(projection)
 
-    def restore_stopped(self, source: RegistrySnapshot, names: Sequence[str]) -> tuple[str, ...]:
+    def change[**P, R](
+        self, operation: Callable[Concatenate[RegistryDocument, P], R],
+        *args: P.args, **kwargs: P.kwargs,
+    ) -> R:
         with self.store.editing() as edit:
-            result = edit.document.restore_stopped(source, names)
+            result = operation(edit.document, *args, **kwargs)
             edit.commit()
             return result
 
-    def rename(self, name: str, new_name: str) -> tuple[str, str]:
-        with self.store.editing() as edit:
-            result = edit.document.rename(name, new_name)
-            edit.commit()
-            return result
+    restore_stopped = partialmethod(change, RegistryDocument.restore_stopped)
+    rename = partialmethod(change, RegistryDocument.rename)
 
     def fence_idle_owners(
         self, selected: Sequence[tuple[Thread, int]]
@@ -220,62 +221,16 @@ class Registration:
             edit.commit()
             return fenced
 
-    def unregister(self, name: str) -> None:
-        with self.store.editing() as edit:
-            result = edit.document.unregister(name)
-            edit.commit()
-            return result
-
-    def archive(self, name: str) -> None:
-        with self.store.editing() as edit:
-            result = edit.document.archive(name)
-            edit.commit()
-            return result
-
-    def begin_delete(self, name: str) -> None:
-        with self.store.editing() as edit:
-            result = edit.document.begin_delete(name)
-            edit.commit()
-            return result
-
-    def archive_originals(self, originals: Sequence[Thread]) -> None:
-        with self.store.editing() as edit:
-            edit.document.archive_originals(originals)
-            edit.commit()
-
-    def begin_delete_originals(self, originals: Sequence[Thread]) -> None:
-        with self.store.editing() as edit:
-            edit.document.begin_delete_originals(originals)
-            edit.commit()
-
-    def remove_originals(self, originals: Sequence[Thread]) -> dict[str, tuple[str, ...]]:
-        with self.store.editing() as edit:
-            detached = edit.document.remove_originals(originals)
-            edit.commit()
-            return detached
-
-    def change_tag(self, originals: Sequence[Thread], tag: str, replacement: str | None) -> None:
-        with self.store.editing() as edit:
-            edit.document.change_tag(originals, tag, replacement)
-            edit.commit()
-
-    def remove(self, name: str) -> tuple[str, ...]:
-        with self.store.editing() as edit:
-            result = edit.document.remove(name)
-            edit.commit()
-            return result
-
-    def heartbeat(self, name: str) -> None:
-        with self.store.editing() as edit:
-            result = edit.document.heartbeat(name)
-            edit.commit()
-            return result
-
-    def release_turn(self, lease: TurnLeaseFence) -> tuple[bool, TurnCompletion]:
-        with self.store.editing() as edit:
-            result = edit.document.release_turn(lease)
-            edit.commit()
-            return result
+    unregister = partialmethod(change, RegistryDocument.unregister)
+    archive = partialmethod(change, RegistryDocument.archive)
+    begin_delete = partialmethod(change, RegistryDocument.begin_delete)
+    archive_originals = partialmethod(change, RegistryDocument.archive_originals)
+    begin_delete_originals = partialmethod(change, RegistryDocument.begin_delete_originals)
+    remove_originals = partialmethod(change, RegistryDocument.remove_originals)
+    change_tag = partialmethod(change, RegistryDocument.change_tag)
+    remove = partialmethod(change, RegistryDocument.remove)
+    heartbeat = partialmethod(change, RegistryDocument.heartbeat)
+    release_turn = partialmethod(change, RegistryDocument.release_turn)
 
     def live_owner_with_claim(self, name: str) -> tuple[Thread, int]:
         """Read the stored process input generation, independent of metadata revisions."""
