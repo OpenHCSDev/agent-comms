@@ -21,7 +21,7 @@ from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
-from agent_comms.installer.carry import CarryChain, CarryLedger
+from agent_comms.installer.carry import CarryChain
 from agent_comms.installer.runtime_resolution import (
     ArchiveRecord,
     CommitRecord,
@@ -419,19 +419,15 @@ def test_install_schedule_carry_is_discovered_and_deletes_only_its_file(tmp_path
     schedule.write_text('{"at": 0, "installer": "retired"}')
     history = root / "saved-session"
     history.write_bytes(b"preserved original history")
-    chain = CarryChain.at(Path(__file__).resolve().parents[1])
-    ledger = CarryLedger(root)
-    ledger.write(())
-    assert InstallSchedule in chain.pending(ledger.applied())
+    assert InstallSchedule in CarryChain.at(Path(__file__).resolve().parents[1]).steps
     assert InstallSchedule.backup_files(root) == (schedule,)
     assert InstallSchedule.carry(root, apply=False).changed == 1
     assert schedule.exists()
 
-    result = ledger.apply(InstallSchedule.name(), lambda: InstallSchedule.carry(root, apply=True))
+    result = InstallSchedule.carry(root, apply=True)
 
     assert result.changed == 1
     assert schedule.name in result.rewritten
     assert not schedule.exists()
     assert history.read_bytes() == b"preserved original history"
-    assert InstallSchedule not in chain.pending(ledger.applied())
     assert InstallSchedule.carry(root, apply=True).changed == 0

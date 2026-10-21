@@ -17,7 +17,7 @@ from agent_comms.commander.config import (
     CommanderConfig, GivenRepos, NamedCommander, NoConfigFile, WrittenConfigFile,
 )
 from agent_comms.installer.backup import UpgradeRefused, bus_files
-from agent_comms.installer.carry import CarryChain, CarryLedger
+from agent_comms.installer.carry import CarryChain
 from agent_comms.installer.practice import declared_files, practice_copy
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
@@ -45,9 +45,7 @@ def test_a_bus_install_creates_is_fresh_until_marked_and_runs_no_carry(private_d
     assert log.fresh()
     Comms(root).messaging.initialize_private_initial_protocol()
     assert not log.fresh()
-    chain = CarryChain.at(REPO)
-    CarryLedger(root).start(chain)
-    assert chain.pending(CarryLedger(root).applied()) == ()
+    assert CarryChain.at(REPO).pending(lambda step: step.carry(root, apply=False)) == ()
 
 
 def test_install_routes_a_new_bus_and_replaces_only_a_route_that_selects_none(private_directory):
