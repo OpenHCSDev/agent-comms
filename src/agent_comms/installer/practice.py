@@ -11,8 +11,7 @@ from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from agent_comms.coordination_database import CoordinationStore
-from agent_comms.installer.backup import UpgradeRefused, bus_files
+from agent_comms.installer.backup import UpgradeRefused
 from agent_comms.locked_store import RegistryFile, RootFile, SQLiteFile
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import SharedLock, _store_lock
@@ -57,11 +56,13 @@ def prepare_runtime_home(home: Path) -> None:
         (home / ".npm").mkdir(mode=0o700)
 
 
-def declared_databases(root: Path) -> frozenset[Path]:
-    """The existing databases of every declared SQLite owner, never a probe of listed files."""
+def declared_files(root: Path) -> dict[Path, type[RootFile]]:
+    """Every existing file a declared owner names, with that owner, never a probe of listed
+    files: an undeclared file (a native writer's transient claim, a lock) has no owner, so
+    no rehearsal reads it and the copy never meets it."""
     RootFile.load_declarations()
-    return frozenset(path for owner, directory in RootFile.declarations_in(root)
-                     if issubclass(owner, SQLiteFile) for path in owner.matching_in(directory))
+    return {path: owner for owner, directory in RootFile.declarations_in(root)
+            for path in owner.matching_in(directory)}
 
 
 def _copy_database(source: Path, copy: Path) -> None:
@@ -82,10 +83,10 @@ def _copy_file(source: Path, copy: Path) -> None:
 def practice_copy(root: Path, into: Path) -> Iterator[tuple[Path, PracticeMeasurement]]:
     """Copy the bus as files, so no runtime's code reads it to build the copy: the outgoing
     runtime's bugs cannot block the install of their fix, and the target cannot read a
-    format its carries have not run on yet. Every declared SQLite owner's database copies
-    through SQLite's backup, and its -wal, -shm and journal never; the log's and the
-    registry's cut_paths copy together under each one's lock; every other saved file byte
-    for byte.
+    format its carries have not run on yet. The copy is the declared owners' files and
+    nothing else: every SQLite owner's database copies through SQLite's backup, and its
+    -wal, -shm and journal never; the log's and the registry's cut_paths copy together
+    under each one's lock; every other declared file byte for byte.
     The maintenance witnesses stay behind: the rehearsal holds its copy itself. Stored
     paths keep naming the live bus, and every step writes only inside the root it is given."""
     floor = StorageRule.load(root).floor_gib * 2**30
@@ -93,36 +94,31 @@ def practice_copy(root: Path, into: Path) -> Iterator[tuple[Path, PracticeMeasur
     if shutil.disk_usage(into.parent).free < floor:
         raise UpgradeRefused("Insufficient free space before building the practice copy")
     started = time.monotonic()
-    witnesses = {str(path.relative_to(root))
-                 for path in MaintenanceBarrier(RegistryFile.path_in(root)).witness_paths}
+    witnesses = set(MaintenanceBarrier(RegistryFile.path_in(root)).witness_paths)
     log = WireLog(WireLog.path_in(root))
     registry = RegistryStore.at(root)
-    saved = bus_files(root)
-    databases = declared_databases(root)
-    companions = {companion for path in databases for companion in SQLiteFile.files(path)[1:]}
+    files = declared_files(root)
     into.mkdir(mode=0o700)
+
+    def copy(path: Path) -> None:
+        owner = files.get(path, RootFile)
+        (_copy_database if issubclass(owner, SQLiteFile) else _copy_file)(
+            path, into / path.relative_to(root))
+
     # The log's own file lock, never WireLog.locked(): that checks the index with the
     # target's code, which refuses a bus whose carries have not run yet. Each group is one
     # cut, its paths read under its lock: a writer advancing the log between its copy and
     # its checkpoint's would leave a checkpoint past the end of the copied log, and a turn
-    # claimed after ``saved`` was listed would leave the registry naming a missing turn.
+    # claimed after the declared files were listed would leave the registry naming a
+    # missing turn.
     locked_copies = ((_store_lock(log.path), log), (registry.locked(mode=SharedLock()), registry))
     copied: set[Path] = set()
     for lock, owner in locked_copies:
         with lock:
             for path in owner.cut_paths:
                 if path.exists():
-                    copy = into / path.relative_to(root)
-                    (_copy_database if path in databases else _copy_file)(path, copy)
+                    copy(path)
                     copied.add(path)
-    for path in databases - copied:
-        _copy_database(path, into / path.relative_to(root))
-    # Files no owner declares are copied from the listing, the one gap left: an undeclared
-    # SQLite file still copies through the backup, recognized by SQLite's own header, and
-    # SQLite's companions are never probed or copied.
-    unowned = {root / name for name in saved.keys() - witnesses} - copied - databases - companions
-    unowned -= {path for path in unowned if path.name.endswith(SQLiteFile.companion_suffixes)}
-    for path in unowned:
-        (_copy_database if CoordinationStore.is_database(path) else _copy_file)(
-            path, into / path.relative_to(root))
+    for path in files.keys() - copied - witnesses:
+        copy(path)
     yield into, PracticeMeasurement.of(into, time.monotonic() - started, floor)
