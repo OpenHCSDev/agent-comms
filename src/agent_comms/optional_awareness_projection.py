@@ -22,10 +22,7 @@ from typing import ClassVar
 
 from agent_comms.coordination_database import CoordinationStore, StoreBusy
 from agent_comms.coordination_errors import CoordinationError
-from agent_comms.coordination_schema import (
-    COORDINATION_SCHEMA_VERSION,
-    COORDINATION_SNAPSHOT_VERSION,
-)
+from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
 from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import OwnerGenerations
@@ -35,7 +32,6 @@ from .audience_manifest import FrozenRecipient
 from .bus_publication import CommittedDelivery
 from .child_process import ProcessIdentity
 from .cohort_schema import (
-    COHORT_SCHEMA_VERSION,
     AwarenessClaimGenerations,
     ClaimBatchAcknowledgements,
     ClaimBatchMembers,
@@ -60,7 +56,7 @@ from .registration import Registration
 from .store_files import _store_lock
 from .threads import Thread
 from .turn_context import ContextSegment, InstructionFile, ResourceProvenance, WireProvenance
-from .typed_table import SQLiteUserVersion, TypedRow
+from .typed_table import TypedRow
 from .wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
 
 
@@ -69,17 +65,6 @@ class _ParticipantOwner(TypedRow):
     generation: int
     committed: bool
     owner_thread: str
-
-
-@dataclass(frozen=True)
-class _CoordinatorVersions(TypedRow):
-    schema_version: int
-    snapshot_version: int
-
-
-@dataclass(frozen=True)
-class _CohortVersion(TypedRow):
-    version: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -315,21 +300,9 @@ class OptionalAwarenessProjection:
         assignment: WakeAssignment,
         owner: Thread,
     ) -> None:
-        versions = SQLiteUserVersion.read(db.execute("PRAGMA user_version"))
-        meta = _CoordinatorVersions.read(
-            db.execute("SELECT schema_version,snapshot_version FROM schema_meta WHERE singleton=1")
-        )
-        if versions != [SQLiteUserVersion(COORDINATION_SCHEMA_VERSION)] or meta != [
-            _CoordinatorVersions(COORDINATION_SCHEMA_VERSION, COORDINATION_SNAPSHOT_VERSION)
-        ]:
-            raise ProjectionUnavailableError("coordinator schema changed")
+        CoordinatorTable.require_schema(db)
         assert_cohort_schema(db)
         assert_optional_awareness_schema(db)
-        cohort_versions = _CohortVersion.read(
-            db.execute("SELECT version FROM cohort_schema_meta WHERE singleton=1")
-        )
-        if cohort_versions != [_CohortVersion(COHORT_SCHEMA_VERSION)]:
-            raise ProjectionUnavailableError("cohort schema changed")
         people = _ParticipantOwner.read(
             db.execute(
                 "SELECT p.committed,g.owner_thread,g.generation FROM participants p "

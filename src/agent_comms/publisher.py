@@ -14,8 +14,9 @@ from typing import TYPE_CHECKING
 
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
-    canonical_publication_key,
 )
+
+from agent_comms.response_acknowledgement import canonical_publication_key
 
 from .active_route import guard_original_root_write
 from .audience_manifest import MAX_WIRE_SEQ, FrozenRecipient, freeze_audience

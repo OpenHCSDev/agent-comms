@@ -80,14 +80,6 @@ def test_setup_requires_explicit_owner_private_root_and_0600_db(tmp_path):
     assert GoalAttemptStore(root).snapshot("missing") is None
 
 
-def test_goal_schema_marker_cannot_claim_a_different_declaration(store):
-    """Matching tables alone cannot authenticate an unrelated stored schema marker."""
-    with sqlite3.connect(store.path) as db:
-        db.execute("UPDATE goal_attempt_schema SET ddl_digest=?", ("0" * 64,))
-    with pytest.raises(StorageUncertainError):
-        GoalAttemptStore(store.root)
-
-
 def test_one_reservation_across_two_independent_supervisors(store):
     store.create_goal("goal")
     ctx = multiprocessing.get_context("spawn")

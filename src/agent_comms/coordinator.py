@@ -198,10 +198,9 @@ class Coordination:
         """Explicit protocol/owner bootstrap, never invoked by a reader."""
         # Load the canonical declarations before querying their existing family.
         from . import cohort_schema, coordination_response, native_prompt_binding  # noqa: F401
-        from .native_runtime_input import NativeRuntimeSchemaMeta  # noqa: F401
-        from .typed_table import TypedTable
+        from . import native_runtime_input  # noqa: F401
 
-        for schema in TypedTable.members_with(PrivateRuntimeSchema):
+        for schema in PrivateRuntimeSchema.__subclasses__():
             schema.install(self)
 
     def close(self) -> None:

@@ -20,7 +20,7 @@ def _bind(state: Path, requested: Binding, pipe: Connection) -> None:
             pipe.send('ready')
             assert pipe.recv() == 'bind'
             try:
-                pipe.send(('bound', Binding.bind(db, requested)))
+                pipe.send(('bound', requested.bind(db)))
             except ValueError as error:
                 pipe.send(('rejected', str(error)))
     finally:

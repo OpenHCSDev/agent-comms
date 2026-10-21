@@ -33,34 +33,34 @@
 |---|---|---|---|---|
 | 1 | Create a problem with owner, order and deadline | `order.py problem`; `problems.json` | `CommsTodoCreateTool` | `one_order_owner` |
 | 2 | Assign, reassign, drop an order | `order.py send`, `--reassign`, `drop`; `deadlines.json` | `CommsOrderTool`, `CommsTodoTool` assignment and release | `one_order_owner` |
-| 3 | Complete only on the delivered commit | `order.py done` | `CommsOrderDoneTool`: merged to main, another branch, or not merged | `one_order_owner`, `record_plane` |
+| 3 | Complete only on the delivered commit | `order.py done` | `CommsOrderDoneTool`: merged to main, another branch, or not merged | `one_order_owner` |
 | 4 | Close with installed evidence | `order.py close`; `closed.jsonl` | `CommsProblemCloseTool` | `one_order_owner` |
 | 5 | Board, overdue, silent, spinning | `order.py board`, `overdue`; `fleet-board.md` | `CommsTodoListTool` and the fleet tool, derived | `one_order_owner` |
 | 6 | Branch hygiene | `branches-*.txt` by hand | `CommsWorkBranchesTool` | `one_order_owner` |
-| 7 | Strikes and the strike limit | `order.py strike`; `strikes.jsonl` | `Strike` rows, author-declared `StrikeLimit`, one `comms_fire` | `record_plane` |
-| 8 | Verdicts on a unit's tool calls | `judge.py ok`, `back`; both invoke `CommsVerdictTool` | Order `Verdict`; send-back revises the Goal and records its strike atomically | `record_plane` |
-| 9 | Plain words in verdicts and strikes | judge and order checks | `PlainText` | `record_plane` |
-| 10 | Refuse soft or vague orders | `order.py` | `OrderText` on every order action | `record_plane` |
+| 7 | Strikes and the strike limit | `order.py strike`; `strikes.jsonl` | `StrikeTodo`, `ObjectiveStrike`, `ProblemGoalOrder.StrikeLimit`, `TodoStore.fire` |  |
+| 8 | Verdicts on a unit's tool calls | `judge.py ok`, `back`; both invoke `CommsVerdictTool` | `CommsVerdictTool`, `SendBackVerdict`: one retained event and Goal revision |  |
+| 9 | Plain words in verdicts and strikes | judge and order checks | `PlainText`, `StrikeReason` |  |
+| 10 | Refuse soft or vague orders | `order.py` | `OrderText`, `CheckedProblemOrder.require_wording` |  |
 | 11 | What a unit did during its order | `tool_watch.py`; `edits.jsonl`; `judge.py show` | `comms_order_work`: both transcript families by `tool_call_id` | `review_queue` |
 | 12 | What the commander has not judged yet | `judge.py unjudged`; `vibe_watch.py` | `comms_unjudged`: calls and unit messages after the last verdict | `review_queue` |
 | 13 | Public story and roasts | `fleet-narrative.md`; `judge.py roast` | `comms_order_story`, `comms_fleet_story`; send-back reason posted once | `story` |
 | 14 | Heartbeat: next unit every minute | `rotate.py` (60 s loop) | Core-owned scheduled commander wake | `control_plane` |
 | 15 | Standing rules broken right now | `rotate.py broken_rules` | `StandingRule` members derive violations on read | `control_plane` |
-| 16 | Rule review | `rules.py`; `rules.jsonl`; maximum age | Rule instruction segments in the commander's turn context, with provenance | `control_plane` |
+| 16 | Rule review | `rules.py review` prints every rule; the session hook rereads them in full | Rule instruction segments in the commander's turn context, with provenance | `control_plane` |
 | 17 | Load and forking | `agent-comms-commander capacity`: load and live fork reports; ten-minute beat age | Reporting-only `commander.capacity.Load.of`; no capacity refusal or automatic fork policy | `control_plane` |
 | 19 | Storage hygiene | `StandingRule.broken` storage delivery (formerly `storage.py`) | `UnitStorage.violations`, `DiskLow.violations`; live `StorageRule` thresholds | `control_plane` |
-| 20 | Commander reaches units only through orders | `send_guard.py` (PreToolUse hook) | Harness hook checking Core order tools | `control_plane` |
+| 20 | Commander reaches units only through orders | Nothing: the PreToolUse send guard was deleted | Harness hook checking Core order tools | `control_plane` |
 | 21 | Paths, repositories, commander identity | `CommanderConfig` from `commander.json` | Core project and registry configuration | `cutover` |
 | 22 | Seeing the fleet: board, strikes, queue, story, alarms | `fleet-board.md`, `order.py board`, `rotate.py`, `judge.py` | Toad commander page rendering Core through `ui_model` | `commander_page` |
-| 23 | An order states the user-visible run that closes it | scratch `rts/order.py send` (`Works when:`) | `OrderText` requires the run; `CommsProblemCloseTool.works` checks it | `record_plane` |
-| 24 | Reassigning past two owners needs the commander's trace | scratch `order.py send --reassign --traced` | Transfer reads Todo owner history and requires traced source location | `record_plane` |
-| 25 | Unit wording gets a correction, not a strike | scratch `vibe_watch.py` | `PlainText` for commander verdicts/strikes; unit wording gets correction | `record_plane` |
+| 23 | An order states the user-visible run that closes it | scratch `rts/order.py send` (`Works when:`) | `ApplicationOrderRun`, `InstallTodo`, `CommsProblemCloseTool` |  |
+| 24 | Reassigning past two owners needs the commander's trace | scratch `order.py send --reassign --traced` | `Assignment.require_trace`, `Todo.assigned` |  |
+| 25 | Unit wording gets a correction, not a strike | scratch `vibe_watch.py` | `PlainText`, `CommsCorrectWordingTool`: correction leaves strikes unchanged |  |
 | 26 | Alerts carry only decisions | none; every line interrupts | `messages.AlertKind.require_publishable`, `tools.CommsDecisionTool` | `control_plane` |
 | 27 | Momentum prediction per unit, compared with the outcome | none | Prediction record and later outcome on commander page; `CommitMomentum` is a partial candidate | `commander_page` |
 | 28 | Measured load and self-report | `capacity.py` unit count | `commander.capacity.Load.of` reports orders, overdue, edits and forks; self-report comparison unverified | `control_plane` |
-| 29 | No handoff of finished, checked work | none; scratch transfer moved P507 after its fix was pushed and checked | Transfer refuses delivered checked work; that owner merges; check is reused | `record_plane` |
-| 30 | A proof is bound to the build it ran on | none; screenshots and logs are bare paths | Build run records runtime and Core/Toad revisions; close requires delivered commit | `record_plane` |
-| 31 | An order states its intent as a deletion target | Current order command with a declared FamilyDeletion | CommsTodoCreateTool and CommsOrderDoneTool check the delivered family count | `record_plane` |
+| 29 | No handoff of finished, checked work | none; scratch transfer moved P507 after its fix was pushed and checked | `DeliveredProblemOrder.require_transfer`: the checked delivery stays with its owner |  |
+| 30 | A proof is bound to the build it ran on | none; screenshots and logs are bare paths | `DeliveredProblemOrder.require_installation`, `RecordedBuildIdentity.require_installed` |  |
+| 31 | An order states its intent as a deletion target | Current order command with a declared FamilyDeletion | `FamilyDeletion.checks`, `OrderDelivery.verified`: count the delivered source |  |
 | 32 | Where units' time goes, classified | none; activity.log lacks durations and turn boundaries | `UnitTime`: model, build/check/test/shell, dependency/commander waits and idle; classify large waits | `commander_page`, `control_plane` |
 | 33 | Order progress beside its deadline; the unit never sees a due time | `order.py board`, `overdue`, `due`, `send`; `rotate.py` | Derived `OrderProgress`; merged work draws no strike; first commit 10 min, later progress 15 min STALL; units see no due time | `one_order_owner`, `control_plane` |
 | 34 | Several commanders on one machine and bus, one per project | none; a second commander.json install overwrites the first | Registry commander/project ownership; caller from --from; scoped orders, strikes, load, board, alarms and forks; raw-send guard; duplicate project commander refused | `one_order_owner`, `cutover` |
@@ -107,21 +107,25 @@ This phase removes the duplicate authority that exists today, before any new fea
 
 **Done when** the design and `main` describe the same system.
 
-### Phase 3: the record plane
+### Phase 3: the record plane — native implementation done
 
-**Changes.**
-- `PlainText`: a value type refusing text under ten words and the declared banned words, except inside quoted, backticked or identifier spans.
-- `OrderText`: a value type for order bodies that refuses what `order.py` refuses today (soft or vague orders, no stated design, no check), used by every order action.
-- `Verdict` on the order: an accepted verdict must quote the judged tool call and at least four words of the order; a send-back revises the order Goal and records a send-back strike in the same write.
-- `Strike` on the order, with causes for send-back, missed deadline, false completion and missing evidence, and a declared caught-at stage; the commander gets strikes on the same record.
-- `StrikeLimit` declared on the commanded author; `comms_fire` transfers or releases every open order of the unit with one stated reason.
-- Delivery states returned by completion: merged to `main`, merged to another branch, not merged; a completion on an unlinked branch is refused.
+The order records and their operations below own the behavior; this phase is not another pending implementation list. P360 exercised each item through real native requests and real stores on disposable copied roots under `/home/ts/.cache/agent-rehearsal/fork-boundaries-P360-*`. Its PR retains the commands and results. These copied runs establish the native behavior, not an installed-build acceptance claim; accepted installed phase delivery remains owned by the Todo record.
 
-**Deletes:** `strikes.jsonl` writes (already moved in phase 1), the strike and verdict paths in `order.py` and `judge.py`.
+| Delivered behavior | Owning declaration | Copied-root result |
+|---|---|---|
+| Send-back is one event, one implied strike and one Goal revision | `todos.py:2535` `SendBackVerdict`; `goal_management.py:80` `change_problem` | Pass: one verdict, one strike, one Todo revision, same Goal identity |
+| Missed deadline is retained once per order and cause | `todos.py:2329` `MissedDeadlineStrike`; `ObjectiveStrike.repeats` | Pass: two observations retain one strike |
+| False completion is retained once for commit and operation delivery | `todos.py:163` `OrderDelivery.check_failed`; `todos.py:194` commit integration distinction | Pass: two rejected operation deliveries retain one strike; commit family-check failure also retains one |
+| The declared two-strike limit releases the unit's open work in one fire operation | `goals.py` `ProblemGoalOrder.StrikeLimit`; `todos.py:3306` `TodoStore.fire`; `tools.py` `CommsFireTool` | Pass: two strikes and exactly one native fire release the assignment |
+| Application orders require a closing run; mechanical orders are explicit | `todos.py:1283` `ApplicationOrderRun`; `MechanicalOrderRun` | Pass: decoding an order without its run is refused |
+| Installed closing requires the close tool, matching works and an existing artifact | `todos.py:2713` `InstallTodo`; `tools.py` `CommsProblemCloseTool`; `DoneTodoState.prepare_change` | Pass: missing artifact and direct state-close refused; artifact-backed close accepted |
+| Checked delivered work cannot be transferred | `todos.py:1761` `DeliveredProblemOrder.require_transfer` | Pass: native reassignment refused, stored state unchanged |
+| A proof from the wrong build cannot close an order | `todos.py:1781` `require_installation`; `launch_runtime.py:136` `RecordedBuildIdentity.require_installed` | Pass: older build refused without mutation; current build accepted |
+| Renaming a decision does not satisfy its deletion | `todos.py:1341` `FamilyDeletion`; `todos.py:137` `OrderDelivery.verified` | Pass: renamed class count remains one and delivery is refused; zero-family commit accepted |
+| Further ownership changes require the commander's traced source | `todos.py:2062` `Assignment.require_trace`; `Todo.assigned` | Pass: third ownership change without trace refused |
+| Commander words are checked; unit wording is corrected without a strike | `todos.py` `PlainText`, `OrderText`, `StrikeReason`; `tools.py` `CommsCorrectWordingTool` | Pass: short strike refused; wording correction preserves strike count |
 
-- The 2026-10-18 rules (matrix rows 23-25 and 29-31): `OrderText` requires the user-visible run that closes the order (8+ words) unless the order is declared mechanical, and closing checks against it; the transfer of a problem with two or more past owners refuses without the commander's traced `PATH:LINE`; unit wording never becomes a strike; an order whose owner already delivered a checked commit cannot be transferred, its owner merges; a close's run artifact names its runtime, and a runtime without the delivered commit is refused; an order states the decision family it deletes and completion refuses while the family count is above zero or a renamed site of the same kind appears. The 86 wording strikes in the scratch file are carried as voids in phase 8, never deleted.
-
-**Done when** a send-back, a missed deadline and a false completion each produce one record on the order, a second strike fires the unit in one operation, and on a copied root an order without a works line is refused while one with it closes only through `CommsProblemCloseTool` with an artifact, and transferring an order with a delivered, checked commit is refused, a close citing a run from a build without the delivered commit is refused, and a delivery that renames the decision instead of deleting it (the P520 case) is refused by its family count.
+P360 deleted the operation-delivery silent failure default and the duplicate commit-only failure writer, sharing recording through the existing delivery owner. The matrix derives from its row declarations; delivered rows no longer carry this phase as pending work. The 86 historical scratch wording strikes still belong to phase 8's explicit void carry, not deletion or a new implementation here.
 
 ### Phase 4: the review queue
 
