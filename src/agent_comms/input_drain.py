@@ -26,6 +26,7 @@ from .activity import FailedWakeDiagnostic
 from .agent_backend import ClearQueue, InputContent, InputId, SendNow, TurnInbox, TurnInboxItem
 from .child_process import join_retirement
 from .comms import Comms
+from .turn_terminal import EndedWithoutResult, TurnTerminal
 from .coordination_cohort import next_sealed_assignment
 from .coordination_database import CoordinationStore
 from .coordination_errors import IdentityConflict
@@ -1012,12 +1013,12 @@ class InputDrain(InputObservation):
             if state.queued:
                 state.to_turn(SendNow(tuple(InputId(input_id) for input_id in state.queued)))
 
-    async def close(self) -> None:
-        """Retire input producers before their sessions and turns are closed."""
+    async def close(self, terminal: TurnTerminal = EndedWithoutResult()) -> None:
+        """Retire input producers with the shutdown's actual terminal cause."""
         self.closing = True
         tasks = tuple(task for state in self.drained.values() for task in state.producers())
         for task in tasks:
-            task.cancel()
+            task.cancel(terminal)
         try:
             await join_retirement(asyncio.gather(*tasks, return_exceptions=True))
         finally:

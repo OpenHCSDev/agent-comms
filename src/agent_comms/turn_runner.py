@@ -46,6 +46,7 @@ from .transcript_updates import TurnTranscriptUpdate
 from .turn_effects import TurnEffects
 from .turn_lease import TurnLeaseFence, TurnState
 from .turn_phase import CancellingPhase, TurnPhase
+from .turn_terminal import EndedWithoutResult, TurnTerminal
 
 if TYPE_CHECKING:
     from . import pi_events as pi
@@ -462,11 +463,11 @@ class TurnRunner:
             dependency_wait_id=dependency_wait_id,
         ).run()
 
-    async def close(self) -> None:
+    async def close(self, terminal: TurnTerminal = EndedWithoutResult()) -> None:
         tasks = dict(self.turn_tasks)
         self.turn_tasks.clear()
         for task in tasks.values():
-            task.cancel()
+            task.cancel(terminal)
         await asyncio.gather(*tasks.values(), return_exceptions=True)
         # A relay-only turn never created a backend, so it has no runtime work to stop.
         await asyncio.gather(
