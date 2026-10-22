@@ -3466,11 +3466,16 @@ class TodoStore(DurableStore):
     @classmethod
     def require_unit_in(cls, db: sqlite3.Connection, unit: ThreadIncarnation,
                         assigner: ThreadIncarnation) -> None:
-        """The original open Todo owns who assigns its unit, under this transaction."""
+        """The original open Todo owns who assigns its unit, under this transaction.
+
+        Its commander outranks the fork that assigned it, so an order a fork left open,
+        even one whose fork has ended, is the commander's to replace; sibling forks
+        stay refused, since a fork never created a problem itself."""
         for todo in cls.held_in(db,
-                f'NOT ({Assignment.sql_field("parent")}=? '
-                f'AND {Assignment.sql_field("parent_created")}=?)',
-                (assigner.name, assigner.wire_birth), unit=unit):
+                f'NOT (({Assignment.sql_field("parent")}=? '
+                f'AND {Assignment.sql_field("parent_created")}=?) '
+                'OR (creator=? AND creator_created=?))',
+                (assigner.name, assigner.wire_birth) * 2, unit=unit):
             raise TodoError(
                 f"{unit.name} is assigned by {todo.held().parent} on open order "
                 f"{todo.order.checked().id} ({todo.id}); "
