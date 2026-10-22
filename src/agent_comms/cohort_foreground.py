@@ -6,8 +6,8 @@ from collections.abc import Callable
 from pathlib import Path
 
 from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordinator import Coordination
 from agent_comms.coordination_session import NativeBoundary
+from agent_comms.coordinator import Coordination
 
 from .cohort_schema import CohortDeliveryReceipts, assert_cohort_schema
 from .coordination_cohort import accept_delivery_cohort

@@ -22,7 +22,8 @@ import pytest
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.backup import bus_files
 from agent_comms.installer.upgrade import CarriedRehearsal, RehearsedUpgrade, Upgrade
-from conftest import declare_test_bus, publish_initial
+from cutover.carry_bus_history import BusHistory
+from test_carry_bus_history import predecessor_history
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 
@@ -61,21 +62,21 @@ def installed_home(tmp_path_factory) -> dict[str, str]:
 
 @pytest.mark.timeout(280)
 @pytest.mark.parametrize("repos", ((), ("--repos",)), ids=("kept-repos", "given-repos"))
-def test_install_rehearses_without_changing_the_bus(private_comms, installed_home, tmp_path, repos):
-    comms = private_comms
-    declare_test_bus(comms, channels=("comms",), threads=(
-        comms.registry.new_thread(name="worker", tags=frozenset(), worktree=str(tmp_path)),))
-    publish_initial(comms, "worker", "#all", "One message before the install")
+def test_install_rehearses_without_changing_the_bus(installed_home, tmp_path, repos):
+    # The outgoing runtime must inspect its own format, not a target-version fixture.
+    # Reuse the carry proof's real publisher rather than forge its retired marker.
+    root = predecessor_history(tmp_path) / "destination"
+    assert BusHistory.filename in {path.name for path in root.iterdir()}
     checkout = tmp_path / "checkout"
     subprocess.run(["git", "clone", "-q", REPOSITORY, checkout], check=True)
-    before = bus_files(comms.root)
+    before = bus_files(root)
     given = (*repos, str(checkout)) if repos else ()
     installed = subprocess.run(
-        [Path(sys.executable).with_name("agent-comms"), "--root", comms.root, "install",
+        [Path(sys.executable).with_name("agent-comms"), "--root", root, "install",
          "--rehearse", "--checkout", checkout, "--to", "HEAD", "--project", checkout, *given],
         cwd=checkout, env={**installed_home, "PYTHONPATH": os.environ.get("PYTHONPATH", "")},
         capture_output=True, text=True, timeout=270)
     assert installed.returncode == 0, installed.stderr
     result = FieldCodec.decode(Upgrade, FieldCodec.parse(installed.stdout))
     assert isinstance(result, RehearsedUpgrade) and isinstance(result.rehearsal, CarriedRehearsal)
-    assert bus_files(comms.root) == before
+    assert bus_files(root) == before

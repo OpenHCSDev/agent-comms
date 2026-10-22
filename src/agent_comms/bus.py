@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import sqlite3
 import json
+import sqlite3
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
@@ -11,31 +11,35 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
-from agent_comms.bus_publication import Delivered, KeyedPublication
 from agent_comms.bus_activity_index import BusActivityIndex
 from agent_comms.bus_display_index import BusDisplayIndex
+from agent_comms.bus_publication import Delivered, KeyedPublication
 from agent_comms.bus_route_counts import RouteCounts
 from agent_comms.bus_tables import (
     Addressed,
+    AnsweredSource,
+    BusProjectionTables,
     BusRow,
     BusTables,
-    BusProjectionTables,
     ClaimOperations,
     HeldResources,
     MessageIdentitySource,
-    SentSource,
     ReceivedSource,
-    AnsweredSource,
+    SentSource,
 )
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.errors import CommittedMessageError, RelationViolationError, UnclaimedError
 from agent_comms.envelope_claim_transitions import (
-    ClaimOwner, ClaimProjection, ClaimTransition, RecordedScope, ResourceClaim,
+    ClaimOwner,
+    ClaimProjection,
+    ClaimTransition,
+    RecordedScope,
+    ResourceClaim,
 )
+from agent_comms.errors import CommittedMessageError, RelationViolationError, UnclaimedError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.locked_store import BusFile, StoreCommittedError
-from agent_comms.messages import BusRecord, Claimed, ClaimMessage, Message
 from agent_comms.message_reference import MessageReference
+from agent_comms.messages import BusRecord, Claimed, ClaimMessage, Message
 from agent_comms.private_path import FileIdentity, PresentPath
 from agent_comms.typed_table import CarriedWriter, SQLiteDatabase, WalStore
 from agent_comms.watched import Watched

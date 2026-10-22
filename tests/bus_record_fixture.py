@@ -7,6 +7,8 @@ from pathlib import Path
 from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
 from agent_comms.bus import Bus, PrivateRecord
 from agent_comms.comms import Comms
+from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordinator import Coordination
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.bus_publication import Delivered, KeyedPublication
 from agent_comms.envelope_claim_transitions import UnscopedClaims
@@ -25,6 +27,8 @@ def prepare_native_comms(comms: Comms) -> Comms:
     """Validate native-root authority before installing data or opening a coordinator."""
     comms.registry.prepare_native_root()
     Bus.install(Bus.path_in(comms.root))
+    with Coordination(str(CoordinationStore.path_in(comms.root))) as coordinator:
+        coordinator.install_private_runtime()
     return comms
 
 

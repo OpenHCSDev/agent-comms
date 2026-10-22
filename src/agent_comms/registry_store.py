@@ -23,7 +23,12 @@ from .native_input_owner import RegistryOwner
 from .private_path import FileObservation, FileRevision, MissingFile
 from .private_registry_guard import PrivateRegistryGuard, PublicRegistry, RegistryPrivacy
 from .registration_change import NativeSourcePublication
-from .registry_document import HistoricalRootPurpose, RegistryDocument, RegistryEntry, RegistrySnapshot
+from .registry_document import (
+    HistoricalRootPurpose,
+    RegistryDocument,
+    RegistryEntry,
+    RegistrySnapshot,
+)
 from .routing import TurnRouting
 from .store_files import SharedLock
 from .thread_identity import TurnIdentity

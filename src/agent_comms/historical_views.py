@@ -12,6 +12,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .bus import Bus
 from .channels import Channel
 from .coordination_errors import HistoricalSourceChanged
 from .errors import UnregisteredThreadError
@@ -47,7 +48,6 @@ from .registry_provenance import RegistryProvenance
 from .revision_views import BusSourceView
 from .store_files import _atomic_write_text, _store_lock
 from .thread_identity import ThreadProvenance, UnrecordedThreadIncarnation
-from .bus import Bus
 
 if TYPE_CHECKING:
     from .catalog_document import CatalogDocument
