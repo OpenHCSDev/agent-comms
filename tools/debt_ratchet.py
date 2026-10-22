@@ -68,14 +68,16 @@ class ContentCache:
 
     @staticmethod
     def sources() -> tuple[Path, ...]:
-        """Every module loaded in this process whose file lies under this repository's tools/
-        or src/, sorted: the ratchet's measuring code, direct and indirect imports alike."""
+        """Every module loaded in this process under this repository's tools/ or src/, plus the
+        audit package: measuring subprocesses import it from AUDIT_SCRIPTS, so sys.modules
+        alone would miss a change to it. Sorted."""
         roots = (REPOSITORY / "tools", REPOSITORY / "src")
         origins = (Path(origin).resolve() for module in list(sys.modules.values())
                    if isinstance(module, types.ModuleType)
                    and (origin := module.__dict__.get("__file__")))
-        return tuple(sorted({path for path in origins
-                             if any(path.is_relative_to(root) for root in roots)}))
+        loaded = {path for path in origins if any(path.is_relative_to(root) for root in roots)}
+        audited = {path.resolve() for path in (AUDIT_SCRIPTS / "audit").rglob("*.py")}
+        return tuple(sorted(loaded | audited))
 
     @staticmethod
     @cache

@@ -17,6 +17,7 @@ from agent_comms.field_codec import FieldCodec
 from process_tree_fixture import TREE, identities
 
 from tools.debt_ratchet import (
+    AUDIT_SCRIPTS,
     BannedVocabulary,
     BroadExceptDefault,
     BroadSwallow,
@@ -1239,6 +1240,7 @@ def test_content_cache_digest_covers_a_module_only_loaded_indirectly():
     change to it is a different cache key."""
     indirect = Path(sys.modules["agent_comms.coordination_tables.attempts"].__file__).resolve()
     assert indirect in ContentCache.sources()
+    assert (AUDIT_SCRIPTS / "audit" / "findings.py").resolve() in ContentCache.sources()
     assert indirect.is_relative_to(Path(__file__).resolve().parents[2] / "src")
 
 
