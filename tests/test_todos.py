@@ -31,6 +31,7 @@ from agent_comms.installer.practice import practice_copy
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import OrderCheck
 from agent_comms.owner_requests import NewestOpenRequest
+from agent_comms.plan_phases import PlanPhase
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.recorded_time import RecordedEventTime
@@ -246,9 +247,9 @@ def pr_commander(tmp_path, monkeypatch, proof_build_checkouts):
     # Borrow only the plan inputs; the proof fixture owns the commit graph.
     current = Path(__file__).resolve().parents[1]
     shutil.copytree(current / 'plans', source.checkout / 'plans')
-    module = source.checkout / 'src' / 'agent_comms'
-    module.mkdir(parents=True)
-    shutil.copyfile(current / 'src' / 'agent_comms' / '__init__.py', module / '__init__.py')
+    module = source.module_file(PlanPhase.__module__)
+    (source.checkout / module).parent.mkdir(parents=True)
+    shutil.copyfile(current / module, source.checkout / module)
     source.git(source.checkout, 'add', 'plans', 'src')
     source.git(source.checkout, 'commit', '-qm', 'Declare current commander plans')
     source.git(source.checkout, 'push', '-q', 'origin', 'HEAD:main')
