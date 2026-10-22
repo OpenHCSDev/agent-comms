@@ -768,6 +768,17 @@ class CliCommand(
         return cls
 
     @classmethod
+    def result_type(cls) -> type[CliResult]:
+        """The result this command answers: its ``apply``'s declared return."""
+        answered: type[CliResult] = signature(cls.apply, eval_str=True).return_annotation
+        return answered
+
+    @classmethod
+    def invocation(cls, *arguments: str) -> tuple[str, ...]:
+        """This command's invocation on the agent-comms command line."""
+        return (cls.declared_name, *arguments)
+
+    @classmethod
     def selected_targets(cls, raw: CommandTarget | str | tuple[CommandTarget | str, ...]) -> TargetSelection:
         """Decode a CLI or menu target input once, before command execution."""
         return TargetSelection.decode(raw, multiple=False)
@@ -1382,7 +1393,7 @@ class AckCliCommand(ThreadArgument, CliCommand):
 class WhoCliCommand(CliCommand):
     help = "Presence: who is in the chat"
 
-    def apply(self, ctx: Comms) -> CliResult:
+    def apply(self, ctx: Comms) -> WhoResult:
         return WhoResult(ctx.views.who())
 
 
@@ -1533,7 +1544,7 @@ class ThreadsCliCommand(CliCommand):
         False
     )
 
-    def apply(self, ctx: Comms) -> CliResult:
+    def apply(self, ctx: Comms) -> ThreadsResult:
         return ThreadsResult(ctx.views.list_threads(active_only=self.active_only))
 
 
@@ -1715,12 +1726,30 @@ class ReconciledStoresResult(CliResult):
     rewritten: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class BusReadBack(CliResult):
+    """What a bus answers through one runtime's CLI: its threads and who is present."""
+
+    threads: int
+    who: int
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReadBackCliCommand(CliCommand, declared_name="read-back"):
+    help = ("Count this bus's threads and present participants; the installer reads a "
+            "carried bus back with it")
+
+    def apply(self, ctx: Comms) -> BusReadBack:
+        return BusReadBack(len(ctx.views.list_threads(active_only=False)),
+                           len(ctx.views.who()))
+
+
 @dataclass(frozen=True, kw_only=True)
 class ReconcileStoresCliCommand(CliCommand, declared_name="reconcile-stores"):
     help = ("Reconcile every declared store's schema onto this runtime's declarations; "
             "the installer runs it under maintenance after the outgoing owners stop")
 
-    def apply(self, ctx: Comms) -> CliResult:
+    def apply(self, ctx: Comms) -> ReconciledStoresResult:
         rewritten = []
         for path, owner in sorted(ReconciledFile.existing_in(ctx.root).items()):
             if owner.reconcile_at(path):

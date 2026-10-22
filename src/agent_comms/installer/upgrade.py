@@ -36,25 +36,29 @@ from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
-from agent_comms.active_route import ActiveRoute, active_route_path, route_new_bus
+from pydantic import TypeAdapter
+
 from agent_comms import cli
-from agent_comms.cli_commands import (
-    InstallResult, ReconciledStoresResult, ReconcileStoresCliCommand, ThreadsResult, WhoResult,
-)
-from agent_comms.cli_result import CliResult
+from agent_comms.active_route import ActiveRoute, active_route_path, route_new_bus
 from agent_comms.cli_bridges.shared import Serve, SessionBridgeResumes
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.cli_commands import (
+    BusReadBack,
+    CliCommand,
+    InstallResult,
+    ReadBackCliCommand,
+    ReconciledStoresResult,
+    ReconcileStoresCliCommand,
+    StartCliCommand,
+    StopCliCommand,
+)
+from agent_comms.cli_protocol import CoreError
+from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
-from agent_comms.field_codec import FieldCodec, PathText
-from agent_comms.history_result import EverythingHistoryPageResult
-from agent_comms.storage_rules import StorageRule
+from agent_comms.coordination_errors import CoordinationReadUnavailable
+from agent_comms.declared_family import DeclaredFamily
+from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText
 from agent_comms.host_services import HostService
-from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
-from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, MaintenanceOperator
-from agent_comms.registry_store import RegistryStore
-from agent_comms.repo import Checkout, ScratchCheckout
-from agent_comms.store_files import _store_lock
-from agent_comms.wire_log import WireLog
+from agent_comms.install_choices import InstallerChoice
 from agent_comms.installer import publication, step_worker
 from agent_comms.installer.backup import (
     BackupReport,
@@ -73,12 +77,19 @@ from agent_comms.installer.practice import (
     practice_copy,
 )
 from agent_comms.installer.runtime_resolution import RuntimeResolution
-from agent_comms.install_choices import InstallerChoice
+from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
+from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, MaintenanceOperator
+from agent_comms.registry_store import RegistryStore
+from agent_comms.repo import Checkout, ScratchCheckout
+from agent_comms.storage_rules import StorageRule
+from agent_comms.store_files import _store_lock
+from agent_comms.wire_log import WireLog
 
 if TYPE_CHECKING:
     from agent_comms.installer.launch import InstallReport
 
 HOME = Path.home()
+CORE_ERROR = TypeAdapter(CoreError.declared_union())
 CLIENT_IMPORTS = "import toad.app, agent_comms.acp"
 
 
@@ -152,7 +163,7 @@ class OwnerStart(DeclaredFamily, affix="Owner"):
     @staticmethod
     def attempt(stack: Stack, root: Path, name: str) -> OwnerStart:
         try:
-            stack.cli(root, "start", "--name", name)
+            stack.cli(root, StartCliCommand, CliResult, "--name", name)
         except UpgradeRefused as error:
             return RefusedOwner(name, str(error))
         return StartedOwner(name)
@@ -190,15 +201,6 @@ class InstallRolledBack(UpgradeRefused):
             *(line for owner in self.started for line in owner.lines()),
             f"Backup: {self.backup}",
         )
-
-
-@dataclass(frozen=True)
-class BusReadBack:
-    """What the carried bus answered through the CLI of the runtime that serves it next."""
-
-    threads: int
-    who: int
-    history: int
 
 
 class Extendable:
@@ -449,22 +451,31 @@ class Stack:
             return configuration.apply_runtime(environment)
         return environment
 
-    def cli(self, root: Path, *arguments: str) -> dict:
-        """One JSON CLI result for this bus alone, never the route's, waiting while the
-        route index is still being built."""
+    def cli[Answer: CliResult](self, root: Path, command: type[CliCommand],
+                               answer: type[Answer], *arguments: str) -> Answer:
+        """This bus's answer to ``command``, never the route's, decoded as the result the
+        command declares. A declared read-unavailable failure (the route index still
+        rebuilding, its writer busy) is waited out; every other failure refuses."""
+        if not issubclass(command.result_type(), answer):
+            raise TypeError(f"{command} answers {command.result_type()}, not {answer}")
+        invocation = command.invocation(*arguments)
+        verb = f"agent-comms {' '.join(invocation)}"
         for _ in range(240):
             completed = subprocess.run(
-                [str(self.python), "-m", cli.__name__, "--root", str(root),
-                 *arguments], cwd=self.checkout, env=self.environment(), capture_output=True,
-                text=True)
-            if "Route index covers" not in completed.stdout:
-                break
+                [str(self.python), "-m", cli.__name__, "--root", str(root), *invocation],
+                cwd=self.checkout, env=self.environment(), capture_output=True, text=True)
+            try:
+                if not completed.returncode:
+                    return FieldCodec.decode(command.result_type(),
+                                             FieldCodec.parse(completed.stdout))
+                failure = CORE_ERROR.validate_json(completed.stdout)
+            except (MalformedRecord, ValueError) as malformed:
+                raise UpgradeRefused(f"{verb}: undecodable answer: {malformed}; "
+                                     f"stderr: {completed.stderr.strip()}") from malformed
+            if not issubclass(failure.exception_type, CoordinationReadUnavailable):
+                raise UpgradeRefused(f"{verb}: {failure.error}")
             time.sleep(5)
-        result = json.loads(completed.stdout or "{}")
-        if completed.returncode or "error" in result:
-            raise UpgradeRefused(f"agent-comms {' '.join(arguments)}: "
-                                 f"{completed.stdout.strip() or completed.stderr.strip()}")
-        return result
+        raise UpgradeRefused(f"{verb}: still unavailable after 20 minutes: {failure.error}")
 
     def call_step(self, step: type[Carry], root: Path, tree: TargetTree,
                   method: str, **arguments: bool) -> str:
@@ -493,26 +504,20 @@ print(json.dumps([thread.name for thread in OwnerRestartRequest().scope.threads(
 """, root, cwd=self.checkout, env=self.environment())
         return FieldCodec.decode(list[str], FieldCodec.parse(selected))
 
-    def owners(self, root: Path, command: str, names: list[str]) -> None:
+    def owners(self, root: Path, command: type[CliCommand], names: list[str]) -> None:
         """Run the captured owner set together and join every request before proceeding."""
         with ThreadPoolExecutor(max_workers=max(1, len(names))) as pool:
-            list(pool.map(lambda name: self.cli(root, command, "--name", name), names))
+            list(pool.map(lambda name: self.cli(root, command, CliResult, "--name", name),
+                          names))
 
     def start(self, root: Path, names: list[str]) -> tuple[OwnerStart, ...]:
         """Start the captured owner set together; each owner's outcome is its own."""
         with ThreadPoolExecutor(max_workers=max(1, len(names))) as pool:
             return tuple(pool.map(lambda name: OwnerStart.attempt(self, root, name), names))
 
-    def listed(self, root: Path, result: type[CliResult], *arguments: str) -> int:
-        """How many items a listing answered, under its result's one field."""
-        (listing,) = fields(result)
-        return len(self.cli(root, *arguments)[listing.name])
-
     def verify(self, root: Path) -> BusReadBack:
-        history = self.cli(root, "history", "--limit", "50")  # #any: every channel
-        return BusReadBack(self.listed(root, ThreadsResult, "threads"),
-                           self.listed(root, WhoResult, "who"),
-                           len(history[EverythingHistoryPageResult.messages_key]))
+        """What the carried bus answers through the CLI of the runtime that serves it next."""
+        return self.cli(root, ReadBackCliCommand, BusReadBack)
 
 
 @dataclass(frozen=True)
@@ -626,7 +631,7 @@ def reconcile_stores(root: Path, staged: Stack) -> StepRun:
     under the hold, and names each file it rewrote, so the backup and the rehearsal account
     for the schema change like any carry's rewrite."""
     verb = ReconcileStoresCliCommand.declared_name
-    result = FieldCodec.decode(ReconciledStoresResult, staged.cli(root, verb))
+    result = staged.cli(root, ReconcileStoresCliCommand, ReconciledStoresResult)
     return StepRun(verb, Carried(len(result.rewritten), rewritten=result.rewritten))
 
 
@@ -829,7 +834,7 @@ class RetiringInstall(FreshInstall):
 
     def live(self, rehearsal: FreshRehearsal) -> RetiredRun:
         running = self.installed.running_owners(self.root)
-        self.installed.owners(self.root, "stop", running)
+        self.installed.owners(self.root, StopCliCommand, running)
         retired = self.root.with_name(f"{self.root.name}.retired-{time.strftime('%Y%m%dT%H%M%S')}")
         self.root.rename(retired)
         return super().live(rehearsal).extended(RetiredRun, stopped=tuple(running), retired=retired)
@@ -854,7 +859,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
     held = maintenance.begin(MaintenanceOperator.current())
     os.environ[HOLDER_NONCE] = held.nonce  # this run's own CLI calls read under its hold
     try:
-        installed.owners(root, "stop", running)
+        installed.owners(root, StopCliCommand, running)
         with transcripts_held(root):
             before = bus_files(root)
             backup = StoreBackup.take(root, active_route_path(), selected, spill_dir)

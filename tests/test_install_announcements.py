@@ -1,11 +1,11 @@
 """Typed installer results use the real publisher and retained channel history."""
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
-from agent_comms.cli_commands import HistoryCliCommand, InstallResult
+from agent_comms.cli_commands import BusReadBack, HistoryCliCommand, InstallResult
 from agent_comms.commander.config import NoConfigFile
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.errors import UnknownChannelError
@@ -14,9 +14,18 @@ from agent_comms.installer.backup import BackupReport, RestoreSpace, UpgradeRefu
 from agent_comms.installer.carry import Carried
 from agent_comms.installer.launch import InstallReport
 from agent_comms.installer.upgrade import (
-    BusReadBack, CarriedRun, CreatedRun, FreshRehearsal, InstalledUpgrade,
-    InstallRolledBack, RefusedOwner, RehearsalFiles, RetiredRun, StartedOwner,
-    StepRun, UnchangedRun, Upgrade,
+    CarriedRun,
+    CreatedRun,
+    FreshRehearsal,
+    InstalledUpgrade,
+    InstallRolledBack,
+    RefusedOwner,
+    RehearsalFiles,
+    RetiredRun,
+    StartedOwner,
+    StepRun,
+    UnchangedRun,
+    Upgrade,
 )
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.thread_execution import ExternalThreadExecution
@@ -27,7 +36,7 @@ from conftest import declare_test_bus
     CarriedRun(
         steps=(StepRun("carry_order_scopes", Carried(6)),),
         files=RehearsalFiles(3, 1, ("todos.sqlite3",), 1024),
-        read=BusReadBack(2, 2, 1), stopped=("worker",), services=("connector",),
+        read=BusReadBack(2, 2), stopped=("worker",), services=("connector",),
         started=(StartedOwner("worker"), RefusedOwner("busy", "already running")),
         restore_space=RestoreSpace(1024, 4096, 0.01),
         backup=BackupReport("saved-before-install", 1024), retired_backups=(),

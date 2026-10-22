@@ -9,16 +9,21 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from tools.debt_ratchet import UncarriedRecordFormat, git
 
+from agent_comms.cli_commands import ArchiveCliCommand
 from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.thread_execution import ExternalThreadExecution
-from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
-from agent_comms.installer.carry import (
-    STEPS, Carried, Carry, CarryChain,
-)
 from agent_comms.installer.backup import (
-    StoreBackup, UpgradeRefused, bus_files, transcripts_held,
+    StoreBackup,
+    UpgradeRefused,
+    bus_files,
+    transcripts_held,
+)
+from agent_comms.installer.carry import (
+    STEPS,
+    Carried,
+    Carry,
+    CarryChain,
 )
 from agent_comms.installer.upgrade import (
     RehearsalFiles,
@@ -26,7 +31,9 @@ from agent_comms.installer.upgrade import (
     StepRun,
     carried,
 )
-from tools.debt_ratchet import UncarriedRecordFormat, git
+from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -169,7 +176,7 @@ def test_owner_request_failure_joins_the_entire_set_before_propagating(comms, st
     # The first real CLI request fails; both other children must finish their writes
     # before owners propagates that failure. No replacement Stack.cli is involved.
     with pytest.raises(UpgradeRefused, match="failed"):
-        stack.owners(comms.root, "archive", names)
+        stack.owners(comms.root, ArchiveCliCommand, names)
     saved = comms.registry.snapshot()
     assert tuple(saved.status(name) for name in names[1:]) == (ArchivedThreadStatus(),) * 2
 
