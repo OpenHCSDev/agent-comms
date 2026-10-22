@@ -11,7 +11,6 @@ from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .locked_store import BusLockFile
 from agent_comms.lifecycle_capability import Unresolved
 
 from .agent_activity import AgentActivity
@@ -74,7 +73,7 @@ class Goals:
         self.registry = registry
         self.bus = bus
         self.agents = agents
-        self._wire_lock_path = BusLockFile.path_in(root)
+        self._wire_lock_path = root / "wire"
         self.waits = GoalWaits.at(root)
         self.goal_store: GoalAttemptStore | None = None
 

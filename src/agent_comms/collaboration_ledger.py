@@ -3,7 +3,6 @@
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from .locked_store import BusLockFile
 from .errors import UnregisteredThreadError
 from .registration import Registration
 from .shared_ledger import SharedLedger
@@ -15,7 +14,7 @@ class CollaborationLedger(SharedLedger):
     registry: Registration
 
     def merge(self, updates: Mapping[str, object], author: str) -> None:
-        with _store_lock(BusLockFile.path_in(self.path.parent)):
+        with _store_lock(self.path.with_name("wire")):
             if author not in self.registry:
                 raise UnregisteredThreadError(f"Author {author!r} is not registered.")
             super().merge(updates, author)

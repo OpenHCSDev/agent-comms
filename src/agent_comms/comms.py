@@ -16,7 +16,7 @@ from .collaboration_ledger import CollaborationLedger
 from .context_store import ContextStore
 from .goal_management import Goals
 from .history_views import HistoryViews
-from .locked_store import RegistryFile, BusLockFile
+from .locked_store import RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .messaging import Messaging
@@ -38,7 +38,7 @@ class Comms:
         self.route = resolve_comms_route(root)
         self.route.observe_root()
         publisher.prepare_root(self.root)
-        self._wire_lock_path = BusLockFile.path_in(self.root)
+        self._wire_lock_path = self.root / "wire"
         self.registry = Registration(RegistryFile.path_in(self.root))
         self.bus = MessageBus(
             WireLog.path_in(self.root),

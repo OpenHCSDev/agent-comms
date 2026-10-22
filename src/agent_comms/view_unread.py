@@ -16,7 +16,7 @@ from weakref import WeakValueDictionary, finalize
 
 from .coordination_database import CoordinationStore, StoreBusy
 from .coordination_errors import CoordinationReadUnavailable
-from .locked_store import RuntimeFile, SQLiteFile, BusLockFile
+from .locked_store import RuntimeFile, SQLiteFile
 from .native_entries import NativeEntry
 from .native_transcript import SessionCut, reverse_records
 from .private_path import FileObservation, FileRevision, MissingFile
@@ -344,7 +344,7 @@ class NativeReplyPreparation(ReplyPreparation):
         # Publication stays under the existing deletion and SQLite owners.
         # A busy writer leaves these exact completed readers for the next observation.
         try:
-            with _store_lock(BusLockFile.path_in(state.path.parent), mode=SharedLock(), blocking=False):
+            with _store_lock(state.path.parent / "wire", mode=SharedLock(), blocking=False):
                 with CoordinationReadUnavailable.checking(), SQLiteFile.write_transaction(database):
                     for source in completed:
                         self.readers[source].commit(database)

@@ -8,7 +8,6 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Concatenate
 
-from .locked_store import BusLockFile
 from .catalog_store import ChannelCatalog
 from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError
@@ -139,7 +138,7 @@ class Registration:
         phase is retained from the locked document, not compared to an old view.
         Native session identity and context proof remain with their producers.
         """
-        with _store_lock(BusLockFile.path_in(self.store.path.parent), mode=SharedLock()), self.store.editing() as edit:
+        with _store_lock(self.store.path.parent / "wire", mode=SharedLock()), self.store.editing() as edit:
             change = edit.prepare_native_source(original, session_file)
             change = self._commit_registration(edit, change)
             # The document owns the next turn's selection. Publishing an
@@ -156,7 +155,7 @@ class Registration:
         preserves omitted provenance and a current executor before applying the same
         registration effects. No pre-read can authorize a stale owner replacement.
         """
-        with _store_lock(BusLockFile.path_in(self.store.path.parent)):
+        with _store_lock(self.store.path.parent / "wire"):
             return self._declare_unlocked(thread, status)
 
     def _declare_unlocked(self, thread: Thread, status: ThreadStatus = _RUNNING_STATUS) -> Thread:

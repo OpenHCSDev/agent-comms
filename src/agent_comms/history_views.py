@@ -11,7 +11,6 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
-from .locked_store import BusLockFile
 from .catalog_store import ChannelCatalog
 from .declared_family import DeclaredFamily
 from .cli_result import CliResult
@@ -191,7 +190,7 @@ class HistoryViews:
         self.messaging = messaging
         self.goals = goals
         self.ledger = ledger
-        self._wire_lock_path = BusLockFile.path_in(root)
+        self._wire_lock_path = root / "wire"
         self.presentation = BusPresentation(bus, registry, channels.catalog, agents, goals)
         self.transcript_reads = transcript_read_state(bus.reads.path)
 

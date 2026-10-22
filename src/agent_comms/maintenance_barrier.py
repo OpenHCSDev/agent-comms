@@ -24,7 +24,7 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, ToolRefusedError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .lifecycle import LifecycleState
-from .locked_store import DurableFile, LockedStore, RegistryFile, BusLockFile
+from .locked_store import DurableFile, LockedStore, RegistryFile
 from .send_outcome import GrantedSend, HeldSend
 from .store_files import (
     SharedLock,
@@ -277,7 +277,7 @@ class MaintenanceBarrier(MaintenanceIngress):
 
     def __init__(self, registry_path: Path):
         self.registry_path = Path(registry_path)
-        self.wire_path = BusLockFile.path_in(self.registry_path.parent)
+        self.wire_path = self.registry_path.parent / "wire"
         self.marker_path = MaintenanceMarker.path_in(self.registry_path.parent)
         self.state_path = MaintenanceState.path_in(self.registry_path.parent)
 

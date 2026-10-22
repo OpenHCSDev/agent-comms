@@ -297,13 +297,6 @@ class RuntimeFile(RootFile):
     __slots__ = ()
 
 
-class BusLockFile(RuntimeFile):
-    """The bus lock file every bus reader and writer locks; declared once."""
-
-    __slots__ = ()
-    filename = "wire"
-
-
 class DocumentConversion(ABC):
     """A store's declared converter names the old schemas it can actually read."""
 

@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
 from uuid import uuid4
 
-from .locked_store import BusLockFile
 from agent_comms.coordination_contracts import MAX_IDENTIFIER_CHARS
 from agent_comms.coordination_errors import CoordinationError, ParticipantNotRegistered
 
@@ -231,7 +230,7 @@ class ThreadManagement:
 
     @property
     def _wire_lock_path(self) -> Path:
-        return BusLockFile.path_in(self.root)
+        return self.root / "wire"
 
     def import_thread(
         self,

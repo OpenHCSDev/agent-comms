@@ -26,7 +26,7 @@ from agent_comms.channels import AnyChannel
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.historical_views import HistoryArchive
-from agent_comms.locked_store import BusLockFile
+from agent_comms.locked_store import RuntimeFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError
 from agent_comms.message_page import (
     InboxPage,
@@ -93,7 +93,8 @@ class WatchPass[Observed](HeldBusWrite, ABC):
     def pass_body(self, comms: Comms, observed: Observed) -> None: ...
 
 
-class MessageBus[Writes: Publisher](BusLockFile, StoreLockOwner):
+class MessageBus[Writes: Publisher](RuntimeFile, StoreLockOwner):
+    filename = "wire"
 
     @property
     def path(self) -> Path:

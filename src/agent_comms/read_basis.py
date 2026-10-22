@@ -7,7 +7,6 @@ uses ThreadIncarnation; process and turn generations do not alter provenance.
 
 from __future__ import annotations
 
-from .locked_store import BusLockFile
 from .bus_activity_index import ActivityClocks
 
 import asyncio
@@ -672,7 +671,7 @@ class DMDisplayBasis:
         that the corresponding inbound tail was contiguous and visibly painted.
         """
         peer = CommandTarget.named(peer).require_dm_peer()
-        with _store_lock(BusLockFile.path_in(root), mode=SharedLock()), registry.store.reading_snapshot() as snapshot:
+        with _store_lock(root / "wire", mode=SharedLock()), registry.store.reading_snapshot() as snapshot:
             viewer_name = snapshot.canonical_name(viewer)
             peer_name = snapshot.canonical_name(peer)
             scope = DMDisplayScope.capture_human(viewer_name, peer_name, snapshot)
@@ -686,7 +685,7 @@ class DMDisplayBasis:
                 bus.reads, document, viewer_name, snapshot, snapshot, source,
             )
         page, displayed = result.page, result.displayed
-        with _store_lock(BusLockFile.path_in(root), mode=SharedLock()):
+        with _store_lock(root / "wire", mode=SharedLock()):
             root_info = root.stat()
             basis = cls(
                 root=str(root.resolve()),
@@ -749,7 +748,7 @@ class DMDisplayBasis:
         """
         if type(through) is not int:
             raise ValueError("Painted DM read requires a typed page basis and integer bound.")
-        with _store_lock(BusLockFile.path_in(root), mode=SharedLock()):
+        with _store_lock(root / "wire", mode=SharedLock()):
             user = registry.user_thread()
             with registry.store.locked():
                 snapshot = registry.store.read_snapshot_unlocked()
