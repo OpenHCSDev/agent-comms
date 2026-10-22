@@ -376,3 +376,90 @@ class ExternalBoundariesPhase(RemainingSlopPhase):
     """Wave 3."""
 
     evidence = PatternAbsent(r"^\s*except Exception\b")
+
+
+class ThreadNameOwnersPhase(RemainingSlopPhase):
+    """4.1: the registry owns a thread's name; the coordinator keys by lookup."""
+
+    evidence = PatternAbsent(r"\bowner_thread\b")
+
+
+class TurnOwnerIdentityPhase(RemainingSlopPhase):
+    """4.5: a turn's owner is a ProcessIdentity, never a bare pid."""
+
+    evidence = PatternAbsent(r"\bowner_pid\b")
+
+
+class FormatIdentityPhase(RemainingSlopPhase):
+    """4.7: the FieldCodec-derived schema is a stored format's identity."""
+
+    evidence = PatternAbsent(
+        r"format_fingerprint|_canonical_schema|convert_format|source_fingerprints")
+
+
+class DirectoryFsyncPhase(RemainingSlopPhase):
+    """5.1: one atomic file owner; no caller passes an fsync flag."""
+
+    evidence = PatternAbsent(r"\bfsync_parent\b")
+
+
+class PlatformFactsPhase(RemainingSlopPhase):
+    """5.2: Platform owns private-mode checks."""
+
+    evidence = PatternAbsent(
+        r"\bos\.name\b",
+        (
+            "src/agent_comms/goal_history.py",
+            "src/agent_comms/goal_attempts.py",
+            "src/agent_comms/coordination_database.py",
+            "src/agent_comms/maintenance_barrier.py",
+        ),
+    )
+
+
+class HandPrecedencePhase(RemainingSlopPhase):
+    """6.1: the family's declaration order owns precedence, never an integer."""
+
+    evidence = PatternAbsent(
+        r"^\s*(precedence|priority|classification_priority|proof_order|action_order)"
+        r"(: ClassVar\[int\])? = [0-9]")
+
+
+class FailureReasonPhase(RemainingSlopPhase):
+    """6.2: TurnFailure members are the reason."""
+
+    after = (HandPrecedencePhase,)
+    evidence = PatternAbsent(r"\bFailureReason\b")
+
+
+class DeadToolsPhase(RemainingSlopPhase):
+    """8: unreferenced tools."""
+
+    evidence = PathsAbsent(
+        ("tools/codex_duplicate_execution_hook.py", "tools/prove_commander_dispatch.py"))
+
+
+class MaintenanceAdmissionPhase(RemainingSlopPhase):
+    """9.1: a carried file's kind refuses writers during maintenance; no hand-placed check."""
+
+    evidence = PatternAbsent(
+        r"assert_open_unlocked\(\)",
+        ("src/agent_comms/agent_activity.py", "src/agent_comms/wire_log.py"),
+    )
+
+
+class TranscriptHoldPhase(RemainingSlopPhase):
+    """9.3: the gate replaced the installer's transcript lock hold."""
+
+    evidence = PatternAbsent(r"transcripts_held|HOLD_TRANSCRIPTS", ("src/agent_comms/installer",))
+
+
+class InstallerFileIdentityPhase(RemainingSlopPhase):
+    """9.2: the installer identifies a file by its declaring RootFile type."""
+
+    after = (TranscriptHoldPhase,)
+    evidence = PatternAbsent(
+        r"rewritten: tuple\[str|endswith\(\(\"\.lock\"|name\[:-4\]",
+        ("src/agent_comms/installer",),
+    )
+
