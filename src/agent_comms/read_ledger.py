@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from .channel_targets import CommandTarget
 from .coordination_errors import DMScopeChanged
 from .field_codec import FieldCodec, NullMember, SubclassUnion
-from .locked_store import DurableFile, LockedStore
+from .maintenance_barrier import CarriedDocument
 from .private_path import ObservedPath
 from .read_basis import (
     ChannelConversation,
@@ -124,7 +124,7 @@ class ReadDocument:
         )
 
 
-class ReadLedger(DurableFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
+class ReadLedger(Sealed, ThreadOwnedState, CarriedDocument[ReadDocument]):
     filename = "read_ledger.json"
 
     record_type = ReadDocument
