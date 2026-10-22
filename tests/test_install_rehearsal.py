@@ -10,8 +10,10 @@ carried practice copy and the outgoing runtime's owner probe.
 from __future__ import annotations
 
 import os
+import sqlite3
 import subprocess
 import sys
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -19,8 +21,14 @@ import pytest
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.backup import bus_files
 from agent_comms.installer.practice import TestHome
+from agent_comms.installer.upgrade import (
+    CarriedRehearsal,
+    RehearsedUpgrade,
+    UncopiedRehearsal,
+    Upgrade,
+)
 from agent_comms.repo import Checkout, ScratchCheckout
-from agent_comms.installer.upgrade import CarriedRehearsal, RehearsedUpgrade, Upgrade
+from agent_comms.typed_table import ReconciledFile
 from conftest import declare_test_bus, publish_initial
 
 REPOSITORY = Path(__file__).resolve().parents[1]
@@ -60,13 +68,33 @@ def installed_home(tmp_path_factory) -> dict[str, str]:
     return environment
 
 
+def drop_one_index(root: Path) -> None:
+    """One declared store's schema drifts from both runtimes' declarations."""
+    for path in sorted(ReconciledFile.existing_in(root)):
+        with closing(sqlite3.connect(path)) as db:
+            index = db.execute("SELECT name FROM sqlite_master WHERE type='index'"
+                               " AND sql IS NOT NULL ORDER BY name LIMIT 1").fetchone()
+            if index:
+                db.execute(f'DROP INDEX "{index[0]}"')
+                db.commit()
+                return
+    raise AssertionError("No declared store has an index to drop")
+
+
 @pytest.mark.timeout(280)
-@pytest.mark.parametrize("repos", ((), ("--repos",)), ids=("kept-repos", "given-repos"))
-def test_install_rehearses_without_changing_the_bus(private_comms, installed_home, tmp_path, repos):
+@pytest.mark.parametrize("repos, rehearsal", (
+    ((), UncopiedRehearsal), (("--repos",), CarriedRehearsal),
+), ids=("kept-repos-nothing-to-carry", "given-repos-drifted-store"))
+def test_install_rehearses_without_changing_the_bus(private_comms, installed_home, tmp_path,
+                                                    repos, rehearsal):
+    """A bus with nothing to carry is rehearsed without a copy; one store whose schema
+    drifted makes the rehearsal copy the bus and carry it. Neither changes the bus."""
     comms = private_comms
     declare_test_bus(comms, channels=("comms",), threads=(
         comms.registry.new_thread(name="worker", tags=frozenset(), worktree=str(tmp_path)),))
     publish_initial(comms, "worker", "#all", "One message before the install")
+    if rehearsal is CarriedRehearsal:
+        drop_one_index(comms.root)
     checkout = tmp_path / "checkout"
     subprocess.run(["git", "clone", "-q", REPOSITORY, checkout], check=True)
     Checkout(checkout).prepare()
@@ -79,5 +107,5 @@ def test_install_rehearses_without_changing_the_bus(private_comms, installed_hom
         capture_output=True, text=True, timeout=270)
     assert installed.returncode == 0, installed.stderr
     result = FieldCodec.decode(Upgrade, FieldCodec.parse(installed.stdout))
-    assert isinstance(result, RehearsedUpgrade) and isinstance(result.rehearsal, CarriedRehearsal)
+    assert isinstance(result, RehearsedUpgrade) and type(result.rehearsal) is rehearsal
     assert bus_files(comms.root) == before

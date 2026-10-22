@@ -247,9 +247,24 @@ class Rehearsal(DeclaredFamily, affix="Rehearsal"):
     """What a run tried before it touched the live bus."""
 
 
+class RehearsedFiles(Rehearsal, declared_name=None):
+    """A rehearsal that names the files its live pass may rewrite."""
+
+    files: RehearsalFiles
+
+
 @dataclass(frozen=True)
-class CarriedRehearsal(CarriedPass, Rehearsal):
+class CarriedRehearsal(CarriedPass, RehearsedFiles):
     copy: PracticeMeasurement
+
+
+@dataclass(frozen=True)
+class UncopiedRehearsal(RehearsedFiles):
+    """A read of the live root found no carry pending and no store to reconcile, so no
+    practice copy was taken and the live pass may rewrite nothing. Its own planned
+    reconcile, under the hold, still refuses before any write if it names a file."""
+
+    files: RehearsalFiles = RehearsalFiles(0, 0, (), 0)
 
 
 @dataclass(frozen=True)
@@ -773,17 +788,23 @@ class Install[Rehearsed: Rehearsal](ABC):
 
 
 class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
-    """A bus is already at the root: one practice copy of it answers what is pending and
-    carries the rehearsal."""
+    """A bus is already at the root. When a carry step exists or a store's schema differs
+    from the target's, one practice copy of it answers what is pending and carries the
+    rehearsal; otherwise nothing could change, and no copy is taken."""
 
     @classmethod
     def rehearsed(cls, checkout: Path, root: Path, current: str, target: str,
                   chain: CarryChain, installed: Stack, staged: Stack, tree: TargetTree,
                   installer: InstallerChoice, spill_dir: Path) -> tuple[Install, Rehearsal]:
-        with PracticeBus.of(root, installer) as practice:
-            install = cls.of(checkout, root, current, target, practice.pending(chain, staged, tree),
-                             installed, staged, tree, installer, spill_dir)
-            return install, install.rehearsal(practice)
+        if chain.steps or staged.cli(root, PlannedReconcileCliCommand).rewritten:
+            with PracticeBus.of(root, installer) as practice:
+                install = cls.of(checkout, root, current, target,
+                                 practice.pending(chain, staged, tree),
+                                 installed, staged, tree, installer, spill_dir)
+                return install, install.rehearsal(practice)
+        install = cls.of(checkout, root, current, target, (), installed, staged, tree,
+                         installer, spill_dir)
+        return install, install.uncopied()
 
     @classmethod
     def of(cls, checkout: Path, root: Path, current: str, target: str,
@@ -799,13 +820,20 @@ class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
     @abstractmethod
     def rehearsal(self, practice: PracticeBus) -> Rehearsed: ...
 
+    @abstractmethod
+    def uncopied(self) -> Rehearsed:
+        """This member's rehearsal when nothing on the bus could change."""
 
-class ChangedInstall(ExistingBusInstall[CarriedRehearsal]):
+
+class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
     def rehearsal(self, practice: PracticeBus) -> CarriedRehearsal:
         return rehearse(practice, self.root, self.staged, self.installed, self.tree,
                         self.pending)
 
-    def live(self, rehearsal: CarriedRehearsal) -> CarriedRun:
+    def uncopied(self) -> UncopiedRehearsal:
+        return UncopiedRehearsal()
+
+    def live(self, rehearsal: RehearsedFiles) -> CarriedRun:
         return live(self.checkout, self.root, self.current, self.target, self.pending,
                     self.installed, self.staged, self.tree, self.installer, self.spill_dir,
                     rehearsal.files)
@@ -816,6 +844,9 @@ class UnchangedInstall(ExistingBusInstall[UnchangedRehearsal]):
     nothing to rehearse, hold or restart."""
 
     def rehearsal(self, practice: PracticeBus) -> UnchangedRehearsal:
+        return UnchangedRehearsal()
+
+    def uncopied(self) -> UnchangedRehearsal:
         return UnchangedRehearsal()
 
     def live(self, rehearsal: UnchangedRehearsal) -> UnchangedRun:
