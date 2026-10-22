@@ -9,7 +9,7 @@ On 2026-10-21 the plans Tristan asked for at 18:30 the day before had not landed
 - Install 52 sat for twenty minutes holding the wire lock and waiting on the registry lock (`maintenance_barrier.py:380`, `store_files.py:157`), sleeping in short naps and never naming the holder. The live coordination store was found malformed in the same minute the install was stopped.
 - "May I write during an install" had five answers: the maintenance barrier, a transcript lock, a connector stop, a bridge watch stop, and the commander's shell wrapper around `agent-comms install`. Each install failed on a different missing one.
 - One commander verb took one to five minutes under load. About 4.8 seconds of each call was import alone (2,093 dataclass builds, 433 pydantic models), and the answer gate then scanned the bus.
-- Failures were silent. The bridge watch crashed when the socket moved during the install (`cli_bridges/monitor.py:260`, FileNotFoundError). The session relay would not restart ("Session bridge startup not observed ... No launch retry"). Commander writes hung until a timeout killed them, with no output. A say that drew a jargon flag posted but recorded none of its answers.
+- Failures were silent. The bridge watch crashed when the socket moved during the install (`cli_bridges/monitor.py:260`, FileNotFoundError). The session relay would not restart ("Session bridge startup not observed ... No launch retry"). Commander writes hung until a timeout killed them, with no output. A say that drew a jargon flag appeared to record none of its answers; on 2026-10-22 the message itself (`#comms` seq 18462, 34 answers) showed they are recorded, and the report came from a heartbeat replayed from before the post.
 - About 120 bus events in 30 minutes reached the commander's main loop, including six-part heartbeats listing twenty vibe-check ids.
 
 A silent or slow tool teaches the commander to work around it, and the workarounds are new copies of facts. The fix is at each owner, once.
@@ -58,9 +58,9 @@ The growth alarm is commander-native phase 7's (`plans/commander-native-plan.md`
 
 ### 3. No silent failures
 
-- The bridge watch waits out maintenance and reconnects; it reports the wait instead of crashing.
+- The bridge watch's running loop already survives a missing socket while its owner lives (`cli_bridges/monitor.py:392-411`). A watch started during an install still gives up after a hand-picked 30 seconds (`InspectSession.awaited`, `monitor.py:305`); it waits while the bridge process it is attaching to is alive (that PID survives the bridge's exec in place) and names the wait.
 - The session relay restarts, or says exactly why it cannot.
-- A say that draws a jargon flag either records every answer or is refused. Nothing posts with its answers dropped.
+- The owed-answer set clears when an answer is recorded: shown on a live heartbeat after an answer posted to `#comms`. Until then it is not known whether it does.
 - `--answers` refuses a malformed id (for example a comma-joined list) at the command line.
 - A commander write that waits on a lock prints what it waits on.
 
