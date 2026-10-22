@@ -66,11 +66,12 @@ class RehearsalHome(RuntimeHome):
     required, so a broken installation refuses the rehearsal instead of rehearsing on PATH."""
 
     def prepare(self) -> Path:
+        installed = (Path.home() / ".local/share/agent-comms/current").resolve(strict=True)
         super().prepare()
         pointer = self.path / ".local/share/agent-comms/current"
         pointer.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         pointer.unlink(missing_ok=True)
-        pointer.symlink_to((Path.home() / ".local/share/agent-comms/current").resolve(strict=True))
+        pointer.symlink_to(installed)
         return self.path
 
     def uv(self) -> Path:
