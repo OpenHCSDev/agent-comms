@@ -17,6 +17,7 @@ from pathlib import Path
 from agent_comms.cli_commands import (
     CliCommand,
     PlannedReconcileCliCommand,
+    ReadBackCliCommand,
     ReconcileStoresCliCommand,
 )
 from agent_comms.maintenance_barrier import HOLDER_NONCE
@@ -86,4 +87,17 @@ def test_planned_reconcile_names_the_same_stores_and_writes_nothing(private_comm
         completed = reconcile(root, nonce, PlannedReconcileCliCommand)
         assert completed.returncode == 0, completed.stdout + completed.stderr
         assert tuple(json.loads(completed.stdout)["rewritten"]) == tuple(sorted(dropped))
+        assert digests(root) == before
+
+
+def test_read_back_under_the_hold_writes_nothing_on_a_drifted_bus(private_comms):
+    """The installer reads the bus back before its carries, after the backup; a write the
+    read made would be refused as a change no step names, so a correct install needs it to
+    write nothing even where every store's schema differs."""
+    root = private_comms.root
+    drop_one_index_each(root)
+    with maintenance_held(root) as nonce:
+        before = digests(root)
+        completed = reconcile(root, nonce, ReadBackCliCommand)
+        assert completed.returncode == 0, completed.stdout + completed.stderr
         assert digests(root) == before

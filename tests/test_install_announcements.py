@@ -37,7 +37,7 @@ from conftest import declare_test_bus
     CarriedRun(
         steps=(StepRun("carry_order_scopes", Carried(6)),),
         files=RehearsalFiles(3, 1, ("todos.sqlite3",), 1024),
-        read=BusReadBack(2, 2), stopped=("worker",), services=("connector",),
+        read=BusReadBack(2), stopped=("worker",), services=("connector",),
         started=(StartedOwner("worker"), RefusedOwner("busy", "already running")),
         restore_space=RestoreSpace(1024, 4096, 0.01),
         backup=BackupReport("saved-before-install", 1024), retired_backups=(),
@@ -106,8 +106,8 @@ def test_publication_failure_raises_after_registering_the_sender(private_comms):
     assert private_comms.registry.require(CommanderHeartbeat.sender).execution is ExternalThreadExecution
 
 
-def test_a_live_read_back_that_differs_from_its_rehearsal_refuses():
-    passed = CarriedPass(steps=(), files=RehearsalFiles(0, 0, (), 0), read=BusReadBack(2, 2))
-    passed.require_read(BusReadBack(2, 2))
-    with pytest.raises(UpgradeRefused, match="its rehearsal read"):
-        passed.require_read(BusReadBack(3, 2))
+def test_a_read_back_that_differs_from_before_the_carry_refuses():
+    passed = CarriedPass(steps=(), files=RehearsalFiles(0, 0, (), 0), read=BusReadBack(2))
+    passed.require_read(BusReadBack(2))
+    with pytest.raises(UpgradeRefused, match="before its carry it read"):
+        passed.require_read(BusReadBack(3))

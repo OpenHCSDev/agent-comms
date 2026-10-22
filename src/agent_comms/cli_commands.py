@@ -26,9 +26,11 @@ from pathlib import Path
 from typing import Annotated, Any, ClassVar, Literal, Self, TextIO
 
 from acp.exceptions import RequestError
+
 from agent_comms.errors import ToolRefusedError
-from agent_comms.message_bus import HeldBusWrite
+from agent_comms.launch_root import LaunchRoot
 from agent_comms.lifecycle_capability import LifecycleCapability, Successful
+from agent_comms.message_bus import HeldBusWrite
 
 from .active_route import (
     ActiveRoute,
@@ -41,20 +43,39 @@ from .activity import ActivityState
 from .catalog_document import CatalogDocument
 from .channel_management import KeepThreadsTagDisposition, TagChangeResult, TagDisposition
 from .channel_targets import (
-    ChannelSelection, CommandTarget, NoChannel, OneChannel, ResolvedChannel,
-    ResolvedThread, SurroundingChannel,
+    ChannelSelection,
+    CommandTarget,
+    NoChannel,
+    OneChannel,
+    ResolvedChannel,
+    ResolvedThread,
+    SurroundingChannel,
 )
 from .channels import AnyChannel, Channel
 from .check_root import CheckRoot
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .cli_bridges.claude import ClaudeTranscript
 from .cli_bridges.history import (
-    AnySession, DefaultAddress, ExpectedSession, HarnessAddress, History, OfflineHistory, OnlineHistory,
+    AnySession,
+    DefaultAddress,
+    ExpectedSession,
+    HarnessAddress,
+    History,
+    OfflineHistory,
+    OnlineHistory,
 )
 from .cli_bridges.shared import ChoiceTargetField, DeclaredOptions, SendRequest, TargetField
 from .cli_protocol import ArrivedMessage, EarlierItems
 from .cli_result import CliResult
 from .command import Command
+from .commander.config import (
+    CommanderChoice,
+    CommanderConfigFile,
+    CommanderRecord,
+    KeptCommander,
+    KeptRepos,
+    RepoChoice,
+)
 from .comms import Comms, client_wire
 from .config_options import (
     ConfigOptions,
@@ -76,46 +97,52 @@ from .exporting import (
     UnsetScopeFlag,
 )
 from .field_codec import (
-    FieldCodec,
-    FieldPlan,
-    PathText,
-    WireForm,
     Argument,
     Catalog,
     Editor,
     EditorFormat,
     FactoryArgumentDefault,
+    FieldCodec,
+    FieldPlan,
     Multiline,
     NamedArgumentGroup,
     Normalize,
+    PathText,
     TargetBound,
+    WireForm,
     WireName,
     WireOmitDefault,
     boundary_decoder,
 )
-from agent_comms.launch_root import LaunchRoot
 from .harness_install import Harness
 from .history_result import HistoryPageResult
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
+from .install_choices import InstallerChoice, UnnamedInstaller
 from .maintenance_barrier import MaintenanceHeldError
 from .message_page import PageBounds
 from .message_reference import FirstUnreadStart, InboxStart, MessageReference
 from .messages import (
     Message,
 )
+from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary
 from .native_settings import NativeThreadDefaults
 from .native_turn_context import NativeContextData
 from .owner_lifecycle import OwnerRestartResult, OwnerStartResult
-from .restart_scope import AllOwners, OneOwner, RestartTarget
 from .page_traversal import NewestCursor, PageCursor
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
 from .presentation import CountedRead, InboxRead, ThreadRecord, ThreadView, UncountedRead
-from .read_basis import AnonymousViewer, DisplayViewer, OnReadWatchAcknowledgment, WatchAcknowledgment
+from .read_basis import (
+    AnonymousViewer,
+    DisplayViewer,
+    OnReadWatchAcknowledgment,
+    WatchAcknowledgment,
+)
 from .registry_document import RegistrySnapshot
+from .registry_store import RegistryStore
+from .restart_scope import AllOwners, OneOwner, RestartTarget
 from .runtime import RuntimeConnection, socket_path
 from .schema_report import StoreSchemaReport, StoreSchemaReports
-from .typed_table import ReconciledFile
 from .send_result import SendResult
 from .shared_ledger import LedgerDocument
 from .thread_execution import (
@@ -127,17 +154,19 @@ from .thread_execution import (
     ThreadCommandAvailability,
     ThreadExecution,
 )
-from .thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
-from .commander.config import (
-    CommanderChoice, CommanderConfigFile, CommanderRecord, KeptCommander, KeptRepos, RepoChoice,
-)
-from .install_choices import InstallerChoice, UnnamedInstaller
-from .thread_model import ThreadModel
 from .thread_management import (
-    ForkSpec, GivenTags, ImportDirectory, InheritedTags, NewThreadSpec, SourceDirectory, TagChoice,
+    ForkSpec,
+    GivenTags,
+    ImportDirectory,
+    InheritedTags,
+    NewThreadSpec,
+    SourceDirectory,
+    TagChoice,
     ThreadDeleted,
 )
+from .thread_model import ThreadModel
 from .thread_status import ThreadStatus
+from .thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
 from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread
 from .tool_result import ToolResult
 from .turn_context import (
@@ -150,10 +179,10 @@ from .turn_context import (
     Provenance,
     TurnContext,
 )
+from .typed_table import ReconciledFile
 from .wire_log import WireLog
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
-from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary
 
 
 def _duration_seconds(value: str) -> float:
@@ -1732,26 +1761,33 @@ class ReconciledStoresResult(CliResult):
 
 @dataclass(frozen=True)
 class BusReadBack(CliResult):
-    """What a bus answers through one runtime's CLI: its threads and who is present."""
+    """What a bus's registry holds that a carry must keep: its threads."""
 
     threads: int
-    who: int
 
     def lines(self) -> tuple[str, ...]:
         """A read-back proves the carried bus reads; only an answered message proves an
         agent works on it, and an install answers none."""
-        return (f"Read back: {self.threads} threads, {self.who} present",
+        return (f"Read back: {self.threads} threads",
                 "No live agent has answered a message on this install yet")
 
 
 @dataclass(frozen=True, kw_only=True)
 class ReadBackCliCommand(CliCommand, declared_name="read-back"):
-    help = ("Count this bus's threads and present participants; the installer reads a "
-            "carried bus back with it")
+    help = ("Count the threads this bus's registry holds; the installer reads a bus back "
+            "with it before and after its carries")
+
+    def answer(self, root: Path) -> BusReadBack:
+        with RegistryStore.at(root).reading_snapshot() as snapshot:
+            return BusReadBack(len(snapshot.threads))
 
     def apply(self, ctx: Comms) -> BusReadBack:
-        return BusReadBack(len(ctx.views.list_threads(active_only=False)),
-                           len(ctx.views.presence()))
+        return self.answer(ctx.root)
+
+    def execute(self, route: CommsRoute, output: TextIO) -> int:
+        """Opening the bus writes its metadata and checkpoint, and the installer reads back
+        before its carries, after the backup: only the registry is read, never written."""
+        return self.written(self.answer(route.root), output)
 
 
 @dataclass(frozen=True, kw_only=True)

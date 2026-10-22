@@ -220,11 +220,12 @@ class CarriedPass(Extendable):
     files: RehearsalFiles
     read: BusReadBack
 
-    def require_read(self, rehearsed: BusReadBack) -> None:
-        """The live bus reads back what its rehearsal did, or the carry lost something."""
-        if self.read != rehearsed:
+    def require_read(self, carried_from: BusReadBack) -> None:
+        """The bus reads back after its carry what it read before it, or the carry lost
+        something on this root."""
+        if self.read != carried_from:
             raise UpgradeRefused(
-                f"The carried bus read back {self.read}; its rehearsal read {rehearsed}")
+                f"The carried bus read back {self.read}; before its carry it read {carried_from}")
 
 
 @dataclass(frozen=True)
@@ -648,10 +649,17 @@ def carry_and_read(root: Path, before: dict[str, SavedFile], pending: tuple[type
                    stopping: tuple[StepRun, ...]) -> CarriedPass:
     """The pass a rehearsal and a live install share once ``before`` was read under the
     transcript hold. The hold is released first: SQLite cannot lend its writer lock to a
-    step's process, so a step that writes the transcript store could not run under it."""
+    step's process, so a step that writes the transcript store could not run under it.
+
+    The bus is read back before the carries and after them, on this root and by the same
+    reader, and the two must agree. The first read follows ``before``, so a write it made
+    is a change no step names and the carry check refuses it."""
+    carried_from = reader.verify(root)
     steps = (*stopping, *carry_all(root, pending, staged, tree), reconcile_stores(root, staged))
     files = carried(root, before, steps, RehearsalFiles.declared(steps))
-    return CarriedPass(steps, files, reader.verify(root))
+    passed = CarriedPass(steps, files, reader.verify(root))
+    passed.require_read(carried_from)
+    return passed
 
 
 def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice, rehearse_only: bool,
@@ -787,7 +795,7 @@ class ChangedInstall(ExistingBusInstall[CarriedRehearsal]):
     def live(self, rehearsal: CarriedRehearsal) -> CarriedRun:
         return live(self.checkout, self.root, self.current, self.target, self.pending,
                     self.installed, self.staged, self.tree, self.installer, self.spill_dir,
-                    rehearsal)
+                    rehearsal.files)
 
 
 class UnchangedInstall(ExistingBusInstall[UnchangedRehearsal]):
@@ -850,14 +858,14 @@ class RetiringInstall(FreshInstall):
 
 def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[type[Carry], ...],
          installed: Stack, staged: Stack, tree: TargetTree, installer: InstallerChoice,
-         spill_dir: Path, rehearsal: CarriedRehearsal) -> CarriedRun:
+         spill_dir: Path, rehearsal_files: RehearsalFiles) -> CarriedRun:
     """The rehearsal's passes under the rehearsal's stack; ``installed`` only stops, starts
     and reads back its own owners."""
-    expected = frozenset(rehearsal.files.names) | frozenset(
+    expected = frozenset(rehearsal_files.names) | frozenset(
         str(path.relative_to(root)) for path in staged.backup_files(root, pending, tree))
     selected = tuple(root / name for name in sorted(expected))
     restore = RestoreSpace.measure(max(
-        rehearsal.files.restore_bytes,
+        rehearsal_files.restore_bytes,
         sum(path.stat().st_size for path in selected if path.exists()),
     ), root.parent)
     restore.require()
@@ -869,7 +877,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
     try:
         installed.owners(root, StopCliCommand, running)
         planned = staged.cli(root, PlannedReconcileCliCommand, ReconciledStoresResult)
-        unrehearsed = sorted(frozenset(planned.rewritten) - frozenset(rehearsal.files.names))
+        unrehearsed = sorted(frozenset(planned.rewritten) - frozenset(rehearsal_files.names))
         if unrehearsed:
             raise UpgradeRefused(
                 f"Reconcile would rewrite files the rehearsal did not: {unrehearsed}")
@@ -887,8 +895,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
         Checkout(checkout).prepare()
         staged.prepare_native()
         passed = carry_and_read(root, before, pending, staged, staged, tree, stopping)
-        passed.files.require_rehearsal(rehearsal.files)
-        passed.require_read(rehearsal.read)
+        passed.files.require_rehearsal(rehearsal_files)
         staged.publish()
         maintenance.clear(held)
         services = HostService.restart_running(staged.python)
