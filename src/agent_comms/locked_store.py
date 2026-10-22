@@ -11,6 +11,7 @@ from collections import defaultdict
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from functools import cache
 from importlib import import_module
 from pathlib import Path
 from pkgutil import walk_packages
@@ -167,10 +168,11 @@ class RootFile:
         path = cls.path_in(root)
         return frozenset((path,)) if path.is_file() else frozenset()
 
-    @classmethod
-    def load_declarations(cls) -> None:
-        """Import every module of the package, so ``declarations_in`` walks the whole family
-        and not only the owners some caller happened to import."""
+    @staticmethod
+    @cache
+    def load_declarations() -> None:
+        """Import every module of the package once per process, so ``declarations_in`` walks
+        the whole family and not only the owners some caller happened to import."""
         package = import_module(__package__)
         for module in walk_packages(package.__path__, f"{package.__name__}."):
             if not module.name.startswith(f"{package.__name__}.skills"):
@@ -179,6 +181,7 @@ class RootFile:
     @classmethod
     def declarations_in(cls, root: Path) -> Iterator[tuple[type[Self], Path]]:
         """Each declaring owner and its directory, once across composed capabilities."""
+        RootFile.load_declarations()
         pending: list[type[Self]] = [cls]
         visited: set[type[Self]] = set()
         while pending:
@@ -195,7 +198,6 @@ class RootFile:
         """Every existing file a declared owner names, with that owner, never a probe of
         listed files: an undeclared file (a native writer's transient claim, a lock) has no
         owner, so nothing that walks a bus by its declarations meets it."""
-        RootFile.load_declarations()
         return {path: owner for owner, directory in cls.declarations_in(root)
                 for path in owner.matching_in(directory)}
 
