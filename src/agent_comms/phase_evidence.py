@@ -27,9 +27,6 @@ if TYPE_CHECKING:
     from agent_comms.todos import Todo
 
 
-FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef)
-
-
 @dataclass(frozen=True)
 class MainTree:
     """One commit of a repository's fetched ``origin/main``; evidence never reads a worktree."""
@@ -375,6 +372,51 @@ class ErasedBody(ast.NodeTransformer):
         return ast.dump(erased.args) + ast.dump(ast.Module(erased.body, []))
 
 
+class NamedFunctions(ast.NodeVisitor):
+    """The functions and coroutines, nested ones included, named one of ``names``."""
+
+    def __init__(self, names: tuple[str, ...]) -> None:
+        self.names = names
+        self.found: list[ast.FunctionDef | ast.AsyncFunctionDef] = []
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self.collect(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self.collect(node)
+
+    def collect(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        if node.name in self.names:
+            self.found.append(node)
+        self.generic_visit(node)
+
+    @classmethod
+    def of(
+        cls, names: tuple[str, ...], tree: ast.AST
+    ) -> list[ast.FunctionDef | ast.AsyncFunctionDef]:
+        functions = cls(names)
+        functions.visit(tree)
+        return functions.found
+
+
+class Classes(ast.NodeVisitor):
+    """Every class statement in the visited trees, nested ones included."""
+
+    def __init__(self) -> None:
+        self.found: list[ast.ClassDef] = []
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self.found.append(node)
+        self.generic_visit(node)
+
+    @classmethod
+    def of(cls, trees: Iterable[ast.AST]) -> list[ast.ClassDef]:
+        classes = cls()
+        for tree in trees:
+            classes.visit(tree)
+        return classes.found
+
+
 @dataclass(frozen=True)
 class NoExactCopies(MainEvidence):
     """No two functions named one of ``names`` across ``paths`` share one erased body."""
@@ -384,10 +426,9 @@ class NoExactCopies(MainEvidence):
 
     def read(self, main: MainTree) -> bool:
         shapes = [
-            ErasedBody.of(node)
+            ErasedBody.of(function)
             for path in self.paths
-            for node in ast.walk(main.module(path).tree)
-            if isinstance(node, FUNCTIONS) and node.name in self.names
+            for function in NamedFunctions.of(self.names, main.module(path).tree)
         ]
         return len(shapes) == len(set(shapes))
 
@@ -406,9 +447,8 @@ class NoGodFunction(MainEvidence):
         module = main.module(self.path)
         return not any(
             found
-            for node in ast.walk(module.tree)
-            if isinstance(node, FUNCTIONS) and node.name == self.name
-            for found in GodFunction.from_node(node, module)
+            for function in NamedFunctions.of((self.name,), module.tree)
+            for found in GodFunction.from_node(function, module)
         )
 
     def describe(self) -> str:
@@ -423,11 +463,11 @@ class NoAbsenceProbes(MainEvidence):
     paths: tuple[str, ...]
 
     def read(self, main: MainTree) -> bool:
+        """Every node is offered to the probe, whose own pattern decides what it counts."""
         return not any(
             ForeignAbsenceProbe.count(node)
             for path in self.paths
             for node in ast.walk(main.module(path).tree)
-            if isinstance(node, ForeignAbsenceProbe.node_types)
         )
 
     def describe(self) -> str:
@@ -447,9 +487,8 @@ class ClassFlagsAbsent(MainEvidence):
         return not any(
             (path, statement.lineno) in matched
             for path in {path for path, _ in matched}
-            for node in ast.walk(main.module(path).tree)
-            if isinstance(node, ast.ClassDef)
-            for statement in node.body
+            for declared in Classes.of((main.module(path).tree,))
+            for statement in declared.body
         )
 
     def describe(self) -> str:
@@ -529,18 +568,14 @@ class ParentsShared(MainEvidence):
         declared = {
             *self.names,
             *(
-                node.name
-                for path in self.paths
-                for node in main.module(path).tree.body
-                if isinstance(node, ast.ClassDef)
+                declared.name
+                for declared in Classes.of(main.module(path).tree for path in self.paths)
             ),
         }
         members = Counter(
             base
-            for module in main.modules(("src",))
-            for node in ast.walk(module)
-            if isinstance(node, ast.ClassDef)
-            for base in NamedClasses.of(node.bases) & declared
+            for member in Classes.of(main.modules(("src",)))
+            for base in NamedClasses.of(member.bases) & declared
         )
         return all(members[name] >= 2 for name in declared)
 
