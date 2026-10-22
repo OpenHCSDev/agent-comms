@@ -307,7 +307,6 @@ class NativeSource:
             prefix=f".{self.destination.name}.native-source-",
         )
         temporary = Path(name)
-        complete = False
         try:
             with os.fdopen(descriptor, "wb") as stream:
                 stream.write(self.content)
@@ -316,11 +315,10 @@ class NativeSource:
             os.chmod(temporary, 0o600)
             if temporary.stat().st_nlink != 1:
                 raise NativePackageError("Native extension source staging file is shared")
-            complete = True
             return temporary
-        finally:
-            if not complete:
-                temporary.unlink(missing_ok=True)
+        except BaseException:
+            temporary.unlink(missing_ok=True)
+            raise
 
     def verify_installed(self) -> None:
         info = self.destination.lstat()

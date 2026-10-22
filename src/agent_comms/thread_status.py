@@ -10,6 +10,7 @@ from .child_process import ProcessState
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, ThreadNotStoppedError
 from .field_codec import FieldCodec, TextRepresentation
+from .lifecycle_capability import Active, LifecycleCapability
 from .thread_presentation import ThreadOwnerBinding, ThreadPresentation, InactiveThreadPresentationStatus
 
 if TYPE_CHECKING:
@@ -40,8 +41,7 @@ class Visible:
 
 
 @dataclass(frozen=True)
-class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
-    active: ClassVar[bool] = False
+class ThreadStatus(DeclaredFamily, LifecycleCapability, affix="ThreadStatus"):
     running: ClassVar[bool] = False
     stopped: ClassVar[bool] = False
     # Whether a message sent now is read now; each status answers, none by default.
@@ -75,6 +75,11 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
 
     def require_mutable(self, name: str) -> None:
         """Registration/heartbeat may update this thread's presence."""
+
+    @property
+    def active(self) -> bool:
+        """An owner is active exactly when its status inherits ``Active``."""
+        return bool(self.items_with(Active, self))
 
     def starts_owner(self, nxt: ThreadStatus) -> bool:
         return not self.active and nxt.active
@@ -114,10 +119,9 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
                                   status=InactiveThreadPresentationStatus())
 
 
-class ActiveThreadPresence(AlwaysListed, Visible, ThreadStatus, declared_name=None):
+class ActiveThreadPresence(Active, AlwaysListed, Visible, ThreadStatus, declared_name=None):
     """Shared semantics of running and idle owners; not a second state family."""
 
-    active = True
     receiving = True
 
     def require_active(self) -> None:

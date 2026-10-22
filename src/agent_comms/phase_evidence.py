@@ -1,4 +1,5 @@
-"""What proves a plan phase done: facts on its repository's fetched ``origin/main``.
+"""What proves a plan phase done: facts on its repository's fetched ``origin/main``, and for
+the merge gate the repository's own GitHub rulesets.
 
 Task acceptance never proves a phase. Each phase declares the evidence its plan's
 "Done means" names, and ``PlanPhase.done`` reads only that evidence.
@@ -6,6 +7,9 @@ Task acceptance never proves a phase. Each phase declares the evidence its plan'
 
 from __future__ import annotations
 
+import ast
+import json
+import re
 import subprocess
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -38,6 +42,17 @@ class MainTree:
         if run.returncode not in (0, 1):
             run.check_returncode()
         return sum(int(line.rsplit(":", 1)[1]) for line in run.stdout.splitlines())
+
+    def lines(self, pattern: str, paths: tuple[str, ...]) -> tuple[str, ...]:
+        run = self.git("grep", "-h", "-E", "-e", pattern, self.commit, "--", *paths)
+        if run.returncode not in (0, 1):
+            run.check_returncode()
+        return tuple(run.stdout.splitlines())
+
+    def module(self, path: str) -> ast.Module:
+        run = self.git("show", f"{self.commit}:{path}")
+        run.check_returncode()
+        return ast.parse(run.stdout, filename=path)
 
     def contains(self, sha: str) -> bool:
         return self.repo.contains(sha, self.commit)
@@ -73,17 +88,6 @@ class PhaseEvidence(ABC):
 
     @abstractmethod
     def describe(self) -> str: ...
-
-
-@dataclass(frozen=True)
-class NoDeclaredEvidence(PhaseEvidence):
-    """A phase whose plan names nothing checkable on main is never done by declaration."""
-
-    def holds(self, reading: PlanReading) -> bool:
-        return False
-
-    def describe(self) -> str:
-        return "no evidence declared; declare what main must show"
 
 
 @dataclass(frozen=True)
@@ -160,3 +164,153 @@ class ParityEvidence(PhaseEvidence):
 
     def describe(self) -> str:
         return "every parity row passes"
+
+
+@dataclass(frozen=True)
+class RulesetGates(PhaseEvidence):
+    """The merge queue refuses a head without ``check``: an active ruleset requires it and no
+    actor bypasses that ruleset always. A required check an admin bypasses gates nothing."""
+
+    check: str
+
+    def holds(self, reading: PlanReading) -> bool:
+        name = reading.main.repo.github.to_wire()
+        return any(
+            self.gates(self.api(f"repos/{name}/rulesets/{ruleset['id']}"))
+            for ruleset in self.api(f"repos/{name}/rulesets")
+            if ruleset["enforcement"] == "active"
+        )
+
+    def gates(self, ruleset: dict) -> bool:
+        required = {
+            check["context"]
+            for rule in ruleset["rules"]
+            if rule["type"] == "required_status_checks"
+            for check in rule["parameters"]["required_status_checks"]
+        }
+        return self.check in required and not any(
+            actor["bypass_mode"] == "always" for actor in ruleset["bypass_actors"]
+        )
+
+    @staticmethod
+    def api(path: str):
+        run = subprocess.run(("gh", "api", path), capture_output=True, text=True, timeout=60)
+        run.check_returncode()
+        return json.loads(run.stdout)
+
+    def describe(self) -> str:
+        return f"an active ruleset requires {self.check} with no always-bypass actor"
+
+
+class ErasedBody(ast.NodeTransformer):
+    """A function's shape with identifiers, literals and attribute names erased, as the
+    duplicate scan compared them."""
+
+    def visit_Name(self, node: ast.Name) -> ast.AST:
+        return ast.copy_location(ast.Name("_", node.ctx), node)
+
+    def visit_arg(self, node: ast.arg) -> ast.AST:
+        return ast.copy_location(ast.arg("_"), node)
+
+    def visit_Attribute(self, node: ast.Attribute) -> ast.AST:
+        self.generic_visit(node)
+        return ast.copy_location(ast.Attribute(node.value, "_", node.ctx), node)
+
+    def visit_Constant(self, node: ast.Constant) -> ast.AST:
+        return ast.copy_location(ast.Constant(None), node)
+
+    @classmethod
+    def of(cls, function: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
+        erased = cls().visit(ast.Module([*function.body], []))
+        return ast.dump(function.args) + ast.dump(erased)
+
+
+@dataclass(frozen=True)
+class NoExactCopies(PhaseEvidence):
+    """No two functions named ``name`` across ``paths`` share one erased body."""
+
+    name: str
+    paths: tuple[str, ...]
+
+    def holds(self, reading: PlanReading) -> bool:
+        shapes = [
+            ErasedBody.of(node)
+            for path in self.paths
+            for node in ast.walk(reading.main.module(path))
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == self.name
+        ]
+        return len(shapes) == len(set(shapes))
+
+    def describe(self) -> str:
+        return f"no exact copies of {self.name} in {' '.join(self.paths)} on main"
+
+
+@dataclass(frozen=True)
+class FunctionLinesAtMost(PhaseEvidence):
+    path: str
+    name: str
+    limit: int
+
+    def holds(self, reading: PlanReading) -> bool:
+        return all(
+            node.end_lineno - node.lineno + 1 <= self.limit
+            for node in ast.walk(reading.main.module(self.path))
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == self.name
+        )
+
+    def describe(self) -> str:
+        return f"{self.name} in {self.path} at most {self.limit} lines on main"
+
+
+CLASS_HEADER = r"^\s*class [A-Za-z_][A-Za-z0-9_]*"
+
+
+@dataclass(frozen=True)
+class OwnClassChecksAbsent(PhaseEvidence):
+    """No ``isinstance`` in ``src`` names a class that ``src`` declares; checks against AST,
+    typing and SDK types stay."""
+
+    target = re.compile(r"isinstance\([^,()]+,\s*(\([^)]*\)|[A-Za-z_][\w.]*)")
+
+    def holds(self, reading: PlanReading) -> bool:
+        own = {
+            re.match(CLASS_HEADER, line)[0].split("class ", 1)[1]
+            for line in reading.main.lines(CLASS_HEADER, ("src",))
+        }
+        checked = {
+            name.strip().rsplit(".", 1)[-1]
+            for line in reading.main.lines(r"isinstance\(", ("src",))
+            for match in self.target.finditer(line)
+            for name in match[1].strip("()").split(",")
+            if name.strip()
+        }
+        return not own & checked
+
+    def describe(self) -> str:
+        return "no isinstance against a class declared in src on main"
+
+
+@dataclass(frozen=True)
+class ParentsShared(PhaseEvidence):
+    """Every class declared in ``paths`` has at least two direct subclasses in ``src``: a
+    capability left with one member is folded back into it."""
+
+    paths: tuple[str, ...]
+
+    def holds(self, reading: PlanReading) -> bool:
+        declared = {
+            node.name
+            for path in self.paths
+            for node in reading.main.module(path).body
+            if isinstance(node, ast.ClassDef)
+        }
+        bases = tuple(
+            header.split("(", 1)[1] for header in reading.main.lines(CLASS_HEADER + r"\(", ("src",))
+        )
+        return all(
+            sum(bool(re.search(rf"\b{name}\b", parents)) for parents in bases) >= 2
+            for name in declared
+        )
+
+    def describe(self) -> str:
+        return "every capability in " + " ".join(self.paths) + " has two members on main"
