@@ -43,6 +43,7 @@ from .ui_model.message_category import InboundCategory, MessageCategory, OtherCa
 from .wake_policy import BoundedTriageWake, PassiveWake
 
 if TYPE_CHECKING:
+    from .historical_views import HistorySource
     from .retained_task_facts import ExactTaskFact
     from .threads import Thread
 
@@ -192,6 +193,9 @@ class MessageRole(InlineRecord):
 
     @abstractmethod
     def response_policy(self, message: Message) -> ResponsePolicy: ...
+
+    @abstractmethod
+    def as_historical(self) -> MessageRole: ...
 
     @classmethod
     def wire_record(cls):
@@ -511,7 +515,9 @@ class Message(Addressed, BusCapability):
         ).hexdigest()[:12]
         return digest
 
-    history_source = None
+    @property
+    def history_source(self) -> HistorySource | None:
+        return None
 
     @property
     def display_metadata(self) -> dict:

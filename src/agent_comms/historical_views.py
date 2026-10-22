@@ -59,7 +59,9 @@ if TYPE_CHECKING:
 class HistoryView(ABC):
     """A requested view binds its predicate once to each original registry."""
 
-    viewer: DisplayViewer = AnonymousViewer()
+    @property
+    def viewer(self) -> DisplayViewer:
+        return AnonymousViewer()
 
     def live_page(self, presentation: BusPresentation, bounds: PageBounds) -> MessagePage:
         """Bind the query to the bus owner's snapshot and read that exact source."""
@@ -133,7 +135,8 @@ class ConversationHistoryView:
             stores = views.revision()
             return ConversationRevision(
                 stores, cls._selection(
-                    views, snapshot, views.channels.catalog._read_unlocked(), viewer, target, worktree, stores.history,
+                    views, snapshot, views.channels.catalog._read_unlocked(), viewer, target, worktree,
+                    FileRevision.capture(views.bus.history.path),
                 ),
             )
 
@@ -573,7 +576,7 @@ class HistoryArchive(DurableFile):
         return replace(selected, selection=replace(selected.selection, history_revision=history_revision))
 
     def threads(self, name: str | None = None) -> tuple[HistoricalThread, ...]:
-        result = []
+        result: list[HistoricalThread] = []
         for source in self.sources():
             source.validate()
             result.extend(HistoricalThread(source, thread)
