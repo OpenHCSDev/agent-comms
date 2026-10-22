@@ -22,6 +22,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import tokenize
 import tomllib
 import types
@@ -53,6 +54,7 @@ from agent_comms.field_codec import FieldCodec, boundary_decoder, projected
 from agent_comms.mro_dispatch import MroDispatch, handles
 
 AUDIT_SCRIPTS = Path(audit.__path__[0]).parent
+REPOSITORY = Path(__file__).resolve().parents[1]
 
 
 class ContentCache:
@@ -62,24 +64,30 @@ class ContentCache:
 
     directory: typing.ClassVar[Path] = Path.home() / ".cache/agent-comms/debt-ratchet"
     checkers: typing.ClassVar[tuple[str, ...]] = ("black", "ruff", "mypy")
+    retention_days: typing.ClassVar[int] = 14
+
+    @staticmethod
+    def sources() -> tuple[Path, ...]:
+        """Every module loaded in this process under this repository's tools/ or src/, plus the
+        audit package: measuring subprocesses import it from AUDIT_SCRIPTS, so sys.modules
+        alone would miss a change to it. Sorted."""
+        roots = (REPOSITORY / "tools", REPOSITORY / "src")
+        origins = (Path(origin).resolve() for module in list(sys.modules.values())
+                   if isinstance(module, types.ModuleType)
+                   and (origin := module.__dict__.get("__file__")))
+        loaded = {path for path in origins if any(path.is_relative_to(root) for root in roots)}
+        audited = {path.resolve() for path in (AUDIT_SCRIPTS / "audit").rglob("*.py")}
+        return tuple(sorted(loaded | audited))
 
     @staticmethod
     @cache
     def code() -> bytes:
-        """This ratchet's measuring code: its own source, the reader it runs in revisions, the
-        pinned audit's scripts, the modules it imports directly, and each checker's version."""
-        modules = {sys.modules[StoredForm.__module__], *(
-            module for module in vars(sys.modules[__name__]).values()
-            if isinstance(module, types.ModuleType)
-            and module.__name__.partition(".")[0] == agent_comms.__name__)}
-        origins = (module.__spec__.origin for module in modules
-                   if module.__spec__ and module.__spec__.origin)
-        files = sorted({Path(__file__).resolve(), *(AUDIT_SCRIPTS / "audit").rglob("*.py"),
-                        *(Path(origin).resolve() for origin in origins)})
+        """This ratchet's measuring code (see sources), and each checker's version. Computed
+        once, at the first key, after the measures' imports, so the set is the one that ran."""
         digest = hashlib.sha256(f"{sys.version}\0{__name__}".encode())
         for name in ContentCache.checkers:
             digest.update(f"\0{name}={importlib.metadata.version(name)}".encode())
-        for path in files:
+        for path in ContentCache.sources():
             digest.update(b"\0" + str(path).encode() + b"\0" + path.read_bytes())
         return digest.digest()
 
@@ -93,7 +101,18 @@ class ContentCache:
     def stored(cls, *parts: str) -> tuple[object, ...]:
         """The stored result for these parts, as a one-item tuple, or an empty one."""
         path = cls.path(*parts)
-        return (pickle.loads(path.read_bytes()),) if path.is_file() else ()
+        if not path.is_file():
+            return ()
+        os.utime(path)  # the mtime records the last use, which is what pruning reads
+        return (pickle.loads(path.read_bytes()),)
+
+    @classmethod
+    def prune(cls) -> None:
+        """Delete the entries neither written nor read for retention_days."""
+        horizon = time.time() - cls.retention_days * 86400
+        for path in cls.directory.glob("*/*"):
+            if path.stat().st_mtime < horizon:
+                path.unlink(missing_ok=True)
 
     @classmethod
     def store[Value](cls, value: Value, *parts: str) -> Value:
@@ -2208,6 +2227,7 @@ def compare(repo: Path, base: str, head: str, root: str, workers: int) -> Compar
 
 
 def main() -> int:
+    ContentCache.prune()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", required=True, help="Repository-relative production source directory")
     parser.add_argument("--base", required=True)

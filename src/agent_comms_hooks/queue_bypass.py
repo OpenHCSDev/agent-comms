@@ -21,6 +21,8 @@ GH = Program("gh")
 class QueueBypass(ABC):
     """One way a `gh` command merges a pull request around the merge queue."""
 
+    reason: ClassVar[str]
+
     @classmethod
     @abstractmethod
     def merges(cls, args: list[str]) -> bool: ...
@@ -30,14 +32,14 @@ class QueueBypass(ABC):
         if not GH.runs(command):
             return ()
         return tuple(
-            member.__doc__ or member.__name__
-            for member in cls.__subclasses__()
-            if member.merges(command.args)
+            member.reason for member in cls.__subclasses__() if member.merges(command.args)
         )
 
 
 class AdminMerge(QueueBypass):
     """`gh pr merge --admin` merges past the queue and its required checks."""
+
+    reason = "`gh pr merge --admin` merges past the queue and its required checks."
 
     @classmethod
     def merges(cls, args: list[str]) -> bool:
@@ -46,6 +48,8 @@ class AdminMerge(QueueBypass):
 
 class ApiMerge(QueueBypass):
     """`gh api .../pulls/N/merge` merges directly, outside the queue."""
+
+    reason = "`gh api .../pulls/N/merge` merges directly, outside the queue."
 
     path: ClassVar[re.Pattern[str]] = re.compile(r"/?repos/[^/\s]+/[^/\s]+/pulls/\d+/merge")
 
