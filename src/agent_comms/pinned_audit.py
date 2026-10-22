@@ -15,8 +15,7 @@ SCRIPTS = Path(str(files(skills) / "refactor-audit" / "scripts"))
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
-import audit  # noqa: E402
-from audit.findings import GodFunction  # noqa: E402
-from audit.measures import ForeignAbsenceProbe  # noqa: E402
-
-__all__ = ("SCRIPTS", "audit", "ForeignAbsenceProbe", "GodFunction")
+import audit as audit  # noqa: E402
+from audit.findings import GodFunction as GodFunction  # noqa: E402
+from audit.findings import ParsedModule as ParsedModule  # noqa: E402
+from audit.measures import ForeignAbsenceProbe as ForeignAbsenceProbe  # noqa: E402

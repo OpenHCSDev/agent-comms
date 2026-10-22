@@ -12,7 +12,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.head_review import HeadReview
 from agent_comms.phase_evidence import (
     AllEvidence,
     ClassFlagsAbsent,
@@ -80,18 +79,13 @@ class UnplannedPhase(OrderPhase):
 
 
 class PlanPhase(OrderPhase, declared_name=None):
-    """A named phase declares the evidence that proves it done; one that declares none is
-    refused at its declaration, because landing its work could never clear it."""
+    """Every named phase declares its plan and the evidence that proves it done; neither has
+    a default, because a phase whose work could never clear it is not a phase."""
 
     plan: ClassVar[type[Plan]]
     after: ClassVar[tuple[type[PlanPhase], ...]] = ()
     evidence: ClassVar[PhaseEvidence]
     task: ClassVar[PhaseTask] = UnspecifiedPhaseTask()
-
-    def __init_subclass__(cls, **options) -> None:
-        super().__init_subclass__(**options)
-        if cls.declared_name is not None and not any("evidence" in vars(base) for base in cls.__mro__):
-            raise TypeError(f"{cls.__name__} declares no evidence on main that proves it done")
 
     @classmethod
     def serving(cls, todos: tuple[Todo, ...]) -> tuple[Todo, ...]:
@@ -165,7 +159,7 @@ class ReviewQueuePhase(CommanderNativePhase):
     merge, which an always-bypass actor would defeat."""
 
     after = (RecordPlanePhase,)
-    evidence = RulesetGates(HeadReview)
+    evidence = RulesetGates()
 
 
 COMMANDER = "src/agent_comms/commander/"
@@ -179,8 +173,14 @@ class ControlPlanePhase(CommanderNativePhase):
         tuple(
             COMMANDER + name
             for name in (
-                "rotate.py", "capacity.py", "forks", "growth_watch.py", "growth_seen.json",
-                "storage.py", "rules.py", "rules.jsonl",
+                "rotate.py",
+                "capacity.py",
+                "forks",
+                "growth_watch.py",
+                "growth_seen.json",
+                "storage.py",
+                "rules.py",
+                "rules.jsonl",
             )
         )
     )
@@ -336,8 +336,8 @@ class LifecycleFlagsPhase(MultipleInheritancePhase):
     """1A: flags declared on classes; a function's local named ``complete`` is not one."""
 
     evidence = ClassFlagsAbsent(
-        ("terminal", "failed", "successful", "pending", "active", "executing",
-         "unresolved", "deferred", "complete", "completed")
+        r"^\s+(terminal|failed|successful|pending|active|executing"
+        r"|unresolved|deferred|complete|completed)" + FLAG
     )
 
 
@@ -372,20 +372,58 @@ class DuplicatesPhase(MultipleInheritancePhase):
         tuple(
             NoExactCopies(names, tuple(f"src/agent_comms/{path}" for path in paths))
             for names, paths in (
-                (("__init__",), ("attempt_store.py", "cli_bridges/opencode.py", "cli_bridges/shared.py",
-                                 "external_transcript.py", "recovery_reader.py")),
-                (("captured_owner", "owner_identity"),
-                 ("cohort_schema.py", "coordination_tables/attempts.py", "native_input_record.py",
-                  "participant_store.py")),
-                (("trigger_bodies",), ("coordination_response.py", "native_prompt_binding.py",
-                                       "private_sidecar.py")),
-                (("__init__",), ("durable_turn.py", "execution_store.py", "exporting.py", "publisher.py")),
+                (
+                    ("__init__",),
+                    (
+                        "attempt_store.py",
+                        "cli_bridges/opencode.py",
+                        "cli_bridges/shared.py",
+                        "external_transcript.py",
+                        "recovery_reader.py",
+                    ),
+                ),
+                (
+                    ("captured_owner", "owner_identity"),
+                    (
+                        "cohort_schema.py",
+                        "coordination_tables/attempts.py",
+                        "native_input_record.py",
+                        "participant_store.py",
+                    ),
+                ),
+                (
+                    ("trigger_bodies",),
+                    ("coordination_response.py", "native_prompt_binding.py", "private_sidecar.py"),
+                ),
+                (
+                    ("__init__",),
+                    ("durable_turn.py", "execution_store.py", "exporting.py", "publisher.py"),
+                ),
                 (("wire_member",), ("pi_payloads.py",)),
-                (("_assert_response_schema", "assert_cohort_schema", "assert_native_runtime_schema"),
-                 ("cohort_schema.py", "coordinated_runtime_schema.py", "coordination_response.py")),
-                (("references",), ("coordination_tables/attempts.py", "coordination_tables/recovery.py",
-                                   "coordination_tables/responses.py")),
-                (("annotation_disclosure", "disclosure_for"), ("pi_payloads.py", "turn_context.py")),
+                (
+                    (
+                        "_assert_response_schema",
+                        "assert_cohort_schema",
+                        "assert_native_runtime_schema",
+                    ),
+                    (
+                        "cohort_schema.py",
+                        "coordinated_runtime_schema.py",
+                        "coordination_response.py",
+                    ),
+                ),
+                (
+                    ("references",),
+                    (
+                        "coordination_tables/attempts.py",
+                        "coordination_tables/recovery.py",
+                        "coordination_tables/responses.py",
+                    ),
+                ),
+                (
+                    ("annotation_disclosure", "disclosure_for"),
+                    ("pi_payloads.py", "turn_context.py"),
+                ),
             )
         )
     )
@@ -396,8 +434,15 @@ class FieldDirectivesPhase(MultipleInheritancePhase):
     The bus groups are deleted by the virtual bus, and ``Addressed`` is the bus's own."""
 
     evidence = ParentsShared(
-        names=("TurnItem", "ClaimScoped", "SingletonRow", "SchemaMeta", "Revisioned",
-               "ExecutionKeyed", "WithoutRowid")
+        names=(
+            "TurnItem",
+            "ClaimScoped",
+            "SingletonRow",
+            "SchemaMeta",
+            "Revisioned",
+            "ExecutionKeyed",
+            "WithoutRowid",
+        )
     )
 
     after = (
@@ -448,8 +493,15 @@ class AbsencePhase(RemainingSlopPhase):
     evidence = NoAbsenceProbes(
         tuple(
             f"src/agent_comms/{path}"
-            for path in ("typed_table.py", "backend.py", "input_drain.py", "turn_watchdog.py",
-                         "commander/order.py", "attempt_start.py", "todos.py")
+            for path in (
+                "typed_table.py",
+                "backend.py",
+                "input_drain.py",
+                "turn_watchdog.py",
+                "commander/order.py",
+                "attempt_start.py",
+                "todos.py",
+            )
         ),
     )
 

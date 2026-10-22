@@ -1,5 +1,5 @@
 """What proves a plan phase done: facts on its repository's fetched ``origin/main``, and for
-the merge gate the repository's own GitHub rulesets.
+the merge gate the repository's own GitHub rules.
 
 Task acceptance never proves a phase. Each phase declares the evidence its plan's
 "Done means" names, and ``PlanPhase.done`` reads only that evidence. Evidence that reads
@@ -10,17 +10,19 @@ from __future__ import annotations
 
 import ast
 import copy
-import json
 import subprocess
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
+from collections import Counter
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.commander_parity import ParityRow
+from agent_comms.field_codec import DefaultExternalName, ExternalName, FieldCodec
 from agent_comms.head_review import HeadReview
-from agent_comms.pinned_audit import ForeignAbsenceProbe, GodFunction
+from agent_comms.pinned_audit import ForeignAbsenceProbe, GodFunction, ParsedModule
 from agent_comms.repo import Repo
+from agent_comms.work_branches import WorkBranches
 
 if TYPE_CHECKING:
     from agent_comms.todos import Todo
@@ -43,17 +45,32 @@ class MainTree:
     def has(self, path: str) -> bool:
         return self.git("cat-file", "-e", f"{self.commit}:{path}").returncode == 0
 
-    def count(self, pattern: str, paths: tuple[str, ...]) -> int:
-        """Matching lines under ``paths``; git pathspecs such as ``:!file`` exclude."""
-        run = self.git("grep", "-c", "-E", "-e", pattern, self.commit, "--", *paths)
+    def grep(self, *options: str, pattern: str, paths: tuple[str, ...]) -> list[str]:
+        """``git grep -E`` rows under ``paths``; git pathspecs such as ``:!file`` exclude."""
+        run = self.git("grep", *options, "-E", "-e", pattern, self.commit, "--", *paths)
         if run.returncode not in (0, 1):
             run.check_returncode()
-        return sum(int(line.rsplit(":", 1)[1]) for line in run.stdout.splitlines())
+        return run.stdout.splitlines()
 
-    def module(self, path: str) -> ast.Module:
+    def count(self, pattern: str, paths: tuple[str, ...]) -> int:
+        """Matching lines under ``paths``."""
+        return sum(
+            int(row.rsplit(":", 1)[1]) for row in self.grep("-c", pattern=pattern, paths=paths)
+        )
+
+    def matching_lines(self, pattern: str, paths: tuple[str, ...]) -> frozenset[tuple[str, int]]:
+        """Each ``(path, line)`` under ``paths`` whose line matches."""
+        return frozenset(
+            (path, int(line))
+            for _, path, line, _ in (
+                row.split(":", 3) for row in self.grep("-n", pattern=pattern, paths=paths)
+            )
+        )
+
+    def module(self, path: str) -> ParsedModule:
         run = self.git("show", f"{self.commit}:{path}")
         run.check_returncode()
-        return ast.parse(run.stdout, filename=path)
+        return ParsedModule(path, run.stdout, ast.parse(run.stdout, filename=path), path)
 
     def modules(self, paths: tuple[str, ...]) -> Iterator[ast.Module]:
         """Every Python module under ``paths``, read in one ``git cat-file --batch``."""
@@ -71,7 +88,7 @@ class MainTree:
             header, _, batch = batch.partition(b"\n")
             size = int(header.rsplit(b" ", 1)[1])
             yield ast.parse(batch[:size], filename=name)
-            batch = batch[size + 1:]
+            batch = batch[size + 1 :]
 
     def contains(self, sha: str) -> bool:
         return self.repo.contains(sha, self.commit)
@@ -85,35 +102,69 @@ class MainTree:
         )
 
 
-class EvidenceUnknown(Exception):
+class UnreadableEvidenceError(Exception):
     """The evidence's source could not be read this pass; the phase is unknown, not failed."""
+
+
+class EvidenceRead(ABC):
+    """What one reading learned of one evidence."""
+
+    @abstractmethod
+    def held(self) -> bool: ...
+
+    @abstractmethod
+    def describe(self, evidence: PhaseEvidence) -> str: ...
+
+
+@dataclass(frozen=True)
+class EvidenceFound(EvidenceRead):
+    holds: bool
+
+    def held(self) -> bool:
+        return self.holds
+
+    def describe(self, evidence: PhaseEvidence) -> str:
+        return evidence.describe()
+
+
+@dataclass(frozen=True)
+class EvidenceUnread(EvidenceRead):
+    """The source could not be read: not done, and the description says why."""
+
+    reason: str
+
+    def held(self) -> bool:
+        return False
+
+    def describe(self, evidence: PhaseEvidence) -> str:
+        return f"unknown ({self.reason}): {evidence.describe()}"
 
 
 @dataclass(frozen=True)
 class PlanReading:
     """One look at the plans: the order history and the plan repository's main.
 
-    Each evidence is read once per reading, however many phases wait on it. Evidence whose
-    source cannot be read counts as not done and says why in its description."""
+    Each evidence is read once per reading, however many phases wait on it."""
 
     todos: tuple[Todo, ...]
     main: MainTree
-    found: dict[PhaseEvidence, bool] = field(default_factory=dict, compare=False, repr=False)
-    unknown: dict[PhaseEvidence, str] = field(default_factory=dict, compare=False, repr=False)
+    reads: dict[PhaseEvidence, EvidenceRead] = field(
+        default_factory=dict, compare=False, repr=False
+    )
+
+    def read(self, evidence: PhaseEvidence) -> EvidenceRead:
+        if evidence not in self.reads:
+            try:
+                self.reads[evidence] = EvidenceFound(evidence.holds(self))
+            except UnreadableEvidenceError as error:
+                self.reads[evidence] = EvidenceUnread(str(error))
+        return self.reads[evidence]
 
     def holds(self, evidence: PhaseEvidence) -> bool:
-        if evidence not in self.found:
-            try:
-                self.found[evidence] = evidence.holds(self)
-            except EvidenceUnknown as error:
-                self.unknown[evidence] = str(error)
-                self.found[evidence] = False
-        return self.found[evidence]
+        return self.read(evidence).held()
 
     def describe(self, evidence: PhaseEvidence) -> str:
-        self.holds(evidence)
-        reason = self.unknown.get(evidence)
-        return evidence.describe() if reason is None else f"unknown ({reason}): {evidence.describe()}"
+        return self.read(evidence).describe(evidence)
 
 
 class PhaseEvidence(ABC):
@@ -133,8 +184,9 @@ class MainEvidence(PhaseEvidence):
         key = (reading.main, self)
         if key not in MainEvidence.results:
             MainEvidence.results = {
-                cached: held for cached, held in MainEvidence.results.items()
-                if cached[0].repo.checkout != reading.main.repo.checkout or cached[0] == reading.main
+                (tree, evidence): held
+                for (tree, evidence), held in MainEvidence.results.items()
+                if tree.repo.checkout != reading.main.repo.checkout or tree == reading.main
             }
             MainEvidence.results[key] = self.read(reading.main)
         return MainEvidence.results[key]
@@ -219,42 +271,85 @@ class ParityEvidence(PhaseEvidence):
         return "every parity row passes"
 
 
+class BypassMode(ExternalName, affix="Bypass"):
+    """How a ruleset's bypass actor may skip its rules: GitHub's ``bypass_mode``, decoded
+    once. A mode this family does not name is taken as able to skip them."""
+
+    @classmethod
+    def keeps_gate(cls) -> bool:
+        return False
+
+
+class AlwaysBypass(BypassMode):
+    """Skips the rules on every merge."""
+
+
+class PullRequestBypass(BypassMode):
+    """Skips the rules only through a pull request it bypasses for; the queue still gates."""
+
+    @classmethod
+    def keeps_gate(cls) -> bool:
+        return True
+
+
+class UnlistedBypass(DefaultExternalName, BypassMode):
+    """A mode GitHub names that this family does not."""
+
+
+@dataclass(frozen=True)
+class BranchRule:
+    """An active rule GitHub applies to main: its ruleset and the status checks it requires."""
+
+    ruleset: int
+    required: tuple[str, ...]
+
+    def requires(self, check: str) -> bool:
+        return check in self.required
+
+
 @dataclass(frozen=True)
 class RulesetGates(MainEvidence):
-    """The merge queue refuses a head without the review's verdict: an active ruleset requires
-    the queue job that reads ``review.context`` and no actor bypasses that ruleset always. A
-    required check an admin bypasses gates nothing. Read once per main commit."""
+    """The merge queue refuses a head without the review's verdict: an active rule on main
+    requires the queue job that reads ``HeadReview.context``, and no actor of that rule's
+    ruleset skips it. A required check an actor skips gates nothing. Read once per main
+    commit."""
 
-    review: type[HeadReview]
+    rules_query: ClassVar[str] = (
+        "[.[] | {ruleset: .ruleset_id, required: [.parameters.required_status_checks[]?.context]}]"
+    )
+    bypass_query: ClassVar[str] = "[.bypass_actors[].bypass_mode]"
 
     def read(self, main: MainTree) -> bool:
+        rules = FieldCodec.decode(
+            tuple[BranchRule, ...],
+            self.api(main, f"rules/branches/{WorkBranches.main}", self.rules_query),
+        )
         return any(
-            self.gates(self.api(main, f"rulesets/{ruleset['id']}"))
-            for ruleset in self.api(main, "rulesets")
-            if ruleset["enforcement"] == "active"
+            self.unskipped(main, rule.ruleset)
+            for rule in rules
+            if rule.requires(HeadReview.queue_check)
         )
 
-    def gates(self, ruleset: dict) -> bool:
-        required = {
-            check["context"]
-            for rule in ruleset["rules"]
-            if rule["type"] == "required_status_checks"
-            for check in rule["parameters"]["required_status_checks"]
-        }
-        return self.review.queue_check in required and not any(
-            actor["bypass_mode"] == "always" for actor in ruleset["bypass_actors"]
+    def unskipped(self, main: MainTree, ruleset: int) -> bool:
+        modes = FieldCodec.decode_external(
+            tuple[type[BypassMode], ...],
+            self.api(main, f"rulesets/{ruleset}", self.bypass_query),
+            {},
         )
+        return all(mode.keeps_gate() for mode in modes)
 
     @staticmethod
-    def api(main: MainTree, path: str):
-        read = main.repo.github.rest(path)
+    def api(main: MainTree, path: str, query: str) -> object:
+        read = main.repo.github.rest(path, "--jq", query)
         if read.returncode:
-            raise EvidenceUnknown(read.stderr.strip() or f"GitHub {path} could not be read")
-        return json.loads(read.stdout)
+            raise UnreadableEvidenceError(read.stderr.strip() or f"GitHub {path} could not be read")
+        return FieldCodec.parse(read.stdout)
 
     def describe(self) -> str:
-        return (f"an active ruleset requires {self.review.queue_check}, the queue job that reads"
-                f" {self.review.context}, with no always-bypass actor")
+        return (
+            f"an active rule on {WorkBranches.main} requires {HeadReview.queue_check}, the queue"
+            f" job that reads {HeadReview.context}, and no actor of its ruleset skips it"
+        )
 
 
 class ErasedBody(ast.NodeTransformer):
@@ -291,7 +386,7 @@ class NoExactCopies(MainEvidence):
         shapes = [
             ErasedBody.of(node)
             for path in self.paths
-            for node in ast.walk(main.module(path))
+            for node in ast.walk(main.module(path).tree)
             if isinstance(node, FUNCTIONS) and node.name in self.names
         ]
         return len(shapes) == len(set(shapes))
@@ -302,16 +397,18 @@ class NoExactCopies(MainEvidence):
 
 @dataclass(frozen=True)
 class NoGodFunction(MainEvidence):
-    """``name`` in ``path`` is under the census's god-function size."""
+    """The census finds no god function named ``name`` in ``path``."""
 
     path: str
     name: str
 
     def read(self, main: MainTree) -> bool:
-        return all(
-            node.end_lineno - node.lineno + 1 <= GodFunction.threshold
-            for node in ast.walk(main.module(self.path))
+        module = main.module(self.path)
+        return not any(
+            found
+            for node in ast.walk(module.tree)
             if isinstance(node, FUNCTIONS) and node.name == self.name
+            for found in GodFunction.from_node(node, module)
         )
 
     def describe(self) -> str:
@@ -329,7 +426,7 @@ class NoAbsenceProbes(MainEvidence):
         return not any(
             ForeignAbsenceProbe.count(node)
             for path in self.paths
-            for node in ast.walk(main.module(path))
+            for node in ast.walk(main.module(path).tree)
             if isinstance(node, ForeignAbsenceProbe.node_types)
         )
 
@@ -339,45 +436,70 @@ class NoAbsenceProbes(MainEvidence):
 
 @dataclass(frozen=True)
 class ClassFlagsAbsent(MainEvidence):
-    """No class body in ``src`` declares one of ``names`` as a bool flag, bare or ``ClassVar``.
-    A function's local or a dataclass field default of the same name is not a declared flag;
-    the grep only picks the files the AST then reads."""
+    """No line matching ``pattern`` in ``paths`` is a statement of a class body. A function's
+    local or a dataclass field default of the same name is not a declared flag."""
 
-    names: tuple[str, ...]
+    pattern: str
+    paths: tuple[str, ...] = ("src",)
 
     def read(self, main: MainTree) -> bool:
-        spelled = "|".join(self.names)
-        candidates = main.git(
-            "grep", "-l", "-E", "-e", rf"^\s+({spelled})(: ClassVar\[bool\])? = (True|False)$",
-            main.commit, "--", "src",
-        ).stdout.splitlines()
+        matched = main.matching_lines(self.pattern, self.paths)
         return not any(
-            self.flag(statement)
-            for candidate in candidates
-            for node in ast.walk(main.module(candidate.split(":", 1)[1]))
+            (path, statement.lineno) in matched
+            for path in {path for path, _ in matched}
+            for node in ast.walk(main.module(path).tree)
             if isinstance(node, ast.ClassDef)
             for statement in node.body
         )
 
-    def flag(self, statement: ast.stmt) -> bool:
-        match statement:
-            case ast.Assign(targets=[ast.Name(id=name)], value=ast.Constant(value=bool())):
-                return name in self.names
-            case ast.AnnAssign(target=ast.Name(id=name), annotation=ast.Subscript(value=ast.Name("ClassVar")),
-                               value=ast.Constant(value=bool())):
-                return name in self.names
-        return False
-
     def describe(self) -> str:
-        return f"no class body flag {'|'.join(self.names)} on main"
+        return f"no class body line {self.pattern!r} in {' '.join(self.paths)} on main"
 
 
-def class_name(node: ast.expr) -> str | None:
-    """The class a base or ``isinstance`` target names, by its last dotted part."""
-    match node:
-        case ast.Name(id=name) | ast.Attribute(attr=name):
-            return name
-    return None
+class NamedClasses(ast.NodeVisitor):
+    """The classes a base list or an ``isinstance`` target names, each by its last dotted part.
+    A subscripted or computed base names none."""
+
+    def __init__(self) -> None:
+        self.names: set[str] = set()
+
+    def visit_Name(self, node: ast.Name) -> None:
+        self.names.add(node.id)
+
+    def visit_Attribute(self, node: ast.Attribute) -> None:
+        self.names.add(node.attr)
+
+    def visit_Subscript(self, node: ast.Subscript) -> None:
+        """``Generic[T]`` names no class of ``src``."""
+
+    def visit_Call(self, node: ast.Call) -> None:
+        """A base computed by a call names no class."""
+
+    @classmethod
+    def of(cls, nodes: Iterable[ast.expr]) -> set[str]:
+        named = cls()
+        for node in nodes:
+            named.visit(node)
+        return named.names
+
+
+class ClassChecks(ast.NodeVisitor):
+    """The classes the visited modules declare and the classes their ``isinstance`` calls
+    name."""
+
+    def __init__(self) -> None:
+        self.declared: set[str] = set()
+        self.checked: set[str] = set()
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self.declared.add(node.name)
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> None:
+        match node:
+            case ast.Call(func=ast.Name(id=isinstance.__name__), args=[_, target]):
+                self.checked |= NamedClasses.of((target,))
+        self.generic_visit(node)
 
 
 @dataclass(frozen=True)
@@ -386,18 +508,10 @@ class OwnClassChecksAbsent(MainEvidence):
     typing and SDK types stay."""
 
     def read(self, main: MainTree) -> bool:
-        own: set[str] = set()
-        checked: set[str] = set()
+        checks = ClassChecks()
         for module in main.modules(("src",)):
-            for node in ast.walk(module):
-                match node:
-                    case ast.ClassDef(name=name):
-                        own.add(name)
-                    case ast.Call(func=ast.Name("isinstance"), args=[_, ast.Tuple(elts=targets)]):
-                        checked.update(filter(None, map(class_name, targets)))
-                    case ast.Call(func=ast.Name("isinstance"), args=[_, target]):
-                        checked.update(filter(None, (class_name(target),)))
-        return not own & checked
+            checks.visit(module)
+        return not checks.declared & checks.checked
 
     def describe(self) -> str:
         return "no isinstance against a class declared in src on main"
@@ -412,17 +526,23 @@ class ParentsShared(MainEvidence):
     paths: tuple[str, ...] = ()
 
     def read(self, main: MainTree) -> bool:
-        declared = {*self.names, *(
-            node.name for path in self.paths for node in main.module(path).body
+        declared = {
+            *self.names,
+            *(
+                node.name
+                for path in self.paths
+                for node in main.module(path).tree.body
+                if isinstance(node, ast.ClassDef)
+            ),
+        }
+        members = Counter(
+            base
+            for module in main.modules(("src",))
+            for node in ast.walk(module)
             if isinstance(node, ast.ClassDef)
-        )}
-        members = {name: 0 for name in declared}
-        for module in main.modules(("src",)):
-            for node in ast.walk(module):
-                if isinstance(node, ast.ClassDef):
-                    for base in {class_name(base) for base in node.bases} & declared:
-                        members[base] += 1
-        return all(count >= 2 for count in members.values())
+            for base in NamedClasses.of(node.bases) & declared
+        )
+        return all(members[name] >= 2 for name in declared)
 
     def describe(self) -> str:
         named = [*self.names, *self.paths]

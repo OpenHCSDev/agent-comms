@@ -1,12 +1,14 @@
 import subprocess
 
-import pytest
-
+from agent_comms.field_codec import FieldCodec
+from agent_comms.head_review import HeadReview
 from agent_comms.phase_evidence import (
     AllEvidence,
+    AlwaysBypass,
+    BranchRule,
+    BypassMode,
     ClassFlagsAbsent,
     CommitMerged,
-    EvidenceUnknown,
     MainEvidence,
     MainTree,
     NoAbsenceProbes,
@@ -17,12 +19,15 @@ from agent_comms.phase_evidence import (
     PathsAbsent,
     PatternAbsent,
     PatternPresent,
+    PhaseEvidence,
     PlanReading,
+    PullRequestBypass,
     RulesetGates,
+    UnlistedBypass,
+    UnreadableEvidenceError,
 )
-from agent_comms.head_review import HeadReview
 from agent_comms.pinned_audit import GodFunction
-from agent_comms.plan_phases import ExternalBoundariesPhase, PlanPhase, RemainingSlopPhase
+from agent_comms.plan_phases import FLAG, ExternalBoundariesPhase, PlanPhase
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 
@@ -77,15 +82,10 @@ def test_boundary_evidence_ignores_its_declaration_and_exception_groups(tmp_path
     assert not changed.holds(ExternalBoundariesPhase.evidence)
 
 
-def test_every_plan_phase_declares_its_plan():
+def test_every_plan_phase_declares_its_plan_and_evidence():
     phases = PlanPhase.members_with(PlanPhase)
     assert phases and all(phase.plan.document.startswith("plans/") for phase in phases)
-
-
-def test_a_phase_without_evidence_cannot_be_declared():
-    with pytest.raises(TypeError, match="declares no evidence"):
-        class UnprovablePhase(RemainingSlopPhase):
-            pass
+    assert all(isinstance(phase.evidence, PhaseEvidence) for phase in phases)
 
 
 def main_of(tmp_path, files):
@@ -125,31 +125,43 @@ def test_source_shape_evidence_reads_declarations_on_main(tmp_path):
     assert not reading.holds(ParentsShared(names=("Missing",)))
 
 
-def test_ruleset_gates_only_without_an_always_bypass():
-    ruleset = {
-        "rules": [{"type": "required_status_checks",
-                   "parameters": {"required_status_checks": [{"context": "review-verdict"}]}}],
-        "bypass_actors": [{"actor_type": "RepositoryRole", "bypass_mode": "pull_request"}],
-    }
-    gates = RulesetGates(HeadReview)
-    assert gates.gates(ruleset)
-    assert HeadReview.context in gates.describe()
-    ruleset["bypass_actors"][0]["bypass_mode"] = "always"
-    assert not gates.gates(ruleset)
-    ruleset["rules"][0]["parameters"]["required_status_checks"] = [{"context": "smoke"}]
-    ruleset["bypass_actors"] = []
-    assert not gates.gates(ruleset)
+def test_ruleset_gates_only_while_no_actor_skips_the_review(tmp_path):
+    modes = FieldCodec.decode_external(
+        tuple[type[BypassMode], ...], ["pull_request", "always", "exempt"], {})
+    assert modes == (PullRequestBypass, AlwaysBypass, UnlistedBypass)
+    assert [mode.keeps_gate() for mode in modes] == [True, False, False]
+
+    main = main_of(tmp_path, {"src/a.py": "x = 1\n"}).main
+    rules = [{"ruleset": 7, "required": ["smoke"]},
+             {"ruleset": 8, "required": [HeadReview.queue_check]}]
+    assert [rule.requires(HeadReview.queue_check)
+            for rule in FieldCodec.decode(tuple[BranchRule, ...], rules)] == [False, True]
+
+    def gates(bypass):
+        answers = {"rules/branches/main": rules, "rulesets/8": bypass}
+
+        class Answered(RulesetGates):
+            @staticmethod
+            def api(main, path, query):
+                return answers[path]
+
+        return Answered().read(main)
+
+    assert gates(["pull_request"])
+    assert gates([])
+    assert not gates(["pull_request", "always"])
+    assert HeadReview.context in RulesetGates().describe()
 
 
 def test_lifecycle_flags_count_class_bodies_not_locals(tmp_path):
     local = "def stage():\n    complete = False\n    complete = True\n"
     reading = main_of(tmp_path, {"src/local.py": local})
-    assert reading.holds(ClassFlagsAbsent(("complete", "active")))
+    assert reading.holds(ClassFlagsAbsent(r"^\s+(complete|active)" + FLAG))
 
     flagged = main_of(tmp_path, {"src/flag.py": "class Status:\n    active: ClassVar[bool] = False\n"
                                                  "class Scope:\n    complete: bool = True\n"})
-    assert not flagged.holds(ClassFlagsAbsent(("complete", "active")))
-    assert flagged.holds(ClassFlagsAbsent(("complete",)))
+    assert not flagged.holds(ClassFlagsAbsent(r"^\s+(complete|active)" + FLAG))
+    assert flagged.holds(ClassFlagsAbsent(r"^\s+(complete)" + FLAG))
 
 
 def test_main_evidence_reads_once_per_commit_and_unknown_is_reported(tmp_path):
@@ -168,7 +180,7 @@ def test_main_evidence_reads_once_per_commit_and_unknown_is_reported(tmp_path):
 
     class Unreadable(PatternPresent):
         def read(self, main):
-            raise EvidenceUnknown("GitHub is down")
+            raise UnreadableEvidenceError("GitHub is down")
 
     unreadable = Unreadable("x")
     assert not reading.holds(unreadable)
