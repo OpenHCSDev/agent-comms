@@ -12,6 +12,7 @@ from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
+from agent_comms.field_codec import boundary_decoder
 from agent_comms.installer.backup import UpgradeRefused
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.locked_store import RegistryFile, RootFile, SQLiteFile
@@ -90,6 +91,7 @@ class TestHome(RuntimeHome):
     """A source checkout's test build: no installed runtime, the uv its caller put on PATH."""
 
     @property
+    @boundary_decoder
     def uv(self) -> Path:
         executable = shutil.which("uv")
         if executable is None:
