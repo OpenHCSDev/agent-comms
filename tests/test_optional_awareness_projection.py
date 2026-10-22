@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from agent_comms.lifecycle_capability import Executing
 
-from conftest import publish_initial
+from conftest import publish_initial, without_mutation_guards
 from agent_comms.messages import NoticeRole
 import os
 from dataclasses import replace
@@ -15,7 +15,11 @@ import pytest
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.bus_publication import CommittedDelivery
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.cohort_schema import install_private_cohort_schema
+from agent_comms.cohort_schema import (
+    AwarenessClaimGenerations,
+    ClaimBatchAcknowledgements,
+    install_private_cohort_schema,
+)
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import IdentityConflict
@@ -288,18 +292,14 @@ def test_older_receipt_message_id_mismatch_omits_entire_context(tmp_path: Path) 
         owner = _owner(comms, "member000")
         builder = _projection(index, store, owner, 0, initial.message.seq)
         assert builder(initial, assignment, owner).context()["selected"]
-        # Disposable legacy/disk inconsistency only: supported writes freeze
-        # acknowledgement facts. Restore the original trigger before checking schema.
+        # Disposable disk inconsistency only: supported writes freeze
+        # acknowledgement facts. Restore declared guards before checking schema.
         db = store.session._connection
-        trigger = db.execute(
-            "SELECT sql FROM sqlite_master WHERE name='cohort_receipt_update_guard'"
-        ).fetchone()[0]
-        db.execute("DROP TRIGGER cohort_receipt_update_guard")
-        db.execute(
-            "UPDATE claim_batch_receipts SET message_id=? WHERE wire_root_id=? AND wire_seq=?",
-            ("forged-older-id", root_id, prior.message.seq),
-        )
-        db.execute(trigger)
+        with without_mutation_guards(db, ClaimBatchAcknowledgements):
+            db.execute(
+                "UPDATE claim_batch_receipts SET message_id=? WHERE wire_root_id=? AND wire_seq=?",
+                ("forged-older-id", root_id, prior.message.seq),
+            )
         stale = builder(initial, assignment, owner)
         assert 'Optional awareness omitted' in stale.render(32768)
     finally:
@@ -459,14 +459,10 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
         # The passive row remains a completeness requirement, not an inner-join
         # casualty silently omitted while the original is called complete.
         db = store.session._connection
-        trigger = db.execute(
-            "SELECT sql FROM sqlite_master WHERE name='awareness_generation_delete_guard'"
-        ).fetchone()[0]
-        db.execute("DROP TRIGGER awareness_generation_delete_guard")
-        db.execute(
-            "DELETE FROM awareness_claim_generations WHERE claim_id=?", (passive.assignment_id,)
-        )
-        db.execute(trigger)
+        with without_mutation_guards(db, AwarenessClaimGenerations):
+            db.execute(
+                "DELETE FROM awareness_claim_generations WHERE claim_id=?", (passive.assignment_id,)
+            )
         missing = builder(initial, assignment, owner)
         assert 'Optional awareness omitted' in missing.render(32768)
         assert WakeAssignment.select(db) == assignments_before
