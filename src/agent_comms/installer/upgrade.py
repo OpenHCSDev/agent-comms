@@ -37,7 +37,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 from agent_comms.active_route import ActiveRoute, active_route_path, route_new_bus
-from agent_comms.cli_commands import InstallResult, ThreadsResult, WhoResult
+from agent_comms import cli
+from agent_comms.cli_commands import (
+    InstallResult, ReconciledStoresResult, ReconcileStoresCliCommand, ThreadsResult, WhoResult,
+)
 from agent_comms.cli_result import CliResult
 from agent_comms.cli_bridges.shared import Serve, SessionBridgeResumes
 from agent_comms.declared_family import DeclaredFamily
@@ -451,7 +454,7 @@ class Stack:
         route index is still being built."""
         for _ in range(240):
             completed = subprocess.run(
-                [str(self.python), "-c", "from agent_comms.cli import main; main()", "--root", str(root),
+                [str(self.python), "-m", cli.__name__, "--root", str(root),
                  *arguments], cwd=self.checkout, env=self.environment(), capture_output=True,
                 text=True)
             if "Route index covers" not in completed.stdout:
@@ -622,8 +625,9 @@ def reconcile_stores(root: Path, staged: Stack) -> StepRun:
     """The target's runtime reconciles every store onto its declarations after the carries,
     under the hold, and names each file it rewrote, so the backup and the rehearsal account
     for the schema change like any carry's rewrite."""
-    rewritten = tuple(staged.cli(root, "reconcile-stores")["rewritten"])
-    return StepRun("reconcile-stores", Carried(len(rewritten), rewritten=rewritten))
+    verb = ReconcileStoresCliCommand.declared_name
+    result = FieldCodec.decode(ReconciledStoresResult, staged.cli(root, verb))
+    return StepRun(verb, Carried(len(result.rewritten), rewritten=result.rewritten))
 
 
 def carry_and_read(root: Path, before: dict[str, SavedFile], pending: tuple[type[Carry], ...],

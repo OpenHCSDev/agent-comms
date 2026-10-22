@@ -23,7 +23,9 @@ from .coordination_database import CoordinationStore
 from .field_codec import FieldCodec, MalformedRecord, HistoryExclude
 from .goals import GoalDeclaration, NoGoal
 from .locked_store import DurableFile
-from .typed_table import Column, DurableTables, Index, JsonStorage, ReconciledFile, TypedTable
+from .typed_table import (
+    Column, DurableTables, HeldBusFile, Index, JsonStorage, ReconciledFile, TypedTable,
+)
 
 
 class GoalHistoryError(RuntimeError):
@@ -154,7 +156,8 @@ class GoalHistoryStore(DurableFile, ReconciledFile):
             raise GoalHistoryError("Goal history database must be owner-only.")
         try:
             with closing(self._connect()) as connection:
-                GoalHistoryEntry.install_schema(connection)
+                GoalHistoryEntry.install_schema(
+                    connection, HeldBusFile(GoalHistoryStore, self.path))
             self._sync()
         except (OSError, sqlite3.Error) as error:
             raise GoalHistoryError("Goal history initialization is uncertain.") from error

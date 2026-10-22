@@ -49,8 +49,9 @@ from .field_codec import (
     compile_decoder,
 )
 from .lifecycle import LifecycleState
-from .locked_store import DurableFile, FileStore, RegistryFile, RuntimeFile, SQLiteFile
-from .maintenance_barrier import MaintenanceBarrier
+from .locked_store import DurableFile, FileStore, RegistryFile, RootFile, RuntimeFile, SQLiteFile
+from .maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier
+from .store_files import _store_lock
 
 if TYPE_CHECKING:
     from .execution_states import ExecutionState
@@ -685,6 +686,37 @@ class SQLiteCatalogObject(TypedRow):
                 db.execute(sql)
 
 
+class SchemaChange(ABC):
+    """Who may change a stored schema: the reconcile asks before it writes."""
+
+    @abstractmethod
+    def require(self) -> None: ...
+
+
+@dataclass(frozen=True)
+class HeldBusFile(SchemaChange):
+    """A bus file every runtime on the root opens: its schema changes only in the process
+    holding the root's maintenance, so a newer runtime opening the live bus outside an
+    install refuses instead of moving it under the running owners (install 53, 2026-10-22)."""
+
+    owner: type[RootFile]
+    path: Path
+
+    def require(self) -> None:
+        barrier = MaintenanceBarrier(RegistryFile.path_in(self.owner.bus_root(self.path)))
+        # Only the holder clears a hold, so a nonce this process holds cannot go stale while
+        # it reads; the witness alone answers without the wire lock.
+        barrier.current_unlocked().require_held_by(
+            os.environ.get(HOLDER_NONCE, ""), f"Changing the schema of {self.path}")
+
+
+class SoleWriterFile(SchemaChange):
+    """A file one process writes alone: its schema follows that process's own code."""
+
+    def require(self) -> None:
+        """The one writer is the one reader, so no other runtime meets the change."""
+
+
 class TableSchema(ABC):
     """The tables of one SQLite file, and the one reader of the SQL SQLite stored for them.
 
@@ -763,17 +795,19 @@ class TableSchema(ABC):
         cls.require_schema(db)
 
     @classmethod
-    def reconcile_schema(cls, db: sqlite3.Connection) -> bool:
+    def reconcile_schema(cls, db: sqlite3.Connection, change: SchemaChange) -> bool:
         """The writer's answer to a stored schema that differs from the declaration, in a
-        write transaction of its own; whether it changed the file."""
+        write transaction of its own and only where ``change`` allows; whether it changed
+        the file."""
         if not cls.schema_differs(db):
             return False
+        change.require()
         with SQLiteFile.write_transaction(db):
             cls.carry_schema(db)
         return True
 
     @classmethod
-    def install_schema(cls, db: sqlite3.Connection) -> None:
+    def install_schema(cls, db: sqlite3.Connection, change: SchemaChange) -> None:
         """Every writer's opening: a file with no stored schema gets its declaration, and
         one that has a schema is reconciled onto it. The first read also attaches an existing
         WAL, and an opening that finds its schema takes no write lock."""
@@ -781,7 +815,7 @@ class TableSchema(ABC):
             with SQLiteFile.write_transaction(db):
                 if not cls.stored_schema(db):
                     cls.create_schema(db)
-        cls.reconcile_schema(db)
+        cls.reconcile_schema(db, change)
 
     @classmethod
     @abstractmethod
@@ -1753,10 +1787,9 @@ class ReconciledFile(SQLiteFile):
     def reconcile_at(cls, path: Path) -> bool:
         """Whether reconciling the file at ``path`` changed it."""
         from .coordination_database import CoordinationStore
-        from .store_files import _store_lock
 
         with _store_lock(path), closing(CoordinationStore.writer(path, isolation_level=None)) as db:
-            return cls.table_schema().reconcile_schema(db)
+            return cls.table_schema().reconcile_schema(db, HeldBusFile(cls, path))
 
 
 class CarriedWriter(StoreWriter, DurableFile):
@@ -1816,8 +1849,6 @@ class TypedStore(StoreWriter, TableSchema, ReconciledFile):
         physical owner serializes these connection boundaries; readers and
         writers retain SQLite's parallel WAL transactions between them.
         """
-        from .store_files import _store_lock
-
         with ExitStack() as lifetime:
             with _store_lock(self.path):
                 resource = opening()
@@ -1847,7 +1878,7 @@ class TypedStore(StoreWriter, TableSchema, ReconciledFile):
         try:
             connection.execute(f"PRAGMA synchronous={self.synchronous}")
             # Under the attachment boundary: a derived file is rebuilt, a durable one carried.
-            self.install_schema(connection)
+            self.install_schema(connection, HeldBusFile(type(self), self.path))
             if SQLiteJournalMode.read(connection.execute("PRAGMA journal_mode=WAL")) != [
                 SQLiteJournalMode("wal")
             ]:
