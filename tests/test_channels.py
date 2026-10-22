@@ -32,7 +32,8 @@ from agent_comms.thread_model import DeclaredModel
 @pytest.mark.parametrize("channel", BuiltinChannelView.members_with(BuiltinChannelView))
 def test_builtin_channel_target_decodes_to_declaring_member(channel):
     target = channel.target()
-    assert FieldCodec.decode(type[BuiltinChannelView], target.name) is channel
+    assert BuiltinChannelView.addressed(target.name) is channel
+    assert FieldCodec.decode(type[BuiltinChannelView], channel.declared_name) is channel
 
 
 def setup_wire(path):

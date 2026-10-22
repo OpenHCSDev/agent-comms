@@ -84,8 +84,8 @@ class ResolvedChannel:
 def exact_stored_target(name: str) -> bool:
     from .channels import BuiltinChannelView
 
-    return (BuiltinChannelView.member_named(name).exact_stored_target()
-            if name in BuiltinChannelView.names() else True)
+    return (BuiltinChannelView.addressed(name).exact_stored_target()
+            if name in BuiltinChannelView.addresses() else True)
 
 
 class CommandTarget(ABC):
@@ -396,7 +396,7 @@ class ChannelTarget(NamedTarget):
     def validate(self, sender=None):
         from .channels import BuiltinChannelView
 
-        if self.name not in BuiltinChannelView.names():
+        if self.name not in BuiltinChannelView.addresses():
             Tag.validate(self.name[1:], label=f"Channel {self.name!r}")
 
     def response_policy(self, message):
@@ -484,7 +484,7 @@ class Tag:
         from .channels import BuiltinChannelView
 
         if (not name or not set(name) <= _TAG_CHARS
-                or ChannelTarget.normalize_name(name) in BuiltinChannelView.names()):
+                or ChannelTarget.normalize_name(name) in BuiltinChannelView.addresses()):
             raise ValueError(f"{label} must be lowercase alphanumeric with hyphens/underscores; built-in channel names are reserved.")
 
 

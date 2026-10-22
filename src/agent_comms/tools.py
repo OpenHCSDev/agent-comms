@@ -1543,7 +1543,7 @@ class CommsInboxTool(ToolRequest):
         "already reviewed entries, and excluded owner/other-dependency inputs."
     )
     thread: Annotated[str, *tool_field("Thread name")]
-    target: Annotated[str, *tool_field("Channel or peer conversation")] = AnyChannel.declared_name
+    target: Annotated[str, *tool_field("Channel or peer conversation")] = AnyChannel.address()
     ack: Annotated[bool, *tool_field("Mark exactly the returned messages delivered")] = (
         True
     )

@@ -1455,7 +1455,7 @@ class HistoryCliCommand(CliCommand):
     help = "Newest-first bounded history of a named target"
     target: Annotated[
         str, Argument(flags=("--target",), options={"help": "#channel or @peer"})
-    ] = AnyChannel.declared_name
+    ] = AnyChannel.address()
     me: Annotated[
         DisplayViewer,
         Argument(

@@ -82,7 +82,7 @@ class CatalogDocument:
         return self.tags | frozenset(DeclaredTag.names())
 
     def views(self, activity: ActivityClocks) -> Channels:
-        result = Channels((name, self.require_channel(name, activity)) for name in BuiltinChannelView.names())
+        result = Channels((name, self.require_channel(name, activity)) for name in BuiltinChannelView.addresses())
         result.update((channel, self.require_channel(channel, activity))
                       for channel in map(ChannelTarget.normalize_name,
                                          (*sorted(self.present_tags), *self.saved_views)))
@@ -91,9 +91,9 @@ class CatalogDocument:
     def require_channel(self, target: str, activity: ActivityClocks) -> Channel:
         target = ChannelTarget.normalize_name(target)
         tag = ChannelTarget.bare_name(target)
-        if target in BuiltinChannelView.names():
+        if target in BuiltinChannelView.addresses():
             preference = self.preferences.get(target, ChannelPreferences())
-            return preference.channel(BuiltinChannelView.member_named(target), target, frozenset())
+            return preference.channel(BuiltinChannelView.addressed(target), target, frozenset())
         if (view := self.saved_views.get(tag)) is not None:
             preference = self.preferences.get(target, ChannelPreferences(created_at=view.created_at))
             return preference.channel(SavedViewChannel, target, view.predicate.tags, view=view)
@@ -107,7 +107,7 @@ class CatalogDocument:
 
     def targets_for(self, tags: frozenset[str]) -> frozenset[str]:
         return frozenset(
-            kind.declared_name for kind in BuiltinChannelView.members_with(BuiltinChannelView)
+            kind.address() for kind in BuiltinChannelView.members_with(BuiltinChannelView)
             if kind.matches(tags)
         ) | frozenset(map(ChannelTarget.normalize_name, tags))
 
