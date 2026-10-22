@@ -113,6 +113,7 @@ from agent_comms.todos import (
     ToolCallVerdict,
     PlainText,
     PullRequests,
+    ReviewedHeadVerdict,
     StrikeReason,
     Todo,
     TodoOperation,
@@ -920,6 +921,28 @@ class CommsVerdictTool(CommsChangeProblemTool):
     operation: Annotated[
         ToolCallVerdict, *tool_field("Accepted or send-back verdict on the judged tool call ID")
     ]
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsHeadVerdictTool(ThreadToolRequest):
+    """One reviewed commit judges the holder's whole diff: the commander, or any fork of it,
+    accepts an order's exact PR head, so every edit made before it is judged in one verdict and
+    the head carries agent-comms/review for the merge queue."""
+
+    label = "Accept an order's PR head"
+    description = (
+        "Accept the exact pull request head commit an order's holder delivered: one verdict "
+        "judges every edit made before it and posts agent-comms/review on that commit. Quote "
+        "4+ words of the order it carries out."
+    )
+    problem: Annotated[str, *tool_field("Problem ID")]
+    operation: Annotated[ReviewedHeadVerdict, *tool_field("Accepted PR-head verdict")]
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
+        reviewer = caller.identity(comms)
+        comms.goals.todos.get(self.problem).require_commander(reviewer)
+        todo = self.operation.reviewed(comms.goals, self.problem, reviewer)
+        return TodoChanged(todo, todo.strike_count)
 
 
 @dataclass(frozen=True, kw_only=True)

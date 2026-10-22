@@ -36,6 +36,7 @@ from agent_comms.todos import (
     Derivation,
     DroppedVerdict,
     PeerAcceptedVerdict,
+    ReviewedHeadVerdict,
     SendBackVerdict,
     Slop,
     StrikeReason,
@@ -43,7 +44,7 @@ from agent_comms.todos import (
     Todo,
     ToolCallVerdict,
 )
-from agent_comms.tools import CommsUnjudgedTool, CommsVerdictTool
+from agent_comms.tools import CommsHeadVerdictTool, CommsUnjudgedTool, CommsVerdictTool
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tool_declaration import EditCall, ReplacementEdit
 from agent_comms.commander import order
@@ -153,6 +154,28 @@ class AlarmVerb(JudgeVerb):
 
     def run(self, ctx: order.Commander) -> None:
         alarm(ctx)
+
+
+@dataclass(frozen=True, kw_only=True)
+class HeadVerb(JudgeVerb):
+    help = ("accept an order's reviewed PR head: every edit before it is judged and "
+            "agent-comms/review is posted on the commit")
+    problem: Annotated[str, Argument(flags=("problem",), options={"metavar": "PROBLEM"})]
+    head: Annotated[str, Argument(flags=("head",), options={"metavar": "SHA"})]
+    serves: Annotated[
+        str, Argument(options={"help": "exact words of the order the head carries out"})
+    ]
+
+    def run(self, ctx: order.Commander) -> None:
+        held = [todo for todo in ctx.held_orders() if todo.id == self.problem]
+        if not held:
+            sys.exit(f'Refused: {self.problem} is not an order this commander holds')
+        todo, = held
+        verdict = ReviewedHeadVerdict(todo.revision, ctx.actor_identity, todo.held(),
+                                      quote=self.serves, head=self.head)
+        ctx.call(CommsHeadVerdictTool(problem=todo.id, operation=verdict))
+        left = len(Edit.unjudged(ctx.comms, ctx.commander))
+        print(f'head {self.head} accepted on {todo.id}; {left} still unjudged')
 
 
 @dataclass(frozen=True, kw_only=True)

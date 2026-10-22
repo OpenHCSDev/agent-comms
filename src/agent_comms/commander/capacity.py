@@ -12,13 +12,11 @@ from ..turn_digests import OrderEditCountRead
 
 @dataclass(frozen=True)
 class Load(ToolResult):
-    """Order and edit debt, and the working forks that share it: a fork reading the debt now is
-    another reader of it, so the debt each thread carries is the total over the commander and
-    its working forks. An idle fork reads nothing; it counts once it works again or retires."""
+    """Order and edit debt. Forking relieves it only by what forks clear: each verdict, order
+    or answer a fork records lowers the debt itself, never a division by how many forks exist."""
     owed: int
     timers_up: int
     unjudged: int
-    forks: tuple[str, ...]
 
     @classmethod
     def of(cls, comms: Comms, commander: str) -> Load:
@@ -26,29 +24,18 @@ class Load(ToolResult):
         owner = snapshot.require(commander)
         held = todos.held_for_commander(owner.incarnation)
         owed = tuple(t for t in held if t.pending)
-        forks = tuple(sorted(
-            thread.name for thread in snapshot.threads.values()
-            if thread.parent.named(owner.name)
-            and comms.agents.is_working(thread.incarnation, snapshot)
-        ))
         unjudged = sum(
             read.read() for read in OrderEditCountRead.for_orders(comms.root, snapshot, held)
         )
-        return cls(len(owed), sum(bool(t.timer_up(now)) for t in owed), unjudged, forks)
+        return cls(len(owed), sum(bool(t.timer_up(now)) for t in owed), unjudged)
 
     @projected(view="wire")
     def total(self) -> float:
         return self.owed + 2 * self.timers_up + self.unjudged / 10
 
-    @projected(view="wire")
-    def share(self) -> float:
-        """The debt per reader: forking is how a commander relieves its load."""
-        return self.total / (1 + len(self.forks))
-
     def __str__(self) -> str:
         return (f'load {self.total:.0f} ({self.owed} open orders, {self.timers_up} review timers up, '
-                f'{self.unjudged} unjudged edits), {len(self.forks)} working forks {list(self.forks)},'
-                f' {self.share:.0f} per reader')
+                f'{self.unjudged} unjudged edits)')
 
 
 def main(a, ctx):
