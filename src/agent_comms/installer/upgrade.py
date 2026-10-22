@@ -42,7 +42,6 @@ from agent_comms.cli_result import CliResult
 from agent_comms.cli_bridges.shared import Serve, SessionBridgeResumes
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.comms import Comms
-from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.history_result import EverythingHistoryPageResult
 from agent_comms.storage_rules import StorageRule
@@ -803,30 +802,23 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
     maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
     held = maintenance.begin(MaintenanceOperator.current())
     os.environ[HOLDER_NONCE] = held.nonce  # this run's own CLI calls read under its hold
-    # The transcript store's writers are not owners, so the stop does not stop them. Its
-    # writer lock is held from the baseline through the carry check, unless a step that
-    # the rehearsal proved rewrites it is the one meant to write.
-    window = ExitStack()
     try:
         installed.owners(root, "stop", running)
-        if ExternalTranscript.filename not in rehearsal_files.names:
-            window.enter_context(transcripts_held(root))
-        before = bus_files(root)
-        backup = StoreBackup.take(root, active_route_path(), selected, spill_dir)
+        with transcripts_held(root):
+            before = bus_files(root)
+            backup = StoreBackup.take(root, active_route_path(), selected, spill_dir)
     except BaseException as error:
-        window.close()
         maintenance.clear(held)
         started = installed.start(root, running)
         print(f"install: aborted before the backup ({type(error).__name__}: {error}); "
               f"maintenance cleared; owners: {started}", file=sys.stderr)
         raise
     try:
-        with window:
-            run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
-            Checkout(checkout).prepare()
-            staged.prepare_native()
-            passed = carry_and_read(root, before, pending, staged, staged, tree, stopping)
-            passed.files.require_rehearsal(rehearsal_files)
+        run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
+        Checkout(checkout).prepare()
+        staged.prepare_native()
+        passed = carry_and_read(root, before, pending, staged, staged, tree, stopping)
+        passed.files.require_rehearsal(rehearsal_files)
         staged.publish()
         maintenance.clear(held)
         services = HostService.restart_running(staged.python)
