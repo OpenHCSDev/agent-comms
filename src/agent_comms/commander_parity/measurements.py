@@ -12,7 +12,7 @@ from agent_comms.commander_parity.load import LoadComparison, state_files
 from agent_comms.comms import Comms
 from agent_comms.standing_rules import DiskLow, StandingRule
 from agent_comms.storage_rules import StorageViolation
-from agent_comms.todos import PullRequests
+from agent_comms.todos import ProgressRead
 from agent_comms.ui_model.unit_state import UnitState
 
 
@@ -46,7 +46,7 @@ class RuleComparison(ParityComparison):
         code = method.__func__.__code__
         config = CommanderConfig.read(CommanderConfig.path())
         comms = Comms(config.root)
-        states = UnitState.current(comms, config.commander, PullRequests())
+        states = UnitState.current(comms, config.commander, ProgressRead())
         before = state_files(config.state)
         observed: list[tuple[StandingRule, ...]] = []
 

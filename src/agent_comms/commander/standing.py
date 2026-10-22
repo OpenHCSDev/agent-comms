@@ -34,7 +34,7 @@ from agent_comms.standing_rules import (
 )
 from agent_comms.storage_rules import OrderCheckoutWork
 from agent_comms.threads import Thread
-from agent_comms.todos import PullRequests, Todo
+from agent_comms.todos import ProgressRead, Todo
 from agent_comms.turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
 from agent_comms.ui_model.unit_state import UnitState
 from agent_comms.wire_log import WireSnapshot
@@ -202,12 +202,12 @@ class UnitAskUnanswered(OwedAnswer, UndatedStandingRule):
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         return tuple(cls(message, source.thread.name)
-                     for source in UnitState.observations(comms, commander, PullRequests())
+                     for source in UnitState.observations(comms, commander, ProgressRead())
                      for message in source.due_questions)
 
     @classmethod
     def open_messages(cls, comms: Comms, commander: str) -> tuple[Message, ...]:
-        return tuple(message for source in UnitState.observations(comms, commander, PullRequests())
+        return tuple(message for source in UnitState.observations(comms, commander, ProgressRead())
                      for message in source.questions)
 
     def line(self) -> str:

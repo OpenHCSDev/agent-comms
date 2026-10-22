@@ -29,8 +29,8 @@ from agent_comms.todos import (
     NoCommitProgress,
     OrderClaim,
     OrderProgress,
+    ProgressRead,
     ProgressSource,
-    PullRequests,
     SendBackVerdict,
     Todo,
 )
@@ -50,7 +50,7 @@ class UnitObservation:
     comms: Comms
     thread: Thread
     todos: tuple[Todo, ...]
-    pulls: PullRequests
+    pulls: ProgressRead
     questions: tuple[Message, ...]
     now: float
     presence: ThreadStatus
@@ -154,7 +154,7 @@ class UnitState(UndatedStandingRule, declared_name=None):
 
     @classmethod
     def observations(
-        cls, comms: Comms, commander: str, pulls: PullRequests
+        cls, comms: Comms, commander: str, pulls: ProgressRead
     ) -> tuple[UnitObservation, ...]:
         snapshot, now = comms.registry.snapshot(), time.time()
         held = StandingRule.holders(comms, commander)
@@ -208,7 +208,7 @@ class UnitState(UndatedStandingRule, declared_name=None):
         return tuple(reading for reading in readings if reading.thread.incarnation in eligible)
 
     @classmethod
-    def current(cls, comms: Comms, commander: str, pulls: PullRequests) -> tuple[UnitState, ...]:
+    def current(cls, comms: Comms, commander: str, pulls: ProgressRead) -> tuple[UnitState, ...]:
         states = tuple(cls.read(source) for source in cls.observations(comms, commander, pulls))
         return tuple(
             state for member in cls.worst_first() for state in states if isinstance(state, member)
@@ -228,7 +228,7 @@ class UnitState(UndatedStandingRule, declared_name=None):
     def attention(self) -> bool:
         return False
 
-    def merged_orders(self, comms: Comms, pulls: PullRequests) -> tuple[Todo, ...]:
+    def merged_orders(self, comms: Comms, pulls: ProgressRead) -> tuple[Todo, ...]:
         return tuple(
             closed
             for problem in self.orders
@@ -283,7 +283,7 @@ class Unreadable(NeedsCommanderAttention, UnitState):
     def readable_units(self) -> tuple[ThreadIncarnation, ...]:
         return ()
 
-    def merged_orders(self, comms: Comms, pulls: PullRequests) -> tuple[Todo, ...]:
+    def merged_orders(self, comms: Comms, pulls: ProgressRead) -> tuple[Todo, ...]:
         # The card reports the failure; a merge read must not retry that source.
         return ()
 

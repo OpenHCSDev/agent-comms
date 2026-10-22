@@ -36,7 +36,6 @@ from agent_comms.build_identity import (
     UnrecordedBuildIdentity,
 )
 from agent_comms.bus_publication import AgentOrigin
-from agent_comms.head_review import AcceptedHeadReview
 from agent_comms.change_report import (
     FileLine,
     MainRevision,
@@ -56,7 +55,6 @@ from agent_comms.child_process import (
 )
 from agent_comms.command import Command
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.lifecycle_capability import LifecycleCapability, Pending
 from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import (
     FieldCodec,
@@ -72,6 +70,8 @@ from agent_comms.field_codec import (
     boundary_decoder,
 )
 from agent_comms.goals import CheckedCommit, GitCommandFailed, OrderCheck, ProblemGoalOrder
+from agent_comms.head_review import AcceptedHeadReview
+from agent_comms.lifecycle_capability import LifecycleCapability, Pending
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message
 from agent_comms.order_runs import OrderRun
@@ -575,18 +575,12 @@ class MergedListedPullRequest(ListedPullRequest):
 
 
 class PullRequests:
-    """GitHub facts for recorded links, and each checkout's Git facts, cached within one
-    board read: orders sharing a checkout ask Git its refs and push reflog once."""
+    """GitHub facts for recorded links, cached within one board read."""
 
     def __init__(self, todos: Sequence[Todo] = ()) -> None:
         self._read: dict[tuple[RepositoryName, type[ListedPullRequest], str], tuple[PullRequest, ...]] = {}
         self._todos: dict[RepositoryName, dict[str, Todo]] = {}
-        self._checkouts: dict[Path, PresentCheckout] = {}
         self.register(todos)
-
-    def checkout(self, path: Path) -> PresentCheckout:
-        """This read's one reader of the checkout at path."""
-        return self._checkouts.setdefault(path, PresentCheckout(path))
 
     def register(self, todos: Sequence[Todo]) -> Self:
         """Register a frame's orders while preserving this read's existing GitHub facts."""
@@ -923,17 +917,37 @@ class PresentCheckout(ProgressCheckout):
         return ((sha, at) for sha, at in self.origin_pushes if sha in published)
 
 
+class CheckoutReads:
+    """Each checkout's Git facts within one read: orders sharing a checkout ask Git its
+    refs and push reflog once, and nothing outlives the read to go stale."""
+
+    def __init__(self) -> None:
+        self._checkouts: dict[Path, PresentCheckout] = {}
+
+    def checkout(self, path: Path) -> PresentCheckout:
+        """This read's one reader of the checkout at path."""
+        return self._checkouts.setdefault(path, PresentCheckout(path))
+
+
+class ProgressRead(PullRequests, CheckoutReads):
+    """One read of order progress: its GitHub facts and its checkouts' Git facts."""
+
+    def __init__(self, todos: Sequence[Todo] = ()) -> None:
+        CheckoutReads.__init__(self)
+        PullRequests.__init__(self, todos)
+
+
 @dataclass(frozen=True)
 class ProgressSource:
     """Problem progress across owned worktrees, shared Git history and retained PR identities."""
     todo: Todo
     checkout: ProgressCheckout
-    pulls: PullRequests
+    pulls: ProgressRead
     references: tuple[str, ...] = ()
     worktrees: tuple[PresentCheckout, ...] = ()
 
     @classmethod
-    def of(cls, todo: Todo, registry: Registration, pulls: PullRequests) -> Self:
+    def of(cls, todo: Todo, registry: Registration, pulls: ProgressRead) -> Self:
         owner = registry.require(todo.held().owner)
         storage = registry.storage_rule
         owned = storage.checkout_paths(owner)
@@ -1003,7 +1017,7 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
     Never stored: the checkout and GitHub are its owners."""
 
     @classmethod
-    def read(cls, todo: Todo, registry: Registration, pulls: PullRequests) -> OrderProgress:
+    def read(cls, todo: Todo, registry: Registration, pulls: ProgressRead) -> OrderProgress:
         """The first found member by its declared precedence; with none found, no commit yet."""
         return cls.from_source(MeasuredProgressSource.of(todo, registry, pulls))
 
@@ -1526,7 +1540,7 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
         return ()
 
     def closed_by_merge(self, todo: Todo, registry: Registration,
-                        pulls: PullRequests) -> tuple[Todo, ...]:
+                        pulls: ProgressRead) -> tuple[Todo, ...]:
         return ()
 
     def reissued(self, at: float) -> PendingProblemOrder:
@@ -1882,7 +1896,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         return self.copy_as(MergedProblemOrder, sha=sha)
 
     def closed_by_merge(self, todo: Todo, registry: Registration,
-                        pulls: PullRequests) -> tuple[Todo, ...]:
+                        pulls: ProgressRead) -> tuple[Todo, ...]:
         repo = Repo(checkout=Path(self.check.directory), github=todo.repo)
         source = ProgressSource.of(todo, registry, pulls)
         return tuple(self.run.after_merge(todo, merged)
@@ -3711,7 +3725,7 @@ class TodoStore(DurableStore):
                       registry: Registration) -> tuple[Todo, ...]:
         """Observe linked merges without holding a write lock."""
         held = self.held_for_commander(commander)
-        pulls = PullRequests(held)
+        pulls = ProgressRead(held)
         return tuple(closed for todo in held
                      for closed in todo.order.closed_by_merge(todo, registry, pulls))
 
@@ -3730,7 +3744,7 @@ class TodoStore(DurableStore):
     ) -> Iterator[tuple[Todo, MergedProgress]]:
         """Open orders whose progress misses a linked merge, sharing one PR read cache."""
         todos = self.held_for_commander(commander)
-        pulls = PullRequests(todos)
+        pulls = ProgressRead(todos)
         for todo in todos:
             progress = OrderProgress.read(todo, registry, pulls)
             source = ProgressSource.of(todo, registry, pulls)
@@ -3756,7 +3770,7 @@ class TodoStore(DurableStore):
                                 now: float) -> tuple[tuple[Todo, RecordedEventTime], ...]:
         """Held work whose review timer is up, with its round; merged work waits on install."""
         held = self.held_for_commander(commander)
-        pulls = PullRequests(held)
+        pulls = ProgressRead(held)
         return tuple((todo, up) for todo in held for up in todo.timer_up(now)
                      if not todo.order.waiting_on_install(
                          todo, {todo.id: OrderProgress.read(todo, registry, pulls)}))

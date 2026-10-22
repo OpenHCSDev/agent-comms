@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.lifecycle_capability import Active
-
 import dataclasses
 import json
 import sys
@@ -11,12 +9,32 @@ import threading
 from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
-from pathlib import Path
 from functools import partial
+from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, NoReturn, TextIO, Type
 
 from pydantic import JsonValue
 
+from agent_comms.lifecycle_capability import Active
+from agent_comms.private_bus_checkpoint import PublicMessages
+from agent_comms.todos import (
+    ClaimOrder,
+    CorrectCheckTodo,
+    DeliverTodo,
+    InstallTodo,
+    OrderClaim,
+    OrderDelivery,
+    OrderProgress,
+    PlainText,
+    ProgressRead,
+    ReviewedHeadVerdict,
+    ServeTodo,
+    StrikeReason,
+    Todo,
+    TodoOperation,
+    ToolCallVerdict,
+    VerdictAudience,
+)
 
 from . import cli as comms_cli
 from .change_report import NoChangeReport, ReportEvidence
@@ -40,29 +58,27 @@ from .cli_commands import (
 )
 from .cli_result import ToolCatalogResult
 from .commander.capacity import Load
-from .ui_model.unit_state import UnitState
 from .coordination_tables.refusals import SendRefusal
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
 from .errors import RelationViolationError, ToolRefusedError
 from .field_codec import (
-    FieldCodec,
-    MalformedRecord,
-    NullMember,
-    SingleFieldValue,
-    SubclassUnion,
-    projected,
     Argument,
     ContextSource,
     DefaultNonNull,
     Description,
+    FieldCodec,
     FieldDirective,
+    MalformedRecord,
     Normalize,
+    NullMember,
+    SingleFieldValue,
+    SubclassUnion,
     WireChoices,
     WireName,
     WireOmitDefault,
+    projected,
 )
-from .launch_runtime import LaunchRuntime
 from .goal_actions import (
     ActiveGoalAction,
     CreateProblemGoalAction,
@@ -75,72 +91,57 @@ from .goal_actions import (
     TransitionGoalAction,
 )
 from .goal_history import RecordedGoalRevision
-from .goal_presentation import GoalSnapshot, GoalExecution
+from .goal_presentation import GoalExecution, GoalSnapshot
 from .goal_waits import NoStandbyReview, StandbyReview
 from .goals import Goal, GoalDeclaration, OrderCheck
-from .message_bus import HeldBusWrite
-from .standing_rules import StandingRule
-from .plan_phases import OrderPhase
-from .message_reference import MessageReference
-from .message_page import PageBounds
 from .history_result import HistoryPageResult
 from .input_attempt import UnresolvedInput
+from .launch_runtime import LaunchRuntime
+from .message_bus import HeldBusWrite
+from .message_page import PageBounds
+from .message_reference import MessageReference
 from .messages import InfoKind, Message, MessageKind, NoticeRole, SendableMessageKind
 from .native_tools import ArgumentTool, NativeRequestTools, NativeToolDeclaration
+from .order_story import FleetStory, OrderStory
+from .order_work import OrderWork
+from .owner_lifecycle import OwnerRestartSelection, OwnerStartResult
 from .page_traversal import NewestCursor, PageCursor
-from .owner_lifecycle import OwnerStartResult, OwnerRestartSelection
+from .pi_payloads import PublishedGoalToolDetails
+from .pi_vocabulary import ServiceTier, ThinkingLevelField
+from .plan_phases import OrderPhase
 from .presentation import ChannelView
+from .progress_claims import ProgressClaim
 from .read_basis import NamedViewer
-from .relationships import Collaboration, GoalDerivedContact, GoalMentionDiagnostic
+from .relationships import (
+    Collaboration,
+    GoalDerivedContact,
+    GoalMentionDiagnostic,
+    RelationshipEdit,
+)
 from .restart_queue import (
     QueuedRestart,
+)
+from .restart_queue import (
     cancel as cancel_restart,
+)
+from .restart_queue import (
     enqueue as enqueue_restart,
+)
+from .restart_queue import (
     status as restart_status,
 )
-from .thread_management import InheritedTags, RenameThreadResult, TagChoice
-from .threads import NextTurnConfiguration
-from .thread_model import ThreadModel
-from .transcript_events import SentTranscript
-from agent_comms.todos import (
-    ClaimOrder,
-    OrderClaim,
-    CorrectCheckTodo,
-    ServeTodo,
-    DeliverTodo,
-    InstallTodo,
-    OrderDelivery,
-    OrderProgress,
-    ToolCallVerdict,
-    PlainText,
-    PullRequests,
-    ReviewedHeadVerdict,
-    StrikeReason,
-    Todo,
-    TodoOperation,
-    VerdictAudience,
-)
-from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing
-from .thread_identity import ThreadIncarnation
-from .tool_result import ToolResult
-from .pi_payloads import PublishedGoalToolDetails
 from .send_result import CorrectionResult, SendResult
+from .standing_rules import StandingRule
 from .task_sources import (
-    CurrentTaskScopeSelection,
     Constraint,
+    CurrentTaskScopeSelection,
     Decision,
+    OriginalTaskChange,
     Subtask,
     TaskAttachment,
     TaskChange,
     TaskScopeSelection,
-    OriginalTaskChange,
 )
-from .order_story import FleetStory, OrderStory
-from .order_work import OrderWork
-from .pi_vocabulary import ServiceTier, ThinkingLevelField
-from agent_comms.private_bus_checkpoint import PublicMessages
-from .progress_claims import ProgressClaim
-from .relationships import RelationshipEdit
 from .thread_execution import (
     ArchiveOwnerControl,
     NativeOwnerCommand,
@@ -148,7 +149,14 @@ from .thread_execution import (
     StartOwnerControl,
     ThreadCommandAvailability,
 )
+from .thread_identity import ThreadIncarnation
+from .thread_management import InheritedTags, RenameThreadResult, TagChoice
+from .thread_model import ThreadModel
+from .threads import NextTurnConfiguration
+from .tool_caller import NoThreadCaller, ThreadCaller, ThreadListing, ToolCaller
 from .tool_output import MAX_INLINE_OUTPUT_BYTES
+from .tool_result import ToolResult
+from .transcript_events import SentTranscript
 from .turn_digests import (
     LastTurns,
     OrderEditsRead,
@@ -157,6 +165,7 @@ from .turn_digests import (
     TurnsSince,
     UnjudgedEdits,
 )
+from .ui_model.unit_state import UnitState
 from .work_branches import WorkBranch, WorkBranches
 
 if TYPE_CHECKING:
@@ -1012,7 +1021,7 @@ class CommsTodoListTool(ThreadReadTool):
     def apply(self, comms: Comms, caller: ToolCaller) -> TodoList:
         actor = comms.registry.require(caller.subject(self.thread)).incarnation
         listed = tuple(comms.goals.todos.for_commander(actor))
-        pulls = PullRequests(listed)
+        pulls = ProgressRead(listed)
         return TodoList(listed, {todo.id: OrderProgress.read(todo, comms.registry, pulls)
                                  for todo in listed if todo.holder})
 
@@ -1029,7 +1038,7 @@ class CommsStandingRulesTool(ThreadToolRequest):
     ] = 0.0
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> StandingRulesRead:
-        states = UnitState.current(comms, caller.name, PullRequests())
+        states = UnitState.current(comms, caller.name, ProgressRead())
         broken = (*StandingRule.broken(comms, caller.name, observed=states),
                   *(state for state in states if state.attention()))
         rejected = StandingRule.enforce_all(comms, caller.name, broken)

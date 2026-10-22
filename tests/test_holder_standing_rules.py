@@ -16,6 +16,7 @@ from agent_comms.bus_publication import AgentOrigin
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.order import Commander, OrderFile, SayVerb, SendVerb
+from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.commander.standing import (
     HeartbeatSilent,
     UnitAskUnanswered,
@@ -26,7 +27,10 @@ from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
-    CreateProblemGoalAction, DirectiveGoalAction, ReissuedOrderGoalAction, SetGoalAction,
+    CreateProblemGoalAction,
+    DirectiveGoalAction,
+    ReissuedOrderGoalAction,
+    SetGoalAction,
 )
 from agent_comms.goal_presentation import RunnableExecution
 from agent_comms.goal_states import ActiveGoal
@@ -42,20 +46,21 @@ from agent_comms.read_basis import DMDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import StandingRule
-from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.todos import (
-    ClaimOrder, OrderClaim, OrderMessage,
+    ClaimOrder,
+    OrderClaim,
+    OrderMessage,
     PendingProblemOrder,
-    PullRequests,
+    ProgressRead,
     TodoConflict,
 )
+from agent_comms.ui_model.unit_state import AwaitingCommander, Blocked, Detached, UnitState
 from conftest import declare_test_bus
 from native_backend_fixture import native_backend_fixture, wait_for
 from test_goal_execution import turn_on
-from agent_comms.ui_model.unit_state import AwaitingCommander, Blocked, Detached, UnitState
 
 
 @pytest.fixture
@@ -128,13 +133,13 @@ def claim_order(held_bus):
 
 
 def state_cards(comms, member):
-    return tuple(state for state in UnitState.current(comms, "lead", PullRequests())
+    return tuple(state for state in UnitState.current(comms, "lead", ProgressRead())
                  if isinstance(state, member))
 
 
 def unanswered(comms):
     return UnitAskUnanswered.broken(
-        comms, "lead", observed=UnitState.current(comms, "lead", PullRequests()))
+        comms, "lead", observed=UnitState.current(comms, "lead", ProgressRead()))
 
 
 def blocked_holder(comms):
@@ -426,7 +431,7 @@ def test_one_state_per_unit_even_when_blocked_and_detached(held_bus, installed_r
     assert detached.unit.name == "worker" and set(detached.orders) == {"P1", "P2"}
     blocked_holder(held_bus)
     blocked, = state_cards(held_bus, Blocked)
-    states = UnitState.current(held_bus, "lead", PullRequests())
+    states = UnitState.current(held_bus, "lead", ProgressRead())
     assert tuple(state for state in states if state.unit == blocked.unit) == (blocked,)
     assert blocked not in StandingRule.broken(held_bus, "lead", observed=states)
 
@@ -462,7 +467,7 @@ def test_every_pass_beats_and_a_stale_beat_is_heartbeat_silent(held_bus, monkeyp
     review = CommanderReview(frozenset())
     CommanderHeartbeat.register(held_bus.registry)
     assert HeartbeatSilent.violations(held_bus, "lead") == ()
-    states = UnitState.current(held_bus, "lead", PullRequests())
+    states = UnitState.current(held_bus, "lead", ProgressRead())
     with held_bus.bus.locked():
         review.wake(held_bus, CommanderHeartbeat.sender, commander, (), states)
         review.wake(held_bus, CommanderHeartbeat.sender, commander, (), states)
@@ -499,7 +504,10 @@ def test_naming_one_line_of_a_burst_answers_the_burst_at_the_gate(held_bus):
     """The gate reads an answer the way UnansweredBurst reads it once sent: naming any line of
     an escalation burst covers the sender's other lines, while another sender's stay owed."""
     from agent_comms.commander.vibe_check import (
-        ChokeholdSender, ChokeholdUnanswered, VibeCheckSender, VibeCheckUnanswered,
+        ChokeholdSender,
+        ChokeholdUnanswered,
+        VibeCheckSender,
+        VibeCheckUnanswered,
     )
 
     VibeCheckSender.register(held_bus.registry)
@@ -519,7 +527,10 @@ def test_a_compliant_answer_resumes_a_held_unit_whose_attempt_was_interrupted(he
     release continues its generation the way a fresh order does, so one such unit neither stays
     paused nor stops the release of the others (the heartbeat died on it, 2026-10-21 22:43)."""
     from agent_comms.goal_actions import (
-        ActiveGoalAction, ChokeholdPausedGoalAction, CompliedGoalAction, OwnerInvocable,
+        ActiveGoalAction,
+        ChokeholdPausedGoalAction,
+        CompliedGoalAction,
+        OwnerInvocable,
     )
 
     blocked_holder(held_bus)
@@ -535,7 +546,11 @@ def test_a_restarted_heartbeat_does_not_resend_an_escalation_burst(held_bus, mon
     """The heartbeat's memory of what it enforced dies with its process; the bus says which
     bursts already went out, so a rule that reads as new again after a restart is not resent."""
     from agent_comms.commander.vibe_check import (
-        AnswersOwedDegradation, EscalationSender, Sign, VibeCheck, VibeCheckSender,
+        AnswersOwedDegradation,
+        EscalationSender,
+        Sign,
+        VibeCheck,
+        VibeCheckSender,
     )
 
     monkeypatch.setattr(EscalationSender, "gap", 0.0)

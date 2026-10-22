@@ -10,49 +10,48 @@ import re
 import shlex
 import shutil
 import subprocess
-from contextlib import chdir, nullcontext
 from concurrent.futures import ProcessPoolExecutor
+from contextlib import chdir, nullcontext
 from dataclasses import replace
 from multiprocessing import Manager
 from pathlib import Path
 
 import pytest
 
-from source_revision_fixture import SourceRepository
-
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander.order import Commander, PullRequestVerb
 from agent_comms.commander.standing import UnownedOrderWatch
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import Comms
 from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import FieldCodec
-from agent_comms.installer.runtime_resolution import CorePackage
-from agent_comms.installer.practice import practice_copy
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import OrderCheck, RequestGoalOrder
+from agent_comms.installer.practice import practice_copy
+from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.launch_root import LaunchRoot
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun, OrderRun
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.registration import Registration
+from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageRule
 from agent_comms.store_files import store_lock_path
 from agent_comms.thread_identity import CoreWatcherIncarnation
-from agent_comms.repository_name import RepositoryName
-from agent_comms.registration import Registration
 from agent_comms.threads import Thread
 from agent_comms.todos import (
     Assignment,
     ChangeTodoState,
+    ClosedListedPullRequest,
+    DeliverTodo,
     DoneTodoState,
     GoalRef,
-    ClosedListedPullRequest,
     MergedListedPullRequest,
-    PullRequestCommit,
+    OperationDelivery,
     PendingProblemOrder,
+    ProgressRead,
+    PullRequestCommit,
     PullRequestLink,
     PullRequests,
-    UnmergedListedPullRequest,
-    DeliverTodo,
-    OperationDelivery,
     ReleaseTodo,
     StrikeReason,
     Todo,
@@ -60,11 +59,11 @@ from agent_comms.todos import (
     TodoError,
     TodoState,
     TodoStore,
+    UnmergedListedPullRequest,
     WithdrawTodo,
 )
-from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun, OrderRun
 from agent_comms.work_branches import WorkBranches
-
+from source_revision_fixture import SourceRepository
 
 pytest_plugins = ("test_holder_standing_rules", "test_unowned_checkout_work", "test_proof_build")
 
@@ -324,7 +323,7 @@ def test_recorded_merged_request_closes_all_linked_orders(pr_commander, number, 
         assert saved.order.checked().pull_requests == (link,)
         assert saved.revision == original.revision + 1
         assert adopt_pr(ctx, original.id, number) == saved
-    requests = PullRequests(linked).listed(ctx.repos[0].github, MergedListedPullRequest, linked[0])
+    requests = ProgressRead(linked).listed(ctx.repos[0].github, MergedListedPullRequest, linked[0])
     assert len(requests) == 1
     assert requests[0].problems == tuple(todo.id for todo in linked)
     assert requests[0].orders == tuple(todo.order.id for todo in linked)
@@ -343,7 +342,7 @@ def test_unlinked_pr_with_matching_problem_heading_closes_nothing(pr_commander):
     ctx = pr_commander
     assert "## P343" in github_body(ctx, 2)
     original = pr_order(ctx, "P343")
-    assert PullRequests((original,)).listed(original.repo, MergedListedPullRequest, original) == ()
+    assert ProgressRead((original,)).listed(original.repo, MergedListedPullRequest, original) == ()
     store = TodoStore(ctx.root)
     store.record_merges(store.merged_orders(ctx.incarnation, ctx.comms.registry))
     assert store.get(original.id) == original
@@ -354,7 +353,7 @@ def test_recorded_closed_request_is_not_open_or_merged(pr_commander):
     ctx = pr_commander
     original = pr_order(ctx, "P1")
     linked = adopt_pr(ctx, original.id, 3)
-    pulls = PullRequests((linked,))
+    pulls = ProgressRead((linked,))
     assert pulls.listed(linked.repo, UnmergedListedPullRequest, linked) == ()
     assert pulls.listed(linked.repo, MergedListedPullRequest, linked) == ()
     assert len(pulls.listed(linked.repo, ClosedListedPullRequest, linked)) == 1

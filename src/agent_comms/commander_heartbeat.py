@@ -11,7 +11,7 @@ from agent_comms.service_sender import ServiceSender
 from agent_comms.standing_rules import StandingRule
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.threads import Thread
-from agent_comms.todos import PullRequests
+from agent_comms.todos import ProgressRead
 from agent_comms.ui_model.unit_state import UnitState
 
 if TYPE_CHECKING:
@@ -69,7 +69,7 @@ class CommanderObservation:
 
     @classmethod
     def read(cls, comms: Comms, thread: Thread) -> CommanderObservation:
-        pulls = PullRequests(StandingRule.todos(comms, thread.name))
+        pulls = ProgressRead(StandingRule.todos(comms, thread.name))
         states = UnitState.current(comms, thread.name, pulls)
         rules = StandingRule.broken(comms, thread.name, observed=states)
         merged = tuple(todo for state in states for todo in state.merged_orders(comms, pulls))
