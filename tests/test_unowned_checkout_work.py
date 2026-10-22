@@ -33,14 +33,12 @@ from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageDenied, StorageRule, shell_storage_effects
-from agent_comms.standing_rules import StandingRule
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import CoreWatcherIncarnation
-from agent_comms.todos import GoalRef, PendingProblemOrder, ReleaseTodo, StrikeReason
+from agent_comms.todos import GoalRef, PendingProblemOrder, PullRequests, ReleaseTodo, StrikeReason
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.work_branches import UnreadableCheckoutRead, WorkBranches
-from agent_comms.ui_model.unit_state import Unreadable
-from order_scope_fixture import FIX_SCOPE
+from agent_comms.ui_model.unit_state import UnitState, Unreadable
 
 
 def git(directory: Path, *arguments: str) -> str:
@@ -253,7 +251,8 @@ def test_unreadable_checkout_is_its_units_state_and_the_pass_carries_on(
             assert isinstance(read, UnreadableCheckoutRead) and read.holds_work
             UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
             assert c.goals.todos.get('P2') == before
-            unreadable, = Unreadable.violations(c, 'lead')
+            unreadable, = (state for state in UnitState.current(c, 'lead', PullRequests())
+                          if isinstance(state, Unreadable))
             assert unreadable.unit == c.registry.require('worker').incarnation
             assert str(checkout) in unreadable.reason
             assert 'not a git repository' in unreadable.line()

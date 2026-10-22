@@ -14,7 +14,7 @@ from agent_comms.read_basis import DMDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.thread_text import ForkedParent, SavedSessionFile
-from agent_comms.todos import DeliverTodo, OperationDelivery
+from agent_comms.todos import DeliverTodo, OperationDelivery, PullRequests
 from agent_comms.ui_model.unit_state import (
     AwaitingCommander,
     Blocked,
@@ -28,7 +28,7 @@ from agent_comms.ui_model.unit_state import (
     UnitState,
     Unreadable,
 )
-from test_holder_standing_rules import blocked_holder, publish
+from test_holder_standing_rules import blocked_holder, publish, state_cards
 
 pytest_plugins = ("test_holder_standing_rules",)
 
@@ -96,7 +96,7 @@ def test_unit_state_family_uses_real_records(held_bus, tmp_path, member):
             pass  # Assigned work, before its first-call deadline.
         else:
             pytest.fail(f"New UnitState needs its real-record scenario: {member}")
-        states = UnitState.current(comms, "lead")
+        states = UnitState.current(comms, "lead", PullRequests())
         state, = (state for state in states if state.unit.name == unit)
         assert isinstance(state, member)
         assert state.unit == comms.registry.require(unit).incarnation
@@ -113,18 +113,18 @@ def test_claim_is_a_commander_question_not_a_verified_delivery(held_bus, claim_o
     comms = held_bus
     claim = claim_order("P1")
     with LaunchRoot.from_path(comms.root).selected():
-        state, = AwaitingCommander.violations(comms, "lead")
+        state, = state_cards(comms, AwaitingCommander)
         question, = state.owed
         assert question.message_id == claim.message.message_id
         assert question.seq > claim.message.answers[0].seq
-        assert DeliveredUnclosed.violations(comms, "lead") == ()
+        assert state_cards(comms, DeliveredUnclosed) == ()
 
 
 def test_stopped_child_without_lead_orders_remains_in_the_frame(held_bus):
     child = replace(held_bus.registry.require("outsider"), parent=ForkedParent("lead"))
     held_bus.registry.register(child, StoppedThreadStatus())
     with LaunchRoot.from_path(held_bus.root).selected():
-        state, = (state for state in UnitState.current(held_bus, "lead")
+        state, = (state for state in UnitState.current(held_bus, "lead", PullRequests())
                   if state.unit == child.incarnation)
         assert isinstance(state, Idle)
         assert state.presence == StoppedThreadStatus()
@@ -138,7 +138,7 @@ def test_malformed_native_source_is_unreadable_not_idle(held_bus):
     del header["timestamp"]
     path.write_text("\n".join((json.dumps(header), *rows[1:])) + "\n")
     with LaunchRoot.from_path(held_bus.root).selected():
-        state, = Unreadable.violations(held_bus, "lead")
+        state, = state_cards(held_bus, Unreadable)
         assert state.unit.name == "worker"
         assert "timestamp" in state.reason
 

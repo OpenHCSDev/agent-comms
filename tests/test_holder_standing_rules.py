@@ -48,6 +48,7 @@ from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.todos import (
     ClaimOrder, OrderClaim, OrderMessage,
     PendingProblemOrder,
+    PullRequests,
     TodoConflict,
 )
 from conftest import declare_test_bus
@@ -123,8 +124,14 @@ def claim_order(held_bus):
     return claim
 
 
+def state_cards(comms, member):
+    return tuple(state for state in UnitState.current(comms, "lead", PullRequests())
+                 if isinstance(state, member))
+
+
 def unanswered(comms):
-    return UnitAskUnanswered.broken(comms, "lead", observed=UnitState.current(comms, "lead"))
+    return UnitAskUnanswered.broken(
+        comms, "lead", observed=UnitState.current(comms, "lead", PullRequests()))
 
 
 def blocked_holder(comms):
@@ -148,7 +155,7 @@ def test_an_active_goal_with_an_unresolved_attempt_is_reported_never_retried(hel
     store.recover_unreserved_ready(goal.id, generation.number)
     store.reserve(goal.id, generation.number, ready_grant=store.ready_grant(goal.id, generation.number))
     reserved = store.require_generation(goal.id)
-    violation, = Blocked.violations(held_bus, "lead")
+    violation, = state_cards(held_bus, Blocked)
     assert violation.orders == ("P1", "P2")
     violation.enforce(held_bus, "lead")
     assert held_bus.registry.require("worker").goal.require() == goal
@@ -171,14 +178,14 @@ def test_failed_holder_is_reported_without_reissuing_orders_or_replaying_unknown
     orders = held_bus.goals.todos.held_orders()
     inputs = InputDispositions(held_bus.root)
     unresolved = inputs.lookup("unresolved-input")
-    violation, = Blocked.violations(held_bus, "lead")
+    violation, = state_cards(held_bus, Blocked)
     assert violation.orders == ("P1", "P2")
     violation.enforce(held_bus, "lead")
     assert held_bus.registry.require("worker").goal == goal
     assert held_bus.goals.todos.held_orders() == orders
     assert store.require_generation(goal.id) == generation
     assert inputs.lookup("unresolved-input") == unresolved
-    assert Blocked.violations(held_bus, "lead") == (violation,)
+    assert state_cards(held_bus, Blocked) == (violation,)
 
 
 def test_an_order_to_a_blocked_goal_activates_it_and_keeps_other_orders(held_bus):
@@ -215,7 +222,7 @@ async def test_sigterm_group_preserves_active_goal_and_never_reissues_orders(
                 await Coordination.run_worker(partial(held_bus.owners.stop, "worker"))
                 assert held_bus.registry.require("worker").goal == goal
                 assert isinstance(held_bus.goals.goal_execution("worker"), RunnableExecution)
-                for violation in Blocked.violations(held_bus, "lead"):
+                for violation in state_cards(held_bus, Blocked):
                     violation.enforce(held_bus, "lead")
                 assert held_bus.goals.todos.held_orders() == orders
                 assert InputDispositions(held_bus.root).lookup("unresolved-input") == unresolved
@@ -244,7 +251,7 @@ def test_a_running_turn_is_not_a_stalled_holder(held_bus):
     lease = owner.thread.turn_lease
     assert lease is not None
     try:
-        assert Blocked.violations(held_bus, "lead") == ()
+        assert state_cards(held_bus, Blocked) == ()
     finally:
         held_bus.agents.finish_turn(lease)
 
@@ -411,11 +418,11 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
 
 def test_one_state_per_unit_even_when_blocked_and_detached(held_bus, installed_runtime):
     held_bus.registry.register(held_bus.registry.require("worker"), StoppedThreadStatus())
-    detached, = Detached.violations(held_bus, "lead")
+    detached, = state_cards(held_bus, Detached)
     assert detached.unit.name == "worker" and set(detached.orders) == {"P1", "P2"}
     blocked_holder(held_bus)
-    blocked, = Blocked.violations(held_bus, "lead")
-    states = UnitState.current(held_bus, "lead")
+    blocked, = state_cards(held_bus, Blocked)
+    states = UnitState.current(held_bus, "lead", PullRequests())
     assert tuple(state for state in states if state.unit == blocked.unit) == (blocked,)
     assert blocked not in StandingRule.broken(held_bus, "lead", observed=states)
 
@@ -424,7 +431,7 @@ def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus, 
     blocked_holder(held_bus)
     question = publish(held_bus, "worker", "lead", time.time() - 901)
     expected = tuple(rule.line() for rule in (
-        *Blocked.violations(held_bus, "lead"), *unanswered(held_bus),
+        *state_cards(held_bus, Blocked), *unanswered(held_bus),
     ))
     heartbeat = CommanderHeartbeat()
     commander = held_bus.registry.require("lead")
@@ -451,7 +458,7 @@ def test_every_pass_beats_and_a_stale_beat_is_heartbeat_silent(held_bus, monkeyp
     review = CommanderReview(frozenset())
     CommanderHeartbeat.register(held_bus.registry)
     assert HeartbeatSilent.violations(held_bus, "lead") == ()
-    states = UnitState.current(held_bus, "lead")
+    states = UnitState.current(held_bus, "lead", PullRequests())
     with held_bus.bus.locked():
         review.wake(held_bus, CommanderHeartbeat.sender, commander, (), states)
         review.wake(held_bus, CommanderHeartbeat.sender, commander, (), states)

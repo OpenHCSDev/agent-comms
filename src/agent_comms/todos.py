@@ -552,9 +552,9 @@ class PullRequests:
     def __init__(self, todos: Sequence[Todo] = ()) -> None:
         self._read: dict[tuple[RepositoryName, type[ListedPullRequest], str], tuple[PullRequest, ...]] = {}
         self._todos: dict[RepositoryName, dict[str, Todo]] = {}
-        self(todos)
+        self.register(todos)
 
-    def __call__(self, todos: Sequence[Todo]) -> Self:
+    def register(self, todos: Sequence[Todo]) -> Self:
         """Register a frame's orders while preserving this read's existing GitHub facts."""
         for todo in todos:
             self._todos.setdefault(todo.repo, {})[todo.id] = todo

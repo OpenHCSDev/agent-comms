@@ -80,6 +80,9 @@ class GoalExecution(DeclaredFamily, affix="Execution"):
     def waiting_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
         return ordinary
 
+    def runnable(self) -> bool:
+        return False
+
     def standby(self) -> bool:
         return False
 
@@ -161,6 +164,9 @@ class RetryableExecution(ControlledExecution, declared_name=None):
 @dataclass(frozen=True)
 class RunnableExecution(ActiveExecution):
     label = "Active"
+
+    def runnable(self) -> bool:
+        return True
 
 
 @dataclass(frozen=True)

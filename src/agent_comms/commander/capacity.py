@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from ..comms import Comms
 from ..field_codec import projected
 from ..tool_result import ToolResult
+from ..todos import PullRequests
 from ..turn_digests import OrderEditCountRead
 from ..ui_model.unit_state import UnitState
 
@@ -24,7 +25,7 @@ class Load(ToolResult):
 
     @classmethod
     def of(cls, comms: Comms, commander: str) -> Load:
-        return cls.from_states(comms, commander, UnitState.current(comms, commander))
+        return cls.from_states(comms, commander, UnitState.current(comms, commander, PullRequests()))
 
     @classmethod
     def from_states(cls, comms: Comms, commander: str, observed: Sequence[UnitState]) -> Load:

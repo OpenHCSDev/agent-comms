@@ -33,7 +33,7 @@ class CommanderReview:
 
     def wake(self, comms: Comms, sender: str, commander: Thread,
              rules: tuple[StandingRule, ...], states: tuple[UnitState, ...]) -> None:
-        """Every pass beats, so silence is a failure; an unchanged beat is one short line."""
+        """Every pass beats with every unit's card, even when the frame is unchanged."""
         found_rules, found_states = frozenset(rules), frozenset(states)
         actionable = (*rules, *(state for state in states if state.attention()))
         old_rules = self.rules

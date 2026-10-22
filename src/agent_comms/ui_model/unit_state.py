@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.field_codec import MalformedRecord
-from agent_comms.goal_presentation import GoalSnapshot, RunnableExecution
+from agent_comms.goal_presentation import GoalSnapshot
 from agent_comms.goals import GitCommandFailed
 from agent_comms.messages import Message
 from agent_comms.native_failures import NativePiUnavailable
@@ -54,6 +54,7 @@ class UnitObservation:
     messages: tuple[Message, ...]
     now: float
     presence: ThreadStatus
+    working: bool
 
     @cached_property
     def goal(self) -> GoalSnapshot:
@@ -170,14 +171,14 @@ class UnitState(UndatedStandingRule, declared_name=None):
 
     @classmethod
     def observations(
-        cls, comms: Comms, commander: str, pulls: PullRequests | type[PullRequests] = PullRequests
+        cls, comms: Comms, commander: str, pulls: PullRequests
     ) -> tuple[UnitObservation, ...]:
         snapshot, now = comms.registry.snapshot(), time.time()
         held = StandingRule.holders(comms, commander)
         for owner in held:
             if snapshot.require(owner.name).incarnation != owner:
                 raise ValueError("Held order owner incarnation changed")
-        requests = pulls(tuple(todo for todos in held.values() for todo in todos))
+        requests = pulls.register(tuple(todo for todos in held.values() for todo in todos))
         questions = cls.asks(comms, commander, now)
         readings = tuple(
             UnitObservation(
@@ -192,6 +193,7 @@ class UnitState(UndatedStandingRule, declared_name=None):
                 ),
                 now,
                 snapshot.status(thread.name),
+                comms.agents.is_working(thread.incarnation, snapshot),
             )
             for thread in snapshot.threads.values()
         )
@@ -210,20 +212,10 @@ class UnitState(UndatedStandingRule, declared_name=None):
         return tuple(reading for reading in readings if reading.thread.incarnation in eligible)
 
     @classmethod
-    def current(
-        cls, comms: Comms, commander: str, pulls: PullRequests | type[PullRequests] = PullRequests
-    ) -> tuple[UnitState, ...]:
+    def current(cls, comms: Comms, commander: str, pulls: PullRequests) -> tuple[UnitState, ...]:
         states = tuple(cls.read(source) for source in cls.observations(comms, commander, pulls))
         return tuple(
             state for member in cls.worst_first() for state in states if isinstance(state, member)
-        )
-
-    @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        return tuple(
-            state
-            for state in cls.current(comms, commander)
-            if isinstance(state, cls) and state.attention()
         )
 
     @classmethod
@@ -423,7 +415,7 @@ class StalledOnNothing(NeedsCommanderAttention, PendingWorkState, UnitState):
     @classmethod
     def matches(cls, source: UnitObservation) -> bool:
         return bool(
-            isinstance(source.goal.execution, RunnableExecution)
+            source.goal.execution.runnable()
             and source.turns
             and not source.comms.bus.pending_count(source.thread.name)
         )
