@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
-from typing import Annotated, ClassVar
-from dataclasses import dataclass
+import sqlite3
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, replace
 from enum import StrEnum
+from typing import Annotated, ClassVar
 
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
@@ -13,20 +14,44 @@ from agent_comms.coordination_contracts import (
     require_nonempty,
     validate_execution_id,
 )
-from agent_comms.coordination_errors import IntegrityViolationError
+from agent_comms.coordination_errors import IdentityConflict, IntegrityViolationError, StaleRevision
 from agent_comms.coordination_schema import CoordinatorTable
-from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments
+from agent_comms.coordination_tables.attempts import (
+    APPROVED_REPLAY_FACT_MASK,
+    AttemptRecord,
+    ReplayFact,
+)
 from agent_comms.execution_states import ExecutionState
-from agent_comms.field_codec import NullMember, SingleFieldValue, SnapshotExclude, SubclassUnion, projected
+from agent_comms.field_codec import (
+    MalformedRecord,
+    NullMember,
+    SingleFieldValue,
+    SnapshotExclude,
+    SubclassUnion,
+    projected,
+)
 from agent_comms.reason_codes import ReasonCode
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
 from agent_comms.typed_table import (
-    IntegerStorage,
-    TextStorage,
+    AccumulatingBits,
     Column,
+    ColumnGuard,
     ForeignKey,
+    FrozenColumn,
     Generated,
+    GuardedAfterWrites,
+    GuardedColumns,
+    GuardedInserts,
+    IncrementingColumn,
     Index,
+    IntegerStorage,
+    LifecycleTransitions,
+    MonotoneColumns,
+    NoDelete,
+    NonDecreasing,
+    NonIncreasing,
+    OrdinalTransitions,
+    TextStorage,
     TypedTable,
 )
 
@@ -89,7 +114,13 @@ class NoPointedAttempt(NullMember, PointerAttempt):
 
 
 @dataclass(frozen=True, slots=True)
-class CurrentExecutions(CoordinatorTable, TypedTable):
+class CurrentExecutions(
+    IncrementingColumn, GuardedInserts, NoDelete, CoordinatorTable, TypedTable
+):
+    revision_column = "pointer_revision"
+    insert_condition = """NOT EXISTS (SELECT 1 FROM owner_generations
+        WHERE owner_lookup = NEW.owner_lookup)"""
+
     @property
     def unresolved(self) -> bool:
         return self.execution_id.pointed
@@ -102,7 +133,7 @@ class CurrentExecutions(CoordinatorTable, TypedTable):
                 "selected owner has an unresolved execution; new claims remain pending"
             )
 
-    owner_lookup: Annotated[str, Column(primary_key=True)]
+    owner_lookup: Annotated[str, FrozenColumn(primary_key=True)]
     execution_id: Annotated[PointerExecution, Column(storage=TextStorage, nullable=True)]
     attempt_ordinal: Annotated[PointerAttempt, Column(storage=IntegerStorage, nullable=True)]
     pointer_revision: Annotated[int, Column(check="pointer_revision >= 0")]
@@ -144,30 +175,6 @@ class CurrentExecutions(CoordinatorTable, TypedTable):
             ),
         )
 
-    @classmethod
-    def trigger_bodies(cls):
-        return {
-            "current_pointer_insert_owner": (
-                """ BEFORE INSERT ON current_executions
-WHEN NOT EXISTS (SELECT 1 FROM owner_generations
- WHERE owner_lookup = NEW.owner_lookup)
-BEGIN SELECT RAISE(ABORT, 'current pointer owner is not registered'); END"""
-            ),
-            "current_pointer_update_owner": (
-                """ BEFORE UPDATE ON current_executions
-WHEN NEW.owner_lookup IS NOT OLD.owner_lookup
- OR NEW.pointer_revision != OLD.pointer_revision + 1
-BEGIN SELECT RAISE(ABORT, 'current pointer owner/revision mismatch'); END"""
-            ),
-            "current_pointer_delete_frozen": (
-                """ BEFORE DELETE ON
-current_executions BEGIN
-    SELECT RAISE(ABORT, 'current pointer cannot be deleted' );
-END"""
-            ),
-        }
-
-
 _RETRY_BASIS = """SELECT e.execution_id,
   CASE WHEN e.current_attempt_ordinal IS NOT NULL
      AND e.current_attempt_ordinal < e.max_attempts
@@ -181,7 +188,39 @@ FROM executions e"""
 
 
 @dataclass(frozen=True, slots=True)
-class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
+class ExecutionRecord(
+    LifecycleTransitions,
+    OrdinalTransitions,
+    IncrementingColumn,
+    MonotoneColumns,
+    GuardedColumns,
+    NoDelete,
+    CoordinatorTable,
+    TypedTable,
+    declared_name="executions",
+):
+    column_orders = (NonDecreasing(("updated_at_ms",)),)
+    column_guards = (
+        ColumnGuard(("lifecycle",), """(json_extract(NEW.lifecycle, '$.kind')
+        IN ({optional_attempt_execution_names}) AND json_extract(NEW.lifecycle, '$.ordinal')
+        IS NOT NULL AND NOT EXISTS (SELECT 1 FROM attempts a WHERE a.execution_id = NEW.execution_id
+        AND a.attempt_ordinal = json_extract(NEW.lifecycle, '$.ordinal')
+        AND a.owner_lookup = NEW.owner_lookup AND a.phase IN ({failed_attempt_phases})))
+        OR ((NEW.origin = 'wire') AND ((NOT EXISTS (SELECT 1 FROM obligations
+        WHERE execution_id = NEW.execution_id))
+        OR (json_extract(NEW.lifecycle, '$.kind') = 'completed'
+        AND EXISTS (SELECT 1 FROM obligations WHERE execution_id = NEW.execution_id
+        AND success_terminal != 1)) OR (json_extract(NEW.lifecycle, '$.kind') = 'deferred'
+        AND json_extract(NEW.lifecycle, '$.ordinal') IS NOT NULL AND EXISTS (
+        SELECT 1 FROM obligations WHERE execution_id = NEW.execution_id AND retryable != 1))))
+        OR (json_extract(NEW.lifecycle, '$.kind') = 'failed' AND EXISTS (
+        SELECT 1 FROM publication_receipts WHERE execution_id = NEW.execution_id))
+        OR (json_extract(NEW.lifecycle, '$.kind') = 'failed'
+        AND json_extract(NEW.lifecycle, '$.ordinal')
+        IS NOT NULL AND EXISTS (SELECT 1 FROM retry_disposition_basis b
+        WHERE b.execution_id = NEW.execution_id AND b.authorized = 1))"""),
+    )
+
     retry_view = "retry_disposition_basis"
 
     @classmethod
@@ -191,9 +230,7 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
         return super().schema_objects(if_not_exists=if_not_exists) | {
             cls.retry_view: f"CREATE VIEW {existence}{cls.retry_view} AS\n" + _RETRY_BASIS}
 
-    def retry_authorized(self, replay: ReplayAssessments | None, obligations) -> bool:
-        if replay is None:
-            return False
+    def retry_authorized(self, replay: ReplayState, obligations) -> bool:
         return (
             self.lifecycle.has_retry_budget(self.max_attempts)
             and replay.allows_retry
@@ -205,7 +242,7 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
 
     execution_id: Annotated[
         str,
-        Column(
+        FrozenColumn(
             primary_key=True,
             check=(
                 "\n"
@@ -215,18 +252,18 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
             ),
         ),
     ]
-    origin: ExecutionOrigin
+    origin: Annotated[ExecutionOrigin, FrozenColumn()]
     lifecycle: Annotated[ExecutionState, SnapshotExclude()]
-    owner_thread: Annotated[str, Column(check="length(owner_thread) BETWEEN 1 AND 256")]
-    owner_lookup: str
+    owner_thread: Annotated[str, FrozenColumn(check="length(owner_thread) BETWEEN 1 AND 256")]
+    owner_lookup: Annotated[str, FrozenColumn()]
     revision: Annotated[int, Column(check="revision > 0")]
-    max_attempts: Annotated[int, Column(check="max_attempts > 0")]
+    max_attempts: Annotated[int, FrozenColumn(check="max_attempts > 0")]
     reason_code: Annotated[
         ReasonCode,
         Column(storage=TextStorage, nullable=True,
                check="reason_code IS NULL OR length(reason_code) BETWEEN 1 AND 64"),
     ]
-    created_at_ms: Annotated[int, Column(check="created_at_ms >= 0")]
+    created_at_ms: Annotated[int, FrozenColumn(check="created_at_ms >= 0")]
     updated_at_ms: Annotated[int, Column(check="updated_at_ms >= created_at_ms")]
 
     @projected(view="snapshot", name="status")
@@ -360,7 +397,6 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
     @classmethod
     def references(cls):
         from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink
-        from agent_comms.coordination_tables.attempts import ReplayAssessments
         from agent_comms.coordination_tables.participants import Participants
 
         return (
@@ -396,77 +432,252 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
             ),
         )
 
+
+class ExecutionReference:
+    """An execution-owned row cannot outlive its original execution."""
+
     @classmethod
-    def trigger_bodies(cls):
-        return {
-            "execution_status_edge": (
-                """ BEFORE UPDATE OF lifecycle ON executions
-WHEN json_extract(NEW.lifecycle, '$.kind') != json_extract(OLD.lifecycle, '$.kind') AND NOT ({execution_edges})
-BEGIN SELECT RAISE(ABORT, 'execution status transition is not declared'); END"""
+    def references(cls) -> tuple[ForeignKey, ...]:
+        return (
+            ForeignKey(("execution_id",), ExecutionRecord, ("execution_id",), on_delete="RESTRICT"),
+        )
+
+
+class RetryPartition(GuardedAfterWrites):
+    """A failed execution cannot retain authorization to retry."""
+
+    after_write_condition = """EXISTS (SELECT 1 FROM retry_disposition_basis b JOIN executions e
+        ON e.execution_id = b.execution_id WHERE b.execution_id = NEW.execution_id
+        AND b.authorized = 1 AND e.status = 'failed' AND e.current_attempt_ordinal IS NOT NULL)"""
+
+
+class ReplayState(ABC):
+    """An original replay assessment, or the state before one has been recorded."""
+
+    @property
+    @abstractmethod
+    def allows_retry(self) -> bool: ...
+
+    @property
+    @abstractmethod
+    def next_revision(self) -> int: ...
+
+    @abstractmethod
+    def require_revision(self, expected: object) -> None: ...
+
+    @abstractmethod
+    def require_execution(self, execution_id: str) -> None: ...
+
+    @abstractmethod
+    def require_assessment(self) -> ReplayAssessments: ...
+
+    @abstractmethod
+    def authorize_retry(self, db: sqlite3.Connection, execution_id: str) -> None: ...
+
+    @abstractmethod
+    def revoke_retry(self, db: sqlite3.Connection) -> None: ...
+
+    @abstractmethod
+    def record(self, db: sqlite3.Connection, after: ReplayAssessments) -> bool: ...
+
+    def observe(
+        self, db: sqlite3.Connection, execution_id: str, *, facts: ReplayFact,
+        replay_safe: bool, side_effects_possible: bool,
+    ) -> bool:
+        self.require_execution(execution_id)
+        after = ReplayAssessments(
+            execution_id, facts, replay_safe, side_effects_possible, self.next_revision
+        )
+        return self.record(db, after)
+
+
+@dataclass(frozen=True, slots=True)
+class NoReplayAssessment(NullMember, ReplayState):
+    @property
+    def allows_retry(self) -> bool:
+        return False
+
+    @property
+    def next_revision(self) -> int:
+        return 1
+
+    def require_revision(self, expected: object) -> None:
+        try:
+            type(self).from_wire(expected)
+        except MalformedRecord as error:
+            raise StaleRevision("replay assessment revision changed") from error
+
+    def require_execution(self, execution_id: str) -> None:
+        """No recorded assessment claims an execution identity."""
+
+    def require_assessment(self) -> ReplayAssessments:
+        raise IntegrityViolationError("replay assessment is absent")
+
+    def authorize_retry(self, db: sqlite3.Connection, execution_id: str) -> None:
+        self.observe(
+            db, execution_id, facts=ReplayFact.NONE,
+            replay_safe=True, side_effects_possible=False,
+        )
+
+    def revoke_retry(self, db: sqlite3.Connection) -> None:
+        """An absent assessment has granted nothing to revoke."""
+
+    def record(self, db: sqlite3.Connection, after: ReplayAssessments) -> bool:
+        after.insert(db)
+        return True
+
+
+@dataclass(frozen=True, slots=True)
+class ReplayAssessments(
+    ReplayState,
+    IncrementingColumn,
+    MonotoneColumns,
+    AccumulatingBits,
+    ExecutionReference,
+    RetryPartition,
+    NoDelete,
+    CoordinatorTable,
+    TypedTable,
+):
+    column_orders = (
+        NonDecreasing(("side_effects_possible",)),
+        NonIncreasing(("replay_safe",)),
+    )
+    accumulating_columns = ("facts",)
+
+    @property
+    def allows_retry(self) -> bool:
+        return self.replay_safe and self.facts == ReplayFact.NONE and not self.side_effects_possible
+
+    execution_id: Annotated[str, SnapshotExclude(), FrozenColumn(primary_key=True)]
+    facts: Annotated[ReplayFact, Column(check="facts >= 0 AND facts <= 1023")]
+    replay_safe: Annotated[bool, Column()]
+    side_effects_possible: Annotated[bool, Column()]
+    revision: Annotated[int, Column(check="revision > 0")]
+
+    @classmethod
+    def accumulate(
+        cls, db: sqlite3.Connection, execution_id: str, observed: ReplayFact
+    ) -> None:
+        """Join original observations under the caller's existing attempt fence.
+
+        Missing replay evidence cannot establish safety. Only an existing
+        assessment may retain that fact, and every incoming observation can
+        revoke it. Output facts remain monotonic across all attempts.
+        """
+        if not observed or cls.exists(
+            db,
+            where=(
+                "execution_id=? AND (facts & ?) = ? AND replay_safe=0 AND side_effects_possible=1"
             ),
-            "execution_failed_attempt": (
-                """ BEFORE UPDATE OF lifecycle ON executions
-WHEN json_extract(NEW.lifecycle, '$.kind') IN ({optional_attempt_execution_names})
- AND json_extract(NEW.lifecycle, '$.ordinal') IS NOT NULL
- AND NOT EXISTS (
-   SELECT 1 FROM attempts a
-   WHERE a.execution_id = NEW.execution_id
-     AND a.attempt_ordinal = json_extract(NEW.lifecycle, '$.ordinal')
-     AND a.owner_lookup = NEW.owner_lookup
-     AND a.phase IN ({failed_attempt_phases})
- )
-BEGIN SELECT RAISE(ABORT, 'failed execution requires a failed attempt'); END"""
+            parameters=(execution_id, int(observed), int(observed)),
+        ):
+            return
+        # Most streamed deltas repeat a fact already durably joined. Read only
+        # that answer, not a decoded row or another write-lock acquisition.
+        # A new fact joins atomically: another connection may have accumulated
+        # different evidence since the existence check, even in autocommit use.
+        statement, values = cls(execution_id, observed, False, True, 1)._insertion()
+        db.execute(
+            statement + """
+            ON CONFLICT (execution_id) DO UPDATE SET
+                facts = facts | excluded.facts,
+                replay_safe = 0,
+                side_effects_possible = 1,
+                revision = revision + 1
+            WHERE (facts | excluded.facts) != facts
+               OR replay_safe != 0 OR side_effects_possible != 1
+            """,
+            values,
+        )
+
+    @classmethod
+    def for_execution(cls, db: sqlite3.Connection, execution_id: str) -> ReplayAssessment:
+        return next(iter(cls._keyed(db, dict(execution_id=execution_id))), NoReplayAssessment())
+
+    @classmethod
+    def authorize_if_unobserved(cls, db: sqlite3.Connection, execution_id: str) -> None:
+        """Record provider-failure proof only while no output fact exists."""
+        cls.for_execution(db, execution_id).authorize_retry(db, execution_id)
+
+    @classmethod
+    def revoke(cls, db: sqlite3.Connection, execution_id: str) -> None:
+        """A nonretryable failure consumes any earlier provider-failure proof."""
+        cls.for_execution(db, execution_id).revoke_retry(db)
+
+    @property
+    def next_revision(self) -> int:
+        return self.revision + 1
+
+    def require_revision(self, expected: object) -> None:
+        if expected != self.revision:
+            raise StaleRevision("replay assessment revision changed")
+
+    def require_execution(self, execution_id: str) -> None:
+        if self.execution_id != execution_id:
+            raise IntegrityViolationError("snapshot records belong to another execution")
+
+    def require_assessment(self) -> ReplayAssessments:
+        return self
+
+    def authorize_retry(self, db: sqlite3.Connection, execution_id: str) -> None:
+        """An existing assessment cannot be authorized by a later provider failure."""
+
+    def revoke_retry(self, db: sqlite3.Connection) -> None:
+        if self.replay_safe:
+            self.record(db, replace(self, replay_safe=False, revision=self.next_revision))
+
+    def require_successor(self, after: ReplayAssessments) -> None:
+        accumulated = replace(
+            after,
+            facts=self.facts | after.facts,
+            replay_safe=self.replay_safe and after.replay_safe,
+            side_effects_possible=self.side_effects_possible or after.side_effects_possible,
+        )
+        if accumulated != after:
+            raise IdentityConflict("replay facts cannot be erased")
+
+    def record(self, db: sqlite3.Connection, after: ReplayAssessments) -> bool:
+        """The original recorded state validates and persists its successor."""
+        after.require_execution(self.execution_id)
+        if replace(self, revision=after.revision) == after:
+            return False
+        self.require_successor(after)
+        ReplayAssessments.update(
+            db,
+            where="execution_id=?",
+            parameters=(self.execution_id,),
+            facts=after.facts,
+            replay_safe=after.replay_safe,
+            side_effects_possible=after.side_effects_possible,
+            revision=self.next_revision,
+        )
+        return True
+
+    def __post_init__(self) -> None:
+        validate_execution_id(self.execution_id)
+        if self.revision <= 0:
+            raise ValueError("replay revision must be positive")
+        if int(self.facts) < 0 or int(self.facts) & ~APPROVED_REPLAY_FACT_MASK:
+            raise ValueError("unrecognized replay fact bits")
+        if self.facts != ReplayFact.NONE and self.replay_safe:
+            raise IntegrityViolationError("an execution with ambiguity facts cannot be replay-safe")
+
+    retry_authorized: ClassVar[Generated] = Generated(
+        int,
+        Column(
+            generated=(
+                "CASE WHEN facts = 0 AND replay_safe = 1 AND side_effects_possibl"
+                "e = 0\n"
+                "              THEN 1 ELSE 0 END"
             ),
-            "execution_frozen_facts": (
-                """ BEFORE UPDATE ON executions
-WHEN NEW.execution_id IS NOT OLD.execution_id OR NEW.origin IS NOT OLD.origin
- OR NEW.owner_lookup IS NOT OLD.owner_lookup
- OR NEW.owner_thread IS NOT OLD.owner_thread OR NEW.max_attempts != OLD.max_attempts
- OR NEW.created_at_ms != OLD.created_at_ms OR NEW.revision != OLD.revision + 1
- OR NEW.updated_at_ms < OLD.updated_at_ms OR
- (json_extract(NEW.lifecycle, '$.kind') = 'active' AND
-  (json_extract(OLD.lifecycle, '$.kind') NOT IN ({startable_execution_names}) OR
-   json_extract(NEW.lifecycle, '$.ordinal') != coalesce(json_extract(OLD.lifecycle, '$.ordinal'), 0) + 1)) OR
- (json_extract(NEW.lifecycle, '$.kind') != 'active' AND
-  json_extract(NEW.lifecycle, '$.ordinal') IS NOT json_extract(OLD.lifecycle, '$.ordinal'))
-BEGIN SELECT RAISE(ABORT, 'execution transition rewrites frozen authority'); END"""
-            ),
-            "execution_response_finality": """
-BEFORE UPDATE OF lifecycle ON executions
-WHEN NEW.origin = 'wire'
-BEGIN
-    SELECT RAISE(ABORT, 'wire execution requires original response obligations')
-    WHERE NOT EXISTS (SELECT 1 FROM obligations WHERE execution_id = NEW.execution_id);
-    SELECT RAISE(ABORT, 'completed execution requires all original responses')
-    WHERE json_extract(NEW.lifecycle, '$.kind') = 'completed' AND EXISTS (
-      SELECT 1 FROM obligations WHERE execution_id = NEW.execution_id AND success_terminal != 1);
-    SELECT RAISE(ABORT, 'deferred execution requires all original responses retryable')
-    WHERE json_extract(NEW.lifecycle, '$.kind') = 'deferred'
-      AND json_extract(NEW.lifecycle, '$.ordinal') IS NOT NULL AND EXISTS (
-      SELECT 1 FROM obligations WHERE execution_id = NEW.execution_id AND retryable != 1);
-END""",
-            "execution_failure_receipt_guard": (
-                """ BEFORE UPDATE OF lifecycle
-ON executions
-WHEN json_extract(NEW.lifecycle, '$.kind') = 'failed' AND EXISTS (
-  SELECT 1 FROM publication_receipts WHERE execution_id =
-  NEW.execution_id)
-BEGIN SELECT RAISE(ABORT,
-'failed execution cannot erase publication receipt' ); END"""
-            ),
-            "execution_delete_frozen": (
-                """ BEFORE DELETE ON executions BEGIN
-    SELECT RAISE(ABORT, 'execution cannot be deleted');
-END"""
-            ),
-            "failed_retry_partition_update": (
-                """ BEFORE UPDATE OF lifecycle
-ON executions
-WHEN json_extract(NEW.lifecycle, '$.kind') = 'failed' AND json_extract(NEW.lifecycle, '$.ordinal') IS NOT NULL
- AND EXISTS (SELECT 1 FROM retry_disposition_basis b
-             WHERE b.execution_id = NEW.execution_id AND b.authorized
-             = 1)
-BEGIN SELECT RAISE(ABORT, 'authorized retry cannot settle failed' );
-END"""
-            ),
-        }
+            nullable=True,
+        ),
+    )
+
+    checks = ("facts = 0 OR replay_safe = 0",)
+    unique = (("execution_id", "retry_authorized"),)
+
+
+# The fixed external snapshot format is still a row object or JSON null.
+ReplayAssessment = ReplayAssessments | NoReplayAssessment

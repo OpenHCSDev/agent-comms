@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.lifecycle_capability import Active
+
 from agent_comms.native_session_files import NativeSessionFiles
 from agent_comms.native_session_reopen import NativeSessionIdentity
 
@@ -13,7 +15,7 @@ from contextlib import contextmanager
 from collections.abc import Iterator
 
 from .assignment_states import DeferredAssignment, FailedAssignment
-from .coordinated_runtime_schema import assert_native_runtime_schema
+from agent_comms.native_runtime_input import NativeRuntimeTable
 from .coordination_errors import IdentityConflict, RetryScheduled, StaleFence
 from .coordination_tables.assignments import WakeAssignment
 from .coordinator import Coordination
@@ -92,7 +94,7 @@ class NativeSendStage(ABC):
     def reserve(self, store: Coordination, owner: ParticipantOwner, token_digest: str) -> str:
         input_id = Id128Text.mint()
         with store.session.writing() as db:
-            assert_native_runtime_schema(db)
+            NativeRuntimeTable.require_installed(db)
             owner.require(store, self.recipient_lookup)
             self.reserve_claim(store, db)
             NativeRuntimeInput(
@@ -117,7 +119,7 @@ class NativeSendStage(ABC):
     ) -> NativeRuntimeInput:
         """Read current durable ownership inside the caller's read/write transaction."""
         db = store.session._connection
-        assert_native_runtime_schema(db)
+        NativeRuntimeTable.require_installed(db)
         owner.require(store, self.recipient_lookup)
         row = NativeRuntimeInput.one(db, input_id=input_id)
         if row is None:
@@ -281,7 +283,7 @@ class TriageNativeSend(NativeSendStage):
     def reserve_claim(self, store: Coordination, db: sqlite3.Connection) -> None:
         for captured in self.assignments:
             current = store.assignments.get(captured.assignment_id)
-            if current != captured or not current.lifecycle.triage_pending:
+            if current != captured or not current.lifecycle.requires_selected_triage():
                 raise IdentityConflict("triage claim changed before native batch reservation")
             if SqlValue.for_annotation(int).read(db.execute(
                 f"SELECT 1 FROM ({self.execution.source_membership_sql()}) members "
@@ -400,9 +402,9 @@ class FullNativeSend(NativeSendStage):
 
     def require_phase(self, store: Coordination, current: WakeAssignment) -> None:
         snapshot, attempt = store.attempts.require_fence(self.fence)
+        current.lifecycle.require_engagement()
         if (
-            not current.lifecycle.engaged
-            or not snapshot.execution.lifecycle.active
+            not snapshot.execution.lifecycle.items_with(Active, snapshot.execution)
             or not attempt.lifecycle.starting
             or attempt.lifecycle.backend_done
             or attempt.lifecycle.process_dead

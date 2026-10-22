@@ -51,15 +51,6 @@ def test_experiment_c_every_pause_preserving_action_keeps_owner(owner, action):
     comms.registry.register(replace(comms.registry.require("worker"), goal=rewritten))
     assert wire(comms.root).registry.require("worker").goal.state == paused.state
     assert comms.goals.goal_history("worker")[-1].after.state == paused.state
-    assert (
-        comms.goals.block_goal_after_failed_turn(
-            "worker",
-            started_goal=goal,
-            expected_worktree=str(comms.root),
-            diagnostic="Backend failed",
-        )
-        == rewritten
-    )
 
 
 @pytest.mark.parametrize(
@@ -117,19 +108,16 @@ def test_original_proxy_decodes_typed_goal_control_at_json_boundary():
         RuntimeRequest.from_wire({**payload, "status": "unrecorded"})
 
 
-def test_fresh_cli_tool_process_preserves_owner_pause(owner):
-    import os
+def test_fresh_cli_tool_process_preserves_owner_pause(owner, source_programs):
     import subprocess
-    import sys
+
+    from agent_comms.cli import main
 
     comms, goal = owner
     paused = comms.goals.update_goal("worker", PausedGoalAction(), actor=OwnerInvocable)
-    environment = dict(os.environ)
     result = subprocess.run(
         [
-            sys.executable,
-            "-m",
-            "agent_comms.cli",
+            source_programs.script(main),
             "--root",
             str(comms.root),
             "tool",
@@ -146,7 +134,6 @@ def test_fresh_cli_tool_process_preserves_owner_pause(owner):
                 }
             ),
         ],
-        env=environment,
         text=True,
         capture_output=True,
         timeout=10,

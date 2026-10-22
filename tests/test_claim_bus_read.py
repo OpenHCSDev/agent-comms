@@ -9,7 +9,7 @@ the owner's event loop with the wire, bus and registry locks held.
 from __future__ import annotations
 from agent_comms.context_store import UNREAD_CONTEXT
 
-from conftest import publish_initial
+from conftest import _root_lifetime, publish_initial
 import hashlib
 import os
 import sys
@@ -76,7 +76,10 @@ def record_context(comms: Comms, name: str, generation: int) -> None:
 @contextmanager
 def selected_turn():
     """Alice runs a selected turn for one message; context rows surround it."""
-    with TemporaryDirectory(prefix="ac-claim-read-") as dirname:
+    with (
+        TemporaryDirectory(prefix="ac-claim-read-") as dirname,
+        _root_lifetime(Path(dirname)),
+    ):
         root = Path(dirname) / "wire"
         root.mkdir(mode=0o700)
         worktree = Path(dirname) / "work"
@@ -115,7 +118,7 @@ def selected_turn():
                 "execution", expected_revision=snapshot.execution.revision
             ).value
             store.attempts.start(AttemptStart(
-                "execution", 1, owner.name, person.participant_generation, prepare_fence_token(),
+                "execution", 1, owner.name, person.owner_identity.generation, prepare_fence_token(),
                 expected_execution_revision=snapshot.execution.revision,
                 expected_pointer_revision=snapshot.pointer_revision,
             ))
@@ -130,7 +133,7 @@ def selected_turn():
                 operation_id="f" * 32,
                 owner_claimed_generation=generation,
                 turn_id=owner.require_turn_lease().turn_id,
-                participant_generation=person.participant_generation,
+                participant_generation=person.owner_identity.generation,
                 attempt_ordinal=1,
             )
             yield comms, store, claim_scope, resource

@@ -1,22 +1,25 @@
-"""Goal lifecycle and pause provenance: the determining domain authorities."""
+"""Stored goal decisions; backend execution is read from the attempt ledger."""
 
 from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
-from .goal_attempt_identity import FailureNotObserved
 from .lifecycle import LifecycleState
+from .lifecycle_capability import Active, Complete, Terminal
 
 if TYPE_CHECKING:
-    from .goal_actions import GoalAction, GoalActionContext, ProblemOrderGoalAction
+    from .goal_actions import GoalActionContext, ProblemOrderGoalAction
+    from .goal_presentation import GoalExecution, GoalExecutionSource
     from .goals import Goal
 
 
 @dataclass(frozen=True)
 class PauseSource(DeclaredFamily, affix="Pause"):
+    lifts_on_compliance: ClassVar[bool] = False
+
     def instruction(self) -> str | None:
         return None
 
@@ -24,18 +27,10 @@ class PauseSource(DeclaredFamily, affix="Pause"):
     def protects_pause(self) -> bool:
         return self.instruction() is not None
 
-    def failure_projection(self) -> tuple[Literal["owner_paused", "paused_uncertain"], str]:
-        return (
-            ("owner_paused", "owner_pause")
-            if self.protects_pause
-            else ("paused_uncertain", "pause_attribution_uncertain")
-        )
-
 
 class OwnerPause(PauseSource):
     def instruction(self) -> str:
         from .turn_context import InstructionFile
-
         return InstructionFile.read("owner-pause.md").content
 
 
@@ -47,13 +42,26 @@ class RuntimePause(PauseSource):
     pass
 
 
+class ChokeholdPause(PauseSource):
+    """The heartbeat held this unit because its commander ignored a vibe check; Core resumes
+    it when the commander complies, and nothing else may."""
+
+    lifts_on_compliance = True
+
+    def instruction(self) -> str:
+        return (
+            "Your commander ignored the heartbeat's vibe check, so the heartbeat paused every"
+            " unit under it until it complies. Do not resume or continue this goal; Core resumes"
+            " it when the commander answers."
+        )
+
+
 @dataclass(frozen=True)
 class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
-    active: ClassVar[bool] = False
-    terminal: ClassVar[bool] = False
+    acp_plan_status: ClassVar[str] = "in_progress"
 
-    def after_failed_turn(self, diagnostic: str) -> GoalState:
-        return self
+    @abstractmethod
+    def execution(self, source: GoalExecutionSource) -> GoalExecution: ...
 
     def accept_order(self, action: ProblemOrderGoalAction, goal: Goal, ctx: GoalActionContext) -> Goal:
         return action.continue_goal(goal, ctx)
@@ -61,37 +69,16 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
     def require_model_resume(self) -> None:
         raise ValueError("This goal cannot be resumed; refresh its state.")
 
-    def require_active(self) -> None:
-        from .errors import RelationViolationError
-
-        raise RelationViolationError(self.activity_refusal())
-
     def activity_refusal(self) -> str:
         pause = self.pause_source
-        return (
-            (pause.instruction() if pause else None)
-            or "This goal is no longer active; refresh its state."
-        )
-
-    def failure_projection(self, reason: str) -> tuple[str, str]:
-        raise FailureNotObserved("owner_or_goal_changed")
-
-    @property
-    @abstractmethod
-    def toggle(self) -> type[GoalAction] | None: ...
-
-    toggle_label: ClassVar[str]
-    acp_plan_status: ClassVar[str] = "in_progress"
+        return ((pause.instruction() if pause else None)
+                or "This goal is no longer active; refresh its state.")
 
     @classmethod
     def wire_payload(cls, reason: str | None, source: str | None) -> dict[str, object]:
         if reason is not None:
             raise ValueError("A blocked goal requires a bounded explicit reason.")
         return {"kind": cls.declared_name}
-
-    @classmethod
-    @abstractmethod
-    def successors(cls) -> tuple[type[GoalState], ...]: ...
 
     def check_transition(self, nxt: GoalState, *, owner: bool) -> None:
         if not self.may_become(nxt):
@@ -113,85 +100,58 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
         return None
 
     @property
+    def lifts_on_compliance(self) -> bool:
+        """Held by the heartbeat until the commander complies."""
+        return False
+
+    @property
     def protected(self) -> bool:
         return False
 
-    def presentation(self) -> tuple[str, str]:
-        from .goal_presentation import GoalExecutionState
-
-        return "✓", GoalExecutionState.for_domain_state(self).value.title()
-
 
 class FromOpenGoal:
-    """A state explicitly eligible as the target of an active/paused transition."""
+    """A state eligible as the target of an active/paused decision."""
 
 
-class BlockingOnFailure:
-    """An eligible state owns the failed-turn transition and reason validation."""
-
-    def after_failed_turn(self, diagnostic: str) -> GoalState:
-        from .goal_actions import required_block_reason
-
-        return BlockedGoal(required_block_reason(diagnostic))
-
-
-class OpenGoal(BlockingOnFailure, GoalState):
+class OpenGoal(GoalState):
     @classmethod
     def successors(cls) -> tuple[type[GoalState], ...]:
         return GoalState.members_with(FromOpenGoal)
 
 
 @dataclass(frozen=True)
-class ActiveGoal(OpenGoal, FromOpenGoal):
-    active = True
+class ActiveGoal(Active, OpenGoal, FromOpenGoal):
 
-    def require_active(self) -> None:
-        pass
+    def execution(self, source: GoalExecutionSource) -> GoalExecution:
+        return source.wait.execution(source)
 
     def continues_turn_from(self, captured: GoalState) -> bool:
         """An order or retry that makes the goal active never ends a running turn."""
         return True
 
-    @property
-    def toggle(self) -> type[GoalAction]:
-        from .goal_actions import PausedGoalAction
-
-        return PausedGoalAction
-
-    toggle_label = "Pause"
 
 @dataclass(frozen=True)
 class PausedGoal(OpenGoal, FromOpenGoal):
     source: PauseSource = field(default_factory=OwnerPause)
 
-    def after_failed_turn(self, diagnostic: str) -> GoalState:
-        if self.protected:
-            return self
-        return super().after_failed_turn(diagnostic)
-
-    def failure_projection(self, reason: str) -> tuple[str, str]:
-        return self.source.failure_projection()
-
-    @property
-    def toggle(self) -> type[GoalAction]:
-        from .goal_actions import ActiveGoalAction
-
-        return ActiveGoalAction
-
-    toggle_label = "Resume"
+    def execution(self, source: GoalExecutionSource) -> GoalExecution:
+        from .goal_presentation import PausedExecution
+        return PausedExecution(source.goal.id, self.source)
 
     @classmethod
     def wire_payload(cls, reason: str | None, source: str | None) -> dict[str, object]:
         if reason is not None:
             raise ValueError("A blocked goal requires a bounded explicit reason.")
-        return {
-            "kind": cls.declared_name,
-            "source": {"kind": source if source is not None else OwnerPause.declared_name},
-        }
+        return {"kind": cls.declared_name,
+                "source": {"kind": source if source is not None else OwnerPause.declared_name}}
 
     @property
     def pause_source(self) -> PauseSource:
         return self.source
+
+    @property
+    def lifts_on_compliance(self) -> bool:
+        return self.source.lifts_on_compliance
 
     @property
     def protected(self) -> bool:
@@ -209,25 +169,7 @@ class PausedGoal(OpenGoal, FromOpenGoal):
 
 class BlockedState(GoalState, FromOpenGoal):
     def accept_order(self, action: ProblemOrderGoalAction, goal: Goal, ctx: GoalActionContext) -> Goal:
-        ordered = action.continue_goal(goal, ctx)
-        # A checked fresh order is new work authority, not a replay of the failed input.
-        ctx.goals.open_goal_store().authorize_current_retry(goal.id, action.order.id)
-        return replace(ordered, state=ActiveGoal())
-
-    def failure_projection(self, reason: str) -> tuple[str, str]:
-        return "backend_suspended", reason
-
-    @property
-    def toggle(self) -> type[GoalAction]:
-        from .goal_actions import RetryGoalAction
-
-        return RetryGoalAction
-
-    toggle_label = "Retry"
-
-    @property
-    @abstractmethod
-    def reason(self) -> str | None: ...
+        return replace(action.continue_goal(goal, ctx), state=ActiveGoal())
 
     @classmethod
     def successors(cls) -> tuple[type[GoalState], ...]:
@@ -244,14 +186,14 @@ class BlockedState(GoalState, FromOpenGoal):
 class BlockedGoal(BlockedState):
     block_reason: str
 
+    def execution(self, source: GoalExecutionSource) -> GoalExecution:
+        from .goal_presentation import DecidedBlockExecution
+        return DecidedBlockExecution(source.goal.id, self.block_reason)
+
     def __post_init__(self) -> None:
         reason = self.block_reason
-        if (
-            type(reason) is not str
-            or not reason.strip()
-            or reason != reason.strip()
-            or len(reason) > 1024
-        ):
+        if (type(reason) is not str or not reason.strip() or reason != reason.strip()
+                or len(reason) > 1024):
             raise ValueError("A blocked goal requires a bounded explicit reason.")
 
     @classmethod
@@ -262,37 +204,24 @@ class BlockedGoal(BlockedState):
     def reason(self) -> str:
         return self.block_reason
 
-    def presentation(self) -> tuple[str, str]:
-        reason = " ".join(self.block_reason.split())
-        summary = reason[:157] + "…" if len(reason) > 160 else reason
-        return "!", f"Blocked · {summary}"
-
 
 @dataclass(frozen=True)
 class UnrecordedBlockGoal(BlockedState):
-    """A recorded blocked status whose reason was not recorded."""
-
-    @property
-    def reason(self) -> None:
-        return None
-
-    def presentation(self) -> tuple[str, str]:
-        return "!", "Blocked · reason unavailable"
+    def execution(self, source: GoalExecutionSource) -> GoalExecution:
+        from .goal_presentation import UnrecordedBlockExecution
+        return UnrecordedBlockExecution(source.goal.id)
 
 
 @dataclass(frozen=True)
-class CompletedGoal(BlockingOnFailure, GoalState, FromOpenGoal):
-    terminal = True
+class CompletedGoal(Complete, Terminal, GoalState, FromOpenGoal):
+
+    def execution(self, source: GoalExecutionSource) -> GoalExecution:
+        from .goal_presentation import CompletedExecution
+        return CompletedExecution(source.goal.id)
 
     def accept_order(self, action: ProblemOrderGoalAction, goal: Goal, ctx: GoalActionContext) -> Goal:
         goal.order.require_replacement(goal, ctx.goals, ctx.thread.incarnation)
         return action.create(ctx)
-
-    @property
-    def toggle(self) -> None:
-        return None
-
-    toggle_label = "Completed"
 
     @classmethod
     def successors(cls) -> tuple[type[GoalState], ...]:

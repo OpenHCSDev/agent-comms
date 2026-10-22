@@ -4,6 +4,8 @@ Reuse the existing application/native journey. Only the localhost provider HTTP
 status is controlled; UI, registry, source, ACP and native processes remain real. The application runs
 under Textual Pilot; external st/Linux entrypoint acceptance is a separate gate.
 """
+
+from agent_comms.lifecycle_capability import Deferred
 from bus_history import read_history
 from conftest import publish_initial
 import argparse
@@ -67,7 +69,7 @@ async def acceptance(app, pilot, agent, comms, entered, release, hold_next, requ
     view.prompt.prompt_text_area.focus()
     await pilot.press('enter')
     await until(pilot, lambda: response_painted(app, view, 'NATIVE_RESPONSE_1'))
-    await until(pilot, lambda: not comms.registry.require('beta').active_turn.executing)
+    await until(pilot, lambda: not comms.registry.require('beta').executing)
     assert len(requests) == 1
     (evidence/'first-reply.svg').write_text(app.export_screenshot())
     user = comms.messaging.user_identity(str(agent.project_root_path)).name
@@ -124,7 +126,7 @@ async def acceptance(app, pilot, agent, comms, entered, release, hold_next, requ
         assert NativeRuntimeInput.one(db,input_id=retained_input.input_id) == retained_input
         rows = WakeAssignment.select(db)
     assert len(requests) == 2
-    assert any(row.wire_seq==failure_source.seq and row.lifecycle.deferred for row in rows)
+    assert any(row.wire_seq==failure_source.seq and bool(row.lifecycle.items_with(Deferred, True)) for row in rows)
     assert not any(row.wire_seq == pending_source.seq for row in rows)
     original, = comms.bus.log.deliveries_for_references((pending_source.reference,))
     assert original.message == pending_source

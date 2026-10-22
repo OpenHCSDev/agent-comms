@@ -11,7 +11,7 @@ from . import agent_events as events
 from . import turn_phase as phases
 from .acp_failure import UnrecordedFailureSource
 from .declared_family import DeclaredFamily
-from .field_codec import DecodedValue, FieldCodec, FieldPlan, WireName, WireOmitDefault
+from .field_codec import FieldCodec, FieldPlan, WireName, WireOmitDefault
 from .native_input_record import NativeInputCommit, NativeInputLocation
 from .native_pi import NativePiOperationFailed
 from .native_turn_context import NativeContextManifestData
@@ -735,14 +735,14 @@ class Response(NativePiEvent, DurablePiEvent):
     success: ReportedFlag | PiOmitted = PiOmitted()
 
     @classmethod
-    def normalize_record(cls, value, data):
+    def decode_fields(cls, value, decoded):
         command = FieldCodec.field_plan(cls, "command")
         owner = (PiCommand.response_owner(value[command.key])
                  if command.key in value else cls.command)
         owner.validate_response(value, cls)
-        return super().normalize_record(value, dict(
-            data, command=DecodedValue(owner),
-            data=owner.normalize_response_data(value.get("data")),
+        return super().decode_fields(value, dict(
+            decoded, command=owner,
+            data=owner.decode_response_data(value.get("data")),
         ))
 
     @classmethod

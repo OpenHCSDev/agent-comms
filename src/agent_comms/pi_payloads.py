@@ -42,6 +42,7 @@ from .field_codec import (
     boundary_decoder,
 )
 from .goals import GoalDeclaration
+from .lifecycle_capability import Successful
 from .native_file_artifact import NativeFileArtifact
 from .native_session_reopen import NativeSessionIdentity
 from .pi_counts import NonnegativePiCount, PiCount, TotalPiCount, UnreportedCount
@@ -86,8 +87,7 @@ class PiReported[T](SingleFieldValue):
     def from_wire(cls, data: object) -> Self:
         """The value decodes and encodes as the field it fills, family tag included."""
         annotation = cls.wire_field().annotation
-        normalized = FieldCodec.normalize_external(annotation, data, {})
-        return cls(FieldCodec.decode(annotation, normalized))
+        return cls(FieldCodec.decode_external(annotation, data, {}))
 
     def to_wire(self) -> object:
         return FieldCodec.encode(self.value, self.wire_field().annotation)
@@ -181,36 +181,33 @@ class PiPayload(ExternalField):
     wire_tag: ClassVar[str | None] = None
 
     @classmethod
-    def normalize_wire(cls, value):
+    def decode_external_value(cls, value: object, record: Mapping[str, object]) -> object:
         if not isinstance(value, dict):
             raise MalformedRecord(f"Expected {cls.__name__} object")
-        member = cls
-        data = {}
-        if issubclass(cls, DeclaredFamily):
-            member = cls.wire_member(value)
-            data["kind"] = member.declared_name
-        return member.normalize_record(value, data)
+        member = cls.wire_member(value)
+        return FieldCodec.construct(member, member.decode_fields(value, {}))
 
     @classmethod
-    def normalize_record(
-        cls, value: dict[str, JsonValue], data: dict[str, object],
+    def wire_member(cls, value: dict[str, JsonValue]) -> type[Self]:
+        return cls
+
+    @classmethod
+    @boundary_decoder
+    def decode_fields(
+        cls, value: dict[str, JsonValue], decoded: dict[str, object],
     ) -> dict[str, object]:
         hints = FieldCodec._types(cls)
         for f, key in FieldCodec.record_fields(cls):
-            if key in data:
-                continue
+            if f.name in decoded:
+                decoded[f.name] = FieldCodec.decode_resolved(hints[f.name], decoded[f.name])
             # Native null means omitted where the declaration names its not-reported member.
-            if key in value and not (value[key] is None and isinstance(f.default, PiPayload)):
-                data[key] = FieldCodec.normalize_external(hints[f.name], value[key], value)
-        return data
-
-    @classmethod
-    def normalize_external(cls, value: object, record: Mapping[str, object]) -> object:
-        return cls.normalize_wire(value)
+            elif key in value and not (value[key] is None and isinstance(f.default, PiPayload)):
+                decoded[f.name] = FieldCodec.decode_external(hints[f.name], value[key], value)
+        return decoded
 
     @classmethod
     def from_wire(cls, value):
-        return FieldCodec.decode(cls, cls.normalize_wire(value))
+        return FieldCodec.decode_external(cls, value, {})
 
     def to_wire(self):
         data = FieldCodec.encode(self)
@@ -232,10 +229,12 @@ class Opaque(PiPayload):
     payload: JsonValue
 
     @classmethod
-    def normalize_record(
-        cls, value: dict[str, JsonValue], data: dict[str, object],
+    def decode_fields(
+        cls, value: dict[str, JsonValue], decoded: dict[str, object],
     ) -> dict[str, object]:
-        return dict(super().normalize_record(value, data), payload=value)
+        return super().decode_fields(value, dict(
+            decoded, payload=FieldCodec.decode(JsonValue, value),
+        ))
 
     def to_wire(self) -> JsonValue:
         return self.payload
@@ -249,13 +248,13 @@ class StrictFields(PiPayload):
     """A closed native record rejects every undeclared external field."""
 
     @classmethod
-    def normalize_record(
-        cls, value: dict[str, JsonValue], data: dict[str, object],
+    def decode_fields(
+        cls, value: dict[str, JsonValue], decoded: dict[str, object],
     ) -> dict[str, object]:
         names = {key for _, key in FieldCodec.record_fields(cls)}
         if set(value) - names - {cls.wire_tag}:
             raise MalformedRecord(f"Unexpected {cls.__name__} fields")
-        return super().normalize_record(value, data)
+        return super().decode_fields(value, decoded)
 
 
 class OpenPayload(PiPayload, DeclaredFamily):
@@ -280,8 +279,8 @@ class OpenPayload(PiPayload, DeclaredFamily):
 @dataclass(frozen=True)
 class ProviderRetryOutcome(PiPayload, DeclaredFamily, affix="ProviderRetry"):
     @classmethod
-    def normalize_external(cls, value: object, record: Mapping[str, object]) -> object:
-        return cls.normalize_wire(record)
+    def decode_external_value(cls, value: object, record: Mapping[str, object]) -> object:
+        return super().decode_external_value(record, record)
 
     @classmethod
     def wire_member(cls, value):
@@ -865,7 +864,7 @@ class AssistantMessage(PiMessage):
 
     @property
     def final_reply(self):
-        return self.stop_reason.successful
+        return bool(self.stop_reason.items_with(Successful, self))
 
     async def apply_start(self, session, event):
         await session.assistant_started()
@@ -888,7 +887,9 @@ class AssistantMessage(PiMessage):
         session.output.start_message()
         if session.accepts_output:
             updates.extend(self.usage.charges(session.usage))
-        session.output.final_assistant_stop = reason.successful and session.started_input
+        session.output.final_assistant_stop = (
+            bool(reason.items_with(Successful, reason)) and session.started_input
+        )
         updates.extend([event async for event in reason.apply(session, self)])
         await session.assistant_ended()
         return tuple(updates)
@@ -1301,18 +1302,12 @@ class ReportedCompaction(PiReported[CompactionData]):
 @dataclass(frozen=True)
 class UnknownData(Opaque, PiResponseData):
     @classmethod
-    def normalize_wire(cls, value):
-        return {"kind": cls.declared_name, "payload": value}
+    def decode_external_value(cls, value: object, record: Mapping[str, object]) -> object:
+        return FieldCodec.construct(cls, {"payload": FieldCodec.decode(JsonValue, value)})
 
 
 @dataclass(frozen=True)
-class PiToolResult(PiPayload, DeclaredFamily, affix="ToolResult"):
-    @classmethod
-    def normalize_wire(cls, value):
-        if value is None:
-            return {"kind": MissingToolResult.declared_name}
-        return super().normalize_wire(value)
-
+class PiToolResult(ExternalNull, PiPayload, DeclaredFamily, affix="ToolResult"):
     @classmethod
     def wire_member(cls, value):
         return ProvidedToolResult
@@ -1330,7 +1325,7 @@ class PiToolResult(PiPayload, DeclaredFamily, affix="ToolResult"):
         return NoSentMessage()
 
 
-class MissingToolResult(PiToolResult):
+class MissingToolResult(ExternalNullMember, PiToolResult):
     """No native result was emitted; output and edit evidence are absent."""
 
     def text(self, limit=4000):
@@ -1386,17 +1381,17 @@ class NativeEditDetails(PiPayload):
 
 
 @dataclass(frozen=True)
-class NativeToolDetails(PiPayload, DeclaredFamily, affix="ToolDetails"):
+class NativeToolDetails(ExternalNull, PiPayload, DeclaredFamily, affix="ToolDetails"):
     """Decode the original owned result once; other extension details stay opaque."""
     wire_tag = "agentCommsKind"
 
     @classmethod
-    def normalize_wire(cls, value):
-        if value is None:
-            return {"kind": NoToolDetails.declared_name}
+    def decode_external_value(cls, value: object, record: Mapping[str, object]) -> object:
         if not isinstance(value, dict) or cls.wire_tag not in value:
-            return {"kind": OpaqueToolDetails.declared_name, "payload": value}
-        return super().normalize_wire(value)
+            return FieldCodec.construct(OpaqueToolDetails, {
+                "payload": FieldCodec.decode(JsonValue, value),
+            })
+        return super().decode_external_value(value, record)
 
     @classmethod
     def wire_member(cls, value):
@@ -1450,7 +1445,7 @@ class PublishedGoalToolDetails(NativeToolDetails):
         permission.published(self.goal)
 
 
-class NoToolDetails(NativeToolDetails):
+class NoToolDetails(ExternalNullMember, NativeToolDetails):
     pass
 
 

@@ -132,8 +132,8 @@ class PiCommand(DeclaredFamily):
             return UnknownCommand
 
     @classmethod
-    def normalize_response_data(cls, value: object) -> object:
-        return cls.response_payload.normalize_external(value, {})
+    def decode_response_data(cls, value: object) -> object:
+        return cls.response_payload.decode_external(value, {})
 
     @staticmethod
     def validate_response(record: Mapping[str, object], response: type[Response]) -> None:

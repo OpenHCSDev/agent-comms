@@ -34,7 +34,7 @@ class TurnFailure(DeclaredFamily):
 
     def prepare_execution_retry(self, db, execution_id: str) -> None:
         """Consume any earlier provider proof for this nonretryable failure."""
-        from .coordination_tables.attempts import ReplayAssessments
+        from .coordination_tables.executions import ReplayAssessments
 
         ReplayAssessments.revoke(db, execution_id)
 
@@ -144,7 +144,7 @@ class RetryableProviderFailure:
 
     def prepare_execution_retry(self, db, execution_id: str) -> None:
         """A provider refusal may retry only while durable output facts are absent."""
-        from .coordination_tables.attempts import ReplayAssessments
+        from .coordination_tables.executions import ReplayAssessments
 
         ReplayAssessments.authorize_if_unobserved(db, execution_id)
 

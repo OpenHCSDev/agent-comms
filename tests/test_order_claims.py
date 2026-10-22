@@ -1,4 +1,4 @@
-"""A holder claims through the real command/tool boundary on a copied bus."""
+"""A holder claims through the real tool boundary on a copied bus."""
 from contextlib import chdir
 from dataclasses import replace
 import json
@@ -14,6 +14,8 @@ from agent_comms.goals import OrderCheck, ProblemGoalOrder
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
     ClaimedProblemOrder,
+    CorrectCheckTodo,
+    DoneTodoState,
     DeliveredProblemOrder,
     PendingProblemOrder,
     SendBackVerdict,
@@ -30,6 +32,7 @@ from test_held_problem_orders import (  # noqa: F401 - shared copied-bus fixture
     held_commander,
     pr_commander,
 )
+from test_proof_build import proof_build_checkouts  # noqa: F401 - shared copied-bus fixture
 from test_todos import order, thread
 
 
@@ -51,8 +54,7 @@ def test_claim_verdict_family_on_retained_copy(held_commander):
         ThreadCaller(ctx.commander).invoke(request, comms)
     assert comms.goals.todos.get("P1") == original
 
-    main(["deliver", "P1", "--fork", "worker", "--pr", "1", "--sha", sha,
-          "--report-file", str(report)], ctx)
+    ThreadCaller("worker").invoke(request, comms)
     claimed = comms.goals.todos.get("P1")
     assert isinstance(claimed.order, ClaimedProblemOrder)
     assert not claimed.pending
@@ -102,8 +104,9 @@ def claimed_by_worker(ctx) -> Todo:
     sha = ctx.repos[0].git(ctx.repos[0].checkout, "rev-parse", "HEAD").strip()
     report = ctx.root / "report.txt"
     report.write_text("The source change is published; inspect its actual diff before accepting it.")
-    main(["deliver", "P1", "--fork", "worker", "--pr", "1", "--sha", sha,
-          "--report-file", str(report)], ctx)
+    ThreadCaller("worker").invoke(CommsOrderDeliverTool(
+        problem="P1", pull_request=1, head=sha, report=report.read_text(),
+    ), ctx.comms)
     claimed = ctx.comms.goals.todos.get("P1")
     assert isinstance(claimed.order, ClaimedProblemOrder)
     return claimed
@@ -146,4 +149,34 @@ def test_claimed_order_to_another_unit_is_refused_and_writes_nothing(held_comman
     with pytest.raises(TodoError, match="Only an undelivered order can change owner"):
         main(["send", "other", corrected_order_file(ctx), "--clean", "--reassign",
               "the claimant reported the delivery, so moving it would discard that claim"], ctx)
+    assert ctx.comms.goals.todos.get("P1") == claimed
+
+
+def test_claimed_order_takes_a_check_correction_through_the_real_verb(held_commander):
+    ctx = held_commander
+    claimed = claimed_by_worker(ctx)
+    repo = ctx.repos[0]
+
+    main(["check", "P1", "--check", f"{repo.checkout} :: printf 1 -> 0",
+          "--why", "the recorded check also counted lines the order never asked to remove"], ctx)
+    corrected = ctx.comms.goals.todos.get("P1")
+    assert isinstance(corrected.order, ClaimedProblemOrder)
+    assert corrected.order.check.command == "printf 1"
+    assert corrected.order.check_corrections[-1].previous == claimed.order.check
+    assert (corrected.order.id, corrected.order.claim) == (claimed.order.id, claimed.order.claim)
+    assert (corrected.holder, corrected.review_at, corrected.strike_count) == (
+        claimed.holder, claimed.review_at, claimed.strike_count)
+
+
+def test_closed_problem_refuses_a_check_correction_and_writes_nothing(held_commander):
+    ctx = held_commander
+    claimed = claimed_by_worker(ctx)
+    closed = replace(claimed, state=DoneTodoState)
+    correction = CorrectCheckTodo(
+        expected_revision=claimed.revision, actor=ctx.incarnation,
+        previous=claimed.order.check, check=claimed.order.check,
+        reason="the recorded check also counted lines the order never asked to remove",
+    )
+    with pytest.raises(TodoError, match="is done"):
+        correction.apply(closed)
     assert ctx.comms.goals.todos.get("P1") == claimed

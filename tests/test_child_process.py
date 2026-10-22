@@ -8,7 +8,7 @@ import os
 import subprocess
 import sys
 import time
-from contextlib import closing
+from contextlib import closing, nullcontext
 from dataclasses import replace
 from pathlib import Path
 
@@ -25,6 +25,7 @@ from agent_comms.child_process import (
     ObservedProcess,
     OutlivesLauncherLifetime,
     SpawnedProcess,
+    SynchronousProcess,
     Platform,
     ProcessIdentity,
     TimedOutOutcome,
@@ -110,12 +111,28 @@ def test_grandchild_import_path_holds_one_copy_of_the_checkout(tmp_path: Path) -
         "sys.stdout.buffer.write(r.stdout)"
     )
     environment = {name: value for name, value in os.environ.items() if name != "PYTHONPATH"}
-    result = SpawnedProcess.run((sys.executable, "-c", report), timeout=60, cwd=tmp_path, env=environment)
+    result = SpawnedProcess.run(
+        (sys.executable, "-c", report), timeout=60, cwd=tmp_path, env=environment
+    )
     assert result.returncode == 0, result.stderr
     import agent_comms
 
     root = str(Path(agent_comms.__file__).resolve().parents[1])
     assert result.stdout.decode().strip().split(os.pathsep).count(root) == 1
+
+
+def test_stop_batch_retires_live_child_after_an_original_identity_exits() -> None:
+    exited = SpawnedProcess.launch((sys.executable, "-c", "pass"))
+    live = SpawnedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
+    try:
+        exited.process.wait(timeout=5)
+        original = ObservedProcess(exited.identity)
+        with pytest.raises(ProcessLookupError):
+            SynchronousProcess.stop_together(((original, nullcontext), (live, nullcontext)))
+        assert live.retired
+    finally:
+        live.close()
+        exited.close()
 
 
 @pytest.mark.asyncio

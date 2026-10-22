@@ -152,6 +152,10 @@ class OwedAnswer(StandingRule, declared_name=None):
     def open_messages(cls, comms: Comms, commander: str) -> tuple[Message, ...]:
         """This member's messages an action may answer now, inside their window or past it."""
 
+    def answered_by(self, named: tuple[Message, ...]) -> bool:
+        """Whether an action naming these open messages answers this one."""
+        return any(message.message_id == self.message.message_id for message in named)
+
     @classmethod
     def answerable(cls, comms: Comms, commander: str) -> tuple[Message, ...]:
         """Every message an action may name with --answers, read from each member once."""
@@ -335,9 +339,9 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         thread, now = comms.registry.require(commander), time.time()
         return tuple(
-            cls(directive.original(comms.goals), goal.id, directive)
+            cls(original, goal.id, directive)
             for goal in thread.goal.active()
-            for directive in goal.order.overdue_directives(
+            for directive, original in goal.order.overdue_directives(
                 goal, comms.goals, thread.incarnation, now
             )
         )

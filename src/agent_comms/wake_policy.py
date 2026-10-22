@@ -9,6 +9,7 @@ from typing import ClassVar
 
 from .coordination_errors import IntegrityViolationError
 from .declared_family import DeclaredFamily
+from .lifecycle_capability import Active, LifecycleCapability
 from .source_proof_requirement import (
     FullSourceProof,
     NoSourceProof,
@@ -127,8 +128,8 @@ class Engagement(DeclaredFamily, affix="Engagement"):
 
     @property
     def mode(self) -> WakePolicy:
-        return next(policy() for policy in WakePolicy.members_with(WakePolicy)
-                    if policy.active and policy.engagement_type() is self.__class__)
+        return next(policy() for policy in WakePolicy.members_with(Active)
+                    if policy.engagement_type() is self.__class__)
 
     @property
     @abstractmethod
@@ -152,8 +153,7 @@ class BoundedTriageEngagement(Engagement):
 
 
 @dataclass(frozen=True)
-class WakePolicy(DeclaredFamily, SourceProofRequirement, affix="Wake"):
-    active: ClassVar[bool] = True
+class WakePolicy(LifecycleCapability, DeclaredFamily, SourceProofRequirement, affix="Wake"):
     triage: ClassVar[bool] = False
 
     @classmethod
@@ -184,7 +184,6 @@ class WakePolicy(DeclaredFamily, SourceProofRequirement, affix="Wake"):
 
 
 class PassiveWake(NoSourceProof, WakePolicy):
-    active = False
 
     @classmethod
     def initial_state(cls):
@@ -204,7 +203,7 @@ class UnmentionedWake(PassiveWake):
         return NoWakeDecision(recipient)
 
 
-class BoundedTriageWake(TriageSourceProof, WakePolicy):
+class BoundedTriageWake(Active, TriageSourceProof, WakePolicy):
     triage = True
 
     @classmethod
@@ -221,7 +220,7 @@ class BoundedTriageWake(TriageSourceProof, WakePolicy):
         return TriagePendingAssignment
 
 
-class FullWake(FullSourceProof, WakePolicy):
+class FullWake(Active, FullSourceProof, WakePolicy):
     @classmethod
     def engagement_type(cls) -> type[Engagement]:
         return FullEngagement
