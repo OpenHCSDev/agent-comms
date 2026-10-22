@@ -349,7 +349,8 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
         thread = comms.registry.require(commander)
         requests = comms.goals.todos.open_requests(thread.incarnation)
         with comms.bus.log.checked_read() as source:
-            return tuple(message for request in requests for message in request.directive_messages(source))
+            return tuple(message for request in requests
+                         for message in request.directive_messages(source))
 
     def began(self) -> float:
         return self.directive.deadline

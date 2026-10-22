@@ -298,7 +298,7 @@ class AssignOrderCase(CreateProblemCase):
             run.worker, "The copied workflow is released before its next native assignment."
         )
         document = replace(OrderFile.read(run.document.read_text()), problems=(before.id,))
-        run.commander.send(run.worker, document, clean=True)
+        run.commander.send(run.worker, document, clean=True, request=before.request.require())
         return before, run.commander.comms.goals.todos.get(before.id)
 
     @classmethod

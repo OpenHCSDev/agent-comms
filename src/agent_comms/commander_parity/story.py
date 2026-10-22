@@ -43,6 +43,7 @@ class StoryCase(LifecycleCase):
             run.worker,
             document,
             clean=True,
+            request=created.request.require(),
         )
         run.commander.strike(run.worker, created.id, cls.strike_reason,
                              evidence=(created.order.checked().owner,))
@@ -53,9 +54,7 @@ class StoryCase(LifecycleCase):
                 order=CreateProblemGoalAction(
                     problem="P2",
                     order=replace(document.order, at=saved.order.checked().at),
-                    request=run.commander.comms.registry.require(run.commander.commander)
-                    .goal.require()
-                    .id,
+                    request=saved.request.require(),
                     review_at=saved.review_at,
                     commander=run.commander.commander,
                     assigner=run.commander.actor_identity,
