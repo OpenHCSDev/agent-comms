@@ -3,6 +3,7 @@ from agent_comms.native_package import pinned_location, pinned_native_package
 
 import asyncio
 import os
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -27,6 +28,7 @@ from agent_comms.registration import Registration
 from agent_comms.messages import ConversationRole, InfoKind, Message
 from agent_comms.store_files import _store_lock
 from agent_comms.thread_text import ForkedParent, GivenThreadText
+from agent_comms.typed_table import TypedTable
 
 pytest_plugins = (goal_owner_fixture.__name__,)
 
@@ -207,6 +209,19 @@ def _managed_runtime_environment_is_explicit(monkeypatch: pytest.MonkeyPatch) ->
         for name in _MANAGED_RUNTIME_ENVIRONMENT:
             monkeypatch.delenv(name, raising=False)
         yield
+
+
+@contextmanager
+def without_mutation_guards(db: sqlite3.Connection, table: type[TypedTable]) -> Iterator[None]:
+    """Damage disposable rows, restoring their declaration before a checked read."""
+    guards = table.triggers()
+    for name in guards:
+        db.execute(f'DROP TRIGGER "{name}"')
+    try:
+        yield
+    finally:
+        for statement in guards.values():
+            db.execute(statement)
 
 
 @contextmanager

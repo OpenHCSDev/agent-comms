@@ -82,7 +82,7 @@ def test_unknown_settles_failed_in_current_store(tmp_path, authorized):
             outcome = store.attempts.fail_unknown(fence, expected_pointer_revision=1).value
         assert type(outcome.attempt.lifecycle) is UnknownOutcomeAttempt
         assert type(outcome.execution.lifecycle) is FailedExecution
-        assert outcome.replay.facts & ReplayFact.UNKNOWN_EFFECTS
+        assert outcome.replay.require_assessment().facts & ReplayFact.UNKNOWN_EFFECTS
         assert not outcome.can_retry
 
 
