@@ -15,6 +15,7 @@ from agent_comms.installer.backup import UpgradeRefused
 from agent_comms.messages import InfoKind, Message
 from agent_comms.mro_dispatch import MroDispatch, handles
 from agent_comms.publisher import InitialWrites
+from agent_comms.repo import Repo
 
 if TYPE_CHECKING:
     from agent_comms.installer.launch import InstallReport
@@ -131,13 +132,18 @@ class InstallFailure[Error: BaseException](
     error: Error
 
     @classmethod
-    def of(cls, error: BaseException, writer: RootWriter) -> InstallFailure[BaseException]:
+    def of(
+        cls,
+        error: BaseException,
+        writer: RootWriter,
+        source: Repo,
+    ) -> InstallFailure[BaseException]:
         handler = next(cls.class_handlers_for(type(error)))
-        return cast(InstallFailure[BaseException], handler(error, writer))
+        return cast(InstallFailure[BaseException], handler(error, writer, source))
 
     @handles(UpgradeRefused)
     @staticmethod
-    def refused(error: UpgradeRefused, writer: RootWriter) -> RefusedInstall:
+    def refused(error: UpgradeRefused, writer: RootWriter, source: Repo) -> RefusedInstall:
         return RefusedInstall(writer, error)
 
     @handles(CarriedInstallError)
@@ -146,21 +152,31 @@ class InstallFailure[Error: BaseException](
         cls,
         error: CarriedInstallError,
         writer: RootWriter,
+        source: Repo,
     ) -> InstallFailure[BaseException]:
-        return cls.of(error.error, error.passed.writer())
+        return cls.of(error.error, error.passed.writer(), source)
 
     @handles(BaseException)
     @staticmethod
-    def crashed(error: BaseException, writer: RootWriter) -> CrashedInstall:
-        # This factory consumes a caught exception from the source-side run context;
-        # that context (or CarriedPass.finishing) supplies a src frame even when the
-        # innermost failing library is external.
+    def crashed(error: BaseException, writer: RootWriter, source: Repo) -> CrashedInstall:
+        # The context supplies a Core frame even if the failing library is external.
+        # Its package directory works in both a checkout and a built wheel.
+        package = Path(__file__).resolve().parents[1]
         frame = next(
             frame
             for frame in reversed(extract_tb(error.__traceback__))
-            if "src" in Path(frame.filename).parts
+            if Path(frame.filename).resolve().is_relative_to(package)
         )
-        return CrashedInstall(writer, error, frame)
+        module = ".".join(
+            Path(frame.filename).resolve().relative_to(package.parent).with_suffix("").parts
+        )
+        location = FrameSummary(
+            str(source.module_file(module)),
+            frame.lineno,
+            frame.name,
+            lookup_line=False,
+        )
+        return CrashedInstall(writer, error, location)
 
 
 class RefusedInstall(InstallFailure[UpgradeRefused]):
@@ -173,9 +189,7 @@ class CrashedInstall(InstallFailure[BaseException]):
     frame: FrameSummary
 
     def lines(self) -> tuple[str, ...]:
-        path = Path(self.frame.filename)
-        source = Path(*path.parts[path.parts.index("src") :])
         return (
             f"Install failed: {type(self.error).__name__}: {self.error}",
-            f"{source}:{self.frame.lineno}",
+            f"{self.frame.filename}:{self.frame.lineno}",
         )

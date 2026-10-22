@@ -29,6 +29,7 @@ from agent_comms.installer.reporting import (
     RootWriter,
     UnfinishedInstall,
 )
+from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.installer.upgrade import (
     CarriedPass,
     Install,
@@ -40,6 +41,7 @@ from agent_comms.installer.upgrade import (
 )
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.mro_dispatch import MroDispatch, handles
+from agent_comms.repo import Repo
 from agent_comms.service_sender import ServiceSender
 from agent_comms.storage_rules import StorageRule
 
@@ -64,6 +66,10 @@ class InstallReport(ServiceSender, MroDispatch):
     @property
     def target(self) -> str:
         return f"#{self.channel}"
+
+    @property
+    def source(self) -> Repo:
+        return Repo(checkout=self.outgoing.checkout, github=CorePackage.repository)
 
     def writing(self, writer: RootWriter) -> None:
         self.outcome = UnfinishedInstall(writer)
@@ -92,7 +98,7 @@ class InstallReport(ServiceSender, MroDispatch):
             # A caller cannot accidentally leave the context without its result.
             self.outcome.lines()
         except BaseException as error:
-            failure = InstallFailure.of(error, self.outcome.writer)
+            failure = InstallFailure.of(error, self.outcome.writer, self.source)
             self.outcome = failure
             raise failure.error from failure.error.__cause__
         finally:

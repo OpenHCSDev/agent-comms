@@ -654,7 +654,7 @@ def upgrade(request: InstallRun, report: InstallReport) -> Upgrade:
         installed.require_uv()
         if not installed.python.exists():
             raise UpgradeRefused(f"No installed stack at {installed.python}")
-        staged = Stack.build(tree.path)
+        staged = Stack.build(tree.path, home=installed.home)
         pending = member.pending_steps(root, chain, staged, tree)
         install = member.of(checkout, root, current, target, pending, installed, staged,
                             tree, command.installer, command.spill_dir, report)

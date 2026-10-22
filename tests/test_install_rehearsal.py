@@ -14,16 +14,34 @@ import shutil
 import subprocess
 import sys
 import tarfile
+from contextlib import nullcontext
+from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
+from traceback import FrameSummary, extract_stack
+from typing import ClassVar
 
 import pytest
 
+import agent_comms
+from agent_comms.cli_bridges.monitor import InspectSession
+from agent_comms.cli_commands import HistoryCliCommand, InstallCliCommand
+from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
-from agent_comms.cli_commands import HistoryCliCommand
-from agent_comms.installer.launch import InstallReport
-from agent_comms.installer.upgrade import CarriedRehearsal, RehearsedUpgrade, Upgrade
+from agent_comms.harness_install import replace_link
+from agent_comms.installer.launch import InstallReport, InstallRun
+from agent_comms.installer.reporting import CarriedWriter, CrashedInstall
+from agent_comms.installer.runtime_resolution import RuntimeResolution
+from agent_comms.installer.upgrade import (
+    CarriedRehearsal,
+    RehearsedUpgrade,
+    Stack,
+    Upgrade,
+    upgrade,
+)
+from agent_comms.launch_runtime import LaunchRuntime
 from conftest import declare_test_bus, publish_initial
+from test_install_session_bridge import session_bridge
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 
@@ -33,8 +51,14 @@ def git(*arguments: str) -> str:
                           capture_output=True, text=True).stdout.strip()
 
 
+@dataclass(frozen=True)
+class InstalledHome:
+    environment: dict[str, str]
+    outgoing: LaunchRuntime
+
+
 @pytest.fixture(scope="module")
-def installed_home(tmp_path_factory) -> dict[str, str]:
+def installed_home(tmp_path_factory) -> InstalledHome:
     """A home holding what an installed machine has: the installer's uv, and as the
     installed runtime a build of the merge base this change lands on. Both cases share
     it, so the second reuses the staged runtime the first built, as a second install
@@ -57,7 +81,7 @@ def installed_home(tmp_path_factory) -> dict[str, str]:
     subprocess.run([uv, "pip", "install", "-q", "--python", runtime / "bin/python", base],
                    check=True, env=environment)
     (home / ".local/share/agent-comms/current").symlink_to(runtime, target_is_directory=True)
-    return environment
+    return InstalledHome(environment, LaunchRuntime(runtime / "bin/python"))
 
 
 @pytest.mark.timeout(280)
@@ -76,7 +100,7 @@ def test_install_rehearses_preserving_existing_data_and_publishing_its_result(
     installed = subprocess.run(
         [Path(sys.executable).with_name("agent-comms"), "--root", comms.root, "install",
          "--rehearse", "--checkout", checkout, "--to", "HEAD", "--project", checkout, *given],
-        cwd=checkout, env={**installed_home, "PYTHONPATH": os.environ.get("PYTHONPATH", "")},
+        cwd=checkout, env={**installed_home.environment, "PYTHONPATH": os.environ.get("PYTHONPATH", "")},
         capture_output=True, text=True, timeout=270)
     assert installed.returncode == 0, installed.stderr
     result = FieldCodec.decode(Upgrade, FieldCodec.parse(installed.stdout))
@@ -93,3 +117,116 @@ def test_install_rehearses_preserving_existing_data_and_publishing_its_result(
     assert all(message.sender == InstallReport.sender for message in reports)
     assert reports[0].body.splitlines()[0] == "Install starting"
     assert reports[1].body.splitlines()[0] == "Install finished"
+
+
+class PublicationFault(BaseException):
+    """The injected failure retains the actual source caller, not a copied line number."""
+
+    def __init__(self, site: FrameSummary):
+        super().__init__("The target was published before this failure")
+        self.site = site
+
+
+class PublicationRuntimeError(PublicationFault, RuntimeError):
+    pass
+
+
+class PublicationInterrupt(PublicationFault, KeyboardInterrupt):
+    pass
+
+
+class PublicationFailingRun(InstallRun):
+    """Inject only the requested final-step failure; the entire install is real."""
+
+    error_kind: ClassVar[type[PublicationFault]] = PublicationRuntimeError
+
+    def harnesses(self):
+        assert RuntimeResolution.at(LaunchRuntime.installed().prefix).core_commit == self.target
+        raise self.error_kind(extract_stack(limit=2)[0])
+
+
+class PublicationInterruptedRun(PublicationFailingRun):
+    error_kind = PublicationInterrupt
+
+
+@pytest.fixture
+def publication_home(request, monkeypatch, tmp_path):
+    """The hosted installed-runtime job supplies the build; source workers never build one."""
+    candidate = LaunchRuntime.running()
+    if not Path(agent_comms.__file__).resolve().is_relative_to(candidate.prefix.resolve()):
+        pytest.skip("Full publication proof requires the hosted built-runtime job")
+    installed = request.getfixturevalue("installed_home")
+    for name, value in installed.environment.items():
+        monkeypatch.setenv(name, value)
+    replace_link(LaunchRuntime.current_pointer(), installed.outgoing.prefix)
+    # An isolated home must never restart the test runner's real user services.
+    binary = tmp_path / "host-programs"
+    binary.mkdir()
+    systemctl = binary / "systemctl"
+    systemctl.write_text(
+        '#!/bin/sh\n'
+        'if [ "$1" = "--user" ] && [ "$2" = "show" ]; then\n'
+        "  printf '0\\n'\n"
+        'else\n'
+        '  exit 1\n'
+        'fi\n'
+    )
+    systemctl.chmod(0o700)
+    monkeypatch.setenv("PATH", os.pathsep.join((str(binary), os.environ["PATH"])))
+    return Path(installed.environment["HOME"]), candidate
+
+
+@pytest.mark.timeout(280)
+@pytest.mark.parametrize("run_type,completion,terminal", (
+    pytest.param(InstallRun, nullcontext(), "Install finished", id="finished"),
+    pytest.param(PublicationFailingRun, pytest.raises(RuntimeError), "Install failed", id="crashed"),
+    pytest.param(
+        PublicationInterruptedRun, pytest.raises(KeyboardInterrupt), "Install failed",
+        id="interrupted",
+    ),
+))
+def test_live_upgrade_family_after_real_publication(
+        publication_home, tmp_path, run_type, completion, terminal):
+    home, candidate = publication_home
+    checkout = tmp_path / "checkout"
+    subprocess.run(["git", "clone", "-q", REPOSITORY, checkout], check=True)
+    target = git("rev-parse", "HEAD")
+    subprocess.run(["git", "-C", checkout, "checkout", "--detach", "-q",
+                    git("rev-parse", "HEAD^")], check=True)
+    outgoing = Stack(checkout, home=home, runtime=LaunchRuntime.installed())
+    program = (str(candidate.interpreter.with_name("agent-comms-claude-bridge")),)
+    with session_bridge(tmp_path, home, program) as (_, claim, observed, child, log):
+        comms = Comms(tmp_path / "bus")
+        declare_test_bus(comms, channels=(InstallReport.channel,))
+        publish_initial(comms, claim.thread, "#all", "Retained before the upgrade")
+        before = HistoryCliCommand().apply(comms).messages
+        request = run_type.start(InstallCliCommand(checkout=checkout, to=target, project=checkout),
+                                 comms.root)
+        report = InstallReport(comms.root, outgoing)
+        with completion as caught:
+            upgrade(request, report)
+        assert isinstance(report.outcome.writer, CarriedWriter)
+        if isinstance(report.outcome, CrashedInstall):
+            error = report.outcome.error
+            assert isinstance(error, PublicationFault)
+            assert caught.value is error
+            assert (report.outcome.frame.filename, report.outcome.frame.lineno) == (
+                str(report.source.module_file(upgrade.__module__)), error.site.lineno,
+            )
+        assert RuntimeResolution.at(LaunchRuntime.installed().prefix).core_commit == target
+        assert LaunchRuntime.installed().prefix != outgoing.runtime.prefix
+        resumed = InspectSession().information(claim)
+        assert resumed.process == observed.process
+        assert resumed.process.pid == child.pid
+        assert resumed.runtime.prefix == LaunchRuntime.installed().prefix.resolve()
+        assert child.poll() is None, log.read_text()
+        reports = tuple(reversed(HistoryCliCommand(target=report.target).apply(comms).messages))
+        assert len(reports) == 2
+        assert reports[0].body.splitlines()[0] == "Install starting"
+        assert reports[1].body.splitlines()[0].startswith(terminal)
+        assert all(line in reports[1].body for line in report.outcome.lines())
+        retained = {
+            message.reference: message for message in HistoryCliCommand().apply(comms).messages
+        }
+        assert all(retained[message.reference] == message for message in before)
+        assert not request.scratch.exists()
