@@ -357,6 +357,7 @@ class Stack:
     @classmethod
     def build(cls, checkout: Path, home: Path = HOME) -> Stack:
         """Resolve current mains once, then build or reuse their immutable installation."""
+        Checkout(checkout).prepare()
         source = cls(checkout, home, runtime=LaunchRuntime.running())
         source.require_uv()
         run(source.uv, "lock", "--project", "stack", "--upgrade", "--python", "3.14",
@@ -382,6 +383,20 @@ class Stack:
             shutil.rmtree(prefix)
             raise
         return built
+
+    def test(self, *pytest_arguments: str) -> None:
+        """Run checkout tests against this runtime's installed packages, never its source."""
+        run(self.uv, "pip", "install", "--python", self.python,
+            "-r", "pyproject.toml", "--extra", "dev", cwd=self.checkout,
+            env=self.environment())
+        core = run("git", "-C", self.checkout, "rev-parse", "HEAD").strip()
+        scratch = StorageRule().scratch_base
+        scratch.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=scratch, prefix=f"tests-{core[:12]}-") as temporary:
+            print(run("timeout", "300", self.python, "-m", "pytest", "-n", "0", "-q", "-s",
+                      "-o", "pythonpath=. tools", "-o", "faulthandler_timeout=60",
+                      "--basetemp", Path(temporary) / "pytest", "-p", "no:cacheprovider",
+                      *pytest_arguments, cwd=self.checkout, env=self.environment()), end="")
 
     def imports(self) -> None:
         run(self.python, "-c", CLIENT_IMPORTS, cwd=self.checkout, env=self.environment())
