@@ -58,8 +58,10 @@ class CatalogDocument:
     def validate(self) -> None:
         for tag in self.tags:
             Tag.validate(tag)
-            if f"#{tag}" not in self.preferences or self.preferences[f"#{tag}"].created_at <= 0:
-                raise ValueError(f"Channel #{tag} has no recorded creation time; carry its catalog first.")
+            channel = ChannelTarget.normalize_name(tag)
+            if channel not in self.preferences or self.preferences[channel].created_at <= 0:
+                raise ValueError(
+                    f"Channel {channel} has no recorded creation time; carry its catalog first.")
         if any(name != view.name for name, view in self.saved_views.items()):
             raise ValueError("Saved view key must match its declared name")
         self.validate_parents()
@@ -76,13 +78,14 @@ class CatalogDocument:
 
     def views(self, activity: ActivityClocks) -> Channels:
         result = Channels((name, self.require_channel(name, activity)) for name in BuiltinChannelView.names())
-        result.update((f"#{tag}", self.require_channel(f"#{tag}", activity)) for tag in sorted(self.tags))
-        result.update((f"#{name}", self.require_channel(f"#{name}", activity)) for name in self.saved_views)
+        result.update((channel, self.require_channel(channel, activity))
+                      for channel in map(ChannelTarget.normalize_name,
+                                         (*sorted(self.tags), *self.saved_views)))
         return result
 
     def require_channel(self, target: str, activity: ActivityClocks) -> Channel:
         target = ChannelTarget.normalize_name(target)
-        tag = target.removeprefix("#")
+        tag = ChannelTarget.bare_name(target)
         if target in BuiltinChannelView.names():
             preference = self.preferences.get(target, ChannelPreferences())
             return preference.channel(BuiltinChannelView.member_named(target), target, frozenset())
@@ -100,7 +103,7 @@ class CatalogDocument:
         return frozenset(
             kind.declared_name for kind in BuiltinChannelView.members_with(BuiltinChannelView)
             if kind.matches(tags)
-        ) | frozenset(f"#{tag}" for tag in tags)
+        ) | frozenset(map(ChannelTarget.normalize_name, tags))
 
     def pinned_threads(self, channel: str) -> frozenset[str]:
         return self.preferences.get(channel, ChannelPreferences()).pinned_threads
@@ -113,8 +116,8 @@ class CatalogDocument:
         }
 
     def require_available_name(self, name: str) -> None:
-        if name.removeprefix("#") in self.saved_views:
-            raise RelationViolationError(f"Name {name.removeprefix('#')!r} is reserved by a saved view.")
+        if (bare := ChannelTarget.bare_name(name)) in self.saved_views:
+            raise RelationViolationError(f"Name {bare!r} is reserved by a saved view.")
 
     def require_available_tag_name(self, name: str, *, previous: str | None = None) -> None:
         self.require_available_name(name)
@@ -127,7 +130,8 @@ class CatalogDocument:
         created_at = time.time()
         for tag in tags - self.tags:
             Tag.validate(tag)
-            self.preferences[f"#{tag}"] = ChannelPreferences(created_at=created_at)
+            self.preferences[ChannelTarget.normalize_name(tag)] = ChannelPreferences(
+                created_at=created_at)
         self.tags |= tags
 
     def create_tag(self, tag: str) -> None:
@@ -139,9 +143,11 @@ class CatalogDocument:
         if unknown:
             raise ValueError(f"Unknown view tags: {', '.join(sorted(unknown))}")
         if view.name in self.tags or (
-            view.name not in self.saved_views and f"#{view.name}" in activity.channels
+            view.name not in self.saved_views
+            and ChannelTarget.normalize_name(view.name) in activity.channels
         ):
-            raise ValueError(f"View name conflicts with channel: #{view.name}")
+            raise ValueError(
+                f"View name conflicts with channel: {ChannelTarget.normalize_name(view.name)}")
         previous = self.saved_views.get(view.name)
         if previous is not None:
             view = replace(
@@ -154,7 +160,7 @@ class CatalogDocument:
         self.saved_views[view.name] = view
 
     def delete_view(self, name: str) -> None:
-        name = name.removeprefix("#")
+        name = ChannelTarget.bare_name(name)
         if name not in self.saved_views:
             raise ValueError(f"Unknown view: {name!r}")
         if self.saved_views[name].original_targets:
@@ -162,7 +168,7 @@ class CatalogDocument:
                 "Imported history views retain retired targets; archive the view instead."
             )
         del self.saved_views[name]
-        self.remove_channel(f"#{name}")
+        self.remove_channel(ChannelTarget.normalize_name(name))
 
     def set_preferences(self, name: str, activity: ActivityClocks, **changes) -> Channel:
         channel = self.require_channel(name, activity)
@@ -224,12 +230,14 @@ class CatalogDocument:
 
     def change_tag(self, previous: str, current: str | None) -> None:
         if previous not in self.tags:
-            raise UnknownChannelError(f"Unknown channel: #{previous}")
+            raise UnknownChannelError(
+                f"Unknown channel: {ChannelTarget.normalize_name(previous)}")
 
         def changed(tags):
             return (tags - {previous}) | ({current} if previous in tags and current else set())
 
-        old_target, new_target = f"#{previous}", f"#{current}" if current else None
+        old_target = ChannelTarget.normalize_name(previous)
+        new_target = ChannelTarget.normalize_name(current) if current else None
         if new_target:
             preference = self.preferences.pop(old_target, None)
             if preference is not None:

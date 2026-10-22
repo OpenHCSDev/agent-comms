@@ -102,10 +102,10 @@ class CommandTarget(ABC):
             return name
         if not isinstance(name, str) or not name:
             raise ValueError("Select a named target")
-        name = name.removeprefix("@")
+        name = name.removeprefix(ThreadTarget.sigil)
         if not name:
             raise ValueError("Select a named target")
-        return ChannelTarget(name) if name.startswith("#") else ThreadTarget(name)
+        return ChannelTarget(name) if ChannelTarget.names_channel(name) else ThreadTarget(name)
 
     @staticmethod
     def arguments(names: tuple[str, ...], project: str):
@@ -140,10 +140,26 @@ class CommandTarget(ABC):
 @dataclass(frozen=True)
 class NamedTarget(CommandTarget):
     name: str
+    sigil: ClassVar[str]
     batchable = False
     direct_names = ()
     guidance_scope = ""
     default_audience = MessageAudience.DIRECT
+
+    @classmethod
+    def address(cls, name: str) -> str:
+        """The target name an address of this kind names once its sigil is read."""
+        return name
+
+    @staticmethod
+    def sigils() -> tuple[str, ...]:
+        """Every named target kind's sigil, from the family."""
+        return tuple(kind.sigil for kind in NamedTarget.__subclasses__())
+
+    @staticmethod
+    def leads(text: str) -> bool:
+        """Whether text opens with a named target's address."""
+        return text.lstrip().startswith(NamedTarget.sigils())
 
     @property
     def names(self) -> tuple[str, ...]:
@@ -197,6 +213,7 @@ class NamedTarget(CommandTarget):
 
 
 class ThreadTarget(NamedTarget):
+    sigil = "@"
     history_result_type = DmHistoryPageResult
     kind = "thread"
     incoming_scope = "direct message"
@@ -292,9 +309,25 @@ class ChannelTarget(NamedTarget):
     kind = "channel"
     default_audience = MessageAudience.COLLECTIVE
 
+    sigil = "#"
+
+    @classmethod
+    def address(cls, name: str) -> str:
+        return cls.normalize_name(name)
+
+    @classmethod
+    def names_channel(cls, name: str) -> bool:
+        return name.startswith(cls.sigil)
+
     @classmethod
     def normalize_name(cls, name: str) -> str:
-        return name if name.startswith("#") else f"#{name}"
+        """The channel address of a catalog name (a tag or saved view); an address is kept."""
+        return name if cls.names_channel(name) else f"{cls.sigil}{name}"
+
+    @classmethod
+    def bare_name(cls, name: str) -> str:
+        """The catalog name a channel address carries: its tag or saved view name."""
+        return name.removeprefix(cls.sigil)
 
     @property
     def incoming_scope(self):
@@ -419,5 +452,18 @@ class Tag:
     def validate(name: str, *, label: str = "Tags") -> None:
         from .channels import BuiltinChannelView
 
-        if not name or not set(name) <= _TAG_CHARS or f"#{name}" in BuiltinChannelView.names():
+        if (not name or not set(name) <= _TAG_CHARS
+                or ChannelTarget.normalize_name(name) in BuiltinChannelView.names()):
             raise ValueError(f"{label} must be lowercase alphanumeric with hyphens/underscores; built-in channel names are reserved.")
+
+
+class CoordinationChannel:
+    """The channel the fleet coordinates on. Installer reports, todo announcements and the
+    commander's posts address it; its tag is stated here once, and the catalog makes its
+    channel when a thread carries that tag."""
+
+    tag: ClassVar[str] = "comms"
+
+    @classmethod
+    def name(cls) -> str:
+        return ChannelTarget.normalize_name(cls.tag)

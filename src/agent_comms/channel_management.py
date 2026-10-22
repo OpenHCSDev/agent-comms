@@ -46,7 +46,8 @@ class TagDisposition(DeclaredFamily, affix="TagDisposition"):
 
     @staticmethod
     def tag_names(tag: str | tuple[str, ...]) -> str:
-        return ', '.join(f'#{name}' for name in ((tag,) if isinstance(tag, str) else tag))
+        return ', '.join(map(ChannelTarget.normalize_name,
+                             (tag,) if isinstance(tag, str) else tag))
 
     @abstractmethod
     def apply(self, channels: ChannelManagement, tag: str, cohort: tuple[Thread, ...]) -> TagChangeResult: ...

@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Annotated, ClassVar, TextIO
 
 import agent_comms.installer
+from agent_comms.channel_targets import CoordinationChannel
 from agent_comms.cli_commands import InstallCliCommand, InstallResult
 from agent_comms.comms import client_wire
 from agent_comms.bus_publication import AgentOrigin
@@ -40,7 +41,8 @@ class InstallReport(ServiceSender):
         with client_wire(self.root) as comms:
             self.register(comms.registry)
             return comms.bus.publisher.publish_ordinary(
-                Message(sender=self.sender, target="#comms", body="\n".join(lines),
+                Message(sender=self.sender, target=CoordinationChannel.name(),
+                        body="\n".join(lines),
                         type=InfoKind), origin=AgentOrigin())
 
     def starting(self, upgrade: Upgrade) -> Message:

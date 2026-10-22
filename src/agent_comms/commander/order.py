@@ -32,6 +32,7 @@ from typing import Annotated, Self
 from pydantic import Field, InstanceOf, PrivateAttr
 
 from agent_comms.change_report import FileLine, MainRevision, NoSourceReference
+from agent_comms.channel_targets import CoordinationChannel
 from agent_comms.cli_bridges.shared import DeclaredVerb
 from agent_comms.commander.config import CommanderConfig, CommanderRole
 from agent_comms.commander.standing import UnownedWheelSpin
@@ -496,7 +497,8 @@ class CommanderContext(CommanderConfig):
 
     def post(self, audience: VerdictAudience, body: str,
              answers: tuple[MessageReference, ...] = ()) -> str:
-        target = audience.threads[0] if len(audience.threads) == 1 else '#comms'
+        target = (audience.threads[0] if len(audience.threads) == 1
+                  else CoordinationChannel.name())
         published = self.comms.messaging.send(self.actor_name, target,
             audience.addressed(target, body), answers=answers)
         return published.message.message_id

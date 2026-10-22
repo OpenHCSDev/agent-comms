@@ -20,6 +20,7 @@ from .input_origin import InputOrigin, UnattributedInputOrigin
 from . import agent_events as events
 from .agent_backend import AgentBackend
 from .agent_event_updates import AcpEventConsumer, TurnEventConsumer
+from .channel_targets import NamedTarget
 from .channels import AllChannel
 from .comms import Comms
 from .coordinator import Coordination
@@ -192,7 +193,7 @@ class TurnRunner:
                 agent_task = text[len(AGENT_PREFIX) :].strip()
             elif text.startswith(RELAY_PREFIX):
                 relay_text = text[len(RELAY_PREFIX) :].strip()
-            elif text.lstrip().startswith(("@", "#")):
+            elif NamedTarget.leads(text):
                 relay_text = text
             else:
                 agent_task = text.strip()
@@ -499,10 +500,11 @@ def parse_target(text: str) -> tuple[str, str]:
     is consumed, never broadcast.
     """
     stripped = text.strip()
-    for prefix, template in (("@", "{}"), ("#", "#{}")):
-        if stripped.startswith(prefix) and len(stripped) > 1:
-            parts = stripped[1:].split(maxsplit=1)
-            name = parts[0].rstrip("@#")
+    sigils = "".join(NamedTarget.sigils())
+    for kind in NamedTarget.__subclasses__():
+        if stripped.startswith(kind.sigil) and len(stripped) > len(kind.sigil):
+            parts = stripped[len(kind.sigil):].split(maxsplit=1)
+            name = parts[0].rstrip(sigils)
             if name and len(parts) == 2 and parts[1].strip():
-                return template.format(name), parts[1].strip()
+                return kind.address(name), parts[1].strip()
     return AllChannel.declared_name, stripped

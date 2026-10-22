@@ -49,6 +49,7 @@ from .acp_extension import (
     encode_updates,
 )
 from .acp_failure import NativeTurnError
+from .channel_targets import NamedTarget
 from .cohort_foreground import _accept_visible_deliveries
 from .comms import Comms, wire
 from .coordination_cohort import next_sealed_assignment
@@ -242,14 +243,15 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             images = prompt_images(prompt)
         except ValueError as error:
             raise RequestError.invalid_params({"reason": str(error)}) from error
-        if images and self._prompt_text(prompt).lstrip().startswith(("@", "#", RELAY_PREFIX)):
+        if images and self._prompt_text(prompt).lstrip().startswith(
+                (*NamedTarget.sigils(), RELAY_PREFIX)):
             raise RequestError.invalid_params(
                 {"reason": "Send images to an agent thread, not as a coordination relay."}
             )
         text = self._prompt_text(prompt)
         if (
             (await self.turns.active_backend_turn(session_id)).is_open
-            and not text.lstrip().startswith(("@", "#", RELAY_PREFIX))
+            and not text.lstrip().startswith((*NamedTarget.sigils(), RELAY_PREFIX))
         ):
             return await self.inputs.accept_followup(
                 session_id,

@@ -282,7 +282,8 @@ class SavedViewChannel(ReadOnlyChannel, PredicateChannel, GroupedChannel, Channe
     view: SavedView
 
     def validate_declaration(self) -> None:
-        if self.name != f"#{self.view.name}" or self.tags != self.view.predicate.tags:
+        if (self.name != ChannelTarget.normalize_name(self.view.name)
+                or self.tags != self.view.predicate.tags):
             raise ValueError("Saved projection must retain its declaration identity.")
 
     def matches(self, tags: frozenset[str]) -> bool:
@@ -305,8 +306,8 @@ class TagChannelIdentity(GroupedChannel, Channel):
     """A tag's original address remains its history identity after retirement."""
 
     def validate_declaration(self) -> None:
-        Tag.validate(self.name.removeprefix("#"))
-        if self.tags != frozenset({self.name.removeprefix("#")}):
+        Tag.validate(ChannelTarget.bare_name(self.name))
+        if self.tags != frozenset({ChannelTarget.bare_name(self.name)}):
             raise ValueError("A routable channel must be its exact tag.")
 
     @property
@@ -326,7 +327,7 @@ class TagChannel(MembershipChannel, TagChannelIdentity):
         return self.history_scope()
 
     def members(self, index: ChannelMemberIndex) -> tuple[Thread, ...]:
-        return index[self.name.removeprefix("#")]
+        return index[ChannelTarget.bare_name(self.name)]
 
     def matches(self, tags: frozenset[str]) -> bool:
         return bool(self.tags & tags)
@@ -403,7 +404,8 @@ class SavedView(ToolResult):
     def history_targets(self) -> frozenset[str]:
         # Original addressed messages remain attached to their immutable target;
         # this is a read projection, never a rewritten message or delivery scope.
-        return self.original_targets | frozenset(f"#{tag}" for tag in self.predicate.tags)
+        return self.original_targets | frozenset(
+            map(ChannelTarget.normalize_name, self.predicate.tags))
 
     def __post_init__(self) -> None:
         Tag.validate(self.name)
