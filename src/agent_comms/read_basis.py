@@ -7,8 +7,6 @@ uses ThreadIncarnation; process and turn generations do not alter provenance.
 
 from __future__ import annotations
 
-from .bus_activity_index import ActivityClocks
-
 import asyncio
 import json
 from abc import ABC, abstractmethod
@@ -21,6 +19,7 @@ from itertools import product
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, TextIO
 
+from .bus_activity_index import ActivityClocks
 from .channel_targets import CommandTarget
 from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged, HistoricalSourceChanged
 from .declared_family import DeclaredFamily
@@ -300,21 +299,20 @@ class ExplicitWatchAcknowledgment(WatchAcknowledgment):
 
 
 if TYPE_CHECKING:
-    from .bus import Bus, BusReader, BusSnapshot
-    from .channels import TagChannel
-    from .historical_views import DMHistory, HistoryArchive, HistorySource
-    from .history_views import HistoryViews
+    from .bus import BusReader, BusSnapshot
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
-    from .channels import Channels
+    from .channels import Channels, TagChannel
+    from .historical_views import DMHistory, HistoryArchive, HistorySource
+    from .history_views import HistoryViews
     from .message_bus import MessageBus
     from .message_page import MessagePage, PageBounds
-    from .messages import Message
+    from .messages import Message, MessageKind
     from .read_ledger import ReadDocument, ReadLedger
     from .registration import Registration
     from .registry_document import RegistrySnapshot, UserThreadLookup
-    from .threads import Thread
     from .registry_provenance import RegistryProvenance
+    from .threads import Thread
 
 
 @dataclass(frozen=True, slots=True)
@@ -816,7 +814,10 @@ class MessageDisplayScope(DeclaredFamily, ABC, affix="DisplayScope"):
         conversation = self.read_key(message.sender, message.target, snapshot)
         return message.seq in seen.for_conversation(conversation)
 
-    def records(self, source: BusReader, *, lower=0, upper=None, descending=False, limit=100, kinds=()):
+    def records(
+        self, source: BusReader, *, lower: int = 0, upper: int | None = None,
+        descending: bool = False, limit: int = 100, kinds: tuple[type[MessageKind], ...] = (),
+    ) -> tuple[Message, ...]:
         predicate, parameters = self.index_predicate
         return source.scoped_page(predicate, parameters, lower=lower, upper=upper,
                                   descending=descending, limit=limit, kinds=kinds)
@@ -968,7 +969,7 @@ class ChannelDisplayScope(MessageDisplayScope):
     def target_values[V](self, values: Mapping[str, V]) -> Iterable[V]:
         return (values[target] for target in self.targets if target in values)
 
-    def activity(self, source: Bus):
+    def activity(self, source: BusReader):
         return source.target_activity(*self.index_predicate)
 
     @property
@@ -1062,7 +1063,7 @@ class MemberActivityDisplayScope(AllTargetsDisplayScope):
     def includes_indexed(self, row) -> bool:
         return self._includes(row.sender, row.target, row.mentions)
 
-    def activity(self, source: Bus):
+    def activity(self, source: BusReader):
         from .bus_activity_index import ChannelActivity
 
         return ChannelActivity.combine((

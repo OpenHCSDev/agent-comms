@@ -12,11 +12,10 @@ from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .native_transcript import NativeRecord
-    from .sent_message import PublishedSentMessage
     from .transcript_events import TranscriptEvent
     from .turn_digests import TurnBound
 
@@ -28,6 +27,7 @@ from .field_codec import MalformedRecord
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .recorded_time import EventTime, UnrecordedEventTime
 from .routing import TurnRouting
+from .sent_message import PublishedSentMessage
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .transcript_events import (
     AssistantTranscript,
@@ -56,7 +56,7 @@ class AssignedSourceIdentity:
 class WireFrontier(DeclaredFamily, affix="WireFrontier"):
     """The wire coordinate owns cursor construction, bounds and source authority."""
 
-    sequence: ClassVar[int] = 0
+    sequence: int
 
     def cursor(self, session_file, offset):
         from .transcripts import NativeTranscriptCursor
@@ -92,7 +92,7 @@ class WireFrontier(DeclaredFamily, affix="WireFrontier"):
 
 @dataclass(frozen=True)
 class NoWireFrontier(WireFrontier):
-    pass
+    sequence = 0
 
 
 @dataclass(frozen=True)
@@ -365,9 +365,11 @@ class TranscriptSource:
         pending: list[NativeRecord] = []
         for record in records:
             pending.append(record)
-            if record.project(lambda original: original.entry.input_boundary):
-                yield TurnDigest(record.entry.require_entry_id(), tuple(
-                    event for original in reversed(pending) for event in original.events))
+            for digest in record.project(lambda original: (
+                TurnDigest(original.entry.require_entry_id(), tuple(
+                    event for source in reversed(pending) for event in source.events)),
+            ) if original.entry.input_boundary else ()):
+                yield digest
                 pending.clear()
 
     def current_draft(self, root: Path, incarnation: ThreadIncarnation) -> TranscriptDraft:
@@ -464,15 +466,11 @@ class AssignedTranscriptSource(TranscriptSource):
         sender's frozen assignments supply its reference, body, time and route.
         Missing births cannot select an assignment, even if a name matches.
         """
-        from .sent_message import PublishedSentMessage
-
         messages = tuple(messages)
         originals = self.sent_messages(message.source for message in messages)
         scope = AssignedSourceIdentity(str(self.root), self.recipient)
         return tuple(
-            PublishedSentMessage(message, scope)
-            if (original := originals.get(message.source)) is not None
-            and message.matches(original) else message
+            PublishedSentMessage.from_originals(message, scope, originals)
             for message in messages
         )
 

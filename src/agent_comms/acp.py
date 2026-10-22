@@ -218,7 +218,10 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             raise RequestError.invalid_params(
                 {"reason": "Selected write requires attached ACP controller"}
             )
-        acknowledgement = await Coordination.run_worker(partial(SelectedWritePlans(self._comms).submit,
+        scope = await Coordination.run_worker(partial(self.cursors.scope, owner, session_id))
+        plans = SelectedWritePlans(self._comms, scope.require_live().wire_root_id)
+        acknowledgement = await Coordination.run_worker(partial(
+            plans.submit,
             owner_name=owner,
             source_seq=request.source_seq,
             source_message_id=request.source_message_id,
@@ -315,7 +318,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
     # ─── Helpers ─────────────────────────────────────────────────────────────
 
-    async def _drain_private_nk(self, session_id: str) -> int:
+    async def _drain_private_nk(self, session_id: str, wire_root_id: str) -> int:
         """Run a selected private wake for this ACP session.
 
         This explicitly configured path reuses the reviewed one-shot native
@@ -340,11 +343,12 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             return 0
         if not owner.process_identity.runs_here():
             raise IdentityConflict("private N/K ACP recipient is not this process owner")
+        lookup = owner.incarnation.require_recorded().lookup
         bus = MessageBus(self._comms.root, self._comms.registry, ResponseWrites)
         delivery = self.cursors.delivery(session_id)
         async with delivery.reading() as source_reads:
             state = await CursorOwner.read_async(
-                bus, owner_name=thread_name, source_reads=source_reads,
+                bus, wire_root_id=wire_root_id, owner_name=thread_name, source_reads=source_reads,
             )
         after_seq = state.covered_seq
         store_path = CoordinationStore.path_in(self._comms.root)
@@ -352,34 +356,31 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         # originals and the selected launch share it instead of verifying twice.
         execution = SelectedExecution(
             root=self._comms.root,
+            wire_root_id=wire_root_id,
             owner_name=thread_name,
             native_package=package,
             cursor_delivery=delivery,
             write_authority=AcpSelectedWriteAuthority(
-                self, session_id, SelectedWritePlans(self._comms)
+                self, session_id, SelectedWritePlans(self._comms, wire_root_id)
             ),
-            **(
-                {"selected_tool_intent": self._private_selected_tool_intent}
-                if self._private_selected_tool_intent is not None
-                else {}
-            ),
+            selected_tool_intent=self._private_selected_tool_intent,
         )
         with execution.cursor_delivery.measurements.operation("accept_deliveries"):
             await _accept_visible_deliveries(
-                bus, store_path, owner.incarnation.lookup, after_seq,
+                bus, wire_root_id, store_path, lookup, after_seq,
                 owner_name=owner.name, acquire_package=execution.validate,
             )
         if self.inputs.owns_execution(session_id, owner):
             # A running turn takes its owner's pending messages as inputs;
             # whatever it cannot take wakes this owner once the turn ends.
             await DeliveredInput.deliver_pending(
-                self.inputs, session_id, owner, bus, after_seq
+                self.inputs, session_id, owner, bus, wire_root_id, after_seq
             )
             await self.cursors.publish(session_id, thread_name)
             return 0
         def select(store):
             with store.session.read():
-                participant = store.participants.get(owner.incarnation.lookup)
+                participant = store.participants.get(lookup)
                 candidate = next_sealed_assignment(
                     store, participant.lookup, owner.name, after_seq=after_seq,
                 )

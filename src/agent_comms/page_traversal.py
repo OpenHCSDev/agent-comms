@@ -12,30 +12,67 @@ from .field_codec import FieldCodec, NullMember, RecordMember, SubclassUnion
 if TYPE_CHECKING:
     from .bus import BusReader
     from .message_page import MessagePage, PageWindow
-    from .messages import Message
+    from .messages import Message, MessageKind
     from .read_basis import MessageDisplayScope
 
 
 class PageCursor(SubclassUnion, affix=""):
-    sequence: int
+    """The cursor owns its bound, source and whether an opposite page exists."""
+
+    def older(self) -> OlderTraversal:
+        return OlderTraversal(self)
+
+    def newer(self) -> NewerTraversal:
+        return NewerTraversal(self)
+
+    @property
+    def history_source(self) -> str | None:
+        return None
+
+    @property
+    def historical(self) -> bool:
+        return False
+
+    @property
+    @abstractmethod
+    def upper(self) -> int | None: ...
+
+    @property
+    @abstractmethod
+    def lower(self) -> int: ...
 
     @abstractmethod
-    def older(self) -> OlderTraversal: ...
-
-    @abstractmethod
-    def newer(self) -> NewerTraversal: ...
+    def opposite_older(
+        self, source: BusReader, scope: MessageDisplayScope, *, limit: int,
+        kinds: tuple[type[MessageKind], ...],
+    ) -> tuple[Message, ...]: ...
 
 
 @dataclass(frozen=True)
-class LiveCursor(PageCursor):
+class SequenceCursor(PageCursor, declared_name=None):
     sequence: int
 
-    def older(self) -> OlderTraversal:
-        return OlderTraversal(self.sequence)
+    def __post_init__(self) -> None:
+        if self.sequence < 0:
+            raise ValueError("History cursors cannot be negative.")
 
-    def newer(self) -> NewerTraversal:
-        return NewerTraversal(self.sequence)
+    @property
+    def upper(self) -> int:
+        return self.sequence
 
+    @property
+    def lower(self) -> int:
+        return self.sequence
+
+    def opposite_older(
+        self, source: BusReader, scope: MessageDisplayScope, *, limit: int,
+        kinds: tuple[type[MessageKind], ...],
+    ) -> tuple[Message, ...]:
+        return scope.records(source, lower=self.sequence - 1, limit=limit, kinds=kinds)
+
+
+@dataclass(frozen=True)
+class LiveCursor(SequenceCursor):
     def to_wire(self) -> int:
         return self.sequence
 
@@ -50,40 +87,48 @@ class LiveCursor(PageCursor):
 
 @dataclass(frozen=True)
 class NewestCursor(NullMember, PageCursor):
-    """No cursor given: a page starts at the newest message, or the oldest for newer pages."""
+    """No cursor given: start at the newest message, or oldest for newer pages."""
 
-    def older(self) -> OlderTraversal:
-        return OlderTraversal()
+    @property
+    def upper(self) -> None:
+        return None
 
-    def newer(self) -> NewerTraversal:
-        return NewerTraversal()
+    @property
+    def lower(self) -> int:
+        return 0
+
+    def opposite_older(
+        self, source: BusReader, scope: MessageDisplayScope, *, limit: int,
+        kinds: tuple[type[MessageKind], ...],
+    ) -> tuple[Message, ...]:
+        return ()
 
 
 @dataclass(frozen=True)
-class HistoryCursor(RecordMember, PageCursor):
+class HistoryCursor(RecordMember, SequenceCursor):
     source: str
-    sequence: int
 
-    def older(self) -> OlderTraversal:
-        return OlderTraversal(self.sequence, self.source)
-
-    def newer(self) -> NewerTraversal:
-        return NewerTraversal(self.sequence, self.source)
-
-
-class PageTraversal(ABC):
-    """Exclusive cursor, traversal order and edge meaning belong together."""
-
-    cursor: int | None
-    source: str | None
+    @property
+    def history_source(self) -> str:
+        return self.source
 
     @property
     def historical(self) -> bool:
-        return self.source is not None
+        return True
 
-    def __post_init__(self) -> None:
-        if self.cursor is not None and self.cursor < 0:
-            raise ValueError("History cursors cannot be negative.")
+
+class PageTraversal(ABC):
+    """Traversal order and edge meaning retain their original nominal cursor."""
+
+    cursor: PageCursor
+
+    @property
+    def source(self) -> str | None:
+        return self.cursor.history_source
+
+    @property
+    def historical(self) -> bool:
+        return self.cursor.historical
 
     @abstractmethod
     def source_indexes(self, start: int, count: int) -> range: ...
@@ -93,12 +138,14 @@ class PageTraversal(ABC):
 
     @abstractmethod
     def records(
-        self, source: BusReader, scope: MessageDisplayScope, *, limit: int, kinds=(),
+        self, source: BusReader, scope: MessageDisplayScope, *, limit: int,
+        kinds: tuple[type[MessageKind], ...] = (),
     ) -> tuple[Message, ...]: ...
 
     @abstractmethod
     def opposite(
-        self, source: BusReader, scope: MessageDisplayScope, *, limit: int, kinds=(),
+        self, source: BusReader, scope: MessageDisplayScope, *, limit: int,
+        kinds: tuple[type[MessageKind], ...] = (),
     ) -> tuple[Message, ...]: ...
 
     @staticmethod
@@ -114,19 +161,22 @@ class PageTraversal(ABC):
 
 @dataclass(frozen=True, slots=True)
 class OlderTraversal(PageTraversal):
-    cursor: int | None = None
-    source: str | None = None
+    cursor: PageCursor = NewestCursor()
 
     def source_indexes(self, start: int, count: int) -> range:
         return range(start, -1, -1)
 
-    def records(self, source, scope, *, limit, kinds=()):
-        return scope.records(source, upper=self.cursor, descending=True, limit=limit, kinds=kinds)
+    def records(
+        self, source: BusReader, scope: MessageDisplayScope, *, limit: int,
+        kinds: tuple[type[MessageKind], ...] = (),
+    ) -> tuple[Message, ...]:
+        return scope.records(source, upper=self.cursor.upper, descending=True, limit=limit, kinds=kinds)
 
-    def opposite(self, source, scope, *, limit, kinds=()):
-        if self.cursor is None:
-            return ()
-        return scope.records(source, lower=self.cursor - 1, limit=limit, kinds=kinds)
+    def opposite(
+        self, source: BusReader, scope: MessageDisplayScope, *, limit: int,
+        kinds: tuple[type[MessageKind], ...] = (),
+    ) -> tuple[Message, ...]:
+        return self.cursor.opposite_older(source, scope, limit=limit, kinds=kinds)
 
     def continuation(self, page: MessagePage) -> OlderTraversal | None:
         cursor = page.oldest_cursor
@@ -140,17 +190,23 @@ class OlderTraversal(PageTraversal):
 
 @dataclass(frozen=True, slots=True)
 class NewerTraversal(PageTraversal):
-    cursor: int = 0
-    source: str | None = None
+    cursor: PageCursor = NewestCursor()
 
     def source_indexes(self, start: int, count: int) -> range:
         return range(start, count)
 
-    def records(self, source, scope, *, limit, kinds=()):
-        return scope.records(source, lower=self.cursor, limit=limit, kinds=kinds)
+    def records(
+        self, source: BusReader, scope: MessageDisplayScope, *, limit: int,
+        kinds: tuple[type[MessageKind], ...] = (),
+    ) -> tuple[Message, ...]:
+        return scope.records(source, lower=self.cursor.lower, limit=limit, kinds=kinds)
 
-    def opposite(self, source, scope, *, limit, kinds=()):
-        return OlderTraversal(self.cursor + 1).records(source, scope, limit=limit, kinds=kinds)
+    def opposite(
+        self, source: BusReader, scope: MessageDisplayScope, *, limit: int,
+        kinds: tuple[type[MessageKind], ...] = (),
+    ) -> tuple[Message, ...]:
+        return scope.records(source, upper=self.cursor.lower + 1, descending=True,
+                             limit=limit, kinds=kinds)
 
     def continuation(self, page: MessagePage) -> NewerTraversal | None:
         cursor = page.newest_cursor

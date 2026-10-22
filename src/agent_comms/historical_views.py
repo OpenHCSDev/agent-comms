@@ -246,14 +246,27 @@ class HistorySource:
     def key(self) -> str:
         return self.root
 
+    @classmethod
+    def capture_original(cls, root: Path, provenance: RegistryProvenance) -> HistorySource:
+        """Capture the same owned source facts used to validate a sealed archive."""
+        identity = RecordedBusIdentity.capture(Bus.path_in(root))
+        return cls(
+            str(root), str(root), identity, identity, Bus(Bus.path_in(root)).revision(),
+            FileRevision.capture(RegistryFile.path_in(root)), provenance,
+        )
+
     def validate(self) -> None:
         root = Path(self.root)
-        if (
-            not self.snapshot_bus_identity.matches(ObservedPath.at(Bus.path_in(root)))
-            or Bus(Bus.path_in(root)).revision() != self.snapshot_bus_revision
-            or FileRevision.capture(RegistryFile.path_in(root)) != self.snapshot_registry_revision
-        ):
-            raise ValueError("Historical snapshot changed; restore it before browsing")
+        error = ValueError("Historical snapshot changed; restore it before browsing")
+        if not self.snapshot_bus_identity.matches(ObservedPath.at(Bus.path_in(root))):
+            raise error
+        current = replace(
+            self,
+            snapshot_bus_revision=Bus(Bus.path_in(root)).revision(),
+            snapshot_registry_revision=FileRevision.capture(RegistryFile.path_in(root)),
+        )
+        if current != self:
+            raise error
 
     def acknowledge(self, displayed: DisplayBasis) -> None:
         """Validate this archived source before updating its own read ledger."""
@@ -332,7 +345,7 @@ class HistoricalMessage(Message):
 
     @property
     def view_cursor(self) -> HistoryCursor:
-        return HistoryCursor(self.source.key, self.seq)
+        return HistoryCursor(source=self.source.key, sequence=self.seq)
 
     @property
     def view_key(self) -> tuple[str, int]:
@@ -440,16 +453,17 @@ class HistoryArchive(DurableFile):
                         ChannelCatalog.filename,
                     )
                 ]
-                revisions = tuple(FileRevision.capture(path) for path in paths)
+                catalog_path = ChannelCatalog.path_in(source_root)
+                catalog_revision = FileRevision.capture(catalog_path)
                 original_bus = Bus(Bus.path_in(source_root))
-                bus_revision = original_bus.revision()
-                original_identity = RecordedBusIdentity.capture(original_bus.path)
                 if source_read is None:
-                    with Registration(RegistryFile.path_in(source_root)).store.reading() as original:
-                        provenance = RegistryProvenance.capture(original)
+                    with Registration(RegistryFile.path_in(source_root)).store.reading() as registry:
+                        original = HistorySource.capture_original(
+                            source_root, RegistryProvenance.capture(registry),
+                        )
                 else:
                     source_read.require_original(source_root)
-                    provenance = source_read.provenance
+                    original = source_read
                 archived = Bus(Bus.path_in(stage))
                 original_bus.backup(archived.path)
                 for path in paths:
@@ -457,17 +471,17 @@ class HistoryArchive(DurableFile):
                         shutil.copy2(path, stage / path.name)
                 TranscriptRoutes(source_root).retain(stage)
                 Registration(RegistryFile.path_in(stage)).store.mark_historical()
-                if (revisions != tuple(FileRevision.capture(path) for path in paths)
-                        or not original_identity.matches(ObservedPath.at(original_bus.path))
-                        or original_bus.revision() != bus_revision
-                        or archived.revision() != bus_revision):
-                    raise ValueError("Historical source changed during snapshot; retry")
-                if source_read is not None:
-                    source_read.require_original(source_root)
+                original.require_original(source_root)
+                error = ValueError("Historical source changed during snapshot; retry")
+                if FileRevision.capture(catalog_path) != catalog_revision:
+                    raise error
+                if archived.revision() != original.snapshot_bus_revision:
+                    raise error
                 source = HistorySource(
                     str(stage.resolve()), str(source_root),
-                    original_identity, RecordedBusIdentity.capture(archived.path), bus_revision,
-                    FileRevision.capture(RegistryFile.path_in(stage)), provenance,
+                    original.bus_identity, RecordedBusIdentity.capture(archived.path),
+                    original.snapshot_bus_revision,
+                    FileRevision.capture(RegistryFile.path_in(stage)), original.provenance,
                 )
                 if not source.provenance.threads:
                     raise ValueError("Historical source has no identity declarations")

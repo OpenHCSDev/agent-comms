@@ -4,27 +4,29 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Iterable, Mapping, Sequence
 from abc import abstractmethod
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 from .catalog_store import ChannelCatalog
-from .declared_family import DeclaredFamily
 from .cli_result import CliResult
+from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, WireForm
 from .registration import Registration
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .shared_ledger import LedgerDocument
-from .thread_identity import ThreadIncarnation
 from .thread_execution import ConversationPreparation
+from .thread_identity import ThreadIncarnation
 from .transcript_sources import AssignedSourceIdentity
 
 if TYPE_CHECKING:
     from .historical_views import HistoricalThread, HistorySource
     from .registry_document import RegistrySnapshot
     from .threads import Thread
+from agent_comms.thread_presentation import NoThreadPresentation, ThreadPresentation
+
 from .agent_activity import AgentActivity
 from .bus_activity_index import ChannelActivity
 from .channel_management import ChannelManagement
@@ -44,22 +46,21 @@ from .goal_management import Goals
 from .historical_views import ChannelDisplayHistory, ChannelHistory, DMDisplayHistory, DMHistory
 from .message_bus import MessageBus
 from .message_page import NEWEST_PAGE, MessagePage, PageBounds
-from .page_traversal import OlderTraversal
 from .message_reference import MessageReference
 from .messages import Message
 from .messaging import Messaging
+from .page_traversal import LiveCursor
 from .presentation import (
     ChannelView,
     CoordinationSnapshot,
-    MessageNotification,
-    ThreadRecord,
     CountedRead,
     InboxRead,
+    MessageNotification,
+    ThreadRecord,
     ThreadView,
     WireRevision,
 )
 from .read_basis import AnonymousViewer, DisplayViewer, DMDisplayBasis, NamedViewer
-from agent_comms.thread_presentation import NoThreadPresentation, ThreadPresentation
 from .threads import current_thread
 from .transcripts import TranscriptCursor, Transcripts
 
@@ -119,7 +120,7 @@ class ThreadViewRead(ConversationPreparation):
         page = DMDisplayBasis.fetch_page(
             self.views.bus, self.views.registry, self.views.root, self.viewer.name,
             self.thread.name, worktree=self.viewer.worktree,
-            bounds=PageBounds(OlderTraversal(self.through.wire.sequence + 1)),
+            bounds=PageBounds(LiveCursor(self.through.wire.sequence + 1).older()),
         )
         if page.messages:
             self.views.mark_page_read(page, worktree=self.viewer.worktree)

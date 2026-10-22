@@ -13,20 +13,20 @@ from agent_comms.bus_publication import AgentOrigin, HumanOrigin
 from agent_comms.bus_tables import BusRow, MessageIdentitySource
 from agent_comms.errors import HumanSendRefusedError
 from agent_comms.field_codec import FieldCodec, MalformedRecord
-from agent_comms.locked_store import RegistryFile
 from agent_comms.historical_views import HistoryArchive
+from agent_comms.locked_store import RegistryFile
 from agent_comms.message_bus import MessageBus
 from agent_comms.message_page import MessagePageRequest, PageBounds
-from agent_comms.page_traversal import NewerTraversal, OlderTraversal
-from agent_comms.read_basis import ChannelDisplayScope
-from agent_comms.messaging import Messaging
 from agent_comms.messages import InfoKind, Message
+from agent_comms.messaging import Messaging
 from agent_comms.native_transcript import NativeTranscript
-from agent_comms.publisher import Publisher
+from agent_comms.page_traversal import LiveCursor, OlderTraversal
 from agent_comms.presentation import WireRevision
+from agent_comms.publisher import Publisher
+from agent_comms.read_basis import ChannelDisplayScope
 from agent_comms.recorded_bus import RecordedBusIdentity
-from agent_comms.revision_views import BusSourceView, StoresView
 from agent_comms.registration import Registration
+from agent_comms.revision_views import BusSourceView, StoresView
 from agent_comms.transcripts import NativeTranscriptCursor, TranscriptCursor
 from agent_comms.typed_table import RowNotFoundError
 
@@ -54,7 +54,7 @@ def test_message_bus_pages_five_channel_messages_two_at_a_time(tmp_path):
     assert pages(channel_bus(tmp_path)) == [(5, 4), (3, 2), (1,)]
 
 
-@pytest.mark.parametrize("traversal", [OlderTraversal(), OlderTraversal(8), NewerTraversal(3)])
+@pytest.mark.parametrize("traversal", [OlderTraversal(), LiveCursor(8).older(), LiveCursor(3).newer()])
 def test_scoped_page_rows_and_edges_share_the_admitted_cut(tmp_path, traversal):
     messages = channel_bus(tmp_path)
     request = MessagePageRequest(

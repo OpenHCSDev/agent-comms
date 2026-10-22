@@ -5,9 +5,17 @@ from __future__ import annotations
 import asyncio
 import inspect
 from abc import ABC, abstractmethod
-from functools import partial
-from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import (
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Iterable,
+    Iterator,
+    Mapping,
+    Sequence,
+)
 from contextlib import AbstractContextManager, aclosing, contextmanager
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -20,16 +28,25 @@ from agent_comms.errors import UnregisteredThreadError
 from agent_comms.historical_views import HistoryArchive
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError
 from agent_comms.message_page import InboxPage, MessagePage, MessagePageRequest, PageBounds
-from agent_comms.message_reference import AfterMessageStart, FirstUnreadStart, InboxStart, MessageReference
+from agent_comms.message_reference import (
+    AfterMessageStart,
+    FirstUnreadStart,
+    InboxStart,
+    MessageReference,
+)
 from agent_comms.messages import Message
-from agent_comms.page_traversal import NewerTraversal
+from agent_comms.page_traversal import LiveCursor
 from agent_comms.publisher import Publisher
 from agent_comms.read_basis import (
-    AnonymousViewer, CapturedSelection, DisplayBasis, DisplayViewer,
-    ListedDeliveries, NamedViewer, WatchAcknowledgment,
+    AnonymousViewer,
+    CapturedSelection,
+    DisplayBasis,
+    DisplayViewer,
+    ListedDeliveries,
+    NamedViewer,
+    WatchAcknowledgment,
 )
 from agent_comms.routing import DeliveryScope
-
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
@@ -125,7 +142,7 @@ class MessageBus[Writes: Publisher]:
         listed = ListedDeliveries(selection, frozenset(row.seq for row in unread),
                                   frozenset(row.target for row in unread))
         result = MessagePageRequest(
-            listed, PageBounds(NewerTraversal(cursor), bounds.limit),
+            listed, PageBounds(LiveCursor(cursor).newer(), bounds.limit),
         ).displayed(self.reads, document, delivery.actor, snapshot, snapshot, self.bus)
         return InboxPage(result.page, result.displayed, total - len(result.page.messages))
 
@@ -251,16 +268,16 @@ class MessageBus[Writes: Publisher]:
         from agent_comms.context_segments.awareness import AwarenessSegment
         from agent_comms.peer_relevance import Prioritized
 
-        first = {relation.peer.lookup for relation in relations
+        first = {relation.peer.require_recorded().lookup for relation in relations
                  if relation.relevance.grants(Prioritized)}
-        rows = self.bus.received(owner.incarnation.lookup, limit=100)
+        rows = self.bus.received(owner.incarnation.require_recorded().lookup, limit=100)
         rows = tuple(sorted(rows, key=lambda row: row.audience.sender_lookup not in first))
         return (AwarenessSegment.capture(self.bus.path, rows),) if rows else ()
 
     def incoming_page(self, name: str, *, after: int) -> MessagePage:
         snapshot = self._registry.snapshot()
         delivery = DeliveryScope.capture(name, snapshot, self._channels.read())
-        return MessagePageRequest(delivery, PageBounds(NewerTraversal(after))).read_opened(self.bus)
+        return MessagePageRequest(delivery, PageBounds(LiveCursor(after).newer())).read_opened(self.bus)
 
     def channels(self) -> Sequence[str]:
         return list(self.channel_declarations())

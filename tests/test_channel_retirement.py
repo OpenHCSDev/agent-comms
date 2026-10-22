@@ -1,21 +1,19 @@
 """Saved audience retirement retains addressed history, never routing authority."""
 
-from agent_comms.bus import Bus, PublicRecord
-
-from bus_history import read_history
-from agent_comms.messages import Membership
 import json
 from dataclasses import replace
 
 import pytest
 
+from agent_comms.bus import Bus, PublicRecord
 from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
-from agent_comms.messages import InfoKind, Message
 from agent_comms.message_page import PageBounds
-from agent_comms.page_traversal import OlderTraversal
+from agent_comms.messages import InfoKind, Membership, Message
+from agent_comms.page_traversal import LiveCursor
+from bus_history import read_history
 from test_private_human_ingress import _root
 
 
@@ -80,7 +78,7 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
     ) == {"a", "b"}
     tail = comms.views.channel_display_page("#engineering", bounds=PageBounds(limit=2))
     assert [m.seq for m in tail.messages] == [3, 4]
-    older = comms.views.channel_display_page("#engineering", bounds=PageBounds(OlderTraversal(3), 2))
+    older = comms.views.channel_display_page("#engineering", bounds=PageBounds(LiveCursor(3).older(), 2))
     assert [m.seq for m in older.messages] == [1, 2]
     assert [m.target for m in read_history(comms, "#engineering")] == [
         m.target for m in rows
