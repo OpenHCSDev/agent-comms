@@ -110,6 +110,11 @@ class RehearsalFiles:
     names: tuple[str, ...]
     restore_bytes: int
 
+    @classmethod
+    def none(cls) -> RehearsalFiles:
+        """The files of a rehearsal that rewrote nothing."""
+        return cls(0, 0, (), 0)
+
     @staticmethod
     def declared(steps: tuple[StepRun, ...]) -> frozenset[str]:
         return frozenset(name for step in steps for name in step.carried.rewritten)
@@ -296,7 +301,7 @@ class UncopiedRehearsal(RehearsedFiles):
     practice copy was taken and the live pass may rewrite nothing. Its own planned
     reconcile, under the hold, still refuses before any write if it names a file."""
 
-    files: RehearsalFiles = RehearsalFiles(0, 0, (), 0)
+    files: RehearsalFiles = field(default_factory=RehearsalFiles.none)
 
 
 @dataclass(frozen=True)
