@@ -32,6 +32,16 @@ A silent or slow tool teaches the commander to work around it, and the workaroun
 
 **Done when** `order say` and `order board` each answer in under one second on the live bus.
 
+### 2b. One measure of how much a change grows the source
+
+"How much did this change grow `src`" has three answers today: raw `git diff --stat`, the commander growth alarm's 40-net-line limit, and the multiple inheritance plan's "net src lines" in every PR body. All three count every line, so the `BusLockFile` factoring (047bccc65), which turned 22 declarations of the lock file name into one, read as +18 when its real growth was +6: twelve of the eighteen were import lines at the top of files.
+
+- One AST-based measure, declared once: parse each changed file before and after, drop the leading block of module-level imports, blank lines and comments, and count what remains. Imports below the top of a file still count; they are code, and usually a dependency cycle being dodged.
+- The ratchet, the growth alarm and PR bodies all read that one measure; their own line counting is deleted.
+- Each report shows lines beside facts: the ratchet's debt measures (string dispatch, type switches, rosters and the rest) are the verdict, and lines are only the signal.
+
+**Done when** the measure reports +6 for 047bccc65, and no other place in the tree counts net source lines.
+
 ### 3. No silent failures
 
 - The bridge watch waits out maintenance and reconnects; it reports the wait instead of crashing.
