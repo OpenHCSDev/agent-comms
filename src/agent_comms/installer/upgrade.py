@@ -64,7 +64,12 @@ from agent_comms.installer.backup import (
     transcripts_held,
 )
 from agent_comms.installer.carry import STEPS, Carried, Carry, CarryChain
-from agent_comms.installer.practice import PracticeMeasurement, practice_copy, prepare_runtime_home
+from agent_comms.installer.practice import (
+    PracticeMeasurement,
+    RehearsalHome,
+    RuntimeHome,
+    practice_copy,
+)
 from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.install_choices import InstallerChoice
 
@@ -349,7 +354,7 @@ class Stack:
     @property
     def uv(self) -> Path:
         """The uv the installer runs, kept in the installer's own state."""
-        return self.home / ".local/state/agent-comms/upgrade-bus/uv"
+        return RuntimeHome.uv_path(self.home)
 
     def require_uv(self) -> None:
         if not os.access(self.uv, os.X_OK):
@@ -571,7 +576,7 @@ def rehearse(root: Path, stack: Stack, installed: Stack, tree: TargetTree,
         practice_copy(root, Path(scratch) / "bus") as (copied, measurement),
     ):
         home = Path(scratch) / "home"
-        prepare_runtime_home(home)
+        RehearsalHome(home).prepare()
         (home / ".claude").symlink_to(Path.home() / ".claude")
         stack = replace(stack, home=home)
         stack.prepare_native()
