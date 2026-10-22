@@ -743,8 +743,10 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
     current = commands.run("git", "-C", checkout, "rev-parse", "HEAD").strip()
     tree = TargetTree(checkout, scratch, target)
     try:
-        if subprocess.run(["git", "-C", str(checkout), "merge-base", "--is-ancestor", current,
-                           target]).returncode:
+        ancestry = ["git", "-C", str(checkout), "merge-base", "--is-ancestor", current, target]
+        with commands.timing(" ".join(ancestry)):
+            answer = subprocess.run(ancestry)
+        if answer.returncode:
             raise UpgradeRefused(f"{target[:12]} does not follow the checkout's {current[:12]}")
         if commands.run("git", "-C", checkout, "status", "--porcelain",
                         "--untracked-files=no").strip():
