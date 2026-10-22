@@ -153,7 +153,7 @@ class PlanIdle(PlanRule):
         return (
             f"PLAN IDLE: {self.phase.plan.declared_name} phase {self.phase.declared_name} ready"
             f" ({self.phase.plan.document}), no open order; done when"
-            f" {self.phase.evidence.describe()} -> {self.phase.task.instruction}"
+            f" {self.reading.describe(self.phase.evidence)} -> {self.phase.task.instruction}"
         )
 
 

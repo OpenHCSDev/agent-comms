@@ -32,26 +32,7 @@ from dataclasses import dataclass
 from functools import cache, cached_property, partial
 from pathlib import Path
 
-sys.path.insert(
-    0,
-    str(
-        Path(__file__).resolve().parents[1]
-        / subprocess.check_output(
-            [
-                "git",
-                "config",
-                "--file",
-                str(Path(__file__).resolve().parents[1] / ".gitmodules"),
-                "--get",
-                "submodule.src/agent_comms/skills/refactor-audit.path",
-            ],
-            text=True,
-        ).strip()
-        / "scripts"
-    ),
-)
-
-import audit
+from agent_comms.pinned_audit import audit
 from audit.findings import Package as AuditPackage, ParsedModule as AuditModule, RawShape
 from audit.repository import Repository as AuditRepository
 from audit.handler_declarations import BuiltinHandlerDeclarations
@@ -92,8 +73,10 @@ class Measure(DeclaredFamily, affix="Measure"):
     @staticmethod
     def source_paths(root: str, tree: Path) -> tuple[str, ...]:
         """Where a revision extracted to the tree imports from: the measured root's directory,
-        then its ``src`` (``agent-comms install`` runs tools with it), never the installed one."""
-        return tuple(dict.fromkeys(str(tree / directory) for directory in (Path(root).parts[0], "src")))
+        then its ``src`` (``agent-comms install`` runs tools with it), never the installed one,
+        then the pinned audit's scripts, a submodule no ``git archive`` of the tree carries."""
+        return (*dict.fromkeys(str(tree / directory) for directory in (Path(root).parts[0], "src")),
+                str(AUDIT_SCRIPTS))
 
     @classmethod
     @abstractmethod
@@ -459,8 +442,7 @@ class TypeErrors(CheckedRevision):
     @staticmethod
     def environment(root: str, tree: Path) -> dict[str, str]:
         """Module names start at the source directory, as they do when the package is installed."""
-        return {**os.environ, "MYPYPATH": os.pathsep.join(
-            (*Measure.source_paths(root, tree), str(AUDIT_SCRIPTS)))}
+        return {**os.environ, "MYPYPATH": os.pathsep.join(Measure.source_paths(root, tree))}
 
 
 @dataclass(frozen=True)
