@@ -63,7 +63,7 @@ from agent_comms.installer.backup import (
     transcripts_held,
 )
 from agent_comms.installer.carry import STEPS, Carried, Carry, CarryChain
-from agent_comms.installer.practice import PracticeMeasurement, RehearsalHome, practice_copy
+from agent_comms.installer.practice import PracticeMeasurement, RehearsalHome, RuntimeHome, practice_copy
 from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.install_choices import InstallerChoice
 
@@ -348,7 +348,7 @@ class Stack:
     @property
     def uv(self) -> Path:
         """The uv the installer runs, kept in the installer's own state."""
-        return self.home / ".local/state/agent-comms/upgrade-bus/uv"
+        return RuntimeHome.uv_path(self.home)
 
     def require_uv(self) -> None:
         if not os.access(self.uv, os.X_OK):

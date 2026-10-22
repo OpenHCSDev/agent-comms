@@ -44,6 +44,10 @@ class RuntimeHome(ABC):
 
     path: Path
 
+    @staticmethod
+    def uv_path(home: Path) -> Path:
+        return home / ".local/state/agent-comms/upgrade-bus/uv"
+
     @property
     @abstractmethod
     def uv(self) -> Path: ...
@@ -54,7 +58,7 @@ class RuntimeHome(ABC):
     def prepare(self) -> None:
         self.path.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.link_runtime()
-        uv = self.path / ".local/state/agent-comms/upgrade-bus/uv"
+        uv = self.uv_path(self.path)
         uv.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         uv.unlink(missing_ok=True)
         uv.symlink_to(self.uv)
@@ -71,7 +75,7 @@ class RehearsalHome(RuntimeHome):
 
     @property
     def uv(self) -> Path:
-        return (Path.home() / ".local/state/agent-comms/upgrade-bus/uv").resolve(strict=True)
+        return self.uv_path(Path.home()).resolve(strict=True)
 
     def link_runtime(self) -> None:
         installed = LaunchRuntime.current_pointer()

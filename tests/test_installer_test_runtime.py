@@ -32,7 +32,7 @@ def test_rehearsal_home_requires_both_installed_inputs(tmp_path, monkeypatch):
     current.symlink_to(selected, target_is_directory=True)
     with pytest.raises(FileNotFoundError):
         home.prepare()
-    uv = installed_home / ".local/state/agent-comms/upgrade-bus/uv"
+    uv = practice.RuntimeHome.uv_path(installed_home)
     uv.parent.mkdir(parents=True)
     uv.symlink_to(executable)
     home.prepare()
@@ -43,7 +43,7 @@ def test_rehearsal_home_requires_both_installed_inputs(tmp_path, monkeypatch):
 def test_test_home_requires_uv_on_path_even_with_an_installer_uv(tmp_path, monkeypatch):
     executable = practice.TestHome(tmp_path).uv
     installed_home = tmp_path / "installed"
-    uv = installed_home / ".local/state/agent-comms/upgrade-bus/uv"
+    uv = practice.RuntimeHome.uv_path(installed_home)
     uv.parent.mkdir(parents=True)
     uv.symlink_to(executable)
     monkeypatch.setenv("HOME", str(installed_home))
