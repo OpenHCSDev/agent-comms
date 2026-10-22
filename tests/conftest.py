@@ -29,6 +29,8 @@ from agent_comms.messages import ConversationRole, InfoKind, Message
 from agent_comms.store_files import _store_lock
 from agent_comms.thread_text import ForkedParent, GivenThreadText
 from agent_comms.typed_table import TypedTable
+from agent_comms.locked_store import RegistryFile
+from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, MaintenanceOperator
 
 pytest_plugins = (goal_owner_fixture.__name__,)
 
@@ -339,6 +341,24 @@ def installed_runtime(durable_home, tmp_path):
     current.parent.mkdir(parents=True)
     current.symlink_to(runtime, target_is_directory=True)
     return LaunchRuntime.installed()
+
+
+@contextmanager
+def maintenance_held(root: Path) -> Iterator[str]:
+    """This process holds ``root``'s maintenance the way an install does, nonce in its
+    environment for its children, so a stored schema may change here and nowhere else."""
+    barrier = MaintenanceBarrier(RegistryFile.path_in(root))
+    held = barrier.begin(MaintenanceOperator.current())
+    previous = os.environ.get(HOLDER_NONCE)
+    os.environ[HOLDER_NONCE] = held.nonce
+    try:
+        yield held.nonce
+    finally:
+        if previous is None:
+            os.environ.pop(HOLDER_NONCE, None)
+        else:
+            os.environ[HOLDER_NONCE] = previous
+        barrier.clear(held)
 
 
 def declare_test_bus(comms: Comms, *, channels=(), threads=()) -> Comms:

@@ -10,6 +10,9 @@ from dataclasses import FrozenInstanceError, replace
 
 import pytest
 
+from agent_comms.maintenance_barrier import MaintenanceNotHeldError
+from conftest import maintenance_held
+
 from agent_comms.coordination_tables.executions import NoPointedAttempt, NoPointedExecution, PointedAttempt, PointedExecution
 from agent_comms.reason_codes import NoReasonCode
 from agent_comms.assignment_states import (
@@ -1432,7 +1435,9 @@ def test_unexplained_columns_and_symlinks_rejected(tmp_path):
         pass
     with sqlite3.connect(path) as c:
         c.execute("ALTER TABLE participants ADD COLUMN unexplained TEXT")
-    with pytest.raises(SchemaVersionError):
+    with pytest.raises(MaintenanceNotHeldError):
+        CoordinationStore(path)
+    with maintenance_held(tmp_path), pytest.raises(SchemaVersionError):
         CoordinationStore(path)
     link = tmp_path / "link"
     link.symlink_to(path)

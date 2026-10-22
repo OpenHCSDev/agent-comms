@@ -115,6 +115,7 @@ from .read_basis import AnonymousViewer, DisplayViewer, OnReadWatchAcknowledgmen
 from .registry_document import RegistrySnapshot
 from .runtime import RuntimeConnection, socket_path
 from .schema_report import StoreSchemaReport, StoreSchemaReports
+from .typed_table import ReconciledFile
 from .send_result import SendResult
 from .shared_ledger import LedgerDocument
 from .thread_execution import (
@@ -1705,6 +1706,26 @@ class SchemaReportCliCommand(CliCommand, declared_name="schema-report"):
 
     def apply(self, ctx: Comms) -> CliResult:
         return StoreSchemaReports(StoreSchemaReport.scan(ctx))
+
+
+@dataclass(frozen=True)
+class ReconciledStoresResult(CliResult):
+    """The bus files whose schema the reconcile changed, relative to the bus root."""
+
+    rewritten: tuple[str, ...]
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReconcileStoresCliCommand(CliCommand, declared_name="reconcile-stores"):
+    help = ("Reconcile every declared store's schema onto this runtime's declarations; "
+            "the installer runs it under maintenance after the outgoing owners stop")
+
+    def apply(self, ctx: Comms) -> CliResult:
+        rewritten = []
+        for path, owner in sorted(ReconciledFile.existing_in(ctx.root).items()):
+            if owner.reconcile_at(path):
+                rewritten.append(str(path.relative_to(ctx.root)))
+        return ReconciledStoresResult(tuple(rewritten))
 
 
 @dataclass(frozen=True, kw_only=True)

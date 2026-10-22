@@ -20,6 +20,8 @@ from agent_comms.coordination_errors import (
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.typed_table import (
     CarriedWriter,
+    HeldBusFile,
+    ReconciledFile,
     SQLiteTableName,
     StoreWriter,
 )
@@ -106,12 +108,16 @@ class ReadableStore(StoreFile):
             yield consumer.capture(connection, *arguments)
 
 
-class CoordinationStore(CarriedWriter):
+class CoordinationStore(CarriedWriter, ReconciledFile):
     """Own SQLite read snapshots and the shared writer busy policy."""
 
     filename = "coordination.sqlite3"
     writer_timeout = 5.0
     header = b"SQLite format 3\0"
+
+    @classmethod
+    def table_schema(cls) -> type[CoordinatorTable]:
+        return CoordinatorTable
 
     @classmethod
     def is_database(cls, path: Path) -> bool:
@@ -259,7 +265,7 @@ class CoordinationStore(CarriedWriter):
         self._connection = self._open_connection(contention)
         try:
             self._configure_connection()
-            CoordinatorTable.reconcile_schema(self._connection)
+            CoordinatorTable.install_schema(self._connection, HeldBusFile(CoordinationStore, self.path))
             self._enforce_private_modes()
         except BaseException:
             self._connection.close()

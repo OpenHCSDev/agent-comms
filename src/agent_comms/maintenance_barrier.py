@@ -39,6 +39,16 @@ class MaintenanceHeldError(RelationViolationError, ToolRefusedError):
     """The bus is in maintenance: its readers close and wait for READY."""
 
 
+class MaintenanceNotHeldError(RelationViolationError):
+    """Work only this root's maintenance holder may do, attempted by a process that does not
+    hold it."""
+
+    @classmethod
+    def unheld(cls, change: str) -> MaintenanceNotHeldError:
+        return cls(f"{change} needs this root's maintenance hold, and no install holds it: "
+                   "only agent-comms install changes it")
+
+
 class HeldSends:
     @staticmethod
     @contextmanager
@@ -82,6 +92,12 @@ class MaintenancePhase(DeclaredFamily, LifecycleState, affix="Phase"):
     def hold_for(cls, barrier: MaintenanceBarrier, state: MaintenanceStatus,
                  operator: MaintenanceOperator) -> MaintenanceState:
         raise MaintenanceHeldError('Another maintenance operation holds this root')
+
+    @classmethod
+    def require_held_by(cls, state: MaintenanceState, holder: str, change: str) -> None:
+        if holder != state.nonce:
+            raise MaintenanceNotHeldError(
+                f"{change} needs this root's maintenance hold; another process holds it")
 
     @classmethod
     def send_new(cls, delegate, *args):
@@ -128,6 +144,10 @@ class InstallingPhase(MaintenancePhase):
 
 class ReadyPhase(MaintenancePhase):
     new_sends = running_sends = GrantedSends
+
+    @classmethod
+    def require_held_by(cls, state: MaintenanceState, holder: str, change: str) -> None:
+        raise MaintenanceNotHeldError.unheld(change)
 
     @classmethod
     def holder_dead(cls, state: MaintenanceState) -> bool:
@@ -181,6 +201,11 @@ class MaintenanceStatus:
     def require_open_to(self, holder: str) -> None:
         """Open, or held by ``holder``: the operation holding maintenance still runs its own reads."""
         self.require_open()
+
+    def require_held_by(self, holder: str, change: str) -> None:
+        """``change`` runs only in the process holding this root's maintenance: a root that
+        never enabled maintenance has no holder."""
+        raise MaintenanceNotHeldError.unheld(change)
 
 
 @dataclass(frozen=True, eq=False)
@@ -247,6 +272,9 @@ class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
     def require_open_to(self, holder: str) -> None:
         if holder != self.nonce:
             self.require_open()
+
+    def require_held_by(self, holder: str, change: str) -> None:
+        self.phase.require_held_by(self, holder, change)
 
     def require_draining(self) -> None:
         if self.phase is not DrainingPhase:

@@ -18,6 +18,7 @@ from agent_comms.comms import Comms, wire
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_results import Applied
 from agent_comms.coordinator import Coordination
+from agent_comms.launch_root import LaunchRoot
 from agent_comms.errors import (
     RelationViolationError,
     UnregisteredThreadError,
@@ -84,8 +85,8 @@ def test_explicit_root_override_preserves_private_user_receipt(
 ) -> None:
     comms, _, root_id, _ = _root(tmp_path)
     monkeypatch.setenv("HOME", str(tmp_path / "other-home"))
-    monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
-    selected = wire()
+    with LaunchRoot(comms.root).selected():
+        selected = wire()
     assert selected.root == comms.root
     sent = selected.messaging.send_user_message("alice", "explicit", worktree=str(tmp_path))
     assert selected.bus.log.read_delivery_cohort(root_id, sent.seq).message == sent

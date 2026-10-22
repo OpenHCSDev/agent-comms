@@ -177,10 +177,10 @@ class RootFile:
                 import_module(module.name)
 
     @classmethod
-    def declarations_in(cls, root: Path) -> Iterator[tuple[type[RootFile], Path]]:
+    def declarations_in(cls, root: Path) -> Iterator[tuple[type[Self], Path]]:
         """Each declaring owner and its directory, once across composed capabilities."""
-        pending: list[type[RootFile]] = [cls]
-        visited: set[type[RootFile]] = set()
+        pending: list[type[Self]] = [cls]
+        visited: set[type[Self]] = set()
         while pending:
             family = pending.pop()
             if family in visited:
@@ -189,6 +189,15 @@ class RootFile:
             pending.extend(family.__subclasses__())
             if "filename" in vars(family):
                 yield family, root / family.root_directory
+
+    @classmethod
+    def existing_in(cls, root: Path) -> dict[Path, type[Self]]:
+        """Every existing file a declared owner names, with that owner, never a probe of
+        listed files: an undeclared file (a native writer's transient claim, a lock) has no
+        owner, so nothing that walks a bus by its declarations meets it."""
+        RootFile.load_declarations()
+        return {path: owner for owner, directory in cls.declarations_in(root)
+                for path in owner.matching_in(directory)}
 
     @classmethod
     def paths_in(cls, root: Path) -> frozenset[Path]:
