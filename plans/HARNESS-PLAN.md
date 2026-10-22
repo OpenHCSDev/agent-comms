@@ -20,8 +20,7 @@ A silent or slow tool teaches the commander to work around it, and the workaroun
 
 - `CoordinationStore.observed()` (`coordination_database.py:220`) and `is_database()` (`:118`) open a plain handle on the live database inside processes that hold SQLite locks on it; closing that handle drops the process's locks. This is the likely cause of the 2026-10-21 corruption (fork AL's forensics). The required answer is what sits at the path (missing, not a regular file, not our database, our store); the store's own read-only connection answers it, so the header read is deleted. Callers: `transcripts.py:397`, `coordination_tables/refusals.py:71`, `notification_assignment.py:350`, `installer/backup.py:271`.
 - Installer backup and restore (`installer/backup.py:271-278`, `:360-366`) take the store's own lock instead of relying on writers having been stopped.
-- The store lock wait (`store_files.py:157`) fails within seconds and names the holder's pid and command.
-- The bus wire lock and its hand-spelled paths belong to the virtual bus batch (#2549), which deletes them; this plan does not touch them.
+- The bus wire lock, its hand-spelled paths and the store lock wait (`store_files.py:157`, which must fail within seconds naming the holder) belong to the virtual bus batch (#2549), which rewrites them; this plan does not touch them.
 
 **Done when** no code outside a store's owner opens its live file, and a lock held during an install is named in the install log within seconds.
 
@@ -32,9 +31,17 @@ Found 2026-10-22: a store writer reconciles any schema difference on open (`coor
 - `reconcile_schema` takes the writer, and inside its existing schema-differs branch asks `writer.require_schema_change()`: allowed only while this process holds the bus's maintenance hold (`MaintenanceStatus.require_held_by(holder)`: the open member refuses, a held member compares nonces). One rule for every StoreWriter; fresh empty stores still create their schema.
 - The installer reconciles each declared store under the hold, after the backup, with the staged runtime, so owners start against stores that already match.
 - Step dry runs and `before_stop` run on the practice copy and under the hold, never on the live root before it.
-- `maintenance_barrier.py:452` `ingress_async` stops holding the shared wire lock across its caller's awaits (the open test `test_no_wire_lock_scope_or_yielded_caller_contains_await` names it); held across waits, the fleet's shared locks starved installs 52 and 53 of the exclusive lock.
+- `ingress_async` holding a shared lock across its caller's awaits (the fleet's shared locks starved installs 52 and 53 of the exclusive lock) is #2549's: that batch rewrites `ingress_async` onto the registry lock and still yields inside it (PR comment, 2026-10-22).
 
 **Done when** a newer runtime opening the live bus outside an install fails loudly naming the store and the hold it lacks, and an install with running units completes without anyone stopping them by hand.
+
+### 1d. Main's own tests pass
+
+On 2026-10-22 the full CI workflow on main showed 197 failures, 127 of them in `tests/guards/test_debt_ratchet.py`, and the merge queue's install rehearsal would have failed every PR queued after #2595. A red on main makes every later run ask whether a red is real (rules/tests-and-commands.md). Every red is fixed at its owner or handed to a named open PR, one cause per change.
+
+- Declared evidence paths: a path a plan phase names that main never held reads as absent and passes (`phase_evidence.py` `present_modules`); a guard proves every declared path exists in git history.
+
+**Done when** the CI workflow passes on main, and a red that lands is owned the tick it appears.
 
 ### 2. Commander verbs take a fixed, small time
 
