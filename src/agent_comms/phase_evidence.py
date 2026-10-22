@@ -69,6 +69,18 @@ class MainTree:
         run.check_returncode()
         return ParsedModule(path, run.stdout, ast.parse(run.stdout, filename=path), path)
 
+    def present_modules(self, paths: tuple[str, ...]) -> Iterator[ParsedModule]:
+        """The parsed modules of the ``paths`` main holds. Plans finish by deleting files, so
+        a declared path main no longer holds has no module, and nothing it held is left."""
+        checked = subprocess.run(
+            ("git", "-C", str(self.repo.checkout), "cat-file", "--batch-check"),
+            input="".join(f"{self.commit}:{path}\n" for path in paths),
+            capture_output=True, text=True, timeout=60, check=True,
+        ).stdout.splitlines()
+        for path, line in zip(paths, checked, strict=True):
+            if not line.endswith(" missing"):
+                yield self.module(path)
+
     def modules(self, paths: tuple[str, ...]) -> Iterator[ast.Module]:
         """Every Python module under ``paths``, read in one ``git cat-file --batch``."""
         listed = self.git("ls-tree", "-r", "--name-only", self.commit, "--", *paths)
@@ -428,8 +440,8 @@ class NoExactCopies(MainEvidence):
     def read(self, main: MainTree) -> bool:
         shapes = [
             ErasedBody.of(function)
-            for path in self.paths
-            for function in NamedFunctions.of(self.names, main.module(path).tree)
+            for module in main.present_modules(self.paths)
+            for function in NamedFunctions.of(self.names, module.tree)
         ]
         return len(shapes) == len(set(shapes))
 
@@ -445,9 +457,9 @@ class NoGodFunction(MainEvidence):
     name: str
 
     def read(self, main: MainTree) -> bool:
-        module = main.module(self.path)
         return not any(
             found
+            for module in main.present_modules((self.path,))
             for function in NamedFunctions.of((self.name,), module.tree)
             for found in GodFunction.from_node(function, module)
         )
@@ -467,8 +479,8 @@ class NoAbsenceProbes(MainEvidence):
         """Every node is offered to the probe, whose own pattern decides what it counts."""
         return not any(
             ForeignAbsenceProbe.count(node)
-            for path in self.paths
-            for node in ast.walk(main.module(path).tree)
+            for module in main.present_modules(self.paths)
+            for node in ast.walk(module.tree)
         )
 
     def describe(self) -> str:
@@ -570,7 +582,8 @@ class ParentsShared(MainEvidence):
             *self.names,
             *(
                 declared.name
-                for declared in Classes.of(main.module(path).tree for path in self.paths)
+                for declared in Classes.of(
+                    module.tree for module in main.present_modules(self.paths))
             ),
         }
         members = Counter(
