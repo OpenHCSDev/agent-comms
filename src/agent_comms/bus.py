@@ -19,7 +19,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message
-from agent_comms.typed_table import SQLiteTableName, StoreWriter
+from agent_comms.typed_table import CarriedWriter, SQLiteTableName
 
 
 @dataclass(frozen=True)
@@ -42,7 +42,7 @@ class KeyedPrivateRecord(PrivateRecord, KeyedPublication):
     pass
 
 
-class Bus(StoreWriter):
+class Bus(CarriedWriter):
     """One SQLite transaction owns the sequence and all of a record's fields."""
 
     def __init__(self, path: Path):
