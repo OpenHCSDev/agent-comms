@@ -10,6 +10,7 @@ from acp.schema import SessionInfoUpdate
 
 from agent_comms.acp import CommsAgent, CommsClient
 from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.child_process import ProcessIdentity
 
@@ -37,7 +38,7 @@ class AttachmentClient:
 async def test_close_retires_one_real_subscription_and_permission(tmp_path, monkeypatch):
     # This declared model catalogue avoids SDK/model discovery; no model runs.
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/one")
-    comms = wire(tmp_path / "w")
+    comms = installed_comms(tmp_path / "w")
     owner = CommsAgent(comms, runtime_enabled=True, auto_wake=False)
     client = CommsClient(comms, auto_wake=False, use_unstable_protocol=True)
     other = CommsClient(comms, auto_wake=False, use_unstable_protocol=True)

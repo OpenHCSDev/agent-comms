@@ -58,6 +58,7 @@ from .field_codec import (
     FieldDirective,
     Normalize,
     WireChoices,
+    WireForm,
     WireName,
     WireOmitDefault,
 )
@@ -321,7 +322,7 @@ class TaskPublished(ToolResult):
 class InboxPageRead(ToolResult):
     """One unread page; only its returned references can be acknowledged."""
 
-    messages: tuple[Message, ...]
+    messages: tuple[Annotated[Message, WireForm], ...]
     acknowledged: int
     remaining: int
     unresolved_inputs: tuple[UnresolvedInput, ...]

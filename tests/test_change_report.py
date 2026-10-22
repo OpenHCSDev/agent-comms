@@ -95,7 +95,7 @@ class TestChangeReportKind:
         stored, = list(reporter.views.history_page(CommandTarget.named("fixer"), viewer=NamedViewer("reporter")).messages)
         assert stored.report == report(reporter_repo)
         assert stored.type is ChangeReportKind
-        assert Message.from_committed_wire(committed.to_wire()) == stored
+        assert Message.from_committed_wire(committed.to_wire()) == stored.envelope
 
     def test_missing_fields_are_named_in_the_refusal(self):
         from agent_comms.field_codec import FieldCodec, MalformedRecord

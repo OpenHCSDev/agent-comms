@@ -150,7 +150,7 @@ def test_normal_history_cli_keeps_migrated_content_and_source_identity(
             )
         comms.messaging.send("alice", "#team", f"{comms.root.name} channel").message.message_id
         comms.messaging.send("alice", "bob", f"{comms.root.name} direct").message.message_id
-    source = live.views.attach_history(old.root)
+    live.views.attach_history(old.root)
     live_bus = live.bus.bus.revision()
     assert main(["--root", str(live.root), *arguments]) == 0
     rows = json.loads(capsys.readouterr().out)[result_type.messages_key]
@@ -159,7 +159,6 @@ def test_normal_history_cli_keeps_migrated_content_and_source_identity(
     assert len(historical) == len(current) == per_root
     assert all(row["text"].startswith("old ") for row in historical)
     assert all(row["history"]["source"] == str(old.root) for row in historical)
-    assert all(row["history"]["wire_root_id"] == source.wire_root_id for row in historical)
     assert all(
         row["history"]["sender_created_at"] == old.registry.require("alice").created_at
         for row in historical

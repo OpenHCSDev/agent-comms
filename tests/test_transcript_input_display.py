@@ -85,7 +85,7 @@ def test_incomplete_durable_annotation_schema_is_not_repaired(tmp_path):
 
 @pytest.mark.asyncio
 async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_path):
-    comms = wire(tmp_path / "wire")
+    comms = installed_comms(tmp_path / "wire")
     session = tmp_path / "session.jsonl"
     session.write_text(
         "".join(

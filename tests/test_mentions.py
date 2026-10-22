@@ -29,7 +29,7 @@ def test_mentions_are_addressees_without_changing_channel_delivery(tmp_path):
     assert [item.message_id for item in comms.bus.inbox("alpha")] == [message.message_id]
     assert [item.message_id for item in comms.bus.inbox("beta")] == [message.message_id]
     assert read_history(Comms(tmp_path), "#team")[0].mentions == message.mentions
-    assert Message.from_wire(message.to_wire()) == message
+    assert Message.from_wire(message.to_wire()) == message.envelope
     scheduled = ScheduledTurn.incoming(message)
     assert scheduled.origin.exact_reply_target == "#team"
     assert "Response policy: mentioned_only" in scheduled.prompt
@@ -171,7 +171,7 @@ def test_failed_delivery_posts_a_non_waking_notice_to_the_origin(tmp_path):
     assert isinstance(notice.role, NoticeRole) and not notice.role.response_policy(notice).starts_turn
     with comms.bus.opened_activity() as clocks:
         assert "sender" not in comms.views.last_sent_timestamps(clocks.sent.items(), registry=comms.registry.snapshot())
-    assert Message.from_wire(notice.to_wire()) == notice
+    assert Message.from_wire(notice.to_wire()) == notice.envelope
 
 
 def test_model_tool_changes_own_and_another_thread(comms, tmp_path, monkeypatch):

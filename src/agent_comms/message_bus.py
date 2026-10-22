@@ -246,7 +246,8 @@ class MessageBus[Writes: Publisher]:
     ):
         """Bounded frozen-recipient pointers, independent of UI read state.
 
-        Peer relevance orders the selected rows, never changes their window.
+        The window is the newest received rows, shown in sequence order. Peer relevance
+        orders the selected rows, never changes their window.
         """
         from agent_comms.context_segments.awareness import AwarenessSegment
         from agent_comms.peer_relevance import Prioritized
@@ -254,7 +255,8 @@ class MessageBus[Writes: Publisher]:
         first = {relation.peer.lookup for relation in relations
                  if relation.relevance.grants(Prioritized)}
         rows = self.bus.received(owner.incarnation.lookup, limit=100)
-        rows = tuple(sorted(rows, key=lambda row: row.audience.sender_lookup not in first))
+        rows = tuple(sorted(
+            rows, key=lambda row: (row.audience.sender_lookup not in first, row.seq)))
         return (AwarenessSegment.capture(self.bus.path, rows),) if rows else ()
 
     def incoming_page(self, name: str, *, after: int) -> MessagePage:

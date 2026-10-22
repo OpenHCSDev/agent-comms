@@ -25,17 +25,29 @@ from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 @pytest.mark.asyncio
 async def test_observation_waits_for_the_held_bus_attachment(tmp_path):
     comms, agent, root_id = _session(tmp_path)
+    held, release = threading.Event(), threading.Event()
+
+    def holder():
+        with _store_lock(comms.bus.bus.path):
+            held.set()
+            assert release.wait(5)
+
+    owner = threading.Thread(target=holder)
+    owner.start()
+    assert held.wait(2)
     # A busy original source is pending, not an unavailable inbox. Cancelling
     # one waiter must leave the holder and the other observations intact.
-    with _store_lock(comms.bus.bus.path):
-        tasks = [asyncio.create_task(agent.inputs._observe_private_revision("beta", root_id))
-                 for _ in range(3)]
-        await asyncio.sleep(0.08)
-        assert not any(task.done() for task in tasks)
-        tasks[0].cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await tasks[0]
-        assert not any(task.done() for task in tasks[1:])
+    tasks = [asyncio.create_task(agent.inputs._observe_private_revision("beta", root_id))
+             for _ in range(3)]
+    await asyncio.sleep(0.08)
+    assert not any(task.done() for task in tasks)
+    tasks[0].cancel()
+    await asyncio.sleep(0.04)
+    assert not any(task.done() for task in tasks[1:])
+    release.set()
+    owner.join(5)
+    with pytest.raises(asyncio.CancelledError):
+        await tasks[0]
     observed = await asyncio.wait_for(asyncio.gather(*tasks[1:]), 5)
     assert observed[0] == observed[1]
 

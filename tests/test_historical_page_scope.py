@@ -7,6 +7,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.comms import Comms
+from conftest import installed_comms
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.message_page import PageBounds
 from agent_comms.page_traversal import HistoryCursor
@@ -46,7 +47,7 @@ def history(tmp_path):
             message = replace(message, target="#all")
         rows.append(message)
     Bus.install(Bus.path_in(old.root), history=rows)
-    live = Comms(tmp_path / "live")
+    live = installed_comms(tmp_path / "live")
     # Deliberately different membership: source scope must not use live tags.
     live.registry.declare(live.registry.new_thread('alice', frozenset({'ops'}), str(live.root), created_at=500))
     live.registry.declare(live.registry.new_thread('alice-old', frozenset({'api'}), str(live.root), created_at=501))
