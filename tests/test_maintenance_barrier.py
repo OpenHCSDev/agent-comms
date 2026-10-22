@@ -360,3 +360,23 @@ async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> N
     await asyncio.wait_for(pending, 3)
     with output.transcript.reading() as source:
         assert source.current_draft(output.transcript.root, output.transcript.incarnation).external_row().events == (AssistantTranscript('prefix once', timestamp=1., position='item'),)
+
+
+def test_a_registry_write_is_refused_to_all_but_the_maintenance_holder(tmp_path: Path, monkeypatch) -> None:
+    """The installer stops only its owners; the connector, bridges and forks keep running, so the
+    registry itself refuses their writes during a hold, and the holder's own writes still land."""
+    from agent_comms.maintenance_barrier import HOLDER_NONCE
+
+    comms = Comms(tmp_path)
+    comms.registry.declare(comms.registry.new_thread(name='a', tags=frozenset(), worktree='/wt'))
+    before = comms.registry.store.path.read_bytes()
+    gate = MaintenanceBarrier(comms.registry.store.path)
+    hold = gate.begin(MaintenanceOperator.current())
+    monkeypatch.delenv(HOLDER_NONCE, raising=False)
+    with pytest.raises(RelationViolationError):
+        comms.registry.declare(comms.registry.new_thread(name='b', tags=frozenset(), worktree='/wt'))
+    assert comms.registry.store.path.read_bytes() == before
+    monkeypatch.setenv(HOLDER_NONCE, hold.nonce)
+    comms.registry.declare(comms.registry.new_thread(name='b', tags=frozenset(), worktree='/wt'))
+    assert 'b' in comms.registry
+    gate.clear(hold)

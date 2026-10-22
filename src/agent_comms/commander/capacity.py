@@ -12,8 +12,9 @@ from ..turn_digests import OrderEditCountRead
 
 @dataclass(frozen=True)
 class Load(ToolResult):
-    """Order and edit debt, and the receiving forks that share it: every fork is another reader of
-    the same debt, so the debt each thread carries is the total over the commander and its forks."""
+    """Order and edit debt, and the working forks that share it: a fork reading the debt now is
+    another reader of it, so the debt each thread carries is the total over the commander and
+    its working forks. An idle fork reads nothing; it counts once it works again or retires."""
     owed: int
     timers_up: int
     unjudged: int
@@ -27,7 +28,8 @@ class Load(ToolResult):
         owed = tuple(t for t in held if t.pending)
         forks = tuple(sorted(
             thread.name for thread in snapshot.threads.values()
-            if thread.parent.named(owner.name) and snapshot.status(thread.name).receiving
+            if thread.parent.named(owner.name)
+            and comms.agents.is_working(thread.incarnation, snapshot)
         ))
         unjudged = sum(
             read.read() for read in OrderEditCountRead.for_orders(comms.root, snapshot, held)
@@ -45,7 +47,7 @@ class Load(ToolResult):
 
     def __str__(self) -> str:
         return (f'load {self.total:.0f} ({self.owed} open orders, {self.timers_up} review timers up, '
-                f'{self.unjudged} unjudged edits), {len(self.forks)} live forks {list(self.forks)},'
+                f'{self.unjudged} unjudged edits), {len(self.forks)} working forks {list(self.forks)},'
                 f' {self.share:.0f} per reader')
 
 

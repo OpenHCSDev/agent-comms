@@ -1,9 +1,6 @@
 """Goal absence is dispatched before work; a clear never revives a turn's goal."""
 
-from agent_comms.bus import Bus
-
 import os
-import shutil
 from contextlib import ExitStack, contextmanager
 from uuid import uuid4
 
@@ -11,7 +8,6 @@ import pytest
 
 from agent_comms import agent_events as events
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import Comms
 from agent_comms.goal_actions import ClearGoalAction, SetGoalAction
 from agent_comms.goal_attempts import ProviderUsageTotal
 from agent_comms.goal_turn_permit import NoLaunchPermit
@@ -20,15 +16,6 @@ from agent_comms.pi_payloads import PiUsage
 from agent_comms.thread_identity import TurnId
 from agent_comms.turn_goal_account import TurnGoalAccount
 from agent_comms.turn_terminal import EndedWithoutResult, OperatorStopped
-
-
-@pytest.fixture
-def copied_goal_bus(tmp_path):
-    source = Comms(tmp_path / "source")
-    Bus.install(Bus.path_in(source.root))
-    target = tmp_path / "copy"
-    shutil.copytree(source.root, target)
-    return Comms(target)
 
 
 @contextmanager

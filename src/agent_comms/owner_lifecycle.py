@@ -434,6 +434,9 @@ class OwnerLifecycle:
         with self.registry.store.locked():
             snapshot = self.registry.snapshot()
             thread = self.registry.require(name)
+            thread.role.require_executable(
+                RelationViolationError("Only agent threads can be stopped.")
+            )
             if not snapshot.status(thread.name).active and (
                 thread.process_identity.allows_inactive_stop()
             ):

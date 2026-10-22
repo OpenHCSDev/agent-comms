@@ -1,5 +1,6 @@
 """Canonical inspection unblocks standby without fabricating native delivery."""
 
+from agent_comms.bus import Bus
 from agent_comms.lifecycle_capability import Unresolved
 from agent_comms.channel_targets import CommandTarget
 import os
@@ -32,7 +33,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
         comms.registry.declare(
             comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     comms.agents.begin_turn("parent", "parent-delegation-in-flight")
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Delegate and wait"))
     messages = [

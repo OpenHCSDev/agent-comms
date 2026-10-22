@@ -309,7 +309,6 @@ class Registration:
         with self.store.editing() as edit:
             owner = RegistryOwner.capture_local(edit.original.snapshot, expected.name)
             owner.require_claim(expected, generation)
-            self._assert_maintenance_open_unlocked()
             leased, _ = edit.lease_turn(owner.thread, turn.value, None)
             edit.commit()
             return leased, generation
@@ -331,15 +330,9 @@ class Registration:
             owner = RegistryOwner.capture_local(snapshot, expected.name)
             owner.require_exact(snapshot, expected, generation)
             owner.thread.turn_record.read().require_idle()
-            self._assert_maintenance_open_unlocked()
             result = edit.lease_turn(owner.thread, turn.value, routing)
             edit.commit()
             return result
-
-    def _assert_maintenance_open_unlocked(self) -> None:
-        from .maintenance_barrier import MaintenanceBarrier
-
-        MaintenanceBarrier(self.store.path).assert_open_unlocked()
 
     def lease_local_turn(
         self, name: str, turn_id: str, *, routing: TurnRouting | None = None
@@ -349,7 +342,6 @@ class Registration:
         with self.store.editing() as edit:
             owner = RegistryOwner.capture_local(edit.original.snapshot, name)
             owner.thread.turn_record.read().require_idle()
-            self._assert_maintenance_open_unlocked()
             result = edit.lease_turn(owner.thread, turn.value, routing)
             edit.commit()
             return result
