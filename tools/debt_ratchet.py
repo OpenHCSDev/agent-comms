@@ -7,7 +7,9 @@ import argparse
 import ast
 import dataclasses
 import enum
+import hashlib
 import importlib
+import importlib.metadata
 import inspect
 import importlib.resources
 import importlib.util
@@ -15,6 +17,7 @@ import io
 import itertools
 import json
 import os
+import pickle
 import re
 import subprocess
 import sys
@@ -50,6 +53,63 @@ from agent_comms.field_codec import FieldCodec, boundary_decoder, projected
 from agent_comms.mro_dispatch import MroDispatch, handles
 
 AUDIT_SCRIPTS = Path(audit.__path__[0]).parent
+
+
+class ContentCache:
+    """Results that are pure functions of content, stored under a digest of that content, of
+    this ratchet's own code and of the checkers it runs. The key is the content, so an entry
+    never goes stale: any change to what produced it is a different key."""
+
+    directory: typing.ClassVar[Path] = Path.home() / ".cache/agent-comms/debt-ratchet"
+    checkers: typing.ClassVar[tuple[str, ...]] = ("black", "ruff", "mypy")
+
+    @staticmethod
+    @cache
+    def code() -> bytes:
+        """This ratchet's measuring code: its own source, the reader it runs in revisions, the
+        pinned audit's scripts, the modules it imports directly, and each checker's version."""
+        modules = {sys.modules[StoredForm.__module__], *(
+            module for module in vars(sys.modules[__name__]).values()
+            if isinstance(module, types.ModuleType)
+            and module.__name__.partition(".")[0] == agent_comms.__name__)}
+        origins = (module.__spec__.origin for module in modules
+                   if module.__spec__ and module.__spec__.origin)
+        files = sorted({Path(__file__).resolve(), *(AUDIT_SCRIPTS / "audit").rglob("*.py"),
+                        *(Path(origin).resolve() for origin in origins)})
+        digest = hashlib.sha256(f"{sys.version}\0{__name__}".encode())
+        for name in ContentCache.checkers:
+            digest.update(f"\0{name}={importlib.metadata.version(name)}".encode())
+        for path in files:
+            digest.update(b"\0" + str(path).encode() + b"\0" + path.read_bytes())
+        return digest.digest()
+
+    @classmethod
+    def path(cls, *parts: str) -> Path:
+        key = hashlib.sha256(b"\0".join((cls.code(), *(part.encode() for part in parts))))
+        identity = key.hexdigest()
+        return cls.directory / identity[:2] / identity
+
+    @classmethod
+    def stored(cls, *parts: str) -> tuple[object, ...]:
+        """The stored result for these parts, as a one-item tuple, or an empty one."""
+        path = cls.path(*parts)
+        return (pickle.loads(path.read_bytes()),) if path.is_file() else ()
+
+    @classmethod
+    def store[Value](cls, value: Value, *parts: str) -> Value:
+        path = cls.path(*parts)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as staged:
+            staged.write(pickle.dumps(value))
+        os.replace(staged.name, path)
+        return value
+
+    @classmethod
+    def memo[Value](cls, compute: Callable[[], Value], *parts: str) -> Value:
+        for value in cls.stored(*parts):
+            return typing.cast(Value, value)
+        return cls.store(compute(), *parts)
+
 
 
 class Side(enum.Enum):
@@ -164,7 +224,24 @@ class InventoryMeasure[Reading](Measure):
         """This revision's measurements from its files' readings, in path order."""
 
     @classmethod
+    def context(cls, repo: Path, ref: str) -> str:
+        """What a file's reading depends on besides the file itself."""
+        return ""
+
+    @classmethod
     def read(cls, repo: Path, ref: str, paths: list[str]) -> dict[str, Reading]:
+        """Each file's reading, computed once per blob and context."""
+        identities = GitMeasure.blobs(repo, ref, set(paths))
+        context = cls.context(repo, ref)
+        parts = {path: (cls.__name__, context, path, identities[path]) for path in paths}
+        readings = {path: typing.cast(Reading, stored)
+                    for path in paths for stored in ContentCache.stored(*parts[path])}
+        fresh = cls.read_fresh(repo, ref, sorted(set(paths) - readings.keys()))
+        return {**readings, **{path: ContentCache.store(reading, *parts[path])
+                               for path, reading in fresh.items()}}
+
+    @classmethod
+    def read_fresh(cls, repo: Path, ref: str, paths: list[str]) -> dict[str, Reading]:
         return {path: cls.reading(path, source)
                 for path, source in GitMeasure.sources(repo, ref, set(paths))}
 
@@ -197,10 +274,10 @@ class GitMeasure(RevisionMeasure):
         """Measure the selected source declarations."""
 
     @staticmethod
-    def sources(repo: Path, ref: str, selected: set[str]) -> list[tuple[str, bytes]]:
-        """Read the selected Git blobs with one batch command."""
+    def blobs(repo: Path, ref: str, selected: set[str]) -> dict[str, str]:
+        """Each selected path's blob identity at the revision."""
         if not selected:
-            return []
+            return {}
         tree = git(repo, "--literal-pathspecs", "ls-tree", "-rz", ref, "--", *sorted(selected))
         identities = {}
         for entry in tree.split(b"\0"):
@@ -209,9 +286,18 @@ class GitMeasure(RevisionMeasure):
                 _, kind, identity = metadata.split()
                 if kind != b"blob":
                     raise ValueError(f"Expected a source blob at {path!r}")
-                identities[path.decode()] = identity
+                identities[path.decode()] = identity.decode()
         if identities.keys() != selected:
             raise ValueError("Git omitted a selected path")
+        return identities
+
+    @staticmethod
+    def sources(repo: Path, ref: str, selected: set[str]) -> list[tuple[str, bytes]]:
+        """Read the selected Git blobs with one batch command."""
+        if not selected:
+            return []
+        identities = {path: identity.encode()
+                      for path, identity in GitMeasure.blobs(repo, ref, selected).items()}
         objects = dict.fromkeys(identities.values())
         stream = io.BytesIO(git(repo, "cat-file", "--batch", input=b"\n".join(objects) + b"\n"))
         blobs = {}
@@ -346,9 +432,29 @@ class CheckedRevision(Measure):
         subprocess.run(["tar", "-x", "-C", scratch], input=git(repo, "archive", ref), check=True,
                        timeout=60)
 
+    @staticmethod
+    def configuration(repo: Path, ref: str) -> str:
+        """The revision's checker configuration blob; a revision without one has none."""
+        listed = git(repo, "ls-tree", "--name-only", ref, "--", "pyproject.toml")
+        return git(repo, "rev-parse", f"{ref}:pyproject.toml").decode().strip() if listed else ""
+
+    @classmethod
+    def inputs(cls, repo: Path, ref: str, head: str, root: str, selected: list[str]) -> str:
+        """What the findings on the selected files depend on: the revision's whole tree, which
+        a checker following imports reads, and the head's configuration."""
+        tree = git(repo, "rev-parse", f"{ref}^{{tree}}").decode().strip()
+        return f"{tree} {cls.configuration(repo, head)}"
+
     @classmethod
     def findings(cls, repo: Path, ref: str, head: str, root: str, selected: list[str],
                  side: Side) -> tuple[Side, Counter[str]]:
+        return side, ContentCache.memo(
+            partial(cls.checked, repo, ref, head, root, selected, side),
+            cls.__name__, root, cls.inputs(repo, ref, head, root, selected), *selected)
+
+    @classmethod
+    def checked(cls, repo: Path, ref: str, head: str, root: str, selected: list[str],
+                side: Side) -> Counter[str]:
         # A missing checker exits 1 like a finding run, so importing it first fails loud instead.
         importlib.import_module(cls.command(Path(), [], side)[0])
         with tempfile.TemporaryDirectory(prefix="debt-ratchet-check-") as scratch:
@@ -368,8 +474,8 @@ class CheckedRevision(Measure):
         # it; mypy also reports the modules it follows outside the tree, which are not measured.
         output = (result.stdout + result.stderr).decode()
         reported = (Path(tree, match[1]) for match in cls.finding.finditer(output))
-        return side, Counter(path.relative_to(tree).as_posix()
-                             for path in reported if path.is_relative_to(tree))
+        return Counter(path.relative_to(tree).as_posix()
+                       for path in reported if path.is_relative_to(tree))
 
     @classmethod
     def parts(cls, repo: Path, base: str, head: str, changed: set[str],
@@ -410,6 +516,12 @@ class Unformatted(CheckedRevision):
     @staticmethod
     def command(tree: Path, selected: list[str], side: Side) -> list[str]:
         return ["black", "--check", *selected]
+
+    @classmethod
+    def inputs(cls, repo: Path, ref: str, head: str, root: str, selected: list[str]) -> str:
+        """Black reads only the file and the configuration."""
+        return " ".join((*GitMeasure.blobs(repo, ref, set(selected)).values(),
+                         cls.configuration(repo, head)))
 
 
 class LintFindings(CheckedRevision):
@@ -1494,7 +1606,12 @@ class GodClassExcess(InventoryMeasure[dict[str, int]]):
         return python_paths(repo, ref, root)
 
     @classmethod
-    def read(cls, repo: Path, ref: str, paths: list[str]) -> dict[str, dict[str, int]]:
+    def context(cls, repo: Path, ref: str) -> str:
+        """Black formats each file under the revision's own configuration."""
+        return CheckedRevision.configuration(repo, ref)
+
+    @classmethod
+    def read_fresh(cls, repo: Path, ref: str, paths: list[str]) -> dict[str, dict[str, int]]:
         if not paths:
             return {}
         with tempfile.TemporaryDirectory(prefix="debt-ratchet-layout-") as scratch:
@@ -1942,7 +2059,14 @@ class UncarriedRecordFormat(ChangeMeasure):
 
     @classmethod
     def formats(cls, repo: Path, ref: str, root: str, changed: set[str]) -> dict[str, StoredForm]:
-        """Each versioned record in the changed modules, measured by that revision's own code."""
+        """Each versioned record in the changed modules, measured by that revision's own code;
+        the commit fixes every input, its stamp included."""
+        return ContentCache.memo(partial(cls.measured_formats, repo, ref, root, changed),
+                                 cls.__name__, revision(repo, ref), root, *sorted(changed))
+
+    @classmethod
+    def measured_formats(cls, repo: Path, ref: str, root: str,
+                         changed: set[str]) -> dict[str, StoredForm]:
         package = Path(root)
         while git(repo, "ls-tree", "--name-only", ref, "--", str(package / "__init__.py")):
             package = package.parent
