@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
-from .child_process import ProcessState
+from .child_process import ProcessIdentity, ProcessState
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, ThreadNotStoppedError
 from .field_codec import FieldCodec, TextRepresentation
@@ -118,7 +118,7 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
     def claims_owner(self, process: ProcessState) -> bool:
         return False
 
-    def owns_entry(self, entry: RegistryEntry, owner: OwnerIdentity, process: ProcessState) -> bool:
+    def owns_entry(self, entry: RegistryEntry, owner: OwnerIdentity, process: ProcessIdentity) -> bool:
         return False
 
     def completed_turn(self, lease: TurnLeaseFence) -> TurnCompletion:
@@ -198,7 +198,7 @@ class ActiveThreadPresence(AlwaysListed, Visible, ThreadStatus, declared_name=No
     def claims_owner(self, process: ProcessState) -> bool:
         return process.claims_owner()
 
-    def owns_entry(self, entry: RegistryEntry, owner: OwnerIdentity, process: ProcessState) -> bool:
+    def owns_entry(self, entry: RegistryEntry, owner: OwnerIdentity, process: ProcessIdentity) -> bool:
         return (entry.matches_name(owner.incarnation.name)
                 and owner.owns(entry.thread, entry.owner_generation, process))
 
