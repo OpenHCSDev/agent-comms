@@ -104,7 +104,7 @@ def test_stopped_holder_reclaimed_in_copied_root(tmp_path, monkeypatch, existing
         copied.bus.publisher.release_resources(boundary, (first,), "Late old release")
     assert copied.bus.log.claim_projection()[second.resource] == second
     assert original.bus.log.path.read_bytes() == original_bytes
-    assert original.registry.status("holder-a").active
+    original.registry.status("holder-a").require_active()
     assert resource.resource.exists() == existing
     if existing:
         assert resource.resource.read_text() == "original\n"

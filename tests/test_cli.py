@@ -431,7 +431,7 @@ class TestSelectedTargetActions:
         assert not any(outcome.items_with(Successful, outcome) for outcome in result.outcomes[1:])
         with pytest.raises(ValueError, match="Initial direct target must be visible"):
             comms.registry.status('alpha').require_visible()
-        assert comms.registry.status('beta').active
+        comms.registry.status('beta').require_active()
         assert comms.registry.require('alpha').tags == frozenset({'team'})
         assert comms.registry.require('beta').tags == frozenset({'other'})
 
@@ -472,7 +472,7 @@ class TestSelectedTargetActions:
         assert result["outcomes"][2]["result"]["archived"] is True
         with pytest.raises(ValueError, match="Initial direct target must be visible"):
             comms.registry.status("alpha").require_visible()
-        assert comms.registry.status("active").active
+        comms.registry.status("active").require_active()
         assert comms.bus.require_channel("#team").archived
 
     def test_confirmation_and_target_override_refuse_before_any_batch_write(self, cli, tmp_path):

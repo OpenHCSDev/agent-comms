@@ -102,9 +102,8 @@ class DeleteExclusiveInactiveThreadsTagDisposition(DeleteThreadsTagDisposition):
                 "tags, retained history and uncertain inputs remain.")
 
     def deletion_cohort(self, channels, tag, cohort):
-        return tuple(thread for thread in cohort if thread.tags == frozenset({tag})
-                     and not channels.registry.status(thread.name).active
-                     and not thread.process_alive)
+        return tuple(member for thread in cohort if thread.tags == frozenset({tag})
+                     for member in channels.registry.status(thread.name).deletable_threads(thread))
 
 
 class TagAction(Enum):

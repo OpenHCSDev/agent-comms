@@ -113,7 +113,8 @@ def test_exclusive_tag_deletion_uses_original_storage_and_preserves_survivors(tm
     assert comms.registry.require('multi').incarnation == original_multi.incarnation
     active = comms.registry.require('active')
     assert not active.tags and active.process_identity == original_active.process_identity
-    assert comms.registry.status('active').active and active.process_alive
+    comms.registry.status('active').require_active()
+    assert active.process_alive
     catalog = comms.channels.catalog.read()
     assert 'remove' not in catalog.tags
     assert '#remove' not in catalog.preferences

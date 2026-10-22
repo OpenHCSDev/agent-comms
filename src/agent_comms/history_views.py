@@ -430,8 +430,9 @@ class HistoryViews:
     def list_threads(self, active_only: bool = False) -> tuple[ThreadRecord, ...]:
         """Summarize threads with status and pending counts."""
         snapshot = self.registry.snapshot()
-        threads = tuple(thread for name, thread in sorted(snapshot.threads.items())
-                        if not active_only or snapshot.status(name).active)
+        threads = tuple(thread for _, thread in sorted(snapshot.threads.items()))
+        if active_only:
+            threads = tuple(snapshot.active_threads(threads))
         pending = CountedRead().counts(self.bus, tuple(thread.name for thread in threads))
         return ThreadRecord.read(
             snapshot, self.agents, self.goals, threads, pending)

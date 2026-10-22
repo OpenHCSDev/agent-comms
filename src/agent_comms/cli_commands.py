@@ -1179,9 +1179,8 @@ class ConfigureCliCommand(
 
     def apply(self, ctx: Comms) -> CliResult:
         thread = ctx.registry.require(self.name)
-        if ctx.registry.status(thread.name).active:
-            raise RelationViolationError(
-                f"{thread.name} is running; change its settings through its session")
+        ctx.registry.status(thread.name).require_inactive(
+            f"{thread.name} is running; change its settings through its session")
         asyncio.run(ConfigOptions.configured().validate(self.configured(thread)))
         updated = ctx.threads.set_thread_configuration(thread, self)
         return ThreadConfiguredResult(updated.name, updated.model, updated.thinking_level,
@@ -1443,10 +1442,7 @@ class StatusCliCommand(CliCommand):
 
     def apply(self, ctx: Comms) -> CliResult:
         snapshot = ctx.registry.snapshot()
-        running = (
-            thread for name, thread in snapshot.threads.items()
-            if snapshot.status(name).active
-        )
+        running = snapshot.active_threads(snapshot.threads.values())
         activities = ctx.agents.all_activity(running, snapshot=snapshot)
         return ActiveStatusResult(tuple(
             ThreadActivityRow(thread, activity.state, activity.detail, activity.timestamp)

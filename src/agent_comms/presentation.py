@@ -83,7 +83,7 @@ from .thread_presentation import (
     ThreadPresentation,
     UnavailableThreadOwnerBinding,
 )
-from .thread_status import ThreadStatus, ThreadStatusName
+from .thread_status import ActiveThreadPresence, ThreadStatus, ThreadStatusName
 from .threads import Thread
 from .tool_result import ToolResult
 from .ui_model.unread import ExactUnread, IndexingUnread, UnobservedUnread, UnreadPresentation
@@ -565,7 +565,7 @@ class ChannelView(ToolResult):
             max(history.last_message,
                 max((activity[name].timestamp for name in members if name in activity), default=0)),
             history.last_user_input, pins & frozenset(members),
-            sum(snapshot.status(thread.name).active for thread in registered), len(registered),
+            sum(1 for _ in snapshot.active_threads(registered)), len(registered),
         )
 
 
@@ -624,9 +624,7 @@ class ThreadRecord(CliResult):
         """Only active threads are observed; the rest show the absent activity."""
         threads = tuple(threads)
         waits = goals.waits.read()
-        observed = agents.all_activity(
-            (thread for thread in threads if snapshot.status(thread.name).active),
-            snapshot=snapshot)
+        observed = agents.all_activity(snapshot.active_threads(threads), snapshot=snapshot)
         return tuple(cls(
             thread, snapshot.status(thread.name),
             observed.get(thread.name, Activity.absent(thread.name)),
@@ -679,17 +677,10 @@ class ThreadView(ThreadRecord):
     @property
     def presentation(self) -> ThreadPresentation:
         """One declaration-owned interpretation for every thread view."""
-        ordinary = self._display_presentation()
-        if self.status.active:
-            ordinary = self.activity.readiness.presentation(ordinary)
+        ordinary = self.status.presentation(self.thread.display_title, self.activity,
+                                            self._idle_presentation)
         return replace(self.thread.execution.presentation(self.thread, self.status, ordinary, self.binding),
                        binding=self.binding)
-
-    def _display_presentation(self) -> ThreadPresentation:
-        ordinary = self.status.presentation(self.thread.display_title, self.activity)
-        if self.status.active:
-            return ordinary.status.when_idle(ordinary, self._idle_presentation)
-        return ordinary
 
     def _idle_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
         if self.thread.executing:
@@ -767,9 +758,10 @@ class CoordinationSnapshot:
         if view is None:
             return ()
         return tuple(
-            person for name in view.members
-            if (person := self.threads.get(name)) is not None and person.status.active
-            and person.presentation.status.working
+            member for name in view.members
+            if (person := self.threads.get(name)) is not None
+            for member in person.status.items_with(ActiveThreadPresence, person)
+            if member.presentation.status.working
         )
 
     def mention_candidates(self, channel: str) -> tuple[MentionCandidate, ...]:
