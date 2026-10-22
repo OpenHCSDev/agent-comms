@@ -22,6 +22,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import tokenize
 import tomllib
 import types
@@ -63,6 +64,7 @@ class ContentCache:
 
     directory: typing.ClassVar[Path] = Path.home() / ".cache/agent-comms/debt-ratchet"
     checkers: typing.ClassVar[tuple[str, ...]] = ("black", "ruff", "mypy")
+    retention_days: typing.ClassVar[int] = 14
 
     @staticmethod
     def sources() -> tuple[Path, ...]:
@@ -97,7 +99,18 @@ class ContentCache:
     def stored(cls, *parts: str) -> tuple[object, ...]:
         """The stored result for these parts, as a one-item tuple, or an empty one."""
         path = cls.path(*parts)
-        return (pickle.loads(path.read_bytes()),) if path.is_file() else ()
+        if not path.is_file():
+            return ()
+        os.utime(path)  # the mtime records the last use, which is what pruning reads
+        return (pickle.loads(path.read_bytes()),)
+
+    @classmethod
+    def prune(cls) -> None:
+        """Delete the entries neither written nor read for retention_days."""
+        horizon = time.time() - cls.retention_days * 86400
+        for path in cls.directory.glob("*/*"):
+            if path.stat().st_mtime < horizon:
+                path.unlink(missing_ok=True)
 
     @classmethod
     def store[Value](cls, value: Value, *parts: str) -> Value:
@@ -2212,6 +2225,7 @@ def compare(repo: Path, base: str, head: str, root: str, workers: int) -> Compar
 
 
 def main() -> int:
+    ContentCache.prune()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", required=True, help="Repository-relative production source directory")
     parser.add_argument("--base", required=True)

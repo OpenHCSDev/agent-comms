@@ -1240,3 +1240,17 @@ def test_content_cache_digest_covers_a_module_only_loaded_indirectly():
     indirect = Path(sys.modules["agent_comms.coordination_tables.attempts"].__file__).resolve()
     assert indirect in ContentCache.sources()
     assert indirect.is_relative_to(Path(__file__).resolve().parents[2] / "src")
+
+
+def test_content_cache_prunes_entries_unused_for_the_retention_period(tmp_path, monkeypatch):
+    """An entry read after it aged survives the prune; one neither written nor read does not."""
+    monkeypatch.setattr(ContentCache, "directory", tmp_path / "debt-ratchet")
+    ContentCache.store(1, "read")
+    ContentCache.store(2, "unused")
+    old = time.time() - (ContentCache.retention_days + 1) * 86400
+    for name in ("read", "unused"):
+        os.utime(ContentCache.path(name), (old, old))
+    assert ContentCache.stored("read") == (1,)
+    ContentCache.prune()
+    assert ContentCache.stored("read") == (1,)
+    assert ContentCache.stored("unused") == ()
