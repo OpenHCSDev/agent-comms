@@ -42,7 +42,6 @@ from agent_comms.cli_result import CliResult
 from agent_comms.cli_bridges.shared import Serve, SessionBridgeResumes
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.comms import Comms
-from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.history_result import EverythingHistoryPageResult
 from agent_comms.storage_rules import StorageRule
@@ -64,7 +63,12 @@ from agent_comms.installer.backup import (
     transcripts_held,
 )
 from agent_comms.installer.carry import STEPS, Carried, Carry, CarryChain
-from agent_comms.installer.practice import PracticeMeasurement, practice_copy, prepare_runtime_home
+from agent_comms.installer.practice import (
+    PracticeMeasurement,
+    RehearsalHome,
+    RuntimeHome,
+    practice_copy,
+)
 from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.install_choices import InstallerChoice
 
@@ -349,7 +353,7 @@ class Stack:
     @property
     def uv(self) -> Path:
         """The uv the installer runs, kept in the installer's own state."""
-        return self.home / ".local/state/agent-comms/upgrade-bus/uv"
+        return RuntimeHome.uv_path(self.home)
 
     def require_uv(self) -> None:
         if not os.access(self.uv, os.X_OK):
@@ -571,7 +575,7 @@ def rehearse(root: Path, stack: Stack, installed: Stack, tree: TargetTree,
         practice_copy(root, Path(scratch) / "bus") as (copied, measurement),
     ):
         home = Path(scratch) / "home"
-        prepare_runtime_home(home)
+        RehearsalHome(home).prepare()
         (home / ".claude").symlink_to(Path.home() / ".claude")
         stack = replace(stack, home=home)
         stack.prepare_native()
@@ -803,30 +807,23 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
     maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
     held = maintenance.begin(MaintenanceOperator.current())
     os.environ[HOLDER_NONCE] = held.nonce  # this run's own CLI calls read under its hold
-    # The transcript store's writers are not owners, so the stop does not stop them. Its
-    # writer lock is held from the baseline through the carry check, unless a step that
-    # the rehearsal proved rewrites it is the one meant to write.
-    window = ExitStack()
     try:
         installed.owners(root, "stop", running)
-        if ExternalTranscript.filename not in rehearsal_files.names:
-            window.enter_context(transcripts_held(root))
-        before = bus_files(root)
-        backup = StoreBackup.take(root, active_route_path(), selected, spill_dir)
+        with transcripts_held(root):
+            before = bus_files(root)
+            backup = StoreBackup.take(root, active_route_path(), selected, spill_dir)
     except BaseException as error:
-        window.close()
         maintenance.clear(held)
         started = installed.start(root, running)
         print(f"install: aborted before the backup ({type(error).__name__}: {error}); "
               f"maintenance cleared; owners: {started}", file=sys.stderr)
         raise
     try:
-        with window:
-            run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
-            Checkout(checkout).prepare()
-            staged.prepare_native()
-            passed = carry_and_read(root, before, pending, staged, staged, tree, stopping)
-            passed.files.require_rehearsal(rehearsal_files)
+        run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
+        Checkout(checkout).prepare()
+        staged.prepare_native()
+        passed = carry_and_read(root, before, pending, staged, staged, tree, stopping)
+        passed.files.require_rehearsal(rehearsal_files)
         staged.publish()
         maintenance.clear(held)
         services = HostService.restart_running(staged.python)

@@ -35,8 +35,8 @@ from .cohort_schema import (
     AwarenessClaimGenerations,
     ClaimBatchAcknowledgements,
     ClaimBatchMembers,
-    CohortDeliveryReceipts,
-    assert_cohort_schema,
+    CohortDeliveries,
+    CohortTable,
     assert_optional_awareness_schema,
 )
 from .context_segments.optional_awareness import (
@@ -301,7 +301,7 @@ class OptionalAwarenessProjection:
         owner: Thread,
     ) -> None:
         CoordinatorTable.require_schema(db)
-        assert_cohort_schema(db)
+        CohortTable.require_installed(db)
         assert_optional_awareness_schema(db)
         people = _ParticipantOwner.read(
             db.execute(
@@ -353,7 +353,7 @@ class OptionalAwarenessProjection:
         }
         deliveries = {
             row.wire_seq: row
-            for row in CohortDeliveryReceipts.select(
+            for row in CohortDeliveries.select(
                 db,
                 where=f"wire_root_id=? AND recipient_lookup=? AND wire_seq IN ({marks})",
                 parameters=(root_id, lookup, *sequences),

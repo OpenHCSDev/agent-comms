@@ -40,7 +40,6 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import (
     Argument,
-    DecodedValue,
     FieldCodec,
     MalformedRecord,
     Normalize,
@@ -1066,7 +1065,7 @@ class DoneVerb(OrderVerb):
     ]
     sha: Annotated[
         CommandDeliverySource,
-        Normalize(DecodedValue),
+        Normalize(FieldCodec.encode),
         Argument(
             flags=("--sha",),
             options={"type": CommandDeliverySource.from_text, "choices": None,

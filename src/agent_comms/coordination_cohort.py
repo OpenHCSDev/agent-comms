@@ -10,8 +10,8 @@ from __future__ import annotations
 import hashlib
 import logging
 import sqlite3
-from typing import Annotated
 from dataclasses import dataclass
+from typing import Annotated
 
 from agent_comms.assignment_states import AssignmentState, PendingNotification
 from agent_comms.bus_publication import CommittedDelivery
@@ -19,8 +19,8 @@ from agent_comms.cohort_schema import (
     AwarenessClaimGenerations,
     ClaimBatchAcknowledgements,
     ClaimBatchMembers,
-    CohortDeliveryReceipts,
-    assert_cohort_schema,
+    CohortDeliveries,
+    CohortTable,
     assert_optional_awareness_schema,
 )
 from agent_comms.coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
@@ -85,23 +85,6 @@ def _expected_assignments(
     return tuple(result)
 
 
-def _immutable_assignment_matches(current: WakeAssignment, expected: WakeAssignment) -> bool:
-    return current.lifecycle.mode == expected.lifecycle.mode and all(
-        getattr(current, field) == getattr(expected, field)
-        for field in (
-            "assignment_id",
-            "recipient",
-            "recipient_lookup",
-            "wire_seq",
-            "message_id",
-            "audience",
-            "resolver_version",
-            "policy_version",
-            "accepted_at_ms",
-        )
-    )
-
-
 def _claim_record(db: sqlite3.Connection, initial: CommittedDelivery) -> AcceptedCohort:
     message = initial.message
     audience = initial.audience
@@ -143,7 +126,7 @@ def _claim_record(db: sqlite3.Connection, initial: CommittedDelivery) -> Accepte
         for ordinal, assignment in enumerate(expected)
     ]:
         raise IdentityConflict("sealed K claim members conflict with committed bus")
-    deliveries = CohortDeliveryReceipts.select(
+    deliveries = CohortDeliveries.select(
         db,
         where="wire_root_id=? AND wire_seq=?",
         parameters=(initial.wire_root_id, message.seq),
@@ -151,7 +134,7 @@ def _claim_record(db: sqlite3.Connection, initial: CommittedDelivery) -> Accepte
     )
     selected = {assignment.recipient_lookup: assignment.assignment_id for assignment in expected}
     if deliveries != [
-        CohortDeliveryReceipts(
+        CohortDeliveries(
             wire_root_id=initial.wire_root_id,
             wire_seq=message.seq,
             ordinal=ordinal,
@@ -169,8 +152,7 @@ def _claim_record(db: sqlite3.Connection, initial: CommittedDelivery) -> Accepte
         if db_row is None:
             raise IdentityConflict("sealed cohort claim is missing")
         actual = db_row
-        if not _immutable_assignment_matches(actual, accepted):
-            raise IdentityConflict("sealed cohort claim immutable facts conflict")
+        accepted.require_same_acceptance(actual)
         current.append(actual)
     # A singleton claim for an explicitly no-wake observer cannot be accepted
     # as a K member or hidden by a valid sealed N acknowledgement.
@@ -214,8 +196,8 @@ def _record_optional_owner_generations(
                 claim_id=assignment.assignment_id,
                 wire_root_id=wire_root_id,
                 wire_seq=wire_seq,
-                recipient_lookup=assignment.recipient_lookup,
-                canonical_thread=assignment.recipient,
+                owner_lookup=assignment.recipient_lookup,
+                owner_thread=assignment.recipient,
                 owner_generation=current.generation,
             ).insert(db)
     except (sqlite3.Error, SchemaVersionError, IdentityConflict, MalformedRecord) as error:
@@ -245,7 +227,7 @@ def accept_delivery_cohort(
         if wire_seq <= marker.claimed_after_seq:
             raise IdentityConflict("historical source precedes the current claim_scope floor")
         initial = source.delivery(wire_seq)
-        assert_cohort_schema(db)
+        CohortTable.require_installed(db)
         acknowledgement = ClaimBatchAcknowledgements.one(db, wire_root_id=wire_root_id, wire_seq=wire_seq)
         if acknowledgement is not None:
             return AlreadyApplied(_claim_record(db, initial))
@@ -287,7 +269,7 @@ def accept_delivery_cohort(
         }
         for ordinal, recipient in enumerate(initial.audience.recipients):
             assignment_id = selected.get(recipient.recipient_lookup)
-            CohortDeliveryReceipts(
+            CohortDeliveries(
                 wire_root_id=wire_root_id,
                 wire_seq=wire_seq,
                 ordinal=ordinal,
@@ -360,7 +342,7 @@ def sealed_cohort_assignments(
         raise ValueError("acknowledgement-backed page bounds are invalid")
     with store.session.read():
         db = store.session._connection
-        assert_cohort_schema(db)
+        CohortTable.require_installed(db)
         selected_states = AssignmentState.selection_predicate(state_capability, "c")
         return tuple(
             WakeAssignment.read(

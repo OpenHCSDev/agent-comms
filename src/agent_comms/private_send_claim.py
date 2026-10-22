@@ -15,7 +15,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .coordinated_runtime_schema import assert_native_runtime_schema
+from agent_comms.native_runtime_input import NativeRuntimeTable
 from .coordination_errors import IdentityConflict, RetryScheduled
 from .coordinator import Coordination
 from .diagnostics import (
@@ -254,7 +254,7 @@ class PrivateSendClaim(PromptBoundary):
                 self.owner.require_snapshot(
                     registry, "recipient registry owner changed before native send"
                 )
-                assert_native_runtime_schema(db)
+                NativeRuntimeTable.require_installed(db)
                 self.participant.require(store, self.stage.recipient_lookup)
                 reserved = self.stage.require_reservation(
                     db, self.input_id, self.participant, self.token_digest
