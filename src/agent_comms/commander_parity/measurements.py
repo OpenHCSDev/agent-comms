@@ -12,6 +12,8 @@ from agent_comms.commander_parity.load import LoadComparison, state_files
 from agent_comms.comms import Comms
 from agent_comms.standing_rules import DiskLow, StandingRule
 from agent_comms.storage_rules import StorageViolation
+from agent_comms.todos import PullRequests
+from agent_comms.ui_model.unit_state import UnitState
 
 
 @dataclass(frozen=True)
@@ -36,12 +38,15 @@ class RuleComparison(ParityComparison):
 
     @classmethod
     def read(cls, owner: type[StandingRule]) -> ParityComparison:
-        method = owner.violations
+        method = owner.scan_observed
         if not isinstance(method, MethodType):
-            return UnverifiedParity(f"{owner.__qualname__}.violations is not a bound classmethod")
+            return UnverifiedParity(
+                f"{owner.__qualname__}.scan_observed is not a bound classmethod"
+            )
         code = method.__func__.__code__
         config = CommanderConfig.read(CommanderConfig.path())
         comms = Comms(config.root)
+        states = UnitState.current(comms, config.commander, PullRequests())
         before = state_files(config.state)
         observed: list[tuple[StandingRule, ...]] = []
 
@@ -55,12 +60,12 @@ class RuleComparison(ParityComparison):
                 monitoring.PROFILER_ID, monitoring.events.PY_RETURN, observe
             )
             monitoring.set_local_events(monitoring.PROFILER_ID, code, monitoring.events.PY_RETURN)
-            current = owner.broken(comms, config.commander)
+            current = owner.broken(comms, config.commander, observed=states)
         finally:
             monitoring.free_tool_id(monitoring.PROFILER_ID)
         if len(observed) != 1:
             return UnverifiedParity(
-                f"Expected one {owner.__qualname__}.violations call: {len(observed)}"
+                f"Expected one {owner.__qualname__}.scan_observed call: {len(observed)}"
             )
         native = tuple(rule for rule in observed[0] if rule.broke_after(0.0))
         return cls(
@@ -86,7 +91,7 @@ class StorageComparison(ParityComparison):
 
     @classmethod
     def read(cls) -> StorageComparison:
-        return cls(RuleComparison.read(StorageViolation), RuleComparison.read(DiskLow))
+        return cls(RuleComparison.read(StorageViolation.scan_owner()), RuleComparison.read(DiskLow))
 
 
 def measured_load() -> ParityComparison:

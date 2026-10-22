@@ -47,8 +47,11 @@ def execution_bus(copied_goal_bus):
 def test_execution_identity_survives_wire_and_change_detection(execution_bus, execution_type):
     goal = execution_bus.registry.require("worker").goal
     execution = execution_type(goal.id)
-    assert FieldCodec.decode(GoalExecution, FieldCodec.encode(execution)) == execution
+    decoded = FieldCodec.decode(GoalExecution, FieldCodec.encode(execution))
+    assert decoded == execution
+    assert decoded.runnable() == execution.runnable()
     current = GoalSnapshot(goal, RunnableExecution(goal.id))
+    assert current.execution.runnable()
     assert current.changed_by(GoalSnapshot(goal, execution)) == (current.execution != execution)
 
 

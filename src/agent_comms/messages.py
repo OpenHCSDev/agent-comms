@@ -108,7 +108,11 @@ class InfoKind(SendableMessageKind):
         return cast(Message, compile_decoder(Message | ClaimMessage).decode(data))
 
 
-class QuestionKind(SendableMessageKind):
+class NeedsAnswerKind(SendableMessageKind, declared_name=None):
+    """Questions, alerts and handoffs ask their recipient to act."""
+
+
+class QuestionKind(NeedsAnswerKind):
     pass
 
 
@@ -116,7 +120,7 @@ class AckKind(SendableMessageKind):
     pass
 
 
-class HandoffKind(SendableMessageKind):
+class HandoffKind(NeedsAnswerKind):
     """A handoff declares its evidence; completion claims carry references."""
 
     CLAIMS = ("fixed", "single owner", "no other callers")
@@ -137,7 +141,7 @@ class HandoffKind(SendableMessageKind):
         )
 
 
-class AlertKind(SendableMessageKind):
+class AlertKind(NeedsAnswerKind):
     pass
 
 

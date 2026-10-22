@@ -58,7 +58,7 @@ def fork_bus(tmp_path):
         text='Repair the commander workflow', goal_id='request', order=RequestGoalOrder()))
     core = Repo.of(Path(__file__).parents[1])
     config = Commander.on_machine('lead', (source, core), comms.root, tmp_path)
-    config.root_path(comms.root).write_text(config.model_dump_json())
+    config.path_in(comms.root).write_text(config.model_dump_json())
     now = time.time()
     order = PendingProblemOrder(
         id='first-order', owner=source.scope().shape.parents[0], scope=source.scope(),

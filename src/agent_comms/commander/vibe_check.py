@@ -16,7 +16,8 @@ from typing import ClassVar, Self
 
 from agent_comms.commander.capacity import Load
 from agent_comms.commander.config import CommanderConfig
-from agent_comms.commander.standing import AnswersTo, PlanStalled, SenderMessages, UnansweredBurst
+from agent_comms.commander.questions import SenderMessages, UnansweredBurst
+from agent_comms.commander.standing import AnswersTo, PlanStalled
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.goal_actions import (
@@ -27,7 +28,12 @@ from agent_comms.goal_actions import (
 from agent_comms.messages import Message
 from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.service_sender import ServiceSender
-from agent_comms.standing_rules import OwedAnswer, StandingRule, UndatedStandingRule
+from agent_comms.standing_rules import (
+    IndependentStandingRule,
+    OwedAnswer,
+    StandingRule,
+    UndatedStandingRule,
+)
 
 
 class EscalationSender(ServiceSender):
@@ -140,7 +146,7 @@ class AnswersOwedDegradation(Degradation, BlocksRelease):
     def found(cls, comms: Comms, commander: str) -> tuple[Sign, ...]:
         return tuple(
             Sign(cls, (rule.cited,), rule.line())
-            for rule in OwedAnswer.broken(comms, commander)
+            for rule in OwedAnswer.overdue(comms, commander)
             if not isinstance(rule, Escalation)
         )
 
@@ -180,7 +186,7 @@ class OverloadDegradation(Degradation, BlocksRelease):
 
 
 @dataclass(frozen=True)
-class VibeCheck(UndatedStandingRule):
+class VibeCheck(IndependentStandingRule, UndatedStandingRule):
     """Each degraded sign breaks it once: the heartbeat enforces a rule when it newly breaks, so a
     sign that persists stops the commander once, and a new message, a newly stalled phase or a
     doubled stall stops it again. Pings are decisions, each once."""
@@ -267,7 +273,7 @@ class Indictment:
 
 
 @dataclass(frozen=True)
-class Chokehold(UndatedStandingRule):
+class Chokehold(IndependentStandingRule, UndatedStandingRule):
     """A vibe check ignored past its window: every unit under the commander is paused and the
     commander is told, in a burst it cannot skim, what brings them back."""
 
@@ -332,7 +338,7 @@ class ChokeholdUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class ChokeholdAnswer(UndatedStandingRule, declared_name=None):
+class ChokeholdAnswer(IndependentStandingRule, UndatedStandingRule, declared_name=None):
     """The commander's newest answer to a chokehold, once every chokehold message is answered."""
 
     answer: Message

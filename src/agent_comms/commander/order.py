@@ -839,7 +839,7 @@ class DirectiveVerb(CommanderVerb):
 
     def gate(self, ctx: Commander) -> None:
         named = self.named(ctx)
-        owed = tuple(rule for rule in OwedAnswer.broken(ctx.comms, self.who(ctx))
+        owed = tuple(rule for rule in OwedAnswer.overdue(ctx.comms, self.who(ctx))
                      if not rule.answered_by(named))
         if owed:
             lines = '\n'.join(f'{rule.line()}: {rule.message.body[:80]}' for rule in owed)
@@ -1249,7 +1249,8 @@ class NextHuntVerb(OrderVerb, declared_name="next-hunt"):
     help = "print the next place to hunt"
 
     def run(self, ctx: Commander) -> None:
-        for path in HuntDue.next_hunt(ctx.comms, ctx.commander):
+        for path in HuntDue.next_hunt(ctx.comms, ctx.commander,
+                                      HuntDue.todos(ctx.comms, ctx.commander)):
             print(path)
 
 
