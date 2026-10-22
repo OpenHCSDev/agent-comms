@@ -9,7 +9,7 @@ the owner's event loop with the wire, bus and registry locks held.
 from __future__ import annotations
 from agent_comms.context_store import UNREAD_CONTEXT
 
-from conftest import publish_initial
+from conftest import _root_lifetime, publish_initial
 import hashlib
 import os
 import sys
@@ -76,7 +76,10 @@ def record_context(comms: Comms, name: str, generation: int) -> None:
 @contextmanager
 def selected_turn():
     """Alice runs a selected turn for one message; context rows surround it."""
-    with TemporaryDirectory(prefix="ac-claim-read-") as dirname:
+    with (
+        TemporaryDirectory(prefix="ac-claim-read-") as dirname,
+        _root_lifetime(Path(dirname)),
+    ):
         root = Path(dirname) / "wire"
         root.mkdir(mode=0o700)
         worktree = Path(dirname) / "work"

@@ -1313,9 +1313,7 @@ class TypedTable(
         names = {item.name for item in fields}
         following: dict[str, list[_Field]] = {}
         for owner in cls.__mro__:
-            declared = tuple(
-                annotationlib.get_annotations(owner, format=annotationlib.Format.STRING)
-            )
+            declared = tuple(annotationlib.get_annotations(owner, format=annotationlib.Format.STRING))
             for position, name in enumerate(declared):
                 match vars(owner).get(name):
                     case Generated() as declaration:
