@@ -115,7 +115,8 @@ class BridgeStateTable(DurableTables):
     """The bridge's delivery.sqlite3: its binding and every delivery attempt.
 
     The bus holds the messages, not whether this harness was sent them, so
-    nothing rebuilds these rows: a stored schema that differs is refused.
+    nothing rebuilds these rows: a stored schema that differs is carried onto the
+    declaration where it says how, keeping every row, and refused where it cannot.
     """
 
     __slots__ = ()
