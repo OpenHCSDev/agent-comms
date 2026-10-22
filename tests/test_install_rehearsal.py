@@ -15,12 +15,12 @@ import subprocess
 import sys
 import tarfile
 from collections.abc import Iterator
-from contextlib import nullcontext
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
 from traceback import FrameSummary, extract_stack
-from typing import ClassVar
+from typing import ClassVar, NoReturn
 
 import pytest
 
@@ -60,7 +60,7 @@ class InstalledHome:
 
 
 @pytest.fixture(scope="module")
-def installed_home(tmp_path_factory) -> Iterator[InstalledHome]:
+def installed_home(tmp_path_factory: pytest.TempPathFactory) -> Iterator[InstalledHome]:
     """A home holding what an installed machine has: the installer's uv, and as the
     installed runtime a build of the merge base this change lands on. Both cases share
     it, so the second reuses the staged runtime the first built, as a second install
@@ -68,7 +68,9 @@ def installed_home(tmp_path_factory) -> Iterator[InstalledHome]:
     with short_home(tmp_path_factory.mktemp("installed-home")) as home:
         uv = home / ".local/state/agent-comms/upgrade-bus/uv"
         uv.parent.mkdir(parents=True)
-        uv.symlink_to(shutil.which("uv"))
+        uv_program = shutil.which("uv")
+        assert uv_program is not None, "The installed-runtime fixture requires uv"
+        uv.symlink_to(uv_program)
         caches = subprocess.run([uv, "cache", "dir"], check=True, capture_output=True, text=True)
         environment = {**os.environ, "HOME": str(home), "UV_CACHE_DIR": caches.stdout.strip(),
                        "npm_config_cache": str(Path.home() / ".npm")}
@@ -91,7 +93,8 @@ def installed_home(tmp_path_factory) -> Iterator[InstalledHome]:
 @pytest.mark.timeout(280)
 @pytest.mark.parametrize("repos", ((), ("--repos",)), ids=("kept-repos", "given-repos"))
 def test_install_rehearses_preserving_existing_data_and_publishing_its_result(
-        private_comms, installed_home, tmp_path, repos):
+        private_comms: Comms, installed_home: InstalledHome, tmp_path: Path,
+        repos: tuple[str, ...]) -> None:
     comms = private_comms
     declare_test_bus(comms, channels=("comms",), threads=(
         comms.registry.new_thread(name="worker", tags=frozenset(), worktree=str(tmp_path)),))
@@ -144,7 +147,7 @@ class PublicationFailingRun(InstallRun):
 
     error_kind: ClassVar[type[PublicationFault]] = PublicationRuntimeError
 
-    def harnesses(self):
+    def harnesses(self) -> NoReturn:
         assert RuntimeResolution.at(LaunchRuntime.installed().prefix).core_commit == self.target
         raise self.error_kind(extract_stack(limit=2)[0])
 
@@ -154,12 +157,13 @@ class PublicationInterruptedRun(PublicationFailingRun):
 
 
 @pytest.fixture
-def publication_home(request, monkeypatch, tmp_path):
+def publication_home(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch,
+                     tmp_path: Path) -> tuple[Path, LaunchRuntime]:
     """The hosted installed-runtime job supplies the build; source workers never build one."""
     candidate = LaunchRuntime.running()
     if not Path(agent_comms.__file__).resolve().is_relative_to(candidate.prefix.resolve()):
         pytest.skip("Full publication proof requires the hosted built-runtime job")
-    installed = request.getfixturevalue("installed_home")
+    installed: InstalledHome = request.getfixturevalue("installed_home")
     for name, value in installed.environment.items():
         monkeypatch.setenv(name, value)
     replace_link(LaunchRuntime.current_pointer(), installed.outgoing.prefix)
@@ -190,7 +194,9 @@ def publication_home(request, monkeypatch, tmp_path):
     ),
 ))
 def test_live_upgrade_family_after_real_publication(
-        publication_home, tmp_path, run_type, completion, terminal):
+        publication_home: tuple[Path, LaunchRuntime], tmp_path: Path,
+        run_type: type[InstallRun], completion: AbstractContextManager[object],
+        terminal: str) -> None:
     home, candidate = publication_home
     checkout = tmp_path / "checkout"
     subprocess.run(["git", "clone", "-q", REPOSITORY, checkout], check=True)
@@ -199,11 +205,10 @@ def test_live_upgrade_family_after_real_publication(
                     git("rev-parse", "HEAD^")], check=True)
     outgoing = Stack(checkout, home=home, runtime=LaunchRuntime.installed())
     program = (str(candidate.interpreter.with_name("agent-comms-claude-bridge")),)
-    with session_bridge(tmp_path, home, program, session=tmp_path.name) as (
-            _, claim, observed, child, log):
+    with session_bridge(tmp_path, home, program, session=tmp_path.name) as copied:
         comms = Comms(tmp_path / "bus")
         declare_test_bus(comms, channels=(InstallReport.channel,))
-        publish_initial(comms, claim.thread, "#all", "Retained before the upgrade")
+        publish_initial(comms, copied.binding.bus, "#all", "Retained before the upgrade")
         before = HistoryCliCommand().apply(comms).messages
         request = run_type.start(InstallCliCommand(checkout=checkout, to=target, project=checkout),
                                  comms.root)
@@ -214,17 +219,18 @@ def test_live_upgrade_family_after_real_publication(
         if isinstance(report.outcome, CrashedInstall):
             error = report.outcome.error
             assert isinstance(error, PublicationFault)
+            assert isinstance(caught, pytest.ExceptionInfo)
             assert caught.value is error
             assert (report.outcome.frame.filename, report.outcome.frame.lineno) == (
                 str(report.source.module_file(upgrade.__module__)), error.site.lineno,
             )
         assert RuntimeResolution.at(LaunchRuntime.installed().prefix).core_commit == target
         assert LaunchRuntime.installed().prefix != outgoing.runtime.prefix
-        resumed = InspectSession().information(claim)
-        assert resumed.process == observed.process
-        assert resumed.process.pid == child.pid
+        resumed = InspectSession().information(copied.claim)
+        assert resumed.process == copied.observed.process
+        assert resumed.process.pid == copied.child.pid
         assert resumed.runtime.prefix == LaunchRuntime.installed().prefix.resolve()
-        assert child.poll() is None, log.read_text()
+        assert copied.child.poll() is None, copied.log.read_text()
         reports = tuple(reversed(HistoryCliCommand(target=report.target).apply(comms).messages))
         assert len(reports) == 2
         assert reports[0].body.splitlines()[0] == "Install starting"
