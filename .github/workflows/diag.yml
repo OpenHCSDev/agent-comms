@@ -1,0 +1,39 @@
+name: diag
+on:
+  push:
+    branches: ['diag/**']
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: pyproject.toml
+      - run: python -m pip install -q -e src/agent_comms/skills/refactor-audit -e '.[dev]' mypy
+      - name: Prepare pinned native Pi
+        uses: ./.github/actions/prepare-native
+      - run: npm install -g --prefix "$HOME/.local/pi-npm" --ignore-scripts --no-audit --no-fund @earendil-works/pi-coding-agent@0.85.1
+      - working-directory: src/agent_comms
+        run: npm ci --ignore-scripts --omit=dev --no-audit --no-fund
+      - name: run diag.sh
+        shell: bash
+        run: |
+          set +e
+          bash diag.sh > /tmp/out.txt 2>&1
+          echo "exit $?" >> /tmp/out.txt
+      - name: annotate output
+        shell: bash
+        run: |
+          python - <<'PY'
+          text = open("/tmp/out.txt").read()
+          size, kinds = 3800, ("error", "warning", "notice")
+          chunks = [text[i:i+size] for i in range(0, len(text), size)][:30]
+          for n, chunk in enumerate(chunks):
+              body = chunk.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              print(f"::{kinds[n // 10]} title=diag {n:02d}::{body}")
+          PY
