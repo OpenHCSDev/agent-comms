@@ -12,9 +12,44 @@ from pathlib import Path
 import pytest
 
 from agent_comms.installer import practice
-from agent_comms.installer.backup import SavedFile
+from agent_comms.installer.backup import SavedFile, UpgradeRefused
 from agent_comms.installer.upgrade import Stack
 from agent_comms.launch_runtime import LaunchRuntime
+
+
+def test_rehearsal_home_requires_both_installed_inputs(tmp_path, monkeypatch):
+    executable = practice.TestHome(tmp_path).uv
+    installed_home = tmp_path / "installed"
+    installed_home.mkdir()
+    monkeypatch.setenv("HOME", str(installed_home))
+    home = practice.RehearsalHome(tmp_path / "rehearsal")
+    with pytest.raises(FileNotFoundError):
+        home.prepare()
+    selected = installed_home / "runtime"
+    selected.mkdir()
+    current = LaunchRuntime.current_pointer()
+    current.parent.mkdir(parents=True)
+    current.symlink_to(selected, target_is_directory=True)
+    with pytest.raises(FileNotFoundError):
+        home.prepare()
+    uv = practice.RuntimeHome.uv_path(installed_home)
+    uv.parent.mkdir(parents=True)
+    uv.symlink_to(executable)
+    home.prepare()
+    assert (home.path / current.relative_to(installed_home)).resolve() == selected
+    assert (home.path / uv.relative_to(installed_home)).resolve() == executable.resolve()
+
+
+def test_test_home_requires_uv_on_path_even_with_an_installer_uv(tmp_path, monkeypatch):
+    executable = practice.TestHome(tmp_path).uv
+    installed_home = tmp_path / "installed"
+    uv = practice.RuntimeHome.uv_path(installed_home)
+    uv.parent.mkdir(parents=True)
+    uv.symlink_to(executable)
+    monkeypatch.setenv("HOME", str(installed_home))
+    monkeypatch.setenv("PATH", "")
+    with pytest.raises(UpgradeRefused):
+        practice.TestHome(tmp_path / "test-home").prepare()
 
 
 @pytest.mark.timeout(290)
@@ -57,6 +92,7 @@ def test_checkout_native_tests_use_a_private_runtime(tmp_path):
     # A machine's existing installation is not the test command's build destination.
     live_home = tmp_path / "live-home"
     practice.TestHome(live_home).prepare()
+    assert not (live_home / ".local/share/agent-comms/current").exists(follow_symlinks=False)
     runtimes = live_home / ".local/share/agent-comms/runtimes"
     runtimes.mkdir(parents=True)
     retained = runtimes / "retained"
@@ -64,6 +100,7 @@ def test_checkout_native_tests_use_a_private_runtime(tmp_path):
     witness = retained / "keep"
     witness.write_text("Existing installation")
     current = live_home / ".local/share/agent-comms/current"
+    current.unlink(missing_ok=True)
     current.symlink_to(retained, target_is_directory=True)
     selected = current.readlink()
     before = {
