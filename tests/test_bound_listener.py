@@ -2,8 +2,8 @@
 import asyncio
 import socket
 
-from aiohttp import web
 import pytest
+from aiohttp import web
 
 from agent_comms.host_services import BoundListener, ServiceNotServingError, SystemdUserService
 from connector_readiness import ConnectorReadiness
@@ -15,6 +15,8 @@ def test_readiness_requires_the_started_sites_listening_socket(monkeypatch):
         await runner.setup()
         site = web.TCPSite(runner, "127.0.0.1", 0)
         try:
+            with pytest.raises(TypeError):
+                BoundListener(site)
             with pytest.raises(ServiceNotServingError):
                 BoundListener.of(site)
             with pytest.raises(TypeError):

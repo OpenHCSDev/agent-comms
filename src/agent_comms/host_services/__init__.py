@@ -35,6 +35,9 @@ class BoundListener:
 
     site: TCPSite
 
+    def __new__(cls, _site: TCPSite) -> Self:
+        raise TypeError("Use of(site) to observe a listening socket")
+
     @classmethod
     @boundary_decoder
     def of(cls, site: TCPSite) -> Self:
@@ -44,7 +47,9 @@ class BoundListener:
         # TCPSite.start assigns loop.create_server's Server to BaseSite's wider annotation.
         for bound in cast(Server, server).sockets:
             if bound.getsockopt(socket.SOL_SOCKET, socket.SO_ACCEPTCONN):
-                return cls(site)
+                listener = object.__new__(cls)
+                cls.__init__(listener, site)
+                return listener
         raise ServiceNotServingError("The connector site has no listening socket")
 
 
