@@ -243,14 +243,12 @@ def pr_commander(tmp_path, monkeypatch, proof_build_checkouts):
     graph = next(graph for graph in proof_build_checkouts
                  if graph.repository.github == CorePackage.repository)
     source = graph.repository
-    # This Core fixture owns one Git history. Borrow plan input, not a second
-    # unrelated checkout claiming the same repository and installed commit.
+    # Borrow only the plan inputs; the proof fixture owns the commit graph.
     current = Path(__file__).resolve().parents[1]
     shutil.copytree(current / 'plans', source.checkout / 'plans')
     module = source.checkout / 'src' / 'agent_comms'
-    module.parent.mkdir(parents=True)
-    shutil.copytree(current / 'src' / 'agent_comms', module,
-                    ignore=shutil.ignore_patterns('__pycache__', 'skills', '_native'))
+    module.mkdir(parents=True)
+    shutil.copyfile(current / 'src' / 'agent_comms' / '__init__.py', module / '__init__.py')
     source.git(source.checkout, 'add', 'plans', 'src')
     source.git(source.checkout, 'commit', '-qm', 'Declare current commander plans')
     source.git(source.checkout, 'push', '-q', 'origin', 'HEAD:main')

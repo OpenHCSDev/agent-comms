@@ -71,8 +71,6 @@ from agent_comms.field_codec import (
 from agent_comms.goals import CheckedCommit, OrderCheck, ProblemGoalOrder
 from agent_comms.head_review import AcceptedHeadReview
 from agent_comms.lifecycle_capability import LifecycleCapability, Pending
-from agent_comms.locked_store import RegistryFile
-from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message
 from agent_comms.order_runs import OrderRun
@@ -3521,16 +3519,6 @@ class TodoStore(OwnerRequestStore):
             raise TodoStoreUnwritable(
                 f"{self.path}: {type(error).__name__}: {error}"
             ) from error
-
-    @contextmanager
-    def writer_connection(
-        self, *, check_same_thread: bool = True
-    ) -> Iterator[sqlite3.Connection]:
-        with (
-            MaintenanceBarrier(RegistryFile.path_in(self.root)).allow_input(),
-            super().writer_connection(check_same_thread=check_same_thread) as connection,
-        ):
-            yield connection
 
     def allocate_problem(self) -> str:
         with self.writing() as db:
