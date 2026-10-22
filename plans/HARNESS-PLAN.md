@@ -127,8 +127,9 @@ transcript contention and CLI/native held-send entrypoints. An independent proce
 remains unable to acquire a writer lock after coordinator observation or backup
 digest, then acquires it after the original writer rolls back. WAL refusal-history
 reads expose committed rows only, reject writes and preserve the writer's pending
-transaction. Complete installer and installed-package qualification follow this
-additional source change.
+transaction. The repair is pushed as `8ebcc4030`; all three complete installer
+cases passed again in 183.45 seconds. Final paired installed-package qualification
+follows the Toad repairs.
 
 The saved-fork application journey passed against built Core `35c192054` and Toad
 `ca980312c`: real native parent answer and saved history, fork, immediate opening,
@@ -139,16 +140,40 @@ are real. The paired Toad journey exposed stale fixture contracts:
 `agent_binding`, Core's model/thinking fields are typed, and its ACP declaration
 must opt into explicit root arguments. The native provider fixture also retained a
 deleted response-template protocol; current selected work returns ordinary answer
-text. These are being repaired in their existing owners and consumers, not patched
-with production aliases. A closed delivery observation additionally reads an agent
-before it has ever scheduled a read; the Toad integration owner is fixing that
-production lifetime defect. The same displayed journey exposed raw delivery-state
+text. The repaired fixtures use the existing owners and consumers, without
+production aliases. A closed delivery observation additionally read an agent
+before it had ever scheduled a read; Toad now initializes and retires that binding
+through its declared unbound state. Toad's follow-through also repairs transport failures
+that lost their input disposition, recovery that replaced the retained editor and
+undo history, and successful-send cleanup that erased a different unsent draft.
+The permission journey exposed the pinned diff widget's obsolete render callback;
+`textual-diff-view` now consumes Textual's supplied paint state (`95db444b`, pushed),
+and its development lock uses the same Textual fork. NRA parsed the dependency's
+two source modules and Textual's 255 source modules; the only dependency
+`render_line(self, y)` override now implements `Widget.render_line(self, y, paint)`
+and reads the supplied paint instead of querying widget state again. Its 14
+existing tests and Toad's actual scripted ACP/file/permission journey passed.
+Toad's dependency pin and these recovery repairs are pushed in `c88eecf8d`.
+The Toad binding fork still owns the `ChangingText` same-text metadata repair:
+painted click metadata is confirmed, but the actual click has not yet opened the
+peer tab. It also retains the unfinished historical fixture migrations; those
+do not block the already reviewed production fixes. Installation waits for the
+remaining production landings and happens once for the batch, followed by the
+installed native fork/DM/reply/tab-return journey. The installer itself resolves
+sibling mains and records its runtime inputs; `stack/uv.lock` is generated and
+untracked, not a separate source commit.
+The same displayed journey exposed raw delivery-state
 dataclass text in the status line; `ThreadStatusModel` now uses the existing
 `MessageNotification.label` owner (38 focused status checks passed).
-No new runtime has been published to the live installation. The final changed
-packages still require installer rehearsal/recovery and installed journey checks.
+No new runtime has been published to the live installation. The installer CLI
+rehearsal/recovery checks above are complete; the final paired batch still needs
+installation and its installed application check.
 
 ### 2. Commander verbs take a fixed, small time
+
+The installer ownership fork is tracing this surface's source and existing timing
+evidence while the Toad batch finishes. No implementation or live message has
+been started for this phase; the next decision is which cost actually dominates.
 
 - Profile one verb end to end on the live bus with nothing else running.
 - Cut import cost (load only what the verb uses) and make the answer gate read only the rows it needs, never the whole bus.
