@@ -47,7 +47,6 @@ from agent_comms.cli_commands import (
     InstallResult,
     PlannedReconcileCliCommand,
     ReadBackCliCommand,
-    ReconciledStoresResult,
     ReconcileStoresCliCommand,
     StartCliCommand,
     StopCliCommand,
@@ -164,7 +163,7 @@ class OwnerStart(DeclaredFamily, affix="Owner"):
     @staticmethod
     def attempt(stack: Stack, root: Path, name: str) -> OwnerStart:
         try:
-            stack.cli(root, StartCliCommand, CliResult, "--name", name)
+            stack.cli(root, StartCliCommand, "--name", name)
         except UpgradeRefused as error:
             return RefusedOwner(name, str(error))
         return StartedOwner(name)
@@ -460,13 +459,11 @@ class Stack:
             return configuration.apply_runtime(environment)
         return environment
 
-    def cli[Answer: CliResult](self, root: Path, command: type[CliCommand],
-                               answer: type[Answer], *arguments: str) -> Answer:
+    def cli[Answer: CliResult](self, root: Path, command: type[CliCommand[Answer]],
+                               *arguments: str) -> Answer:
         """This bus's answer to ``command``, never the route's, decoded as the result the
         command declares. A declared read-unavailable failure (the route index still
         rebuilding, its writer busy) is waited out; every other failure refuses."""
-        if not issubclass(command.result_type(), answer):
-            raise TypeError(f"{command} answers {command.result_type()}, not {answer}")
         invocation = command.invocation(*arguments)
         verb = f"agent-comms {' '.join(invocation)}"
         for _ in range(240):
@@ -513,11 +510,11 @@ print(json.dumps([thread.name for thread in OwnerRestartRequest().scope.threads(
 """, root, cwd=self.checkout, env=self.environment())
         return FieldCodec.decode(list[str], FieldCodec.parse(selected))
 
-    def owners(self, root: Path, command: type[CliCommand], names: list[str]) -> None:
+    def owners(self, root: Path, command: type[CliCommand[CliResult]],
+               names: list[str]) -> None:
         """Run the captured owner set together and join every request before proceeding."""
         with ThreadPoolExecutor(max_workers=max(1, len(names))) as pool:
-            list(pool.map(lambda name: self.cli(root, command, CliResult, "--name", name),
-                          names))
+            list(pool.map(lambda name: self.cli(root, command, "--name", name), names))
 
     def start(self, root: Path, names: list[str]) -> tuple[OwnerStart, ...]:
         """Start the captured owner set together; each owner's outcome is its own."""
@@ -526,7 +523,7 @@ print(json.dumps([thread.name for thread in OwnerRestartRequest().scope.threads(
 
     def verify(self, root: Path) -> BusReadBack:
         """What the carried bus answers through the CLI of the runtime that serves it next."""
-        return self.cli(root, ReadBackCliCommand, BusReadBack)
+        return self.cli(root, ReadBackCliCommand)
 
 
 @dataclass(frozen=True)
@@ -640,7 +637,7 @@ def reconcile_stores(root: Path, staged: Stack) -> StepRun:
     under the hold, and names each file it rewrote, so the backup and the rehearsal account
     for the schema change like any carry's rewrite."""
     verb = ReconcileStoresCliCommand.declared_name
-    result = staged.cli(root, ReconcileStoresCliCommand, ReconciledStoresResult)
+    result = staged.cli(root, ReconcileStoresCliCommand)
     return StepRun(verb, Carried(len(result.rewritten), rewritten=result.rewritten))
 
 
@@ -876,7 +873,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
     os.environ[HOLDER_NONCE] = held.nonce  # this run's own CLI calls read under its hold
     try:
         installed.owners(root, StopCliCommand, running)
-        planned = staged.cli(root, PlannedReconcileCliCommand, ReconciledStoresResult)
+        planned = staged.cli(root, PlannedReconcileCliCommand)
         unrehearsed = sorted(frozenset(planned.rewritten) - frozenset(rehearsal_files.names))
         if unrehearsed:
             raise UpgradeRefused(

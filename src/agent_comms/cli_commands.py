@@ -23,7 +23,8 @@ from functools import partial
 from inspect import iscoroutinefunction, signature
 from itertools import dropwhile, takewhile
 from pathlib import Path
-from typing import Annotated, Any, ClassVar, Literal, Self, TextIO
+from types import get_original_bases
+from typing import Annotated, Any, ClassVar, Literal, Self, TextIO, cast, get_args, get_origin
 
 from acp.exceptions import RequestError
 
@@ -784,7 +785,7 @@ class WorktreeArgument:
 
 
 @dataclass(frozen=True, kw_only=True)
-class CliCommand(
+class CliCommand[Answer: CliResult = CliResult](
     DeclaredFamily,
     DeclaredOptions,
     CliExecution,
@@ -797,10 +798,16 @@ class CliCommand(
         return cls
 
     @classmethod
-    def result_type(cls) -> type[CliResult]:
-        """The result this command answers: its ``apply``'s declared return."""
-        answered: type[CliResult] = signature(cls.apply, eval_str=True).return_annotation
-        return answered
+    def result_type(cls) -> type[Answer]:
+        """The result this command declares once, as the family's type argument in its own or
+        an inherited class header."""
+        for declaration in cls.__mro__:
+            for base in get_original_bases(declaration):
+                origin, arguments = get_origin(base), get_args(base)
+                if isinstance(origin, type) and issubclass(origin, CliCommand) and arguments:
+                    (answer,) = arguments
+                    return cast(type[Answer], answer)
+        raise TypeError(f"{cls.__qualname__} declares no result in its class header")
 
     @classmethod
     def invocation(cls, *arguments: str) -> tuple[str, ...]:
@@ -1773,7 +1780,7 @@ class BusReadBack(CliResult):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ReadBackCliCommand(CliCommand, declared_name="read-back"):
+class ReadBackCliCommand(CliCommand[BusReadBack], declared_name="read-back"):
     help = ("Count the threads this bus's registry holds; the installer reads a bus back "
             "with it before and after its carries")
 
@@ -1791,7 +1798,7 @@ class ReadBackCliCommand(CliCommand, declared_name="read-back"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StoreReconcileCliCommand(CliCommand):
+class StoreReconcileCliCommand(CliCommand[ReconciledStoresResult]):
     """Every declared store whose schema differs from this runtime's declarations; each
     member says what it does with one."""
 
@@ -1931,7 +1938,8 @@ class ThreadLifecycleCliCommand(MultipleTargets, NamedThreadCliCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StopCliCommand(AppliedTogether, NativeOwnerCommand, OwnerLifecycleControl, ThreadLifecycleCliCommand):
+class StopCliCommand(AppliedTogether, NativeOwnerCommand, OwnerLifecycleControl,
+                     ThreadLifecycleCliCommand, CliCommand[ThreadStoppedResult]):
     help = "Stop process"
 
     def apply(self, ctx: Comms) -> ThreadStoppedResult:
@@ -2000,7 +2008,8 @@ class ReleaseCliCommand(NameArgument, CliCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ArchiveCliCommand(MultipleTargets, ArchiveOwnerControl, NamedThreadCliCommand):
+class ArchiveCliCommand(MultipleTargets, ArchiveOwnerControl, NamedThreadCliCommand,
+                        CliCommand[ThreadArchivedResult]):
     help = "Archive a stopped thread"
 
     def apply(self, ctx: Comms) -> ThreadArchivedResult:
@@ -2284,7 +2293,8 @@ class TargetActionCliCommand(TargetArguments, declared_name="target-action"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StartCliCommand(NativeOwnerCommand, StartOwnerControl, ThreadLifecycleCliCommand):
+class StartCliCommand(NativeOwnerCommand, StartOwnerControl, ThreadLifecycleCliCommand,
+                      CliCommand[OwnerStartResult]):
     help = 'Start thread'
 
     def apply(self, ctx: Comms) -> OwnerStartResult:
