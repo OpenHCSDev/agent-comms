@@ -55,7 +55,7 @@ found while tracing it in this change, including these unfinished repairs:
   keep migration results separate from diagnostic output.
 - [x] Replace inline interpreter probes throughout the installer, including package
   resolution. Ask the selected runtime without accidentally importing the checkout.
-- [ ] Repair affected test setup, then exercise rehearsal, failure recovery and the
+- [x] Repair affected test setup, then exercise rehearsal, failure recovery and the
   installed entry path. Report source checks and actual installation separately.
 - [x] Finish shared SQLite ownership: file copies, digests, connections and snapshots
   belong to `SQLiteFile`; coordinator schema/session behavior stays in its subclass.
@@ -153,27 +153,53 @@ two source modules and Textual's 255 source modules; the only dependency
 `render_line(self, y)` override now implements `Widget.render_line(self, y, paint)`
 and reads the supplied paint instead of querying widget state again. Its 14
 existing tests and Toad's actual scripted ACP/file/permission journey passed.
-Toad's dependency pin and these recovery repairs are pushed in `c88eecf8d`.
-The Toad binding fork still owns the `ChangingText` same-text metadata repair:
-painted click metadata is confirmed, but the actual click has not yet opened the
-peer tab. It also retains the unfinished historical fixture migrations; those
-do not block the already reviewed production fixes. Installation waits for the
-remaining production landings and happens once for the batch, followed by the
-installed native fork/DM/reply/tab-return journey. The installer itself resolves
-sibling mains and records its runtime inputs; `stack/uv.lock` is generated and
-untracked, not a separate source commit.
+Toad's dependency pin and recovery repairs are pushed in `c88eecf8d`; `5e02805dc`
+also retains acquired transcript history through child teardown and applies link
+metadata when displayed text is unchanged. The actual goal-link click, peer
+opening, tab return and retained draft passed, together with the other five goal
+controls and two unmount/application-close cases. The Toad binding fork retains
+the unfinished historical fixture migrations independently of this batch.
+
+The paired batch is installed: Core `c94bb280f`, Toad `5e02805dc`, Textual
+`cdddff395` and diff renderer `95db444b`. The real CLI returned `installed`, read
+194 threads before/after, required no durable rewrites or backup, and stopped or
+started no agent owners. Connector round-trip and session-bridge runtime switch
+completed. Its result is
+`/home/ts/..agent-comms.installer-e66f6e3390f4412daebceb3c180aba48/result.json`.
+The installer resolves sibling mains and records its runtime inputs;
+`stack/uv.lock` is generated and untracked, not a separate source commit.
 The same displayed journey exposed raw delivery-state
 dataclass text in the status line; `ThreadStatusModel` now uses the existing
 `MessageNotification.label` owner (38 focused status checks passed).
-No new runtime has been published to the live installation. The installer CLI
-rehearsal/recovery checks above are complete; the final paired batch still needs
-installation and its installed application check.
+The installed saved-fork/fresh-DM/reply/tab-return journey passed. The additional
+native client-request journey failed, but the old test harness labelled any
+failure under its defect catalogue as expected and deleted the diagnostics.
+Its recorded SelectCurrent defect therefore does not identify this failure.
+The Toad fork has removed that outcome substitution in both app and ordinary
+tests: the catalogue supplies context, and actual failed app attempts retain
+their output and private roots. That repair is pushed in Toad `291fd4780`; its
+actual-harness regression passed. A fresh installed client-request attempt timed
+out after 90 seconds. Its retained evidence is
+`/home/ts/.cache/agent-scratch/toad-test-7f90sh_5`; the Toad binding fork owns the
+diagnosis and repair. This does not invalidate the completed saved-fork journey
+or establish the recorded SelectCurrent diagnosis.
 
 ### 2. Commander verbs take a fixed, small time
 
-The installer ownership fork is tracing this surface's source and existing timing
-evidence while the Toad batch finishes. No implementation or live message has
-been started for this phase; the next decision is which cost actually dominates.
+The installer ownership fork measured a cold read on installed Core `a500297f9`:
+imports took 1.560 seconds and the refused Say gate took 33.635 seconds, dominated
+by decoding history for unit questions and directives. Read phases were
+cProfile-instrumented; these are diagnostic costs, not uninstrumented latency.
+The independent reference read took 9.887 seconds and returned no references;
+it is not added to the refused verb's cost because that verb would stop first.
+Source proposal and profile evidence live in
+`/home/ts/.cache/agent-scratch/installer-fork-commander-cold-read/`.
+
+PR #2549 already owns `AnsweredSource` and `MessageIdentitySource` projections.
+The next change integrates those owners with current commander's question and
+directive consumers, preserving newer main's `UnitState`, `NeedsAnswerKind` and
+claim lifetime. The installer ownership fork is shaping that integration against
+the conflicting virtual-bus batch; no optimization or subsecond result is claimed.
 
 - Profile one verb end to end on the live bus with nothing else running.
 - Cut import cost (load only what the verb uses) and make the answer gate read only the rows it needs, never the whole bus.

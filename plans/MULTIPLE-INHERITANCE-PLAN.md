@@ -41,6 +41,16 @@ The phase names below identify the existing declarations in `plan_phases.py`; th
 
 **1A, `LifecycleFlagsPhase`.** Reuse `lifecycle_capability.py` across assignment, obligation, execution, goal and input lifecycles. The original candidates were `terminal`, `failed`, `successful`, `pending`, `active`, `executing`, `unresolved`, `deferred`, `complete` and `completed`. Trace each required meaning and its readers; similarly spelled flags need not answer the same question. Move shared transition behavior into `LifecycleState` and its capabilities. Delete flag defaults, overrides and repeated answers already supplied by a parent.
 
+Checkpoint `2c3b83728` moves owner withdrawal onto `ThreadStatus` and its existing
+`ActiveThreadPresence` capability. Registry unregister, archive and remove invoke
+that contract; all three copied active checks and counter mutations are deleted.
+The 21 focused checks include a connected external bridge whose old owner is
+revoked while its status remains connected, plus repeated inactive withdrawals
+that retain the owner generation. Source evidence is in
+`/home/ts/.cache/agent-scratch/mi-owner-withdrawal-trace.json` (NRA inventory: 461
+production modules, zero parse omissions). This checkpoint is pushed, not installed;
+remaining active consumers and the rest of phase 1A are unfinished.
+
 **1B, `CodecFlagsPhase`.** Extend `FieldCodec`'s existing field representations and dispatch. The original candidates were `accepts_null`, `opaque`, `external_json_shape`, `strict_fields` and `accepts_prompt`. Reuse the capabilities that already own these decisions; remove remaining competing readers and declarations. A remaining wire tag belongs to the existing declared wire family, not another handwritten tag roster.
 
 **1C, `SmallFamilyFlagsPhase`.** Move command and other family decisions onto their existing owners. The phase names `multiple_targets`, `preengagement_target`, `notification_changed` and `input_uncertain`; the latter was originally declared eight times and read nowhere. Delete unused facts outright. `GoalDisplay.visible` has an explicit retained decision recorded in the phase declaration; this plan does not silently broaden that decision to unrelated visibility flags.
