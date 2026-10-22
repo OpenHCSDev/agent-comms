@@ -8,7 +8,7 @@ import os
 import subprocess
 import sys
 import time
-from contextlib import closing
+from contextlib import closing, nullcontext
 from dataclasses import replace
 from pathlib import Path
 
@@ -18,11 +18,14 @@ from agent_comms.child_process import (
     AttachedChild,
     BoundedRun,
     ChildOutcome,
+    DiesWithLauncherLifetime,
     ExitedOutcome,
     GroupMember,
     IdentityMismatchError,
     ObservedProcess,
+    OutlivesLauncherLifetime,
     SpawnedProcess,
+    SynchronousProcess,
     Platform,
     ProcessIdentity,
     TimedOutOutcome,
@@ -79,6 +82,20 @@ def test_synchronous_run_collects_both_streams_and_returncode(tmp_path: Path) ->
         timeout=5, cwd=tmp_path, env=dict(os.environ),
     )
     assert (result.returncode, result.stdout, result.stderr) == (7, b"out\n", b"err\n")
+
+
+def test_stop_batch_retires_live_child_after_an_original_identity_exits() -> None:
+    exited = SpawnedProcess.launch((sys.executable, "-c", "pass"))
+    live = SpawnedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
+    try:
+        exited.process.wait(timeout=5)
+        original = ObservedProcess(exited.identity)
+        with pytest.raises(ProcessLookupError):
+            SynchronousProcess.stop_together(((original, nullcontext), (live, nullcontext)))
+        assert live.retired
+    finally:
+        live.close()
+        exited.close()
 
 
 @pytest.mark.asyncio
@@ -305,6 +322,42 @@ time.sleep(60)
         await child.stop()
 
 
+LAUNCHER = """import json,sys,time
+from pathlib import Path
+from agent_comms.child_process import OutlivesLauncherLifetime, SpawnedProcess
+from agent_comms.field_codec import FieldCodec
+sleeper = (sys.executable, '-c', 'import time; time.sleep(60)')
+children = (SpawnedProcess.launch(sleeper),
+            SpawnedProcess.launch(sleeper, lifetime=OutlivesLauncherLifetime))
+Path(sys.argv[1]).write_text(json.dumps([FieldCodec.encode(c.identity) for c in children]))
+time.sleep(60)
+"""
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="PR_SET_PDEATHSIG is the Linux binding")
+@pytest.mark.asyncio
+async def test_killed_launcher_takes_its_child_and_leaves_its_resident(tmp_path: Path) -> None:
+    announcement = tmp_path / "children.json"
+    launcher = SpawnedProcess.launch((sys.executable, "-c", LAUNCHER, str(announcement)))
+    observed = ()
+    try:
+        await ready(announcement)
+        tied, resident = observed = identities(announcement)
+        assert tied.alive() and resident.alive()
+        # SIGKILL runs no exit handler: only the kernel binding can retire the child.
+        launcher.process.kill()
+        launcher.process.wait(timeout=5)
+        async with asyncio.timeout(2):
+            while tied.alive():
+                await asyncio.sleep(.01)
+        assert resident.alive(), "a declared resident must outlive its launcher"
+    finally:
+        launcher.close()
+        for member in observed:
+            if member.alive():
+                ObservedProcess(member).stop_sync()
+
+
 def test_detached_reserves_identity_before_child_can_execute(tmp_path: Path) -> None:
     acknowledgement = tmp_path / "started"
     recorded = []
@@ -422,7 +475,8 @@ def test_parent_pipe_cleanup_closes_after_real_exception():
     with (
         pytest.raises(ValueError),
         Platform.current().launch(
-            (sys.executable, "-c", "import time; time.sleep(60)"), (), LaunchRuntime.running()
+            (sys.executable, "-c", "import time; time.sleep(60)"), (), LaunchRuntime.running(),
+            DiesWithLauncherLifetime,
         ) as launch,
         launch.spawn(stdout=subprocess.PIPE, stderr=subprocess.PIPE) as child,
     ):

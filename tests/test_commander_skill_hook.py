@@ -12,7 +12,7 @@ from agent_comms.behaviour_patterns import PostmortemFailure
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.rule_file import RuleFile
 from agent_comms.todos import Slop
-from agent_comms_hooks.reread import CommanderReread, DriftCheck, SourcesOrder, ToolUseReminder
+from agent_comms_hooks.reread import SliceReminder
 from agent_comms_hooks.skill import CommanderStart
 
 
@@ -75,109 +75,66 @@ def test_session_start_reads_all_packaged_files_without_a_bus(tmp_path, source, 
     assert not tuple(bus.iterdir())
 
 
-def usage(tokens):
-    return json.dumps({"type": "assistant", "message": {"usage": {
-        "input_tokens": tokens, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}}},
-        separators=(",", ":"))
+def hook_record(transcript, event="PostToolUse"):
+    return {"hook_event_name": event, "session_id": "s", "transcript_path": str(transcript),
+            "tool_name": "Bash", "tool_input": {}}
 
 
-def hook_record(transcript, tool="Bash", **tool_input):
-    return {"hook_event_name": "PostToolUse", "session_id": "s", "transcript_path": str(transcript),
-            "tool_name": tool, "tool_input": tool_input}
+def test_no_deck_no_slices_outside_a_commander_session(tmp_path):
+    hook = SliceReminder.decode(hook_record(tmp_path / "session.jsonl"))
+    assert [hook.take() for _ in range(SliceReminder.every * 2)] == [()] * SliceReminder.every * 2
+    assert not hook.calls.exists()
 
 
-@pytest.mark.parametrize("member", [
-    member for member in ToolUseReminder.__subclasses__() if not issubclass(member, SourcesOrder)
-], ids=lambda member: member.__name__)
-def test_each_reminder_keeps_its_own_cadence_and_resets_at_compaction(tmp_path, member):
-    transcript = tmp_path / "session.jsonl"
-    transcript.write_text("")
-    hook = member.decode(hook_record(transcript))
-    assert hook.take(250_000) == ()  # not a commander session: no parts were written
-    hook.parts.mkdir()
-    (hook.parts / "01.md").write_text("sources")
-    hook.voice.write_text("voice")
-    hook.drift.write_text("tell")
-    assert hook.take(250_000)
-    assert hook.take(250_000 + member.every - 1) == ()
-    assert hook.take(250_000 + member.every)
-    assert hook.take(20_000)  # compaction shrank the context below the mark
-
-
-def test_reread_counts_from_the_reply_after_its_parts_were_read(tmp_path):
-    transcript = tmp_path / "session.jsonl"
-    transcript.write_text("")
-    bash = CommanderReread.decode(hook_record(transcript))
-    bash.parts.mkdir()
-    parts = [bash.parts / "01.md", bash.parts / "02.md"]
-    for part in parts:
-        part.write_text("sources")
-    assert bash.take(250_000)
-    assert bash.take(250_001)  # another action before the reads repeats the order
-    for part in parts:
-        read = CommanderReread.decode(hook_record(transcript, "Read", file_path=str(part)))
-        assert read.take(250_001) == ()
-    assert bash.take(250_001) == ()  # the reply that issued the reads does not hold them yet
-    assert bash.take(340_000) == ()  # the reads landed: the next order counts from here
-    assert bash.take(340_000 + CommanderReread.every - 1) == ()
-    assert bash.take(340_000 + CommanderReread.every)
-
-
-def test_compaction_orders_the_sources_read_once(tmp_path, monkeypatch):
+def test_a_slice_every_few_calls_rotating_and_dealt_again_at_compaction(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
-    start = CommanderStart.decode(
-        {"hook_event_name": "SessionStart", "session_id": "s", "transcript_path": str(transcript)})
-    assert start.take(324_000)  # the transcript still ends with the reply before compaction
-    for part in sorted(start.parts.iterdir()):
-        read = CommanderReread.decode(hook_record(transcript, "Read", file_path=str(part)))
-        assert read.take(106_000) == ()
-    assert CommanderReread.decode(hook_record(transcript)).take(173_000) == ()
+    start = CommanderStart.decode(hook_record(transcript, "SessionStart"))
+    assert start.take()
+    hook = SliceReminder.decode(hook_record(transcript))
+    slices = CommanderStart.slices()
+    taken = [hook.take() for _ in range(SliceReminder.every * 3)]
+    assert taken[SliceReminder.every - 1::SliceReminder.every] == [(text,) for text in slices[:3]]
+    assert sum(map(len, taken)) == 3
+    assert start.take()  # compaction deals the deck again from its start
+    assert [hook.take() for _ in range(SliceReminder.every)][-1] == (slices[0],)
 
 
-def test_drift_check_rotates_through_the_packaged_tells(tmp_path):
-    transcript = tmp_path / "session.jsonl"
-    hook = DriftCheck.decode(hook_record(transcript))
-    tells = list(RuleFile.drift_tells())
-    hook.drift.write_text("\n".join(tells))
-    shown = {line for step in range(len(tells)) for line in
-             hook.message(step * DriftCheck.every).splitlines()[1:]}
-    assert shown == set(tells)
+def test_the_deck_carries_the_voice_every_fourth_slice_every_drift_tell_and_every_failure():
+    slices = CommanderStart.slices()
+    voice = CommanderStart.paragraphs(CommanderConfig.packaged_voice().read_text())
+    indictment = CommanderStart.paragraphs(CommanderConfig.packaged_indictment().read_text())
+    assert set(slices[0::4]) == set(voice)
+    assert set(slices[1::4]) == set(indictment)
+    assert set(slices[2::4]) == set(RuleFile.drift_tells())
+    assert set(slices[3::4]) == {
+        f"Recorded failure {line}" for line in PostmortemFailure.catalog().splitlines()}
+    assert all(len(text) < 2_000 for text in slices)
 
 
-def run_hook(program, transcript, event, monkeypatch, capsys, *lines):
+def test_the_installed_commands_order_the_reads_once_then_put_slices_inline(
+        tmp_path, monkeypatch, capsys):
     import io
 
-    transcript.write_text("".join(line + "\n" for line in lines))
-    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(
-        {"hook_event_name": event, "session_id": "s", "transcript_path": str(transcript),
-         "tool_name": "Bash", "tool_input": {}})))
-    program.main()
-    return capsys.readouterr().out
-
-
-def test_every_due_reminder_goes_out_in_one_hook_output_with_the_voice_inline(
-        tmp_path, monkeypatch, capsys):
     from agent_comms_hooks import reread, skill
 
+    def run(program, event):
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(hook_record(transcript, event))))
+        program.main()
+        return capsys.readouterr().out
+
     transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    assert not run_hook(reread, transcript, "PostToolUse", monkeypatch, capsys, usage(250_000))
-    assert run_hook(skill, transcript, "SessionStart", monkeypatch, capsys, usage(250_000))
-    first = run_hook(reread, transcript, "PostToolUse", monkeypatch, capsys, usage(250_001))
-    (document,) = first.splitlines()
-    first_context = json.loads(document)["hookSpecificOutput"]["additionalContext"]
-    assert CommanderConfig.packaged_voice().read_text() in first_context
-    assert "Drift check:" in first_context
-    # A tool call before the ordered reads repeats the order in the same output.
-    parts = sorted(transcript.with_suffix(".reread").iterdir())
-    assert all(str(part) in first_context for part in parts)
-    both = run_hook(reread, transcript, "PostToolUse", monkeypatch, capsys, usage(350_000))
-    (document,) = both.splitlines()
+    assert not run(reread, "PostToolUse")
+    assert run(skill, "SessionStart")
+    outputs = [run(reread, "PostToolUse") for _ in range(SliceReminder.every)]
+    assert outputs[:-1] == [""] * (SliceReminder.every - 1)
+    (document,) = outputs[-1].splitlines()
     context = json.loads(document)["hookSpecificOutput"]["additionalContext"]
-    assert CommanderConfig.packaged_voice().read_text() in context
-    assert all(str(part) in context for part in sorted(transcript.with_suffix(".reread").iterdir()))
+    assert context == CommanderStart.slices()[0]
+    assert "Read each of these" not in context
 
 
 @pytest.mark.parametrize("path", CommanderConfig.packaged_rules_files(), ids=lambda path: path.name)
@@ -211,7 +168,7 @@ def test_a_session_bound_to_another_bus_thread_gets_no_commander_sources(tmp_pat
     transcript.write_text("")
     record = {"hook_event_name": "SessionStart", "session_id": "s", "transcript_path": str(transcript)}
     WatchClaim("s").enrol(WatchRecord("unit-x", str(tmp_path), ()))
-    assert CommanderStart.decode(record).take(0) == ()
+    assert CommanderStart.decode(record).take() == ()
     assert not CommanderStart.decode(record).parts.exists()
 
 
@@ -227,4 +184,4 @@ def test_the_commander_session_gets_its_sources(tmp_path, monkeypatch):
     transcript.write_text("")
     WatchClaim("s").enrol(WatchRecord("claude-code", str(tmp_path), ()))
     assert CommanderStart.decode(
-        {"hook_event_name": "SessionStart", "session_id": "s", "transcript_path": str(transcript)}).take(0)
+        {"hook_event_name": "SessionStart", "session_id": "s", "transcript_path": str(transcript)}).take()

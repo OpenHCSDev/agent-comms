@@ -12,6 +12,7 @@ from agent_comms import field_codec
 
 from .channel_targets import CommandTarget
 from .errors import RelationViolationError
+from .lifecycle_capability import Unresolved
 from .input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
     GoalInputDecision,
@@ -122,7 +123,8 @@ class InputDocument:
     def unknown(self, owners: frozenset[str]) -> tuple[StoredInput, ...]:
         return tuple(
             sorted(
-                (row for row in self.rows.values() if row.owner in owners and row.unresolved),
+                (pending for row in self.rows.values()
+                 for pending in row.items_with(Unresolved, row) if pending.owner in owners),
                 key=lambda row: row.order,
             )
         )
@@ -176,7 +178,7 @@ class InputDocument:
 def _unresolved_kinds() -> str:
     """The unresolved members' stored names, derived from their declarations."""
     return "(" + ", ".join(
-        sql_literal(member) for member in InputAttempt.members_with(StoredInput) if member.unresolved
+        sql_literal(member) for member in InputAttempt.members_with(Unresolved)
     ) + ")"
 
 
@@ -340,8 +342,7 @@ class InputDispositions(DurableStore):
         document = self.read(keys)
         for row in document.rows.values():
             row.require_not_cleared()
-        if any(not document.lookup(key).unresolved
-               or not document.lookup(key).matches_claim(claim_scope) for key in keys):
+        if any(not document.lookup(key).unresolved_claim(claim_scope) for key in keys):
             return False
         if already_bound:
             return all(document.lookup(key).matches_native(
@@ -400,7 +401,7 @@ class InputDispositions(DurableStore):
                     raise ValueError("Reviewed inputs changed; inspect them again.")
                 rows.setdefault(row.key, row)
             if any(
-                key not in rows or rows[key].owner not in owners or not rows[key].unresolved
+                key not in rows or rows[key].owner not in owners
                 for key in keys
             ):
                 raise ValueError("Reviewed inputs changed; inspect them again.")

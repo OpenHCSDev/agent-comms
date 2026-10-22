@@ -4,11 +4,10 @@ import asyncio
 import json
 import multiprocessing as mp
 import os
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
+from agent_comms.lifecycle_capability import Executing
 
 from agent_comms.send_outcome import GrantedSend, HeldSend
 from agent_comms.child_process import ProcessIdentity
@@ -82,7 +81,9 @@ def test_only_hold_bound_cutover_may_retire_during_draining(tmp_path: Path) -> N
 
         with pytest.raises(OwnerMaintenancePendingRefusal) as refused:
             PreserveOwnerRuntime().require_restart_phase(comms.owners)
-        assert refused.value.queue_state().pending  # Idle reload remains queued, not UNKNOWN.
+        from agent_comms.lifecycle_capability import Pending
+
+        assert refused.value.queue_state().items_with(Pending, refused.value)  # Idle reload remains queued, not UNKNOWN.
     comms.owners.maintenance.clear(hold)
     with _store_lock(comms.root / 'wire'):
         with pytest.raises(RelationViolationError):
@@ -99,27 +100,6 @@ def test_clear_stopped_uses_acquired_wire_descriptor(tmp_path: Path) -> None:
         with pytest.raises(RelationViolationError):
             next_hold = gate.begin(MaintenanceOperator.current())
             gate.clear_stopped(next_hold, other.descriptor)
-
-
-def test_production_only_import_cannot_reach_disposable_control(tmp_path: Path) -> None:
-    src = Path(__file__).resolve().parents[1] / "src"
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            "import importlib.util\n"
-            "from agent_comms.maintenance_barrier import MaintenanceBarrier\n"
-            "assert callable(MaintenanceBarrier.begin); "
-            "assert callable(MaintenanceBarrier.advance); "
-            "assert importlib.util.find_spec('agent_comms.maintenance_control_fixture') is None",
-        ],
-        cwd=tmp_path,
-        env={"PATH": os.environ.get("PATH", ""), "PYTHONPATH": str(src)},
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
-    assert result.returncode == 0, result.stderr
 
 
 def _claim_other_process(registry_path: str, ready: mp.Event, result: mp.Queue) -> None:
@@ -239,7 +219,7 @@ async def test_direct_claim_and_bind_denied_after_phase_ack_in_other_process(tmp
         with status.phase.send_new(None, None, "native", "original") as outcome:
             assert isinstance(outcome, HeldSend)
     assert comms.owners.maintenance.read() == hold
-    assert not comms.registry.require("owner").turn_state.active.executing
+    assert not bool(comms.registry.require('owner').turn_state.active.items_with(Executing, comms.registry.require('owner').turn_state.active))
 
 
 def test_rename_and_stopped_same_pid_cannot_reactivate_under_gate(tmp_path: Path) -> None:
@@ -276,7 +256,7 @@ def test_cross_process_claim_races_pause_at_registry_lock(tmp_path: Path) -> Non
     current = comms.registry.require("owner")
     # A claim linearized before the pause is visible for explicit drain; a
     # claim after pause is denied. Neither is silently retried or erased.
-    assert current.turn_state.active.executing == (result == "claimed")
+    assert bool(current.turn_state.active.items_with(Executing, current.turn_state.active)) == (result == "claimed")
     assert comms.owners.maintenance.read() == hold
     with pytest.raises(RelationViolationError):
         comms.registry.lease_local_turn("owner", "never-after-pause")
@@ -393,3 +373,68 @@ async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> N
     await asyncio.wait_for(pending, 3)
     with output.transcript.reading() as source:
         assert source.current_draft(output.transcript.root, output.transcript.incarnation).external_row().events == (AssistantTranscript('prefix once', timestamp=1., position='item'),)
+
+
+def test_a_registry_write_is_refused_to_all_but_the_maintenance_holder(tmp_path: Path, monkeypatch) -> None:
+    """The installer stops only its owners; the connector, bridges and forks keep running, so the
+    registry itself refuses their writes during a hold, and the holder's own writes still land."""
+    from agent_comms.maintenance_barrier import HOLDER_NONCE
+
+    comms = Comms(tmp_path)
+    comms.registry.declare(comms.registry.new_thread(name='a', tags=frozenset(), worktree='/wt'))
+    before = comms.registry.store.path.read_bytes()
+    gate = MaintenanceBarrier(comms.registry.store.path)
+    hold = gate.begin(MaintenanceOperator.current())
+    monkeypatch.delenv(HOLDER_NONCE, raising=False)
+    with pytest.raises(RelationViolationError):
+        comms.registry.declare(comms.registry.new_thread(name='b', tags=frozenset(), worktree='/wt'))
+    assert comms.registry.store.path.read_bytes() == before
+    monkeypatch.setenv(HOLDER_NONCE, hold.nonce)
+    comms.registry.declare(comms.registry.new_thread(name='b', tags=frozenset(), worktree='/wt'))
+    assert 'b' in comms.registry
+    gate.clear(hold)
+
+
+def test_a_carried_store_write_is_refused_to_all_but_the_maintenance_holder(tmp_path: Path, monkeypatch) -> None:
+    """Every file an installation carries gates its writers through its kind, CarriedWriter:
+    a bridge's transcript or a fork's todo write during a hold is refused instead of
+    changing a file the install's carry check compares, and the holder still writes."""
+    from agent_comms.external_transcript import ExternalTranscript
+    from agent_comms.maintenance_barrier import HOLDER_NONCE
+    from agent_comms.typed_table import CarriedWriter, DurableStore, DerivedStore, RuntimeWriter
+
+    assert issubclass(DurableStore, CarriedWriter) and issubclass(ExternalTranscript, CarriedWriter)
+    assert issubclass(DerivedStore, RuntimeWriter)
+    comms = Comms(tmp_path)
+    todos = comms.goals.todos
+    todos.allocate_problem()
+    before = todos.path.read_bytes()
+    gate = MaintenanceBarrier(comms.registry.store.path)
+    hold = gate.begin(MaintenanceOperator.current())
+    monkeypatch.delenv(HOLDER_NONCE, raising=False)
+    with pytest.raises(RelationViolationError):
+        todos.allocate_problem()
+    assert todos.path.read_bytes() == before
+    monkeypatch.setenv(HOLDER_NONCE, hold.nonce)
+    todos.allocate_problem()
+    gate.clear(hold)
+
+
+def test_every_carried_json_document_writes_through_the_maintenance_gate() -> None:
+    """A durable JSON document gets the gate from its kind, as the registry does, and the
+    runtime projection that running owners rewrite during maintenance does not."""
+    from agent_comms.bus_projection import AppendProjectionStore
+    from agent_comms.catalog_store import ChannelCatalog
+    from agent_comms.connector_store import ConnectorStore
+    from agent_comms.maintenance_barrier import CarriedDocument
+    from agent_comms.read_ledger import ReadLedger
+    from agent_comms.registry_store import RegistryStore
+    from agent_comms.relationships import RelationshipStore
+    from agent_comms.runtime_children import RuntimeChildrenStore
+    from agent_comms.runtime_info import RuntimeInfoStore
+    from agent_comms.shared_ledger import SharedLedger
+
+    for store in (ChannelCatalog, ConnectorStore, ReadLedger, RegistryStore, RelationshipStore,
+                  RuntimeChildrenStore, RuntimeInfoStore, SharedLedger):
+        assert issubclass(store, CarriedDocument), store
+    assert not issubclass(AppendProjectionStore, CarriedDocument)

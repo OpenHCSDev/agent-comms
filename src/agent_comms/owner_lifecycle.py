@@ -19,6 +19,7 @@ from .active_route import resolve_comms_route
 from agent_comms.attempt_recovery import RecoveryMonitorCapability
 from .child_process import (
     ObservedProcess,
+    OutlivesLauncherLifetime,
     Platform,
     ProcessIdentity,
     ProcessState,
@@ -223,10 +224,16 @@ class OwnerReleaseEvidence(ReleasedOwner, OwnerRelease, TypedTable):
         process = self.require_process()
         if process.alive():
             raise RelationViolationError("Released native owner process is still alive")
+        if snapshot.status(current.name).active and self.matches(current):
+            raise RelationViolationError("Released native process is still the registry owner")
         actual = snapshot.claimed_identity(current.name)
         released = ClaimedIdentity(self.incarnation(), self.after)
         if not actual.includes(released):
             raise RelationViolationError("Native release claim_scope regressed")
+        if actual == released and not self.matches(current):
+            raise RelationViolationError(
+                "Native release process differs from its original declaration"
+            )
         return self
 
 
@@ -309,7 +316,7 @@ class OwnerLifecycle:
             orders = tuple(
                 todo
                 for commander in CommanderHeartbeat.commanders(self.registry, self.goals)
-                for todo in self.goals.todos.held_by(commander.incarnation, owned.name)
+                for todo in self.goals.todos.held_by(commander.incarnation, owned.incarnation)
                 if todo.pending and todo.held().owner_identity == owned.incarnation
             )
             if orders:
@@ -437,6 +444,9 @@ class OwnerLifecycle:
         with _store_lock(self._wire_lock_path):
             snapshot = self.registry.snapshot()
             thread = self.registry.require(name)
+            thread.role.require_executable(
+                RelationViolationError("Only agent threads can be stopped.")
+            )
             if not snapshot.status(thread.name).active and (
                 thread.process_identity.allows_inactive_stop()
             ):
@@ -518,6 +528,7 @@ class OwnerLifecycle:
                 output=output,
                 before_start=reserve,
                 runtime=launch_runtime,
+                lifetime=OutlivesLauncherLifetime,
             )
         assert owned is not None
         return owned

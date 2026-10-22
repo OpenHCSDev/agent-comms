@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from .coordination_contracts import MAX_IDENTIFIER_CHARS, require_bounded
-from .coordination_errors import IntegrityViolationError, IdentityConflict
+from .coordination_errors import IdentityConflict, IntegrityViolationError
 from .declared_family import DeclaredFamily
 from .field_codec import NullMember
 from .lifecycle import LifecycleState
+from .lifecycle_capability import Deferred, Failed, Pending, Successful, Terminal
 from .message_reference import MessageReference
+from .reason_codes import NoReasonCode
+
+if TYPE_CHECKING:
+    from .coordination_session import CoordinationSession
+    from .coordination_tables.responses import ResponseObligation
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,19 +26,11 @@ class Unpublished(NullMember):
 
 @dataclass(frozen=True)
 class ResponseState(DeclaredFamily, LifecycleState, affix="Response"):
-    terminal: ClassVar[bool] = False
-    successful: ClassVar[bool] = False
     retryable: ClassVar[bool] = False
     allows_intent: ClassVar[bool] = False
     requires_intent: ClassVar[bool] = False
     published: ClassVar[bool] = False
-    pending: ClassVar[bool] = False
     publishing: ClassVar[bool] = False
-    deferred: ClassVar[bool] = False
-
-    @classmethod
-    @abstractmethod
-    def successors(cls) -> tuple[type[ResponseState], ...]: ...
 
     @property
     def published_message_id(self) -> str | Unpublished:
@@ -61,6 +58,12 @@ class ResponseState(DeclaredFamily, LifecycleState, affix="Response"):
     def require_publishing(self) -> None:
         raise IdentityConflict("no frozen publishing intent for current owner")
 
+    @classmethod
+    def resume_response(
+        cls, session: CoordinationSession, obligation: ResponseObligation, execution_id: str
+    ) -> None:
+        """Only a deferred response needs to reengage."""
+
     def require_nonpublication(self) -> None:
         if not self.retryable:
             raise IdentityConflict("wire completion requires nonpublication obligation")
@@ -79,9 +82,8 @@ class ResponseState(DeclaredFamily, LifecycleState, affix="Response"):
             raise IntegrityViolationError("publication acknowledgement exists iff published")
 
 
-class PendingResponse(ResponseState):
+class PendingResponse(Pending, ResponseState):
     retryable = True
-    pending = True
 
     def require_preparation(self) -> None:
         pass
@@ -107,9 +109,22 @@ class PublishingResponse(ResponseState):
         return PublishedResponse, FailedResponse
 
 
-class DeferredResponse(ResponseState):
+class DeferredResponse(Deferred, ResponseState):
     retryable = True
-    deferred = True
+
+    @classmethod
+    def resume_response(
+        cls, session: CoordinationSession, obligation: ResponseObligation, execution_id: str
+    ) -> None:
+        obligation.update(
+            session._connection,
+            where="execution_id=? AND exact_target=?",
+            parameters=(execution_id, obligation.exact_target),
+            lifecycle=PendingResponse(),
+            revision=obligation.revision + 1,
+            reason_code=NoReasonCode(),
+            updated_at_ms=session.now(obligation.updated_at_ms),
+        )
 
     @classmethod
     def successors(cls):
@@ -117,11 +132,9 @@ class DeferredResponse(ResponseState):
 
 
 @dataclass(frozen=True)
-class PublishedResponse(ResponseState):
+class PublishedResponse(Successful, ResponseState):
     message_id: str
     seq: int
-    terminal = True
-    successful = True
     allows_intent = True
     requires_intent = True
     published = True
@@ -156,24 +169,10 @@ class PublishedResponse(ResponseState):
             raise IntegrityViolationError("published obligations require a acknowledgement")
         return cls(message_id, seq)
 
-    @classmethod
-    def successors(cls):
-        return ()
+
+class SilentResponse(Successful, ResponseState):
+    pass
 
 
-class SilentResponse(ResponseState):
-    terminal = True
-    successful = True
-
-    @classmethod
-    def successors(cls):
-        return ()
-
-
-class FailedResponse(ResponseState):
-    terminal = True
+class FailedResponse(Failed, Terminal, ResponseState):
     allows_intent = True
-
-    @classmethod
-    def successors(cls):
-        return ()

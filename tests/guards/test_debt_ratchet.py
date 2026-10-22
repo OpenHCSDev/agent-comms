@@ -92,6 +92,8 @@ class Repository:
         command = (
             sys.executable, str(source / "tools/debt_ratchet.py"),
             "--root", self.root, "--base", base, "--head", head,
+            # pytest-xdist runs these comparisons side by side; each keeps a narrow pool.
+            "--workers", "2",
         )
         environment = {**os.environ, "PYTHONPATH": os.pathsep.join(
             (str(source / "src"), os.environ["PYTHONPATH"]))}
@@ -905,6 +907,35 @@ def test_none_as_absence_fails_with_its_line_except_in_a_declared_boundary_decod
     )
 
 
+def test_an_unchanged_absence_on_a_rewritten_line_is_not_written_but_a_new_one_is(repo):
+    base = repo.commit({"owner.py": "def ready(stored):\n    return stored is not None and stored.done\n"})
+    kept = repo.commit({"owner.py": "def ready(stored):\n    return stored is not None and stored.settled()\n"})
+    status, report = repo.compare(base, kept)
+    identity = f"{NoneAbsence.__name__}:{repo.root}/owner.py"
+    assert report["introduced"][identity] == 0
+    added = repo.commit(
+        {"owner.py": "def ready(stored):\n    return stored is not None and stored.owner is not None\n"}
+    )
+    status, report = repo.compare(kept, added)
+    assert status == 1
+    assert report["introduced_lines"][identity] == [2]
+
+
+def test_an_absence_moved_with_its_class_to_another_module_is_not_written(repo):
+    holder = "class Holder:\n    def check(self, v):\n        return v is None\n"
+    other = "class Other:\n    def check(self, v):\n        return v is None\n"
+    base = repo.commit({"attempts.py": holder, "executions.py": "VALUE = 1\n"})
+    moved = repo.commit({"attempts.py": "VALUE = 2\n", "executions.py": holder})
+    status, report = repo.compare(base, moved)
+    identity = f"{NoneAbsence.__name__}:{repo.root}"
+    assert report["introduced"][f"{identity}/executions.py"] == 0
+    deleted = repo.commit({"attempts.py": holder, "executions.py": None})
+    moved_out = repo.commit({"attempts.py": None, "owners.py": holder + "\n\n" + other})
+    status, report = repo.compare(deleted, moved_out)
+    assert status == 1
+    assert report["introduced_lines"][f"{identity}/owners.py"] == [8]
+
+
 def test_git_context_configuration_cannot_mark_unchanged_lines_as_new(repo):
     repo.git("config", "diff.interHunkContext", "3")
     base = repo.commit({"names.py": "first = 1\nold_receipt = 1\nlast = 1\n"})
@@ -961,6 +992,23 @@ def test_vocabulary_includes_identifiers_comments_and_docstring_lines_only(word)
     assert FrozenFieldWrite.count(b'text = "object.__setattr__(x, y, z)"\n', "values.py") == 0
 
 
+def test_a_frozen_write_counts_except_in_its_own_classes_post_init():
+    source = b"""class Snapshot:
+    def __post_init__(self):
+        object.__setattr__(self, "maps", dict(self.maps))
+        object.__setattr__(self.other, "maps", {})
+        def later():
+            object.__setattr__(self, "maps", {})
+    def refresh(self):
+        object.__setattr__(self, "maps", {})
+def __post_init__(self):
+    object.__setattr__(self, "maps", {})
+"""
+    # Only the first write builds the instance; another object, a nested scope, another
+    # method and a module-level function of the same name all still count.
+    assert FrozenFieldWrite.count(source, "values.py") == 4
+
+
 def test_changed_prose_fails_but_an_unchanged_disk_key_does_not(repo):
     original = 'key = "admission_generation"\n# clean wording\n'
     base = repo.commit({"words.py": original})
@@ -978,7 +1026,7 @@ def test_local_import_scope_counts_nested_functions_and_classes_once():
 
 
 def string_identity_readings(source: bytes) -> list[tuple[str, type]]:
-    declared = b"class CarryStep: pass\ndef carry_hunts(): pass\n"
+    declared = b"class CarryStep: pass\nclass Claimed: pass\ndef carry_hunts(): pass\n"
     spellings = DeclaredSpellings.read(
         {
             path: DeclaredSpellings.declarations(path, module)
@@ -997,6 +1045,7 @@ def test_string_identity_reads_declared_names_compared_kinds_and_named_access():
     source = b"""after = "carry_hunts"
 step = "CarryStep"
 table = "pkg.route_table"
+loaded = sys.modules["pkg.route_table"]
 if kind == "release": pass
 if mode in {"fast", "slow"}: pass
 match shape:
@@ -1019,6 +1068,43 @@ word = "plain words here"
         ("model", NamedAccess),
         ("pkg.plugin", NamedAccess),
         ("text", NamedAccess),
+    ]
+
+
+def test_a_one_word_class_name_counts_only_where_a_type_is_expected():
+    source = b"""notice = Message(owner, owner, "Claimed", kind)
+label = "Claimed"
+field: Annotated[int, tool_field("Claimed")] = 0
+step = "CarryStep"
+def read() -> "Claimed": pass
+held: "Claimed"
+class Index(list["Claimed"]): pass
+Bound = TypeVar("Bound", bound="Claimed")
+"""
+    assert string_identity_readings(source) == [
+        ("CarryStep", NamedDeclaration),
+        ("Claimed", NamedDeclaration),
+        ("Claimed", NamedDeclaration),
+        ("Claimed", NamedDeclaration),
+        ("Claimed", NamedDeclaration),
+    ]
+
+
+def test_a_module_name_counts_only_where_a_string_selects_a_module():
+    source = b"""migrate = numbers and "route_table" in stored
+path = "pkg.route_table"
+spec = importlib.util.find_spec("pkg.route_table")
+cached = sys.modules.get("pkg.route_table")
+present = "pkg.route_table" in sys.modules
+skills = files("pkg.route_table") / "skills"
+command = (interpreter, "-m", "pkg.route_table", root)
+"""
+    assert string_identity_readings(source) == [
+        ("pkg.route_table", NamedDeclaration),
+        ("pkg.route_table", NamedDeclaration),
+        ("pkg.route_table", NamedDeclaration),
+        ("pkg.route_table", NamedDeclaration),
+        ("pkg.route_table", NamedDeclaration),
     ]
 
 
@@ -1051,7 +1137,7 @@ def test_string_identity_measures_spellings_outside_root_and_skips_declared_test
         (repo.path / name).write_text(source)
     base = repo.commit({"kept.py": "value = 1\n"})
     for name in ("tools/step.py", "tests/test_step.py"):
-        (repo.path / name).write_text('after = "carry_other"\n')
+        (repo.path / name).write_text('after = sys.modules["carry_other"]\n')
     head = repo.commit({})
     status, report = repo.compare(base, head)
     assert status == 1
@@ -1126,3 +1212,21 @@ except FileNotFoundError: absent()
 def test_broad_handlers_only_count_defaults_returned_by_the_handler():
     source = b"""def read():\n    try: work()\n    except Exception:\n        return None\n    try: work()\n    except:\n        if condition: return {}\n    try: work()\n    except OSError:\n        return None\n    try: work()\n    except BaseException:\n        raise\n    try: work()\n    except Exception:\n        def helper(): return None\n        raise\n"""
     assert BroadExceptDefault.count(source, "read.py") == 2
+
+
+def test_growth_lines_end_the_merged_log(repo: Repository) -> None:
+    """run-step.sh annotates the last lines of stdout and stderr merged into one pipe; the
+    report is flushed first, so what grew is what a reader without the job log sees."""
+    base = repo.commit({"check.py": 'value = row["a"]\n'})
+    head = repo.commit({"check.py": "value = type(x) is int\n"})
+    source = Path(__file__).resolve().parents[2]
+    environment = {**os.environ, "PYTHONPATH": os.pathsep.join(
+        (str(source / "src"), os.environ["PYTHONPATH"]))}
+    merged = subprocess.run(
+        (sys.executable, str(source / "tools/debt_ratchet.py"),
+         "--root", repo.root, "--base", base, "--head", head),
+        cwd=repo.path, env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, timeout=120,
+    )
+    assert merged.returncode == 1
+    assert merged.stdout.rstrip().splitlines()[-1].startswith(("grew ", "introduced "))

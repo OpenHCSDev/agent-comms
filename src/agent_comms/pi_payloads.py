@@ -42,6 +42,7 @@ from .field_codec import (
     boundary_decoder,
 )
 from .goals import GoalDeclaration
+from .lifecycle_capability import Successful
 from .native_file_artifact import NativeFileArtifact
 from .native_session_reopen import NativeSessionIdentity
 from .pi_counts import NonnegativePiCount, PiCount, TotalPiCount, UnreportedCount
@@ -863,7 +864,7 @@ class AssistantMessage(PiMessage):
 
     @property
     def final_reply(self):
-        return self.stop_reason.successful
+        return bool(self.stop_reason.items_with(Successful, self))
 
     async def apply_start(self, session, event):
         await session.assistant_started()
@@ -886,7 +887,9 @@ class AssistantMessage(PiMessage):
         session.output.start_message()
         if session.accepts_output:
             updates.extend(self.usage.charges(session.usage))
-        session.output.final_assistant_stop = reason.successful and session.started_input
+        session.output.final_assistant_stop = (
+            bool(reason.items_with(Successful, reason)) and session.started_input
+        )
         updates.extend([event async for event in reason.apply(session, self)])
         await session.assistant_ended()
         return tuple(updates)

@@ -28,7 +28,9 @@ from pydantic import Field, TypeAdapter, model_validator
 from agent_comms import field_codec, messages
 from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesTranscript
 from agent_comms.change_report import NoChangeReport, ReportEvidence
-from agent_comms.child_process import AttachedChild, ProcessIdentity, SpawnedProcess, StreamingChildStdio
+from agent_comms.child_process import (
+    AttachedChild, OutlivesLauncherLifetime, ProcessIdentity, SpawnedProcess, StreamingChildStdio,
+)
 from agent_comms.cli_protocol import (
     DeliveredOutcome,
     EmittedOutcome,
@@ -165,7 +167,7 @@ class Binding(BridgeStateTable, TypedTable, BindingRequest):
             with SQLiteFile.write_transaction(db):
                 if not BridgeStateTable.stored_schema(db):
                     BridgeStateTable.create_schema(db)
-                BridgeStateTable.reconcile_schema(db)
+            BridgeStateTable.reconcile_schema(db)
             yield db
 
     def bind(self, db: CoordinationStore) -> Binding:
@@ -551,7 +553,8 @@ class Serve(Watch):
         log = claim.path.with_suffix('.log')
         with log.open('ab') as output:
             child = SpawnedProcess.launch(
-                command, env=runtime.environment(os.environ), output=output, runtime=runtime)
+                command, env=runtime.environment(os.environ), output=output, runtime=runtime,
+                lifetime=OutlivesLauncherLifetime)
         deadline = time.monotonic() + 30
         while child.alive() and time.monotonic() < deadline:
             try:

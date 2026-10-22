@@ -34,7 +34,8 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     caller.invoke(CommsTodoCreateTool(owner="worker", order=CreateProblemGoalAction(
         problem="P1", order=replace(order(source), edits=("Repair the existing record owner",)),
         request="request", review_at=RecordedEventTime(1000),
-        commander="lead", repo=RepositoryName.from_wire("org/repo"), text="Repair the worker")), comms)
+        commander="lead", assigner=comms.registry.require('lead').incarnation,
+        repo=RepositoryName.from_wire("org/repo"), text="Repair the worker")), comms)
     todo = comms.goals.todos.get("P1")
     actor = comms.registry.require("lead").incarnation
     reason = "The worker changed the wrong owner and left the decision duplicated."

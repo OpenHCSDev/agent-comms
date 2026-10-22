@@ -45,9 +45,11 @@ from .cli_protocol import CoreError
 from .command import Command
 from .comms import Comms, client_wire
 from .declared_family import DeclaredFamily, UnknownFamilyMember
-from .errors import ToolRefusedError, UnregisteredThreadError
+from .errors import RelationViolationError, ToolRefusedError, UnregisteredThreadError
+from .coordination_errors import CoordinationError
 from .field_codec import (
-    Argument, FieldCodec, MalformedRecord, PathText, WireName, WireOmitDefault, boundary_decoder,
+    Argument, FieldCodec, GitCommitText, MalformedRecord, PathText, WireName, WireOmitDefault,
+    boundary_decoder,
 )
 from .goal_actions import DirectiveGoalAction
 from .host_services import HostService, SystemdUserService
@@ -61,7 +63,10 @@ from .commander.standing import UnownedOrderWatch
 from .commander_heartbeat import CommanderHeartbeat
 from .coordinator import Coordination
 from .service_passes import ServicePassStore
+from .head_review import HeadReview, PullRequestHead
+from .repository_name import RepositoryName
 from .todos import DirectiveText, ReviewedHeadVerdict
+from .tool_result import ToolResult
 from .tool_caller import ThreadCaller
 from .tools import (
     CommsVerdictTool, ReadTool, TodoChanged, ToolRequest, tool_field,
@@ -105,6 +110,35 @@ class ConnectorVerdictTool(ConnectorTool, declared_name=CommsVerdictTool.declare
             comms.goals, self.id, comms.registry.require(caller.name).incarnation
         )
         return TodoChanged(todo, todo.strike_count)
+
+
+@dataclass(frozen=True)
+class HeadReviewed(ToolResult):
+    repo: RepositoryName
+    pr: int
+    head: str
+    review: HeadReview
+
+
+@dataclass(frozen=True, kw_only=True)
+class ConnectorHeadReviewTool(ConnectorTool, declared_name="comms_review_head"):
+    """A pull request with no order still gets the connector reviewer's verdict on its head;
+    an order's pull request takes comms_verdict, which also records the verdict on the order."""
+
+    label = "Review PR head without an order"
+    description = (
+        "Post the connector reviewer's verdict (accepted, or sent_back with its reason) as "
+        "agent-comms/review on the exact head commit of a pull request no order holds."
+    )
+    repo: Annotated[RepositoryName, *tool_field("Repository, owner/name")]
+    pr: Annotated[int, *tool_field("Pull request number")]
+    head: Annotated[str, GitCommitText, *tool_field("The exact head commit reviewed")]
+    review: Annotated[HeadReview, *tool_field("accepted, or sent_back with the reason")]
+
+    def apply(self, comms: Comms, caller: DirectorCaller) -> HeadReviewed:
+        head = PullRequestHead(self.repo, self.pr, self.head).current()
+        self.review.post(self.repo, head, caller.name, f"#{self.pr}")
+        return HeadReviewed(self.repo, self.pr, self.head, self.review)
 
 
 CALLER = DirectorCaller("claude-ai")  # Owner-typed calls act as this registered bus thread.
@@ -458,7 +492,7 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
         try:
             reply = await asyncio.to_thread(connector.invoke, tool, self.params.arguments)
             return ToolsCallResult((TextContent(json.dumps(reply)),), False, reply)
-        except Exception as error:
+        except (ToolRefusedError, RelationViolationError, CoordinationError) as error:
             logging.exception("Connector tool %s failed", self.params.name)
             return ToolsCallResult.failed(error)
 
