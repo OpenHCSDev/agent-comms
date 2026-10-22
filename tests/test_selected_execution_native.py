@@ -1,7 +1,6 @@
 """SelectedExecution with pinned native Pi, local deterministic coding provider."""
 from agent_comms.lifecycle_capability import Complete
 from bus_history import read_history
-from conftest import publish_initial
 from agent_comms.pi_vocabulary import LowThinkingLevel
 from binding_reads import binding_rows
 
@@ -18,7 +17,6 @@ import pytest
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.coordinated_runtime import SelectedExecution
-from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
@@ -37,24 +35,14 @@ tmp_path = private_root_fixture
 
 
 @pytest.mark.parametrize(
-    "after_cutover, selected_write, triage",
-    [(False, False, False), (True, False, False), (False, True, False), (False, False, True)],
+    "selected_write, triage",
+    [(False, False), (True, False), (False, True)],
 )
-async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch, after_cutover, selected_write, triage, *, cursor_delivery, source_reads):
+async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch, selected_write, triage, *, cursor_delivery, source_reads):
     package = os.environ.get("AC_NATIVE_COPIED_PACKAGE")
     if not package:
         pytest.skip("Prepared native package required; never build or call a paid provider")
     root, root_id, comms, initial, people = _root(tmp_path, direct=not triage, claims=True)
-    old_seq = initial.message.seq
-    if after_cutover:
-        with comms.bus.log.locked():
-            marker = comms.bus.log.private_marker_unlocked()
-            marker.claimed_after_seq = marker.last_seq
-            comms.bus.log.write_metadata_unlocked(marker)
-        fresh = publish_initial(comms, "sender", "beta", "Run the coding tools now.")
-        initial = comms.bus.log.read_delivery_cohort(root_id, fresh.seq)
-        with Coordination(str(root / "coordination.sqlite3")) as store:
-            accept_delivery_cohort(comms.bus, root_id, fresh.seq, store)
     owner = comms.registry.require("beta")
     comms.registry.register(replace(owner, model=DeclaredModel("selected-offline/fixture"), thinking_level=LowThinkingLevel))
     (tmp_path / "input.txt").write_text("state=BEFORE\n")
@@ -268,19 +256,6 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
             if triage:
                 assert len({proof.context.session_file for proof in proofs}) == 1
                 assert len({proof.input_id for proof in proofs}) == 2
-            if after_cutover:
-                assert (
-                    read_historical_native_inputs(
-                        store,
-                        wire_root_id=root_id,
-                        recipient_lookup=RecordedThreadIncarnation(
-                            "fixture", owner.created_at
-                        ).lookup,
-                        source_seq=old_seq,
-                        source_reads=source_reads,
-                    )
-                    == ()
-                )
         with pytest.raises(IdentityConflict):
             await execution.run()
         assert len(requests) == 2 + triage

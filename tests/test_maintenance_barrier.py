@@ -311,17 +311,19 @@ def test_phase_change_waits_for_final_native_write_lock(tmp_path: Path) -> None:
 def test_activity_write_is_refused_while_draining(tmp_path: Path, capsys) -> None:
     """Activity is not a publication request and remains refused during a hold."""
     from agent_comms.activity import ActivityStore
+    from agent_comms.bus import Bus
     from agent_comms.cli import main
 
     def cli(*argv: str) -> tuple[int, str]:
         code = main(['--root', str(tmp_path), *argv])
         return code, capsys.readouterr().out
 
+    bus = Bus.install(Bus.path_in(tmp_path))
     for name in ('a', 'b'):
         assert cli('register', '--name', name, '--worktree', '/wt')[0] == 0
-    def written() -> tuple[bytes, ...]:
-        return tuple(path.read_bytes() if path.exists() else b''
-                     for path in (tmp_path / 'bus.jsonl', ActivityStore.path_in(tmp_path)))
+    def written() -> tuple[int, bytes]:
+        activity = ActivityStore.path_in(tmp_path)
+        return bus.revision(), activity.read_bytes() if activity.exists() else b''
 
     before = written()
     gate = MaintenanceBarrier(tmp_path / 'registry.json')
@@ -408,9 +410,7 @@ def test_a_carried_store_write_is_refused_to_all_but_the_maintenance_holder(tmp_
 
 
 def test_every_carried_json_document_writes_through_the_maintenance_gate() -> None:
-    """A durable JSON document gets the gate from its kind, as the registry does, and the
-    runtime projection that running owners rewrite during maintenance does not."""
-    from agent_comms.bus_projection import AppendProjectionStore
+    """A durable JSON document gets the gate from its kind, as the registry does."""
     from agent_comms.catalog_store import ChannelCatalog
     from agent_comms.connector_store import ConnectorStore
     from agent_comms.maintenance_barrier import CarriedDocument
@@ -424,4 +424,3 @@ def test_every_carried_json_document_writes_through_the_maintenance_gate() -> No
     for store in (ChannelCatalog, ConnectorStore, ReadLedger, RegistryStore, RelationshipStore,
                   RuntimeChildrenStore, RuntimeInfoStore, SharedLedger):
         assert issubclass(store, CarriedDocument), store
-    assert not issubclass(AppendProjectionStore, CarriedDocument)

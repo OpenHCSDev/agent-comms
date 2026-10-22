@@ -310,10 +310,15 @@ def declare_test_bus(comms: Comms, *, channels=(), threads=()) -> Comms:
     return comms
 
 
-@pytest.fixture
-def comms(root: Path) -> Comms:
+def installed_comms(root: Path) -> Comms:
+    """A root as the installer leaves it: its bus exists before any reader opens it."""
     Bus.install(Bus.path_in(root))
     return Comms(root)
+
+
+@pytest.fixture
+def comms(root: Path) -> Comms:
+    return installed_comms(root)
 
 
 @pytest.fixture

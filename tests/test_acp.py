@@ -29,6 +29,7 @@ from agent_comms.acp_extension import (
 from agent_comms.activity import ActivityState
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.context_reading import ContextUsage, UnmeasuredContext
 from agent_comms.channels import AnyChannel
 from agent_comms.errors import UnregisteredThreadError
@@ -410,9 +411,7 @@ class TestLiveDrain:
 
 class TestFullHistory:
     def test_full_history_is_everything_in_order(self, tmp_path):
-        from agent_comms.comms import wire
-
-        comms = wire(tmp_path / "wire")
+        comms = installed_comms(tmp_path / "wire")
         comms.registry.declare(comms.registry.new_thread(name='a', tags=frozenset({'x'}), worktree='/wt'))
         comms.registry.declare(comms.registry.new_thread(name='b', tags=frozenset(), worktree='/wt'))
         comms.messaging.send("a", "#all", "one").message.message_id

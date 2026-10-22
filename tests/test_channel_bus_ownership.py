@@ -25,7 +25,7 @@ def test_membership_changes_keep_canonical_notification_and_history(tmp_path):  
         replace(comms.registry.require("beta"), tags=frozenset({"team", "extra"}))
     )
     message = comms.messaging.send_user_message("#team", "current membership", worktree=str(root))
-    initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
+    initial = comms.bus.bus.delivery(message.seq)
     assert [row.canonical_thread for row in initial.audience.recipients] == ["beta"]
     assert all(isinstance(decision.wake_mode, BoundedTriageWake) for decision in initial.decisions)
     with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -42,47 +42,31 @@ def test_membership_changes_keep_canonical_notification_and_history(tmp_path):  
 def test_no_wake_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa: F811
     import json
 
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.message_reference import MessageReference
     from agent_comms.wake_policy import NoWakeDecision
 
     root, root_id, comms, initial, _people = _root(tmp_path, mentioned=True)
     observer = comms.registry.require("alpha")
     assert any(isinstance(decision, NoWakeDecision) for decision in initial.decisions)
-    for number in range(6):
-        message = comms.messaging.send("sender", "#team", f"@beta review {number}").message
+    sent = tuple(comms.messaging.send("sender", "#team", f"@beta review {number}").message
+                 for number in range(6))
     assert not comms.registry.require("alpha").executing
     references = tuple(message.reference for message in comms.bus.inbox("alpha", CommandTarget.named("#team")))
     comms.messaging.acknowledge("alpha", references)
     ledger = comms.bus.reads.path.read_bytes()
-    source = comms.bus.log.path.read_bytes()
+    revision = comms.bus.bus.revision()
     frame = "".join(segment.text() for segment in comms.bus.awareness_segments(observer, ()))
-    pointers = json.loads(frame.splitlines()[-1])["sources"]
-    assert len(pointers) == 4
-    assert pointers[-1]["seq"] == message.seq
-    assert pointers[-1]["message_id"] == message.message_id
-    for pointer in pointers:
-        row = json.loads(source[pointer["offset"] : pointer["offset"] + pointer["length"]])
-        assert row["seq"] == pointer["seq"] and row["to"] == "#team"
+    pointers = tuple(FieldCodec.decode(MessageReference, pointer)
+                     for pointer in json.loads(frame.splitlines()[-1])["sources"])
+    assert set(pointers) == {initial.message.reference, *(message.reference for message in sent)}
+    pointed = comms.bus.bus.messages_for_references(pointers)
+    assert all(record.target == "#team" for record in pointed)
     assert "may omit older" in frame
     assert comms.bus.reads.path.read_bytes() == ledger
-    assert comms.bus.log.path.read_bytes() == source
+    assert comms.bus.bus.revision() == revision
     assert not (root / "acp_passive_channel_awareness.json").exists()
     assert comms.bus.awareness_segments(replace(observer, created_at=observer.created_at + 1), ()) == ()
-    with comms.bus.log.locked():
-        marker = comms.bus.log.private_marker_unlocked()
-        marker.claimed_after_seq = marker.last_seq
-        comms.bus.log.write_metadata_unlocked(marker)
-    assert comms.bus.awareness_segments(observer, ()) == ()
-
-
-def test_awareness_refuses_changed_checkpoint_without_rebuild(tmp_path):  # noqa: F811
-    root, _root_id, comms, _initial, _people = _root(tmp_path, mentioned=True)
-    observer = comms.registry.require("alpha")
-    path = root / "private_bus_checkpoint.sqlite3"
-    path.touch()  # Same content, but the durable index seal must refuse its new revision.
-    before = path.stat()
-    frame = "".join(segment.text() for segment in comms.bus.awareness_segments(observer, ()))
-    assert "awareness unavailable" in frame
-    assert path.stat() == before
 
 
 async def test_natural_owned_turn_prepares_observer_pointer_without_native_start(tmp_path):  # noqa: F811

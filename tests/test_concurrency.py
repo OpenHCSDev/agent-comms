@@ -18,6 +18,7 @@ from agent_comms.message_page import PageBounds
 from agent_comms.pi_counts import PiCount
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from bus_history import read_history
+from conftest import installed_comms
 from agent_comms.thread_model import DeclaredModel
 
 
@@ -91,7 +92,7 @@ class TestConcurrentWire:
 
     def test_concurrent_senders_preserve_every_message_and_sequence(self, tmp_path: Path) -> None:
         root = tmp_path / "wire"
-        comms = wire(root)
+        comms = installed_comms(root)
         senders = [f"worker-{index}" for index in range(6)]
         for sender in senders:
             comms.registry.declare(comms.registry.new_thread(name=sender, tags=frozenset(), worktree='/tmp'))

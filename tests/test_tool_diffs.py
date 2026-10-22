@@ -6,7 +6,7 @@ from agent_comms.tool_caller import NoThreadCaller
 
 import pytest
 
-from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.pi_payloads import PiToolResult
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.tool_results import NoSentMessage, NoToolDiff, ToolDiff, tool_result_content
@@ -57,7 +57,7 @@ def test_successful_send_preserves_original_publication_in_live_and_saved_conten
     from agent_comms.tools import invoke_tool
     from agent_comms.transcript_events import SentTranscript
 
-    comms = wire(tmp_path / "wire")
+    comms = installed_comms(tmp_path / "wire")
     comms.registry.declare(comms.registry.new_thread('sender', frozenset(), str(tmp_path)))
     comms.registry.declare(comms.registry.new_thread('recipient', frozenset(), str(tmp_path)))
     published = invoke_tool(comms, "comms_send", {

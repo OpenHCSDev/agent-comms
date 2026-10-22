@@ -3,8 +3,6 @@ from conftest import publish_initial
 import hashlib
 import json
 
-import pytest
-
 from agent_comms.thread_identity import TurnId, TurnIdentity
 from agent_comms.turn_context import ContextManifest, RecordedContextTurn, SegmentManifest, OwnerProvenance, TurnContext, TranscriptSegment, UserInputSegment
 from agent_comms.pi_commands import Prompt
@@ -36,49 +34,38 @@ def corrupt_context_kind(comms, name, kind):
                    (json.dumps(encoded), version.id))
 
 
-def test_awareness_inspection_waits_for_original_source_without_input_delay(tmp_path):
-    from concurrent.futures import ThreadPoolExecutor, TimeoutError
+def test_awareness_inspection_reads_the_committed_source_beside_a_held_writer(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
     from threading import Event
-    from agent_comms.context_segments.awareness import AwarenessSegment, UnavailableAwarenessSegment
+
+    from agent_comms.context_segments.awareness import AwarenessSegment
 
     comms = context_comms(tmp_path)
     publish_initial(comms, 'sender', '#team', '@Alice original question')
     owner = comms.registry.require('Alice')
     original = comms.bus.awareness_segments(owner, ())
     assert len(original) == 1 and isinstance(original[0], AwarenessSegment)
-    before = comms.bus.log.path.read_bytes()
-    entered = Event()
-
-    def read():
-        entered.set()
-        return comms.bus.awareness_segments(owner, (), blocking=True)
-
+    before = comms.bus.bus.revision()
     locked, release = Event(), Event()
 
     def hold_writer():
-        with comms.bus.log.locked():
+        with comms.bus.bus.writing():
             locked.set()
             assert release.wait(2)
 
-    with ThreadPoolExecutor(max_workers=2) as worker:
+    with ThreadPoolExecutor(max_workers=1) as worker:
         writer = worker.submit(hold_writer)
         assert locked.wait(1)
         try:
-            # A different thread owns the writer: this is real contention,
-            # unlike reentering this thread's own source lease.
-            omitted = comms.bus.awareness_segments(owner, ())
-            assert len(omitted) == 1 and isinstance(omitted[0], UnavailableAwarenessSegment)
-            pending = worker.submit(read)
-            assert entered.wait(1)
-            with pytest.raises(TimeoutError):
-                pending.result(timeout=.05)
+            # Another thread holds the bus write transaction; the reader keeps
+            # its committed snapshot instead of waiting or omitting awareness.
+            assert comms.bus.awareness_segments(owner, ()) == original
         finally:
             release.set()
         writer.result(timeout=2)
-        assert pending.result(timeout=2) == original
     inspection = TurnContext.for_inspection(comms, owner)
     assert original[0] in inspection.segments
-    assert comms.bus.log.path.read_bytes() == before
+    assert comms.bus.bus.revision() == before
 
 
 def test_rendered_contributors_remain_original_bytes_through_prompt_boundary(tmp_path):

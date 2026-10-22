@@ -25,6 +25,7 @@ import pytest
 from agent_comms.reason_codes import NoReasonCode
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.attempt_start import AttemptStart
+from agent_comms.bus import BusReader
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.selected_claim import (
     publish_selected_resource_claim,
@@ -92,7 +93,7 @@ def selected_turn():
         record_context(comms, "Alice", 1)
         message = publish_initial(comms, "sender", "#team", "@Alice investigate")
         record_context(comms, "Alice", 2)
-        initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
+        initial = comms.bus.bus.delivery(message.seq)
         with Coordination(str(root / "coordination.sqlite3")) as store:
             install_private_cohort_schema(store)
             for recipient in initial.audience.recipients:
@@ -151,8 +152,8 @@ def settle_failed(store):
 
 
 def claim_originals(comms: Comms) -> tuple[ClaimMessage, ...]:
-    with comms.bus.log.full_history_snapshot() as (_, messages):
-        return tuple(message for message in messages if isinstance(message, ClaimMessage))
+    records = comms.bus.bus.since(0, comms.bus.bus.revision())
+    return tuple(record for record in records if isinstance(record, ClaimMessage))
 
 
 def acquire_tool_claim(comms: Comms, name: str, resource: Path, operation_id: str = "e" * 32):
@@ -163,7 +164,7 @@ def acquire_tool_claim(comms: Comms, name: str, resource: Path, operation_id: st
             operation_id=operation_id, turn_id=f"turn-{name}", input_id=f"input-{name}",
         )
         return comms.bus.publisher._publish_acquisition_unlocked(
-            boundary.bus_lock, boundary.registry, owner,
+            boundary.registry, owner,
             ExistingFileClaim(resource).normalized(Path(owner.worktree)), scope,
             activity=boundary.activity,
         )
@@ -176,13 +177,11 @@ def release_tool_claim(comms: Comms, claim) -> None:
 
 def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.MonkeyPatch) -> None:
     with selected_turn() as (comms, store, claim_scope, resource):
-        log = comms.bus.log
-
         def whole_bus(*_, **__):
             raise AssertionError("a claim read every row of the bus")
 
         with monkeypatch.context() as patch:
-            patch.setattr(log, "verified_records_unlocked", whole_bus)
+            patch.setattr(BusReader, "message_history", whole_bus)
             claimed = publish_selected_resource_claim(
                 comms, store, claim_scope, "Alice", ExistingFileClaim(resource)
             )
@@ -195,11 +194,11 @@ def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.Monkey
             settle_failed(store)
         assert resource.read_bytes() == b"value = 2\n"
         # The strict whole-bus reader agrees with what the claim path left.
-        assert dict(log.claim_projection()) == {}
+        assert dict(comms.bus.bus.claim_projection()) == {}
         claims = claim_originals(comms)
-        displayed = tuple(message for message in comms.bus.log.read_page(
-            MessagePageRequest(AllChannelDisplayScope("#any")),
-        ).messages if isinstance(message, ClaimMessage))
+        displayed = tuple(message for message in MessagePageRequest(
+            AllChannelDisplayScope("#any"),
+        ).read_opened(comms.bus.bus).messages if isinstance(message, ClaimMessage))
         assert displayed == claims
         assert [(m.claim_transition.claims, len(m.claim_transition.releases)) for m in claims] == [
             ((str(resource),), 0), ((), 1),
@@ -210,7 +209,7 @@ def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.Monkey
         )
         snapshot = comms.registry.snapshot()
         dm_scope = DMDisplayScope.capture("Alice", "sender", snapshot)
-        assert comms.bus.log.read_page(ConversationMessagePageRequest(dm_scope)).messages == ()
+        assert ConversationMessagePageRequest(dm_scope).read_opened(comms.bus.bus).messages == ()
         raw_channel = comms.views.history_page(CommandTarget.named("#team")).messages
         assert [message.body for message in raw_channel] == ["@Alice investigate"]
         channel = comms.views.channel_display_page("#team").messages
@@ -227,7 +226,7 @@ def test_claim_operation_is_refused_after_its_claim_was_released() -> None:
         claimed = publish_selected_resource_claim(
             comms, store, claim_scope, "Alice", ExistingFileClaim(resource)
         )
-        assert dict(comms.bus.log.claim_projection()) == {str(resource): claimed}
+        assert dict(comms.bus.bus.claim_projection()) == {str(resource): claimed}
         release_tool_claim(comms, claimed)
         with pytest.raises(IdentityConflict):
             publish_selected_resource_claim(
@@ -238,6 +237,6 @@ def test_claim_operation_is_refused_after_its_claim_was_released() -> None:
             ExistingFileClaim(resource),
         )
         assert again.generation != claimed.generation
-        assert dict(comms.bus.log.claim_projection()) == {str(resource): again}
+        assert dict(comms.bus.bus.claim_projection()) == {str(resource): again}
 
 

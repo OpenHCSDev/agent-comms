@@ -2,13 +2,13 @@ import pytest
 
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.channels import BuiltinChannelView
-from agent_comms.comms import wire
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.threads import Thread
+from conftest import installed_comms
 
 
 def test_all_is_the_only_global_target(tmp_path):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     for name in ("sender", "first", "second"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
     with pytest.raises(ValueError):

@@ -16,6 +16,7 @@ from agent_comms.channel_management import (
 )
 from agent_comms.bus import Bus
 from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.display_order import (
     ChannelSort, CreatedThreadSort, LastActivityThreadSort, LastMessageThreadSort, ThreadSort,
@@ -123,7 +124,7 @@ def test_tag_cohort_refuses_active_owners_before_any_registry_publication(tmp_pa
 
 
 def test_exclusive_tag_deletion_uses_original_storage_and_preserves_survivors(tmp_path):
-    comms = wire(tmp_path / 'wire')
+    comms = installed_comms(tmp_path / 'wire')
     saved = {}
     for name, tags, status in (
         ('single', {'remove'}, StoppedThreadStatus()),
@@ -497,7 +498,7 @@ def test_none_membership_and_independent_channel_order(tmp_path):
 
 
 def test_membership_notices_follow_exact_membership_and_do_not_wake(tmp_path):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     comms.registry.declare(comms.registry.new_thread('moving', frozenset(), str(tmp_path)))
     comms.registry.declare(
         comms.registry.new_thread('peer', frozenset({'api'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))

@@ -10,7 +10,7 @@ import pytest
 
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.coordination_errors import DMScopeChanged
 from agent_comms.message_page import PageBounds
 from agent_comms.read_basis import DMSelection
@@ -36,7 +36,7 @@ def _mark(comms, peer, root, page):
 
 
 def test_alias_rename_invalidates_old_basis_but_fresh_alias_page_can_mark(tmp_path: Path):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     comms.registry.declare(_peer(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", viewer, "before rename").message.message_id
@@ -60,7 +60,7 @@ def test_alias_rename_invalidates_old_basis_but_fresh_alias_page_can_mark(tmp_pa
 
 
 def test_delete_and_same_name_reregister_invalidates_old_peer_basis(tmp_path: Path):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     comms.registry.declare(_peer(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", viewer, "old peer painted").message.message_id
@@ -84,7 +84,7 @@ def test_delete_and_same_name_reregister_invalidates_old_peer_basis(tmp_path: Pa
 
 
 def test_viewer_rebind_and_foreign_worktree_reject_old_basis(tmp_path: Path):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     comms.registry.declare(_peer(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", viewer, "old viewer painted").message.message_id
@@ -104,7 +104,7 @@ def test_viewer_rebind_and_foreign_worktree_reject_old_basis(tmp_path: Path):
 
 
 def test_old_viewer_alive_but_new_human_selected_rejects_stale_basis(tmp_path: Path):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     comms.registry.declare(_peer(tmp_path, "peer"))
     old_viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", old_viewer, "old viewer painted").message.message_id
@@ -128,7 +128,7 @@ def test_old_viewer_alive_but_new_human_selected_rejects_stale_basis(tmp_path: P
 
 
 def test_newest_page_mark_leaves_older_message_unread(tmp_path: Path):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     comms.registry.declare(_peer(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     older = comms.messaging.send("peer", viewer, "older").message
@@ -140,7 +140,7 @@ def test_newest_page_mark_leaves_older_message_unread(tmp_path: Path):
 
 
 def test_lifecycle_and_marker_lock_order_does_not_deadlock(tmp_path: Path):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     for name in ("peer", "other"):
         comms.registry.declare(_peer(tmp_path, name))
     viewer = comms.messaging.user_identity(str(tmp_path)).name

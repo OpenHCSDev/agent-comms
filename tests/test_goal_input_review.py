@@ -10,6 +10,7 @@ from conftest import publish_initial
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.field_codec import MalformedRecord
 from agent_comms.goal_actions import (
     ActiveGoalAction,
@@ -130,7 +131,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
 
 @pytest.mark.parametrize("rebound", ["worker", "parent"])
 def test_standby_excludes_retained_rebound_history_but_retains_rename(tmp_path, rebound):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     for name in ("worker", "parent"):
         comms.registry.declare(
             comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))

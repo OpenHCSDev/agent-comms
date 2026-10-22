@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.bus import Bus
 from agent_comms.cli_bridges.shared import Send
 from agent_comms.cli_commands import CliCommand
 
@@ -53,14 +54,16 @@ import json
 import sys
 from contextlib import redirect_stdout
 from pathlib import Path
+from agent_comms.bus import Bus
 from agent_comms.cli import main
 from agent_comms.cli_commands import CliCommand
 
 visited = []
 for declaration in CliCommand.members_with(CliCommand):
     output = io.StringIO()
-    arguments = ['--root', str(Path(sys.argv[1]) / declaration.declared_name),
-                 declaration.declared_name]
+    root = Path(sys.argv[1]) / declaration.declared_name
+    Bus.install(Bus.path_in(root))
+    arguments = ['--root', str(root), declaration.declared_name]
     with redirect_stdout(output):
         code = main(arguments)
     assert code in (0, 1)
@@ -98,6 +101,7 @@ def test_async_override_of_sync_dispatch_is_refused_at_class_creation():
 
 def test_real_send_publishes_and_history_retains_it(tmp_path, isolated_cli):
     root = tmp_path / "bus"
+    Bus.install(Bus.path_in(root))
     for name in ("sender", "reader"):
         assert isolated_cli(root, "register", "--name", name,
                             "--worktree", str(tmp_path))[0] == 0
