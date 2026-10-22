@@ -10,6 +10,7 @@ type: feedback
 
 - Install merged fixes within the hour, once after the landings; when something significant is broken, do not hold for caution or the owner's decision. Tristan, 2026-10-13: "when something significant is broken, we don't need to be cautious about breaking things, it's already broken that's more important".
 - Installs never wait on agent turns: stop every unit at once, install (about 2 minutes), start the same set. Tristan, 2026-10-20 00:59: "there's no such thing as a blocking unit you just stop it why the fuck were you about to wait minutes on it?"
+- The commander's bridge watch stays armed through every install: the carried-write gate (CarriedWriter, CarriedDocument; PRs 2594 and 2596) holds every writer, so stopping the watch buys nothing and makes the commander deaf. After any gap in the watch, the commander answers every message the answer gate lists before any order, review or fork (coordination.md owns answering every ask). 2026-10-21: the watch was stopped for installs 50 and 51, vibe check 3aa4a37c5ef2 went unread, and Core's chokehold paused six units for about twenty minutes.
 - The merge queue's hosted ratchets are the only gate; locally run only the tests the change wrote or touched. The full CI matrix runs only before a PyPI release. Per-PR full gates are serial waste.
 - The commander owns the merge queue's ruleset and required checks: it changes them itself and reports the change.
 - Pin only PyPI releases; our own sibling packages track latest `main`. Tristan, 2026-10-18: "why would we not always use latest?"
