@@ -16,10 +16,10 @@ import subprocess
 import sys
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
-from functools import cache, cached_property
+from functools import cache, cached_property, partial
 from importlib.resources import files
 from math import ceil
 from pathlib import Path
@@ -56,6 +56,7 @@ from agent_comms.child_process import (
 )
 from agent_comms.command import Command
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.lifecycle_capability import LifecycleCapability, Pending
 from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import (
     FieldCodec,
@@ -71,15 +72,14 @@ from agent_comms.field_codec import (
     boundary_decoder,
 )
 from agent_comms.goals import CheckedCommit, OrderCheck, ProblemGoalOrder
-from agent_comms.locked_store import RegistryFile
-from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message
 from agent_comms.order_runs import OrderRun
 from agent_comms.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from agent_comms.plan_phases import OrderPhase, UnplannedPhase
 from agent_comms.private_bus_checkpoint import PublicMessages
-from agent_comms.progress_claims import MergedClaim, ProgressClaim
+from agent_comms.problem_number import ProblemNumber
+from agent_comms.progress_claims import MergedClaim, ProgressClaim, WorkingClaim
 from agent_comms.recorded_time import (
     EventTime,
     RecordedEventTime,
@@ -116,6 +116,9 @@ class DeliveryEvidence(DeclaredFamily, affix="DeliveryEvidence"):
     def artifact(self) -> str:
         raise ValueError("No application evidence was supplied at delivery; pass --artifact FILE.")
 
+    def require_run(self, run: OrderRun) -> None:
+        run.require_artifact("")
+
 
 @dataclass(frozen=True)
 class NoDeliveryEvidence(DeliveryEvidence):
@@ -131,10 +134,19 @@ class FileDeliveryEvidence(DeliveryEvidence):
             raise ValueError("Delivery evidence must name an existing file.")
         return self.path
 
+    def require_run(self, run: OrderRun) -> None:
+        run.require_artifact(self.path)
+
 
 @dataclass(frozen=True, kw_only=True)
 class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
     at: EventTime = field(default_factory=UnrecordedEventTime)
+
+    def check_base(self, repo: Path) -> str:
+        raise ValueError("This delivery has no source commit to establish a check base.")
+
+    def done_claims(self, order: CheckedProblemOrder) -> tuple[ProgressClaim, ...]:
+        return ()
 
     @property
     def installation_commits(self) -> tuple[str, ...]:
@@ -190,6 +202,10 @@ class CheckedDelivery(OrderDelivery, declared_name=None):
     def closing_artifact(self) -> str:
         return self.evidence.artifact()
 
+    def done_claims(self, order: CheckedProblemOrder) -> tuple[ProgressClaim, ...]:
+        self.evidence.require_run(order.run)
+        return super().done_claims(order)
+
     @property
     def installation_build(self) -> BuildIdentity:
         return self.proof_build
@@ -236,6 +252,13 @@ class RecordedCommitDelivery(CheckedDelivery, declared_name="commit"):
     def __post_init__(self) -> None:
         GitCommitText.decode(self.commit)
         GitCommitText.decode(self.delivered)
+
+    def check_base(self, repo: Path) -> str:
+        return Repo.git(repo, "merge-base", self.delivered, WorkBranches.main).strip()
+
+    def done_claims(self, order: CheckedProblemOrder) -> tuple[ProgressClaim, ...]:
+        super().done_claims(order)
+        return (MergedClaim(self.delivered),)
 
     @property
     def delivered(self) -> str:
@@ -387,6 +410,13 @@ class CheckedCommitDelivery(CommitDelivery):
 
 @dataclass(frozen=True, kw_only=True)
 class OperationDelivery(CheckedDelivery):
+    def check_base(self, repo: Path) -> str:
+        return WorkBranches.main
+
+    def done_claims(self, order: CheckedProblemOrder) -> tuple[ProgressClaim, ...]:
+        super().done_claims(order)
+        return (WorkingClaim(self.evidence.artifact()),)
+
     @property
     def line(self) -> str:
         return "operation checked"
@@ -1406,14 +1436,18 @@ class NoSuccessor(NullMember, Successor):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ProblemOrder(DeclaredFamily, StorySource, affix="ProblemOrder"):
+class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="ProblemOrder"):
     """A problem's order state; an unassigned finding is not a fabricated order."""
-
-    pending: ClassVar[bool] = False
 
     @property
     def line(self) -> str:
         return "No order"
+
+    def check_base(self, repo: Path) -> str:
+        raise ValueError("This problem has no active checked order.")
+
+    def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
+        raise ValueError("Only an active checked order takes a check correction.")
 
     finding: Annotated[ProblemFinding, WireOmitDefault()] = field(
         default_factory=UnlocatedProblemFinding
@@ -1477,7 +1511,7 @@ class ProblemOrder(DeclaredFamily, StorySource, affix="ProblemOrder"):
         raise ValueError("This problem already has an order; drop it before linking another.")
 
     def folded(self, into: str, why: str) -> ProblemOrder:
-        if self.pending:
+        if self.items_with(Pending, self):
             raise ValueError("The problem has open orders; link or drop them first.")
         return FoldedProblemOrder(original=self, into=into, why=why)
 
@@ -1542,6 +1576,16 @@ class FixShape:
             location.require_class(root, revision)
 
 
+class DeliverySource(DeclaredFamily, affix="DeliverySource"):
+    """The command's decoded source, before a commit reference is resolved in its repository."""
+
+    @abstractmethod
+    def delivery(self, repo: Path, evidence: DeliveryEvidence) -> CheckedDelivery: ...
+
+    def require_report(self) -> None:
+        raise ValueError("Triage returns --seen REPORT, not a commit or operation.")
+
+
 @dataclass(frozen=True)
 class OrderScope[Delivery: OrderDelivery](DeclaredFamily, affix="Scope"):
     """What the commander authorizes, including the delivery type at its boundary."""
@@ -1570,10 +1614,21 @@ class OrderScope[Delivery: OrderDelivery](DeclaredFamily, affix="Scope"):
     ) -> dict[ProgressClaim, tuple[str, ...]]: ...
 
     @abstractmethod
+    def delivery(self, repo: Path, source: DeliverySource,
+                 screenshot: str, seen: str) -> Delivery: ...
+
+    @abstractmethod
     def completed(self, todo: Todo, delivery: Delivery) -> Todo: ...
 
 
 class TriageScope(OrderScope[ReportDelivery]):
+    def delivery(self, repo: Path, source: DeliverySource,
+                 screenshot: str, seen: str) -> ReportDelivery:
+        source.require_report()
+        if screenshot:
+            raise ValueError("Triage returns --seen REPORT, not a screenshot.")
+        return ReportDelivery(report=Path(seen).read_text())
+
     def instructions(self, problem: str) -> tuple[str, ...]:
         return ("Scope: triage; classify and report only. Do not edit source or deliver commits.",
                 "Return the report to your commander; do not open an implementation PR.")
@@ -1594,6 +1649,12 @@ class TriageScope(OrderScope[ReportDelivery]):
 @dataclass(frozen=True)
 class FixScope(OrderScope[CheckedDelivery]):
     shape: FixShape
+
+    def delivery(self, repo: Path, source: DeliverySource,
+                 screenshot: str, seen: str) -> CheckedDelivery:
+        path = seen or screenshot
+        evidence = FileDeliveryEvidence(path) if path else NoDeliveryEvidence()
+        return source.delivery(repo, evidence)
 
     def require_references(self, root: Path, revision: SourceRevision) -> None:
         self.shape.require_references(root, revision)
@@ -1798,12 +1859,6 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         delivery.at.require_delivery()
         return self.copy_as(DeliveredProblemOrder, delivery=delivery)
 
-    def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
-        if correction.previous != self.check:
-            raise ValueError("The order's check changed since it was read; read it again.")
-        return replace(self, check=correction.check,
-                       check_corrections=(*self.check_corrections, correction))
-
     def installed(self, works: str, artifact: str) -> ProblemOrder:
         raise ValueError("Check the delivered order before recording installation.")
 
@@ -1822,7 +1877,22 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 
 
 @dataclass(frozen=True, kw_only=True)
-class AwaitingInstallationProblemOrder(CheckedProblemOrder, declared_name=None):
+class OpenProblemOrder(CheckedProblemOrder, declared_name=None):
+    """An active order keeps corrections and accepts its checked delivery by identity."""
+
+    def corrected(self, correction: CorrectCheckTodo) -> Self:
+        if correction.previous != self.check:
+            raise ValueError("The order's check changed since it was read; read it again.")
+        return replace(self, check=correction.check,
+                       check_corrections=(*self.check_corrections, correction))
+
+    def require_delivery(self, order_id: str) -> None:
+        if self.id != order_id:
+            raise ValueError("The order changed; refresh its state before delivering it.")
+
+
+@dataclass(frozen=True, kw_only=True)
+class AwaitingInstallationProblemOrder(OpenProblemOrder, declared_name=None):
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         return (todo,)
 
@@ -1831,6 +1901,9 @@ class AwaitingInstallationProblemOrder(CheckedProblemOrder, declared_name=None):
 class MergedProblemOrder(AwaitingInstallationProblemOrder):
     """The checked order installed by a merge, with its actual merge identity."""
     sha: str
+
+    def check_base(self, repo: Path) -> str:
+        return f'{self.sha}^1'
 
     @property
     def line(self) -> str:
@@ -1859,12 +1932,8 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
 
 
 @dataclass(frozen=True, kw_only=True)
-class DeliverableProblemOrder(CheckedProblemOrder, declared_name=None):
+class DeliverableProblemOrder(OpenProblemOrder, declared_name=None):
     """Pending work and a holder's claim both await the commander's delivery verdict."""
-
-    def require_delivery(self, order_id: str) -> None:
-        if self.id != order_id:
-            raise ValueError("The order changed; refresh its state before delivering it.")
 
     def sent_back(self, reason: StrikeReason) -> PendingProblemOrder:
         return self.fresh_order(time.time(), (*self.edits, reason.text))
@@ -1879,11 +1948,14 @@ class DeliverableProblemOrder(CheckedProblemOrder, declared_name=None):
 
 
 @dataclass(frozen=True, kw_only=True)
-class PendingProblemOrder(DeliverableProblemOrder):
+class PendingProblemOrder(Pending, DeliverableProblemOrder):
     id: str = field(default_factory=lambda: uuid4().hex[:12])
     at: EventTime = field(default_factory=lambda: RecordedEventTime(time.time()))
     first_call_deadline: EventTime = field(
         default_factory=lambda: RecordedEventTime(time.time() + 120))
+
+    def check_base(self, repo: Path) -> str:
+        return WorkBranches.main
 
     def reissued(self, at: float) -> PendingProblemOrder:
         return self.fresh_order(at, self.edits)
@@ -1891,7 +1963,6 @@ class PendingProblemOrder(DeliverableProblemOrder):
     def claimed(self, claim: OrderClaim) -> ClaimedProblemOrder:
         return self.copy_as(ClaimedProblemOrder, claim=claim)
 
-    pending: ClassVar[bool] = True
     line: ClassVar[str] = "Open"
 
     def require_transfer(self, todo: Todo) -> None:
@@ -1940,6 +2011,9 @@ class ClaimedProblemOrder(DeliverableProblemOrder):
     claim: OrderClaim
     line: ClassVar[str] = "Claimed by the unit, waiting on the commander's verdict"
 
+    def check_base(self, repo: Path) -> str:
+        return WorkBranches.main
+
     def require_reassignment(self, todo: Todo, proposed: Assignment) -> None:
         """A corrected order to the claimant replaces its claim; another owner is a transfer."""
         if proposed.owner_identity != todo.holder_state.previous_assignment().owner_identity:
@@ -1952,7 +2026,9 @@ class ClaimedProblemOrder(DeliverableProblemOrder):
 @dataclass(frozen=True, kw_only=True)
 class DeliveredProblemOrder(AwaitingInstallationProblemOrder):
     delivery: OrderDelivery
-    pending: ClassVar[bool] = False
+
+    def check_base(self, repo: Path) -> str:
+        return self.delivery.check_base(repo)
 
     @property
     def line(self) -> str:
@@ -1982,9 +2058,6 @@ class DeliveredProblemOrder(AwaitingInstallationProblemOrder):
 
     def closing_artifact(self) -> str:
         return self.delivery.closing_artifact()
-
-    def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
-        raise ValueError("A delivered order keeps the check its delivery passed.")
 
     @property
     def installation_commits(self) -> tuple[str, ...]:
@@ -2099,7 +2172,6 @@ class WithdrawnProblemOrder(CheckedProblemOrder):
     previous: Assignment
     why: str
     superseded_by: Annotated[Successor, WireOmitDefault()] = NoSuccessor()
-    pending: ClassVar[bool] = False
     line: ClassVar[str] = "Withdrawn"
 
     def require_close(self) -> None:
@@ -2260,6 +2332,11 @@ class Assignment(TodoHolder):
     def of(cls, owner: ThreadIncarnation, parent: ThreadIncarnation, generation: str) -> Assignment:
         return cls(owner.name, owner.wire_birth, parent.name, parent.wire_birth, generation)
 
+    @classmethod
+    def sql_field(cls, name: str) -> str:
+        """Queries use the codec's declared wire key, not another record shape."""
+        return f"json_extract({{assignment}}, '$.{FieldCodec.record_key(cls, name)}')"
+
     def __post_init__(self) -> None:
         _text(self.owner, "Thread name", 128)
         _text(self.parent, "Thread name", 128)
@@ -2275,7 +2352,7 @@ class Assignment(TodoHolder):
 
     @property
     def parent_identity(self) -> ThreadIncarnation:
-        """Who made the assignment: the order's commander, or Core's watcher."""
+        """The acting assigner: commander, registered fork, or watcher; not Todo.creator."""
         return ThreadIncarnation.from_wire({"name": self.parent, "created_at": self.parent_created})
 
     def held(self, current: Todo) -> Assignment:
@@ -2412,19 +2489,35 @@ class TodoCommand(Command, DeclaredFamily, affix="TodoOperation"):
 class TodoOperation(TodoCommand, declared_name=None):
     """Commands the ordinary commander's tools accept."""
 
+    def authored_by(self, actor: ThreadIncarnation) -> Self:
+        return replace(self, actor=actor)
+
 
 @dataclass(frozen=True)
 class AssignTodo(TodoOperation):
     """The order's commander gives the problem to a unit."""
 
+    actor: ThreadIncarnation
     proposed: Assignment
     review_at: EventTime
     order: PendingProblemOrder | MergedProblemOrder
     goal: GoalReference
     traced: Annotated[FileLine | NoSourceReference, WireOmitDefault()] = NoSourceReference()
 
+    @classmethod
+    def by(cls, actor: ThreadIncarnation, expected_revision: int, owner: ThreadIncarnation,
+           generation: str, review_at: EventTime, order: PendingProblemOrder | MergedProblemOrder,
+           goal: GoalReference, traced: FileLine | NoSourceReference) -> AssignTodo:
+        """The one place the typed actor and the assignment's recorded assigner are made."""
+        return cls(expected_revision, actor, Assignment.of(owner, actor, generation),
+                   review_at, order, goal, traced)
+
+    def authored_by(self, actor: ThreadIncarnation) -> Self:
+        return replace(self, actor=actor, proposed=replace(self.proposed,
+                       parent=actor.name, parent_created=actor.wire_birth))
+
     def require_unit(self, db: sqlite3.Connection, current: Todo) -> None:
-        TodoStore.require_unit_in(db, self.proposed.owner_identity, current.creator_identity)
+        TodoStore.require_unit_in(db, self.proposed.owner_identity, self.actor)
 
     def apply(self, current: Todo) -> Todo:
         self.review_at.require_recorded("A review time")
@@ -2443,10 +2536,6 @@ class AssignTodo(TodoOperation):
                        order=self.order, prior_orders=current.orders_before(self.order),
                        goal=self.goal,
                        revision=current.revision + 1)
-
-    @property
-    def actor(self) -> ThreadIncarnation:
-        return self.proposed.parent_identity
 
 
 @dataclass(frozen=True)
@@ -2693,8 +2782,8 @@ class SupersededVerdict(ToolCallVerdict):
         return f"{super().story_text()} by {self.replacement}: {self.reason}"
 
     def prepare(self, goals, current):
-        replacing = [todo for todo in goals.todos.held_for_commander(self.actor)
-                     if todo.id == self.replacement]
+        replacing = [todo for todo in goals.todos.held_for_commander(
+                         self.actor.commanding_identity) if todo.id == self.replacement]
         if not replacing:
             raise ValueError('The replacing problem is not held for this commander.')
         if any(todo.holder == current.holder for todo in replacing):
@@ -2849,6 +2938,7 @@ class CorrectCheckTodo(TodoOperation):
     def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
+        current.state.require_open(current)
         _text(self.reason, "Check correction reason", 2000)
         self.check.require_writable()
         return replace(current, order=current.order.corrected(self), revision=current.revision + 1)
@@ -2859,6 +2949,9 @@ class WordingCorrection(TodoOperation):
     """Core's answer to a published unit message whose words hide what happened; no strike."""
     message_id: str
     words: tuple[str, ...]
+
+    def authored_by(self, actor: ThreadIncarnation) -> Self:
+        return self
 
     def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
@@ -3026,10 +3119,11 @@ class ChangeTodoState(TodoOperation):
 @dataclass(frozen=True, slots=True)
 class Todo(TypedTable):
     unit_index: ClassVar[ExpressionIndex] = ExpressionIndex((
-        "json_extract({assignment}, '$.owner')",
-        "json_extract({assignment}, '$.owner_created')", "{state}",
+        Assignment.sql_field('owner'), Assignment.sql_field('owner_created'), '{state}',
     ))
-    indexes = (Index(("creator", "creator_created", "state")), Index(("state",)), unit_index)
+    problem_index: ClassVar[ExpressionIndex] = ExpressionIndex((ProblemNumber.sql_number('{id}'),))
+    indexes = (Index(("creator", "creator_created", "state")), Index(("state",)),
+               unit_index, problem_index)
 
     id: Annotated[str, Column(primary_key=True)]
     repo: Annotated[RepositoryName, Column(storage=TextStorage)]
@@ -3050,6 +3144,12 @@ class Todo(TypedTable):
     corrections: tuple[WordingCorrection, ...] = ()
     messages: tuple[OrderMessage, ...] = ()
     prior_orders: tuple[CheckedProblemOrder, ...] = ()
+
+    @classmethod
+    def rows(cls, db: sqlite3.Connection, where: str, parameters: tuple) -> tuple[Todo, ...]:
+        return tuple(cls.read(db.execute(
+            f"SELECT * FROM {cls.declared_name} WHERE {cls._sql(where)} ORDER BY rowid",
+            parameters)))
 
     @property
     def judged_calls(self) -> tuple[str, ...]:
@@ -3112,7 +3212,7 @@ class Todo(TypedTable):
 
     @property
     def pending(self):
-        return self.order.pending
+        return bool(self.order.items_with(Pending, self))
 
     def story(self) -> ProblemStory:
         implied = frozenset(strike for verdict in self.verdicts
@@ -3238,12 +3338,19 @@ class Todo(TypedTable):
             raise ValueError("Say why they are the same problem in 8+ words.")
         self.order.folded(target.id, why)
 
+    @property
+    def acting_assigner(self) -> ThreadIncarnation:
+        """Who assigned this order last, acting under its commander: a reissue acts as them,
+        so a sibling fork's competing order on the unit is still refused."""
+        return self.holder_state.previous_assignment().parent_identity.acting_for(
+            self.creator_identity)
+
     def require_commander(self, actor: ThreadIncarnation) -> None:
-        if self.creator_identity != actor:
+        if self.creator_identity != actor.commanding_identity:
             raise TodoConflict(self)
 
     def require_actor(self, actor: ThreadIncarnation, generation: str | None) -> None:
-        if self.creator_identity != actor:
+        if self.creator_identity != actor.commanding_identity:
             self.require_assignee(actor, generation)
 
     def require_same_creation(self, proposed: Todo) -> None:
@@ -3285,20 +3392,36 @@ def _participant(thread: Thread) -> ThreadIncarnation:
 
 
 @dataclass(frozen=True)
-class ProblemNumber(TypedTable):
-    """Allocated global problem numbers, including reservations not yet sent."""
+class ProblemAllocation(TypedTable):
+    """Only issued, unsent numbers; creating a Todo removes its allocation row.
+
+    SQLite's sequence remembers issuance, while Todo.id owns every created identity.
+    """
 
     number: Annotated[int, Column(primary_key=True, auto_increment=True)]
+    renamed_from = ("problem_number",)
 
     @classmethod
-    def reserve(cls, db: sqlite3.Connection, problem: str) -> None:
-        if re.fullmatch(r'P[1-9]\d*', problem):
-            cls(int(problem[1:])).insert_if_absent(db)
+    def reserve(cls, db: sqlite3.Connection, text: str) -> ProblemNumber:
+        try:
+            problem = ProblemNumber.parse(text)
+        except ValueError as error:
+            raise TodoError(f'Malformed problem ID: {text!r}') from error
+        return cls.issue(db, problem)
 
     @classmethod
-    def allocate(cls, db: sqlite3.Connection) -> str:
-        cursor = db.execute(f'INSERT INTO "{cls.declared_name}" DEFAULT VALUES')
-        return f'P{cursor.lastrowid}'
+    def issue(cls, db: sqlite3.Connection, problem: ProblemNumber) -> ProblemNumber:
+        cls(problem.number).insert(db)
+        return problem
+
+    @classmethod
+    def allocate(cls, db: sqlite3.Connection) -> ProblemNumber:
+        number, = db.execute(
+            f'SELECT max(COALESCE((SELECT max({Todo.problem_index.term_sql(Todo)}) '
+            f'FROM "{Todo.declared_name}"), 0), '
+            'COALESCE((SELECT seq FROM sqlite_sequence WHERE name=?), 0)) + 1',
+            (cls.declared_name,)).fetchone()
+        return cls.issue(db, ProblemNumber(number))
 
 
 @dataclass(frozen=True, slots=True)
@@ -3312,7 +3435,7 @@ class TodoStore(DurableStore):
 
     root: Path
     filename: ClassVar[str] = "todos.sqlite3"
-    rows: ClassVar[tuple[type[TypedTable], ...]] = (Todo, HuntRecord, ProblemNumber)
+    rows: ClassVar[tuple[type[TypedTable], ...]] = (Todo, HuntRecord, ProblemAllocation)
 
     @contextmanager
     def writing(self) -> Iterator[sqlite3.Connection]:
@@ -3324,36 +3447,27 @@ class TodoStore(DurableStore):
                 f"{self.path}: {type(error).__name__}: {error}"
             ) from error
 
-    @contextmanager
-    def writer_connection(
-        self, *, check_same_thread: bool = True
-    ) -> Iterator[sqlite3.Connection]:
-        with (
-            MaintenanceBarrier(RegistryFile.path_in(self.root)).allow_input(),
-            super().writer_connection(check_same_thread=check_same_thread) as connection,
-        ):
-            yield connection
-
     def allocate_problem(self) -> str:
         with self.writing() as db:
-            return ProblemNumber.allocate(db)
+            return str(ProblemAllocation.allocate(db))
 
-    @staticmethod
-    def require_unit_in(db: sqlite3.Connection, unit: ThreadIncarnation,
+    @classmethod
+    def require_unit_in(cls, db: sqlite3.Connection, unit: ThreadIncarnation,
                         assigner: ThreadIncarnation) -> None:
-        """The original open Todo owns who assigns its unit, under this transaction."""
-        match = (f"({Todo.unit_index.term_sql(Todo)})="
-                 f"({','.join('?' for _ in Todo.unit_index.terms)})")
-        for state in TodoState.open_names():
-            held = Todo.select(db,
-                where=f"{match} AND NOT (creator=? AND creator_created=?)",
-                parameters=(unit.name, unit.wire_birth, state, assigner.name, assigner.wire_birth),
-                limit=1)
-            for todo in held:
-                raise TodoError(
-                    f"{unit.name} is assigned by {todo.creator} on open order "
-                    f"{todo.order.checked().id} ({todo.id}); "
-                    "finish or release that order before assigning it again.")
+        """The original open Todo owns who assigns its unit, under this transaction.
+
+        Its commander outranks the fork that assigned it, so an order a fork left open,
+        even one whose fork has ended, is the commander's to replace; sibling forks
+        stay refused, since a fork never created a problem itself."""
+        for todo in cls.held_in(db,
+                f'NOT (({Assignment.sql_field("parent")}=? '
+                f'AND {Assignment.sql_field("parent_created")}=?) '
+                'OR (creator=? AND creator_created=?))',
+                (assigner.name, assigner.wire_birth) * 2, unit=unit):
+            raise TodoError(
+                f"{unit.name} is assigned by {todo.held().parent} on open order "
+                f"{todo.order.checked().id} ({todo.id}); "
+                "finish or release that order before assigning it again.")
 
     def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
         hunt.require_commander(self, commander)
@@ -3367,8 +3481,10 @@ class TodoStore(DurableStore):
             return tuple(record.hunt for record in HuntRecord.select(db, commander=commander))
 
     def resolve_order(self, commander: ThreadIncarnation, unit: str, problem: str) -> Todo:
-        found = [t for t in self.held_by(commander, unit) if t.id == problem]
-        if len(found) != 1:
+        authority = commander.commanding_identity
+        found = self._select('id=? AND creator=? AND creator_created=?',
+                             (problem, authority.name, authority.wire_birth), reader=self._open)
+        if len(found) != 1 or found[0].holder != unit:
             raise ValueError(f'{unit} holds no order on {problem}')
         return found[0]
 
@@ -3427,17 +3543,30 @@ class TodoStore(DurableStore):
                     assignment=source.held(), goal=source.goal, review_at=source.review_at,
                     messages=source.messages, revision=target.revision + 1).upsert(db)
 
-    def _select(self, where: str, parameters: tuple) -> tuple[Todo, ...]:
-        """Rows in creation order; an absent store has none, and a read never creates one."""
+    @staticmethod
+    def _open(db: sqlite3.Connection, where: str, parameters: tuple,
+              state: type[TodoState] = TodoState) -> tuple[Todo, ...]:
+        states = state.open_names()
+        selected = ','.join('?' for state in states)
+        return Todo.rows(db, f"state IN ({selected}) AND ({where})", (*states, *parameters))
+
+    @classmethod
+    def held_in(cls, db: sqlite3.Connection, where: str, parameters: tuple,
+                *, unit: ThreadIncarnation) -> tuple[Todo, ...]:
+        """The one open-unit query, used by every reader and writer."""
+        terms = Todo.unit_index.terms[:-1]
+        match = f"({', '.join(terms)})=({','.join('?' for term in terms)})"
+        return cls._open(db, f'{match} AND ({where})',
+                         (unit.name, unit.wire_birth, *parameters))
+
+    def _select(self, where: str, parameters: tuple, *,
+                reader: Callable[[sqlite3.Connection, str, tuple], tuple[Todo, ...]] = Todo.rows,
+                ) -> tuple[Todo, ...]:
+        """An absent store has no rows; only this boundary opens a read snapshot."""
         if not self.path.exists():
             return ()
         with self.snapshot() as db:
-            return self._rows(db, where, parameters)
-
-    @staticmethod
-    def _rows(db: sqlite3.Connection, where: str, parameters: tuple) -> tuple[Todo, ...]:
-        return tuple(Todo.read(db.execute(
-            f"SELECT * FROM {Todo.declared_name} WHERE {where} ORDER BY rowid", parameters)))
+            return reader(db, where, parameters)
 
     @classmethod
     def _one(cls, rows: tuple[Todo, ...], todo_id: str) -> Todo:
@@ -3447,7 +3576,7 @@ class TodoStore(DurableStore):
 
     @classmethod
     def _current(cls, db: sqlite3.Connection, todo_id: str) -> Todo:
-        return cls._one(cls._rows(db, "id=?", (todo_id,)), todo_id)
+        return cls._one(Todo.rows(db, "id=?", (todo_id,)), todo_id)
 
     def for_order(self, order_id: str) -> tuple[Todo, ...]:
         """A sent order can cover several linked problems; its ID is not a Todo key."""
@@ -3475,17 +3604,18 @@ class TodoStore(DurableStore):
         return self._select("repo=?", (repo.to_wire(),))
 
     def for_goal(self, owner: ThreadIncarnation, goal_id: str) -> tuple[Todo, ...]:
-        return self._select(
-            "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=? "
-            "AND json_extract(assignment,'$.generation')=?", (owner.name, owner.created_at, goal_id))
+        return self._select(Assignment.sql_field('generation') + '=?', (goal_id,),
+                            reader=partial(self.held_in, unit=owner))
 
     def held_orders(self) -> tuple[Todo, ...]:
-        return self._open("assignment IS NOT NULL", (), OpenTodoState)
+        return self._select("assignment IS NOT NULL", (),
+                            reader=partial(self._open, state=OpenTodoState))
 
     def reassignable(self) -> tuple[Todo, ...]:
         """Work Core released after its objective strikes; never a commander's released backlog.
         No clock releases work: a held order stays held until its commander moves it."""
-        return tuple(todo for todo in self._open("assignment IS NULL", (), OpenTodoState)
+        return tuple(todo for todo in self._select("assignment IS NULL", (),
+                     reader=partial(self._open, state=OpenTodoState))
                      if todo.pending and todo.handed_out_on_release)
 
     def merged_orders(self, commander: ThreadIncarnation,
@@ -3520,9 +3650,8 @@ class TodoStore(DurableStore):
 
     def holds_pending(self, owner: ThreadIncarnation) -> bool:
         """Whether a problem assigned to owner pends, under any generation; its Goal stays open."""
-        return any(todo.pending for todo in self._open(
-            "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=?",
-            (owner.name, owner.wire_birth)))
+        return any(todo.pending for todo in self._select(
+            '1', (), reader=partial(self.held_in, unit=owner)))
 
     def for_request(self, commander: ThreadIncarnation, goal_id: str) -> tuple[Todo, ...]:
         """Every order that served one request, a Goal on the commander's thread, open or done."""
@@ -3531,7 +3660,8 @@ class TodoStore(DurableStore):
             "AND json_extract(goal,'$.goal_id')=?", (commander.name, commander.wire_birth, goal_id))
 
     def for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
-        return self._open("creator=? AND creator_created=?", (commander.name, commander.wire_birth))
+        return self._select("creator=? AND creator_created=?",
+                            (commander.name, commander.wire_birth), reader=self._open)
 
     def timers_up_for_commander(self, commander: ThreadIncarnation, registry: Registration,
                                 now: float) -> tuple[tuple[Todo, RecordedEventTime], ...]:
@@ -3543,13 +3673,12 @@ class TodoStore(DurableStore):
                          todo, {todo.id: OrderProgress.read(todo, registry, pulls)}))
 
     def held_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
-        return self._open("creator=? AND creator_created=? AND assignment IS NOT NULL",
-            (commander.name, commander.wire_birth))
+        return self._select("creator=? AND creator_created=? AND assignment IS NOT NULL",
+            (commander.name, commander.wire_birth), reader=self._open)
 
-    def held_by(self, commander: ThreadIncarnation, unit: str) -> tuple[Todo, ...]:
-        return self._open(
-            "creator=? AND creator_created=? AND json_extract(assignment,'$.owner')=?",
-            (commander.name, commander.wire_birth, unit))
+    def held_by(self, commander: ThreadIncarnation, unit: ThreadIncarnation) -> tuple[Todo, ...]:
+        return self._select('creator=? AND creator_created=?',
+            (commander.name, commander.wire_birth), reader=partial(self.held_in, unit=unit))
 
     def require_recurrence_declaration(
         self, order: CheckedProblemOrder, where: FileLine, root: Path,
@@ -3575,12 +3704,6 @@ class TodoStore(DurableStore):
             for assignment in (*todo.holder_state.current_assignments(),
                                *(release.previous for release in todo.released)))
 
-    def _open(self, where: str, parameters: tuple,
-              state: type[TodoState] = TodoState) -> tuple[Todo, ...]:
-        states = state.open_names()
-        selected = ','.join('?' for state in states)
-        return self._select(f"state IN ({selected}) AND ({where})", (*states, *parameters))
-
     def create(
         self,
         todo_id: str,
@@ -3589,25 +3712,27 @@ class TodoStore(DurableStore):
         *,
         creator: Thread,
         owner: Thread,
+        assigner: ThreadIncarnation,
         generation: str,
         review_at: EventTime,
         order: PendingProblemOrder,
         goal: GoalRef,
     ) -> Todo:
+        number = ProblemNumber.parse(todo_id)
         identity, assignee = _participant(creator), _thread(owner)
         DirectiveText.require(text)
         order.require_wording()
         order.require_writable()
         proposed = Todo.ordered(
-            todo_id, repo, text, identity, Assignment.of(assignee, identity, generation),
+            todo_id, repo, text, identity, Assignment.of(assignee, assigner, generation),
             review_at, order, goal)
         with self.writing() as db:
-            self.require_unit_in(db, assignee, identity)
-            ProblemNumber.reserve(db, todo_id)
+            self.require_unit_in(db, assignee, assigner)
             proposed.insert_if_absent(db)
             current = self._current(db, todo_id)
             current.require_same_creation(proposed)
             current.require_assignment(proposed.assignment)
+            ProblemAllocation.delete(db, number=number.number)
             return current
 
     def apply(self, todo_id: str, command: TodoCommand) -> Todo:
@@ -3620,27 +3745,28 @@ class TodoStore(DurableStore):
             result.upsert(db)
             return self._current(db, todo_id)
 
-    def correct(self, unit: str, message_id: str, text: str) -> tuple[Todo, ...]:
+    def correct(self, unit: ThreadIncarnation, message_id: str, text: str) -> tuple[Todo, ...]:
         """Correct every open order the unit holds when its published text uses jargon."""
         if not self.path.exists() or not (words := tuple(PlainText.found(text))):
             return ()
         with self.writing() as db:
-            held = (todo for todo in self._rows(db, "json_extract(assignment,'$.owner')=?", (unit,))
-                    if todo.state.open)
+            held = self.held_in(db, '1', (), unit=unit)
             corrected = tuple(WordingCorrection(todo.revision, message_id, words).apply(todo)
                               for todo in held)
             for todo in corrected:
                 todo.upsert(db)
             return corrected
 
-    def fire(self, unit: str, actor: ThreadIncarnation, reason: StrikeReason) -> tuple[Todo, ...]:
+    def fire(
+        self, unit: ThreadIncarnation, actor: ThreadIncarnation, reason: StrikeReason,
+    ) -> tuple[Todo, ...]:
         """Release every open problem the unit holds from this commander in one write; each
         records the same reason, and its order and strikes stay."""
         with self.writing() as db:
-            held = tuple((todo, todo.held()) for todo in self._rows(
-                db, "json_extract(assignment,'$.owner')=? AND creator=? AND creator_created=?",
-                (unit, actor.name, actor.wire_birth))
-                if todo.state.open)
+            commander = actor.commanding_identity
+            held = tuple((todo, todo.held()) for todo in self.held_in(
+                db, 'creator=? AND creator_created=?',
+                (commander.name, commander.wire_birth), unit=unit))
             if not held:
                 raise TodoError(f"{unit} holds no open problem.")
             released = tuple(ReleaseTodo(todo.revision, actor, assignment, reason).apply(todo)
@@ -3662,6 +3788,5 @@ class TodoStore(DurableStore):
         order: PendingProblemOrder,
         traced: FileLine | NoSourceReference = NoSourceReference(),
     ) -> Todo:
-        proposed = Assignment.of(_thread(owner), assigner, generation)
-        return self.apply(
-            todo_id, AssignTodo(expected_revision, proposed, review_at, order, goal, traced))
+        return self.apply(todo_id, AssignTodo.by(assigner, expected_revision, _thread(owner),
+                                                 generation, review_at, order, goal, traced))

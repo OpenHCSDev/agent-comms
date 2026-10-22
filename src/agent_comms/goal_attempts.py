@@ -25,13 +25,15 @@ from contextlib import closing, suppress
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, TypeVar, Annotated
+from typing import TYPE_CHECKING, Annotated, ClassVar, TypeVar
 from uuid import uuid4
+
+from agent_comms.goal_turn_permit import GoalTurnPermit
 
 from .coordination_database import CoordinationStore
 from .declared_family import DeclaredFamily
 from .field_codec import MalformedRecord
-from .goal_attempt_identity import GoalAttemptIdentity
+from .goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
 from .goal_attempt_phase import (
     ClaimedAttempt,
     FailedAttempt,
@@ -42,8 +44,11 @@ from .goal_attempt_phase import (
     SucceededAttempt,
 )
 from .goal_failure_observation import (
+    FailedTurnEvidence,
     FailedTurnObservation,
+    GoalFailureEvidence,
     GoalLedgerTable,
+    NoFailedTurnEvidence,
     record_observation,
 )
 from .goal_generation import (
@@ -54,8 +59,8 @@ from .goal_generation import (
     ReadyGeneration,
     ReservedGeneration,
 )
+from .lifecycle_capability import Failed
 from .locked_store import DurableFile, SQLiteFile
-from agent_comms.goal_turn_permit import GoalTurnPermit
 from .pi_counts import PiCount, UnreportedCount
 from .pi_payloads import PiUsage
 from .typed_table import Column, Generated, SQLiteJournalMode, TypedTable
@@ -127,8 +132,16 @@ class Generation(GoalLedgerTable, TypedTable):
         return GoalAttemptIdentity(self.goal_id, self.number, self.attempt_id)
 
     def failure_identity(self) -> GoalAttemptIdentity:
-        self.lifecycle.require_failure()
+        self.lifecycle.require(Failed, FailureNotObserved())
         return self.attempt_identity
+
+    def failure_evidence(self, store: GoalAttemptStore) -> GoalFailureEvidence:
+        identity = self.failure_identity()
+        with closing(store._connect()) as conn:
+            return next(FailedTurnEvidence.stream(
+                conn, attempt_id=identity.attempt_id,
+                goal_id=identity.goal_id, generation=identity.generation,
+            ), NoFailedTurnEvidence())
 
     def has_ready_grant(self, number: int, digest: str) -> bool:
         return self.lifecycle.ready and self.number == number and self.ready_digest == digest

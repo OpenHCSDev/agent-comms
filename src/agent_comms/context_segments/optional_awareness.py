@@ -13,11 +13,18 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
+from agent_comms.lifecycle_capability import Complete
+
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
 from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.responses import ResponseObligation
 
-from ..cohort_schema import AwarenessClaimGenerations, ClaimBatchMembers, ClaimBatchAcknowledgements, CohortDeliveryReceipts
+from ..cohort_schema import (
+    AwarenessClaimGenerations,
+    ClaimBatchAcknowledgements,
+    ClaimBatchMembers,
+    CohortDeliveries,
+)
 from ..field_codec import FieldCodec
 from ..turn_context import ContextSegment, InstructionFile, InstructionSegment, TurnContext
 from ..wake_candidate_index import ProjectionUnavailableError
@@ -35,7 +42,7 @@ class _SelectedDecision:
         assignment: WakeAssignment,
         acknowledgement: ClaimBatchAcknowledgements,
         member: ClaimBatchMembers,
-        delivery: CohortDeliveryReceipts,
+        delivery: CohortDeliveries,
         generation: AwarenessClaimGenerations,
     ) -> _SelectedDecision:
         acknowledgement.require_selected_claim(assignment)
@@ -48,7 +55,7 @@ class _SelectedDecision:
         )
         if member != expected_member:
             raise ProjectionUnavailableError("selected source is not the recorded batch member")
-        expected_delivery = CohortDeliveryReceipts(
+        expected_delivery = CohortDeliveries(
             wire_root_id=acknowledgement.wire_root_id,
             wire_seq=assignment.wire_seq,
             ordinal=delivery.ordinal,
@@ -110,8 +117,6 @@ class _OpenObligation:
 class OptionalAwarenessResult(ABC):
     """Read-only context owns presentation; it never grants an action."""
 
-    complete = False
-
     def segments(self, max_text_bytes: int) -> tuple[ContextSegment, ...]:
         self.render(max_text_bytes)
         return ()
@@ -149,7 +154,7 @@ class OmittedAwareness(InstructionSegment, OptionalAwarenessResult):
 
 
 @dataclass(frozen=True)
-class CompleteAwareness(ContextSegment, OptionalAwarenessResult):
+class CompleteAwareness(Complete, ContextSegment, OptionalAwarenessResult):
     recipient_lookup: str
     through_seq: int
     selected: tuple[_SelectedDecision, ...]
@@ -157,7 +162,6 @@ class CompleteAwareness(ContextSegment, OptionalAwarenessResult):
     omitted_count: int
     instruction: InstructionFile
     content_instruction: InstructionFile
-    complete = True
 
     def segments(self, max_text_bytes):
         if len(self.text().encode("utf-8")) > max_text_bytes:

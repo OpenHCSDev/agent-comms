@@ -1,4 +1,6 @@
 """One configured saved-helper fork and fresh USER channel request, never a retry."""
+
+from agent_comms.lifecycle_capability import Complete
 from agent_comms.thread_text import SavedSessionFile
 from agent_comms.native_entries import NativeEvidenceScope
 import asyncio
@@ -20,7 +22,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
 from agent_comms.native_input_record import FullNativeExecution, TriageNativeExecution
-from agent_comms.native_package import verify_native_package
+from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.selected_triage import FullSelectedTriage
@@ -42,7 +44,7 @@ async def run(stage, package):
     # Persistent fixture roots must also leave room for POSIX socket names.
     assert stage.is_relative_to(Path('/home/ts/wt'))
     stage.mkdir(mode=0o700, exist_ok=False)
-    verify_native_package(package)
+    VerifiedNativePackage.acquire(package)
     public = wire()
     snapshot = public.registry.snapshot()
     source = snapshot.require_active('openhcs-helper')
@@ -131,7 +133,7 @@ async def run(stage, package):
                             claims = WakeAssignment.select(db, where='wire_seq=?', parameters=(original.seq,))
                             inputs = NativeRuntimeInput.select(db)
                             publications = PublicationEvidence.select(db)
-                        if len(claims) == 1 and claims[0].lifecycle.completed:
+                        if len(claims) == 1 and bool(claims[0].lifecycle.items_with(Complete, True)):
                             triage = tuple(row for row in inputs if row.reference_stage is TriageNativeExecution)
                             full = tuple(row for row in inputs if row.reference_stage is FullNativeExecution)
                             assert len(triage) == len(full) == 1
@@ -165,7 +167,7 @@ async def run(stage, package):
                                 'original_historical_source_proofs': 2}
                             persist('configured-saved-triage-full-canonical-channel-reply-handling-PASS')
                             break
-                    if claims and claims[0].lifecycle.terminal:
+                    if claims and not claims[0].lifecycle.successors():
                         acknowledgement['terminal_assignment'] = FieldCodec.encode(claims[0])
                         raise AssertionError('Original request ended without a canonical reply')
                     diagnostics = tuple((service.root / 'diagnostics').glob('*.json'))
@@ -180,7 +182,7 @@ async def run(stage, package):
     finally:
         current = service.registry.require(child.name)
         # Observation expiry cannot authorize aborting a still-running input.
-        if not current.active_turn.executing:
+        if not current.executing:
             await asyncio.to_thread(service.owners.stop, child.name)
         acknowledgement['owned_owner_after_observation'] = FieldCodec.encode(service.registry.require(child.name).process_identity)
         acknowledgement['configured_source_hashes_unchanged'] = all(

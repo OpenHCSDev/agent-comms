@@ -11,7 +11,8 @@ from agent_comms.coordination_errors import (
 from agent_comms.coordination_session import CoordinationSession
 from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink
-from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments
+from agent_comms.coordination_tables.attempts import AttemptRecord
+from agent_comms.coordination_tables.executions import ReplayAssessments
 from agent_comms.coordination_tables.executions import (
     ExecutionRecord,
 )
@@ -52,7 +53,7 @@ class RecoveryReader:
                 )
             )
             assignments = tuple(self.assignments.get(link.assignment_id) for link in links)
-            replay = ReplayAssessments.one(db, execution_id=execution_id)
+            replay = ReplayAssessments.for_execution(db, execution_id)
             obligations = tuple(ResponseObligation.select(db, where="execution_id=?",
                 parameters=(execution_id,), order_by=("exact_target",)))
             intents = tuple(PublicationIntents.select(db, where="execution_id=?",

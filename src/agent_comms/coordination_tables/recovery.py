@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Annotated
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from enum import StrEnum
+from typing import Annotated
 
 from agent_comms import field_codec
 from agent_comms.coordination_contracts import (
@@ -13,14 +13,21 @@ from agent_comms.coordination_contracts import (
     validate_execution_id,
 )
 from agent_comms.coordination_schema import CoordinatorTable
-from agent_comms.recovery_states import RecoveryCondition
+from agent_comms.coordination_tables.executions import ExecutionReference
 from agent_comms.reason_codes import GivenReasonCode, RecoveryDetail
+from agent_comms.recovery_states import RecoveryCondition
 from agent_comms.typed_table import (
-    TextStorage,
     Column,
     ForeignKey,
+    FrozenColumn,
+    ImmutableRows,
+    IncrementingColumn,
     Index,
+    MonotoneColumns,
+    NoDelete,
+    NonDecreasing,
     RowId,
+    TextStorage,
     TypedTable,
     UnallocatedRowId,
 )
@@ -38,8 +45,19 @@ class ACPClientConnectivity(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
-class ConnectivityFacet(CoordinatorTable, TypedTable, declared_name="connectivity"):
-    execution_id: Annotated[str, field_codec.SnapshotExclude(), Column(primary_key=True)]
+class ConnectivityFacet(
+    IncrementingColumn,
+    MonotoneColumns,
+    ExecutionReference,
+    NoDelete,
+    CoordinatorTable,
+    TypedTable,
+    declared_name="connectivity",
+):
+
+    column_orders = (NonDecreasing(('observed_at_ms',)),)
+
+    execution_id: Annotated[str, field_codec.SnapshotExclude(), FrozenColumn(primary_key=True)]
     owner: OwnerConnectivity
     acp_client: ACPClientConnectivity
     revision: Annotated[int, Column(check="revision>0")]
@@ -52,37 +70,8 @@ class ConnectivityFacet(CoordinatorTable, TypedTable, declared_name="connectivit
         if self.revision <= 0 or self.observed_at_ms < 0:
             raise ValueError("revision must be positive and observed_at_ms non-negative")
 
-    @classmethod
-    def references(cls):
-        from agent_comms.coordination_tables.executions import ExecutionRecord
-
-        return (
-            ForeignKey(("execution_id",), ExecutionRecord, ("execution_id",), on_delete="RESTRICT"),
-        )
-
-    @classmethod
-    def trigger_bodies(cls):
-        return {
-            "connectivity_observation_monotonic": (
-                """
-    BEFORE UPDATE ON connectivity
-    WHEN NEW.execution_id IS NOT OLD.execution_id
-     OR NEW.revision != OLD.revision + 1
-     OR NEW.observed_at_ms < OLD.observed_at_ms
-    BEGIN
-        SELECT RAISE(ABORT, 'connectivity revision or observation regressed');
-    END"""
-            ),
-            "connectivity_delete_frozen": (
-                """ BEFORE DELETE ON connectivity BEGIN
-        SELECT RAISE(ABORT, 'connectivity cannot be deleted');
-    END"""
-            ),
-        }
-
-
 @dataclass(frozen=True, slots=True)
-class RecoveryAudit(CoordinatorTable, TypedTable):
+class RecoveryAudit(ImmutableRows, CoordinatorTable, TypedTable):
     # Recovery condition is a stored fact; row identity is the table family tag.
 
     execution_id: Annotated[str, field_codec.SnapshotExclude()]
@@ -120,25 +109,6 @@ class RecoveryAudit(CoordinatorTable, TypedTable):
                 ("execution_id", "attempt"), AttemptRecord, ("execution_id", "attempt_ordinal")
             ),
         )
-
-    @classmethod
-    def trigger_bodies(cls):
-        return {
-            "recovery_audit_update_frozen": (
-                """
-BEFORE UPDATE ON recovery_audit
-BEGIN
-    SELECT RAISE(ABORT, 'recovery audit is append-only');
-END"""
-            ),
-            "recovery_audit_delete_frozen": (
-                """
-BEFORE DELETE ON recovery_audit
-BEGIN
-    SELECT RAISE(ABORT, 'recovery audit is append-only');
-END"""
-            ),
-        }
 
     def __post_init__(self) -> None:
         validate_execution_id(self.execution_id)

@@ -12,11 +12,11 @@ from ..turn_digests import OrderEditCountRead
 
 @dataclass(frozen=True)
 class Load(ToolResult):
-    """Order and edit debt, with receiving children that themselves command orders."""
+    """Order and edit debt. Forking relieves it only by what forks clear: each verdict, order
+    or answer a fork records lowers the debt itself, never a division by how many forks exist."""
     owed: int
     timers_up: int
     unjudged: int
-    forks: tuple[str, ...]
 
     @classmethod
     def of(cls, comms: Comms, commander: str) -> Load:
@@ -24,15 +24,10 @@ class Load(ToolResult):
         owner = snapshot.require(commander)
         held = todos.held_for_commander(owner.incarnation)
         owed = tuple(t for t in held if t.pending)
-        forks = tuple(sorted(
-            thread.name for thread in snapshot.threads.values()
-            if thread.parent.named(owner.name) and snapshot.status(thread.name).receiving
-            and todos.held_for_commander(thread.incarnation)
-        ))
         unjudged = sum(
             read.read() for read in OrderEditCountRead.for_orders(comms.root, snapshot, held)
         )
-        return cls(len(owed), sum(bool(t.timer_up(now)) for t in owed), unjudged, forks)
+        return cls(len(owed), sum(bool(t.timer_up(now)) for t in owed), unjudged)
 
     @projected(view="wire")
     def total(self) -> float:
@@ -40,7 +35,7 @@ class Load(ToolResult):
 
     def __str__(self) -> str:
         return (f'load {self.total:.0f} ({self.owed} open orders, {self.timers_up} review timers up, '
-                f'{self.unjudged} unjudged edits), {len(self.forks)} live forks {list(self.forks)}')
+                f'{self.unjudged} unjudged edits)')
 
 
 def main(a, ctx):

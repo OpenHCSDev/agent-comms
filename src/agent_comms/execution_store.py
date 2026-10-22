@@ -110,7 +110,7 @@ class ExecutionStore:
                 raise IdentityConflict("execution identity conflicts")
             return AlreadyApplied(snapshot)
         participant = self.participants.get(owner_lookup)
-        if not participant.committed or participant.owner_thread != owner_thread:
+        if not participant.committed or participant.owner_identity.owner_thread != owner_thread:
             raise IdentityConflict("execution requires committed current owner")
         if not isinstance(max_attempts, int) or max_attempts <= 0:
             raise ValueError("max_attempts must be positive")
@@ -134,10 +134,10 @@ class ExecutionStore:
             assignment_id = source.assignment_id
             exact_target = source.delivery.message.exact_reply_target
             routes.setdefault(exact_target, None)
+            assignment.lifecycle.require_engageable()
             if (
                 assignment.recipient_lookup != owner_lookup
                 or assignment.lifecycle.execution_id is not None
-                or not assignment.lifecycle.engageable
             ):
                 raise IdentityConflict("claim cannot engage this execution")
             decision = EngagedAssignment.build(

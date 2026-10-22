@@ -8,6 +8,8 @@ historical watermark grants no current-owner, provider, write or reply permit.
 
 from __future__ import annotations
 
+from agent_comms.lifecycle_capability import Active
+
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -22,8 +24,8 @@ from agent_comms.coordinator import Coordination
 
 from .audience_manifest import FrozenRecipient
 from .bus_publication import CommittedDelivery
-from .cohort_schema import ClaimBatchAcknowledgements, assert_cohort_schema
-from .coordinated_runtime_schema import assert_native_runtime_schema
+from .cohort_schema import ClaimBatchAcknowledgements, CohortTable
+from agent_comms.native_runtime_input import NativeRuntimeTable
 from .coordination_cohort import AcceptedCohort, _claim_record
 from .historical_native_inputs import HistoricalNativeInput, read_historical_native_inputs
 from .message_bus import MessageBus
@@ -291,8 +293,8 @@ class SourceCoverage:
     def _accepted_cohort(self, initial: CommittedDelivery) -> AcceptedCohort | None:
         with self.store.session.read():
             db = self.store.session._connection
-            assert_cohort_schema(db)
-            assert_native_runtime_schema(db)
+            CohortTable.require_installed(db)
+            NativeRuntimeTable.require_installed(db)
             sealed = ClaimBatchAcknowledgements.one(
                 db, wire_root_id=self.wire_root_id, wire_seq=initial.message.seq
             )
@@ -311,7 +313,7 @@ class SourceCoverage:
         policy = decision.wake_policy()
         if len(assignments) != 1 or assignments[0].lifecycle.mode != policy:
             raise IdentityConflict("selected claim differs from frozen bus recipient")
-        if not policy.active:
+        if not policy.items_with(Active, policy):
             return ()  # PASSIVE is not native injection.
         evidence = self.native_inputs(seq, source_reads=source_reads)
         if policy.proves_source(evidence) and all(

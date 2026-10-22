@@ -87,8 +87,23 @@ class PlanPhase(OrderPhase, declared_name=None):
         return reading.holds(cls.evidence)
 
     @classmethod
+    def holding(cls, reading: PlanReading) -> tuple[Todo, ...]:
+        """The open orders serving this phase that a unit holds."""
+        return tuple(todo for todo in cls.serving(reading.todos) if todo.state.open and todo.holder)
+
+    @classmethod
     def ordered(cls, reading: PlanReading) -> bool:
-        return any(todo.state.open and todo.holder for todo in cls.serving(reading.todos))
+        return bool(cls.holding(reading))
+
+    @classmethod
+    def ordered_since(cls, reading: PlanReading) -> float:
+        """When the phase was first ordered to its current holders; a re-sent order keeps the
+        time of the first, so re-sending never restarts the clock."""
+        return min(
+            order.at.recorded_at("A plan order")
+            for todo in cls.holding(reading)
+            for order in (*todo.prior_orders, todo.order.checked())
+        )
 
     @classmethod
     def ready(cls, reading: PlanReading) -> bool:
@@ -360,4 +375,4 @@ class OrderSendPhase(RemainingSlopPhase):
 class ExternalBoundariesPhase(RemainingSlopPhase):
     """Wave 3."""
 
-    evidence = PatternAbsent(r"except Exception")
+    evidence = PatternAbsent(r"^\s*except Exception\b")
