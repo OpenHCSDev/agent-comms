@@ -51,6 +51,7 @@ from .field_codec import (
 from .lifecycle import LifecycleState
 from .locked_store import DurableFile, FileStore, RegistryFile, RootFile, RuntimeFile, SQLiteFile
 from .maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier
+from .store_files import _store_lock
 
 if TYPE_CHECKING:
     from .execution_states import ExecutionState
@@ -1786,7 +1787,6 @@ class ReconciledFile(SQLiteFile):
     def reconcile_at(cls, path: Path) -> bool:
         """Whether reconciling the file at ``path`` changed it."""
         from .coordination_database import CoordinationStore
-        from .store_files import _store_lock
 
         with _store_lock(path), closing(CoordinationStore.writer(path, isolation_level=None)) as db:
             return cls.table_schema().reconcile_schema(db, HeldBusFile(cls, path))
@@ -1849,8 +1849,6 @@ class TypedStore(StoreWriter, TableSchema, ReconciledFile):
         physical owner serializes these connection boundaries; readers and
         writers retain SQLite's parallel WAL transactions between them.
         """
-        from .store_files import _store_lock
-
         with ExitStack() as lifetime:
             with _store_lock(self.path):
                 resource = opening()

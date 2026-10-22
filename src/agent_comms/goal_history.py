@@ -156,7 +156,8 @@ class GoalHistoryStore(DurableFile, ReconciledFile):
             raise GoalHistoryError("Goal history database must be owner-only.")
         try:
             with closing(self._connect()) as connection:
-                GoalHistoryEntry.install_schema(connection, HeldBusFile(GoalHistoryStore, self.path))
+                GoalHistoryEntry.install_schema(
+                    connection, HeldBusFile(GoalHistoryStore, self.path))
             self._sync()
         except (OSError, sqlite3.Error) as error:
             raise GoalHistoryError("Goal history initialization is uncertain.") from error

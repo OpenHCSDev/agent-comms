@@ -52,7 +52,9 @@ from agent_comms.message_reference import AfterMessageStart, FirstUnreadStart, I
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
-from agent_comms.typed_table import Column, DurableTables, ExpressionIndex, SoleWriterFile, TypedTable
+from agent_comms.typed_table import (
+    Column, DurableTables, ExpressionIndex, SoleWriterFile, TypedTable,
+)
 from agent_comms_hooks.watch import HeldClaim, WatchClaim, WatchRecord
 
 from ..locked_store import RegistryFile, SQLiteFile
