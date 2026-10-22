@@ -22,7 +22,6 @@ def coverage(tmp_path):
     with NativeBoundary(comms.bus) as boundary:
         root_id = boundary.privacy.namespace
     with Coordination(str(CoordinationStore.path_in(tmp_path))) as store:
-        store.install_private_runtime()
         yield SourceCoverage(comms.bus, store, wire_root_id=root_id,
                              recipient_lookup="b" * 32)
 
