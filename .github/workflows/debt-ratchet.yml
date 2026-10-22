@@ -117,6 +117,9 @@ jobs:
     name: debt-${{ matrix.kind }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
     strategy:
       fail-fast: false
       matrix:
@@ -138,5 +141,28 @@ jobs:
         env:
           BASE: ${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
         run: |
+          set -o pipefail
           PYTHONPATH=src:tools python tools/debt_ratchet.py \
-            --root ${{ matrix.kind }} --base "$BASE" --head HEAD
+            --root ${{ matrix.kind }} --base "$BASE" --head HEAD 2>&1 | tee ratchet.txt
+
+      # Hosted annotations stop at ten per step, so a unit never saw a long list (88 findings
+      # on the bus batch, 2026-10-21). The whole list goes on the pull request, one comment per
+      # kind, replaced on every run.
+      - name: The whole finding list on the pull request
+        if: failure() && github.event_name == 'pull_request'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          KIND: debt-${{ matrix.kind }}
+        run: |
+          marker="<!-- $KIND findings -->"
+          { echo "$marker"; echo "**$KIND** at $(git rev-parse --short HEAD), every finding:"; echo '```';
+            grep -E '^(introduced|grew) ' ratchet.txt; echo '```'; } > body.md
+          old=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+                --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -1)
+          if [ -n "$old" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$old" -F body=@body.md
+          else
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@body.md
+          fi

@@ -1,4 +1,4 @@
-"""Private SQLite connection lifetime and versioned schema installation."""
+"""Private SQLite connections and declaration-owned schema installation."""
 
 from __future__ import annotations
 
@@ -259,7 +259,7 @@ class CoordinationStore(CarriedWriter):
         self._connection = self._open_connection(contention)
         try:
             self._configure_connection()
-            self._initialize_schema()
+            CoordinatorTable.reconcile_schema(self._connection)
             self._enforce_private_modes()
         except BaseException:
             self._connection.close()
@@ -307,26 +307,6 @@ class CoordinationStore(CarriedWriter):
         if not stat.S_ISREG(info.st_mode):
             raise IntegrityViolationError("coordination database must be a regular file")
         return info
-
-    def _initialize_schema(self) -> None:
-        # An installed schema needs only a consistent read. Opening an
-        # ordinary reader must never become a writer awaiting other readers'
-        # release, especially before the wire -> registry -> SQLite lock order.
-        self._connection.execute("BEGIN")
-        try:
-            if SQLiteTableName.stored(self._connection):
-                CoordinatorTable.require_schema(self._connection)
-                return
-        finally:
-            self._connection.execute("ROLLBACK")
-
-        # Only installation owns a write transaction. Recheck after taking it:
-        # another initializer may have installed the schema since the read.
-        with self.writing():
-            if SQLiteTableName.stored(self._connection):
-                CoordinatorTable.require_schema(self._connection)
-            else:
-                CoordinatorTable.create_schema(self._connection)
 
     def writing(self) -> AbstractContextManager[sqlite3.Connection]:
         return StoreWriter.transaction(self, self._connection)

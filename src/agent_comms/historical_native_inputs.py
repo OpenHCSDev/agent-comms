@@ -16,8 +16,8 @@ from typing import Annotated, TYPE_CHECKING
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 
-from .cohort_schema import assert_cohort_schema
-from .coordinated_runtime_schema import assert_native_runtime_schema
+from .cohort_schema import CohortTable
+from agent_comms.native_runtime_input import NativeRuntimeTable
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, Id128Text, WireName
 from .native_input_record import (
@@ -126,8 +126,8 @@ def read_historical_native_inputs(
             raise IdentityConflict("historical native input view requires a committed snapshot")
         with store.session.read():
             db = store.session._connection
-            assert_cohort_schema(db)
-            assert_native_runtime_schema(db)
+            CohortTable.require_installed(db)
+            NativeRuntimeTable.require_installed(db)
             sources = _HistoricalSource.read(
                 db.execute(
                     "SELECT n.input_id,c.assignment_id,c.wire_seq,c.message_id FROM native_runtime_input n "

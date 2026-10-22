@@ -137,7 +137,8 @@ class HardlinkDamage(LinkDamage):
 class RemovedConstraintDamage(JournalDamage):
     def alter(self, files):
         with sqlite3.connect(files.input_proof) as db:
-            db.execute(f'DROP TRIGGER {NativeContextJournal.declared_name}_append')
+            for name in NativeContextJournal.triggers():
+                db.execute(f'DROP TRIGGER "{name}"')
 
 
 @pytest.mark.parametrize('damage', JournalDamage.members_with(JournalDamage), ids=lambda member: member.declared_name)

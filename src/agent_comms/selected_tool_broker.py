@@ -21,7 +21,7 @@ from typing import ClassVar
 from agent_comms.coordinator import Coordination
 
 from .comms import Comms
-from .coordinated_runtime_schema import assert_native_runtime_schema
+from agent_comms.native_runtime_input import NativeRuntimeTable
 from .coordination_errors import CoordinationReadUnavailable
 from .coordination_tables.participants import OwnerGenerations
 from .envelope_claim_transitions import ExistingFileClaim, WakeClaim
@@ -282,7 +282,7 @@ def verify_sent_full_input(
 def _require_sent_full_input(
     scoped: Coordination, claim_scope: WakeClaim, owner_name: str, input_id: str
 ) -> None:
-    assert_native_runtime_schema(scoped.session._connection)
+    NativeRuntimeTable.require_installed(scoped.session._connection)
     row = NativeRuntimeInput.one(scoped.session._connection, input_id=input_id)
     if row is None:
         raise SelectedToolDenied("Selected tool has no reserved FULL input")
@@ -292,7 +292,11 @@ def _require_sent_full_input(
         raise SelectedToolDenied("Selected tool source was not included in this native input")
     expected = NativeInputIdentity(
         input_id, FullNativeExecution(claim_scope.execution_id, claim_scope.attempt_ordinal),
-        OwnerGenerations(owner_lookup=claim_scope.recipient_lookup, owner_thread=owner_name, generation=claim_scope.participant_generation),
+        OwnerGenerations(
+            owner_lookup=claim_scope.recipient_lookup,
+            owner_thread=owner_name,
+            generation=claim_scope.participant_generation,
+        ),
     )
     if row.identity != expected:
         raise SelectedToolDenied("Selected tool does not match the exact sent FULL input")
