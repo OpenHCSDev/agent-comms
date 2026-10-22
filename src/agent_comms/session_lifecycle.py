@@ -195,7 +195,7 @@ class SessionLifecycle:
             session_id=thread.name,
             field_meta=await self.metadata(thread.name, session_id=thread.name),
         )
-        await self.config.observe_configuration(thread.name, self.client)
+        self.config.start_menu(thread.name, self.client)
         return response
 
     async def load_session(
@@ -211,7 +211,7 @@ class SessionLifecycle:
         response = LoadSessionResponse(
             field_meta=await self.metadata(thread.name, session_id=session_id),
         )
-        await self.config.observe_configuration(session_id, self.client)
+        self.config.start_menu(session_id, self.client)
         return response
 
     async def start_owner(self, cwd: str, session_id: str) -> None:

@@ -10,9 +10,9 @@ from __future__ import annotations
 import asyncio
 import json
 from abc import abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import partial
-from typing import TYPE_CHECKING, ClassVar, Literal, Self, Annotated
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from acp.schema import PromptResponse, SetSessionConfigOptionResponse
 from pydantic import BaseModel, JsonValue
@@ -233,9 +233,9 @@ class SubscribeRuntimeRequest(RuntimeRequest):
                     controller_token=ctx.client.token,
                 )
             )
-            await agent.sessions.config.observe_configuration(ctx.session_id, ctx.client)
-            while line := await ctx.reader.readline():
-                ClientLine.read(line).answer(ctx.client)
+            async with agent.sessions.config.observe_configuration(ctx.session_id, ctx.client):
+                while line := await ctx.reader.readline():
+                    ClientLine.read(line).answer(ctx.client)
 
 
 @dataclass(frozen=True, slots=True)
