@@ -15,6 +15,7 @@ from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.maintenance_barrier import (
+    HOLDER_NONCE,
     DrainingPhase,
     InstallingPhase,
     MaintenanceBarrier,
@@ -25,6 +26,21 @@ from agent_comms.maintenance_barrier import (
 )
 from agent_comms.registration import Registration
 from agent_comms.store_files import _async_store_lock, _store_lock
+
+
+def test_nested_holds_restore_the_previous_authority_on_failure(tmp_path, monkeypatch):
+    monkeypatch.delenv(HOLDER_NONCE, raising=False)
+    gates = tuple(MaintenanceBarrier(tmp_path / name / "registry.json")
+                  for name in ("first", "second"))
+    first, second = (gate.begin(MaintenanceOperator.current()) for gate in gates)
+    with first.holding():
+        gates[0].read().require_held_by(os.environ[HOLDER_NONCE], "outer change")
+        with pytest.raises(RuntimeError, match="failed install"):
+            with second.holding():
+                gates[1].read().require_held_by(os.environ[HOLDER_NONCE], "inner change")
+                raise RuntimeError("failed install")
+        gates[0].read().require_held_by(os.environ[HOLDER_NONCE], "recovery")
+    assert HOLDER_NONCE not in os.environ
 
 
 @pytest.mark.parametrize('text', [None, '', 'x' * 129, 42])

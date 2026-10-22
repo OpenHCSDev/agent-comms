@@ -14,6 +14,7 @@ from agent_comms.host_services import RestartedService
 from agent_comms.installer.backup import BackupReport, RestoreSpace, UpgradeRefused
 from agent_comms.installer.carry import Carried
 from agent_comms.installer.launch import InstallReport
+from agent_comms.installer.commands import TimedCommand
 from agent_comms.installer.upgrade import (
     CarriedPass,
     CarriedRun,
@@ -26,7 +27,6 @@ from agent_comms.installer.upgrade import (
     RetiredRun,
     StartedOwner,
     StepRun,
-    TimedCommand,
     UnchangedRun,
     UnresumedUpgrade,
     Upgrade,

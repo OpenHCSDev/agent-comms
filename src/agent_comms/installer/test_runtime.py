@@ -12,7 +12,8 @@ import tempfile
 from pathlib import Path
 
 from agent_comms.installer.practice import TestHome
-from agent_comms.installer.upgrade import InstallCommands, Stack
+from agent_comms.installer.commands import InstallCommands
+from agent_comms.installer.upgrade import Stack
 from agent_comms.storage_rules import StorageRule
 
 

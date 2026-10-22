@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import subprocess
 import sys
 import tomllib
 from dataclasses import dataclass
@@ -16,6 +15,8 @@ from packaging.utils import canonicalize_name
 from pydantic import BaseModel, Field, RootModel, TypeAdapter
 
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.installer.commands import InstallCommands
+from agent_comms.installer.interpreter_operation import InstalledPackagesProbe, DistributionVersionsProbe
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repository_name import RepositoryName
 
@@ -184,7 +185,7 @@ class ResolvedLock(BaseModel):
 class UnbuiltRuntime:
     prefix: Path
 
-    def matches(self, lock: Path, python: Path, core: str) -> bool:
+    def matches(self, lock: Path, python: Path, core: str, commands: InstallCommands) -> bool:
         return False
 
 
@@ -208,26 +209,11 @@ class RuntimeResolution(BaseModel):
         return cls.at(prefix)
 
     @classmethod
-    def capture(cls, python: Path, core: str) -> RuntimeResolution:
-        environment = LaunchRuntime(python).environment(os.environ)
-        program = """import importlib.metadata as m,json,sys
-from pathlib import Path
-import agent_comms
-from agent_comms.package_stamp import STAMP
-from packaging.utils import canonicalize_name
-if not Path(agent_comms.__file__).resolve().is_relative_to(Path(sys.prefix).resolve()):
-    raise ValueError('Core is editable, not a built runtime package')
-if STAMP.commit() != sys.argv[1]:
-    raise ValueError('The wheel stamp does not name the selected source')
-print(json.dumps({canonicalize_name(d.metadata['Name']): {
-    'version':d.version,
-    'source':json.loads(source) if (source := d.read_text('direct_url.json')) else None
-} for d in m.distributions()}))
-"""
-        packages = TypeAdapter(dict[str, PackageRecord]).validate_json(
-            subprocess.check_output([python, "-c", program, core], env=environment)
-        )
-        return cls(core_commit=core, packages=packages)
+    def capture(cls, python: Path, core: str, commands: InstallCommands) -> RuntimeResolution:
+        packages = commands.probe(InstalledPackagesProbe(core), python,
+                                  env=LaunchRuntime(python).environment(os.environ))
+        return cls(core_commit=core,
+                   packages=TypeAdapter(dict[str, PackageRecord]).validate_python(packages))
 
     def save(self, prefix: Path) -> None:
         path = prefix / self.record_path().name
@@ -245,21 +231,11 @@ print(json.dumps({canonicalize_name(d.metadata['Name']): {
             )
         return result
 
-    def matches(self, lock: Path, python: Path, core: str) -> bool:
+    def matches(self, lock: Path, python: Path, core: str, commands: InstallCommands) -> bool:
         resolved = ResolvedLock.model_validate(tomllib.loads(lock.read_text()))
         print(f"install: real lock decodes {len(resolved.package)} packages", file=sys.stderr)
         # sync --locked has already selected the platform, groups and extras. Read its
         # selected names/versions, then obtain every source identity from the lock itself.
-        selected = TypeAdapter(dict[str, str]).validate_json(
-            subprocess.check_output(
-                [
-                    python,
-                    "-c",
-                    "import importlib.metadata as m,json; "
-                    "from packaging.utils import canonicalize_name as n; "
-                    'print(json.dumps({n(d.metadata["Name"]):d.version '
-                    "for d in m.distributions()}))",
-                ]
-            )
-        )
+        selected = commands.probe(DistributionVersionsProbe(), python,
+                                  env=LaunchRuntime(python).environment(os.environ))
         return self.pins() == resolved.pins(selected, core)

@@ -26,19 +26,9 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
+from agent_comms.installer.interpreter_operation import HoldTranscriptsProbe
 from agent_comms.locked_store import LockedStore, RuntimeFile
 from agent_comms.store_files import _atomic_write_text
-
-HOLD_TRANSCRIPTS = """import sys
-from contextlib import closing
-from agent_comms.coordination_database import CoordinationStore
-with closing(CoordinationStore.writer(sys.argv[1], isolation_level=None)) as writer:
-    writer.execute("BEGIN IMMEDIATE")
-    with open(int(sys.argv[2]), "wb") as held:
-        held.write(b"held")
-    sys.stdin.read()
-    writer.execute("ROLLBACK")
-"""
 
 
 class UpgradeRefused(CoordinationError):
@@ -124,17 +114,20 @@ def transcripts_held(root: Path) -> Iterator[None]:
         yield
         return
     ready, held = os.pipe()
-    holder = subprocess.Popen([sys.executable, "-c", HOLD_TRANSCRIPTS, path, str(held)],
-                              stdin=subprocess.PIPE, pass_fds=(held,),
-                              env={**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)})
-    os.close(held)
-    try:
-        with open(ready, "rb") as holding:
-            if not holding.read():
-                raise UpgradeRefused(f"Could not hold the transcript store {path}")
-        yield
-    finally:
-        holder.communicate()
+    with tempfile.TemporaryDirectory() as scratch:
+        holder = subprocess.Popen(
+            HoldTranscriptsProbe(path, held).command(
+                Path(sys.executable), Path(scratch) / "result.json"),
+            stdin=subprocess.PIPE, pass_fds=(held,),
+            env={**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)})
+        os.close(held)
+        try:
+            with open(ready, "rb") as holding:
+                if not holding.read():
+                    raise UpgradeRefused(f"Could not hold the transcript store {path}")
+            yield
+        finally:
+            holder.communicate()
 
 
 @dataclass(frozen=True, order=True)

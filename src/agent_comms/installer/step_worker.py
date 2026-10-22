@@ -1,29 +1,26 @@
 """Run one carry step's operation with the staged stack's interpreter.
 
-``python -m agent_comms.installer.step_worker NAME METHOD ROOT ARGUMENTS``, with the
-target tree's ``src`` and ``tools`` on the path; prints the encoded result.
+``python -m agent_comms.installer.step_worker NAME ROOT OPERATION RESULT``, with the
+target tree's ``src`` and ``tools`` on the path; writes the encoded result to ``RESULT``.
 """
 
 from __future__ import annotations
 
-import inspect
-import json
 import sys
 from importlib import import_module
 from pathlib import Path
 
 from agent_comms.field_codec import FieldCodec
-from agent_comms.installer.carry import STEPS, Carry
+from agent_comms.installer.carry import STEPS, Carry, CarryOperation
 
 
 def main() -> None:
-    name, method, root, encoded_arguments = sys.argv[1:]
+    name, root, encoded_operation, result_path = sys.argv[1:]
     import_module(f"{STEPS.name}.{name}")
     step = Carry.declared[name]
-    annotation = inspect.signature(getattr(Carry, method), eval_str=True).return_annotation
-    arguments = FieldCodec.decode(dict[str, bool], FieldCodec.parse(encoded_arguments))
-    result = getattr(step, method)(Path(root), **arguments)
-    print(json.dumps(FieldCodec.encode(result, annotation)))
+    operation = FieldCodec.decode(CarryOperation, FieldCodec.parse(encoded_operation))
+    result = operation.run(step, Path(root))
+    Path(result_path).write_text(operation.encode_answer(result))
 
 
 if __name__ == "__main__":

@@ -20,7 +20,9 @@ from importlib import import_module
 from pathlib import Path
 from typing import Annotated, ClassVar
 
+from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import PathText
+from agent_comms.installer.interpreter_operation import InterpreterOperation
 from agent_comms.errors import RelationViolationError
 
 STEPS = Path("tools/cutover")
@@ -71,11 +73,24 @@ class Carry(ABC):
         if not path.is_relative_to(root) or path.resolve() != path:
             raise RelationViolationError(f"Carry refuses an unconfined path: {path}")
 
-    @classmethod
-    def before_stop(cls, root: Path, *, apply: bool) -> Carried:
-        """What the running installation needs before its own stop command can read the bus.
-        It records nothing in the ledger."""
-        return Carried(0)
+class CarryOperation[Answer](InterpreterOperation[Answer], DeclaredFamily, affix="Operation"):
+    """One step invocation, including its arguments and its declared answer type."""
+
+    @abstractmethod
+    def run(self, step: type[Carry], root: Path) -> Answer: ...
+
+@dataclass(frozen=True)
+class BackupFilesOperation(CarryOperation[tuple[Annotated[Path, PathText], ...]]):
+    def run(self, step: type[Carry], root: Path) -> tuple[Annotated[Path, PathText], ...]:
+        return step.backup_files(root)
+
+
+@dataclass(frozen=True)
+class MigrateOperation(CarryOperation[Carried]):
+    apply: bool
+
+    def run(self, step: type[Carry], root: Path) -> Carried:
+        return step.carry(root, apply=self.apply)
 
 
 @dataclass(frozen=True)

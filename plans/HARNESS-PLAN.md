@@ -43,6 +43,58 @@ On 2026-10-22 the full CI workflow on main showed 197 failures, 127 of them in `
 
 **Done when** the CI workflow passes on main, and a red that lands is owned the tick it appears.
 
+### Installer completion in progress
+
+The installer is the current priority before resuming the other plans. Keep defects
+found while tracing it in this change, including these unfinished repairs:
+
+- [x] Read the old stores with the outgoing runtime before migration, and the migrated
+  stores with the incoming runtime afterward, in rehearsal and live installation.
+- [x] Let the maintenance hold own its permission's lifetime on success and recovery.
+- [x] Carry declared operations and their answer types through the existing codec;
+  keep migration results separate from diagnostic output.
+- [x] Replace inline interpreter probes throughout the installer, including package
+  resolution. Ask the selected runtime without accidentally importing the checkout.
+- [ ] Repair affected test setup, then exercise rehearsal, failure recovery and the
+  installed entry path. Report source checks and actual installation separately.
+
+#### Implemented ownership and migration order
+
+`before_stop` had no implementations in main or the pending virtual-bus branch.
+Delete that phase rather than designing recovery around dead work. Live order is:
+hold maintenance; stop outgoing owners while their store format still exists; capture
+the original files and outgoing read; finish the backup; migrate and reconcile; read
+with the incoming runtime; compare against rehearsal; publish; release maintenance;
+restart. Taking a backup before owners stop would allow their final writes to fall
+outside recovery.
+
+`ChangedInstall` now owns rehearsal and live installation. `PreparedMigration` owns
+the original snapshot, outgoing read and common migration/check sequence;
+`BackedUpMigration` adds recovery from `StoreBackup`. `MaintenanceState.holding`
+owns permission lifetime, including restoration after nested holds fail. Delete the
+detached `rehearse`, `live`, `before_stop`, `carry_all` and `carry_and_read` paths.
+
+`CarryOperation` owns invocation arguments and behavior. `InterpreterOperation`
+derives answer encoding from the operation's return annotation through `FieldCodec`.
+Workers write answers separately from diagnostics, replacing dynamic method lookup,
+boolean argument bags and last-stdout-line parsing (IMPL-7). Runtime probes use that
+same answer contract under the selected interpreter; `InstallCommands` owns process
+execution and timing. Launch, native tests and package resolution use that owner.
+
+Source inventory uses NRA's parser, `ModuleSyntaxIndex` and `ClassFamilyIndexBuilder`
+over installer modules, maintenance and cutover declarations. Dynamic cutover imports
+remain resolved by `CarryChain` at runtime; AST evidence does not prove their behavior.
+The current pass parsed all 15 modules and projected all 113 original class declarations.
+The existing CI ratchet misses the old computed-method dispatch, stdout protocol and
+manual permission lifetime: its literal-name and multi-arm measures do not establish
+these ownership relationships.
+
+Validation: 57 focused checks passed across carry execution, maintenance, package
+resolution, publication and install announcements. A real worker that writes then
+fails is restored from its backup. New probes ran under the outgoing installed
+interpreter and matched all 82 recorded packages. Full rehearsal, complete installer
+rollback and installed application qualification remain unfinished.
+
 ### 2. Commander verbs take a fixed, small time
 
 - Profile one verb end to end on the live bus with nothing else running.

@@ -21,18 +21,25 @@ from agent_comms.installer.backup import (
 )
 from agent_comms.installer.carry import (
     STEPS,
+    BackupFilesOperation,
     Carried,
     Carry,
     CarryChain,
+    MigrateOperation,
 )
+from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.upgrade import (
-    InstallCommands,
+    BackedUpMigration,
+    PreparedMigration,
     RehearsalFiles,
     Stack,
     StepRun,
+    TargetTree,
     carried,
 )
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
 
@@ -149,6 +156,75 @@ def test_a_store_compares_by_its_rows_and_not_by_its_companion_files(tmp_path):
 def stack(tmp_path):
     """Use the test interpreter, not an unrelated installed runtime under HOME."""
     return Stack(REPO, InstallCommands(), home=tmp_path, runtime=LaunchRuntime.running())
+
+
+@pytest.fixture
+def noisy_step(tmp_path):
+    tree = TargetTree(REPO, tmp_path, "noisy-step")
+    (tree.path / "tools" / "cutover").mkdir(parents=True)
+    (tree.path / "src").symlink_to(REPO / "src", target_is_directory=True)
+    module = tree.path / "tools" / "cutover" / "carry_noisy.py"
+    module.write_text(
+        "from pathlib import Path\n"
+        "from agent_comms.installer.carry import Carry, Carried\n"
+        "class Noisy(Carry):\n"
+        "    @classmethod\n"
+        "    def backup_files(cls, root):\n"
+        "        print('backup diagnostic')\n"
+        "        return (root / 'saved',)\n"
+        "    @classmethod\n"
+        "    def carry(cls, root, *, apply):\n"
+        "        import atexit\n"
+        "        atexit.register(print, 'diagnostic after the answer')\n"
+        "        if apply:\n"
+        "            (root / 'saved').write_text('migrated')\n"
+        "            if (root / 'fail').exists():\n"
+        "                raise RuntimeError('failed after changing the saved file')\n"
+        "        return Carried(1, {'applied': apply}, ('saved',))\n"
+    )
+    # The parent needs only the selected step's identity; its implementation is loaded
+    # by the worker from the target tree.
+    class SelectedStep(Carry):
+        @classmethod
+        def module(cls):
+            return module
+
+    return tree, SelectedStep
+
+
+def test_step_answers_are_separate_from_diagnostics_and_keep_their_types(
+        stack, tmp_path, noisy_step):
+    """Every invocation crosses the real worker process, including a noisy migration."""
+    tree, step = noisy_step
+    root = tmp_path / "bus"
+    root.mkdir()
+    assert stack.call_step(step, root, tree, BackupFilesOperation()) == (root / "saved",)
+    assert stack.call_step(step, root, tree, MigrateOperation(False)) == (
+        Carried(1, {"applied": False}, ("saved",)))
+    assert not (root / "saved").exists()
+    assert stack.call_step(step, root, tree, MigrateOperation(True)) == (
+        Carried(1, {"applied": True}, ("saved",)))
+    assert (root / "saved").read_text() == "migrated"
+
+
+def test_backed_up_migration_restores_a_real_worker_failure(comms, stack, noisy_step):
+    tree, step = noisy_step
+    saved = comms.root / "saved"
+    saved.write_text("original")
+    (comms.root / "fail").touch()
+    maintenance = MaintenanceBarrier(RegistryStore.at(comms.root).path)
+    hold = maintenance.begin(MaintenanceOperator.current())
+    with hold.holding():
+        with PreparedMigration.capture(hold, stack) as original:
+            migration = original.extended(BackedUpMigration, backup=StoreBackup.take(
+                comms.root, comms.root / "no-route", (saved,), comms.root.parent / "spill"))
+        with pytest.raises(UpgradeRefused, match="failed after changing the saved file"):
+            migration.carry((step,), stack, tree)
+        assert saved.read_text() == "migrated"
+        migration.restore()
+        assert saved.read_text() == "original"
+        assert stack.verify(comms.root) == migration.read
+    maintenance.clear(hold)
 
 
 def test_restart_selection_uses_receiving_declaration_with_connected_cli_inbox(comms, stack):

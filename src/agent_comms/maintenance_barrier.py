@@ -265,12 +265,16 @@ class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
     @contextmanager
     def holding(self) -> Iterator[Self]:
         """This process, and every child it starts, acts as this hold's holder while the
-        block lasts, and as no holder after it."""
+        block lasts, restoring its previous holder afterward."""
+        previous = os.environ.get(HOLDER_NONCE)
         os.environ[HOLDER_NONCE] = self.nonce
         try:
             yield self
         finally:
-            del os.environ[HOLDER_NONCE]
+            if previous is None:
+                os.environ.pop(HOLDER_NONCE, None)
+            else:
+                os.environ[HOLDER_NONCE] = previous
 
     def successor(self, phase: type[MaintenancePhase], nonce: str) -> MaintenanceState:
         if not self.phase().may_become(phase()):

@@ -5,16 +5,16 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-import tarfile
-from io import BytesIO
 from pathlib import Path
 
 import pytest
 
 from agent_comms.installer import practice
 from agent_comms.installer.backup import SavedFile, UpgradeRefused
-from agent_comms.installer.upgrade import InstallCommands, Stack
+from agent_comms.installer.commands import InstallCommands
+from agent_comms.installer.upgrade import Stack
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.repo import Checkout
 
 
 def test_rehearsal_home_requires_both_installed_inputs(tmp_path, monkeypatch):
@@ -56,38 +56,8 @@ def test_test_home_requires_uv_on_path_even_with_an_installer_uv(tmp_path, monke
 def test_checkout_native_tests_use_a_private_runtime(tmp_path):
     repository = Path(__file__).resolve().parents[1]
     checkout = tmp_path / "checkout"
-    archive = subprocess.run(
-        ["git", "-C", repository, "archive", "HEAD"], check=True, capture_output=True
-    ).stdout
-    with tarfile.open(fileobj=BytesIO(archive)) as tree:
-        tree.extractall(checkout, filter="data")
-    subprocess.run(["git", "init", "-q", checkout], check=True)
-    subprocess.run(["git", "-C", checkout, "add", "."], check=True)
-    # Archives omit submodule entries; retain their declarations for Checkout.prepare.
-    entries = subprocess.run(
-        ["git", "-C", repository, "ls-files", "--stage"], check=True, capture_output=True, text=True
-    ).stdout
-    subprocess.run(
-        ["git", "-C", checkout, "update-index", "--index-info"],
-        check=True,
-        input="".join(line + "\n" for line in entries.splitlines() if line.startswith("160000 ")),
-        text=True,
-    )
-    subprocess.run(
-        [
-            "git",
-            "-C",
-            checkout,
-            "-c",
-            "user.name=Runtime test",
-            "-c",
-            "user.email=runtime@example.invalid",
-            "commit",
-            "-qm",
-            "Fixture checkout",
-        ],
-        check=True,
-    )
+    subprocess.run(["git", "clone", "--shared", "-q", repository, checkout], check=True)
+    Checkout(checkout).prepare()
 
     # A machine's existing installation is not the test command's build destination.
     live_home = tmp_path / "live-home"
