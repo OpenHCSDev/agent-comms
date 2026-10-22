@@ -7,6 +7,7 @@ from dataclasses import dataclass, replace
 from functools import partial
 from typing import TYPE_CHECKING
 
+from .acp_extension import CursorObservation, EmptyCursorObservation, VerifiedCursorObservation
 from .agent_backend import InputId
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_database import CoordinationStore
@@ -17,11 +18,11 @@ from .native_input_owner import ParticipantOwner, RegistryOwner
 from .native_input_record import NativeInputReference
 from .native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from .private_send_rules import RunningTurnRegistryCheck
+from .proven_source_coverage import SourceCoverage, SourcePrefix
 from .registry_document import RegistrySnapshot
 from .thread_identity import GenerationCounter
 
 if TYPE_CHECKING:
-    from .acp_extension import CursorObservation
     from .historical_native_inputs import HistoricalNativeInput
     from .native_entries import NativeEvidenceScope
 
@@ -48,8 +49,6 @@ class CursorOwner(RegistryOwner):
 
     @classmethod
     def _read_owned(cls, bus, root_id, owner_name, source_reads, store) -> CursorState:
-        from .proven_source_coverage import SourcePrefix
-
         with store.session.boundary(bus) as boundary:
             reason = "Current native cursor has no matching live owner"
             bus._registry.store.private_guard_unlocked().require_root(root_id, StaleFence(reason))
@@ -105,8 +104,6 @@ class CursorOwner(RegistryOwner):
         return owner._advance_owned(bus, source_reads, store)
 
     def _advance_owned(self, bus, source_reads, store) -> CursorState:
-        from .proven_source_coverage import SourceCoverage
-
         with source_reads.borrow():
             sources = SourceCoverage(bus, store, wire_root_id=self.wire_root_id,
                                      recipient_lookup=self.lookup)
@@ -267,8 +264,6 @@ class UnstartedCursor(CursorState):
         return proof.build(owner, coverage.covered_seq)
 
     def observation(self):
-        from .acp_extension import EmptyCursorObservation
-
         return EmptyCursorObservation()
 
     def publish(self, db, owner, coverage, proof):
@@ -302,8 +297,6 @@ class RecordedCursor(CursorState):
         return replace(self.row, covered_seq=coverage.covered_seq)
 
     def observation(self):
-        from .acp_extension import VerifiedCursorObservation
-
         return VerifiedCursorObservation(self.row)
 
     def proves_input(self, input_id: str) -> bool:

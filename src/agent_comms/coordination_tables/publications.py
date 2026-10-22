@@ -14,6 +14,7 @@ from agent_comms.coordination_contracts import (
 )
 from agent_comms.coordination_errors import CoordinationError, IntegrityViolationError
 from agent_comms.coordination_schema import CoordinatorTable
+from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, MalformedRecord, WireName
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
@@ -25,7 +26,6 @@ from agent_comms.typed_table import (
     Generated,
     TypedTable,
 )
-
 
 if TYPE_CHECKING:
     from agent_comms.bus import BusReader
@@ -53,8 +53,6 @@ class PublicationIntents(CoordinatorTable, TypedTable):
 
     def published_message(self, source: BusReader) -> Message | None:
         """The bounded durable match for this exact frozen publication intent."""
-        from agent_comms.errors import RelationViolationError
-
         for message in source.keyed_messages(self.publication_key):
             if not self.matches_publication(message):
                 raise RelationViolationError("Response publication key has different message content.")

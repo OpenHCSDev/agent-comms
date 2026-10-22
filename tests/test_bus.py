@@ -6,7 +6,6 @@ from dataclasses import replace
 
 import pytest
 
-from bus_record_fixture import publication_processes, record_from
 from agent_comms.bus import (
     Bus,
     BusRecord,
@@ -16,15 +15,22 @@ from agent_comms.bus import (
 )
 from agent_comms.bus_publication import Delivered, HumanOrigin, KeyedPublication
 from agent_comms.bus_tables import (
-    AnsweredSource, BusProjectionTables, BusRow, BusTables, DirectReplySource, MessageIdentitySource,
+    AnsweredSource,
+    BusProjectionTables,
+    BusRow,
+    BusTables,
+    DirectReplySource,
+    MessageIdentitySource,
 )
 from agent_comms.coordination_tables.publications import PublicationIntents
 from agent_comms.errors import (
-    HumanSendRefusedError,
     CommittedMessageError,
+    HumanSendRefusedError,
     RelationViolationError,
+    UnclaimedError,
 )
 from agent_comms.messages import (
+    Claimed,
     ClaimHistoryKind,
     InfoKind,
     MembershipChange,
@@ -35,6 +41,7 @@ from agent_comms.response_acknowledgement import (
     canonical_publication_key,
 )
 from agent_comms.typed_table import SQLiteTableName, TypedTable
+from bus_record_fixture import publication_processes, record_from
 
 
 def test_bus_attachment_and_failed_write_do_not_install_a_schema(tmp_path):
@@ -141,6 +148,24 @@ def test_record_family_rebuild_and_public_history_install_preserve_scope(bus, de
     assert copied.page(record.seq + 1, 10) == (public,)
 
 
+@pytest.mark.parametrize("declaration", BusRecord.members_with(Claimed))
+def test_claim_queries_decode_the_declared_capability_in_live_and_held_reads(bus, declaration):
+    plain = bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("author", "worker", "public", InfoKind, seq=seq),
+    ))
+    stored = bus.append(lambda seq, db: record_from(
+        declaration, Message("author", "worker", "claimed", InfoKind, seq=seq),
+    ))
+    expected = stored.require_claim_transition()
+    assert bus.claim(stored.seq) == expected
+    with bus.reading() as snapshot:
+        assert snapshot.claim(stored.seq) == expected
+        for sequence in (plain.seq, stored.seq + 1):
+            with pytest.raises(UnclaimedError) as missing:
+                snapshot.claim(sequence)
+            assert missing.value.seq == sequence
+
+
 def test_acknowledgement_is_idempotent_without_extra_rows(bus):
     first = bus.append(
         lambda seq, db: record_from(
@@ -244,6 +269,12 @@ def test_scoped_and_frozen_source_queries_are_sequence_bounded(bus):
     assert bus.received("b" * 32, sender_lookups=("f" * 32,)) == ()
     assert bus.replies((original.reference,)) == (reply,)
     assert bus.deliveries_for_references((reply.reference,)) == (reply,)
+    tips = bus.latest_conversations("target=?", ("worker",), notice.seq)
+    assert tuple((row.seq, row.sender, row.target) for row in tips) == (
+        (notice.seq, "author", "worker"),
+    )
+    selected = bus.selected_sequences("target=?", ("worker",), reply.seq)
+    assert {row.seq for row in selected} == {notice.seq, reply.seq}
 
 
 def test_bulk_history_keeps_one_snapshot_across_pages(bus):

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import sqlite3
 import json
+import sqlite3
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
@@ -11,37 +11,43 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
-from agent_comms.bus_publication import Delivered, KeyedPublication
-from agent_comms.bus_activity_index import BusActivityIndex
+from agent_comms.bus_activity_index import ActivityClocks, BusActivityIndex, ChannelActivity
 from agent_comms.bus_display_index import BusDisplayIndex
+from agent_comms.bus_publication import Delivered, KeyedPublication
 from agent_comms.bus_route_counts import RouteCounts
 from agent_comms.bus_tables import (
     Addressed,
+    AnsweredSource,
+    BusProjectionTables,
     BusRow,
     BusTables,
-    BusProjectionTables,
     ClaimOperations,
     HeldResources,
     MessageIdentitySource,
-    SentSource,
     ReceivedSource,
-    AnsweredSource,
+    SentSource,
 )
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.errors import CommittedMessageError, RelationViolationError, UnclaimedError
 from agent_comms.envelope_claim_transitions import (
-    ClaimOwner, ClaimProjection, ClaimTransition, RecordedScope, ResourceClaim,
+    ClaimOwner,
+    ClaimProjection,
+    ClaimTransition,
+    RecordedScope,
+    ResourceClaim,
 )
+from agent_comms.errors import CommittedMessageError, RelationViolationError, UnclaimedError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.locked_store import BusFile, StoreCommittedError
-from agent_comms.messages import BusRecord, Claimed, ClaimMessage, Message
 from agent_comms.message_reference import MessageReference
+from agent_comms.messages import BusRecord, Claimed, ClaimMessage, Message, MessageKind
 from agent_comms.private_path import FileIdentity, PresentPath
+from agent_comms.read_basis import ChannelDisplayScope, ReadCursor
 from agent_comms.typed_table import CarriedWriter, SQLiteDatabase, WalStore
 from agent_comms.watched import Watched
 
 if TYPE_CHECKING:
     from agent_comms.registry_document import RegistrySnapshot
+    from agent_comms.registry_provenance import RegistryProvenance
 
 
 class PublicRecord(BusRecord):
@@ -63,15 +69,31 @@ class KeyedPrivateRecord(PrivateRecord, KeyedPublication):
 type RecordBuilder = Callable[[int, sqlite3.Connection], BusRecord]
 
 
+@dataclass(frozen=True)
+class AddressedRow(Addressed, BusRow, declared_name=None):
+    """A read-only join of the declared address and sequence; never another table."""
+
+    @classmethod
+    def matching(
+        cls, db: sqlite3.Connection, predicate: str, parameters: tuple[object, ...],
+    ) -> list[Self]:
+        addresses = Addressed.table
+        return cls.read(db.execute(
+            f'SELECT {Addressed._select_list(addresses)}, {BusRow._select_list(BusRow)} '
+            f'FROM "{addresses.declared_name}" '
+            f'JOIN "{BusRow.declared_name}" USING(seq) '
+            f'WHERE {addresses._sql(predicate)}', parameters))
+
+
 class BusReader(RouteCounts, ABC):
-    """One query implementation for individual reads and an admitted read snapshot."""
+    """One query implementation for individual reads and a held read snapshot."""
 
     @abstractmethod
     def observing(self) -> AbstractContextManager[sqlite3.Connection]: ...
 
     @contextmanager
     def reading(self) -> Iterator[BusSnapshot]:
-        """Keep queries and their physical identity on one admitted snapshot."""
+        """Keep queries and their physical identity on one held snapshot."""
         with self.observing() as db:
             yield BusSnapshot.from_connection(db)
 
@@ -79,15 +101,15 @@ class BusReader(RouteCounts, ABC):
         with self.observing() as db:
             return BusRow.last_seq(db)
 
-    def activity_clocks(self):
+    def activity_clocks(self) -> ActivityClocks:
         with self.observing() as db:
             return BusActivityIndex.clocks(db)
 
-    def target_activity(self, predicate: str, parameters: tuple):
+    def target_activity(self, predicate: str, parameters: tuple[object, ...]) -> ChannelActivity:
         with self.observing() as db:
             return BusActivityIndex.aggregate(db, predicate, parameters)
 
-    def participant_activity(self, names: frozenset[str]):
+    def participant_activity(self, names: frozenset[str]) -> ChannelActivity:
         marks = ','.join('?' for _ in names)
         with self.observing() as db:
             return BusDisplayIndex.aggregate(db, f'participant IN ({marks})', tuple(names))
@@ -107,7 +129,9 @@ class BusReader(RouteCounts, ABC):
     def claim(self, seq: int) -> ClaimTransition:
         """Read attestation from the row's capability, never a retained-history floor."""
         with self.observing() as db:
-            rows = Claimed.table.select(db, seq=seq)
+            rows = Claimed.read(db.execute(
+                f'SELECT {Claimed._select_list(Claimed.table)} '
+                f'FROM "{Claimed.table.declared_name}" WHERE seq=?', (seq,)))
             if not rows:
                 raise UnclaimedError(seq)
             return rows[0].claim_transition
@@ -165,15 +189,16 @@ class BusReader(RouteCounts, ABC):
 
     def inbox(self, target: str, after: int, limit: int) -> tuple[BusRecord, ...]:
         with self.observing() as db:
-            addressed = Addressed.table.select(
-                db, where="{seq} > ?", parameters=(after,), order_by=("seq",), limit=limit,
-                target=target)
-            return tuple(header.kind.read_from(db, header.seq) for row in addressed
-                         for header in BusRow.select(db, seq=row.seq))
+            rows = db.execute(
+                f'SELECT seq FROM "{Addressed.table.declared_name}" '
+                'WHERE target=? AND seq>? ORDER BY seq LIMIT ?', (target, after, limit))
+            headers = (BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in rows)
+            return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
     def scoped_page(
-        self, predicate: str, parameters: tuple, *, lower: int = 0,
-        upper: int | None = None, descending: bool = False, limit: int = 100, kinds=(),
+        self, predicate: str, parameters: tuple[object, ...], *, lower: int = 0,
+        upper: int | None = None, descending: bool = False, limit: int = 100,
+        kinds: tuple[type[MessageKind], ...] = (),
     ) -> tuple[Message, ...]:
         """A captured display scope narrows the addressed table before decoding."""
         with self.observing() as db:
@@ -192,18 +217,22 @@ class BusReader(RouteCounts, ABC):
             headers = (BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in rows)
             return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
-    def latest_conversations(self, predicate: str, parameters: tuple, through: int):
+    def latest_conversations(
+        self, predicate: str, parameters: tuple[object, ...], through: int,
+    ) -> list[AddressedRow]:
         """One prefix per addressed conversation, without materializing its history."""
         with self.observing() as db:
-            return Addressed.table.select(
-                db, where=(f'{{seq}} IN (SELECT MAX(seq) FROM '
-                           f'"{Addressed.table.declared_name}" '
-                           f'JOIN "{Message.table.declared_name}" USING(seq) '
-                           f'WHERE ({predicate}) AND seq <= ? GROUP BY sender, target)'),
-                parameters=(*parameters, through),
+            return AddressedRow.matching(
+                db, (f'{{seq}} IN (SELECT MAX(seq) FROM '
+                     f'"{Addressed.table.declared_name}" '
+                     f'JOIN "{Message.table.declared_name}" USING(seq) '
+                     f'WHERE ({predicate}) AND seq <= ? GROUP BY sender, target)'),
+                (*parameters, through),
             )
 
-    def messages_for_references(self, references):
+    def messages_for_references(
+        self, references: Iterable[MessageReference],
+    ) -> tuple[Message, ...]:
         references = tuple(references)
         with self.reading() as source:
             records = tuple(source.lookup(reference.seq) for reference in references)
@@ -212,12 +241,17 @@ class BusReader(RouteCounts, ABC):
             raise RelationViolationError("Message reference does not match its bus record")
         return messages
 
-    def deliveries_for_references(self, references):
+    def deliveries_for_references(
+        self, references: Iterable[MessageReference],
+    ) -> tuple[Delivered, ...]:
         return tuple(delivery for record in self.messages_for_references(references)
                      for delivery in record.deliveries())
 
-    def _source_page(self, query, parameters, *, after=0, before=None, limit=100,
-                     descending=True, sequences=()):
+    def _source_page(
+        self, query: str, parameters: tuple[object, ...], *, after: int = 0,
+        before: int | None = None, limit: int = 100, descending: bool = True,
+        sequences: tuple[int, ...] = (),
+    ) -> tuple[BusRecord, ...]:
         with self.observing() as db:
             before = BusRow.last_seq(db) + 1 if before is None else before
             selected = ""
@@ -232,8 +266,10 @@ class BusReader(RouteCounts, ABC):
             headers = (BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in rows)
             return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
-    def conversation(self, lookup: str, *, after=0, before=None, limit=100,
-                     descending=True, sequences=()):
+    def conversation(
+        self, lookup: str, *, after: int = 0, before: int | None = None, limit: int = 100,
+        descending: bool = True, sequences: tuple[int, ...] = (),
+    ) -> tuple[BusRecord, ...]:
         return self._source_page(
             f'SELECT seq FROM "{SentSource.declared_name}" WHERE lookup=? UNION '
             f'SELECT seq FROM "{ReceivedSource.declared_name}" WHERE lookup=?',
@@ -241,15 +277,20 @@ class BusReader(RouteCounts, ABC):
             descending=descending, sequences=sequences,
         )
 
-    def sent(self, lookup: str, *, after=0, before=None, limit=100, descending=True):
+    def sent(
+        self, lookup: str, *, after: int = 0, before: int | None = None,
+        limit: int = 100, descending: bool = True,
+    ) -> tuple[BusRecord, ...]:
         return self._source_page(
             f'SELECT seq FROM "{SentSource.declared_name}" WHERE lookup=?', (lookup,),
             after=after, before=before, limit=limit, descending=descending,
         )
 
-    def received(self, lookup: str, *, after=0, before=None, limit=100,
-                 sender_lookups=(), descending=True, source: type[ReceivedSource] = ReceivedSource,
-                 sequences=()):
+    def received(
+        self, lookup: str, *, after: int = 0, before: int | None = None, limit: int = 100,
+        sender_lookups: tuple[str, ...] = (), descending: bool = True,
+        source: type[ReceivedSource] = ReceivedSource, sequences: tuple[int, ...] = (),
+    ) -> tuple[BusRecord, ...]:
         sender = ""
         if sender_lookups:
             marks = ",".join("?" for _ in sender_lookups)
@@ -268,15 +309,19 @@ class BusReader(RouteCounts, ABC):
         with self.observing() as db:
             return AnsweredSource.unanswered(db, requesters, responders, since, before, upper, limit)
 
-    def latest_answer(self, requesters: frozenset[str], responders: frozenset[str], *, since: float):
+    def latest_answer(
+        self, requesters: frozenset[str], responders: frozenset[str], *, since: float,
+    ) -> tuple[BusRecord, ...]:
         with self.observing() as db:
             return AnsweredSource.latest_answer(db, requesters, responders, since)
 
-    def answer_timestamp(self, requesters: frozenset[str], responders: frozenset[str], *, since: float):
+    def answer_timestamp(
+        self, requesters: frozenset[str], responders: frozenset[str], *, since: float,
+    ) -> float:
         with self.observing() as db:
             return AnsweredSource.answer_timestamp(db, requesters, responders, since)
 
-    def replies(self, references: tuple[MessageReference, ...]):
+    def replies(self, references: tuple[MessageReference, ...]) -> tuple[BusRecord, ...]:
         with self.observing() as db:
             sequences = {row.seq for original in references
                          for row in AnsweredSource.select(db, original=original)}
@@ -290,9 +335,10 @@ class BusReader(RouteCounts, ABC):
                 f'SELECT target FROM "{Addressed.table.declared_name}" WHERE seq>?', (after, after),
             ))
 
-    def display_unread(self, scopes, viewer_names, seen, snapshot):
-        from .read_basis import ReadCursor
-
+    def display_unread(
+        self, scopes: Iterable[ChannelDisplayScope], viewer_names: Iterable[str],
+        seen: ReadCursor, snapshot: RegistryProvenance,
+    ) -> dict[str, int]:
         counts = {}
         with self.observing() as db:
             for scope in scopes:
@@ -309,14 +355,16 @@ class BusReader(RouteCounts, ABC):
                 ).fetchone()[0])
         return counts
 
-    def selected_sequences(self, predicate, parameters, through):
+    def selected_sequences(
+        self, predicate: str, parameters: tuple[object, ...], through: int,
+    ) -> list[AddressedRow]:
         """An explicit bulk read mark projects positions, not message bodies."""
         with self.observing() as db:
-            return Addressed.table.select(
-                db, where=(f'{{seq}} IN (SELECT seq FROM "{Addressed.table.declared_name}" '
-                           f'JOIN "{Message.table.declared_name}" USING(seq) '
-                           f'WHERE ({predicate}) AND seq <= ?)'),
-                parameters=(*parameters, through),
+            return AddressedRow.matching(
+                db, (f'{{seq}} IN (SELECT seq FROM "{Addressed.table.declared_name}" '
+                     f'JOIN "{Message.table.declared_name}" USING(seq) '
+                     f'WHERE ({predicate}) AND seq <= ?)'),
+                (*parameters, through),
             )
 
 
@@ -409,7 +457,8 @@ class Bus(BusReader, WalStore, CarriedWriter, BusFile, Watched):
         def acquire(db: sqlite3.Connection) -> int:
             def publish() -> ClaimOwner:
                 seq = self._insert(db, build)
-                return Claimed.table.require(db, seq=seq).claim_transition.claimed(resource)
+                header = BusRow.require(db, seq=seq)
+                return header.kind.read_from(db, seq).require_claim_transition().claimed(resource)
 
             return self.resource_claim(db, resource).acquire(claim, registry, publish).seq
 

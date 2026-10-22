@@ -8,17 +8,35 @@ from contextlib import closing
 from dataclasses import Field, dataclass, fields, make_dataclass, replace
 from functools import cache
 from inspect import get_annotations
-from typing import Annotated, ClassVar, Self, get_origin, get_type_hints
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self, get_origin, get_type_hints
 
 from agent_comms import messages
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.envelope_claim_transitions import (
-    ClaimProjection, ClaimTransition, ClaimTransitionError, ResourceClaim, UnclaimedResource,
+    ClaimProjection,
+    ClaimTransition,
+    ClaimTransitionError,
+    ResourceClaim,
+    UnclaimedResource,
 )
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, WireName, WireOrder
-from agent_comms.typed_table import AppendOnlyTables, Column, DerivedTables, DurableTables, ForeignKey, Index, SharedFileTables, TypedTable, sql_literal
 from agent_comms.message_reference import MessageReference
+from agent_comms.typed_table import (
+    AppendOnlyTables,
+    Column,
+    DerivedTables,
+    DurableTables,
+    ForeignKey,
+    Index,
+    SharedFileTables,
+    TypedRow,
+    TypedTable,
+    sql_literal,
+)
+
+if TYPE_CHECKING:
+    from .bus_publication import Delivered
 
 
 class BusTables(SharedFileTables, DurableTables, AppendOnlyTables):
@@ -283,12 +301,12 @@ class _CapabilityTable:
 
 
 @dataclass(frozen=True)
-class BusCapability(BusTables):
+class BusCapability(TypedRow, BusTables):
     """The hierarchy and each dataclass declaration own their table union."""
 
     table = _CapabilityTable()
 
-    def deliveries(self) -> tuple:
+    def deliveries(self) -> tuple[Delivered, ...]:
         return ()
 
     @classmethod

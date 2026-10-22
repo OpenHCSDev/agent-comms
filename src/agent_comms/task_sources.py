@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from typing import Annotated, TYPE_CHECKING
-
+from typing import TYPE_CHECKING, Annotated
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -22,10 +21,10 @@ from .thread_identity import (
 from .turn_context import Provenance, WireProvenance
 
 if TYPE_CHECKING:
+    from .bus import BusReader
     from .input_attempt import StoredInput
     from .input_disposition import InputDispositions
     from .messages import Message
-    from .bus import BusReader
     from .registry_document import RegistrySnapshot
     from .threads import Thread
 
@@ -141,7 +140,7 @@ class ExplicitTaskScopeSelection(TaskScopeSelection, declared_name="explicit"):
 class TaskChange(DeclaredFamily, affix="TaskChange"):
     @abstractmethod
     def require_publication(self, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot,
-                            original_source: BusReader | None) -> None: ...
+                            original_source: BusReader) -> None: ...
 
     @abstractmethod
     def root_source(self, message: Message,
@@ -161,10 +160,7 @@ class OriginalTaskChange(TaskChange, declared_name="original"):
 class CorrectionTaskChange(TaskChange, declared_name="correction"):
     original: MessageReference
 
-    def require_original(self, original_source: BusReader | None) -> Message:
-        if original_source is None:
-            raise RelationViolationError("Decision correction requires the original publication read")
-
+    def require_original(self, original_source: BusReader) -> Message:
         delivery, = original_source.messages_for_references((self.original,))
         original = delivery.message
         if original.reference != self.original:
