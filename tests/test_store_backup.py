@@ -1,10 +1,104 @@
 """SQLite snapshots preserve committed WAL rows and restore absent resources."""
+import multiprocessing
 import os
 import sqlite3
+from contextlib import closing
 
 import pytest
 
 from agent_comms.installer.backup import BackupName, NoBackup, StoreBackup
+from agent_comms.coordination_database import (
+    CoordinationStore, InvalidStore, MissingStore, ReadableStore,
+)
+from agent_comms.coordination_errors import CoordinationReadUnavailable
+from agent_comms.coordination_tables.refusals import SendRefusal
+from agent_comms.locked_store import SQLiteFile, StoreBusy
+
+
+def _try_external_writer(path, result):
+    """A fresh process checks the OS lock, outside SQLite's process-local bookkeeping."""
+    try:
+        with CoordinationReadUnavailable.checking():
+            with closing(SQLiteFile.writer(path, StoreBusy(), isolation_level=None)) as db:
+                db.execute("BEGIN IMMEDIATE")
+                db.execute("ROLLBACK")
+    except CoordinationReadUnavailable:
+        result.send(False)
+    else:
+        result.send(True)
+    finally:
+        result.close()
+
+
+def _external_writer_acquires(path):
+    context = multiprocessing.get_context("spawn")
+    read, write = context.Pipe(duplex=False)
+    process = context.Process(target=_try_external_writer, args=(path, write))
+    process.start()
+    write.close()
+    try:
+        assert read.poll(10), "The external lock witness did not answer"
+        acquired = read.recv()
+    finally:
+        read.close()
+        process.join(10)
+        if process.is_alive():
+            process.kill()
+            process.join()
+    assert process.exitcode == 0
+    return acquired
+
+
+@pytest.mark.parametrize("inspect_file", (CoordinationStore.observed, StoreBackup.digest),
+                         ids=("coordinator", "backup"))
+def test_inspection_preserves_another_connections_process_locks(tmp_path, inspect_file):
+    path = tmp_path / "locked.sqlite3"
+    with closing(sqlite3.connect(path, isolation_level=None)) as writer:
+        writer.execute("CREATE TABLE records (body TEXT)")
+        writer.execute("BEGIN IMMEDIATE")
+        writer.execute("INSERT INTO records VALUES ('not yet committed')")
+        inspect_file(path)
+        assert not _external_writer_acquires(path)
+        writer.execute("ROLLBACK")
+    assert _external_writer_acquires(path)
+
+
+def test_coordinator_observation_accepts_wal_without_changing_committed_rows(tmp_path):
+    path = CoordinationStore.path_in(tmp_path)
+    with closing(sqlite3.connect(path)) as writer:
+        writer.execute("PRAGMA journal_mode=WAL")
+        SendRefusal.create(writer)
+        SendRefusal.insert_values(
+            writer, sender="sender", target="recipient", reason="committed", refused_at_ms=1,
+        )
+        writer.commit()
+        SendRefusal.insert_values(
+            writer, sender="sender", target="recipient", reason="uncommitted", refused_at_ms=2,
+        )
+        observed = CoordinationStore.observed(path)
+        assert observed == ReadableStore(path)
+        assert [row.reason for row in SendRefusal.recent(tmp_path)] == ["committed"]
+        with closing(SQLiteFile.read_snapshot(path)) as reader:
+            with pytest.raises(sqlite3.OperationalError):
+                reader.execute(f"DELETE FROM {SendRefusal.declared_name}")
+        assert len(SendRefusal.select(writer)) == 2
+        writer.rollback()
+
+
+def test_observation_classifies_missing_foreign_and_busy_files_without_inventing_absence(tmp_path):
+    path = tmp_path / "source"
+    assert CoordinationStore.observed(path) == MissingStore()
+    assert not path.exists()
+    path.write_text("A foreign document")
+    assert isinstance(CoordinationStore.observed(path), InvalidStore)
+    assert path.read_text() == "A foreign document"
+    path.unlink()
+    with closing(sqlite3.connect(path, isolation_level=None)) as writer:
+        writer.execute("CREATE TABLE records (body TEXT)")
+        writer.execute("BEGIN EXCLUSIVE")
+        with pytest.raises(CoordinationReadUnavailable):
+            CoordinationStore.observed(path)
+        writer.execute("ROLLBACK")
 
 
 def test_tree_copy_keeps_committed_wal_rows(tmp_path):

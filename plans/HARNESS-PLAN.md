@@ -18,7 +18,7 @@ A silent or slow tool teaches the commander to work around it, and the workaroun
 
 ### 1. The live stores stay whole, and lock waits name their holder
 
-- `CoordinationStore.observed()` (`coordination_database.py:220`) and `is_database()` (`:118`) open a plain handle on the live database inside processes that hold SQLite locks on it; closing that handle drops the process's locks. This is the likely cause of the 2026-10-21 corruption (fork AL's forensics). The required answer is what sits at the path (missing, not a regular file, not our database, our store); the store's own read-only connection answers it, so the header read is deleted. Callers: `transcripts.py:397`, `coordination_tables/refusals.py:71`, `notification_assignment.py:350`, `installer/backup.py:271`.
+- Repaired: `CoordinationStore.observed()` and backup file classification now use `SQLiteFile`'s nonwaiting read-only snapshot. Plain header handles could cancel other connections' process locks; that mechanism was a suspected cause of the 2026-10-21 corruption, not a proven reconstruction of that event. The raw header reads and invented WAL-mode rejection are deleted. Transcript, refusal-history, notification-assignment and installer consumers share the repair.
 - Installer backup and restore (`installer/backup.py:271-278`, `:360-366`) take the store's own lock instead of relying on writers having been stopped.
 - The bus wire lock, its hand-spelled paths and the store lock wait (`store_files.py:157`, which must fail within seconds naming the holder) belong to the virtual bus batch (#2549), which rewrites them; this plan does not touch them.
 
@@ -28,9 +28,9 @@ A silent or slow tool teaches the commander to work around it, and the workaroun
 
 Found 2026-10-22: a store writer reconciles any schema difference on open (`coordination_database.py:262`, `typed_table.py:1812`, `goal_history.py:156`, `cli_bridges/shared.py:170`), so any newer-code process that opens the live bus migrates it, outside maintenance and before the backup. Install 53 left the live coordination store on the new schema and aborted; the old runtime then refused the store and every unit failed to restart.
 
-- `reconcile_schema` takes the writer, and inside its existing schema-differs branch asks `writer.require_schema_change()`: allowed only while this process holds the bus's maintenance hold (`MaintenanceStatus.require_held_by(holder)`: the open member refuses, a held member compares nonces). One rule for every StoreWriter; fresh empty stores still create their schema.
+- Durable schema changes require this process's maintenance hold through `ReconciledFile.schema_change` and `HeldBusFile`. Disposable, schema-named indexes rebuild through their runtime owner and stay outside installer reconciliation. Fresh empty stores still create their schema.
 - The installer reconciles each declared store under the hold, after the backup, with the staged runtime, so owners start against stores that already match.
-- Step dry runs and `before_stop` run on the practice copy and under the hold, never on the live root before it.
+- Migration practice runs on the copy under its maintenance hold. The unused `before_stop` phase is deleted.
 - `ingress_async` holding a shared lock across its caller's awaits (the fleet's shared locks starved installs 52 and 53 of the exclusive lock) is #2549's: that batch rewrites `ingress_async` onto the registry lock and still yields inside it (PR comment, 2026-10-22).
 
 **Done when** a newer runtime opening the live bus outside an install fails loudly naming the store and the hold it lacks, and an install with running units completes without anyone stopping them by hand.
@@ -57,9 +57,14 @@ found while tracing it in this change, including these unfinished repairs:
   resolution. Ask the selected runtime without accidentally importing the checkout.
 - [ ] Repair affected test setup, then exercise rehearsal, failure recovery and the
   installed entry path. Report source checks and actual installation separately.
-- [ ] Finish shared SQLite ownership: file copies, digests, connections and snapshots
+- [x] Finish shared SQLite ownership: file copies, digests, connections and snapshots
   belong to `SQLiteFile`; coordinator schema/session behavior stays in its subclass.
   Migrate the generic consumers and delete the subclass dependencies.
+- [x] Remove raw database-header handles that can release the process's SQLite
+  locks. Observation and backup
+  classification use nonwaiting SQLite snapshots; the three observation consumers
+  require their declared tables, not a particular journal mode. Delete the invented
+  WAL refusal; let SQLite maintain its own companions without changing rows/schema.
 - [ ] Repair the paired Toad test family's stale agent ownership and launch setup,
   then qualify a saved fork through immediate opening, a fresh DM, its first reply
   and tab return. Fix demonstrated application defects uncovered on this path.
@@ -113,11 +118,21 @@ passed 47 checks, including planned/reconcile CLI, real session bridge, goal
 history, snapshots and required maintenance refusals. Earlier connection/copy
 batches passed 177 and 120 checks. NRA parsed all 461 production modules without
 omissions; dynamic resolution remains a semantic review responsibility. The
-complete CLI run against this committed batch is next.
+complete CLI batch against `35c192054` passed all three cases in 178.78 seconds:
+unchanged-bus rehearsal, drifted-store carry rehearsal, and a live migration that
+writes then fails with data, checkout, launcher, runtime and maintenance restored.
+That checkpoint is pushed to main. The subsequent raw-header repair passed 61
+focused checks, 11 consumer checks and a final 15-case batch covering backup,
+transcript contention and CLI/native held-send entrypoints. An independent process
+remains unable to acquire a writer lock after coordinator observation or backup
+digest, then acquires it after the original writer rolls back. WAL refusal-history
+reads expose committed rows only, reject writes and preserve the writer's pending
+transaction. Complete installer and installed-package qualification follow this
+additional source change.
 
-The saved-fork application journey passed against built Core `f47cda95e` and Toad
+The saved-fork application journey passed against built Core `35c192054` and Toad
 `ca980312c`: real native parent answer and saved history, fork, immediate opening,
-fresh DM, first native reply, tab return and unchanged parent bytes (33.29 seconds).
+fresh DM, first native reply, tab return and unchanged parent bytes (33.04 seconds).
 The loopback provider supplies replies; UI, ACP, native process and durable state
 are real. The paired Toad journey exposed stale fixture contracts:
 `Conversation.agent` was deleted for

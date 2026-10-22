@@ -74,27 +74,25 @@ class CoordinationStore(CarriedWriter, ReconciledFile):
 
     @staticmethod
     def observed(path: Path) -> StoreFile:
-        """Never let a read-only SQLite open create a WAL shared-memory sidecar.
+        """Classify through SQLite without dropping another connection's process locks.
 
-        WAL-mode SQLite can create -shm even when opened with mode=ro. Refuse such a
-        database *before* opening SQLite; rollback-journal mode is the current
-        coordinator configuration. Do not create directories, chmod, or recover a
-        hot journal. A concurrent WAL conversion is outside this schema contract.
+        Both rollback and WAL snapshots are readable. SQLite may maintain its own
+        WAL companions; observation never changes stored rows, installs a schema,
+        chmods a file, or permits recovery to write through a read-only connection.
         """
         try:
             info = path.lstat()
             if not stat.S_ISREG(info.st_mode):
                 return InvalidStore("Coordinator is not a regular file")
-            with path.open("rb") as stream:
-                header = stream.read(100)
+            database = SQLiteFile.is_database(path)
         except FileNotFoundError:
             return MissingStore()
         except PermissionError as error:
             return InvalidStore(str(error))
-        if len(header) < 100 or not header.startswith(SQLiteFile.header):
-            return InvalidStore("Coordinator has an invalid SQLite header")
-        if header[18:20] != b"\x01\x01":
-            return InvalidStore("Coordinator is not in rollback-journal mode")
+        except sqlite3.DatabaseError as error:
+            return InvalidStore(str(error))
+        if not database:
+            return InvalidStore("Coordinator is not a SQLite database")
         return ReadableStore(path)
 
     def __init__(

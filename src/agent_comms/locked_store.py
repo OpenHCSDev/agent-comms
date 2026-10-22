@@ -325,7 +325,6 @@ class SQLiteFile(RootFile):
 
     __slots__ = ()
     companion_suffixes: ClassVar[tuple[str, ...]] = ("-wal", "-shm", "-journal")
-    header: ClassVar[bytes] = b"SQLite format 3\0"
 
     @classmethod
     def writer(
@@ -416,8 +415,18 @@ class SQLiteFile(RootFile):
 
     @classmethod
     def is_database(cls, path: Path) -> bool:
-        with path.open("rb") as stream:
-            return stream.read(len(cls.header)) == cls.header
+        if path.stat().st_size == 0:
+            return False
+        # Even a header-only plain open/read/close can cancel locks owned by
+        # another SQLite connection in this process. Let SQLite own the fd.
+        with CoordinationReadUnavailable.checking():
+            try:
+                with closing(cls.read_snapshot(path, StoreBusy())):
+                    return True
+            except sqlite3.DatabaseError as error:
+                if error.sqlite_errorcode & 0xFF == sqlite3.SQLITE_NOTADB:
+                    return False
+                raise
 
     @classmethod
     def copy_file(cls, source: str | Path, target: str | Path) -> Path:
