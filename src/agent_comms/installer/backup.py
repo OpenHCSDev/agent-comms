@@ -51,13 +51,6 @@ class UpgradeRefused(CoordinationError):
     def lines(self) -> tuple[str, ...]:
         return (f"Install failed: {self}",)
 
-    @classmethod
-    def public_message(cls, output: str) -> str:
-        for line in reversed(output.splitlines()):
-            if line.startswith(cls.prefix):
-                return line
-        return "Installer failed without a declared refusal; private traceback retained on host"
-
 
 @dataclass(frozen=True)
 class SavedFile:
