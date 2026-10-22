@@ -94,7 +94,6 @@ from agent_comms.tools import (
     CommsChangeProblemTool,
     CommsFireTool,
     CommsOrderCheckTool,
-    CommsOrderDeliverTool,
     CommsOrderDoneTool,
     CommsOrderServeTool,
     CommsOrderTool,
@@ -929,27 +928,6 @@ class WithdrawVerb(OrderVerb):
 
     def run(self, ctx: Commander) -> None:
         ctx.withdraw(self.pid, self.why, self.superseded_by)
-
-
-@dataclass(frozen=True, kw_only=True)
-class DeliverVerb(OrderVerb):
-    help = "record your delivery claim and answer the commander"
-    problem: Annotated[str, Argument(flags=("problem",), options={"metavar": "PROBLEM"})]
-    pull_request: Annotated[int, Argument(flags=("--pr",))]
-    head: Annotated[str, Argument(flags=("--sha",))]
-    report_file: Annotated[str, Argument(flags=("--report-file",))]
-
-    def gate(self, ctx: Commander) -> None:
-        ctx.comms.registry.require(self.who(ctx)).role.require_executable(
-            ValueError("A delivery claim requires a registered unit.")
-        )
-
-    def run(self, ctx: Commander) -> None:
-        ctx.call(CommsOrderDeliverTool(
-            problem=self.problem, pull_request=self.pull_request,
-            head=self.head, report=Path(self.report_file).read_text(),
-        ))
-        print(f'{self.problem}: delivery claim recorded')
 
 
 @dataclass(frozen=True, kw_only=True)
