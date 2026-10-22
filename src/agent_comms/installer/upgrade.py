@@ -78,7 +78,7 @@ from agent_comms.installer.practice import (
 )
 from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
-from agent_comms.maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier, MaintenanceOperator
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout, ScratchCheckout
 from agent_comms.storage_rules import StorageRule
@@ -969,62 +969,72 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
     running = installed.running_owners(root)
     maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
     held = maintenance.begin(MaintenanceOperator.current())
-    os.environ[HOLDER_NONCE] = held.nonce  # this run's own CLI calls read under its hold
+    holder = ExitStack()
+    holder.enter_context(held.holding())  # this run's own CLI calls read under its hold
     try:
-        installed.owners(root, StopCliCommand, running)
-        planned = staged.cli(root, PlannedReconcileCliCommand)
-        unrehearsed = sorted(frozenset(planned.rewritten) - frozenset(rehearsal_files.names))
-        if unrehearsed:
-            raise UpgradeRefused(
-                f"Reconcile would rewrite files the rehearsal did not: {unrehearsed}")
-        with transcripts_held(root):
-            before = bus_files(root)
-            backup = StoreBackup.take(root, active_route_path(), selected, spill_dir)
-    except BaseException as error:
-        maintenance.clear(held)
-        started = installed.start(root, running)
-        print(f"install: aborted before the backup ({type(error).__name__}: {error}); "
-              f"maintenance cleared; owners: {started}", file=sys.stderr)
-        raise
-    try:
-        staged.commands.run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
-        Checkout(checkout).prepare()
-        staged.prepare_native()
-        passed = carry_and_read(root, before, pending, staged, installed, tree, stopping)
-        passed.files.require_rehearsal(rehearsal_files)
-        staged.publish()
-        maintenance.clear(held)
-        services = HostService.restart_running(staged.python)
-    except BaseException as error:
-        print(f"install: install failed ({type(error).__name__}: {error}); "
-              "restoring original installation", file=sys.stderr)
-        state = maintenance.read()
-        recovery = state.phase.hold_for(maintenance, state, MaintenanceOperator.current())
-        os.environ[HOLDER_NONCE] = recovery.nonce
-        if not backup.original():
-            backup.restore()
-        restored = maintenance.read()
-        restored_hold = restored.phase.hold_for(maintenance, restored, MaintenanceOperator.current())
-        os.environ[HOLDER_NONCE] = restored_hold.nonce
-        head = installed.commands.run("git", "-C", checkout, "rev-parse", "HEAD").strip()
-        if head != current:
-            installed.commands.run("git", "-C", checkout, "reset", "-q", "--keep", current)
+        try:
+            installed.owners(root, StopCliCommand, running)
+            planned = staged.cli(root, PlannedReconcileCliCommand)
+            unrehearsed = sorted(frozenset(planned.rewritten) - frozenset(rehearsal_files.names))
+            if unrehearsed:
+                raise UpgradeRefused(
+                    f"Reconcile would rewrite files the rehearsal did not: {unrehearsed}")
+            with transcripts_held(root):
+                before = bus_files(root)
+                backup = StoreBackup.take(root, active_route_path(), selected, spill_dir)
+        except BaseException as error:
+            holder.close()
+            maintenance.clear(held)
+            started = installed.start(root, running)
+            print(f"install: aborted before the backup ({type(error).__name__}: {error}); "
+                  f"maintenance cleared; owners: {started}", file=sys.stderr)
+            raise
+        try:
+            staged.commands.run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
             Checkout(checkout).prepare()
-        # Republish only when current moved: the outgoing runtime may predate this publisher.
-        if LaunchRuntime.installed().prefix.resolve() != installed.runtime.prefix.resolve():
-            installed.publish()
-        maintenance.clear(restored_hold)
-        started = installed.start(root, running)
-        print(f"install: restored after failure ({type(error).__name__}: {error}); "
-              f"original runtime selected; owners: {started}; "
-              f"backup: {backup.description}",
-              file=sys.stderr)
-        raise InstallRolledBack(error, started, backup.description,
-                                runtime=installed.runtime) from error
-    # Installed: the carries ran and the runtime is published. Starting the owners it
-    # stopped is reported per owner and never rolls the install back.
-    started = staged.start(root, running)
-    retired_backups = backup.retain(spill_dir)
-    return passed.extended(CarriedRun, stopped=tuple(running), services=services, started=started,
-                           restore_space=restore, backup=backup.report(),
-                           retired_backups=retired_backups)
+            staged.prepare_native()
+            passed = carry_and_read(root, before, pending, staged, installed, tree, stopping)
+            passed.files.require_rehearsal(rehearsal_files)
+            staged.publish()
+            holder.close()
+            maintenance.clear(held)
+            services = HostService.restart_running(staged.python)
+        except BaseException as error:
+            print(f"install: install failed ({type(error).__name__}: {error}); "
+                  "restoring original installation", file=sys.stderr)
+            state = maintenance.read()
+            recovery = state.phase.hold_for(maintenance, state, MaintenanceOperator.current())
+            holder.close()
+            holder.enter_context(recovery.holding())
+            if not backup.original():
+                backup.restore()
+            restored = maintenance.read()
+            restored_hold = restored.phase.hold_for(
+                maintenance, restored, MaintenanceOperator.current())
+            holder.close()
+            holder.enter_context(restored_hold.holding())
+            head = installed.commands.run("git", "-C", checkout, "rev-parse", "HEAD").strip()
+            if head != current:
+                installed.commands.run("git", "-C", checkout, "reset", "-q", "--keep", current)
+                Checkout(checkout).prepare()
+            # Republish only when current moved: the outgoing runtime may predate this publisher.
+            if LaunchRuntime.installed().prefix.resolve() != installed.runtime.prefix.resolve():
+                installed.publish()
+            holder.close()
+            maintenance.clear(restored_hold)
+            started = installed.start(root, running)
+            print(f"install: restored after failure ({type(error).__name__}: {error}); "
+                  f"original runtime selected; owners: {started}; "
+                  f"backup: {backup.description}",
+                  file=sys.stderr)
+            raise InstallRolledBack(error, started, backup.description,
+                                    runtime=installed.runtime) from error
+        # Installed: the carries ran and the runtime is published. Starting the owners it
+        # stopped is reported per owner and never rolls the install back.
+        started = staged.start(root, running)
+        retired_backups = backup.retain(spill_dir)
+        return passed.extended(CarriedRun, stopped=tuple(running), services=services,
+                               started=started, restore_space=restore, backup=backup.report(),
+                               retired_backups=retired_backups)
+    finally:
+        holder.close()
