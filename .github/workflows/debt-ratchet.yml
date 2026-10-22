@@ -47,6 +47,36 @@ jobs:
       - name: Stack clients import only modules Core has
         run: python tools/module_layers.py --check
 
+  touched-tests:
+    # A pull request that edits a test file runs it: two PRs on 2026-10-21 reported a touched
+    # test green while it failed (2510, 2560), and smoke only collects the suite.
+    name: touched-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: pyproject.toml
+      - name: Install agent-comms and test dependencies
+        run: python -m pip install -e src/agent_comms/skills/refactor-audit -e '.[dev]'
+      - name: Prepare pinned native Pi
+        uses: ./.github/actions/prepare-native
+      - name: Install locked runtime host dependencies
+        working-directory: src/agent_comms
+        run: npm ci --ignore-scripts --omit=dev --no-audit --no-fund
+      - name: Run every test file the change touches
+        env:
+          BASE: ${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
+        run: |
+          mapfile -t touched < <(git diff --name-only --diff-filter=AM "$BASE" HEAD -- 'tests/test_*.py' 'tests/**/test_*.py')
+          if [ ${#touched[@]} -eq 0 ]; then echo "no test file touched"; exit 0; fi
+          printf '%s\n' "${touched[@]}"
+          pytest -q -p no:cacheprovider "${touched[@]}"
+
   native-scripts:
     name: native-scripts
     runs-on: ubuntu-latest
