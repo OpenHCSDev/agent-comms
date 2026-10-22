@@ -220,6 +220,12 @@ class CarriedPass(Extendable):
     files: RehearsalFiles
     read: BusReadBack
 
+    def require_read(self, rehearsed: BusReadBack) -> None:
+        """The live bus reads back what its rehearsal did, or the carry lost something."""
+        if self.read != rehearsed:
+            raise UpgradeRefused(
+                f"The carried bus read back {self.read}; its rehearsal read {rehearsed}")
+
 
 @dataclass(frozen=True)
 class StoppedOwners:
@@ -282,6 +288,7 @@ class CarriedRun(CarriedPass, StoppedOwners, RestartedServices, LiveRun):
             *(line for owner in self.started for line in owner.lines()),
             *self.service_lines(),
             f"Backup: {self.backup.backup} ({self.backup.bytes} bytes)",
+            *self.read.lines(),
         )
 
 
@@ -780,7 +787,7 @@ class ChangedInstall(ExistingBusInstall[CarriedRehearsal]):
     def live(self, rehearsal: CarriedRehearsal) -> CarriedRun:
         return live(self.checkout, self.root, self.current, self.target, self.pending,
                     self.installed, self.staged, self.tree, self.installer, self.spill_dir,
-                    rehearsal.files)
+                    rehearsal)
 
 
 class UnchangedInstall(ExistingBusInstall[UnchangedRehearsal]):
@@ -843,14 +850,14 @@ class RetiringInstall(FreshInstall):
 
 def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[type[Carry], ...],
          installed: Stack, staged: Stack, tree: TargetTree, installer: InstallerChoice,
-         spill_dir: Path, rehearsal_files: RehearsalFiles) -> CarriedRun:
+         spill_dir: Path, rehearsal: CarriedRehearsal) -> CarriedRun:
     """The rehearsal's passes under the rehearsal's stack; ``installed`` only stops, starts
     and reads back its own owners."""
-    expected = frozenset(rehearsal_files.names) | frozenset(
+    expected = frozenset(rehearsal.files.names) | frozenset(
         str(path.relative_to(root)) for path in staged.backup_files(root, pending, tree))
     selected = tuple(root / name for name in sorted(expected))
     restore = RestoreSpace.measure(max(
-        rehearsal_files.restore_bytes,
+        rehearsal.files.restore_bytes,
         sum(path.stat().st_size for path in selected if path.exists()),
     ), root.parent)
     restore.require()
@@ -862,7 +869,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
     try:
         installed.owners(root, StopCliCommand, running)
         planned = staged.cli(root, PlannedReconcileCliCommand, ReconciledStoresResult)
-        unrehearsed = sorted(frozenset(planned.rewritten) - frozenset(rehearsal_files.names))
+        unrehearsed = sorted(frozenset(planned.rewritten) - frozenset(rehearsal.files.names))
         if unrehearsed:
             raise UpgradeRefused(
                 f"Reconcile would rewrite files the rehearsal did not: {unrehearsed}")
@@ -880,7 +887,8 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
         Checkout(checkout).prepare()
         staged.prepare_native()
         passed = carry_and_read(root, before, pending, staged, staged, tree, stopping)
-        passed.files.require_rehearsal(rehearsal_files)
+        passed.files.require_rehearsal(rehearsal.files)
+        passed.require_read(rehearsal.read)
         staged.publish()
         maintenance.clear(held)
         services = HostService.restart_running(staged.python)

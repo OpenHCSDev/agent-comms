@@ -14,6 +14,7 @@ from agent_comms.installer.backup import BackupReport, RestoreSpace, UpgradeRefu
 from agent_comms.installer.carry import Carried
 from agent_comms.installer.launch import InstallReport
 from agent_comms.installer.upgrade import (
+    CarriedPass,
     CarriedRun,
     CreatedRun,
     FreshRehearsal,
@@ -103,3 +104,10 @@ def test_publication_failure_raises_after_registering_the_sender(private_comms):
     report.register(private_comms.registry)
     assert private_comms.registry.require("installer").incarnation == original.incarnation
     assert private_comms.registry.require(CommanderHeartbeat.sender).execution is ExternalThreadExecution
+
+
+def test_a_live_read_back_that_differs_from_its_rehearsal_refuses():
+    passed = CarriedPass(steps=(), files=RehearsalFiles(0, 0, (), 0), read=BusReadBack(2, 2))
+    passed.require_read(BusReadBack(2, 2))
+    with pytest.raises(UpgradeRefused, match="its rehearsal read"):
+        passed.require_read(BusReadBack(3, 2))

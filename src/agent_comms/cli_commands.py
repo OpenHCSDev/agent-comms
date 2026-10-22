@@ -1737,6 +1737,12 @@ class BusReadBack(CliResult):
     threads: int
     who: int
 
+    def lines(self) -> tuple[str, ...]:
+        """A read-back proves the carried bus reads; only an answered message proves an
+        agent works on it, and an install answers none."""
+        return (f"Read back: {self.threads} threads, {self.who} present",
+                "No live agent has answered a message on this install yet")
+
 
 @dataclass(frozen=True, kw_only=True)
 class ReadBackCliCommand(CliCommand, declared_name="read-back"):
@@ -1745,7 +1751,7 @@ class ReadBackCliCommand(CliCommand, declared_name="read-back"):
 
     def apply(self, ctx: Comms) -> BusReadBack:
         return BusReadBack(len(ctx.views.list_threads(active_only=False)),
-                           len(ctx.views.who()))
+                           len(ctx.views.presence()))
 
 
 @dataclass(frozen=True, kw_only=True)
