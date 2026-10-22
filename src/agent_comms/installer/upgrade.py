@@ -34,7 +34,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from pydantic import TypeAdapter
 
@@ -340,11 +340,25 @@ class InstalledUpgrade(RehearsedUpgrade):
     live: LiveRun
     install: InstallResult
     """The harnesses registered on the bus the target now reads."""
-    unresumed: tuple[str, ...]
-    """Session bridges paused for the swap that did not come back."""
+
+    finished: ClassVar[str] = "Install finished"
+    """The headline of the post that reports this upgrade."""
 
     def lines(self) -> tuple[str, ...]:
-        return (*super().lines(), *self.live.lines(), *self.unresumed)
+        return (*super().lines(), *self.live.lines())
+
+
+@dataclass(frozen=True)
+class UnresumedUpgrade(InstalledUpgrade):
+    """Installed, with session bridges paused for the swap that did not come back: the
+    install exits non-zero after reporting it."""
+
+    unresumed: tuple[str, ...]
+
+    finished: ClassVar[str] = "Install finished; session bridges not resumed"
+
+    def lines(self) -> tuple[str, ...]:
+        return (*super().lines(), *self.unresumed)
 
 
 @dataclass(frozen=True)
@@ -690,8 +704,9 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
         install.announce(report)
         bridges = SessionBridgeResumes()
         live_run = install.install(rehearsal, bridges)
-        result = InstalledUpgrade(current, target, root, names, rehearsal, live_run,
-                                  harnesses(), bridges.lines())
+        installed = (current, target, root, names, rehearsal, live_run, harnesses())
+        result = (UnresumedUpgrade(*installed, bridges.lines()) if bridges.failures
+                  else InstalledUpgrade(*installed))
         report.finished(result)
         bridges.require_resumed()
         return result

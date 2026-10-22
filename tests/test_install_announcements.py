@@ -26,6 +26,7 @@ from agent_comms.installer.upgrade import (
     StartedOwner,
     StepRun,
     UnchangedRun,
+    UnresumedUpgrade,
     Upgrade,
 )
 from agent_comms.launch_runtime import LaunchRuntime
@@ -53,7 +54,7 @@ def test_typed_results_publish_as_installer_and_survive_history_read(private_com
     found = Upgrade("a" * 40, "b" * 40, comms.root, ("carry_order_scopes",))
     installed = InstalledUpgrade(
         found.source, found.target, found.root, found.pending, FreshRehearsal(),
-        live, InstallResult(NoConfigFile(), {}), (),
+        live, InstallResult(NoConfigFile(), {}),
     )
     # The wire codec still carries the same result family and fields after factoring.
     decoded = FieldCodec.decode(Upgrade, FieldCodec.encode(installed))
@@ -112,3 +113,14 @@ def test_a_read_back_that_differs_from_before_the_carry_refuses():
     passed.require_read(BusReadBack(2))
     with pytest.raises(UpgradeRefused, match="before its carry it read"):
         passed.require_read(BusReadBack(3))
+
+
+def test_an_install_whose_bridges_did_not_resume_says_so_in_its_headline(private_comms):
+    comms = declare_test_bus(private_comms, channels=("comms",))
+    unresumed = UnresumedUpgrade(
+        "a" * 40, "b" * 40, comms.root, (), FreshRehearsal(), UnchangedRun(),
+        InstallResult(NoConfigFile(), {}), ("Not resumed: Session bridge copied-session",),
+    )
+    body = InstallReport(comms.root).finished(unresumed).body
+    assert body.startswith(UnresumedUpgrade.finished)
+    assert "Not resumed: Session bridge copied-session" in body

@@ -24,7 +24,7 @@ from agent_comms.cli_commands import InstallCliCommand, InstallResult
 from agent_comms.comms import client_wire
 from agent_comms.field_codec import FieldCodec, Id128Text, PathText
 from agent_comms.installer.backup import StoreBackup, UpgradeRefused
-from agent_comms.installer.upgrade import TargetTree, Upgrade, run, upgrade
+from agent_comms.installer.upgrade import InstalledUpgrade, TargetTree, Upgrade, run, upgrade
 from agent_comms.messages import InfoKind, Message
 from agent_comms.service_sender import ServiceSender
 from agent_comms.storage_rules import StorageRule
@@ -48,8 +48,8 @@ class InstallReport(ServiceSender):
     def starting(self, upgrade: Upgrade) -> Message:
         return self.post(("Install starting", *upgrade.lines()))
 
-    def finished(self, upgrade: Upgrade) -> Message:
-        return self.post(("Install finished", *upgrade.lines()))
+    def finished(self, upgrade: InstalledUpgrade) -> Message:
+        return self.post((upgrade.finished, *upgrade.lines()))
 
     def failed(self, error: UpgradeRefused) -> Message:
         return self.post(error.lines())
