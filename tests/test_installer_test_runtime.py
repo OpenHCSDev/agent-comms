@@ -94,7 +94,7 @@ def test_checkout_native_tests_use_a_private_runtime(tmp_path):
     practice.TestHome(live_home).prepare()
     assert not (live_home / ".local/share/agent-comms/current").exists(follow_symlinks=False)
     runtimes = live_home / ".local/share/agent-comms/runtimes"
-    runtimes.mkdir()
+    runtimes.mkdir(parents=True)
     retained = runtimes / "retained"
     retained.mkdir()
     witness = retained / "keep"
