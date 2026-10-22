@@ -29,9 +29,9 @@ import sys
 import tempfile
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
@@ -564,34 +564,58 @@ def carry_all(
     return tuple(results)
 
 
-def rehearse(root: Path, stack: Stack, installed: Stack, tree: TargetTree,
-             pending: tuple[type[Carry], ...], installer: InstallerChoice) -> CarriedRehearsal:
-    """The live run on a practice copy, up to stopping owners: the outgoing runtime answers
-    the same owner probe the live run asks it before the stop."""
-    parent = installer.scratch(StorageRule.load(root))
-    parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    with (
-        tempfile.TemporaryDirectory(dir=parent, prefix="practice-") as scratch,
-        practice_copy(root, Path(scratch) / "bus") as (copied, measurement),
-    ):
-        home = Path(scratch) / "home"
-        RehearsalHome(home).prepare()
-        (home / ".claude").symlink_to(Path.home() / ".claude")
-        stack = replace(stack, home=home)
-        stack.prepare_native()
-        for path in stack.backup_files(root, pending, tree):
-            destination = copied / path.relative_to(root)
-            if path.exists() and not destination.exists():
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(path, destination)
-        stopping = before_stop(copied, pending, stack, tree)
-        installed.running_owners(copied)
-        os.environ[HOLDER_NONCE] = MaintenanceBarrier(copied / "registry.json").begin(
-            MaintenanceOperator.current()).nonce
-        with transcripts_held(copied):
-            before = bus_files(copied)
-        passed = carry_and_read(copied, before, pending, stack, stack, tree, stopping)
-        return passed.extended(CarriedRehearsal, copy=measurement)
+@dataclass(frozen=True)
+class PracticeBus:
+    """The one practice copy of an install. The carry steps' dry runs and the rehearsal
+    both run on it, so no process of the staged runtime opens the live bus before
+    maintenance holds it: opening a store reconciles its schema, and on 2026-10-22
+    install 53's dry runs left the live store on the target's schema, which the outgoing
+    runtime's own stop then refused."""
+
+    scratch: Path
+    copied: Path
+    measurement: PracticeMeasurement
+
+    @classmethod
+    @contextmanager
+    def of(cls, root: Path, installer: InstallerChoice) -> Iterator[PracticeBus]:
+        parent = installer.scratch(StorageRule.load(root))
+        parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with (
+            tempfile.TemporaryDirectory(dir=parent, prefix="practice-") as scratch,
+            practice_copy(root, Path(scratch) / "bus") as (copied, measurement),
+        ):
+            yield cls(Path(scratch), copied, measurement)
+
+    def pending(self, chain: CarryChain, staged: Stack,
+                tree: TargetTree) -> tuple[type[Carry], ...]:
+        """Each step's dry run with the target's staged stack says what is left."""
+        return chain.pending(lambda step: carry(step, self.copied, staged, tree))
+
+
+def rehearse(practice: PracticeBus, root: Path, stack: Stack, installed: Stack,
+             tree: TargetTree, pending: tuple[type[Carry], ...]) -> CarriedRehearsal:
+    """The live run on the practice copy, up to stopping owners: the outgoing runtime
+    answers the same owner probe the live run asks it before the stop."""
+    copied = practice.copied
+    home = practice.scratch / "home"
+    RehearsalHome(home).prepare()
+    (home / ".claude").symlink_to(Path.home() / ".claude")
+    stack = replace(stack, home=home)
+    stack.prepare_native()
+    for path in stack.backup_files(root, pending, tree):
+        destination = copied / path.relative_to(root)
+        if path.exists() and not destination.exists():
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, destination)
+    stopping = before_stop(copied, pending, stack, tree)
+    installed.running_owners(copied)
+    os.environ[HOLDER_NONCE] = MaintenanceBarrier(copied / "registry.json").begin(
+        MaintenanceOperator.current()).nonce
+    with transcripts_held(copied):
+        before = bus_files(copied)
+    passed = carry_and_read(copied, before, pending, stack, stack, tree, stopping)
+    return passed.extended(CarriedRehearsal, copy=practice.measurement)
 
 
 def carry_and_read(root: Path, before: dict[str, SavedFile], pending: tuple[type[Carry], ...],
@@ -628,11 +652,9 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
         if not installed.python.exists():
             raise UpgradeRefused(f"No installed stack at {installed.python}")
         staged = Stack.build(tree.path)
-        pending = member.pending_steps(root, chain, staged, tree)
-        install = member.of(checkout, root, current, target, pending, installed, staged,
-                            tree, installer, spill_dir)
-        rehearsal = install.rehearsal()
-        names = tuple(step.name() for step in pending)
+        install, rehearsal = member.rehearsed(checkout, root, current, target, chain,
+                                              installed, staged, tree, installer, spill_dir)
+        names = tuple(step.name() for step in install.pending)
         if rehearse_only:
             return RehearsedUpgrade(current, target, root, names, rehearsal)
         install.announce(report)
@@ -678,27 +700,14 @@ class Install[Rehearsed: Rehearsal](ABC):
             return RetiringInstall
         if WireLog(WireLog.path_in(root)).fresh():
             return FreshInstall
-        return Install
+        return ExistingBusInstall
 
     @classmethod
-    def pending_steps(cls, root: Path, chain: CarryChain, staged: Stack,
-                      tree: TargetTree) -> tuple[type[Carry], ...]:
-        """Each step's dry run on the bus, with the target's staged stack, says what is left."""
-        return chain.pending(lambda step: carry(step, root, staged, tree))
-
-    @classmethod
-    def of(cls, checkout: Path, root: Path, current: str, target: str,
-           pending: tuple[type[Carry], ...], installed: Stack, staged: Stack, tree: TargetTree,
-           installer: InstallerChoice, spill_dir: Path) -> Install:
-        """A bus already carried, on the target, built from the installed lock needs nothing."""
-        unchanged = not pending and current == target and RuntimeResolution.installed().matches(
-            staged.lock, staged.python, target)
-        member = (ChangedInstall, UnchangedInstall)[unchanged]
-        return member(checkout, root, current, target, pending, installed, staged,
-                      tree, installer, spill_dir)
-
     @abstractmethod
-    def rehearsal(self) -> Rehearsed: ...
+    def rehearsed(cls, checkout: Path, root: Path, current: str, target: str,
+                  chain: CarryChain, installed: Stack, staged: Stack, tree: TargetTree,
+                  installer: InstallerChoice, spill_dir: Path) -> tuple[Install, Rehearsal]:
+        """This member's install, with what is pending, and its rehearsal."""
 
     def install(self, rehearsal: Rehearsed, bridges: SessionBridgeResumes) -> LiveRun:
         """Session bridges close their bus resources before units stop, then exec in place.
@@ -717,10 +726,38 @@ class Install[Rehearsed: Rehearsal](ABC):
     def live(self, rehearsal: Rehearsed) -> LiveRun: ...
 
 
-class ChangedInstall(Install[CarriedRehearsal]):
-    def rehearsal(self) -> CarriedRehearsal:
-        return rehearse(self.root, self.staged, self.installed, self.tree, self.pending,
-                        self.installer)
+class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
+    """A bus is already at the root: one practice copy of it answers what is pending and
+    carries the rehearsal."""
+
+    @classmethod
+    def rehearsed(cls, checkout: Path, root: Path, current: str, target: str,
+                  chain: CarryChain, installed: Stack, staged: Stack, tree: TargetTree,
+                  installer: InstallerChoice, spill_dir: Path) -> tuple[Install, Rehearsal]:
+        with PracticeBus.of(root, installer) as practice:
+            install = cls.of(checkout, root, current, target, practice.pending(chain, staged, tree),
+                             installed, staged, tree, installer, spill_dir)
+            return install, install.rehearsal(practice)
+
+    @classmethod
+    def of(cls, checkout: Path, root: Path, current: str, target: str,
+           pending: tuple[type[Carry], ...], installed: Stack, staged: Stack, tree: TargetTree,
+           installer: InstallerChoice, spill_dir: Path) -> ExistingBusInstall:
+        """A bus already carried, on the target, built from the installed lock needs nothing."""
+        unchanged = not pending and current == target and RuntimeResolution.installed().matches(
+            staged.lock, staged.python, target)
+        member = (ChangedInstall, UnchangedInstall)[unchanged]
+        return member(checkout, root, current, target, pending, installed, staged,
+                      tree, installer, spill_dir)
+
+    @abstractmethod
+    def rehearsal(self, practice: PracticeBus) -> Rehearsed: ...
+
+
+class ChangedInstall(ExistingBusInstall[CarriedRehearsal]):
+    def rehearsal(self, practice: PracticeBus) -> CarriedRehearsal:
+        return rehearse(practice, self.root, self.staged, self.installed, self.tree,
+                        self.pending)
 
     def live(self, rehearsal: CarriedRehearsal) -> CarriedRun:
         return live(self.checkout, self.root, self.current, self.target, self.pending,
@@ -728,11 +765,11 @@ class ChangedInstall(Install[CarriedRehearsal]):
                     rehearsal.files)
 
 
-class UnchangedInstall(Install[UnchangedRehearsal]):
+class UnchangedInstall(ExistingBusInstall[UnchangedRehearsal]):
     """The checkout already sits at the target and the relocked lock is the installed one:
     nothing to rehearse, hold or restart."""
 
-    def rehearsal(self) -> UnchangedRehearsal:
+    def rehearsal(self, practice: PracticeBus) -> UnchangedRehearsal:
         return UnchangedRehearsal()
 
     def live(self, rehearsal: UnchangedRehearsal) -> UnchangedRun:
@@ -745,16 +782,13 @@ class FreshInstall(Install[FreshRehearsal]):
     The target's source creates the bus already in its format and routes to it."""
 
     @classmethod
-    def pending_steps(cls, root: Path, chain: CarryChain, staged: Stack,
-                      tree: TargetTree) -> tuple[type[Carry], ...]:
-        return ()
-
-    @classmethod
-    def of(cls, checkout: Path, root: Path, current: str, target: str,
-           pending: tuple[type[Carry], ...], installed: Stack, staged: Stack, tree: TargetTree,
-           installer: InstallerChoice, spill_dir: Path) -> Install:
-        return cls(checkout, root, current, target, pending, installed, staged,
-                   tree, installer, spill_dir)
+    def rehearsed(cls, checkout: Path, root: Path, current: str, target: str,
+                  chain: CarryChain, installed: Stack, staged: Stack, tree: TargetTree,
+                  installer: InstallerChoice, spill_dir: Path) -> tuple[Install, Rehearsal]:
+        """Nothing at the root to copy, so nothing is pending."""
+        install = cls(checkout, root, current, target, (), installed, staged,
+                      tree, installer, spill_dir)
+        return install, install.rehearsal()
 
     def announce(self, report: InstallReport) -> None:
         """A fresh bus has nowhere to publish a start message yet."""

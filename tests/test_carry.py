@@ -15,7 +15,7 @@ from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
 from agent_comms.installer.carry import (
-    STEPS, Carried, CarryChain,
+    STEPS, Carried, Carry, CarryChain,
 )
 from agent_comms.installer.backup import (
     StoreBackup, UpgradeRefused, bus_files, transcripts_held,
@@ -67,12 +67,11 @@ class Repository:
 def test_pending_is_every_step_from_the_first_whose_dry_run_reports_a_change():
     """A step's dry run, not a record of its name, says whether the bus needs it, so a step
     edited after a bus ran it is judged by what it does now. A later step's dry run is
-    not asked before the earlier pending ones have run."""
-    chain = CarryChain.at(REPO)
-    assert sorted(step.name() for step in chain.steps) == sorted(
-        path.stem for path in (REPO / STEPS).glob("carry_*.py"))
+    not asked before the earlier pending ones have run. The steps are its own: a step that
+    leaves ``carry`` abstract is never registered, and the main line may ship none."""
+    chain = CarryChain(tuple(type(f"Step{number}", (Carry,), {}) for number in range(5)))
     assert chain.pending(lambda step: Carried(0)) == ()
-    edited = chain.steps[len(chain.steps) // 2]
+    edited = chain.steps[2]
     asked = []
 
     def dry_run(step):
