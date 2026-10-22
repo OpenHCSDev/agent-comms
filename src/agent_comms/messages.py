@@ -590,6 +590,22 @@ class BusRecord(Message, DeclaredFamily, affix="Record"):
         """Delivery capabilities are not message content in a publication intent."""
         return Message.from_message(self).publication_snapshot
 
+    @classmethod
+    def envelope_type(cls) -> type[Message]:
+        """The public message this record carries: its nearest Message no record extends."""
+        return next(base for base in cls.__mro__
+                    if issubclass(base, Message) and not issubclass(base, BusRecord))
+
+    @property
+    def envelope(self) -> Message:
+        public = self.envelope_type()
+        return FieldCodec.construct(public, {item.name: getattr(self, item.name)
+                                             for item in fields(public)})
+
+    def to_wire(self) -> dict:
+        """The public envelope; delivery and publication capabilities stay in their tables."""
+        return self.envelope.to_wire()
+
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()
         dataclass(cls, frozen=True, kw_only=True)

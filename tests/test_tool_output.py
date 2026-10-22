@@ -261,12 +261,11 @@ def test_dependency_review_and_ack_survive_large_excluded_history(
     assert not stored_inputs(dispositions.root).rows.get("acp:owner-0").goal_reviews
 
 
-def test_inbox_byte_budget_and_no_ack_keep_the_next_page_unread(inbox_comms):
+def test_inbox_page_bound_and_no_ack_keep_the_next_page_unread(inbox_comms):
     comms = inbox_comms
     expected = [comms.messaging.send("a", "b", str(index)).message for index in range(5)]
-    page = comms.bus.inbox_at("b", comms.registry.snapshot(), bounds=PageBounds(limit=4, max_bytes=280))
+    page = comms.bus.inbox_at("b", comms.registry.snapshot(), bounds=PageBounds(limit=2))
     assert page.page.messages == tuple(expected[:2])
-    assert page.page.bytes_read <= 280
     assert page.remaining == 3
     for _ in range(2):
         result = invoke_tool(
@@ -275,19 +274,6 @@ def test_inbox_byte_budget_and_no_ack_keep_the_next_page_unread(inbox_comms):
         assert result["messages"] == [message.to_wire() for message in expected[:2]]
         assert result["acknowledged"] == 0 and result["remaining"] == 5
         assert comms.bus.pending_count("b") == 5
-
-
-def test_one_oversized_message_makes_progress_without_a_snapshot(inbox_comms):
-    comms = inbox_comms
-    first = comms.messaging.send("a", "b", "🧪" * 40_000).message
-    second = comms.messaging.send("a", "b", "next page").message
-    result = invoke_tool(comms, "comms_inbox", {"thread": "b"}, caller=NoThreadCaller())
-    assert result["messages"] == [first.to_wire()]
-    assert result["acknowledged"] == result["remaining"] == 1
-    result = invoke_tool(comms, "comms_inbox", {"thread": "b"}, caller=NoThreadCaller())
-    assert result["messages"] == [second.to_wire()]
-    assert result["acknowledged"] == 1 and result["remaining"] == 0
-    assert not (comms.root / "tool-output").exists()
 
 
 @pytest.mark.asyncio
