@@ -14,6 +14,8 @@ from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, Unmention
 
 if TYPE_CHECKING:
     from .channels import Channel
+    from .goal_actions import DirectiveGoalAction
+    from .goal_management import Goals
     from .historical_views import ChannelHistory, DMHistory, HistoryView
     from .messages import Message
     from .read_basis import ChannelConversation, Conversation, DisplayViewer, DMConversation
@@ -149,6 +151,10 @@ class NamedTarget(CommandTarget):
         return (self.name,)
 
     @abstractmethod
+    def direct(self, goals: Goals, directive: DirectiveGoalAction) -> None:
+        """A plain owner message to this destination, recorded where it holds requests."""
+
+    @abstractmethod
     def conversation_key(self, sender: str, snapshot: RegistryProvenance,
                          channel: type[ChannelConversation], direct: type[DMConversation]) -> Conversation: ...
 
@@ -208,6 +214,11 @@ class ThreadTarget(NamedTarget):
 
     def require_dm_peer(self):
         return self.name
+
+    def direct(self, goals: Goals, directive: DirectiveGoalAction) -> None:
+        """A registered thread holds owner requests; a peer the registry lacks holds none."""
+        if self.name in goals.registry:
+            goals.update_goal(self.name, directive)
 
     def history_view(self, viewer: DisplayViewer, require_channel: Callable[[str], Channel],
                      channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
@@ -296,6 +307,9 @@ class ChannelTarget(NamedTarget):
 
     def require_channel(self):
         return self
+
+    def direct(self, goals: Goals, directive: DirectiveGoalAction) -> None:
+        """A channel holds no owner requests."""
 
     def history_view(self, viewer: DisplayViewer, require_channel: Callable[[str], Channel],
                      channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Annotated, TYPE_CHECKING
 
 
+from .channel_targets import CommandTarget
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, WireOmitDefault
@@ -271,15 +272,11 @@ class TaskAttachment(DeclaredFamily, affix="TaskAttachment"):
 @dataclass(frozen=True)
 class NoTaskAttachment(TaskAttachment, declared_name="absent"):
     def direct(self, goals: Goals, message: Message) -> None:
-        """A plain owner message to a thread is a request when that thread holds owner
-        requests; a channel holds none."""
+        """A plain owner message is a request wherever its destination holds them."""
         from .goal_actions import DirectiveGoalAction
 
-        if message.target in goals.registry:
-            goals.update_goal(
-                message.target,
-                DirectiveGoalAction(text=message.body, seq=message.seq, at=message.timestamp),
-            )
+        CommandTarget.named(message.target).direct(
+            goals, DirectiveGoalAction(text=message.body, seq=message.seq, at=message.timestamp))
 
 
 @dataclass(frozen=True)
