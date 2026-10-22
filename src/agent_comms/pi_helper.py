@@ -13,6 +13,7 @@ from .child_process import BoundedRun, ChildResult
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, MalformedRecord
 from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestartEnvironment
+from .native_package import VerifiedNativePackage
 
 
 class PiHelperError(ValueError):
@@ -83,11 +84,8 @@ class PiHelper(DeclaredFamily, affix="Helper"):
         if node is None:
             raise PiHelperError("Pi helper needs Node")
         configuration = RestartEnvironment.inherit(environment)
-        environment.update(configuration.encode_native())
-        for key in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
-            environment.pop(key, None)
-        environment["NODE_DISABLE_COMPILE_CACHE"] = "1"
-        environment["PI_OFFLINE"] = "1"
+        environment = {**VerifiedNativePackage.node_environment(
+            {**environment, **configuration.encode_native()}), "PI_OFFLINE": "1"}
         command = (node, "--no-global-search-paths")
         # Every current caller supplies the verified native deployment.
         fence = package / "dist/agent-comms-import-fence.mjs"
