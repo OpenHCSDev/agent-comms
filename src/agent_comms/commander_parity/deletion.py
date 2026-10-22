@@ -251,7 +251,8 @@ class NativeDeletionPath(DeletionPath):
                     text=document.defect,
                     order=document.order,
                     request=NewestOpenRequest().for_order(
-                        run.commander.comms.goals.todos, run.commander.incarnation,
+                        run.commander.comms.goals.todos,
+                        run.commander.incarnation,
                     ),
                     review_at=RecordedEventTime(time.time() + 3600),
                     commander=run.commander.commander,
