@@ -6,12 +6,14 @@ import shutil
 import sqlite3
 import subprocess
 import time
+from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
 from agent_comms.installer.backup import UpgradeRefused
+from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.locked_store import RegistryFile, RootFile, SQLiteFile
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import SharedLock, _store_lock
@@ -36,28 +38,61 @@ class PracticeMeasurement:
         return cls(size, seconds)
 
 
-def prepare_runtime_home(home: Path) -> None:
-    home.mkdir(mode=0o700, parents=True, exist_ok=True)
-    pointer = home / ".local/share/agent-comms/current"
-    pointer.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    pointer.unlink(missing_ok=True)
-    installed = Path.home() / ".local/share/agent-comms/current"
-    if installed.exists():
+@dataclass(frozen=True)
+class RuntimeHome(ABC):
+    """A private home whose kind declares its runtime link and uv source."""
+
+    path: Path
+
+    @property
+    @abstractmethod
+    def uv(self) -> Path: ...
+
+    @abstractmethod
+    def link_runtime(self) -> None: ...
+
+    def prepare(self) -> None:
+        self.path.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self.link_runtime()
+        uv = self.path / ".local/state/agent-comms/upgrade-bus/uv"
+        uv.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        uv.unlink(missing_ok=True)
+        uv.symlink_to(self.uv)
+        cache = Path(subprocess.run(["npm", "config", "get", "cache"], capture_output=True,
+                                    text=True, check=True).stdout.strip())
+        if not (self.path / ".npm").exists() and cache.is_dir():
+            (self.path / ".npm").symlink_to(cache, target_is_directory=True)
+        elif not (self.path / ".npm").exists():
+            (self.path / ".npm").mkdir(mode=0o700)
+
+
+class RehearsalHome(RuntimeHome):
+    """The rehearsal borrows the installed runtime and installer uv, both required."""
+
+    @property
+    def uv(self) -> Path:
+        return (Path.home() / ".local/state/agent-comms/upgrade-bus/uv").resolve(strict=True)
+
+    def link_runtime(self) -> None:
+        installed = LaunchRuntime.current_pointer()
+        pointer = self.path / installed.relative_to(Path.home())
+        pointer.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        pointer.unlink(missing_ok=True)
         pointer.symlink_to(installed.resolve(strict=True))
-    uv = home / ".local/state/agent-comms/upgrade-bus/uv"
-    uv.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    uv.unlink(missing_ok=True)
-    installed_uv = Path.home() / ".local/state/agent-comms/upgrade-bus/uv"
-    executable = shutil.which("uv", path=str(installed_uv.parent)) or shutil.which("uv")
-    if not executable:
-        raise UpgradeRefused("Preparing a private runtime home requires uv")
-    uv.symlink_to(executable)
-    cache = Path(subprocess.run(["npm", "config", "get", "cache"], capture_output=True,
-                                text=True, check=True).stdout.strip())
-    if not (home / ".npm").exists() and cache.is_dir():
-        (home / ".npm").symlink_to(cache, target_is_directory=True)
-    elif not (home / ".npm").exists():
-        (home / ".npm").mkdir(mode=0o700)
+
+
+class TestHome(RuntimeHome):
+    """Tests have no installed pointer and require the bootstrap uv on PATH."""
+
+    @property
+    def uv(self) -> Path:
+        executable = shutil.which("uv")
+        if not executable:
+            raise UpgradeRefused("Preparing a test runtime home requires uv on PATH")
+        return Path(executable)
+
+    def link_runtime(self) -> None:
+        """A test build is never selected as an installed runtime."""
 
 
 def declared_files(root: Path) -> dict[Path, type[RootFile]]:

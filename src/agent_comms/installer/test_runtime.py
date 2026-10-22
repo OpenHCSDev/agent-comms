@@ -11,7 +11,7 @@ import argparse
 import tempfile
 from pathlib import Path
 
-from agent_comms.installer.practice import prepare_runtime_home
+from agent_comms.installer.practice import TestHome
 from agent_comms.installer.upgrade import Stack
 from agent_comms.storage_rules import StorageRule
 
@@ -31,7 +31,7 @@ def main() -> None:
         home = options.home.expanduser().resolve()
         if home == Path.home().resolve():
             parser.error("--home must not name the live home")
-        prepare_runtime_home(home)
+        TestHome(home).prepare()
         Stack.build(Path.cwd(), home).test(*arguments)
 
 
