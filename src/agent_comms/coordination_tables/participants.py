@@ -2,21 +2,51 @@
 
 from __future__ import annotations
 
-from typing import Annotated
 from dataclasses import dataclass
+from typing import Annotated
 
-from agent_comms.participant_identity import ParticipantIdentity
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_schema import CoordinatorTable
+from agent_comms.participant_identity import ParticipantIdentity
 from agent_comms.typed_table import (
     Column,
+    ColumnGuard,
+    CounterAdvance,
     ForeignKey,
+    FrozenColumn,
+    GuardedColumns,
+    ImmutableRows,
+    MonotoneColumns,
+    NoDelete,
+    NonDecreasing,
     TypedTable,
 )
 
 
+class OwnerRecord:
+    """Stored owner components produce one coordinator identity, never live permission."""
+
+    owner_lookup: str
+    owner_thread: str
+    owner_generation: int
+
+    @property
+    def owner_identity(self) -> OwnerGenerations:
+        return OwnerGenerations(
+            owner_lookup=self.owner_lookup, owner_thread=self.owner_thread,
+            generation=self.owner_generation,
+        )
+
+
 @dataclass(frozen=True, kw_only=True)
-class Participants(CoordinatorTable, TypedTable):
+class Participants(MonotoneColumns, GuardedColumns, NoDelete, CoordinatorTable, TypedTable):
+
+    column_orders = (NonDecreasing(('committed',)),)
+
+    column_guards = (
+        ColumnGuard(('participant_lookup',), """1"""),
+    )
+
     participant_lookup: Annotated[
         str,
         Column(
@@ -27,36 +57,8 @@ class Participants(CoordinatorTable, TypedTable):
     display_name: Annotated[str, Column(check="length(display_name) BETWEEN 1 AND 256")]
     committed: bool
 
-    @classmethod
-    def trigger_bodies(cls):
-        return {
-            "participant_identity_immutable": (
-                """
-BEFORE UPDATE OF participant_lookup ON participants
-BEGIN
-    SELECT RAISE(ABORT, 'participant lookup identity is immutable');
-END"""
-            ),
-            "participant_commit_monotonic": (
-                """
-BEFORE UPDATE OF committed ON participants
-WHEN OLD.committed = 1 AND NEW.committed = 0
-BEGIN
-    SELECT RAISE(ABORT, 'participant commitment cannot be revoked');
-END"""
-            ),
-            "participant_identity_delete_frozen": (
-                """
-BEFORE DELETE ON participants
-BEGIN
-    SELECT RAISE(ABORT, 'participant lookup identity cannot be deleted');
-END"""
-            ),
-        }
-
-
 @dataclass(frozen=True, kw_only=True)
-class ParticipantAliases(CoordinatorTable, TypedTable):
+class ParticipantAliases(ImmutableRows, CoordinatorTable, TypedTable):
     alias: Annotated[str, Column(primary_key=True, check="length(alias) BETWEEN 1 AND 256")]
     participant_lookup: str
     renamed_at_ms: Annotated[int, Column(check="renamed_at_ms >= 0")]
@@ -65,29 +67,14 @@ class ParticipantAliases(CoordinatorTable, TypedTable):
     def references(cls):
         return (ForeignKey(("participant_lookup",), Participants, ("participant_lookup",)),)
 
-    @classmethod
-    def trigger_bodies(cls):
-        return {
-            "participant_alias_identity_immutable": (
-                """
-BEFORE UPDATE ON participant_aliases
-BEGIN
-    SELECT RAISE(ABORT, 'participant alias identity is immutable');
-END"""
-            ),
-            "participant_alias_delete_frozen": (
-                """
-BEFORE DELETE ON participant_aliases
-BEGIN
-    SELECT RAISE(ABORT, 'participant alias cannot be deleted');
-END"""
-            ),
-        }
-
-
 @dataclass(frozen=True, kw_only=True)
-class OwnerGenerations(ParticipantIdentity, CoordinatorTable, TypedTable):
-    owner_lookup: Annotated[str, Column(primary_key=True)]
+class OwnerGenerations(
+    CounterAdvance, NoDelete, ParticipantIdentity, CoordinatorTable, TypedTable
+):
+
+    counter_column = 'generation'
+
+    owner_lookup: Annotated[str, FrozenColumn(primary_key=True)]
     owner_thread: Annotated[str, Column(check="length(owner_thread) BETWEEN 1 AND 256")]
     generation: Annotated[int, Column(check="generation > 0")]
 
@@ -105,25 +92,3 @@ class OwnerGenerations(ParticipantIdentity, CoordinatorTable, TypedTable):
     @property
     def lookup(self) -> str:
         return self.owner_lookup
-
-    @classmethod
-    def trigger_bodies(cls):
-        return {
-            "owner_generation_delete_frozen": (
-                """ BEFORE DELETE ON
-owner_generations BEGIN
-    SELECT RAISE(ABORT, 'owner generation counter cannot be deleted'
-    );
-END"""
-            ),
-            "owner_generation_monotonic": (
-                """ BEFORE UPDATE ON owner_generations
-WHEN NEW.owner_lookup IS NOT OLD.owner_lookup
- OR (NEW.generation != OLD.generation AND (
-     NEW.generation != OLD.generation + 1
-     OR EXISTS (SELECT 1 FROM attempts WHERE owner_lookup = OLD.owner_lookup
-                AND owner_generation = OLD.generation
-                AND phase NOT IN ({terminal_attempt_names}))))
-BEGIN SELECT RAISE(ABORT, 'owner generation cannot advance with active attempts'); END"""
-            ),
-        }

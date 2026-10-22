@@ -71,7 +71,7 @@ class SessionLifecycle:
         self.proxies: dict[str, RuntimeProxy | IncompatibleOwner] = {}
         self._attachment_lock = asyncio.Lock()
         self._identity_lock = asyncio.Lock()
-        self.transcript = TranscriptReplay(comms, runtime)
+        self.transcript = TranscriptReplay(comms)
         self.config = SessionConfigOptions(comms, agent_bin, agent_args, runtime, self, effects)
 
     async def initialize(
@@ -195,7 +195,7 @@ class SessionLifecycle:
             session_id=thread.name,
             field_meta=await self.metadata(thread.name, session_id=thread.name),
         )
-        await self.config.observe_configuration(thread.name, self.client)
+        self.config.start_menu(thread.name, self.client)
         return response
 
     async def load_session(
@@ -206,11 +206,12 @@ class SessionLifecycle:
         if not thread.process_identity.runs_here():
             return await self.attach_owner(thread, session_id)
         await self._bind_loaded(thread, session_id)
+        await self.transcript.replay(session_id, self.runtime)
         self.effects.inputs.ensure_live_drain(session_id)
         response = LoadSessionResponse(
             field_meta=await self.metadata(thread.name, session_id=session_id),
         )
-        await self.config.observe_configuration(session_id, self.client)
+        self.config.start_menu(session_id, self.client)
         return response
 
     async def start_owner(self, cwd: str, session_id: str) -> None:
@@ -246,7 +247,6 @@ class SessionLifecycle:
     async def _bind_loaded(self, thread: Thread, session_id: str) -> None:
         await Coordination.run_worker(partial(self.comms.threads.heartbeat, thread.name))
         await self.bind_owned(thread, session_id)
-        await self.transcript.replay(session_id, self.transcript.runtime)
         await self.effects.inputs.emit_input_delivery_changed(session_id)
 
     async def attach_owner(self, thread: Thread, session_id: str) -> LoadSessionResponse:
@@ -262,7 +262,7 @@ class SessionLifecycle:
                 self.proxies[session_id] = proxy
             except IncompatibleOwnerError as error:
                 # History is Core's own store; only owner requests need the owner's Core.
-                await self.transcript.replay(session_id, self.transcript.runtime)
+                await self.transcript.replay(session_id, self.runtime)
                 self.proxies[session_id] = error.owner
                 return LoadSessionResponse(field_meta={
                     **await self.metadata(thread.name, session_id=session_id),

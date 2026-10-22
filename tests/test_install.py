@@ -17,7 +17,7 @@ from agent_comms.commander.config import (
     CommanderConfig, GivenRepos, NamedCommander, NoConfigFile, WrittenConfigFile,
 )
 from agent_comms.installer.backup import UpgradeRefused, bus_files
-from agent_comms.installer.carry import CarryChain, CarryLedger
+from agent_comms.installer.carry import CarryChain
 from agent_comms.installer.practice import declared_files, practice_copy
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
@@ -45,9 +45,7 @@ def test_a_bus_install_creates_is_fresh_until_marked_and_runs_no_carry(private_d
     assert log.fresh()
     Comms(root).messaging.initialize_private_initial_protocol()
     assert not log.fresh()
-    chain = CarryChain.at(REPO)
-    CarryLedger(root).start(chain)
-    assert chain.pending(CarryLedger(root).applied()) == ()
+    assert CarryChain.at(REPO).pending(lambda step: step.carry(root, apply=False)) == ()
 
 
 def test_install_routes_a_new_bus_and_replaces_only_a_route_that_selects_none(private_directory):
@@ -171,7 +169,7 @@ def test_an_install_on_a_bus_with_no_commander_writes_no_commander_config(privat
     home = _harnessless_home(private_directory, monkeypatch)
     result = InstallCliCommand(project=private_directory).apply(comms)
     assert result.config == NoConfigFile()
-    assert not CommanderConfig.root_path(root).exists()
+    assert not CommanderConfig.path_in(root).exists()
     assert not CommanderConfig.path(home).exists() and not CommanderConfig.path(home).is_symlink()
 
 
@@ -189,7 +187,7 @@ def test_an_install_refuses_flags_a_bus_without_a_commander_record_cannot_use(
     home = _harnessless_home(private_directory, monkeypatch)
     with pytest.raises(UpgradeRefused):
         InstallCliCommand(project=private_directory, **flags).apply(Comms(root))
-    assert not CommanderConfig.root_path(root).exists() and not CommanderConfig.path(home).is_symlink()
+    assert not CommanderConfig.path_in(root).exists() and not CommanderConfig.path(home).is_symlink()
 
 
 def test_an_install_without_flags_keeps_the_recorded_commander_and_rehomes_its_paths(
@@ -208,7 +206,7 @@ def test_an_install_without_flags_keeps_the_recorded_commander_and_rehomes_its_p
     result = InstallCliCommand(project=private_directory).apply(comms)
     expected = CommanderConfig.on_machine("lead", (), root, home, frozenset({"parked-unit"}))
     assert result.config == WrittenConfigFile(str(CommanderConfig.path(home)))
-    assert CommanderConfig.root_path(root).read_text() == expected.model_dump_json(indent=1) + "\n"
+    assert CommanderConfig.path_in(root).read_text() == expected.model_dump_json(indent=1) + "\n"
     assert CommanderConfig.read(CommanderConfig.path(home)) == expected
 
 

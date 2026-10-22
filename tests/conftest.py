@@ -3,6 +3,7 @@ from agent_comms.native_package import pinned_location, pinned_native_package
 
 import asyncio
 import os
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -12,6 +13,7 @@ from contextlib import AsyncExitStack, contextmanager
 from pathlib import Path
 
 import pytest
+import goal_owner_fixture
 from xdist import is_xdist_worker
 from source_programs import SourcePrograms
 from source_revision_fixture import SourceRepository
@@ -26,6 +28,9 @@ from agent_comms.registration import Registration
 from agent_comms.messages import ConversationRole, InfoKind, Message
 from agent_comms.store_files import _store_lock
 from agent_comms.thread_text import ForkedParent, GivenThreadText
+from agent_comms.typed_table import TypedTable
+
+pytest_plugins = (goal_owner_fixture.__name__,)
 
 
 class TranscriptRecords:
@@ -186,11 +191,11 @@ def cursor_delivery(source_reads):
 
 @pytest.fixture(scope="session")
 def native_runtime_package():
-    """The artifact of this checkout's own pin, prepared as installation prepares it."""
+    """The running interpreter's artifact, qualified by the real installer before tests."""
     from agent_comms.native_package import VerifiedNativePackage
     from agent_comms.unit_instructions import UnitInstructions
 
-    package = VerifiedNativePackage.acquire(pinned_native_package())
+    package = VerifiedNativePackage.qualify(pinned_native_package())
     UnitInstructions.prepare()
     return package
 
@@ -204,6 +209,19 @@ def _managed_runtime_environment_is_explicit(monkeypatch: pytest.MonkeyPatch) ->
         for name in _MANAGED_RUNTIME_ENVIRONMENT:
             monkeypatch.delenv(name, raising=False)
         yield
+
+
+@contextmanager
+def without_mutation_guards(db: sqlite3.Connection, table: type[TypedTable]) -> Iterator[None]:
+    """Damage disposable rows, restoring their declaration before a checked read."""
+    guards = table.triggers()
+    for name in guards:
+        db.execute(f'DROP TRIGGER "{name}"')
+    try:
+        yield
+    finally:
+        for statement in guards.values():
+            db.execute(statement)
 
 
 @contextmanager
@@ -257,11 +275,7 @@ def private_directory():
 
 @pytest.fixture
 def private_comms(private_directory):
-    """One throwaway private bus, built as production builds one.
-
-    Its launch derives like any private root's: the marker installed here
-    gives the root ID, this installation the package.
-    """
+    """One throwaway private bus; native consumers acquire their own package."""
     root = private_directory / "wire"
     root.mkdir(mode=0o700)
     comms = Comms(root)
@@ -269,7 +283,6 @@ def private_comms(private_directory):
     from agent_comms.launch_root import LaunchRoot
 
     LaunchRoot.from_path(root).install()
-    comms.route.launch().require_private().check()
     return comms
 
 

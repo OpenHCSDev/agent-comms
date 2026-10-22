@@ -11,6 +11,8 @@ from agent_comms.service_sender import ServiceSender
 from agent_comms.standing_rules import StandingRule
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.threads import Thread
+from agent_comms.todos import PullRequests
+from agent_comms.ui_model.unit_state import UnitState
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
@@ -20,45 +22,40 @@ if TYPE_CHECKING:
 
 @dataclass
 class CommanderReview:
-    """One commander's handled observations, its last changed beat and next review position.
+    """One commander's handled observations and its last changed beat.
 
     Seq 0 precedes every published message: no changed beat has been sent yet.
     """
 
-    violations: frozenset[StandingRule]
+    rules: frozenset[StandingRule]
+    states: frozenset[UnitState] = frozenset()
     changed: int = 0
-    turn: int = 0
 
     def wake(self, comms: Comms, sender: str, commander: Thread,
-             rules: tuple[StandingRule, ...]) -> None:
+             rules: tuple[StandingRule, ...], states: tuple[UnitState, ...]) -> None:
         """Every pass beats, so silence is a failure; an unchanged beat is one short line."""
-        found = frozenset(rules)
-        previous = self.violations
-        if found == previous and self.changed:
-            comms.messaging.send(sender, commander.name, (
-                f"COMMANDER HEARTBEAT: unchanged since seq {self.changed},"
-                f" {len(found)} violations."))
+        found_rules, found_states = frozenset(rules), frozenset(states)
+        actionable = (*rules, *(state for state in states if state.attention()))
+        old_rules = self.rules
+        previous = self.rules | self.states
+        if found_rules == self.rules and found_states == self.states and self.changed:
+            comms.messaging.send(sender, commander.name,
+                                 f"COMMANDER HEARTBEAT: unchanged since seq {self.changed},"
+                                 f" {len(actionable)} violations.")
             return
         # Mark the observation before any effect; an uncertain publication is not replayed.
-        self.violations = found
+        self.rules, self.states = found_rules, found_states
         rejected = StandingRule.enforce_all(
-            comms, commander.name, (rule for rule in rules if rule not in previous)
+            comms, commander.name, (rule for rule in actionable if rule not in previous)
         )
         # A checked rejection has no effects and must not suppress a fresh observation.
-        self.violations = found - rejected
-        lines = ["COMMANDER HEARTBEAT: standing-rule violations changed."]
-        owed = comms.goals.todos.held_for_commander(commander.incarnation)
-        units = sorted({todo.held().owner for todo in owed})
-        if units:
-            unit = units[self.turn % len(units)]
-            orders = ", ".join(todo.id for todo in owed if todo.held().owner == unit)
-            lines.append(f"Review next: @{unit} ({orders}); read its git state and newest turn.")
-            self.turn += 1
-        lines.extend(StandingRule.heartbeat_changes(
-            previous, tuple(rule for rule in rules if rule not in rejected)
-        ))
-        lines.extend(rule.rejected_line() for rule in rules if rule in rejected)
-        if not found:
+        self.rules -= rejected
+        self.states -= rejected
+        lines = ["COMMANDER HEARTBEAT: unit states and standing rules changed."]
+        lines.extend(state.line() for state in states)
+        lines.extend(StandingRule.heartbeat_changes(old_rules, self.rules))
+        lines.extend(rule.rejected_line() for rule in actionable if rule in rejected)
+        if not actionable:
             lines.append("Standing rules clear.")
         self.changed = comms.messaging.send(sender, commander.name, "\n".join(lines)).message.seq
 
@@ -68,6 +65,15 @@ class CommanderObservation:
     thread: Thread
     merged: tuple[Todo, ...]
     rules: tuple[StandingRule, ...]
+    states: tuple[UnitState, ...]
+
+    @classmethod
+    def read(cls, comms: Comms, thread: Thread) -> CommanderObservation:
+        pulls = PullRequests(StandingRule.todos(comms, thread.name))
+        states = UnitState.current(comms, thread.name, pulls)
+        rules = StandingRule.broken(comms, thread.name, observed=states)
+        merged = tuple(todo for state in states for todo in state.merged_orders(comms, pulls))
+        return cls(thread, merged, rules, states)
 
 
 @dataclass
@@ -89,11 +95,7 @@ class CommanderHeartbeat(ServiceSender, WatchPass[tuple[CommanderObservation, ..
 
     def observe(self, comms: Comms) -> tuple[CommanderObservation, ...]:
         return tuple(
-            CommanderObservation(
-                thread,
-                comms.goals.todos.merged_orders(thread.incarnation, comms.registry),
-                StandingRule.broken(comms, thread.name),
-            )
+            CommanderObservation.read(comms, thread)
             for thread in self.commanders(comms.registry, comms.goals)
         )
 
@@ -107,4 +109,4 @@ class CommanderHeartbeat(ServiceSender, WatchPass[tuple[CommanderObservation, ..
         for item in observed:
             comms.goals.todos.record_merges(item.merged)
             review = self.reviews.setdefault(item.thread.incarnation, CommanderReview(frozenset()))
-            review.wake(comms, self.sender, item.thread, item.rules)
+            review.wake(comms, self.sender, item.thread, item.rules, item.states)

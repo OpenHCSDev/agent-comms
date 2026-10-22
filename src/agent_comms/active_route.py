@@ -147,7 +147,7 @@ class ActiveRoute(CommsRoute):
     def selects_its_root(self) -> bool:
         """Whether the root still exists and carries the marker this route was published for."""
         return self.root.is_dir() and (
-            self.wire_log().read_metadata_unlocked().wire_root_id == self.wire_root_id)
+            self.wire_log().read_metadata_unlocked().root_id == self.wire_root_id)
 
     def observe_root(self) -> Path:
         # The writer atomically replaces this marker. Reuse its owner/mode,

@@ -72,18 +72,12 @@ Priority: the owner's latest message; a broken install, lost or replayed input, 
 
 ## One rotation tick
 
-Pick the next unit. Read its actual state, not its message: worktree, `git log -1`, `git status`, the diff, its last turns in tool-watch. Decide:
-- **Moving:** a fresh commit that deletes or fixes the right thing. Leave it.
-- **Spinning:** repeated send-backs, no commit for 20 minutes on exact edits, tests rerun as investigation. Write the exact target shape into the order.
-- **Stuck:** no tool call for 3 minutes while holding an order. Order it.
-- **Stalled on nothing:** ended its turn holding an order with a question it could answer itself, a summary, a plan, "ready to proceed", or a wait on something already given. Send the next concrete step the same tick, with a strike (rules/send-backs-and-strikes.md).
-- **Idle:** give it the top unowned plan step if your load has room to review it; otherwise leave it stopped.
-- **Adding slop:** send it back with the result it violates.
+Read the heartbeat's unit cards in their urgency order. Each `UnitState` member owns its classification and default action. Read the selected unit's diff and newest turn to judge whether its work is correct; send back added slop with the result it violates.
 
 One line per unit touched, then the next unit.
 
 - **Handling an event is never where the turn ends; the next unit's state is.** Every wait is prep: pre-read the files the next order touches.
-- **A unit records its delivery, not just a chat report:** `order deliver PROBLEM --fork UNIT --pr N --sha HEAD_COMMIT --report-file REPORT.txt` (or the native `comms_order_deliver` tool). Core stores Claimed and answers the commander. Only the holder may claim; the commander uses `order done UNIT PROBLEM --sha SHA` to accept it, or sends it back with corrected instructions. Claimed orders are not reissued on restart.
+- **A unit records its delivery, not just a chat report:** the unit calls the native `comms_order_deliver` tool as itself. Core stores Claimed and answers the commander. Only the holder may claim; the commander uses `order done UNIT PROBLEM --sha SHA` to accept it, or sends it back with corrected instructions. Claimed orders are not reissued on restart.
 - **A hunt is `order hunt FILE:LINE --why ... --sent PROBLEM`** (rules/send-backs-and-strikes.md says when).
 
 ## Slop is a defined term

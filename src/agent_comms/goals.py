@@ -29,7 +29,6 @@ from .field_codec import (
 )
 from .goal_states import ActiveGoal, GoalState
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
-from .goal_failure_observation import FailedTurnProjection
 from .turn_goal_permission import ContinuationGoalPermission, GoalPermission, InactiveGoalPermission
 from .registration_inheritance import RegistrationInheritance
 from .repo import ScratchCheckout
@@ -39,13 +38,10 @@ from .ui_model.goal import GoalDisplay
 
 if TYPE_CHECKING:
     from .goal_actions import DirectiveGoalAction, GoalAction, GoalActionContext
-    from .goal_presentation import ThreadGoalExecution
-    from .goal_waits import GoalWait, GoalWaits
-    from .agent_activity import AgentActivity
-    from .registry_document import RegistrySnapshot
+    from .goal_presentation import GoalExecution
+    from .goal_waits import GoalWaits
     from .task_sources import TaskScope
     from .threads import Thread
-    from .thread_status import ThreadStatus
     from .turn_context import TurnContext
 
 if TYPE_CHECKING:
@@ -366,14 +362,13 @@ class OrderCheck:
                 return word
         return ""
 
-    def require_acceptance(self, checkout_base: Path) -> None:
-        """A new or corrected check must distinguish origin/main from delivered work."""
+    def require_acceptance(self, base: str, checkout_base: Path) -> None:
+        """The order state supplies the source preceding its delivered work."""
         self.require_writable()
-        CheckedCommit.git(self.directory, "fetch", "-q", "origin", "main")
         try:
-            ran = self.run_at("origin/main", self.directory, checkout_base)
+            ran = self.run_at(base, self.directory, checkout_base)
         except subprocess.TimeoutExpired as error:
-            raise ValueError("The order check timed out on origin/main.") from error
+            raise ValueError(f"The order check timed out on {base}.") from error
         if refused := self.result.distance(ran).unproven(self.command, 0):
             raise ValueError("; ".join(refused))
 
@@ -503,9 +498,6 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
     def progress(self, goal: Goal, todos: Sequence[Todo]) -> str:
         return goal.progress
 
-    def failed_turn_progress(self, goal: Goal, diagnostic: str) -> str:
-        return f"{goal.progress}\n\n{diagnostic}" if goal.progress else diagnostic
-
     def require_model_block(self) -> None:
         pass
 
@@ -517,7 +509,7 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
         return ()
 
     def overdue_directives(self, goal: Goal, goals: Goals, owner: ThreadIncarnation,
-                           now: float) -> tuple[RequestDirective, ...]:
+                           now: float) -> tuple[tuple[RequestDirective, Message], ...]:
         return ()
 
     @abstractmethod
@@ -552,19 +544,8 @@ class RequestDirective:
     def due_time(self) -> str:
         return time.strftime("%H:%M", time.localtime(self.deadline))
 
-    def original(self, goals: Goals) -> Message:
-        source: CheckedRead
-        with goals.bus.log.checked_read() as source:
-            return source.delivery(self.seq).message
-
-    def overdue(self, goals: Goals, owner: ThreadIncarnation, now: float) -> bool:
-        if self.deadline >= now:
-            return False
-        original = self.original(goals).reference
-        with goals.bus.log.checked_read() as source:
-            replies = source.replies((original,))
-        return not any(reply.message.sender == owner.name and original in reply.message.answers
-                       for reply in replies)
+    def original(self, source: CheckedRead) -> Message:
+        return source.delivery(self.seq).message
 
 
 @dataclass(frozen=True)
@@ -600,12 +581,27 @@ class RequestGoalOrder(GoalOrder):
         return directive.request(goal, ctx)
 
     def directive_messages(self, goals: Goals) -> tuple[Message, ...]:
-        return tuple(directive.original(goals) for directive in self.directives)
+        """Every directive's original, read in one checked read: a read per directive held the
+        wire lock once per message the owner ever sent (2,258 holds, 20 s per order call)."""
+        source: CheckedRead
+        with goals.bus.log.checked_read() as source:
+            return tuple(directive.original(source) for directive in self.directives)
 
     def overdue_directives(self, goal: Goal, goals: Goals, owner: ThreadIncarnation,
-                           now: float) -> tuple[RequestDirective, ...]:
-        return tuple(directive for directive in self.directives
-                     if directive.overdue(goals, owner, now))
+                           now: float) -> tuple[tuple[RequestDirective, Message], ...]:
+        """Each directive past its deadline that the owner has not answered, with its original;
+        the originals and every reply to them come from one checked read."""
+        due = tuple(directive for directive in self.directives if directive.deadline < now)
+        if not due:
+            return ()
+        source: CheckedRead
+        with goals.bus.log.checked_read() as source:
+            originals = tuple((directive, directive.original(source)) for directive in due)
+            answered = {answer for reply in source.replies(tuple(
+                message.reference for _, message in originals))
+                if reply.message.sender == owner.name for answer in reply.message.answers}
+        return tuple((directive, message) for directive, message in originals
+                     if message.reference not in answered)
 
     def open_requests(
         self, goal: Goal, goals: Goals, owner: ThreadIncarnation
@@ -648,9 +644,6 @@ class ProblemGoalOrder(GoalOrder):
         return "\n".join(" · ".join((f"{todo.id}: {todo.order.line}",
                                      *(verdict.line for verdict in todo.verdicts[-1:])))
                          for todo in todos)
-
-    def failed_turn_progress(self, goal: Goal, diagnostic: str) -> str:
-        return goal.progress
 
     def require_model_block(self) -> None:
         raise ValueError("A problem goal is not blocked by text: ask the commander to block the "
@@ -714,15 +707,7 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
     def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext: ...
 
     @abstractmethod
-    def describe_execution(self, wait: GoalWait, snapshot: RegistrySnapshot,
-                           agents: AgentActivity) -> ThreadGoalExecution: ...
-
-    @abstractmethod
     def peer_change_values(self) -> GoalPeerChange: ...
-
-    @abstractmethod
-    def failed_turn_projection(self, path: Path, owner: Thread, owner_status: ThreadStatus,
-                               claim_scope: int) -> FailedTurnProjection: ...
 
     @abstractmethod
     def stopped_permit(self, store: GoalAttemptStore) -> GoalTurnPermit: ...
@@ -732,14 +717,7 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
                permit: LaunchPermit, turn: TurnId) -> None: ...
 
     @abstractmethod
-    def block_after_failed_turn(self, goals: Goals, name: str, worktree: str,
-                                diagnostic: str) -> GoalDeclaration: ...
-
-    @abstractmethod
     def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]: ...
-
-    def after_failed_turn(self, diagnostic: str) -> GoalDeclaration:
-        return self
 
     def check_expected(self, current: GoalDeclaration) -> None:
         pass
@@ -829,10 +807,6 @@ class NoGoal(NullMember, GoalDeclaration):
                permit: LaunchPermit, turn: TurnId) -> None:
         pass
 
-    def block_after_failed_turn(self, goals: Goals, name: str, worktree: str,
-                                diagnostic: str) -> GoalDeclaration:
-        return self
-
     def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]:
         return ()
 
@@ -867,26 +841,18 @@ class NoGoal(NullMember, GoalDeclaration):
     def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext:
         return context
 
-    def describe_execution(self, wait: GoalWait, snapshot: RegistrySnapshot,
-                           agents: AgentActivity) -> ThreadGoalExecution:
-        return wait.idle_execution()
-
     def peer_change_values(self) -> GoalPeerChange:
         return GoalPeerChange(goal=self, state=self, progress="")
-
-    def failed_turn_projection(self, path: Path, owner: Thread, owner_status: ThreadStatus,
-                               claim_scope: int) -> FailedTurnProjection:
-        return FailedTurnProjection("unavailable", "owner_or_goal_changed")
 
     can_control: ClassVar[bool] = False
     visible: ClassVar[bool] = False
     objective: ClassVar[str] = ""
     progress: ClassVar[str] = ""
 
-    def standby(self, execution: ThreadGoalExecution) -> bool:
+    def standby(self, execution: GoalExecution) -> bool:
         return False
 
-    def heading(self, execution: ThreadGoalExecution) -> str:
+    def heading(self, execution: GoalExecution) -> str:
         return "No current goal"
 
     def action_failure(self, error: Exception) -> str:
@@ -946,12 +912,6 @@ class Goal(RecordMember, GoalDeclaration):
                permit: LaunchPermit, turn: TurnId) -> None:
         settlement(store, permit, self, turn).dispatch_sync(self.state)
 
-    def block_after_failed_turn(self, goals: Goals, name: str, worktree: str,
-                                diagnostic: str) -> GoalDeclaration:
-        return goals.block_goal_after_failed_turn(
-            name, started_goal=self, expected_worktree=worktree, diagnostic=diagnostic,
-        )
-
     def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]:
         return (self.render_instructions(self.order.instructions(
             self.order.todos(goals, owner, self.id))),)
@@ -988,16 +948,8 @@ class Goal(RecordMember, GoalDeclaration):
     def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext:
         return context.prepend_goal(owner, self, goals)
 
-    def describe_execution(self, wait: GoalWait, snapshot: RegistrySnapshot,
-                           agents: AgentActivity) -> ThreadGoalExecution:
-        return wait.project(self, snapshot, agents)
-
     def peer_change_values(self) -> GoalPeerChange:
         return GoalPeerChange(goal=self.revision_key, state=type(self.state), progress=self.progress)
-
-    def failed_turn_projection(self, path: Path, owner: Thread, owner_status: ThreadStatus,
-                               claim_scope: int) -> FailedTurnProjection:
-        return FailedTurnProjection.read_for_goal(path, owner, owner_status, claim_scope, self)
 
     def check_expected(self, current: GoalDeclaration) -> None:
         if self != current:
@@ -1010,18 +962,17 @@ class Goal(RecordMember, GoalDeclaration):
     def objective(self) -> str:
         return self.text
 
-    def details_heading(self, execution: ThreadGoalExecution) -> str:
+    def details_heading(self, execution: GoalExecution) -> str:
         return execution.details_heading(self.heading(execution))
 
     can_control: ClassVar[bool] = True
     visible: ClassVar[bool] = True
 
-    def standby(self, execution: ThreadGoalExecution) -> bool:
+    def standby(self, execution: GoalExecution) -> bool:
         return execution.waiting_for(self)
 
-    def heading(self, execution: ThreadGoalExecution) -> str:
-        status = "Standby" if self.standby(execution) else self.state.declared_name
-        return f"Goal · {status} · rev {self.revision}"
+    def heading(self, execution: GoalExecution) -> str:
+        return execution.heading(self.revision)
 
     def action_failure(self, error: Exception) -> str:
         return str(error)
@@ -1058,13 +1009,6 @@ class Goal(RecordMember, GoalDeclaration):
 
     def render_instructions(self, orders_text: str) -> str:
         return "\n\n".join(part for part in (self.order.goal_text(self), orders_text) if part)
-
-    def after_failed_turn(self, diagnostic: str) -> Goal:
-        progress = self.order.failed_turn_progress(self, diagnostic)
-        state = self.state.after_failed_turn(diagnostic)
-        if state is self.state:
-            return self
-        return replace(self, state=state, progress=progress, revision=self.revision + 1)
 
     def __post_init__(self) -> None:
         if not self.text.strip() or not self.id:

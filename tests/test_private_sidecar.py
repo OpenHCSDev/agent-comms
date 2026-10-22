@@ -115,7 +115,7 @@ def test_symlink_ancestor_refused(path):
         "CREATE INDEX unrelated_index ON prompt_binding(owner_thread)",
         "CREATE VIEW unrelated_view AS SELECT * FROM prompt_binding",
         "CREATE TABLE unrelated_table (x)",
-        "DROP TRIGGER prompt_binding_delete_guard",
+        *(f'DROP TRIGGER "{name}"' for name in PromptBinding.triggers()),
     ],
 )
 def test_all_schema_objects_checked_independent_of_name(path, sql):

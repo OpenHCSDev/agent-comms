@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
@@ -12,14 +12,23 @@ from .goal_attempt_phase import (
     FailedAttempt,
     GoalAttemptPhase,
 )
-from .goal_states import BlockedGoal
+from .goal_failure_observation import NoFailedTurnEvidence
+from .goal_presentation import (
+    AttemptUnresolvedExecution,
+    CompletedExecution,
+    RunnableExecution,
+)
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Complete, Failed, Terminal
 
 if TYPE_CHECKING:
     from .goal_actions import GoalActionContext
     from .goal_attempts import Generation, GoalAttemptStore
+    from .goal_failure_observation import GoalFailureEvidence
+    from .goal_management import Goals
+    from .goal_presentation import GoalExecution, GoalExecutionSource
     from .goals import Goal
+    from .threads import Thread
 
 
 @dataclass(frozen=True)
@@ -29,6 +38,29 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
     def resume_status(self, generation: Generation, goal: Goal, ctx: GoalActionContext) -> None:
         if not self.allows_resume(ctx.thread.executing):
             raise ValueError("The goal attempt is unresolved; inspect it before Retry.")
+
+    def execution(self, source: GoalExecutionSource) -> GoalExecution:
+        return source.turn.execution(source)
+
+    def idle_execution(self, source: GoalExecutionSource) -> GoalExecution:
+        return AttemptUnresolvedExecution(source.goal.id)
+
+    def evidence(self, store: GoalAttemptStore, generation: Generation) -> GoalFailureEvidence:
+        return NoFailedTurnEvidence()
+
+    def continue_work(self, store: GoalAttemptStore, generation: Generation, witness: str) -> None:
+        """An accepted order or verified progress does not resolve unknown work."""
+        pass
+
+    def turn_permit(
+        self,
+        store: GoalAttemptStore,
+        goals: Goals,
+        owner: Thread,
+        claim_scope: int,
+        generation: Generation,
+    ) -> GoalTurnPermit:
+        return NoLaunchPermit()
 
     def validate_attempt(self, attempt_id: str | None) -> None:
         if not attempt_id:
@@ -54,14 +86,25 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
         raise ValueError("The goal attempt is unresolved; inspect it before retrying.")
 
 
-class RetryableGeneration:
-    """A generation an explicit retry or a fresh order may proceed from; every other
-    generation's attempt is unresolved until someone inspects it."""
-
-
 @dataclass(frozen=True)
-class ReadyGeneration(GenerationState, RetryableGeneration):
+class ReadyGeneration(GenerationState):
     ready = True
+
+    def execution(self, source: GoalExecutionSource) -> GoalExecution:
+        return RunnableExecution(source.goal.id)
+
+    def turn_permit(
+        self,
+        store: GoalAttemptStore,
+        goals: Goals,
+        owner: Thread,
+        claim_scope: int,
+        generation: Generation,
+    ) -> GoalTurnPermit:
+        grant = goals.ready_goal_grant_locked(owner, claim_scope, generation)
+        return store.claim_launch(
+            store.reserve(generation.goal_id, generation.number, ready_grant=grant)
+        )
 
     def require_ready(self) -> None:
         pass
@@ -105,19 +148,25 @@ class ReservedGeneration(GenerationState):
 
 
 @dataclass(frozen=True)
-class BlockedGeneration(Failed, GenerationState, RetryableGeneration):
+class BlockedGeneration(Failed, GenerationState):
     def resume_status(self, generation: Generation, goal: Goal, ctx: GoalActionContext) -> None:
+        """A status-only Resume cannot authorize an uncertain attempt."""
         if generation.attempt_id:
-            state = BlockedGoal(
+            raise ValueError(
                 "The interrupted goal attempt is unresolved. Inspect it, then use "
                 "Retry to authorize a new attempt. Your messages can still be sent."
             )
-            blocked = replace(goal, state=state, revision=goal.revision + 1)
-            ctx.goals.registry.register(
-                replace(ctx.thread, goal=blocked), ctx.goals.registry.status(ctx.thread.name)
-            )
-            raise ValueError(state.reason)
         super().resume_status(generation, goal, ctx)
+
+    def evidence(self, store: GoalAttemptStore, generation: Generation) -> GoalFailureEvidence:
+        return generation.failure_evidence(store)
+
+    def idle_execution(self, source: GoalExecutionSource) -> GoalExecution:
+        return source.evidence.execution(source.goal.id)
+
+    def continue_work(self, store: GoalAttemptStore, generation: Generation, witness: str) -> None:
+        store.authorize_current_retry(generation.goal_id, witness)
+
 
     def permits_retirement(self, phase: GoalAttemptPhase | None) -> bool:
         return isinstance(phase, FailedAttempt)
@@ -140,7 +189,8 @@ class BlockedGeneration(Failed, GenerationState, RetryableGeneration):
 
 @dataclass(frozen=True)
 class CompletedGeneration(Complete, Terminal, GenerationState):
-    pass
+    def execution(self, source: GoalExecutionSource) -> GoalExecution:
+        return CompletedExecution(source.goal.id)
 
 
 @dataclass(frozen=True)

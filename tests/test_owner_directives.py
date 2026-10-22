@@ -20,7 +20,8 @@ def requesting_lead(tmp_path):
 def overdue(comms, directive: RequestDirective):
     goal = comms.registry.require("lead").goal
     owner = comms.registry.require("lead").incarnation
-    return goal.order.overdue_directives(goal, comms.goals, owner, directive.deadline + 1)
+    return tuple(due for due, _original in goal.order.overdue_directives(
+        goal, comms.goals, owner, directive.deadline + 1))
 
 
 def test_the_owners_message_is_a_directive_the_overdue_rule_reads(tmp_path):

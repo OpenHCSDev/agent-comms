@@ -195,7 +195,7 @@ def carry(rts: Path, root: Path, apply: bool, retire: bool) -> None:
             existing = {todo.id: todo for todo in todos.Todo.stream(db)}
             for pid, (unit, row, order) in selected.items():
                 owner = comms.registry.require(unit).incarnation
-                proposed = todos.Assignment.of(owner, actor, "rts-order:" + row.msg)
+                generation = "rts-order:" + row.msg
                 due = RecordedEventTime(row.at).at_clock(row.due)
                 if pid in existing:
                     todo = existing[pid]
@@ -205,9 +205,17 @@ def carry(rts: Path, root: Path, apply: bool, retire: bool) -> None:
                     print(f"{pid} order {row.msg}", file=sys.stderr, flush=True)
                     repo = Repo.of(Path(order.owner.file).parent)
                     text = problems[pid].text
+                    proposed = todos.Assignment.of(owner, actor, generation)
                     todo = todos.Todo.ordered(pid, repo.github, text, actor, proposed, due, order)
-                todo = todos.AssignTodo(
-                    todo.revision, proposed, due, row.merged.wrap(order), todo.goal
+                todo = todos.AssignTodo.by(
+                    actor,
+                    todo.revision,
+                    owner,
+                    generation,
+                    due,
+                    row.merged.wrap(order),
+                    todo.goal,
+                    todos.NoSourceReference(),
                 ).apply(todo)
                 history = tuple(
                     strike.recorded(actor, comms.registry.require(strike.unit).incarnation)

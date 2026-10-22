@@ -513,7 +513,7 @@ class TestSharedLedger:
     def test_merge_and_read(self, tmp_path: Path):
         ledger = SharedLedger(tmp_path / "ledger.json")
         ledger.merge({"a": 1}, author="x")
-        assert ledger.read().entries["a"] == 1
+        assert FieldCodec.encode(ledger.read())["a"] == 1
 
     def test_rejects_non_string_keys(self, tmp_path: Path):
         ledger = SharedLedger(tmp_path / "ledger.json")
@@ -523,12 +523,12 @@ class TestSharedLedger:
     def test_persistence_roundtrip(self, tmp_path: Path):
         path = tmp_path / "ledger.json"
         SharedLedger(path).merge({"k": "v"}, author="x")
-        assert SharedLedger(path).read().entries["k"] == "v"
+        assert FieldCodec.encode(SharedLedger(path).read())["k"] == "v"
 
     def test_records_author(self, tmp_path: Path):
         ledger = SharedLedger(tmp_path / "ledger.json")
         ledger.merge({}, author="me")
-        assert ledger.read().entries["last_updated_by"] == "me"
+        assert FieldCodec.encode(ledger.read())["last_updated_by"] == "me"
 
 
 class TestCurrentThread:

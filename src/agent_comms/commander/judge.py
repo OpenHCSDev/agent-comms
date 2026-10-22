@@ -36,6 +36,7 @@ from agent_comms.todos import (
     Derivation,
     DroppedVerdict,
     PeerAcceptedVerdict,
+    ReviewedHeadVerdict,
     SendBackVerdict,
     Slop,
     StrikeReason,
@@ -43,7 +44,7 @@ from agent_comms.todos import (
     Todo,
     ToolCallVerdict,
 )
-from agent_comms.tools import CommsUnjudgedTool, CommsVerdictTool
+from agent_comms.tools import CommsHeadVerdictTool, CommsUnjudgedTool, CommsVerdictTool
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tool_declaration import EditCall, ReplacementEdit
 from agent_comms.commander import order
@@ -156,6 +157,28 @@ class AlarmVerb(JudgeVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
+class HeadVerb(JudgeVerb):
+    help = ("accept an order's reviewed PR head: every edit before it is judged and "
+            "agent-comms/review is posted on the commit")
+    problem: Annotated[str, Argument(flags=("problem",), options={"metavar": "PROBLEM"})]
+    head: Annotated[str, Argument(flags=("head",), options={"metavar": "SHA"})]
+    serves: Annotated[
+        str, Argument(options={"help": "exact words of the order the head carries out"})
+    ]
+
+    def run(self, ctx: order.Commander) -> None:
+        held = [todo for todo in ctx.held_orders() if todo.id == self.problem]
+        if not held:
+            sys.exit(f'Refused: {self.problem} is not an order this commander holds')
+        todo, = held
+        verdict = ReviewedHeadVerdict(todo.revision, ctx.actor_identity, todo.held(),
+                                      quote=self.serves, head=self.head)
+        ctx.call(CommsHeadVerdictTool(problem=todo.id, operation=verdict))
+        left = len(Edit.unjudged(ctx.comms, ctx.commander))
+        print(f'head {self.head} accepted on {todo.id}; {left} still unjudged')
+
+
+@dataclass(frozen=True, kw_only=True)
 class VerdictVerb(JudgeVerb):
     """Every verdict, mine or a fork's, is made after reviewing paper 1's
     correct-maintenance results. Each member's required options are the facts its verdict carries."""
@@ -242,7 +265,7 @@ class OkVerb(VerdictVerb):
     ] = ""
 
     def operation(self, ctx: order.Commander, todo: Todo, edit: Edit) -> AcceptedVerdict:
-        actor = ctx.incarnation
+        actor = ctx.actor_identity
         if self.peer:
             return PeerAcceptedVerdict(todo.revision, actor, todo.held(), edit.id,
                                        quote=self.serves, peer=self.peer)
@@ -273,7 +296,7 @@ class SupersededVerb(VerdictVerb):
 
     def operation(self, ctx: order.Commander, todo: Todo, edit: Edit) -> SupersededVerdict:
         return SupersededVerdict(todo.revision,
-                                 ctx.incarnation,
+                                 ctx.actor_identity,
                                  todo.held(), edit.id, replacement=self.by, reason=self.why)
 
     def check_edits(self, edits: list[Edit]) -> None:
@@ -289,7 +312,7 @@ class DroppedVerb(VerdictVerb):
 
     def operation(self, ctx: order.Commander, todo: Todo, edit: Edit) -> DroppedVerdict:
         added = tuple(line for hunk in edit.hunks for line in hunk.new_text.splitlines())
-        return DroppedVerdict(todo.revision, ctx.incarnation, todo.held(), edit.id,
+        return DroppedVerdict(todo.revision, ctx.actor_identity, todo.held(), edit.id,
                               path=edit.path, added=added)
 
     def check_edits(self, edits: list[Edit]) -> None:
@@ -335,7 +358,7 @@ class BackVerb(VerdictVerb):
                                            at=self.at, derive=self.derive, by=self.by))
 
     def operation(self, ctx: order.Commander, todo: Todo, edit: Edit) -> SendBackVerdict:
-        return SendBackVerdict(todo.revision, ctx.incarnation,
+        return SendBackVerdict(todo.revision, ctx.actor_identity,
                                todo.held(), edit.id,
                                reason=StrikeReason(f'{todo.id} edit sent back: {self.why}'),
                                evidence=(FileLine.from_wire(self.at),))
@@ -354,7 +377,7 @@ class BackVerb(VerdictVerb):
             audience = todo.verdicts[-1].audience.of(todo.held().owner, todo.goal)
             roast(ctx, audience, todo.holder, self.lines, self.roast, self.fix, self.slop())
             line = (f'{time.strftime("%Y-%m-%d %H:%M")} {todo.holder} '
-                    f'(strike {todo.strike_count} on {todo.id}; caught by {ctx.commander} at review): '
+                    f'(strike {todo.strike_count} on {todo.id}; caught by {ctx.actor_name} at review): '
                     f'{todo.strikes[-1].reason}')
             ctx.on_record(line, 'Send-back', audience)
 

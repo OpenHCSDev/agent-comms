@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import os
 import sys
-from collections.abc import Callable, Mapping, MutableMapping
+from abc import ABC, abstractmethod
+from collections.abc import Callable, Iterator, Mapping, MutableMapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
@@ -35,9 +36,29 @@ class CallingThreadUnavailable(RelationViolationError):
     """The process environment does not declare its owner thread."""
 
 
+class InheritedEnvironment(Mapping[str, str]):
+    """A child's environment when its launcher names none: this process's own, read at launch."""
+
+    def __getitem__(self, name: str) -> str:
+        return os.environ[name]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(os.environ)
+
+    def __len__(self) -> int:
+        return len(os.environ)
+
+
+INHERITED_ENVIRONMENT = InheritedEnvironment()
+
+
 @dataclass(frozen=True)
 class LaunchRuntime:
-    """One selected installation for a worker and its native executable."""
+    """One selected installation for a worker and its native executable.
+
+    The interpreter is the runtime's identity; a member decides only what its
+    launched children inherit.
+    """
 
     interpreter: Annotated[Path, PathText]
 
@@ -45,6 +66,12 @@ class LaunchRuntime:
     def running(cls) -> LaunchRuntime:
         """Keep ordinary launches on the calling process's installation."""
         return cls(Path(sys.executable))
+
+    def child_environment(self, environment: Mapping[str, str]) -> dict[str, str]:
+        """A child of this process's own interpreter imports the source this process
+        imported; any other installation's child gets exactly the environment its launcher
+        built."""
+        return RunningSource.serving(self).environment(environment)
 
     @staticmethod
     def current_pointer() -> Path:
@@ -79,25 +106,83 @@ class LaunchRuntime:
             raise ValueError("Target interpreter is unavailable")
 
 
+@dataclass(frozen=True)
+class RunningSource(ABC):
+    """Where this process imported agent_comms from.
+
+    An editable install's .pth names one checkout; a parent running another
+    checkout's source must not hand its children the .pth's copy.
+    """
+
+    root: Path
+
+    @staticmethod
+    def serving(runtime: LaunchRuntime) -> RunningSource:
+        """The source a runtime's children import: this process's own when the runtime is this
+        process's interpreter, otherwise that installation's site-packages."""
+        if runtime.interpreter == Path(sys.executable):
+            return RunningSource.current()
+        return InstalledSource(runtime.prefix)
+
+    @staticmethod
+    def current() -> RunningSource:
+        root = Path(__file__).resolve().parents[1]
+        installed = root.is_relative_to(Path(sys.prefix).resolve())
+        return (InstalledSource if installed else CheckoutSource)(root)
+
+    @abstractmethod
+    def environment(self, environment: Mapping[str, str]) -> dict[str, str]: ...
+
+
+class InstalledSource(RunningSource):
+    """The interpreter's own site-packages: every child of it already imports this copy."""
+
+    def environment(self, environment: Mapping[str, str]) -> dict[str, str]:
+        return dict(environment)
+
+
+class CheckoutSource(RunningSource):
+    """A source checkout: its root goes first on the child's import path."""
+
+    def environment(self, environment: Mapping[str, str]) -> dict[str, str]:
+        inherited = RestartEnvironment.inherit(environment).with_import_root(self.root)
+        return inherited.apply_runtime(environment)
+
+
 class RestoredRuntime(LaunchRuntime):
     """Original-process recovery preserves its original import environment too."""
 
     def _environment(self, source: Mapping[str, str]) -> dict[str, str]:
         return dict(source)
 
+    def child_environment(self, environment: Mapping[str, str]) -> dict[str, str]:
+        return dict(environment)
+
 
 class ImportPath(DeclaredFamily, JsonShapeFamily, affix="ImportPath"):
     """An inherited Python search path or its explicit removal."""
+
+    @abstractmethod
+    def first(self, root: Path) -> ImportPath:
+        """This search path with root searched before it."""
 
 
 @dataclass(frozen=True)
 class NoImportPath(ImportPath, JsonShapeMember):
     value: None = None
 
+    def first(self, root: Path) -> ImportPath:
+        return SpecifiedImportPath(str(root))
+
 
 @dataclass(frozen=True)
 class SpecifiedImportPath(ImportPath, JsonShapeMember):
     value: str
+
+    def first(self, root: Path) -> ImportPath:
+        # Each generation re-applies its root: keep exactly one copy, searched first.
+        entries = (entry for entry in self.value.split(os.pathsep) if entry != str(root))
+        return SpecifiedImportPath(os.pathsep.join((str(root), *entries)))
 
 
 class EnvironmentValue(SubclassUnion, TextChoice, affix="Variable"):
@@ -199,7 +284,7 @@ class RestartEnvironment(EnvironmentRecord):
         return directory.expanduser().resolve()
 
     @classmethod
-    def inherit(cls, environment: Mapping[str, str]):
+    def inherit(cls, environment: Mapping[str, str]) -> Self:
         values = cls.inherited(environment)
         native_name, agent_name = cls.variable("native_config"), cls.variable("agent_directory")
         values[native_name] = (
@@ -213,6 +298,9 @@ class RestartEnvironment(EnvironmentRecord):
 
     def without_pythonpath(self) -> RestartEnvironment:
         return replace(self, pythonpath=NoImportPath())
+
+    def with_import_root(self, root: Path) -> RestartEnvironment:
+        return replace(self, pythonpath=self.pythonpath.first(root))
 
     def for_interpreter(self, interpreter: Path) -> RestartEnvironment:
         """Put this process's runtime first, exactly once; preserve other search paths."""

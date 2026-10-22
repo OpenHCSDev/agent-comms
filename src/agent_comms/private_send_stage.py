@@ -15,7 +15,7 @@ from contextlib import contextmanager
 from collections.abc import Iterator
 
 from .assignment_states import DeferredAssignment, FailedAssignment
-from .coordinated_runtime_schema import assert_native_runtime_schema
+from agent_comms.native_runtime_input import NativeRuntimeTable
 from .coordination_errors import IdentityConflict, RetryScheduled, StaleFence
 from .coordination_tables.assignments import WakeAssignment
 from .coordinator import Coordination
@@ -94,7 +94,7 @@ class NativeSendStage(ABC):
     def reserve(self, store: Coordination, owner: ParticipantOwner, token_digest: str) -> str:
         input_id = Id128Text.mint()
         with store.session.writing() as db:
-            assert_native_runtime_schema(db)
+            NativeRuntimeTable.require_installed(db)
             owner.require(store, self.recipient_lookup)
             self.reserve_claim(store, db)
             NativeRuntimeInput(
@@ -119,7 +119,7 @@ class NativeSendStage(ABC):
     ) -> NativeRuntimeInput:
         """Read current durable ownership inside the caller's read/write transaction."""
         db = store.session._connection
-        assert_native_runtime_schema(db)
+        NativeRuntimeTable.require_installed(db)
         owner.require(store, self.recipient_lookup)
         row = NativeRuntimeInput.one(db, input_id=input_id)
         if row is None:

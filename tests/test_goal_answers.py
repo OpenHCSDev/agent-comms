@@ -1,7 +1,6 @@
 """Goal absence is dispatched before work; a clear never revives a turn's goal."""
 
 import os
-import shutil
 from contextlib import ExitStack, contextmanager
 from uuid import uuid4
 
@@ -9,25 +8,14 @@ import pytest
 
 from agent_comms import agent_events as events
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import Comms
 from agent_comms.goal_actions import ClearGoalAction, SetGoalAction
 from agent_comms.goal_attempts import ProviderUsageTotal
 from agent_comms.goal_turn_permit import NoLaunchPermit
-from agent_comms.goal_states import BlockedGoal
 from agent_comms.goals import NoGoal
 from agent_comms.pi_payloads import PiUsage
 from agent_comms.thread_identity import TurnId
 from agent_comms.turn_goal_account import TurnGoalAccount
 from agent_comms.turn_terminal import EndedWithoutResult, OperatorStopped
-
-
-@pytest.fixture
-def copied_goal_bus(tmp_path):
-    source = Comms(tmp_path / "source")
-    source.messaging.initialize_private_initial_protocol()
-    target = tmp_path / "copy"
-    shutil.copytree(source.root, target)
-    return Comms(target)
 
 
 @contextmanager
@@ -71,23 +59,10 @@ def test_clear_during_original_or_origin_turn_does_not_block_missing_goal(
     with goal_turn(comms, original_goal) as account:
         goal = comms.registry.require("worker").goal.require()
         comms.goals.update_goal("worker", ClearGoalAction())
-        terminal.observe_goal(account)
         account.finish(terminal)
         assert comms.registry.require("worker").goal == NoGoal()
         assert comms.goals.open_goal_store().snapshot(goal.id).lifecycle.successors() == ()
         assert not account.pending_origins
-
-
-@pytest.mark.parametrize("terminal", [
-    EndedWithoutResult(), events.Done("backend failed", False), events.Done("", True),
-])
-def test_unsuccessful_terminal_still_blocks_goal_on_copied_bus(copied_goal_bus, terminal):
-    comms = copied_goal_bus
-    with goal_turn(comms, True) as account:
-        terminal.observe_goal(account)
-        account.finish(terminal)
-        state = comms.registry.require("worker").goal.require().state
-        assert isinstance(state, BlockedGoal)
 
 
 @pytest.mark.parametrize("original_goal", [False, True])

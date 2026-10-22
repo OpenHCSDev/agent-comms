@@ -17,7 +17,6 @@ from .agent_activity import AgentActivity
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError
 from .goal_actions import (
-    BlockedGoalAction,
     GoalAction,
     GoalActionContext,
     GoalPrecondition,
@@ -41,11 +40,14 @@ if TYPE_CHECKING:
     from .message_reference import MessageReference
     from .native_input_owner import RegistryOwner
     from .registry_document import RegistrySnapshot
+    from .thread_identity import ThreadIncarnation
 from .goal_presentation import (
+    GoalExecution,
+    GoalExecutionSource,
     GoalPublicationSnapshot,
     GoalSnapshot,
     GoalWaitTarget,
-    ThreadGoalExecution,
+    IdleGoalExecution,
 )
 from .goals import Goal, GoalDeclaration
 from .input_attempt import (
@@ -98,11 +100,11 @@ class Goals:
         sent_back: Todo = self.todos.get(problem)
         return sent_back
 
-    def fire(self, unit: str, reason: StrikeReason, commander: str) -> tuple[Todo, ...]:
-        actor = self.registry.require(commander).incarnation
+    def fire(self, unit: str, reason: StrikeReason, actor: ThreadIncarnation) -> tuple[Todo, ...]:
+        owner = self.registry.require(unit).incarnation
         store: TodoStore = self.todos
         with _store_lock(self._wire_lock_path):
-            return store.fire(unit, actor, reason)
+            return store.fire(owner, actor, reason)
 
     def open_goal_store(self) -> GoalAttemptStore:
         if self.goal_store is None:
@@ -114,7 +116,7 @@ class Goals:
     def ready_goal_grant_locked(
         self, owner: Thread, claim_scope: int, generation: Generation
     ) -> str:
-        """Caller holds wire; recover only this owner's original unused READY grant."""
+        """Caller holds registry; recover only this owner's original unused READY grant."""
         try:
             goal = GoalLaunchOwner(thread=owner, claimed_generation=claim_scope).require_ready(
                 self.registry.snapshot(), generation.goal_id,
@@ -352,7 +354,7 @@ class Goals:
         self.waits.clear(goal.id, wait_id=wait.wait_id)
         return True
 
-    def goal_execution(self, name: str) -> ThreadGoalExecution:
+    def goal_execution(self, name: str) -> GoalExecution:
         return self._goal_snapshot(name).execution
 
     def goal_changed(self, name: str, previous: GoalPublicationSnapshot) -> GoalChange:
@@ -374,9 +376,20 @@ class Goals:
     def _goal_snapshot(self, name: str) -> GoalSnapshot:
         snapshot = self.registry.snapshot()
         canonical = snapshot.canonical_name(name)
-        goal = snapshot.threads[canonical].goal
-        execution = GoalWaits.execution(goal, self.waits.read(), snapshot, self.agents)
-        return GoalSnapshot(goal, execution)
+        return self.snapshot_for(snapshot.threads[canonical], snapshot, self.waits.read())
+
+    def snapshot_for(self, owner: Thread, snapshot: RegistrySnapshot,
+                     waits: dict[str, RecordedGoalWait]) -> GoalSnapshot:
+        """All goal readers build the same source from the original records."""
+        for goal in owner.goal:
+            store = self.open_goal_store()
+            generation = store.require_generation(goal.id)
+            source = GoalExecutionSource(
+                goal, GoalWaits.for_goal(goal, waits), generation,
+                generation.lifecycle.evidence(store, generation), owner, snapshot, self.agents,
+            )
+            return GoalSnapshot(goal, source.execution())
+        return GoalSnapshot(owner.goal, IdleGoalExecution())
 
     def consume_goal_wait(self, name: str, wait_id: str) -> bool:
         """Called under the send-boundary wire lock after reserving an attempt."""
@@ -434,29 +447,3 @@ class Goals:
         action = action.prepare(self, name, actor)
         with _store_lock(self._wire_lock_path):
             yield action.apply(GoalActionContext(self, self.registry.require(name), actor))
-
-    def block_failed_origin(self, name: str, goal: Goal) -> GoalDeclaration:
-        return self.update_goal(name, BlockedGoalAction(
-            expect=GoalPrecondition(goal_id=goal.id, expected_goal=goal),
-            progress="Goal origin turn did not finish successfully.",
-        ))
-
-    def block_goal_after_failed_turn(
-        self,
-        name: str,
-        *,
-        started_goal: Goal,
-        expected_worktree: str,
-        diagnostic: str,
-    ) -> GoalDeclaration:
-        """Make an unresolved same-ID attempt visible without losing newer progress."""
-        with _store_lock(self._wire_lock_path):
-            thread = self.registry.require(name)
-            current = thread.goal.matching(started_goal.id)
-            if thread.worktree != expected_worktree:
-                return thread.goal
-            blocked = current.after_failed_turn(diagnostic)
-            if blocked is current:
-                return thread.goal
-            self.registry.register(replace(thread, goal=blocked), self.registry.status(thread.name))
-            return blocked

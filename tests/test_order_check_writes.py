@@ -4,6 +4,7 @@ import pytest
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import CountCheckResult, OrderCheck
+from agent_comms.work_branches import WorkBranches
 
 
 @pytest.mark.parametrize('command', ['git checkout main', 'git -C /repo switch work',
@@ -32,7 +33,7 @@ def test_multiline_checks_keep_quoted_newlines_and_command_boundaries():
 def test_acceptance_refuses_passing_and_unmeasurable_checks(source_repository, tmp_path, command, expected):
     check = OrderCheck(str(source_repository.checkout), command, CountCheckResult(expected))
     with pytest.raises(ValueError):
-        check.require_acceptance(tmp_path / 'checks')
+        check.require_acceptance(WorkBranches.main, tmp_path / 'checks')
     assert not tuple((tmp_path / 'checks').iterdir())
 
 

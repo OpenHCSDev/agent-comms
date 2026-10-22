@@ -110,7 +110,7 @@ class Messaging:
             )
             committed = commit.publish(message, origin)
         try:
-            todos.correct(owner.name, committed.message_id, body)
+            todos.correct(owner.incarnation, committed.message_id, body)
         except TodoError as error:
             correction = CorrectionFailed(f'{error.__class__.__name__}: {error}')
         else:
