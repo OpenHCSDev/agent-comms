@@ -208,7 +208,9 @@ def carry(rts: Path, root: Path, apply: bool, retire: bool) -> None:
                     repo = Repo.of(Path(order.owner.file).parent)
                     text = problems[pid].text
                     proposed = todos.Assignment.of(owner, actor, generation)
-                    todo = todos.Todo.ordered(pid, repo.github, text, actor, proposed, due, order, request)
+                    todo = todos.Todo.ordered(
+                        pid, repo.github, text, actor, proposed, due, order, request
+                    )
                 todo = todos.AssignTodo.by(
                     actor,
                     todo.revision,

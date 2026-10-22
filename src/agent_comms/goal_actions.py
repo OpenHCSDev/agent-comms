@@ -23,6 +23,7 @@ from agent_comms.goals import (
     UnorderedGoalOrder,
 )
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.todos import PendingProblemOrder, SendBackVerdict, Todo, TodoOperation
 
 from .change_report import FileLine, NoSourceReference
 from .child_process import ProcessIdentity
@@ -48,7 +49,6 @@ from .recorded_time import EventTime
 from .repository_name import RepositoryName
 from .thread_identity import ThreadIncarnation
 from .threads import Thread
-from agent_comms.todos import PendingProblemOrder, SendBackVerdict, Todo, TodoOperation
 
 if TYPE_CHECKING:
     from .goal_management import Goals

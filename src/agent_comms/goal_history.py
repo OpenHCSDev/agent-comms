@@ -15,17 +15,17 @@ import stat
 import time
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Annotated, Literal
 
+from agent_comms.field_codec import WireOmitDefault
+from agent_comms.owner_requests import NoRequestRevision, RequestAtRevision, RequestRevision
 
 from .coordination_database import CoordinationStore
-from .field_codec import FieldCodec, MalformedRecord, HistoryExclude
+from .field_codec import FieldCodec, HistoryExclude, MalformedRecord
 from .goals import GoalDeclaration, NoGoal
 from .locked_store import DurableFile, SQLiteFile
-from agent_comms.owner_requests import RequestAtRevision
-from agent_comms.field_codec import WireOmitDefault
 from .typed_table import Column, DurableTables, Index, JsonStorage, TypedTable
 
 
@@ -37,8 +37,21 @@ class GoalHistoryError(RuntimeError):
 class RequestHistory:
     """Moved request data stays linked to its original history observation."""
 
-    request_before: Annotated[RequestAtRevision | None, Column(storage=JsonStorage), WireOmitDefault()] = None
-    request_after: Annotated[RequestAtRevision | None, Column(storage=JsonStorage), WireOmitDefault()] = None
+    request_before: Annotated[
+        RequestRevision, Column(storage=JsonStorage, nullable=True), WireOmitDefault(),
+    ] = NoRequestRevision()
+    request_after: Annotated[
+        RequestRevision, Column(storage=JsonStorage, nullable=True), WireOmitDefault(),
+    ] = NoRequestRevision()
+
+    @classmethod
+    def endpoint_columns(cls) -> dict[str, str]:
+        """Request-prefix fields declare the goal endpoint each preserves."""
+        return {entry.name.removeprefix("request_"): entry.name for entry in fields(RequestHistory)}
+
+    @property
+    def request_revisions(self) -> tuple[RequestRevision, ...]:
+        return self.request_before, self.request_after
 
 
 @dataclass(frozen=True)
@@ -91,7 +104,7 @@ class GoalHistoryEntry(RequestHistory, TypedTable, DurableTables):
     ) -> None:
         """Move an endpoint's request to its prefix without dropping the goal observation."""
         goal_column = cls._column_list((column,))
-        prefix_column = cls._column_list(("request_" + column,))
+        prefix_column = cls._column_list((cls.endpoint_columns()[column],))
         db.execute(
             f'UPDATE "{cls.declared_name}" '
             f"SET {goal_column}=json_set({goal_column}, '$.order', json(?)), {prefix_column}=? "

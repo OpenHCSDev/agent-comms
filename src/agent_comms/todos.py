@@ -36,7 +36,6 @@ from agent_comms.build_identity import (
     UnrecordedBuildIdentity,
 )
 from agent_comms.bus_publication import AgentOrigin
-from agent_comms.head_review import AcceptedHeadReview
 from agent_comms.change_report import (
     FileLine,
     MainRevision,
@@ -56,7 +55,6 @@ from agent_comms.child_process import (
 )
 from agent_comms.command import Command
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.lifecycle_capability import LifecycleCapability, Pending
 from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import (
     FieldCodec,
@@ -71,6 +69,8 @@ from agent_comms.field_codec import (
     boundary_decoder,
 )
 from agent_comms.goals import CheckedCommit, OrderCheck, ProblemGoalOrder
+from agent_comms.head_review import AcceptedHeadReview
+from agent_comms.lifecycle_capability import LifecycleCapability, Pending
 from agent_comms.locked_store import RegistryFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.message_reference import MessageReference
@@ -2514,9 +2514,9 @@ class VerdictAudience:
     threads: tuple[str, ...]
 
     @classmethod
-    def of(cls, unit: str, request: OwnerRequest) -> VerdictAudience:
-        """An order concerns its unit and the commander on its owner request."""
-        return cls(tuple(dict.fromkeys((unit, request.commander.name))))
+    def of(cls, unit: str, todo: Todo) -> VerdictAudience:
+        """The order records its commander; a request lookup adds no authority."""
+        return cls(tuple(dict.fromkeys((unit, todo.creator))))
 
     @property
     def target(self) -> NamedTarget:
@@ -3040,14 +3040,19 @@ class OwnerRequest(TypedTable, SharedFileTables, DurableTables):
     def directive_messages(self, source: CheckedRead) -> tuple[Message, ...]:
         return tuple(directive.original(source) for directive in self.directives)
 
-    def overdue_directives(self, source: CheckedRead, now: float) -> tuple[tuple[RequestDirective, Message], ...]:
+    def overdue_directives(
+        self, source: CheckedRead, now: float,
+    ) -> tuple[tuple[RequestDirective, Message], ...]:
         originals = tuple((directive, directive.original(source)) for directive in self.directives
                           if directive.deadline < now)
         if not originals:
             return ()
-        answered = {answer for reply in source.replies(tuple(message.reference for _, message in originals))
-                    if reply.audience.sender_lookup == self.commander.lookup for answer in reply.message.answers}
-        return tuple((directive, message) for directive, message in originals if message.reference not in answered)
+        replies = source.replies(tuple(message.reference for _, message in originals))
+        answered = {answer for reply in replies
+                    if reply.audience.sender_lookup == self.commander.lookup
+                    for answer in reply.message.answers}
+        return tuple((directive, message) for directive, message in originals
+                     if message.reference not in answered)
 
 
 @dataclass(frozen=True, slots=True)
@@ -3362,8 +3367,64 @@ class ProblemAllocation(TypedTable):
         return cls.issue(db, ProblemNumber(number))
 
 
+class OwnerRequestStore(DurableStore):
+    """Request lifetime and serving-work queries share the store's transaction."""
+
+    def add_request(self, commander: ThreadIncarnation, text: str) -> OwnerRequest:
+        request = OwnerRequest.new(commander, text)
+        with self.writing() as db:
+            request.insert(db)
+        return request
+
+    def owner_request(self, request: OwnerRequestId) -> OwnerRequest:
+        with self.snapshot() as db:
+            return OwnerRequest.require(db, id=request)
+
+    def open_requests(
+        self, commander: ThreadIncarnation, *, limit: int = -1,
+    ) -> tuple[OwnerRequest, ...]:
+        with self.snapshot() as db:
+            return tuple(OwnerRequest.select(
+                db, where="commander_created_at=?",
+                parameters=(commander.require_recorded().created_at,), state=OpenRequestState(),
+                order_by=("created_at", "id"), descending=True, limit=limit,
+            ))
+
+    def record_directive(self, request: OwnerRequest, directive: RequestDirective) -> None:
+        with self.writing() as db:
+            current = OwnerRequest.require(db, id=request.id)
+            current.require_open(request.commander)
+            replace(current, directives=(*current.directives, directive)).upsert(db)
+
+    def complete_request(
+        self, commander: ThreadIncarnation, request: OwnerRequestId, reason: str,
+    ) -> OwnerRequest:
+        with self.writing() as db:
+            current = OwnerRequest.require(db, id=request)
+            state = current.require_open(commander)
+            completed = replace(current, state=state.complete(
+                request, self._serving(db, request), reason,
+            ))
+            completed.upsert(db)
+        return completed
+
+    @staticmethod
+    def _serving(db: sqlite3.Connection, request: OwnerRequestId) -> tuple[Todo, ...]:
+        return tuple(Todo.select(db, request=request, where=Todo.serving_request))
+
+    def serving_orders(self, request: OwnerRequestId) -> tuple[Todo, ...]:
+        """Pending work and unaccepted claims, through the request's partial index."""
+        with self.snapshot() as db:
+            return self._serving(db, request)
+
+    def for_request(self, request: OwnerRequestId) -> tuple[Todo, ...]:
+        """Every order that served this independent request, open or done."""
+        with self.snapshot() as db:
+            return tuple(Todo.select(db, request=request))
+
+
 @dataclass(frozen=True, slots=True)
-class TodoStore(DurableStore):
+class TodoStore(OwnerRequestStore):
     """One SQLite row owns both todo state and its exclusive assignment.
 
     Assignment identity and revision deduplicate known operations. An uncertain
@@ -3411,44 +3472,6 @@ class TodoStore(DurableStore):
                 f"{unit.name} is assigned by {todo.held().parent} on open order "
                 f"{todo.order.checked().id} ({todo.id}); "
                 "finish or release that order before assigning it again.")
-
-    def add_request(self, commander: ThreadIncarnation, text: str) -> OwnerRequest:
-        request = OwnerRequest.new(commander, text)
-        with self.writing() as db:
-            request.insert(db)
-        return request
-
-    def owner_request(self, request: OwnerRequestId) -> OwnerRequest:
-        with self.snapshot() as db:
-            return OwnerRequest.require(db, id=request)
-
-    def open_requests(
-        self, commander: ThreadIncarnation, *, limit: int | None = None,
-    ) -> tuple[OwnerRequest, ...]:
-        with self.snapshot() as db:
-            return tuple(OwnerRequest.select(
-                db, where="commander_created_at=?",
-                parameters=(commander.require_recorded().created_at,), state=OpenRequestState(),
-                order_by=("created_at", "id"), descending=True, limit=limit,
-            ))
-
-    def record_directive(self, request: OwnerRequest, directive: RequestDirective) -> None:
-        with self.writing() as db:
-            current = OwnerRequest.require(db, id=request.id)
-            current.require_open(request.commander)
-            replace(current, directives=(*current.directives, directive)).upsert(db)
-
-    def complete_request(
-        self, commander: ThreadIncarnation, request: OwnerRequestId, reason: str,
-    ) -> OwnerRequest:
-        with self.writing() as db:
-            current = OwnerRequest.require(db, id=request)
-            state = current.require_open(commander)
-            completed = replace(current, state=state.complete(
-                request, self._serving(db, request), reason,
-            ))
-            completed.upsert(db)
-        return completed
 
     def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
         hunt.require_commander(self, commander)
@@ -3633,20 +3656,6 @@ class TodoStore(DurableStore):
         """Whether a problem assigned to owner pends, under any generation; its Goal stays open."""
         return any(todo.pending for todo in self._select(
             '1', (), reader=partial(self.held_in, unit=owner)))
-
-    @staticmethod
-    def _serving(db: sqlite3.Connection, request: OwnerRequestId) -> tuple[Todo, ...]:
-        return tuple(Todo.select(db, request=request, where=Todo.serving_request))
-
-    def serving_orders(self, request: OwnerRequestId) -> tuple[Todo, ...]:
-        """Pending work and unaccepted claims, through the request's partial index."""
-        with self.snapshot() as db:
-            return self._serving(db, request)
-
-    def for_request(self, request: OwnerRequestId) -> tuple[Todo, ...]:
-        """Every order that served this independent request, open or done."""
-        with self.snapshot() as db:
-            return tuple(Todo.select(db, request=request))
 
     def for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._select("creator=? AND creator_created=?",

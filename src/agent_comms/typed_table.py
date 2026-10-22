@@ -1024,8 +1024,10 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         cls._writable_fields(tuple(changed))
         fields = cls._writable_fields()
         stored = cls.stored_columns(db)
-        expressions = (changed[item.name] if item.name in changed else item.rebuild_expression(stored)
-                       for item in fields)
+        expressions = (
+            changed[item.name] if item.name in changed else item.rebuild_expression(stored)
+            for item in fields
+        )
         selected = ", ".join(f'{expression} AS {_identifier(item.wire_name)}'
                              for item, expression in zip(fields, expressions, strict=True))
         table = _identifier(cls.declared_name)
@@ -1051,7 +1053,9 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
             return
         if not all(item.nullable and item.column.writable for item in missing):
             return
-        previous = cls._table_sql(columns=tuple(item.name for item in fields if item.wire_name in stored))
+        previous = cls._table_sql(
+            columns=tuple(item.name for item in fields if item.wire_name in stored),
+        )
         actual = {item.name: item.sql for item in cls.stored_objects(db)}
         if actual.get(cls.declared_name) == previous:
             cls.rebuild(db)

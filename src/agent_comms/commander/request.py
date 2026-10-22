@@ -21,7 +21,7 @@ class RequestVerb(CommanderVerb):
 
 
 class RequestMutation(HeldBusWrite, RequestVerb, declared_name=None):
-    """Request mutations share the same admission as order and directive publication."""
+    """Request mutations use the same bus writer as orders and directives."""
 
     def apply(self, ctx: Commander) -> None:
         self.write_when_open(ctx.comms, partial(super().apply, ctx))

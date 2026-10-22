@@ -52,6 +52,7 @@ from agent_comms.goals import OrderCheck, ProblemGoalOrder
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
 from agent_comms.native_tool_call import SelectedToolDenied
+from agent_comms.owner_requests import NewestOpenRequest, RequestSelection
 from agent_comms.plan_phases import OrderPhase
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.progress_claims import MergedClaim, WorkingClaim
@@ -60,7 +61,6 @@ from agent_comms.repo import Repo
 from agent_comms.standing_rules import HuntDue, OwedAnswer
 from agent_comms.storage_rules import UnitStorage
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.owner_requests import NewestOpenRequest, RequestSelection
 from agent_comms.todos import (
     BluntText,
     CleanHunt,
@@ -577,21 +577,6 @@ class Commander(CommanderContext):
         refuse(body, *OUTGOING)
         print(self.post(VerdictAudience(tuple(units.split(','))), body.rstrip(), answers))
 
-    def problem(self, order_file, unit, where, disk=False,
-                answers: tuple[MessageReference, ...] = (), *, request: RequestSelection):
-        """A problem is born owned: Core records it with its order in one step, or not at all."""
-        document = OrderFile.read(Path(order_file).read_text())
-        location = FileLine.from_wire(where)
-        checkout = self.repo_directory(document.order.check.directory)
-        if checkout.is_dir():
-            self.comms.goals.todos.require_recurrence_declaration(
-                document.order, location, checkout, document.slop, time.time())
-        pid = self.comms.goals.todos.allocate_problem()
-        self.send(unit, document, new=(pid, document.defect),
-             disk=disk, finding=LocatedProblemFinding(location), answers=answers,
-             request=request)
-        print(pid)
-
     def close(self, pid, works, artifact=''):
         """Core owns closing: the installed evidence, the artifact and the no-open-order rule live on the Todo."""
         evidence = artifact or self.comms.goals.todos.get(pid).order.closing_artifact()
@@ -644,8 +629,7 @@ class Commander(CommanderContext):
         n = struck(todo, unit)
         line = (f'{time.strftime("%Y-%m-%d")} {strike.at.clock()} {unit} (strike {n} on {todo.id}'
                 f'{f", {todo.id} taken away" if n >= 2 else ""}): {strike.reason}')
-        self.on_record(line, 'Strike', VerdictAudience.of(
-            unit, self.comms.goals.todos.owner_request(todo.request.require())), answers)
+        self.on_record(line, 'Strike', VerdictAudience.of(unit, todo), answers)
         print(f'{unit}: {n} strike(s) on {todo.id}' + (f'. Reassign {todo.id} now and freeze its branch.' if n >= 2 else ''))
 
     def done(self, pid, sha, screenshot='', seen=''):
@@ -716,8 +700,7 @@ class Commander(CommanderContext):
         n = struck(self.comms.goals.todos.get(task), unit)
         line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike voided on {task}, '
                 f'recorded {voided.at.clock()}; {n} strike(s) remain): {why}')
-        self.on_record(line, 'Void', VerdictAudience.of(
-            unit, self.comms.goals.todos.owner_request(todo.request.require())))
+        self.on_record(line, 'Void', VerdictAudience.of(unit, todo))
         print(f'{unit}: {n} strike(s) on {task}')
 
     def withdraw(self, pid: str, why: str, superseded_by: Successor = NoSuccessor()) -> None:
@@ -734,8 +717,7 @@ class Commander(CommanderContext):
         unit = previous.owner
         withdrawal, = self.comms.goals.todos.get(pid).order.withdrawals(todo)
         self.on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {withdrawal}', 'Withdrawal',
-                  VerdictAudience.of(
-                      unit, self.comms.goals.todos.owner_request(todo.request.require())))
+                  VerdictAudience.of(unit, todo))
         self.post(VerdictAudience((unit,)),
              f'Withdrawn: {withdrawal}. Stop that work; it counts against no one.')
         print(withdrawal)
@@ -1143,8 +1125,17 @@ class ProblemVerb(RequestedOrderVerb):
     disk: Annotated[bool, Argument(flags=("--disk",))] = False
 
     def run(self, ctx: Commander) -> None:
-        ctx.problem(self.order, self.to, self.where, self.disk,
-                    self.answer_references(ctx), request=self.request)
+        document = OrderFile.read(Path(self.order).read_text())
+        location = FileLine.from_wire(self.where)
+        checkout = ctx.repo_directory(document.order.check.directory)
+        if checkout.is_dir():
+            ctx.comms.goals.todos.require_recurrence_declaration(
+                document.order, location, checkout, document.slop, time.time())
+        pid = ctx.comms.goals.todos.allocate_problem()
+        ctx.send(self.to, document, new=(pid, document.defect), disk=self.disk,
+                 finding=LocatedProblemFinding(location), answers=self.answer_references(ctx),
+                 request=self.request)
+        print(pid)
 
 
 @dataclass(frozen=True, kw_only=True)

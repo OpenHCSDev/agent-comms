@@ -4,22 +4,28 @@ from __future__ import annotations
 
 import time
 from abc import abstractmethod
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 from uuid import uuid4
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import BoundedText, NullMember, SingleFieldValue, SubclassUnion
+from agent_comms.field_codec import (
+    BoundedText,
+    NullMember,
+    RecordMember,
+    SingleFieldValue,
+    SubclassUnion,
+)
 
 if TYPE_CHECKING:
     from agent_comms.channel_targets import NamedTarget
-    from agent_comms.wire_log import CheckedRead
     from agent_comms.messages import Message
     from agent_comms.registration import Registration
     from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.todos import OwnerRequest, Todo, TodoStore
+    from agent_comms.wire_log import CheckedRead
 
 
 class RequestValue(SubclassUnion, affix=""):
@@ -33,10 +39,16 @@ class RequestLink(RequestValue, declared_name=None):
 
 class RequestSelection(RequestValue, declared_name=None):
     def for_message(
-        self, store: TodoStore, target: NamedTarget, registry: Registration,
+        self,
+        store: TodoStore,
+        target: NamedTarget,
+        registry: Registration,
     ) -> tuple[OwnerRequest, ...]:
-        return tuple(request for name in target.direct_names
-                     for request in self.select(store, registry.require(name).incarnation))
+        return tuple(
+            request
+            for name in target.direct_names
+            for request in self.select(store, registry.require(name).incarnation)
+        )
 
     def for_order(self, store: TodoStore, commander: ThreadIncarnation) -> OwnerRequestId:
         selected = self.select(store, commander)
@@ -46,7 +58,9 @@ class RequestSelection(RequestValue, declared_name=None):
 
     @abstractmethod
     def select(
-        self, store: TodoStore, commander: ThreadIncarnation,
+        self,
+        store: TodoStore,
+        commander: ThreadIncarnation,
     ) -> tuple[OwnerRequest, ...]: ...
 
 
@@ -62,12 +76,17 @@ class OwnerRequestId(SingleFieldValue, RequestLink, RequestSelection):
         return self
 
     def for_message(
-        self, store: TodoStore, target: NamedTarget, registry: Registration,
+        self,
+        store: TodoStore,
+        target: NamedTarget,
+        registry: Registration,
     ) -> tuple[OwnerRequest, ...]:
         return self.select(store, registry.require(target.require_dm_peer()).incarnation)
 
     def select(
-        self, store: TodoStore, commander: ThreadIncarnation,
+        self,
+        store: TodoStore,
+        commander: ThreadIncarnation,
     ) -> tuple[OwnerRequest, ...]:
         request = store.owner_request(self)
         request.require_open(commander)
@@ -83,7 +102,9 @@ class NoRequestLink(NullMember, RequestLink):
 @dataclass(frozen=True)
 class NewestOpenRequest(NullMember, RequestSelection):
     def select(
-        self, store: TodoStore, commander: ThreadIncarnation,
+        self,
+        store: TodoStore,
+        commander: ThreadIncarnation,
     ) -> tuple[OwnerRequest, ...]:
         return store.open_requests(commander, limit=1)
 
@@ -99,7 +120,10 @@ class OpenRequestState(RequestState):
         return self
 
     def complete(
-        self, request: OwnerRequestId, orders: Sequence[Todo], reason: str,
+        self,
+        request: OwnerRequestId,
+        orders: Sequence[Todo],
+        reason: str,
     ) -> CompletedRequestState:
         if orders:
             raise ValueError(f"Request {request.value} still has pending orders.")
@@ -115,8 +139,19 @@ class CompletedRequestState(RequestState):
             raise ValueError("Completing an owner request requires a reason.")
 
 
+class RequestRevision(SubclassUnion, affix="RequestRevision"):
+    @abstractmethod
+    def validate(self, requests: Mapping[OwnerRequestId, OwnerRequest]) -> None: ...
+
+
 @dataclass(frozen=True)
-class RequestAtRevision:
+class NoRequestRevision(NullMember, RequestRevision):
+    def validate(self, requests: Mapping[OwnerRequestId, OwnerRequest]) -> None:
+        pass
+
+
+@dataclass(frozen=True)
+class RequestAtRevision(RecordMember, RequestRevision):
     """A historical directive prefix, not another writable request state."""
 
     id: OwnerRequestId
@@ -126,11 +161,10 @@ class RequestAtRevision:
         if self.directive_count < 0:
             raise ValueError("A directive prefix cannot have negative length.")
 
-    def directives(self, store: TodoStore) -> tuple[RequestDirective, ...]:
-        request = store.owner_request(self.id)
+    def validate(self, requests: Mapping[OwnerRequestId, OwnerRequest]) -> None:
+        request = requests[self.id]
         if self.directive_count > len(request.directives):
             raise RelationViolationError("Request history exceeds its recorded directives.")
-        return request.directives[:self.directive_count]
 
 
 @dataclass(frozen=True)

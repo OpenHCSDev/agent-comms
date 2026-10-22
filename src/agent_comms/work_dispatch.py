@@ -14,13 +14,13 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
-from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.goal_actions import (
     CreateProblemGoalAction,
     GoalActionContext,
     OrderGoalAction,
     ProblemOrderGoalAction,
 )
+from agent_comms.owner_requests import NewestOpenRequest
 
 from .native_settings import NativeThreadDefaults
 from .phase_tasks import PhaseTask

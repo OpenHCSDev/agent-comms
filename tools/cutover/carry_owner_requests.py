@@ -3,6 +3,7 @@
 Delete after every bus has run this step. The retired wire tag is understood
 only here; no request-goal member or compatibility decoder is registered.
 """
+
 from __future__ import annotations
 
 import json
@@ -19,13 +20,25 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_history import GoalHistoryEntry, GoalHistoryStore
 from agent_comms.goals import Goal, UnorderedGoalOrder
 from agent_comms.installer.carry import Carried, Carry
-from agent_comms.locked_store import SQLiteFile
 from agent_comms.lifecycle_capability import Complete
-from agent_comms.owner_requests import CompletedRequestState, OwnerRequestId, OpenRequestState, RequestDirective
+from agent_comms.locked_store import SQLiteFile
+from agent_comms.owner_requests import (
+    CompletedRequestState,
+    OpenRequestState,
+    OwnerRequestId,
+    RequestDirective,
+)
 from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.todos import OwnerRequest, Todo, TodoStore
-from agent_comms.typed_table import Column, JsonStorage, SQLiteSchemaObject, TextStorage, TypedRow, TypedTable
+from agent_comms.typed_table import (
+    Column,
+    JsonStorage,
+    SQLiteSchemaObject,
+    TextStorage,
+    TypedRow,
+    TypedTable,
+)
 
 
 @dataclass(frozen=True)
@@ -38,11 +51,22 @@ class StoredRequestGoal(TypedRow):
 
     def request(self, commander: RecordedThreadIncarnation, created_at: float) -> OwnerRequest:
         if commander.created_at != self.owner_created_at:
-            raise RelationViolationError("Retained request belongs to another commander incarnation.")
-        state = (CompletedRequestState(self.goal.progress)
-                 if self.goal.state.items_with(Complete, self.goal) else OpenRequestState())
-        return OwnerRequest(OwnerRequestId(self.goal.id), commander, self.goal.text,
-                            state, self.directives, created_at)
+            raise RelationViolationError(
+                "Retained request belongs to another commander incarnation."
+            )
+        state = (
+            CompletedRequestState(self.goal.progress)
+            if self.goal.state.items_with(Complete, self.goal)
+            else OpenRequestState()
+        )
+        return OwnerRequest(
+            OwnerRequestId(self.goal.id),
+            commander,
+            self.goal.text,
+            state,
+            self.directives,
+            created_at,
+        )
 
 
 @dataclass(frozen=True)
@@ -78,17 +102,25 @@ def memory_copy(lifetime: ExitStack, path: Path) -> sqlite3.Connection:
     return db
 
 
-def historical(db: sqlite3.Connection, column: str, *, where: str = "1") -> list[HistoricalRequestGoal]:
-    return HistoricalRequestGoal.read(GoalHistoryEntry.orders_with_replacement(
-        db, column, UNORDERED, order_kind="request", where=where))
+def historical(
+    db: sqlite3.Connection, column: str, *, where: str = "1"
+) -> list[HistoricalRequestGoal]:
+    return HistoricalRequestGoal.read(
+        GoalHistoryEntry.orders_with_replacement(
+            db, column, UNORDERED, order_kind="request", where=where
+        )
+    )
 
 
 class OwnerRequests(Carry):
     @classmethod
     def backup_files(cls, root: Path) -> tuple[Path, ...]:
         registry = RegistryStore.at(root)
-        paths = (*registry.written, *SQLiteFile.files(TodoStore.path_in(root)),
-                 *SQLiteFile.files(GoalHistoryStore.path_in(root)))
+        paths = (
+            *registry.written,
+            *SQLiteFile.files(TodoStore.path_in(root)),
+            *SQLiteFile.files(GoalHistoryStore.path_in(root)),
+        )
         for path in paths:
             cls.require_confined(root, path)
         return tuple(path for path in paths if path.exists())
@@ -108,36 +140,54 @@ class OwnerRequests(Carry):
             registry.private_guard_unlocked()
             raw = registry.path.read_text()
             sql = lifetime.enter_context(closing(sqlite3.connect(":memory:")))
-            current = CurrentRequestGoal.read(sql.execute(
-                "SELECT key AS name, fullkey || '.goal.order' AS path, "
-                "json_extract(value, '$.created_at') AS owner_created_at, "
-                "json_set(json_extract(value, '$.goal'), '$.order', json(?)) AS goal, "
-                "coalesce(json_extract(value, '$.goal.order.directives'), '[]') AS directives "
-                "FROM json_each(?, '$.threads') WHERE json_extract(value, '$.goal.order.kind')='request'",
-                (UNORDERED, raw)))
-            for source in current:
-                (raw,) = sql.execute('SELECT json_set(?, ?, json(?))', (raw, source.path, UNORDERED)).fetchone()
+            current = CurrentRequestGoal.read(
+                sql.execute(
+                    "SELECT key AS name, fullkey || '.goal.order' AS path, "
+                    "json_extract(value, '$.created_at') AS owner_created_at, "
+                    "json_set(json_extract(value, '$.goal'), '$.order', json(?)) AS goal, "
+                    "coalesce(json_extract(value, '$.goal.order.directives'), '[]') AS directives "
+                    "FROM json_each(?, '$.threads') "
+                    "WHERE json_extract(value, '$.goal.order.kind')='request'",
+                    (UNORDERED, raw),
+                )
+            )
+            for current_source in current:
+                (raw,) = sql.execute(
+                    "SELECT json_set(?, ?, json(?))", (raw, current_source.path, UNORDERED)
+                ).fetchone()
             document = registry._decode(FieldCodec.parse(raw))
-            owners = {thread.incarnation.require_recorded().created_at: thread.incarnation.require_recorded()
-                      for thread in document.threads.values()}
+            owners = {}
+            for thread in document.threads.values():
+                recorded_commander = thread.incarnation.require_recorded()
+                owners[recorded_commander.created_at] = recorded_commander
             todos = memory_copy(lifetime, todo_path)
             history = memory_copy(lifetime, history_path)
             todo_columns = Todo.stored_columns(todos)
             old_links = "goal" in todo_columns
             if old_links:
-                for link in StoredRequestLink.read(todos.execute(
-                    "SELECT json_extract(goal,'$.goal_id') AS request, "
-                    "json_extract(goal,'$.owner') AS owner, json_extract(goal,'$.owner_created') AS owner_created "
-                    f'FROM "{Todo.declared_name}" WHERE goal IS NOT NULL GROUP BY goal')):
+                for link in StoredRequestLink.read(
+                    todos.execute(
+                        "SELECT json_extract(goal,'$.goal_id') AS request, "
+                        "json_extract(goal,'$.owner') AS owner, "
+                        "json_extract(goal,'$.owner_created') AS owner_created "
+                        f'FROM "{Todo.declared_name}" WHERE goal IS NOT NULL GROUP BY goal'
+                    )
+                ):
                     # Deleted commanders still have their original incarnation
                     # on the orders they issued. Do not manufacture a new actor.
-                    owners.setdefault(link.owner_created, RecordedThreadIncarnation(link.owner, link.owner_created))
+                    owners.setdefault(
+                        link.owner_created,
+                        RecordedThreadIncarnation(link.owner, link.owner_created),
+                    )
             if OwnerRequest.stored_columns(todos):
                 differences = SQLiteSchemaObject.differences(
-                    TypedTable.objects_of(todos, (OwnerRequest,)), OwnerRequest.schema_objects(),
+                    TypedTable.objects_of(todos, (OwnerRequest,)),
+                    OwnerRequest.schema_objects(),
                 )
                 if differences:
-                    raise RelationViolationError(f"Request table differs from its declaration: {differences}")
+                    raise RelationViolationError(
+                        f"Request table differs from its declaration: {differences}"
+                    )
                 requests = {request.id: request for request in OwnerRequest.stream(todos)}
             else:
                 requests = {}
@@ -145,10 +195,16 @@ class OwnerRequests(Carry):
             sources: dict[str, list[HistoricalRequestGoal]] = {}
             first_seen: dict[OwnerRequestId, float] = {}
             if GoalHistoryEntry.stored_columns(history):
-                for column in ("before", "after"):
+                for column in GoalHistoryEntry.endpoint_columns():
                     sources[column] = historical(history, column)
-                committed = sorted((source for column in sources for source in historical(
-                    history, column, where="state='committed'")), key=lambda source: source.sequence)
+                committed = sorted(
+                    (
+                        source
+                        for column in sources
+                        for source in historical(history, column, where="state='committed'")
+                    ),
+                    key=lambda source: source.sequence,
+                )
                 for source in committed:
                     identity = OwnerRequestId(source.goal.id)
                     first_seen.setdefault(identity, source.observed_at)
@@ -156,19 +212,28 @@ class OwnerRequests(Carry):
                         commander = owners[source.owner_created_at]
                     except KeyError:
                         raise RelationViolationError(
-                            f"Request {identity.value} has no retained commander incarnation.") from None
+                            f"Request {identity.value} has no retained commander incarnation."
+                        ) from None
                     requests[identity] = source.request(commander, first_seen[identity])
-            for source in current:
-                identity = OwnerRequestId(source.goal.id)
+            for current_source in current:
+                identity = OwnerRequestId(current_source.goal.id)
                 first_seen.setdefault(identity, time.time())
-                requests[identity] = source.request(document.threads[source.name].incarnation.require_recorded(),
-                                                    first_seen[identity])
+                requests[identity] = current_source.request(
+                    document.threads[current_source.name].incarnation.require_recorded(),
+                    first_seen[identity],
+                )
             for identity, previous in existing.items():
                 if identity in requests:
                     proposed = requests[identity]
                     if (previous.commander, previous.text, previous.state, previous.directives) != (
-                            proposed.commander, proposed.text, proposed.state, proposed.directives):
-                        raise RelationViolationError(f"Request {identity.value} differs while finishing its carry.")
+                        proposed.commander,
+                        proposed.text,
+                        proposed.state,
+                        proposed.directives,
+                    ):
+                        raise RelationViolationError(
+                            f"Request {identity.value} differs while finishing its carry."
+                        )
                     requests[identity] = previous
             # Validate every historical endpoint, including pending/aborted/
             # uncertain intents. They cannot become new accepted directives.
@@ -178,13 +243,19 @@ class OwnerRequests(Carry):
                     identity = OwnerRequestId(source.goal.id)
                     if identity not in requests:
                         raise RelationViolationError(
-                            f"Request {identity.value} at history {source.sequence} exists only in an unresolved intent.")
-                    prefixes[column, source.sequence] = requests[identity].at_revision(source.directives)
+                            f"Request {identity.value} at history {source.sequence} "
+                            "exists only in an unresolved intent."
+                        )
+                    prefixes[column, source.sequence] = requests[identity].at_revision(
+                        source.directives
+                    )
             new_rows = len(requests.keys() - existing.keys())
             todo_changed = old_links or new_rows > 0
             if todo_columns:
                 if not old_links and "request" not in todo_columns:
-                    raise RelationViolationError("Todo has neither the retired goal nor a request link.")
+                    raise RelationViolationError(
+                        "Todo has neither the retired goal nor a request link."
+                    )
                 if not OwnerRequest.stored_columns(todos):
                     OwnerRequest.reconcile_schema(todos)
             elif requests:
@@ -194,43 +265,62 @@ class OwnerRequests(Carry):
                 request.upsert(todos)
             linked = 0
             if old_links:
-                (linked,) = todos.execute(f'SELECT count(*) FROM "{Todo.declared_name}" WHERE goal IS NOT NULL').fetchone()
+                (linked,) = todos.execute(
+                    f'SELECT count(*) FROM "{Todo.declared_name}" WHERE goal IS NOT NULL'
+                ).fetchone()
                 Todo.rebuild(todos, {"request": "json_extract(goal,'$.goal_id')"})
             if todo_columns or requests:
                 TodoStore.require_schema(todos)
                 for _ in Todo.stream(todos):
                     pass
                 if list(todos.execute("PRAGMA foreign_key_check")):
-                    raise RelationViolationError("Carried Todo request links violate their foreign keys.")
+                    raise RelationViolationError(
+                        "Carried Todo request links violate their foreign keys."
+                    )
             history_columns = GoalHistoryEntry.stored_columns(history)
-            history_changed = bool(history_columns and (prefixes or GoalHistoryEntry.schema_differs(history)))
+            history_changed = bool(
+                history_columns and (prefixes or GoalHistoryEntry.schema_differs(history))
+            )
             if history_changed:
                 GoalHistoryEntry.reconcile_schema(history)
                 for column, snapshots in sources.items():
                     for source in snapshots:
                         GoalHistoryEntry.move_request_order(
-                            history, column, source.sequence, prefixes[column, source.sequence], UNORDERED)
+                            history,
+                            column,
+                            source.sequence,
+                            prefixes[column, source.sequence],
+                            UNORDERED,
+                        )
             if history_columns:
                 GoalHistoryEntry.require_schema(history)
                 for entry in GoalHistoryEntry.stream(history):
-                    for prefix in (entry.request_before, entry.request_after):
-                        if prefix is not None:
-                            request = OwnerRequest.require(todos, id=prefix.id)
-                            if prefix.directive_count > len(request.directives):
-                                raise RelationViolationError("Carried history exceeds its request directives.")
+                    for prefix in entry.request_revisions:
+                        prefix.validate(requests)
             rewritten: list[str] = []
             if apply:
-                for changed, path, prepared in ((todo_changed, todo_path, todos), (history_changed, history_path, history)):
+                for changed, path, prepared in (
+                    (todo_changed, todo_path, todos),
+                    (history_changed, history_path, history),
+                ):
                     if changed:
                         prepared.commit()
                         with closing(CoordinationStore.writer(path)) as destination:
                             prepared.backup(destination)
                         path.chmod(0o600)
-                        rewritten.extend(str(file.relative_to(root)) for file in SQLiteFile.files(path))
+                        rewritten.extend(
+                            str(file.relative_to(root)) for file in SQLiteFile.files(path)
+                        )
                 if current:
                     registry._write_unlocked(raw)
                     rewritten.extend(str(path.relative_to(root)) for path in registry.written)
-            return Carried(new_rows + int(old_links) + int(history_changed) + len(current),
-                           detail={"requests": new_rows, "linked_todos": linked,
-                                   "directives": sum(len(request.directives) for request in requests.values()),
-                                   "history_endpoints": len(prefixes)}, rewritten=tuple(rewritten))
+            return Carried(
+                new_rows + int(old_links) + int(history_changed) + len(current),
+                detail={
+                    "requests": new_rows,
+                    "linked_todos": linked,
+                    "directives": sum(len(request.directives) for request in requests.values()),
+                    "history_endpoints": len(prefixes),
+                },
+                rewritten=tuple(rewritten),
+            )
