@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.installer import practice
 from agent_comms.installer.backup import SavedFile
-from agent_comms.installer.practice import prepare_runtime_home
 from agent_comms.installer.upgrade import Stack
 from agent_comms.launch_runtime import LaunchRuntime
 
@@ -56,15 +56,14 @@ def test_checkout_native_tests_use_a_private_runtime(tmp_path):
 
     # A machine's existing installation is not the test command's build destination.
     live_home = tmp_path / "live-home"
-    prepare_runtime_home(live_home)
+    practice.TestHome(live_home).prepare()
     runtimes = live_home / ".local/share/agent-comms/runtimes"
-    runtimes.mkdir()
+    runtimes.mkdir(parents=True)
     retained = runtimes / "retained"
     retained.mkdir()
     witness = retained / "keep"
     witness.write_text("Existing installation")
     current = live_home / ".local/share/agent-comms/current"
-    current.unlink(missing_ok=True)
     current.symlink_to(retained, target_is_directory=True)
     selected = current.readlink()
     before = {

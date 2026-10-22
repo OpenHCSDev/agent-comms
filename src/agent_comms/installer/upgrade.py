@@ -63,7 +63,7 @@ from agent_comms.installer.backup import (
     transcripts_held,
 )
 from agent_comms.installer.carry import STEPS, Carried, Carry, CarryChain
-from agent_comms.installer.practice import PracticeMeasurement, practice_copy, prepare_runtime_home
+from agent_comms.installer.practice import PracticeMeasurement, RehearsalHome, practice_copy
 from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.install_choices import InstallerChoice
 
@@ -570,7 +570,7 @@ def rehearse(root: Path, stack: Stack, installed: Stack, tree: TargetTree,
         practice_copy(root, Path(scratch) / "bus") as (copied, measurement),
     ):
         home = Path(scratch) / "home"
-        prepare_runtime_home(home)
+        RehearsalHome(home).prepare()
         (home / ".claude").symlink_to(Path.home() / ".claude")
         stack = replace(stack, home=home)
         stack.prepare_native()
