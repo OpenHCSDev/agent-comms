@@ -17,9 +17,8 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.backup import BackupReport, RestoreSpace, UpgradeRefused
 from agent_comms.installer.carry import Carried
 from agent_comms.installer.launch import InstallReport, InstallRun
-from agent_comms.installer.reporting import (
-    CrashedInstall, InstalledWriter, PreparedFreshWriter, RefusedInstall,
-)
+from agent_comms.installer.outcome import CrashedInstall
+from agent_comms.installer.reporting import InstalledWriter, PreparedFreshWriter
 from agent_comms.installer.upgrade import (
     BusReadBack, CarriedRun, CreatedRun, FreshRehearsal, InstalledUpgrade,
     RefusedOwner, RehearsalFiles, RetiredRun, StartedOwner,
@@ -71,7 +70,7 @@ def test_live_result_family_survives_codec_and_retained_history(report_bus, live
 
 
 @pytest.fixture
-def report_bus(comms):
+def report_bus(comms, durable_home):
     """Reporting starts no native owner: use the ordinary bus, not a native-SDK fixture."""
     comms.messaging.initialize_private_initial_protocol()
     return declare_test_bus(comms, channels=(InstallReport.channel,))
@@ -96,16 +95,16 @@ def refused_request(report_bus, tmp_path):
 
 
 @pytest.mark.parametrize("scratch_present,error_kind,outcome_kind", (
-    (True, UpgradeRefused, RefusedInstall),
+    (True, UpgradeRefused, UpgradeRefused),
     (False, FileNotFoundError, CrashedInstall),
 ), ids=("early-refusal", "cleanup-crash"))
 def test_install_failure_family_through_upgrade(refused_request, scratch_present,
-                                                error_kind, outcome_kind):
+                                                error_kind, outcome_kind, durable_home):
     request, comms = refused_request
     if scratch_present:
         request.scratch.mkdir()
     report = InstallReport.for_run(request)
-    with pytest.raises(error_kind):
+    with pytest.raises(error_kind) as raised:
         upgrade(request, report)
     messages = tuple(reversed(HistoryCliCommand(
         target=f"#{report.channel}").apply(comms).messages))
@@ -114,10 +113,12 @@ def test_install_failure_family_through_upgrade(refused_request, scratch_present
     assert messages[1].body.splitlines()[0].startswith("Install failed")
     assert all(message.sender == report.sender for message in messages)
     assert isinstance(report.outcome, outcome_kind)
-    assert isinstance(report.outcome.writer, InstalledWriter)
+    assert report.outcome.exception() is raised.value
+    assert isinstance(report.writer, InstalledWriter)
+    assert report.outgoing.home == durable_home
     assert not request.scratch.exists()
     assert all(line in messages[1].body for line in report.outcome.lines())
-    assert report.outcome.writer.stack.runtime == LaunchRuntime.running()
+    assert report.writer.stack.runtime == LaunchRuntime.running()
 
 
 @pytest.mark.parametrize("fresh,writer_kind", (
@@ -131,7 +132,7 @@ def test_root_writer_family_through_upgrade(refused_request, fresh, writer_kind)
     report = InstallReport.for_run(request)
     with pytest.raises(UpgradeRefused):
         upgrade(request, report)
-    assert isinstance(report.outcome.writer, writer_kind)
+    assert isinstance(report.writer, writer_kind)
     messages = tuple(reversed(HistoryCliCommand(
         target=report.target).apply(Comms(root)).messages))
     assert len(messages) == 2

@@ -15,20 +15,22 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, ClassVar, TextIO
+from traceback import FrameSummary, extract_tb
+from typing import Annotated, ClassVar, TextIO, cast
 
 import agent_comms.installer
 from agent_comms.cli_commands import InstallCliCommand, InstallResult
 from agent_comms.comms import client_wire
 from agent_comms.field_codec import FieldCodec, Id128Text, PathText
-from agent_comms.installer.reporting import (
+from agent_comms.installer.outcome import (
+    CarriedInstallError,
+    CrashedInstall,
     FinishedInstall,
-    InstalledWriter,
     InstallFailure,
     InstallOutcome,
-    RootWriter,
     UnfinishedInstall,
 )
+from agent_comms.installer.reporting import InstalledWriter, RootWriter
 from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.installer.upgrade import (
     CarriedPass,
@@ -54,10 +56,11 @@ class InstallReport(ServiceSender, MroDispatch):
     channel: ClassVar[str] = "comms"
     root: Path
     outgoing: Stack
-    outcome: InstallOutcome = field(init=False)
+    writer: RootWriter = field(init=False)
+    outcome: InstallOutcome = field(default_factory=UnfinishedInstall, init=False)
 
     def __post_init__(self) -> None:
-        self.outcome = UnfinishedInstall(InstalledWriter(self.outgoing))
+        self.writer = InstalledWriter(self.outgoing)
 
     @classmethod
     def for_run(cls, request: InstallRun) -> InstallReport:
@@ -72,7 +75,7 @@ class InstallReport(ServiceSender, MroDispatch):
         return Repo(checkout=self.outgoing.checkout, github=CorePackage.repository)
 
     def writing(self, writer: RootWriter) -> None:
-        self.outcome = UnfinishedInstall(writer)
+        self.writer = writer
         writer.prepare(self)
 
     @handles(CarriedPass)
@@ -82,8 +85,39 @@ class InstallReport(ServiceSender, MroDispatch):
         self.writing(passed.writer())
 
     def complete(self, result: Upgrade) -> Upgrade:
-        self.outcome = FinishedInstall(self.outcome.writer, result)
+        self.outcome = FinishedInstall(result)
         return result
+
+    def failure(self, error: BaseException) -> InstallFailure:
+        """Decode once at the exception boundary using its nominal capabilities."""
+        return cast(InstallFailure, next(self.handlers_for(error))(error))
+
+    @handles(InstallFailure)
+    def reportable(self, error: InstallFailure) -> InstallFailure:
+        return error
+
+    @handles(CarriedInstallError)
+    def carried_failure(self, error: CarriedInstallError) -> InstallFailure:
+        self.carried(error.passed)
+        return self.failure(error.error)
+
+    @handles(BaseException)
+    def crashed(self, error: BaseException) -> CrashedInstall:
+        # The context supplies a Core frame even if the failing library is external.
+        # Its package directory works in both a checkout and a built wheel.
+        package = Path(__file__).resolve().parents[1]
+        frame = next(
+            frame
+            for frame in reversed(extract_tb(error.__traceback__))
+            if Path(frame.filename).resolve().is_relative_to(package)
+        )
+        module = ".".join(
+            Path(frame.filename).resolve().relative_to(package.parent).with_suffix("").parts
+        )
+        location = FrameSummary(
+            str(self.source.module_file(module)), frame.lineno, frame.name, lookup_line=False,
+        )
+        return CrashedInstall(error, location)
 
     @contextmanager
     def running(self, request: InstallRun) -> Iterator[type[Install]]:
@@ -91,18 +125,18 @@ class InstallReport(ServiceSender, MroDispatch):
             with TargetTree.from_run(request):
                 member = Install.member(self.root, request.command.retire)
                 self.writing(member.initial_writer(self.root, self.outgoing))
-                self.outcome.writer.post(self.root, self, (
+                self.writer.post(self.root, self, (
                     "Install starting", f"Target: {request.target[:12]}",
                 ))
                 yield member
             # A caller cannot accidentally leave the context without its result.
             self.outcome.lines()
         except BaseException as error:
-            failure = InstallFailure.of(error, self.outcome.writer, self.source)
-            self.outcome = failure
-            raise failure.error from failure.error.__cause__
+            self.outcome = self.failure(error)
+            original = self.outcome.exception()
+            raise original from original.__cause__
         finally:
-            self.outcome.writer.post(self.root, self, self.outcome.lines())
+            self.writer.post(self.root, self, self.outcome.lines())
 
 
 @dataclass(frozen=True)

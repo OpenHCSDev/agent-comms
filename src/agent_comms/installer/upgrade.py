@@ -57,8 +57,8 @@ from agent_comms.installer.backup import (
 )
 from agent_comms.installer.carry import STEPS, Carried, Carry, CarryChain
 from agent_comms.installer.practice import PracticeMeasurement, practice_copy, prepare_runtime_home
+from agent_comms.installer.outcome import CarriedInstallError
 from agent_comms.installer.reporting import (
-    CarriedInstallError,
     CarriedWriter,
     FreshWriter,
     InstalledWriter,
@@ -77,7 +77,6 @@ from agent_comms.wire_log import WireLog
 if TYPE_CHECKING:
     from agent_comms.installer.launch import InstallReport, InstallRun
 
-HOME = Path.home()
 CLIENT_IMPORTS = "import toad.app, agent_comms.acp"
 
 
@@ -357,7 +356,7 @@ class Stack:
     """One built installation and the source checkout containing its install tools."""
 
     checkout: Path
-    home: Path = HOME
+    home: Path = field(default_factory=Path.home)
     runtime: LaunchRuntime = field(default_factory=LaunchRuntime.installed)
 
     @property
@@ -378,7 +377,7 @@ class Stack:
             raise UpgradeRefused(f"No uv executable at {self.uv}; the installer runs only that uv")
 
     @classmethod
-    def build(cls, checkout: Path, home: Path = HOME) -> Stack:
+    def build(cls, checkout: Path, home: Path) -> Stack:
         """Resolve current mains once, then build or reuse their immutable installation."""
         Checkout(checkout).prepare()
         source = cls(checkout, home, runtime=LaunchRuntime.running())
@@ -775,7 +774,7 @@ class CreatingInstall(Install[FreshRehearsal]):
 
     def creation_writer(self) -> PreparedFreshWriter:
         self.report.writing(FreshWriter(self.root))
-        return cast(PreparedFreshWriter, self.report.outcome.writer)
+        return cast(PreparedFreshWriter, self.report.writer)
 
     def rehearsal(self) -> FreshRehearsal:
         return FreshRehearsal()
@@ -800,7 +799,7 @@ class FreshInstall(CreatingInstall):
         return FreshWriter(root)
 
     def creation_writer(self) -> PreparedFreshWriter:
-        return cast(PreparedFreshWriter, self.report.outcome.writer)
+        return cast(PreparedFreshWriter, self.report.writer)
 
 
 class RetiringInstall(CreatingInstall):

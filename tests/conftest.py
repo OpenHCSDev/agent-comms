@@ -3,6 +3,7 @@ from agent_comms.native_package import pinned_location, pinned_native_package
 
 import asyncio
 import os
+import pwd
 import subprocess
 import sys
 import tempfile
@@ -71,18 +72,28 @@ def source_programs(tmp_path):
     return SourcePrograms.create(tmp_path)
 
 
-@pytest.fixture
-def bridge_home(tmp_path, monkeypatch):
-    """Short per-worker socket addresses; all state stays in persistent test scratch."""
-    destination = tmp_path / 'home'
-    destination.mkdir()
-    monkeypatch.chdir(Path(__file__).resolve().parents[1])
-    home = Path(f'.bridge-home-{uuid.uuid4().hex[:8]}')
+@contextmanager
+def short_home(destination: Path) -> Iterator[Path]:
+    """A short absolute socket address, with all data in the caller's owned scratch.
+
+    The OS account home locates only the disposable alias. HOME may already name
+    another private runtime, and relative aliases break when install children chdir.
+    """
+    destination.mkdir(parents=True, exist_ok=True)
+    home = Path(pwd.getpwuid(os.getuid()).pw_dir) / f'.bh-{uuid.uuid4().hex[:8]}'
     home.symlink_to(destination, target_is_directory=True)
     try:
         yield home
     finally:
         home.unlink()
+
+
+@pytest.fixture
+def bridge_home(tmp_path, monkeypatch):
+    """Short per-worker socket addresses; all state stays in persistent test scratch."""
+    monkeypatch.chdir(Path(__file__).resolve().parents[1])
+    with short_home(tmp_path / 'home') as home:
+        yield home
 
 
 _MANAGED_RUNTIME_ENVIRONMENT = frozenset({

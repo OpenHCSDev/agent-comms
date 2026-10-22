@@ -26,6 +26,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
+from agent_comms.installer.outcome import InstallFailure
 from agent_comms.locked_store import LockedStore, RuntimeFile
 from agent_comms.store_files import _atomic_write_text
 
@@ -41,7 +42,7 @@ with closing(CoordinationStore.writer(sys.argv[1], isolation_level=None)) as wri
 """
 
 
-class UpgradeRefused(CoordinationError):
+class UpgradeRefused(InstallFailure, CoordinationError):
     """The update stopped without permission to discard its original data."""
     prefix: ClassVar[str] = "install: refused:"
 
@@ -50,6 +51,9 @@ class UpgradeRefused(CoordinationError):
 
     def lines(self) -> tuple[str, ...]:
         return (f"Install failed: {self}",)
+
+    def exception(self) -> BaseException:
+        return self
 
     @classmethod
     def public_message(cls, output: str) -> str:

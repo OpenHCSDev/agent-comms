@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+from collections.abc import Iterator
 from contextlib import nullcontext
 from dataclasses import dataclass
 from io import BytesIO
@@ -30,7 +31,8 @@ from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.harness_install import replace_link
 from agent_comms.installer.launch import InstallReport, InstallRun
-from agent_comms.installer.reporting import CarriedWriter, CrashedInstall
+from agent_comms.installer.outcome import CrashedInstall
+from agent_comms.installer.reporting import CarriedWriter
 from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.installer.upgrade import (
     CarriedRehearsal,
@@ -40,7 +42,7 @@ from agent_comms.installer.upgrade import (
     upgrade,
 )
 from agent_comms.launch_runtime import LaunchRuntime
-from conftest import declare_test_bus, publish_initial
+from conftest import declare_test_bus, publish_initial, short_home
 from test_install_session_bridge import session_bridge
 
 REPOSITORY = Path(__file__).resolve().parents[1]
@@ -58,30 +60,32 @@ class InstalledHome:
 
 
 @pytest.fixture(scope="module")
-def installed_home(tmp_path_factory) -> InstalledHome:
+def installed_home(tmp_path_factory) -> Iterator[InstalledHome]:
     """A home holding what an installed machine has: the installer's uv, and as the
     installed runtime a build of the merge base this change lands on. Both cases share
     it, so the second reuses the staged runtime the first built, as a second install
     would. Package caches stay shared."""
-    home = tmp_path_factory.mktemp("installed-home")
-    uv = home / ".local/state/agent-comms/upgrade-bus/uv"
-    uv.parent.mkdir(parents=True)
-    uv.symlink_to(shutil.which("uv"))
-    caches = subprocess.run([uv, "cache", "dir"], check=True, capture_output=True, text=True)
-    environment = {**os.environ, "HOME": str(home), "UV_CACHE_DIR": caches.stdout.strip(),
-                   "npm_config_cache": str(Path.home() / ".npm")}
-    environment.pop("PYTHONPATH", None)
-    base = home / "outgoing-source"
-    archive = subprocess.run(["git", "-C", REPOSITORY, "archive", git("merge-base", "HEAD", "origin/main")],
-                             check=True, capture_output=True).stdout
-    with tarfile.open(fileobj=BytesIO(archive)) as tree:
-        tree.extractall(base, filter="data")
-    runtime = home / ".local/share/agent-comms/runtimes/outgoing"
-    subprocess.run([uv, "venv", "-q", "--python", sys.executable, runtime], check=True, env=environment)
-    subprocess.run([uv, "pip", "install", "-q", "--python", runtime / "bin/python", base],
-                   check=True, env=environment)
-    (home / ".local/share/agent-comms/current").symlink_to(runtime, target_is_directory=True)
-    return InstalledHome(environment, LaunchRuntime(runtime / "bin/python"))
+    with short_home(tmp_path_factory.mktemp("installed-home")) as home:
+        uv = home / ".local/state/agent-comms/upgrade-bus/uv"
+        uv.parent.mkdir(parents=True)
+        uv.symlink_to(shutil.which("uv"))
+        caches = subprocess.run([uv, "cache", "dir"], check=True, capture_output=True, text=True)
+        environment = {**os.environ, "HOME": str(home), "UV_CACHE_DIR": caches.stdout.strip(),
+                       "npm_config_cache": str(Path.home() / ".npm")}
+        environment.pop("PYTHONPATH", None)
+        base = home / "outgoing-source"
+        archive = subprocess.run(
+            ["git", "-C", REPOSITORY, "archive", git("merge-base", "HEAD", "origin/main")],
+            check=True, capture_output=True).stdout
+        with tarfile.open(fileobj=BytesIO(archive)) as tree:
+            tree.extractall(base, filter="data")
+        runtime = home / ".local/share/agent-comms/runtimes/outgoing"
+        subprocess.run([uv, "venv", "-q", "--python", sys.executable, runtime],
+                       check=True, env=environment)
+        subprocess.run([uv, "pip", "install", "-q", "--python", runtime / "bin/python", base],
+                       check=True, env=environment)
+        (home / ".local/share/agent-comms/current").symlink_to(runtime, target_is_directory=True)
+        yield InstalledHome(environment, LaunchRuntime(runtime / "bin/python"))
 
 
 @pytest.mark.timeout(280)
@@ -195,7 +199,8 @@ def test_live_upgrade_family_after_real_publication(
                     git("rev-parse", "HEAD^")], check=True)
     outgoing = Stack(checkout, home=home, runtime=LaunchRuntime.installed())
     program = (str(candidate.interpreter.with_name("agent-comms-claude-bridge")),)
-    with session_bridge(tmp_path, home, program) as (_, claim, observed, child, log):
+    with session_bridge(tmp_path, home, program, session=tmp_path.name) as (
+            _, claim, observed, child, log):
         comms = Comms(tmp_path / "bus")
         declare_test_bus(comms, channels=(InstallReport.channel,))
         publish_initial(comms, claim.thread, "#all", "Retained before the upgrade")
@@ -205,7 +210,7 @@ def test_live_upgrade_family_after_real_publication(
         report = InstallReport(comms.root, outgoing)
         with completion as caught:
             upgrade(request, report)
-        assert isinstance(report.outcome.writer, CarriedWriter)
+        assert isinstance(report.writer, CarriedWriter)
         if isinstance(report.outcome, CrashedInstall):
             error = report.outcome.error
             assert isinstance(error, PublicationFault)

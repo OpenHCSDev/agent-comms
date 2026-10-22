@@ -29,14 +29,14 @@ SERVE_FROM_SOURCE = (sys.executable, '-c', 'from agent_comms.cli_bridges.claude 
 
 
 @contextmanager
-def session_bridge(tmp_path, home, program=SERVE_FROM_SOURCE):
+def session_bridge(tmp_path, home, program=SERVE_FROM_SOURCE, *, session='copied-session'):
     comms = Comms(tmp_path / 'bus')
     comms.messaging.initialize_private_initial_protocol()
     comms.registry.declare(comms.registry.new_thread(
         'bridge-copy', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
-    transcript = tmp_path / 'copied-session.jsonl'
+    transcript = tmp_path / f'{session}.jsonl'
     transcript.write_text('')
-    state = home / '.local/state/agent-comms/claude-bridge-copy'
+    state = home / '.local/state/agent-comms' / f'claude-{transcript.stem}'
     binding = Binding(str(comms.root), 'bridge-copy', transcript.stem)
     with Binding.open(state) as db:
         binding.bind(db)
@@ -65,6 +65,20 @@ def session_bridge(tmp_path, home, program=SERVE_FROM_SOURCE):
         yield home, claim, observed, child, log
     finally:
         stop(child)
+
+
+def test_copied_sessions_share_a_short_home_without_rebinding(tmp_path, bridge_home):
+    with ExitStack() as resources:
+        bridges = []
+        for session in ('first-session', 'second-session'):
+            directory = tmp_path / session
+            directory.mkdir()
+            bridges.append(resources.enter_context(
+                session_bridge(directory, bridge_home, session=session)))
+        assert len({claim.socket_path for _, claim, _, _, _ in bridges}) == len(bridges)
+        for _, claim, observed, child, log in bridges:
+            assert InspectSession().information(claim).process == observed.process
+            assert child.poll() is None, log.read_text()
 
 
 def stop(child):
