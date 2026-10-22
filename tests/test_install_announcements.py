@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.channel_targets import CommsTag
 from agent_comms.cli_commands import BusReadBack, HistoryCliCommand, InstallResult
 from agent_comms.commander.config import NoConfigFile
 from agent_comms.commander_heartbeat import CommanderHeartbeat
-from agent_comms.errors import UnknownChannelError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.backup import BackupReport, RestoreSpace, UpgradeRefused
 from agent_comms.installer.carry import Carried
@@ -94,12 +94,13 @@ def test_rollback_and_refusal_are_published_from_their_error_types(private_comms
     assert FieldCodec.parse(completed.stdout) == HistoryCliCommand(target="#comms").apply(comms).to_wire()
 
 
-def test_publication_failure_raises_after_registering_the_sender(private_comms):
-    # No #comms channel exists: the real publisher refuses it after registering its sender.
+def test_a_fresh_bus_carries_the_installer_report_into_its_declared_channel(private_comms):
+    # No thread carries the comms tag and nobody created it: CommsTag declares the channel.
     CommanderHeartbeat.register(private_comms.registry)
     report = InstallReport(private_comms.root)
-    with pytest.raises(UnknownChannelError):
-        report.failed(UpgradeRefused("stopped before carrying"))
+    posted = report.failed(UpgradeRefused("stopped before carrying"))
+    history = HistoryCliCommand(target=CommsTag.channel()).apply(private_comms).messages
+    assert tuple(message.reference for message in history) == (posted.reference,)
     original = private_comms.registry.require("installer")
     report.register(private_comms.registry)
     assert private_comms.registry.require("installer").incarnation == original.incarnation

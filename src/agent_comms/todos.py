@@ -44,7 +44,7 @@ from agent_comms.change_report import (
     SourceReference,
     SourceRevision,
 )
-from agent_comms.channel_targets import CommandTarget, CoordinationChannel
+from agent_comms.channel_targets import CommandTarget, CommsTag
 from agent_comms.child_process import (
     BoundedRun,
     CheckPrinted,
@@ -2725,7 +2725,7 @@ class FailedCheckStrike(StrikeTodo):
                 f"{self.previous.owner} {self.reason}"
                 + (f"; {changed.id} taken away" if not changed.holder else ""))
         goals.bus.publisher.publish_ordinary(
-            Message(sender=changed.creator, target=CoordinationChannel.name(), body=line,
+            Message(sender=changed.creator, target=CommsTag.channel(), body=line,
                     type=InfoKind),
             origin=AgentOrigin())
 

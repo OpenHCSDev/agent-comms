@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, overload
 
+from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import NullMember, SingleFieldValue, SubclassUnion
 from .history_result import DmHistoryPageResult, HistoryPageResult
@@ -457,13 +458,15 @@ class Tag:
             raise ValueError(f"{label} must be lowercase alphanumeric with hyphens/underscores; built-in channel names are reserved.")
 
 
-class CoordinationChannel:
-    """The channel the fleet coordinates on. Installer reports, todo announcements and the
-    commander's posts address it; its tag is stated here once, and the catalog makes its
-    channel when a thread carries that tag."""
-
-    tag: ClassVar[str] = "comms"
+class DeclaredTag(DeclaredFamily, affix="Tag"):
+    """A tag every bus has by declaration: its name is its class name, and its channel
+    resolves before any thread carries it. Membership is still by tag."""
 
     @classmethod
-    def name(cls) -> str:
-        return ChannelTarget.normalize_name(cls.tag)
+    def channel(cls) -> str:
+        return ChannelTarget.normalize_name(cls.declared_name)
+
+
+class CommsTag(DeclaredTag):
+    """The channel the fleet coordinates on: installer reports, Core's strike announcements
+    and the commander's posts address it."""

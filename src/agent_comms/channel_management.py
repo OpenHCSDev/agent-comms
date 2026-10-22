@@ -251,8 +251,7 @@ class ChannelManagement:
     def rename_tag(self, name: str, new_name: str) -> None:
         Tag.validate(new_name)
         if name == new_name:
-            if name not in self.catalog.read().tags:
-                raise ValueError(f"Unknown tag: {name!r}")
+            self.catalog.read().require_changeable_tag(name)
             return
         self._change_tag(name, new_name)
 
@@ -263,20 +262,16 @@ class ChannelManagement:
             raise ValueError(disposition.confirmation(name))
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             snapshot = self.registry.snapshot()
-            if name not in self.catalog.read().tags:
-                raise ValueError(f"Unknown tag: {name!r}")
+            self.catalog.read().require_changeable_tag(name)
             cohort = tuple(thread for thread in snapshot.threads.values() if name in thread.tags)
             return disposition.apply(self, name, cohort)
 
     def _change_tag(self, name: str, replacement: str | None) -> None:
         Tag.validate(name)
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
-            if name not in self.catalog.read().tags:
-                raise ValueError(f"Unknown tag: {name!r}")
+            self.catalog.read().require_changeable_tag(name)
             if replacement is not None:
-                self.catalog.read().require_available_tag_name(
-                    replacement, previous=name
-                )
+                self.catalog.read().require_available_rename(name, replacement)
 
             cohort = tuple(thread for thread in self.registry.all_threads().values() if name in thread.tags)
             self._change_tag_unlocked(name, replacement, cohort)

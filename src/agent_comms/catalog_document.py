@@ -7,7 +7,7 @@ from dataclasses import dataclass, field, replace
 
 from .bus_activity_index import ActivityClocks
 from . import channels
-from .channel_targets import ChannelTarget, Tag
+from .channel_targets import ChannelTarget, DeclaredTag, Tag
 from .channels import (
     BuiltinChannelView,
     Channel,
@@ -76,11 +76,16 @@ class CatalogDocument:
                 visited.add(parent)
                 parent = self.preferences.get(parent, ChannelPreferences()).parent
 
+    @property
+    def present_tags(self) -> frozenset[str]:
+        """The tags this catalog created and every declared tag, which no bus lacks."""
+        return self.tags | frozenset(DeclaredTag.names())
+
     def views(self, activity: ActivityClocks) -> Channels:
         result = Channels((name, self.require_channel(name, activity)) for name in BuiltinChannelView.names())
         result.update((channel, self.require_channel(channel, activity))
                       for channel in map(ChannelTarget.normalize_name,
-                                         (*sorted(self.tags), *self.saved_views)))
+                                         (*sorted(self.present_tags), *self.saved_views)))
         return result
 
     def require_channel(self, target: str, activity: ActivityClocks) -> Channel:
@@ -92,8 +97,9 @@ class CatalogDocument:
         if (view := self.saved_views.get(tag)) is not None:
             preference = self.preferences.get(target, ChannelPreferences(created_at=view.created_at))
             return preference.channel(SavedViewChannel, target, view.predicate.tags, view=view)
-        if tag in self.tags:
-            return self.preferences[target].channel(TagChannel, target, frozenset({tag}))
+        if tag in self.present_tags:
+            preference = self.preferences.get(target, ChannelPreferences())
+            return preference.channel(TagChannel, target, frozenset({tag}))
         if target in activity.channels:
             preference = self.preferences.get(target, ChannelPreferences())
             return preference.channel(channels.RetiredTagChannel, target, frozenset({tag}))
@@ -119,12 +125,30 @@ class CatalogDocument:
         if (bare := ChannelTarget.bare_name(name)) in self.saved_views:
             raise RelationViolationError(f"Name {bare!r} is reserved by a saved view.")
 
-    def require_available_tag_name(self, name: str, *, previous: str | None = None) -> None:
+    def require_available_tag_name(self, name: str) -> None:
+        """A new tag's name: free of saved views and of every created tag."""
         self.require_available_name(name)
-        if name in self.tags and name != previous:
+        if name in self.tags:
             raise RelationViolationError(
                 f"Tag {name!r} already exists; tag rename does not merge identities."
             )
+
+    def require_available_rename(self, previous: str, name: str) -> None:
+        """A rename's new name: the tag itself, or a name no created or declared tag holds."""
+        if name == previous:
+            return
+        self.require_available_tag_name(name)
+        if name in DeclaredTag.names():
+            raise RelationViolationError(
+                f"Tag {name!r} is declared on every bus; tag rename does not merge identities.")
+
+    def require_changeable_tag(self, tag: str) -> None:
+        """A created tag may be renamed or deleted; a declared one is on every bus."""
+        if tag in DeclaredTag.names():
+            raise RelationViolationError(
+                f"Tag {tag!r} is declared on every bus; it cannot be renamed or deleted.")
+        if tag not in self.tags:
+            raise UnknownChannelError(f"Unknown channel: {ChannelTarget.normalize_name(tag)}")
 
     def remember_tags(self, tags: frozenset[str]) -> None:
         created_at = time.time()
@@ -139,10 +163,10 @@ class CatalogDocument:
         self.remember_tags(frozenset({tag}))
 
     def set_view(self, view: SavedView, activity: ActivityClocks) -> None:
-        unknown = view.predicate.tags - self.tags
+        unknown = view.predicate.tags - self.present_tags
         if unknown:
             raise ValueError(f"Unknown view tags: {', '.join(sorted(unknown))}")
-        if view.name in self.tags or (
+        if view.name in self.present_tags or (
             view.name not in self.saved_views
             and ChannelTarget.normalize_name(view.name) in activity.channels
         ):
@@ -229,9 +253,7 @@ class CatalogDocument:
         }
 
     def change_tag(self, previous: str, current: str | None) -> None:
-        if previous not in self.tags:
-            raise UnknownChannelError(
-                f"Unknown channel: {ChannelTarget.normalize_name(previous)}")
+        self.require_changeable_tag(previous)
 
         def changed(tags):
             return (tags - {previous}) | ({current} if previous in tags and current else set())

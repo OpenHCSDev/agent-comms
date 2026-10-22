@@ -8,7 +8,7 @@ import pytest
 from agent_comms.tools import invoke_tool
 from agent_comms.tool_caller import ThreadCaller, NoThreadCaller
 from agent_comms.channels import AllOfMatch, AnyOfMatch, BuiltinChannelView, ChannelMemberIndex, RetiredTagChannel, TagChannel, SavedView, ViewKind, ViewPredicate
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.channel_targets import CommandTarget, CommsTag, DeclaredTag
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.channel_management import (
     ArchiveThreadsTagDisposition, DeleteThreadsTagDisposition,
@@ -587,3 +587,19 @@ def test_invalid_pins_do_not_mutate_catalog(tmp_path):
     with pytest.raises(ValueError):
         invoke_tool(comms, "comms_pin_channel", {"name": "api", "pinned": "false"}, caller=NoThreadCaller())
     assert comms.channels.catalog.path.read_text() == before
+
+
+def test_a_declared_tag_resolves_on_a_fresh_bus_and_is_never_renamed_away_or_into(tmp_path):
+    comms = wire(tmp_path)
+    channel = comms.bus.require_channel(CommsTag.channel())
+    assert isinstance(channel, TagChannel)
+    assert CommsTag.channel() in comms.bus.channel_declarations()
+    for declared in DeclaredTag.names():
+        with pytest.raises(RelationViolationError, match="declared on every bus"):
+            comms.channels.rename_tag(declared, "renamed")
+        with pytest.raises(RelationViolationError, match="declared on every bus"):
+            comms.channels.delete_tag(declared, confirmed=True)
+    comms.channels.create_tag("ops")
+    with pytest.raises(RelationViolationError, match="declared on every bus"):
+        comms.channels.rename_tag("ops", CommsTag.declared_name)
+    comms.channels.create_tag(CommsTag.declared_name)
