@@ -13,10 +13,8 @@ from agent_comms.goal_actions import (
     GoalAction,
     GoalPrecondition,
     PausedGoalAction,
-    RetryGoalAction,
     SetGoalAction,
 )
-from agent_comms.goal_states import ActiveGoal, BlockedGoal, CompletedGoal, PausedGoal
 from agent_comms.goals import (
     Goal, NoGoal, NoReportedTurn, ReportedTurn, ReportedTurnState,
 )
@@ -154,20 +152,6 @@ def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(tmp_path, mo
     comms.goals.update_goal("worker", SetGoalAction(text="Replacement goal"))
     with pytest.raises(ValueError):
         resume.invoke(comms, {"goal_id": goal.id, "progress": "stale replaced goal"}, caller=ThreadCaller("worker"))
-
-
-@pytest.mark.parametrize(
-    "state,action,label",
-    [
-        (ActiveGoal(), PausedGoalAction, "Pause"),
-        (PausedGoal(), ActiveGoalAction, "Resume"),
-        (BlockedGoal("Explicit fixture refusal"), RetryGoalAction, "Retry"),
-        (CompletedGoal(), None, "Completed"),
-    ],
-)
-def test_goal_control_distinguishes_resume_retry_and_completion(state, action, label):
-    assert state.toggle is action
-    assert state.toggle_label == label
 
 
 def test_agent_can_set_its_own_persistent_goal(tmp_path, monkeypatch):

@@ -1,5 +1,6 @@
 """Original authored ingress and neutral historical evidence share one input store."""
 
+from agent_comms.lifecycle_capability import Unresolved
 from agent_comms.messages import NoticeRole
 from contextlib import ExitStack
 
@@ -288,4 +289,4 @@ async def test_direct_human_input_pin_shares_original_source_lineage_without_rep
         task=UserTaskDrop(CorrectionTaskChange(second_pin.reference)))
     assert captured(owner.name).current_authored_sources(owner, comms.registry.snapshot()) == (revised,)
     assert stored_inputs(inputs.root).lookup(row.key) == row
-    assert stored_inputs(inputs.root).lookup(second.key).unresolved
+    stored_inputs(inputs.root).lookup(second.key).require(Unresolved, ValueError("review required"))

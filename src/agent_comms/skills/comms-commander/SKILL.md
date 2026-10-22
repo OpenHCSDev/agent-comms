@@ -10,7 +10,7 @@ description: Command a fleet of coding agents over agent-comms like an RTS comma
 2. **Work from the heartbeat.** Core's heartbeat is the board: every line gets a disposition or an owner the tick it arrives. Never steer from a hand-made poll.
 3. **Tristan's plans are the work** (`plans/*.md`, declared in the Plan family). Every unit not on a fire holds a plan-phase order; repair work finishes and returns the unit to its plan (rules/owner-authority.md).
 4. **Review gates merging.** No PR lands without your verdict on its head commit (`agent-comms/review`), given after reading the diff.
-5. **Dispatch from the main loop; Claude forks diagnose, shape, review and write short fixes.** Launch a unit when every unit is busy.
+5. **Dispatch from the main loop; Claude forks diagnose, shape, review and write short fixes.** Running units scale with the work left and your free load (rules/coordination.md).
 
 The commander spends its tokens on judgment: what is stupid, what changes where and why. Every unit keeps moving toward an installed fix or deleted slop.
 
@@ -77,13 +77,13 @@ Pick the next unit. Read its actual state, not its message: worktree, `git log -
 - **Spinning:** repeated send-backs, no commit for 20 minutes on exact edits, tests rerun as investigation. Write the exact target shape into the order.
 - **Stuck:** no tool call for 3 minutes while holding an order. Order it.
 - **Stalled on nothing:** ended its turn holding an order with a question it could answer itself, a summary, a plan, "ready to proceed", or a wait on something already given. Send the next concrete step the same tick, with a strike (rules/send-backs-and-strikes.md).
-- **Idle:** give it the top unowned board row.
+- **Idle:** give it the top unowned plan step if your load has room to review it; otherwise leave it stopped.
 - **Adding slop:** send it back with the result it violates.
 
 One line per unit touched, then the next unit.
 
 - **Handling an event is never where the turn ends; the next unit's state is.** Every wait is prep: pre-read the files the next order touches.
-- **A unit records its delivery, not just a chat report:** `order deliver PROBLEM --fork UNIT --pr N --sha HEAD_COMMIT --report-file REPORT.txt` (or the native `comms_order_deliver` tool). Core stores Claimed and answers the commander. Only the holder may claim; the commander uses `order done UNIT PROBLEM --sha SHA` to accept it, or sends it back with corrected instructions. Claimed orders are not reissued on restart.
+- **A unit records its delivery, not just a chat report:** the unit calls the native `comms_order_deliver` tool as itself. Core stores Claimed and answers the commander. Only the holder may claim; the commander uses `order done UNIT PROBLEM --sha SHA` to accept it, or sends it back with corrected instructions. Claimed orders are not reissued on restart.
 - **A hunt is `order hunt FILE:LINE --why ... --sent PROBLEM`** (rules/send-backs-and-strikes.md says when).
 
 ## Slop is a defined term
@@ -94,7 +94,7 @@ rules/correct-maintenance.md owns the definition; rules/slop-and-polymorphism.md
 
 ## Forks, strikes and the record
 
-- **"Fork" means a Claude subagent of the commander.** Codex units named `fork-*` are units, never forks. A fork commands with the same tools and posts its verdicts and open items before ending (`order say '#comms' FILE --fork NAME`), so closing it loses nothing. `capacity` does not yet count forks (commander-native plan, phase 7).
+- **"Fork" means a Claude subagent of the commander.** Codex units named `fork-*` are units, never forks. Fork reviews to parallelize them: each fork takes a slice of the unjudged edits or open PRs and records every judgment in Core with `judge ok`, `judge back` or `judge superseded` before it ends. A review that exists only as prose clears nothing, and the load keeps rising. Its #comms post (`order say '#comms' FILE --fork NAME`) announces what it recorded and its open items, so closing it loses nothing. `capacity` does not yet count forks (commander-native plan, phase 7).
 - **Compliance is not evidence, and neither is the unit's proof.** Judge the diff, then rerun the proof or watch the behaviour: a real message answered, a real turn, a practice install on a copy of the bus. A numeric check (`-> N`) is a target hit by the cheapest route; pair it with a behaviour check and read how the number moved.
 - **Undisclosed assumptions are false claims.** An assumption found in the diff that the report's `Assumed:` list left out is a strike.
 - **Strikes** (rules/send-backs-and-strikes.md owns when): `order strike UNIT PID FILE:LINE --why "..."` (10+ plain words) records it in Core and posts to #comms; `order fire UNIT --why` releases every problem the unit holds; `order unstrike PID --why` voids a strike recorded in error. `order done UNIT PROBLEM --sha` only after reading the diff that meets the order.

@@ -7,15 +7,21 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Annotated
-
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .activity import ObservedActivity
 from .errors import RelationViolationError
 from .field_codec import (
-    NullMember, RecordMember, SingleFieldValue, SubclassUnion, WireName, WireTransient,
+    NullMember,
+    RecordMember,
+    SingleFieldValue,
+    SubclassUnion,
+    WireName,
+    WireTransient,
     boundary_decoder,
 )
+from .goal_presentation import RunningExecution
+from .lifecycle_capability import Executing, LifecycleCapability
 from .locked_store import DurableFile, JsonDocument, PatternFile
 from .routing import TurnRouting
 from .store_files import _store_lock
@@ -24,23 +30,23 @@ from .turn_phase import IdlePhase, PreparingPhase, TurnPhase
 
 if TYPE_CHECKING:
     from .child_process import ProcessState
+    from .goal_presentation import GoalExecution, GoalExecutionSource
     from .registry_document import RegistrySnapshot
     from .threads import Thread
 
 
-class TurnDeclaration(SubclassUnion, affix=""):
+class TurnDeclaration(LifecycleCapability, SubclassUnion, affix=""):
     """A recorded active turn or the idle state."""
 
     phase: TurnPhase
     id: str | None
     started_at: float | None
 
+    @abstractmethod
+    def execution(self, source: GoalExecutionSource) -> GoalExecution: ...
+
     def project_activity(self, activity: ObservedActivity) -> ObservedActivity:
         return self.phase.project_activity(activity)
-
-    @property
-    @abstractmethod
-    def executing(self) -> bool: ...
 
     @property
     @abstractmethod
@@ -85,8 +91,10 @@ class NoTurn(NullMember, TurnDeclaration):
     phase: ClassVar[TurnPhase] = IdlePhase()
     id = None
     started_at = None
-    executing = False
     report_turn = ""
+
+    def execution(self, source: GoalExecutionSource) -> GoalExecution:
+        return source.generation.lifecycle.idle_execution(source)
 
     def require_active(self) -> ActiveTurn:
         raise RelationViolationError("registry owner has no active turn")
@@ -199,7 +207,7 @@ class UnrecordedGeneration(NullMember, TurnGeneration):
 
 
 @dataclass(frozen=True)
-class ActiveTurn(RecordMember, TurnDeclaration):
+class ActiveTurn(Executing, RecordMember, TurnDeclaration):
     id: str
     owner_pid: int
     started_at: float = field(default_factory=time.time)
@@ -209,7 +217,10 @@ class ActiveTurn(RecordMember, TurnDeclaration):
     ] = UnrecordedGeneration()
     turn_generation: TurnGeneration = UnrecordedGeneration()
     phase: TurnPhase = field(default_factory=PreparingPhase)
-    executing = True
+    def execution(self, source: GoalExecutionSource) -> GoalExecution:
+        if source.owner_alive and source.owner.process_identity.owns_turn(self):
+            return RunningExecution(source.goal.id)
+        return source.generation.lifecycle.idle_execution(source)
 
     @property
     def report_turn(self) -> str:
@@ -413,7 +424,7 @@ class TurnLeaseFence(TurnFence, TurnLease):
         return self.identity.generation
 
 
-class TurnRecord(SubclassUnion, affix=""):
+class TurnRecord(LifecycleCapability, SubclassUnion, affix=""):
     """A stored turn reference or the declared absence of one; never a phase cache."""
 
     @abstractmethod
@@ -421,10 +432,6 @@ class TurnRecord(SubclassUnion, affix=""):
 
     @abstractmethod
     def read(self) -> TurnDeclaration: ...
-
-    @property
-    @abstractmethod
-    def executing(self) -> bool: ...
 
     @abstractmethod
     def without_claim(self) -> None: ...
@@ -436,7 +443,6 @@ class TurnRecord(SubclassUnion, affix=""):
 
 @dataclass(frozen=True)
 class NoTurnRecord(NullMember, TurnRecord):
-    executing = False
 
     def bound_to(self, registry_path: Path, identity: TurnIdentity) -> NoTurnRecord:
         return self
@@ -456,10 +462,6 @@ class NoTurnRecord(NullMember, TurnRecord):
 class StoredTurnReference(RecordMember, TurnRecord):
     """Wire presence only; the registry's thread supplies the turn identity."""
 
-    @property
-    def executing(self) -> bool:
-        raise RelationViolationError("Turn reference must be bound by its registry")
-
     def bound_to(self, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
         return StoredTurnRecord.for_identity(registry_path, identity)
 
@@ -475,7 +477,7 @@ class StoredTurnReference(RecordMember, TurnRecord):
 
 
 @dataclass(frozen=True)
-class StoredTurnRecord(DurableFile, PatternFile, JsonDocument[ActiveTurn],
+class StoredTurnRecord(Executing, DurableFile, PatternFile, JsonDocument[ActiveTurn],
                        StoredTurnReference, declared_name=None):
     """Turn file bound to the registry that decoded its wire reference."""
 
@@ -485,7 +487,6 @@ class StoredTurnRecord(DurableFile, PatternFile, JsonDocument[ActiveTurn],
     )
 
     record_type = ActiveTurn
-    executing = True
     filename = "turns/{lookup}-{generation}.json"
 
     @property

@@ -25,14 +25,12 @@ class PracticeMeasurement:
     bytes: int
     seconds: float
 
-    max_bytes = 3 * 1024**3
-
     @classmethod
     def of(cls, copy: Path, seconds: float, floor: float) -> PracticeMeasurement:
-        """Refuse a copy over its cap or without room for the rehearsal's second copy."""
+        """Refuse a copy without room for the rehearsal's second copy above the disk floor. The
+        free space is what a copy can cost; a fixed byte cap beside it refused a 3.01 GiB bus
+        with 29 GiB free and stopped install 45."""
         size = sum(path.stat().st_size for path in copy.rglob("*") if path.is_file())
-        if size > cls.max_bytes:
-            raise UpgradeRefused(f"Practice copy is {size} bytes, over its {cls.max_bytes} cap")
         if shutil.disk_usage(copy.parent).free < 2 * size + floor:
             raise UpgradeRefused(f"Insufficient free space for rehearsal of {size} copied bytes")
         return cls(size, seconds)
@@ -43,11 +41,17 @@ def prepare_runtime_home(home: Path) -> None:
     pointer = home / ".local/share/agent-comms/current"
     pointer.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     pointer.unlink(missing_ok=True)
-    pointer.symlink_to((Path.home() / ".local/share/agent-comms/current").resolve(strict=True))
+    installed = Path.home() / ".local/share/agent-comms/current"
+    if installed.exists():
+        pointer.symlink_to(installed.resolve(strict=True))
     uv = home / ".local/state/agent-comms/upgrade-bus/uv"
     uv.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     uv.unlink(missing_ok=True)
-    uv.symlink_to(Path.home() / ".local/state/agent-comms/upgrade-bus/uv")
+    installed_uv = Path.home() / ".local/state/agent-comms/upgrade-bus/uv"
+    executable = shutil.which("uv", path=str(installed_uv.parent)) or shutil.which("uv")
+    if not executable:
+        raise UpgradeRefused("Preparing a private runtime home requires uv")
+    uv.symlink_to(executable)
     cache = Path(subprocess.run(["npm", "config", "get", "cache"], capture_output=True,
                                 text=True, check=True).stdout.strip())
     if not (home / ".npm").exists() and cache.is_dir():

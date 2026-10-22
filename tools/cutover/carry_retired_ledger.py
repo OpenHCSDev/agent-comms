@@ -1,14 +1,14 @@
-"""Delete the retired install schedule; installed build identity now answers what is due."""
+"""Delete the carry ledger: each step's own dry run now says whether a bus needs it."""
 
 from pathlib import Path
 
 from agent_comms.installer.carry import Carried, Carry
 
 
-class InstallSchedule(Carry):
+class RetiredLedger(Carry):
     @classmethod
     def backup_files(cls, root: Path) -> tuple[Path, ...]:
-        return (root / "install-deadline.json",)
+        return (root / "carries.json",)
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:

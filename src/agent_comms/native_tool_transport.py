@@ -18,11 +18,13 @@ from typing import TYPE_CHECKING, Generic, TypeVar
 
 from .child_process import join_retirement
 from .field_codec import FieldCodec, MalformedRecord, Token256Text
+from .lifecycle_capability import Complete
 from .native_tool_call import (
     DuplicateToolCallIdentity,
     NativeToolCall,
     OwnerToolConnection,
     SelectedToolDenied,
+    ToolOutcomeUnknown,
 )
 from .pi_payloads import PiContent, ToolCallContent
 from .private_path import PrivateDirectoryRole, PrivateSocketRole
@@ -126,10 +128,9 @@ class NativeToolCallTable(dict[ToolCallIdentity | str, Call]):
         decode_call: Callable[[object, object, object], Call],
     ) -> NativeToolRound[Call]:
         round = NativeToolRound.decode(len(self.rounds), content, decode_call)
-        if self.rounds and not all(call.complete for call in self.rounds[-1].declared):
-            raise SelectedToolDenied(
-                "Native tool round was announced again before its calls completed"
-            )
+        if self.rounds:
+            for call in self.rounds[-1].declared:
+                call.progress.observation.require(Complete, ToolOutcomeUnknown())
         return round
 
     def announce(self, round: NativeToolRound[Call]) -> None:
@@ -326,7 +327,7 @@ class ToolTransport(Generic[Call]):
 
     def assert_complete(self) -> None:
         for call in self.calls.values():
-            call.assert_complete()
+            call.progress.observation.require(Complete, ToolOutcomeUnknown())
 
     async def handle_request(self, raw: bytes) -> dict[str, object]:
         call = self.calls.call_for(self.decode_request(raw))

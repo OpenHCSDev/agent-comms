@@ -43,12 +43,12 @@ def test_every_bus_file_is_a_declared_root_file(tmp_path: Path, source_repositor
         )
     assert claim.seq > sent.seq
     todo = TodoStore(comms.root).create(
-        "declared-files", RepositoryName.from_wire("OpenHCSDev/agent-comms"),
-        "Keep declared bus files", creator=owner, owner=owner,
+        "P1", RepositoryName.from_wire("OpenHCSDev/agent-comms"),
+        "Keep declared bus files", creator=owner, assigner=owner.incarnation, owner=owner,
         generation="declared-files", goal=GoalRef(owner.name, owner.created_at, "goal-1"),
         review_at=RecordedEventTime(1000.0), order=order(source_repository),
     )
-    assert todo.id == "declared-files"
+    assert todo.id == "P1"
     drain_candidate_catchup(comms.root)
     declared = RootFile.paths_in(comms.root)
     assert PrivateOwnerRenameIntent.path_in(comms.root) in declared

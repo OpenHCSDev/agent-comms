@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 from agent_comms.cli_result import CliResult
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember
-from agent_comms.locked_store import DurableFile, LockedStore
+from agent_comms.maintenance_barrier import CarriedDocument
 from agent_comms.thread_owned_state import ThreadOwnedState
 
 if TYPE_CHECKING:
@@ -103,7 +103,7 @@ class LedgerDocument(LedgerValue, JsonShapeMember, CliResult):
 
 
 @dataclass(frozen=True, slots=True)
-class SharedLedger(DurableFile, ThreadOwnedState, LockedStore[LedgerDocument]):
+class SharedLedger(ThreadOwnedState, CarriedDocument[LedgerDocument]):
     """One free-form JSON document; no in-memory mirror."""
 
     filename: ClassVar[str] = "ledger.json"
