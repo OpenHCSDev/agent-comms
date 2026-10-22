@@ -6,8 +6,10 @@ rehearsal and harness setup are the target's, never the outgoing runtime's.
 """
 from __future__ import annotations
 
+import glob
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -20,7 +22,7 @@ from agent_comms.cli_commands import InstallCliCommand, InstallResult
 from agent_comms.comms import client_wire
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.field_codec import FieldCodec, Id128Text, PathText
-from agent_comms.installer.backup import UpgradeRefused
+from agent_comms.installer.backup import StoreBackup, UpgradeRefused
 from agent_comms.installer.upgrade import TargetTree, Upgrade, run, upgrade
 from agent_comms.messages import InfoKind, Message
 from agent_comms.service_sender import ServiceSender
@@ -52,6 +54,33 @@ class InstallReport(ServiceSender):
 
 
 @dataclass(frozen=True)
+class InstallLogs:
+    """Each install's diagnostics beside the bus, kept as long as its data backups are."""
+
+    root: Path
+
+    @property
+    def prefix(self) -> str:
+        return f".{self.root.name}.installer-"
+
+    def minted(self) -> Path:
+        """A new install's own directory; older ones past the backups' count are retired."""
+        logs = self.root.parent / f"{self.prefix}{Id128Text.mint()}"
+        logs.mkdir(mode=0o700)
+        self.retire()
+        return logs
+
+    def retire(self) -> tuple[Path, ...]:
+        """The names carry no time, so age is each directory's own modification time."""
+        logs = sorted((path for path in self.root.parent.glob(f"{glob.escape(self.prefix)}*")
+                       if path.is_dir()), key=lambda path: path.stat().st_mtime)
+        retired = tuple(logs[:-StoreBackup.kept])
+        for path in retired:
+            shutil.rmtree(path)
+        return retired
+
+
+@dataclass(frozen=True)
 class InstallRun:
     command: InstallCliCommand
     root: Annotated[Path, PathText]
@@ -77,8 +106,7 @@ class InstallRun:
         """The install outlives its caller: a new session, its output in files beside the bus.
         Retiring the caller's process group must not cut an install short."""
         tree = TargetTree(self.command.checkout, self.scratch, self.target)
-        logs = self.root.parent / f".{self.root.name}.installer-{Id128Text.mint()}"
-        logs.mkdir(mode=0o700)
+        logs = InstallLogs(self.root).minted()
         result, errors = logs / "result.json", logs / "stderr.log"
         with result.open("xb") as stdout, errors.open("xb") as stderr:
             process = subprocess.Popen(
