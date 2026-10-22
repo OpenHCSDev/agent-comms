@@ -72,7 +72,7 @@ class EditingSource(EmptySource):
 
     @property
     def edited_at(self):
-        return tuple(sorted(self.worktree.edits(), reverse=True)[:1])
+        return tuple(sorted(self.worktree.edits, reverse=True)[:1])
 
 
 @pytest.mark.parametrize('name', ['owner.py', 'new_module.py'])
@@ -90,7 +90,7 @@ def test_a_unit_editing_before_its_first_commit_is_moving_not_stalled(tmp_path, 
 def test_a_deleted_file_is_no_edit_time(tmp_path):
     worktree = unit_checkout(tmp_path / 'worker--P1')
     (worktree / 'owner.py').unlink()
-    assert tuple(PresentCheckout(worktree).edits()) == ()
+    assert tuple(PresentCheckout(worktree).edits) == ()
 
 
 def test_a_submodule_with_a_missing_git_directory_does_not_stop_reading_edits(tmp_path):
@@ -105,7 +105,7 @@ def test_a_submodule_with_a_missing_git_directory_does_not_stop_reading_edits(tm
     assert WorkBranches(worktree).uncommitted() == ()
     edited(worktree, 'owner.py', 700.0)
     assert WorkBranches(worktree).uncommitted() == (worktree / 'owner.py',)
-    assert tuple(PresentCheckout(worktree).edits()) == (700.0,)
+    assert tuple(PresentCheckout(worktree).edits) == (700.0,)
     assert WorkBranches(worktree).local_work
 
 

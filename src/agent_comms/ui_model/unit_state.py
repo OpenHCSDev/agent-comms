@@ -29,7 +29,6 @@ from agent_comms.todos import (
     NoCommitProgress,
     OrderClaim,
     OrderProgress,
-    PresentCheckout,
     ProgressSource,
     PullRequests,
     SendBackVerdict,
@@ -98,7 +97,7 @@ class UnitObservation:
     def require_read(self) -> None:
         if self.todos:
             for path in self.comms.registry.storage_rule.checkout_paths(self.thread):
-                PresentCheckout(path).require_read()
+                self.pulls.checkout(path).require_read()
         for source in self.sources:
             source.checkout.require_read()
 

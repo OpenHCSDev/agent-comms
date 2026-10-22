@@ -575,12 +575,18 @@ class MergedListedPullRequest(ListedPullRequest):
 
 
 class PullRequests:
-    """GitHub facts for recorded links, cached within one board read."""
+    """GitHub facts for recorded links, and each checkout's Git facts, cached within one
+    board read: orders sharing a checkout ask Git its refs and push reflog once."""
 
     def __init__(self, todos: Sequence[Todo] = ()) -> None:
         self._read: dict[tuple[RepositoryName, type[ListedPullRequest], str], tuple[PullRequest, ...]] = {}
         self._todos: dict[RepositoryName, dict[str, Todo]] = {}
+        self._checkouts: dict[Path, PresentCheckout] = {}
         self.register(todos)
+
+    def checkout(self, path: Path) -> PresentCheckout:
+        """This read's one reader of the checkout at path."""
+        return self._checkouts.setdefault(path, PresentCheckout(path))
 
     def register(self, todos: Sequence[Todo]) -> Self:
         """Register a frame's orders while preserving this read's existing GitHub facts."""
@@ -824,13 +830,41 @@ class PresentCheckout(ProgressCheckout):
         return tuple(self.git("for-each-ref", "--format=%(refname)",
                               "refs/heads/", "refs/remotes/origin/").splitlines())
 
-    @property
+    @cached_property
     def origin_refs(self) -> tuple[str, ...]:
         return tuple(ref for ref in self.git_refs if ref.startswith("refs/remotes/origin/"))
 
+    @cached_property
+    def origin_pushes(self) -> tuple[tuple[str, float], ...]:
+        """Each push to a retained origin reference, as its commit and push time."""
+        origin = frozenset(self.origin_refs)
+        pushes = []
+        for row in self.git("reflog", "show", "--all", "--date=unix",
+                            "--grep-reflog=update by push", "--format=%gD%x09%H").splitlines():
+            selector, sha = row.split("\t")
+            reference, stamp = selector.rsplit("@{", 1)
+            if reference in origin:
+                pushes.append((sha, float(stamp.removesuffix("}"))))
+        return tuple(pushes)
+
+    @cached_property
+    def checked_out(self) -> dict[str, tuple[str, ...]]:
+        """Branch name -> the worktree paths that have it checked out."""
+        return WorkBranches(self.path).worktrees()
+
+    @cached_property
+    def check_notes(self) -> dict[str, tuple[CheckedCommit, ...]]:
+        """The stored check results read so far, by commit."""
+        return {}
+
+    def stored(self, sha: str) -> tuple[CheckedCommit, ...]:
+        if sha not in self.check_notes:
+            self.check_notes[sha] = CheckedCommit.stored(str(self.path), sha)
+        return self.check_notes[sha]
+
     def references(self, storage: StorageRule, owner: Thread) -> tuple[str, ...]:
         owned = {f"refs/heads/{branch}"
-                 for branch, paths in WorkBranches(self.path).worktrees().items()
+                 for branch, paths in self.checked_out.items()
                  if any(storage.owns_checkout(owner, checkout, checkout)
                         for checkout in (Path(path).resolve() for path in paths))}
         return (*(ref for ref in self.git_refs if ref in owned), *self.origin_refs)
@@ -848,16 +882,17 @@ class PresentCheckout(ProgressCheckout):
                         *excluded: str) -> Iterator[ProgressPoint]:
         """A recorded check links a head even without a problem token in its title."""
         return (point for point in self.commits("", refs, *excluded)
-                if order.check.recorded(point.sha, str(self.path)))
+                if order.check.recorded_among(self.stored(point.sha)))
 
     def published(self, pattern: str) -> Iterator[ProgressPoint]:
         return self.commits(pattern, self.origin_refs, *self.default_refs)
 
-    def edits(self) -> Iterator[float]:
+    @cached_property
+    def edits(self) -> tuple[float, ...]:
         """When each uncommitted change in this checkout was last written; a deletion has none."""
-        return (path.stat().st_mtime
-                for path in WorkBranches(self.path).read_checkout().uncommitted()
-                if path.exists())
+        return tuple(path.stat().st_mtime
+                     for path in WorkBranches(self.path).read_checkout().uncommitted()
+                     if path.exists())
 
     def readings(self, source: ProgressSource) -> DistanceReadings:
         """Read bounded recorded results; an absent remote default supplies no invented base."""
@@ -877,7 +912,7 @@ class PresentCheckout(ProgressCheckout):
     def recorded_distances(self, order: CheckedProblemOrder, base: str,
                            point: ProgressPoint) -> Iterator[DistanceReading]:
         """Read the check run result; without a recorded result the distance is unknown."""
-        for run in order.check.recorded(point.sha, str(self.path)):
+        for run in order.check.recorded_among(self.stored(point.sha)):
             touched = self.git("diff", "--name-only", base, point.sha).split()
             yield DistanceReading(point.at, order.check.result.distance(run).plus(
                 order.untouched(touched)), order.check.command)
@@ -885,12 +920,7 @@ class PresentCheckout(ProgressCheckout):
     def pushes(self, pattern: str) -> Iterator[tuple[str, float]]:
         """Retained origin commits prove publication; their push reflog supplies its clock."""
         published = {point.sha for point in self.published(pattern)}
-        for row in self.git("reflog", "show", "--all", "--date=unix",
-                            "--grep-reflog=update by push", "--format=%gD%x09%H").splitlines():
-            selector, sha = row.split("\t")
-            reference, stamp = selector.rsplit("@{", 1)
-            if reference in self.origin_refs and sha in published:
-                yield sha, float(stamp.removesuffix("}"))
+        return ((sha, at) for sha, at in self.origin_pushes if sha in published)
 
 
 @dataclass(frozen=True)
@@ -911,13 +941,13 @@ class ProgressSource:
         path = next((path for path in candidates if (path / ".git").exists()),
                     next(iter(owned), candidates[0]))
         checkout: ProgressCheckout = (
-            PresentCheckout(path) if (path / ".git").exists() else MissingCheckout(path))
+            pulls.checkout(path) if (path / ".git").exists() else MissingCheckout(path))
         try:
             references = checkout.references(storage, owner)
         except (OSError, GitCommandFailed, WorkBranchError, subprocess.TimeoutExpired) as failure:
             checkout, references = UnreadCheckout(path, str(failure)), ()
         return cls(todo, checkout, pulls, references,
-                   tuple(PresentCheckout(path) for path in owned if (path / ".git").exists()))
+                   tuple(pulls.checkout(path) for path in owned if (path / ".git").exists()))
 
     @property
     def since(self) -> float:
@@ -946,7 +976,7 @@ class ProgressSource:
     @cached_property
     def edited_at(self) -> tuple[float, ...]:
         """The newest uncommitted change in the holder's own checkouts: work no commit shows yet."""
-        return tuple(sorted((edited for worktree in self.worktrees for edited in worktree.edits()),
+        return tuple(sorted((edited for worktree in self.worktrees for edited in worktree.edits),
                             reverse=True)[:1])
 
     @cached_property

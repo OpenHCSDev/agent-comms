@@ -379,8 +379,11 @@ class OrderCheck:
 
     def recorded(self, sha: str, repository: str) -> tuple[ChildResult, ...]:
         """Read the check run result without starting the check."""
-        return tuple(checked.result for checked in CheckedCommit.stored(repository, sha)
-                     if checked.command == self.command)[:1]
+        return self.recorded_among(CheckedCommit.stored(repository, sha))
+
+    def recorded_among(self, stored: tuple[CheckedCommit, ...]) -> tuple[ChildResult, ...]:
+        """This check's result among a commit's stored check results."""
+        return tuple(checked.result for checked in stored if checked.command == self.command)[:1]
 
     def at(self, revision: str, repository: str, checkout_base: Path) -> ChildResult:
         """Read the result on ``revision``, or explicitly run the check in a detached checkout."""
