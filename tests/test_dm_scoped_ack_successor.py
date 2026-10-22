@@ -2,22 +2,27 @@
 
 from __future__ import annotations
 
-from agent_comms.channel_targets import CommandTarget
-from agent_comms.registration import Registration
-
 import os
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
 
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import DMScopeChanged
 from agent_comms.message_page import PageBounds
 from agent_comms.read_basis import DMSelection
+from agent_comms.registration import Registration
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.threads import Thread
+from bus_record_fixture import prepare_native_comms
+
+
+@pytest.fixture(autouse=True)
+def installed_bus(tmp_path: Path):
+    return prepare_native_comms(wire(tmp_path))
 
 
 def _peer(root: Path, name: str) -> Thread:
@@ -75,7 +80,7 @@ def test_delete_and_same_name_reregister_invalidates_old_peer_basis(tmp_path: Pa
     assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) == 1
     fresh = comms.views.dm_display_page("peer", worktree=str(tmp_path))
     assert isinstance(fresh.selection, DMSelection)
-    assert fresh.selection.basis.peer_created_at != old.selection.basis.peer_created_at
+    assert fresh.selection.basis.peer_identity != old.selection.basis.peer_identity
 
 
 def test_viewer_rebind_and_foreign_worktree_reject_old_basis(tmp_path: Path):

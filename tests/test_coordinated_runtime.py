@@ -2,23 +2,16 @@
 
 from __future__ import annotations
 
-from bus_record_fixture import prepare_native_comms
-
-from bus_history import read_history
-from conftest import publish_initial
-from agent_comms.pi_vocabulary import HighThinkingLevel
-import os
 import json
+import os
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.bus import Bus
 from agent_comms.comms import Comms
-from agent_comms.notification_progress import HumanReadProgress
+from agent_comms.context_segments.wake import SelectedWakeSegment
 from agent_comms.coordinated_runtime import SelectedExecution, SessionSetupFailed
 from agent_comms.coordinated_runtime_schema import (
     assert_native_runtime_schema,
@@ -31,10 +24,15 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.coordinator import Coordination
 from agent_comms.native_failures import NativePiUnavailable
-from agent_comms.context_segments.wake import SelectedWakeSegment
-from agent_comms.turn_context import TurnContext
-from agent_comms.thread_text import GivenThreadText
+from agent_comms.notification_progress import HumanReadProgress
+from agent_comms.pi_vocabulary import HighThinkingLevel
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_model import DeclaredModel
+from agent_comms.thread_text import GivenThreadText
+from agent_comms.turn_context import TurnContext
+from bus_history import read_history
+from bus_record_fixture import prepare_native_comms
+from conftest import publish_initial
 
 
 @pytest.fixture
@@ -66,7 +64,7 @@ def _root(
     target = "beta" if direct else "#team"
     body = body if body is not None else ("@beta Compute 17+25." if mentioned else "Compute 17+25.")
     message = publish_initial(comms, "sender", target, body)
-    initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
+    initial = comms.bus.bus.delivery(message.seq)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         for recipient in initial.audience.recipients:
             store.participants.register(

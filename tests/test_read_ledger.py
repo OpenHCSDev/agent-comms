@@ -189,10 +189,10 @@ def test_turn_lease_and_unrelated_registry_changes_do_not_invalidate_dm(tmp_path
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("alice", viewer, "painted").message.message_id
     page = comms.views.dm_display_page("alice", worktree=str(tmp_path))
-    assert page.selection.basis.peer_created_at == page.selection.basis.peer_created_at
+    assert page.selection.basis.peer_identity == peer.incarnation
     comms.registry.lease_local_turn("alice", "ordinary-turn")
     fresh = comms.views.dm_display_page("alice", worktree=str(tmp_path))
-    assert fresh.selection.basis.peer_created_at == page.selection.basis.peer_created_at
+    assert fresh.selection.basis.peer_identity == page.selection.basis.peer_identity
     comms.registry.register(comms.registry.new_thread('unrelated', frozenset(), str(tmp_path)))
     comms.views.mark_page_read(page, worktree=str(tmp_path))
     assert wire(tmp_path).bus.pending_count(viewer, CommandTarget.named("alice")) == 0

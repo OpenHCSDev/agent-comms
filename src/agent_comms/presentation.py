@@ -74,7 +74,7 @@ from .revision_views import (
 )
 from .runtime_info import RuntimeInfo
 from .storage_room import RoomLedger
-from .thread_identity import ThreadIncarnation
+from .thread_identity import ThreadIncarnation, ThreadProvenance
 from .thread_presentation import (
     ThreadOwnerBinding,
     ThreadPresentation,
@@ -132,7 +132,7 @@ class OwnerOutcomes(OutcomeViewer):
     lookup: str
 
     @classmethod
-    def of(cls, owner: Thread) -> OwnerOutcomes:
+    def of(cls, owner: ThreadProvenance) -> OwnerOutcomes:
         return cls(owner.incarnation.require_recorded().lookup)
 
     def includes(self, sender_lookup: str, recipient: FrozenRecipient) -> bool:
@@ -463,9 +463,9 @@ class BusPresentation:
         bounds: PageBounds = NEWEST_PAGE,
     ) -> MessagePage:
         """Local display projection; underlying channel history remains target-owned."""
-        target = CommandTarget.named(target).require_channel()
+        channel = CommandTarget.named(target).require_channel()
         with self.bus.snapshot(viewer) as (basis, source):
-            return basis.viewer.read_page(basis.scope(target.name), bounds, basis, source)
+            return basis.viewer.read_page(basis.scope(channel.name), bounds, basis, source)
 
     def mark_channel_read(
         self,

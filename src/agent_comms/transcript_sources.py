@@ -485,12 +485,14 @@ class AssignedTranscriptSource(TranscriptSource):
         )
 
     def rows(
-        self, *, before: int | None = None, after: int = 0, limit=1, ascending=False,
-        sequences: tuple[int, ...] = (),
-    ):
-        return self.bus.conversation(
-            self.recipient.lookup, before=before, after=after, limit=limit,
-            descending=not ascending, sequences=sequences,
+        self, *, before: int | None = None, after: int = 0, limit: int = 1,
+        ascending: bool = False, sequences: tuple[int, ...] = (),
+    ) -> tuple[Delivered, ...]:
+        return tuple(
+            delivery for record in self.bus.conversation(
+                self.recipient.lookup, before=before, after=after, limit=limit,
+                descending=not ascending, sequences=sequences,
+            ) for delivery in record.deliveries()
         )
 
     @property
@@ -504,7 +506,11 @@ class AssignedTranscriptSource(TranscriptSource):
         """The same sequence cut bounds both conversation and sender pages."""
         before = self.bus.revision() + 1
         rows = self.rows(before=before, limit=limit)
-        sent = self.bus.sent(self.recipient.lookup, before=before, limit=sent_limit)
+        sent = tuple(
+            delivery for record in self.bus.sent(
+                self.recipient.lookup, before=before, limit=sent_limit,
+            ) for delivery in record.deliveries()
+        )
         newest = max((row.seq for row in (*rows, *sent)), default=0)
         cursor = AssignedSourceCursor(str(self.root), self.recipient, newest)
         return AssignedSourceWindow(cursor, rows, sent)

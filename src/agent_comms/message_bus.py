@@ -270,7 +270,11 @@ class MessageBus[Writes: Publisher]:
 
         first = {relation.peer.require_recorded().lookup for relation in relations
                  if relation.relevance.grants(Prioritized)}
-        rows = self.bus.received(owner.incarnation.require_recorded().lookup, limit=100)
+        rows = tuple(
+            delivery for record in self.bus.received(
+                owner.incarnation.require_recorded().lookup, limit=100,
+            ) for delivery in record.deliveries()
+        )
         rows = tuple(sorted(rows, key=lambda row: row.audience.sender_lookup not in first))
         return (AwarenessSegment.capture(self.bus.path, rows),) if rows else ()
 

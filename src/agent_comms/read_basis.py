@@ -713,16 +713,8 @@ class DMDisplayBasis:
         return self.viewer_identity.name
 
     @property
-    def viewer_created_at(self) -> float:
-        return self.viewer_identity.created_at
-
-    @property
     def peer(self) -> str:
         return self.peer_identity.name
-
-    @property
-    def peer_created_at(self) -> float:
-        return self.peer_identity.created_at
 
     def acknowledge(
         self,
@@ -1073,8 +1065,7 @@ class MemberActivityDisplayScope(AllTargetsDisplayScope):
 
     def _includes(self, sender: str, target: str, mentions: Iterable[str]) -> bool:
         return (target in self.targets or sender in self.participant_names
-                or any(name in self.participant_names
-                       for name in CommandTarget.named(target).direct_names)
+                or not self.participant_names.isdisjoint(CommandTarget.named(target).direct_names)
                 or any(name in self.participant_names for name in mentions))
 
 
