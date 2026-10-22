@@ -22,12 +22,12 @@ import re
 import subprocess
 import sys
 import time
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Annotated, ClassVar, Self
+from typing import Annotated, Self
 
 from pydantic import Field, InstanceOf, PrivateAttr
 
@@ -79,6 +79,7 @@ from agent_comms.todos import (
     OrderText,
     OrderWords,
     PendingProblemOrder,
+    ProblemFinding,
     PullRequestLink,
     RecordPullRequest,
     Slop,
@@ -312,13 +313,14 @@ class OrderFile:
             problems.append('slop: fix: supply pattern, fact, at, derive and by citation fields')
         return problems
 
-    def resolved(self, context: CommanderContext, finding) -> OrderFile:
+    def resolved(self, context: CommanderContext, finding: ProblemFinding) -> OrderFile:
         check = replace(self.order.check,
                         directory=str(context.repo_directory(self.order.check.directory)))
         return replace(self, order=replace(self.order, finding=finding, check=check))
 
     def assignment_refusals(self, context: CommanderContext, unit: str,
-                            group: Sequence[str], listed: Mapping[str, Todo], new,
+                            group: Sequence[str], listed: Mapping[str, Todo],
+                            target: OrderedProblems,
                             traced: FileLine | NoSourceReference) -> list[str]:
         """The document's selected problems, phase and existing owners must agree."""
         reading = context.plan_reading(context.comms.goals.todos.history_for_commander(context.incarnation))
@@ -336,10 +338,7 @@ class OrderFile:
                             f'running units holding no order: {", ".join(idle) or "none"}')
         if not group or any(not ProblemNumber.accepts(pid) for pid in group):
             problems.append('problems: fix: supply an array of P<n> IDs, or use order problem')
-        if new and self.problems:
-            problems.append('problems: fix: omit IDs when creating a new problem')
-        if not new and (missing := [pid for pid in group if pid not in listed]):
-            problems.append(f'{missing} not open problems; fix: name existing open problem IDs')
+        problems.extend(target.refusals(self, group, listed))
         for pid in group:
             try:
                 with MalformedRecord.refusing(pid):
@@ -399,7 +398,7 @@ class OrderFile:
         return problems
 
     def require_send(self, context: CommanderContext, unit: str,
-                     group: Sequence[str], listed: Mapping[str, Todo], new,
+                     group: Sequence[str], listed: Mapping[str, Todo], target: OrderedProblems,
                      reassign: Reassignment, holders: Sequence[str], clean: bool,
                      traced: FileLine | NoSourceReference) -> None:
         """Collect field refusals before recording any part of this document."""
@@ -407,8 +406,9 @@ class OrderFile:
         try:
             context.comms.registry.storage_rule.require_quota(context.comms.registry.require(unit))
         except SelectedToolDenied as quota:
-            problems.append(f'{unit}: {quota}: it cleans up its own checkouts and scratch before it gets new work')
-        problems.extend(self.assignment_refusals(context, unit, group, listed, new, traced))
+            problems.append(f'{unit}: {quota}: it cleans up its own checkouts and scratch '
+                            'before it gets new work')
+        problems.extend(self.assignment_refusals(context, unit, group, listed, target, traced))
         problems.extend(self.source_refusals(context, traced))
         problems.extend(self.check_refusals(context))
         problems.extend(reassign.refusals(holders))
@@ -425,26 +425,20 @@ class OrderFile:
             f'Problems: {", ".join(group)}', *self.order.work_instructions()))
         replacement = '\nThis replaces my earlier order on it; drop that one.' if replacing else ''
         storage = context.comms.registry.storage_rule.order_text(
-            context.comms.registry.require(unit), [f'{repo.checkout}/.venv/bin/python' for repo in context.repos])
+            context.comms.registry.require(unit),
+            [f'{repo.checkout}/.venv/bin/python' for repo in context.repos])
         return (instructions + replacement + reassign.note() + '\n' + storage
-                + '\nIf two lines of this order conflict, take the narrower reading, say which one you took, and proceed; do not stop to ask.'
+                + '\nIf two lines of this order conflict, take the narrower reading, '
+                'say which one you took, and proceed; do not stop to ask.'
                 + '\nStart now and push as you go.\n'
                 + '\n'.join(line for pid in group for line in self.order.scope.instructions(pid)))
 
-    def record(self, context: CommanderContext, unit: str, group: Sequence[str], new,
-               traced: FileLine | NoSourceReference, review_at) -> None:
+    def record(self, context: CommanderContext, unit: str, group: Sequence[str],
+               target: OrderedProblems, traced: FileLine | NoSourceReference,
+               review_at: RecordedEventTime) -> None:
         """The native tools record the typed order; the document supplies no second store."""
         request = self.order.request(context.comms.registry.require(context.commander), tuple(group))
-        if new:
-            context.call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
-                problem=new[0], repo=Repo.of(Path(self.order.check.directory)).github, text=new[1],
-                order=self.order, request=request, review_at=review_at, commander=context.commander,
-                assigner=context.actor_identity)))
-        for pid in [] if new else group:
-            context.call(CommsOrderTool(owner=unit, order=OrderGoalAction(
-                problem=pid, expected_revision=context.comms.goals.todos.get(pid).revision,
-                assigner=context.actor_identity, traced=traced,
-                order=self.order, request=request, review_at=review_at, commander=context.commander)))
+        target.record(context, self.order, unit, group, traced, request, review_at)
 
     def send_back(self, context: Commander, unit: str, group: Sequence[str],
                   replacing: bool, clean: bool, reassign: Reassignment, struck_already: bool) -> None:
@@ -568,6 +562,77 @@ class CommanderContext(CommanderConfig):
         return '\n'.join(lines) + '\n'
 
 
+class OrderedProblems(ABC):
+    """The problems one sent order covers: a problem born with it, or open ones it names."""
+
+    @abstractmethod
+    def group(self, document: OrderFile) -> list[str]: ...
+
+    @abstractmethod
+    def refusals(self, document: OrderFile, group: Sequence[str],
+                 listed: Mapping[str, Todo]) -> list[str]: ...
+
+    @abstractmethod
+    def replacing(self, unit: str, group: Sequence[str], listed: Mapping[str, Todo]) -> bool:
+        """Whether this order replaces the unit's own earlier order on the same problems."""
+
+    @abstractmethod
+    def record(self, context: CommanderContext, order: PendingProblemOrder, unit: str,
+               group: Sequence[str], traced: FileLine | NoSourceReference, request: str,
+               review_at: RecordedEventTime) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class NewProblem(OrderedProblems):
+    """Core records the problem with its first order in one step."""
+
+    problem: str
+    text: str
+
+    def group(self, document: OrderFile) -> list[str]:
+        return [self.problem]
+
+    def refusals(self, document: OrderFile, group: Sequence[str],
+                 listed: Mapping[str, Todo]) -> list[str]:
+        return ['problems: fix: omit IDs when creating a new problem'] if document.problems else []
+
+    def replacing(self, unit: str, group: Sequence[str], listed: Mapping[str, Todo]) -> bool:
+        return False
+
+    def record(self, context: CommanderContext, order: PendingProblemOrder, unit: str,
+               group: Sequence[str], traced: FileLine | NoSourceReference, request: str,
+               review_at: RecordedEventTime) -> None:
+        context.call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
+            problem=self.problem, repo=Repo.of(Path(order.check.directory)).github,
+            text=self.text, order=order, request=request, review_at=review_at,
+            commander=context.commander, assigner=context.actor_identity)))
+
+
+@dataclass(frozen=True, slots=True)
+class ListedProblems(OrderedProblems):
+    """The open problems the order document lists."""
+
+    def group(self, document: OrderFile) -> list[str]:
+        return list(document.problems)
+
+    def refusals(self, document: OrderFile, group: Sequence[str],
+                 listed: Mapping[str, Todo]) -> list[str]:
+        missing = [pid for pid in group if pid not in listed]
+        return [f'{missing} not open problems; fix: name existing open problem IDs'] if missing else []
+
+    def replacing(self, unit: str, group: Sequence[str], listed: Mapping[str, Todo]) -> bool:
+        return bool(group) and all(pid in listed and listed[pid].holder == unit for pid in group)
+
+    def record(self, context: CommanderContext, order: PendingProblemOrder, unit: str,
+               group: Sequence[str], traced: FileLine | NoSourceReference, request: str,
+               review_at: RecordedEventTime) -> None:
+        for pid in group:
+            context.call(CommsOrderTool(owner=unit, order=OrderGoalAction(
+                problem=pid, expected_revision=context.comms.goals.todos.get(pid).revision,
+                assigner=context.actor_identity, traced=traced, order=order, request=request,
+                review_at=review_at, commander=context.commander)))
+
+
 class Reassignment(SubclassUnion, affix="Reassignment"):
     """Why a held problem changes owner, or no change of owner."""
 
@@ -666,23 +731,23 @@ class NewestStrike(NullMember, StrikeSelector):
 
 class Commander(CommanderContext):
     @boundary_decoder
-    def send(self, unit, document: OrderFile, clean=False,
-             reassign: Reassignment = NoReassignment(), new=None,
+    def send(self, unit: str, document: OrderFile, clean: bool = False,
+             reassign: Reassignment = NoReassignment(), target: OrderedProblems = ListedProblems(),
              traced: FileLine | NoSourceReference = NoSourceReference(),
-             disk=False, finding=UnlocatedProblemFinding(),
-             answers: tuple[MessageReference, ...] = ()):
+             disk: bool = False, finding: ProblemFinding = UnlocatedProblemFinding(),
+             answers: tuple[MessageReference, ...] = ()) -> None:
         """Record the decoded order, or report every failed prerequisite before any write."""
         document = document.resolved(self, finding)
-        group = [new[0]] if new else list(document.problems)
+        group = target.group(document)
         listed = {todo.id: todo for todo in self.todos()}
         holders = sorted({listed[pid].holder for pid in group if pid in listed} - {unit, None})
-        replacing = not new and bool(group) and all(pid in listed and listed[pid].holder == unit for pid in group)
-        document.require_send(self, unit, group, listed, new, reassign, holders, clean, traced)
+        replacing = target.replacing(unit, group, listed)
+        document.require_send(self, unit, group, listed, target, reassign, holders, clean, traced)
         struck_already = replacing and listed[group[0]].struck_on_order(unit)
         measured = MeasuredReview.read(self.comms.goals.todos)
         review_at = measured.review_at(document.order)
         message = document.message(self, unit, group, replacing, reassign)
-        document.record(self, unit, group, new, traced, review_at)
+        document.record(self, unit, group, target, traced, review_at)
         sent = self.post(VerdictAudience((unit,)), message, answers)
         for pid in group:
             self.call(CommsChangeProblemTool(problem=pid, operation=OrderMessage(
@@ -690,7 +755,8 @@ class Commander(CommanderContext):
         for other in holders:
             self.post(VerdictAudience((other,)),
                       f'Taken off you: {", ".join(group)} ("{listed[group[0]].text[:120]}") '
-                      f'now belongs to {unit} because: {reassign.because()}. Stop that work; do not touch its files.')
+                      f'now belongs to {unit} because: {reassign.because()}. '
+                      'Stop that work; do not touch its files.')
         print(f'{measured.summary}; review timer {review_at.clock()}')
         print(document.order.id)
         document.send_back(self, unit, group, replacing, clean, reassign, struck_already)
@@ -716,8 +782,8 @@ class Commander(CommanderContext):
         refuse(body, *OUTGOING)
         print(self.post(VerdictAudience(tuple(units.split(','))), body.rstrip(), answers))
 
-    def problem(self, order_file, unit, where, disk=False,
-                answers: tuple[MessageReference, ...] = ()):
+    def problem(self, order_file: str, unit: str, where: str, disk: bool = False,
+                answers: tuple[MessageReference, ...] = ()) -> None:
         """A problem is born owned: Core records it with its order in one step, or not at all."""
         document = OrderFile.read(Path(order_file).read_text())
         location = FileLine.from_wire(where)
@@ -726,8 +792,8 @@ class Commander(CommanderContext):
             self.comms.goals.todos.require_recurrence_declaration(
                 document.order, location, checkout, document.slop, time.time())
         pid = self.comms.goals.todos.allocate_problem()
-        self.send(unit, document, new=(pid, document.defect),
-             disk=disk, finding=LocatedProblemFinding(location), answers=answers)
+        self.send(unit, document, target=NewProblem(pid, document.defect),
+                  disk=disk, finding=LocatedProblemFinding(location), answers=answers)
         print(pid)
 
     def close(self, pid, works, artifact=''):

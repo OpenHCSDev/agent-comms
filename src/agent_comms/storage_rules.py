@@ -92,7 +92,7 @@ class StorageRule(RoomAllocation):
             raise ValueError("Storage limits cannot be negative.")
 
     @classmethod
-    def load(cls, root: Path):
+    def load(cls, root: Path) -> Self:
         path = root / 'storage.json'
         return FieldCodec.decode(cls, json.loads(path.read_text()) if path.exists() else {})
 
