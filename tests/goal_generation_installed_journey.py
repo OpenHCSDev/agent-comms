@@ -16,6 +16,11 @@ from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
+from toad.agent_schema import AgentDefinition
+from toad.app import ToadApp
+from toad.goal_interaction import ToggleInteraction
+from toad.widgets.goal_bar import GoalControl
+
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_generation import BlockedGeneration, CompletedGeneration
 from agent_comms.goal_management import Goals
@@ -31,9 +36,6 @@ async def run(stage: Path, extension: Path, *, package: VerifiedNativePackage) -
     assert '/site-packages/' in inspect.getfile(Goals), (
         'Use the installed candidate, not editable source'
     )
-    from toad.agent_schema import AgentDefinition
-    from toad.app import ToadApp
-
     stage.mkdir(mode=0o700, parents=True, exist_ok=False)
     os.environ.update(XDG_CONFIG_HOME=str(stage / 'ui-config'),
                       XDG_STATE_HOME=str(stage / 'ui-state'),
@@ -116,11 +118,15 @@ async def run(stage: Path, extension: Path, *, package: VerifiedNativePackage) -
                 store = comms.goals.open_goal_store()
                 before = store.require_generation(blocked.id)
                 assert before.lifecycle == BlockedGeneration(), before
-                await until(lambda: view.query_one('#goal-toggle').display
-                            and not view.query_one('#goal-toggle').disabled
-                            and 'Retry' in str(view.query_one('#goal-toggle').render()))
+                retry = view.goal_bar.query_one(
+                    f'#{ToggleInteraction.control_id()}', GoalControl,
+                )
+                await until(lambda: retry.display and not retry.disabled
+                            and 'Retry' in str(retry.render()))
                 app.save_screenshot(str(stage / 'blocked-before-retry.svg'))
-                assert await pilot.click('#goal-toggle'), 'Click the actual visible Retry control'
+                assert await pilot.click(retry, offset=(retry.size.width // 2, 0)), (
+                    'Click the actual visible Retry control'
+                )
                 await until(lambda: any(isinstance(goal.state, CompletedGoal)
                                         for goal in comms.registry.require(session).goal)
                             and not comms.registry.require(session).executing)
