@@ -12,6 +12,7 @@ from contextlib import AsyncExitStack, contextmanager
 from pathlib import Path
 
 import pytest
+import goal_owner_fixture
 from xdist import is_xdist_worker
 from source_programs import SourcePrograms
 from source_revision_fixture import SourceRepository
@@ -26,6 +27,8 @@ from agent_comms.registration import Registration
 from agent_comms.messages import ConversationRole, InfoKind, Message
 from agent_comms.store_files import _store_lock
 from agent_comms.thread_text import ForkedParent, GivenThreadText
+
+pytest_plugins = (goal_owner_fixture.__name__,)
 
 
 class TranscriptRecords:
@@ -190,7 +193,7 @@ def native_runtime_package():
     from agent_comms.native_package import VerifiedNativePackage
     from agent_comms.unit_instructions import UnitInstructions
 
-    package = VerifiedNativePackage.acquire(pinned_native_package())
+    package = VerifiedNativePackage.qualify(pinned_native_package())
     UnitInstructions.prepare()
     return package
 
@@ -256,12 +259,8 @@ def private_directory():
 
 
 @pytest.fixture
-def private_comms(private_directory, native_runtime_package):
-    """One throwaway private bus, built as production builds one.
-
-    Its launch derives like any private root's: the marker installed here
-    gives the root ID, this installation the package.
-    """
+def private_comms(private_directory):
+    """One throwaway private bus; native consumers acquire their own package."""
     root = private_directory / "wire"
     root.mkdir(mode=0o700)
     comms = Comms(root)
@@ -269,7 +268,6 @@ def private_comms(private_directory, native_runtime_package):
     from agent_comms.launch_root import LaunchRoot
 
     LaunchRoot.from_path(root).install()
-    comms.route.launch().require_private().check()
     return comms
 
 

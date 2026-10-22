@@ -1,18 +1,17 @@
-"""Real turn acquisition, terminal handling and cutover share the execution owner."""
+"""Real turn acquisition and terminal handling share the execution owner."""
 import os
 import sqlite3
 from contextlib import AsyncExitStack, asynccontextmanager, closing
-from dataclasses import replace
+from dataclasses import fields
 
 import pytest
-from cutover.carry_goal_execution import FAILED_BACKEND_REASON, BackendGoalBlocks
 
 from agent_comms import agent_events as events
 from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
+from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
-    BlockedGoalAction,
     PausedGoalAction,
     RetryGoalAction,
     SetGoalAction,
@@ -20,13 +19,14 @@ from agent_comms.goal_actions import (
 from agent_comms.goal_failure_observation import FailedTurnEvidence
 from agent_comms.goal_presentation import (
     AttemptFailedExecution,
+    GoalExecution,
+    GoalSnapshot,
     RunnableExecution,
     RunningExecution,
 )
-from agent_comms.goal_states import ActiveGoal, BlockedGoal
+from agent_comms.goal_states import ActiveGoal
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.turn_terminal import OwnerStop
-from test_goal_answers import copied_goal_bus
 
 
 @pytest.fixture
@@ -38,6 +38,18 @@ def execution_bus(copied_goal_bus):
     ))
     comms.goals.update_goal("worker", SetGoalAction(text="Repair original work"))
     return comms
+
+
+@pytest.mark.parametrize("execution_type", tuple(
+    member for member in GoalExecution.members_with(GoalExecution)
+    if fields(member) == fields(RunnableExecution)
+))
+def test_execution_identity_survives_wire_and_change_detection(execution_bus, execution_type):
+    goal = execution_bus.registry.require("worker").goal
+    execution = execution_type(goal.id)
+    assert FieldCodec.decode(GoalExecution, FieldCodec.encode(execution)) == execution
+    current = GoalSnapshot(goal, RunnableExecution(goal.id))
+    assert current.changed_by(GoalSnapshot(goal, execution)) == (current.execution != execution)
 
 
 @asynccontextmanager
@@ -127,23 +139,3 @@ async def test_verified_productive_turn_recovers_blocked_generation(execution_bu
     assert isinstance(comms.goals.goal_execution("worker"), RunnableExecution)
     assert comms.registry.require("worker").goal.state == ActiveGoal()
     assert failure_count(comms) == 1  # The old failure remains evidence, never replayed.
-
-
-def test_cutover_retires_backend_text_and_preserves_owner_block(execution_bus):
-    comms = execution_bus
-    owner = comms.registry.require("worker")
-    comms.registry.register(replace(owner, goal=replace(
-        owner.goal.require(),
-        state=BlockedGoal(FAILED_BACKEND_REASON),
-    )))
-    comms.registry.declare(comms.registry.new_thread("explicit", frozenset(), owner.worktree))
-    comms.goals.update_goal("explicit", SetGoalAction(text="Needs owner decision"))
-    decided = comms.goals.update_goal("explicit", BlockedGoalAction(progress="Waiting for owner approval"))
-    dry = BackendGoalBlocks.carry(comms.root, apply=False)
-    assert dry.detail == {"migrated": 1, "preserved": 1}
-    assert comms.registry.require("worker").goal.state != ActiveGoal()
-    carried = BackendGoalBlocks.carry(comms.root, apply=True)
-    assert carried.detail == dry.detail
-    assert comms.registry.require("worker").goal.state == ActiveGoal()
-    assert comms.registry.require("explicit").goal == decided
-    assert BackendGoalBlocks.carry(comms.root, apply=True).changed == 0

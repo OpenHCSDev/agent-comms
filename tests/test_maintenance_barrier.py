@@ -373,3 +373,48 @@ async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> N
     await asyncio.wait_for(pending, 3)
     with output.transcript.reading() as source:
         assert source.current_draft(output.transcript.root, output.transcript.incarnation).external_row().events == (AssistantTranscript('prefix once', timestamp=1., position='item'),)
+
+
+def test_a_registry_write_is_refused_to_all_but_the_maintenance_holder(tmp_path: Path, monkeypatch) -> None:
+    """The installer stops only its owners; the connector, bridges and forks keep running, so the
+    registry itself refuses their writes during a hold, and the holder's own writes still land."""
+    from agent_comms.maintenance_barrier import HOLDER_NONCE
+
+    comms = Comms(tmp_path)
+    comms.registry.declare(comms.registry.new_thread(name='a', tags=frozenset(), worktree='/wt'))
+    before = comms.registry.store.path.read_bytes()
+    gate = MaintenanceBarrier(comms.registry.store.path)
+    hold = gate.begin(MaintenanceOperator.current())
+    monkeypatch.delenv(HOLDER_NONCE, raising=False)
+    with pytest.raises(RelationViolationError):
+        comms.registry.declare(comms.registry.new_thread(name='b', tags=frozenset(), worktree='/wt'))
+    assert comms.registry.store.path.read_bytes() == before
+    monkeypatch.setenv(HOLDER_NONCE, hold.nonce)
+    comms.registry.declare(comms.registry.new_thread(name='b', tags=frozenset(), worktree='/wt'))
+    assert 'b' in comms.registry
+    gate.clear(hold)
+
+
+def test_a_carried_store_write_is_refused_to_all_but_the_maintenance_holder(tmp_path: Path, monkeypatch) -> None:
+    """Every file an installation carries gates its writers through its kind, CarriedWriter:
+    a bridge's transcript or a fork's todo write during a hold is refused instead of
+    changing a file the install's carry check compares, and the holder still writes."""
+    from agent_comms.external_transcript import ExternalTranscript
+    from agent_comms.maintenance_barrier import HOLDER_NONCE
+    from agent_comms.typed_table import CarriedWriter, DurableStore, DerivedStore, RuntimeWriter
+
+    assert issubclass(DurableStore, CarriedWriter) and issubclass(ExternalTranscript, CarriedWriter)
+    assert issubclass(DerivedStore, RuntimeWriter)
+    comms = Comms(tmp_path)
+    todos = comms.goals.todos
+    todos.allocate_problem()
+    before = todos.path.read_bytes()
+    gate = MaintenanceBarrier(comms.registry.store.path)
+    hold = gate.begin(MaintenanceOperator.current())
+    monkeypatch.delenv(HOLDER_NONCE, raising=False)
+    with pytest.raises(RelationViolationError):
+        todos.allocate_problem()
+    assert todos.path.read_bytes() == before
+    monkeypatch.setenv(HOLDER_NONCE, hold.nonce)
+    todos.allocate_problem()
+    gate.clear(hold)

@@ -149,9 +149,10 @@ class GoalHistoryStore(DurableFile, SQLiteFile):
         if os.name == "posix" and stat.S_IMODE(self.path.stat().st_mode) != 0o600:
             raise GoalHistoryError("Goal history database must be owner-only.")
         try:
-            with closing(self._connect()) as connection, self.write_transaction(connection):
-                if not GoalHistoryEntry.stored_schema(connection):
-                    GoalHistoryEntry.create_schema(connection)
+            with closing(self._connect()) as connection:
+                with self.write_transaction(connection):
+                    if not GoalHistoryEntry.stored_schema(connection):
+                        GoalHistoryEntry.create_schema(connection)
                 GoalHistoryEntry.reconcile_schema(connection)
             self._sync()
         except (OSError, sqlite3.Error) as error:

@@ -5,14 +5,11 @@ import os
 import subprocess
 import sys
 import time
-from contextlib import closing
 from dataclasses import replace
 from functools import partial
-from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from cutover.carry_goal_work_decision import RETIRED_TABLE, GoalWorkDecisions
 
 from agent_comms import agent_events as events
 from agent_comms.bus_publication import AgentOrigin
@@ -28,22 +25,18 @@ from agent_comms.commander.standing import (
 )
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import Comms
-from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
     CreateProblemGoalAction, DirectiveGoalAction, ReissuedOrderGoalAction, SetGoalAction,
 )
-from agent_comms.goal_attempts import GoalAttemptStore, GoalWorkDecision
 from agent_comms.goal_presentation import RunnableExecution
 from agent_comms.goal_states import ActiveGoal
-from agent_comms.goals import CountCheckResult, Goal, OrderCheck, RequestGoalOrder
+from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.installer.backup import StoreBackup
-from agent_comms.installer.carry import CarryChain
 from agent_comms.launch_root import LaunchRoot
-from agent_comms.locked_store import SQLiteFile
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.messages import InfoKind, Message
 from agent_comms.native_arguments import GivenBinary
@@ -69,6 +62,7 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
     """One setup owner: real declarations, checked orders, UNKNOWN row, then a copy."""
     source = source_repository
     scope = source.scope()
+    comms.messaging.initialize_private_initial_protocol()
     declare_test_bus(comms, channels=('comms',), threads=tuple(
         comms.registry.new_thread(name=name, tags=frozenset({'comms'}), worktree=str(source.checkout))
         for name in ('lead', 'worker', 'outsider')
@@ -102,6 +96,14 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
     copied_bus = Comms(copied)
     configured_repository(copied_bus)
     return copied_bus
+
+
+def test_stop_rejects_a_human_before_any_registry_change(comms, tmp_path):
+    reader = comms.messaging.user_identity(str(tmp_path))
+    before = comms.registry.store.path.read_bytes()
+    with pytest.raises(RelationViolationError, match="Only agent threads can be stopped"):
+        comms.owners.stop(reader.name)
+    assert comms.registry.store.path.read_bytes() == before
 
 
 def blocked_holder(comms):
@@ -171,9 +173,8 @@ def test_an_order_to_a_blocked_goal_activates_it_and_keeps_other_orders(held_bus
 
 
 async def test_sigterm_group_preserves_active_goal_and_never_reissues_orders(
-    held_bus, native_runtime_package, source_programs, tmp_path,
+    held_bus, native_runtime_package, tmp_path,
 ):
-    source_programs.bind(held_bus.root.parent)
     provider_root = tmp_path / "stopping-provider"
     provider_root.mkdir(mode=0o700)
     async with native_backend_fixture(provider_root, package=native_runtime_package) as fixture:
@@ -398,64 +399,6 @@ def test_detached_and_goal_blocks_are_both_in_standing_rule_scan(held_bus, insta
     broken = StandingRule.broken(held_bus, "lead")
     assert blocked in broken
     assert all(rule in broken for rule in family)
-
-
-def legacy_decision_table(comms):
-    store = comms.goals.open_goal_store()
-    goal = comms.registry.require("worker").goal.require()
-    generation = store.require_generation(goal.id)
-    with closing(GoalAttemptStore.database(store.path)) as db:
-        with SQLiteFile.write_transaction(db):
-            GoalWorkDecision(goal.id, "recorded-decision", generation.number).claim(db)
-            db.execute(f'ALTER TABLE "{GoalWorkDecision.declared_name}" RENAME TO "{RETIRED_TABLE}"')
-    return store.path
-
-
-def test_cutover_renames_copied_ledger_once_and_preserves_rows(held_bus, comms):
-    path = legacy_decision_table(held_bus)
-    original = comms.goals.open_goal_store().path.read_bytes()
-    with closing(CoordinationStore.read_snapshot(path)) as db:
-        before = tuple(db.execute(f'SELECT * FROM "{RETIRED_TABLE}"'))
-    assert GoalWorkDecisions.carry(held_bus.root, apply=False).changed == 1
-    carried = GoalWorkDecisions.carry(held_bus.root, apply=True)
-    assert carried.changed == 1
-    assert carried.rewritten == (str(path.relative_to(held_bus.root)),)
-    assert GoalWorkDecisions.carry(held_bus.root, apply=True).changed == 0
-    GoalAttemptStore(path.parent)  # the installed reader accepts the carried schema
-    with closing(CoordinationStore.read_snapshot(path)) as db:
-        assert tuple(db.execute(f'SELECT * FROM "{GoalWorkDecision.declared_name}"')) == before
-    assert comms.goals.open_goal_store().path.read_bytes() == original
-    assert held_bus.goals.open_goal_store().require_generation(
-        held_bus.registry.require("worker").goal.require().id,
-    ).number == 1
-    assert path in GoalWorkDecisions.backup_files(held_bus.root)
-
-
-def test_cutover_refuses_two_tables_without_choosing_rows(held_bus):
-    path = legacy_decision_table(held_bus)
-    with closing(GoalAttemptStore.database(path)) as db:
-        GoalWorkDecision.create(db)
-        db.commit()
-    before = path.read_bytes()
-    with pytest.raises(RelationViolationError):
-        GoalWorkDecisions.carry(held_bus.root, apply=True)
-    assert path.read_bytes() == before
-
-
-def test_install_discovers_the_decision_cutover_from_its_dry_run_and_runs_it_once(held_bus):
-    chain = CarryChain.at(Path(__file__).resolve().parents[1])
-    assert GoalWorkDecisions in chain.steps
-
-    def dry_run(step):
-        return step.carry(held_bus.root, apply=False)
-
-    assert chain.pending(dry_run) == ()
-    legacy_decision_table(held_bus)
-    assert chain.pending(dry_run)[0] is GoalWorkDecisions
-    assert GoalWorkDecisions.carry(held_bus.root, apply=True).changed == 1
-    second = GoalWorkDecisions.carry(held_bus.root, apply=True)
-    assert second.changed == 0 and second.rewritten == ()
-    assert chain.pending(dry_run) == ()
 
 
 def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus, installed_runtime):

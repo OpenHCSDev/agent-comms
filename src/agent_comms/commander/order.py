@@ -39,6 +39,7 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import (
     Argument,
+    DecodedValue,
     FieldCodec,
     MalformedRecord,
     Normalize,
@@ -54,7 +55,6 @@ from agent_comms.messages import Message
 from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.plan_phases import OrderPhase
 from agent_comms.problem_number import ProblemNumber
-from agent_comms.progress_claims import MergedClaim, WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.standing_rules import HuntDue, OwedAnswer
@@ -62,15 +62,17 @@ from agent_comms.storage_rules import UnitStorage
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import (
     BluntText,
+    CheckedDelivery,
     CleanHunt,
     CommitDelivery,
+    DeliveryEvidence,
+    DeliverySource,
     DirectiveText,
-    FileDeliveryEvidence,
     LocatedProblemFinding,
     MeasuredReview,
-    NoDeliveryEvidence,
     NoSuccessor,
     OperationDelivery,
+    OrderDelivery,
     OrderedHunt,
     OrderMessage,
     OrderProgress,
@@ -94,7 +96,6 @@ from agent_comms.tools import (
     CommsChangeProblemTool,
     CommsFireTool,
     CommsOrderCheckTool,
-    CommsOrderDeliverTool,
     CommsOrderDoneTool,
     CommsOrderServeTool,
     CommsOrderTool,
@@ -178,6 +179,61 @@ def forwarders_added(diff, sources=()):
                if m.group(2) not in kept and not state_call.search(diff[m.start():m.end() + 200].split('\n+', 2)[1] if '\n+' in diff[m.start():m.end()+200] else '')])
 
 
+class CommandDeliverySource(DeliverySource, declared_name=None):
+    @classmethod
+    def from_text(cls, text: str) -> CommandDeliverySource:
+        # Reserved arguments derive from declarations; every other token is a Git reference.
+        return ArgumentDeliverySource.member_or_default(text, ReferenceDeliverySource).from_argument(text)
+
+
+class ArgumentDeliverySource(CommandDeliverySource, declared_name=None):
+    @classmethod
+    def from_argument(cls, text: str) -> Self:
+        return cls()
+
+
+@dataclass(frozen=True)
+class ReferenceDeliverySource(ArgumentDeliverySource, declared_name=None):
+    reference: str
+
+    @classmethod
+    def from_argument(cls, text: str) -> Self:
+        if not text.strip():
+            raise ValueError("A commit delivery needs a nonempty Git reference.")
+        return cls(text)
+
+
+@dataclass(frozen=True)
+class NoDeliverySource(CommandDeliverySource):
+    def require_report(self) -> None:
+        pass
+
+    def delivery(self, repo: Path, evidence: DeliveryEvidence) -> CheckedDelivery:
+        raise ValueError("A fix delivery needs --sha COMMIT or --sha op.")
+
+
+@dataclass(frozen=True)
+class OpDeliverySource(ArgumentDeliverySource):
+    def delivery(self, repo: Path, evidence: DeliveryEvidence) -> CheckedDelivery:
+        return OperationDelivery(evidence=evidence)
+
+
+@dataclass(frozen=True)
+class CommitDeliverySource(ReferenceDeliverySource):
+    def delivery(self, repo: Path, evidence: DeliveryEvidence) -> CheckedDelivery:
+        delivered = Repo.git(repo, 'rev-parse', '--verify', f'{self.reference}^{{commit}}').strip()
+        diff = Repo.git(repo, 'show', '--first-parent', '-m', '--format=', delivered)
+        changed = re.findall(r'^\+\+\+ b/(\S+\.py)$', diff, re.M)
+        sources = [Repo.git(repo, 'show', f'{delivered}:{path}') for path in changed]
+        if added := forwarders_added(diff, sources):
+            raise ValueError(f'Refused: {delivered} adds forwarders {added[:5]}; '
+                             'slop never counts as delivery. Order the hierarchy fix.')
+        return CommitDelivery(
+            commit=Repo.git(repo, 'rev-parse', '--verify', 'HEAD^{commit}').strip(),
+            delivered_commit=delivered, evidence=evidence,
+        )
+
+
 @dataclass(frozen=True)
 class OrderFile:
     """CLI context and prose around the same order the native tools accept."""
@@ -225,12 +281,6 @@ STAGES = (
     "live",
     "user",
 )  # where a mistake was caught; later is worse
-
-
-def revision(repo: str, ref: str) -> str:
-    """Resolve a supplied Git revision once at the command boundary."""
-    return subprocess.check_output(
-        ['git', '-C', repo, 'rev-parse', '--verify', f'{ref}^{{commit}}'], text=True).strip()
 
 
 class CommanderContext(CommanderConfig):
@@ -470,12 +520,14 @@ class Commander(CommanderContext):
                     validate()
             except MalformedRecord as error:
                 problems.append(f'{label}: {error}; fix: name an existing source location or directory')
-        # Send and correction ask the check's owner the same question on clean main.
+        # The new order owns the source against which its check must fail.
         try:
             with MalformedRecord.refusing('order.check'):
                 order.require_writable()
                 if Path(check.directory).is_dir():
-                    check.require_acceptance(self.worktrees)
+                    Repo.git(Path(check.directory), 'fetch', '-q', 'origin', 'main')
+                    base = order.check_base(Path(check.directory))
+                    check.require_acceptance(base, self.worktrees)
         except MalformedRecord as error:
             problems.append(f'order.check: {error}; fix: supply a focused measurable command')
         references = list(dict.fromkeys((
@@ -558,15 +610,17 @@ class Commander(CommanderContext):
                         evidence=(order.owner,))
 
     def correct_check(self, pid: str, line: str, why: str) -> None:
-        """Replace a wrong check of a pending or claimed order by the rule send uses; Core refuses
-        any other order or a closed problem (CorrectCheckTodo.apply); done checks the SHA."""
+        """Correct the current check against the source preceding this order's delivery."""
         todo = self.comms.goals.todos.get(pid)
+        order = todo.order.checked()
         check = self.read_check(line)
         if len(why.split()) < 8:
             sys.exit('Refused: --why says what was wrong with the recorded check (8+ words)')
-        check.require_acceptance(self.worktrees)
+        repo = self.repo_directory(check.directory)
+        Repo.git(repo, 'fetch', '-q', 'origin', 'main')
+        check.require_acceptance(order.check_base(repo), self.worktrees)
         self.call(CommsOrderCheckTool(problem=pid, check=check, why=why))
-        print(f'{pid}: order {todo.order.id} now checks `{check.command}`')
+        print(f'{pid}: order {order.id} now checks `{check.command}`')
 
     def say(self, units: str, body_file: str,
             answers: tuple[MessageReference, ...] = ()) -> None:
@@ -645,23 +699,14 @@ class Commander(CommanderContext):
         self.on_record(line, 'Strike', VerdictAudience.of(unit, todo.goal), answers)
         print(f'{unit}: {n} strike(s) on {todo.id}' + (f'. Reassign {todo.id} now and freeze its branch.' if n >= 2 else ''))
 
-    def done(self, pid, sha, screenshot='', seen=''):
-        """Core runs the delivery's check at its checked commit and strikes a late delivered commit
-        in the same revision; this posts the strikes Core recorded."""
+    def done(self, pid: str, delivery: OrderDelivery) -> None:
+        """Storage is checked here; the delivery owns its evidence and claims."""
         todo = self.comms.goals.todos.get(pid)
         todo.state.require_open(todo)
-        todo.order.checked().require_delivery(todo.order.id)
+        order = todo.order.checked()
+        order.require_delivery(order.id)
         unit = todo.held().owner
-        repo = str(self.repo_directory(todo.order.check.directory))
-        operation = sha == 'op'  # an operation on live state, not a commit: the check runs now and now is delivery
-        if not operation:
-            diff = subprocess.run(['git', '-C', repo, 'show', '--first-parent',
-                '-m', '--format=', sha], capture_output=True, text=True).stdout
-            changed = re.findall(r'^\+\+\+ b/(\S+\.py)$', diff, re.M)
-            after = [subprocess.run(['git', '-C', repo, 'show', f'{sha}:{f}'],
-                capture_output=True, text=True).stdout for f in changed]
-            if added := forwarders_added(diff, after):
-                sys.exit(f'Refused: {sha} adds forwarders {added[:5]}; slop never counts as delivery. Order the hierarchy fix.')
+        claims = delivery.done_claims(order)
         thread = self.comms.registry.require(unit)
         storage = UnitStorage.read(self.comms.registry.storage_rule, thread)
         for checkout in storage.rule.problem_checkouts(unit, pid):
@@ -672,19 +717,9 @@ class Commander(CommanderContext):
             storage.require_quota()
         except SelectedToolDenied as quota:
             sys.exit(f'Refused: {unit}: {quota}; storage rule: it cleans up before the order counts as done.')
-        todo.order.run.require_artifact(seen or screenshot)
-        evidence = FileDeliveryEvidence(seen or screenshot) if seen or screenshot else NoDeliveryEvidence()
-        if operation:
-            delivery = OperationDelivery(evidence=evidence)
-            claim = WorkingClaim(evidence.artifact())
-        else:
-            delivered_commit = revision(repo, sha)
-            delivery = CommitDelivery(commit=revision(repo, 'HEAD'),
-                                      delivered_commit=delivered_commit, evidence=evidence)
-            claim = MergedClaim(delivery.delivered)
         self.call(CommsOrderDoneTool(problem=pid,
-            order_id=todo.order.id, delivery=delivery, claims=(claim,)))
-        print(f'{unit}: order {todo.order.id} delivered as {delivery.delivered if not operation else sha}')
+            order_id=order.id, delivery=delivery, claims=claims))
+        print(f'{unit}: order {order.id} delivered as {delivery.work}')
 
     def hunt(self, where, why, sent):
         """Record the commander's source read, whether or not it became an order."""
@@ -932,27 +967,6 @@ class WithdrawVerb(OrderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class DeliverVerb(OrderVerb):
-    help = "record your delivery claim and answer the commander"
-    problem: Annotated[str, Argument(flags=("problem",), options={"metavar": "PROBLEM"})]
-    pull_request: Annotated[int, Argument(flags=("--pr",))]
-    head: Annotated[str, Argument(flags=("--sha",))]
-    report_file: Annotated[str, Argument(flags=("--report-file",))]
-
-    def gate(self, ctx: Commander) -> None:
-        ctx.comms.registry.require(self.who(ctx)).role.require_executable(
-            ValueError("A delivery claim requires a registered unit.")
-        )
-
-    def run(self, ctx: Commander) -> None:
-        ctx.call(CommsOrderDeliverTool(
-            problem=self.problem, pull_request=self.pull_request,
-            head=self.head, report=Path(self.report_file).read_text(),
-        ))
-        print(f'{self.problem}: delivery claim recorded')
-
-
-@dataclass(frozen=True, kw_only=True)
 class DoneVerb(OrderVerb):
     help = "Core checks the delivered commit; late delivery is a strike"
     unit: Annotated[str, Argument(flags=("unit",), options={"metavar": "UNIT"})]
@@ -964,11 +978,14 @@ class DoneVerb(OrderVerb):
         ),
     ]
     sha: Annotated[
-        str,
+        CommandDeliverySource,
+        Normalize(DecodedValue),
         Argument(
-            flags=("--sha",), options={"help": "commit in the recorded checkout, or op"}
+            flags=("--sha",),
+            options={"type": CommandDeliverySource.from_text, "choices": None,
+                     "help": "for a fix: commit in the recorded checkout, or op"},
         ),
-    ]
+    ] = dataclasses.field(default_factory=NoDeliverySource)
     screenshot: Annotated[
         str,
         Argument(
@@ -984,7 +1001,10 @@ class DoneVerb(OrderVerb):
 
     def run(self, ctx: Commander) -> None:
         todo = ctx.comms.goals.todos.resolve_order(ctx.incarnation, self.unit, self.problem)
-        ctx.done(todo.id, self.sha, self.screenshot, self.seen)
+        order = todo.order.checked()
+        delivery = order.scope.delivery(
+            ctx.repo_directory(order.check.directory), self.sha, self.screenshot, self.seen)
+        ctx.done(todo.id, delivery)
 
 
 @dataclass(frozen=True)

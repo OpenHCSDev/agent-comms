@@ -42,6 +42,7 @@ from agent_comms.cli_result import CliResult
 from agent_comms.cli_bridges.shared import Serve, SessionBridgeResumes
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.comms import Comms
+from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.history_result import EverythingHistoryPageResult
 from agent_comms.storage_rules import StorageRule
@@ -357,6 +358,7 @@ class Stack:
     @classmethod
     def build(cls, checkout: Path, home: Path = HOME) -> Stack:
         """Resolve current mains once, then build or reuse their immutable installation."""
+        Checkout(checkout).prepare()
         source = cls(checkout, home, runtime=LaunchRuntime.running())
         source.require_uv()
         run(source.uv, "lock", "--project", "stack", "--upgrade", "--python", "3.14",
@@ -382,6 +384,20 @@ class Stack:
             shutil.rmtree(prefix)
             raise
         return built
+
+    def test(self, *pytest_arguments: str) -> None:
+        """Run checkout tests against this runtime's installed packages, never its source."""
+        run(self.uv, "pip", "install", "--python", self.python,
+            "-r", "pyproject.toml", "--extra", "dev", cwd=self.checkout,
+            env=self.environment())
+        core = run("git", "-C", self.checkout, "rev-parse", "HEAD").strip()
+        scratch = StorageRule().scratch_base
+        scratch.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=scratch, prefix=f"tests-{core[:12]}-") as temporary:
+            print(run("timeout", "300", self.python, "-m", "pytest", "-n", "0", "-q", "-s",
+                      "-o", "pythonpath=. tools", "-o", "faulthandler_timeout=60",
+                      "--basetemp", Path(temporary) / "pytest", "-p", "no:cacheprovider",
+                      *pytest_arguments, cwd=self.checkout, env=self.environment()), end="")
 
     def imports(self) -> None:
         run(self.python, "-c", CLIENT_IMPORTS, cwd=self.checkout, env=self.environment())
@@ -787,23 +803,30 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
     maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
     held = maintenance.begin(MaintenanceOperator.current())
     os.environ[HOLDER_NONCE] = held.nonce  # this run's own CLI calls read under its hold
+    # The transcript store's writers are not owners, so the stop does not stop them. Its
+    # writer lock is held from the baseline through the carry check, unless a step that
+    # the rehearsal proved rewrites it is the one meant to write.
+    window = ExitStack()
     try:
         installed.owners(root, "stop", running)
-        with transcripts_held(root):
-            before = bus_files(root)
-            backup = StoreBackup.take(root, active_route_path(), selected, spill_dir)
+        if ExternalTranscript.filename not in rehearsal_files.names:
+            window.enter_context(transcripts_held(root))
+        before = bus_files(root)
+        backup = StoreBackup.take(root, active_route_path(), selected, spill_dir)
     except BaseException as error:
+        window.close()
         maintenance.clear(held)
         started = installed.start(root, running)
         print(f"install: aborted before the backup ({type(error).__name__}: {error}); "
               f"maintenance cleared; owners: {started}", file=sys.stderr)
         raise
     try:
-        run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
-        Checkout(checkout).prepare()
-        staged.prepare_native()
-        passed = carry_and_read(root, before, pending, staged, staged, tree, stopping)
-        passed.files.require_rehearsal(rehearsal_files)
+        with window:
+            run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
+            Checkout(checkout).prepare()
+            staged.prepare_native()
+            passed = carry_and_read(root, before, pending, staged, staged, tree, stopping)
+            passed.files.require_rehearsal(rehearsal_files)
         staged.publish()
         maintenance.clear(held)
         services = HostService.restart_running(staged.python)

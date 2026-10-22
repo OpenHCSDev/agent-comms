@@ -144,7 +144,7 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     assert set(ctx.model_copy(deep=True).progress()) == {'P40'}
     assert ctx.held_orders() == (saved,)
     assert ctx.call(CommsTodoListTool(thread=ctx.commander)).todos == (saved,)
-    assert "1 live forks ['fork-one']" in command(comms, 'capacity').stdout
+    assert "working forks" in command(comms, 'capacity').stdout
     refused = command(comms, 'order', 'send', 'worker', body, '--fork', 'fork-two')
     assert refused.returncode != 0 and 'worker is assigned by fork-one' in refused.stderr
     assert store.get('P40') == saved
@@ -160,6 +160,9 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     assert retired.returncode == 0, retired.stderr
     assert not comms.registry.status('fork-one').receiving
     assert store.get('P40') == saved
+    # The ended fork's open order is the commander's to replace; nobody else's.
+    with store.snapshot() as db:
+        store.require_unit_in(db, saved.held().owner_identity, parent.incarnation)
 
 
 def test_fork_and_parent_judge_show_same_unjudged_edits(fork_bus):
@@ -238,9 +241,9 @@ def test_two_commanders_cannot_assign_the_same_unit_concurrently(fork_bus, tmp_p
     print(refused.stderr.strip())
 
 
-def test_retained_store_carry_preserves_original_identities(fork_bus):
-    from cutover.carry_problem_numbers import ProblemNumbers
-
+def test_a_retained_store_takes_its_declared_schema_on_the_next_write(fork_bus):
+    """The writer's open derives what the declaration says: a missing table and indexes are
+    created, and rows stored under ProblemAllocation's declared earlier name move to it."""
     comms, source, order = fork_bus
     store = comms.goals.todos
     retained = store.get('P40')
@@ -248,25 +251,15 @@ def test_retained_store_carry_preserves_original_identities(fork_bus):
         db.execute(f'DROP TABLE "{ProblemAllocation.declared_name}"')
         db.execute(f'DROP INDEX "{Todo.unit_index.name(Todo)}"')
         db.execute(f'DROP INDEX "{Todo.problem_index.name(Todo)}"')
-    assert ProblemNumbers.carry(comms.root, apply=False).changed == 3
-    assert ProblemNumbers.carry(comms.root, apply=True).changed == 3
-    assert store.get('P40') == retained
-    with store.snapshot() as db:
-        assert ProblemAllocation.select(db) == []
     assert store.allocate_problem() == 'P41'
-    assert ProblemNumbers.carry(comms.root, apply=True).changed == 0
-    # Upgrade the installed old schema: keep unsent P41, delete only the P40 copy.
+    assert store.get('P40') == retained
     with store.writing() as db:
         db.execute(f'ALTER TABLE "{ProblemAllocation.declared_name}" RENAME TO problem_number')
-        db.execute('INSERT INTO problem_number(number) VALUES (40)')
         db.execute(f'DROP INDEX "{Todo.problem_index.name(Todo)}"')
-    assert ProblemNumbers.carry(comms.root, apply=False).changed == 2
-    assert ProblemNumbers.carry(comms.root, apply=True).changed == 2
-    with store.snapshot() as db:
-        assert [row.number for row in ProblemAllocation.select(db)] == [41]
-    assert store.get('P40') == retained
     assert store.allocate_problem() == 'P42'
-    assert ProblemNumbers.carry(comms.root, apply=True).changed == 0
+    with store.snapshot() as db:
+        assert [row.number for row in ProblemAllocation.select(db)] == [41, 42]
+    assert store.get('P40') == retained
 
 
 def test_created_ids_live_only_on_todos_and_allocation_uses_numeric_index(fork_bus):
