@@ -108,7 +108,7 @@ def show(ctx, pending: list[Edit]) -> None:
 
 def roast(ctx, audience, thread, lines, text, fix, slop):
     """Every send-back is a lesson, sent to its verdict's audience: the quoted slop,
-    the required fact it restates and the declaration that derives it (paper 1's definition), why that is
+    the required fact it restates and the declaration that derives it (the OOPSLA paper's definition), why that is
     stupid, and what replaces it."""
     body = (f'{thread}, this is stupid slop and it is going back:\n'
             + '\n'.join(f'    {l.strip()}' for l in lines)
@@ -180,7 +180,7 @@ class HeadVerb(JudgeVerb):
 
 @dataclass(frozen=True, kw_only=True)
 class VerdictVerb(JudgeVerb):
-    """Every verdict, mine or a fork's, is made after reviewing paper 1's
+    """Every verdict, mine or a fork's, is made after reviewing the OOPSLA paper's
     correct-maintenance results. Each member's required options are the facts its verdict carries."""
 
     ids: Annotated[

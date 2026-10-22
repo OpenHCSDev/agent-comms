@@ -1292,7 +1292,7 @@ class BluntText(BluntWords, OrderWords):
 
 
 class FairText(OrderWords):
-    """Paper 1 proves multiple parents derive every required pair with nothing outside, which composition and
+    """The OOPSLA paper proves multiple parents derive every required pair with nothing outside, which composition and
     forwarding supply outside (Fig 3, Thm 4.6): faulting inheritance itself is dogma, not a restated fact.
     Only explanatory prose is checked; code and banned-action fields are not prose."""
 

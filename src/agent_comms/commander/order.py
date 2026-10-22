@@ -122,7 +122,7 @@ def struck(todo, unit):
 
 
 # Eliminate forwarding with inheritance and multiple parents; decompose the hierarchy if it is not sound.
-# A forwarder restates an implementation pair (paper 1 Fig 3: fields + forwarding leave routes to maintain), so
+# A forwarder restates an implementation pair (OOPSLA paper, Fig. 3: fields + forwarding leave routes to maintain), so
 # nothing the commander approves, delivers or orders may add or keep one. The cure is the hierarchy, never a
 # route: fold the false owner into the real one, or compose the providers as parents.
 FORWARDER = re.compile(
