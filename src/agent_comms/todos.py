@@ -16,7 +16,7 @@ import subprocess
 import sys
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from functools import cache, cached_property, partial
@@ -79,7 +79,7 @@ from agent_comms.messages import InfoKind, Message
 from agent_comms.order_runs import OrderRun
 from agent_comms.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from agent_comms.plan_phases import OrderPhase, UnplannedPhase
-from agent_comms.private_bus_checkpoint import PublicMessages
+from agent_comms.private_bus_checkpoint import CheckedRead, PublicMessages
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.progress_claims import MergedClaim, ProgressClaim, WorkingClaim
 from agent_comms.recorded_time import (
@@ -1545,7 +1545,7 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         return ()
 
-    def commander_questions(self, comms: Comms) -> tuple[Message, ...]:
+    def commander_claims(self) -> tuple[OrderClaim, ...]:
         return ()
 
     def closing_artifact(self) -> str:
@@ -2039,10 +2039,20 @@ class OrderClaim:
         if not self.message.body.strip():
             raise TodoError("A delivery claim needs its report text.")
 
-    def original(self, comms: Comms) -> Message:
-        with comms.bus.log.checked_read() as source:
-            row = PublicMessages.require(source.connection, message_id=self.message.message_id)
+    def original(self, source: CheckedRead) -> Message:
+        row = PublicMessages.require(source.connection, message_id=self.message.message_id)
         return replace(self.message, seq=row.seq)
+
+    @staticmethod
+    def originals[K](
+        comms: Comms, claims: Mapping[K, tuple[OrderClaim, ...]]
+    ) -> dict[K, tuple[Message, ...]]:
+        """Every claim's original from one checked read; no claim opens no read."""
+        if not any(claims.values()):
+            return {}
+        with comms.bus.log.checked_read() as source:
+            return {key: tuple(claim.original(source) for claim in held)
+                    for key, held in claims.items()}
 
     @classmethod
     def for_order(
@@ -2068,8 +2078,8 @@ class ClaimedProblemOrder(DeliverableProblemOrder):
         if proposed.owner_identity != todo.holder_state.previous_assignment().owner_identity:
             self.require_transfer(todo)
 
-    def commander_questions(self, comms: Comms) -> tuple[Message, ...]:
-        return (self.claim.original(comms),)
+    def commander_claims(self) -> tuple[OrderClaim, ...]:
+        return (self.claim,)
 
     def observed_merges(self, repo: Repo, source: ProgressSource) -> tuple[MergedProblemOrder, ...]:
         return ()

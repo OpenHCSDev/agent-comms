@@ -42,6 +42,7 @@ from agent_comms.read_basis import DMDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import StandingRule
+from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_status import StoppedThreadStatus
@@ -348,7 +349,8 @@ def test_an_overdue_owner_directive_gates_until_answered(held_bus, tmp_path):
 @pytest.mark.parametrize('body', ['@outsider This question is yours', 'The worker broadcasts its result'])
 def test_channel_messages_without_a_commander_addressee_are_not_a_question(held_bus, body):
     held_bus.messaging.send('worker', '#comms', body, type=QuestionKind)
-    assert UnitState.asks(held_bus, 'lead', time.time()) == ()
+    todos = StandingRule.todos(held_bus, 'lead')
+    assert UnansweredUnitAsks.for_orders(held_bus, 'lead', todos, time.time()) == ()
 
 
 def test_send_and_check_accept_a_deletion_check_on_fresh_main(

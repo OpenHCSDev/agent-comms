@@ -27,6 +27,7 @@ from agent_comms.thread_status import ThreadStatus
 from agent_comms.todos import (
     MergedProgress,
     NoCommitProgress,
+    OrderClaim,
     OrderProgress,
     PresentCheckout,
     ProgressSource,
@@ -51,7 +52,7 @@ class UnitObservation:
     thread: Thread
     todos: tuple[Todo, ...]
     pulls: PullRequests
-    messages: tuple[Message, ...]
+    questions: tuple[Message, ...]
     now: float
     presence: ThreadStatus
     working: bool
@@ -59,13 +60,6 @@ class UnitObservation:
     @cached_property
     def goal(self) -> GoalSnapshot:
         return self.comms.goals.goal_snapshot(self.thread.name)
-
-    @cached_property
-    def questions(self) -> tuple[Message, ...]:
-        claims = tuple(
-            message for todo in self.todos for message in todo.order.commander_questions(self.comms)
-        )
-        return (*self.messages, *claims)
 
     @cached_property
     def due_questions(self) -> tuple[Message, ...]:
@@ -102,7 +96,6 @@ class UnitObservation:
         )
 
     def require_read(self) -> None:
-        _ = self.questions
         if self.todos:
             for path in self.comms.registry.storage_rule.checkout_paths(self.thread):
                 PresentCheckout(path).require_read()
@@ -145,15 +138,6 @@ class UnitState(UndatedStandingRule, declared_name=None):
         return ()
 
     @classmethod
-    def asks(cls, comms: Comms, commander: str, before: float) -> tuple[Message, ...]:
-        return UnansweredUnitAsks.for_orders(
-            comms,
-            commander,
-            StandingRule.todos(comms, commander),
-            before,
-        )
-
-    @classmethod
     def read(cls, source: UnitObservation) -> UnitState:
         try:
             return next(state for member in cls.worst_first() for state in member.derive(source))
@@ -179,17 +163,27 @@ class UnitState(UndatedStandingRule, declared_name=None):
             if snapshot.require(owner.name).incarnation != owner:
                 raise ValueError("Held order owner incarnation changed")
         requests = pulls.register(tuple(todo for todos in held.values() for todo in todos))
-        questions = cls.asks(comms, commander, now)
+        asks = UnansweredUnitAsks.for_orders(
+            comms, commander, StandingRule.todos(comms, commander), now
+        )
+        # Claim originals come from one read here, so no unit's questions read can fail alone.
+        claims = OrderClaim.originals(comms, {
+            owner: tuple(claim for todo in todos for claim in todo.order.commander_claims())
+            for owner, todos in held.items()
+        })
         readings = tuple(
             UnitObservation(
                 comms,
                 thread,
                 tuple(held.get(thread.incarnation, ())),
                 requests,
-                tuple(
-                    message
-                    for message in questions
-                    if snapshot.canonical_name(message.sender) == thread.name
+                (
+                    *(
+                        message
+                        for message in asks
+                        if snapshot.canonical_name(message.sender) == thread.name
+                    ),
+                    *claims.get(thread.incarnation, ()),
                 ),
                 now,
                 snapshot.status(thread.name),
@@ -284,10 +278,6 @@ class Unreadable(NeedsCommanderAttention, UnitState):
         source.require_read()
         return iter(())
 
-    @property
-    def owed(self) -> tuple[Message, ...]:
-        return ()
-
     def readable_units(self) -> tuple[ThreadIncarnation, ...]:
         return ()
 
@@ -326,7 +316,7 @@ class Blocked(NeedsCommanderAttention, UnitState):
 
 @dataclass(frozen=True)
 class Detached(NeedsCommanderAttention, UnitState):
-    unread: int
+    unread: int = field(compare=False)
     action = "wake it or reassign the order"
 
     @classmethod

@@ -197,7 +197,7 @@ class StorageHygieneParityRow(ParityRow):
     number = 19
     capability = "Storage hygiene"
     current = "`StandingRule.broken` storage delivery (formerly `storage.py`)"
-    native = "`StorageViolation.violations`, `DiskLow.violations`; live `StorageRule` thresholds"
+    native = "`StorageViolation.scan_observed`, `DiskLow.violations`; live `StorageRule` thresholds"
     phases = (ControlPlanePhase,)
 
     @classmethod

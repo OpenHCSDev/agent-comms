@@ -345,11 +345,6 @@ class StorageViolation(UndatedStandingRule, declared_name=None):
         return __class__
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        units = {todo.held().owner_identity for todo in cls.todos(comms, commander)}
-        return cls.for_units(comms, units)
-
-    @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState]) -> tuple[Self, ...]:
         held = StandingRule.holders(comms, commander)
