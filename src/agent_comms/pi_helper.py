@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
@@ -12,7 +12,7 @@ from typing import ClassVar
 from .child_process import BoundedRun, ChildResult
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, MalformedRecord
-from .launch_runtime import LaunchRuntime, RestartEnvironment
+from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestartEnvironment
 
 
 class PiHelperError(ValueError):
@@ -95,8 +95,8 @@ class PiHelper(DeclaredFamily, affix="Helper"):
         return (*command, "--input-type=module", "--eval", cls.script.read_text()), environment
 
     @classmethod
-    async def run(cls, request, *, cwd: Path, env: dict[str, str] | None = None):
-        command, environment = cls.launch(request, dict(os.environ if env is None else env))
+    async def run(cls, request, *, cwd: Path, env: Mapping[str, str] = INHERITED_ENVIRONMENT):
+        command, environment = cls.launch(request, dict(env))
         payload = json.dumps(FieldCodec.encode(request), separators=(",", ":"), allow_nan=False)
         outcome = await BoundedRun.run(
             command,
