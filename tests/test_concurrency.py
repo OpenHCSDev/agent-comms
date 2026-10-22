@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import multiprocessing
 from collections.abc import Callable, Sequence
+from contextlib import ExitStack
 from multiprocessing.context import BaseContext
 from multiprocessing.synchronize import Event
 from pathlib import Path
@@ -14,6 +15,7 @@ import agent_comms.store_files as store_files
 from agent_comms.activity import ActivityState
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
 from agent_comms.message_page import PageBounds
 from agent_comms.pi_counts import PiCount
 from agent_comms.thread_identity import RecordedThreadIncarnation
@@ -64,15 +66,16 @@ def _run_concurrently(
 ) -> None:
     start = ctx.Event()
     processes = [ctx.Process(target=target, args=(*args, start)) for args in arguments]
-    for process in processes:
-        process.start()
-    start.set()
-    for process in processes:
-        process.join(timeout=30)
-        if process.is_alive():
-            process.terminate()
-            process.join()
-        assert process.exitcode == 0
+    with ExitStack() as running:
+        for process in processes:
+            process.start()
+            running.callback(process.close)
+            running.callback(process.join, 5)
+            running.callback(process.kill)
+        start.set()
+        for process in processes:
+            process.join(timeout=30)
+            assert process.exitcode == 0
 
 
 class TestConcurrentWire:
@@ -128,9 +131,8 @@ class TestConcurrentWire:
         assert set(comms.agents.runtime_info.read().observations) == set(names)
         snapshot = comms.registry.snapshot()
         assert set(comms.agents.all_activity(snapshot.threads.values(), snapshot=snapshot)) == set(names)
-        assert {name: comms.ledger.read().entries[name] for name in names} == {
-            name: "ready" for name in names
-        }
+        ledger = FieldCodec.encode(comms.ledger.read())
+        assert {name: ledger[name] for name in names} == {name: "ready" for name in names}
 
     def test_concurrent_claims_allocate_unique_names(self, tmp_path: Path) -> None:
         root = tmp_path / "wire"
