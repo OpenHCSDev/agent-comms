@@ -4,6 +4,7 @@ import pytest
 
 from agent_comms.phase_evidence import (
     AllEvidence,
+    ClassFlagsAbsent,
     CommitMerged,
     FunctionLinesAtMost,
     MainTree,
@@ -124,3 +125,14 @@ def test_ruleset_gates_only_without_an_always_bypass():
     assert not RulesetGates("smoke").gates(ruleset)
     ruleset["bypass_actors"][0]["bypass_mode"] = "always"
     assert not RulesetGates("review-verdict").gates(ruleset)
+
+
+def test_lifecycle_flags_count_class_bodies_not_locals(tmp_path):
+    local = "def stage():\n    complete = False\n    complete = True\n"
+    reading = main_of(tmp_path, {"src/local.py": local})
+    assert reading.holds(ClassFlagsAbsent(("complete", "active")))
+
+    flagged = main_of(tmp_path, {"src/flag.py": "class Status:\n    active: ClassVar[bool] = False\n"
+                                                 "class Scope:\n    complete: bool = True\n"})
+    assert not flagged.holds(ClassFlagsAbsent(("complete", "active")))
+    assert flagged.holds(ClassFlagsAbsent(("complete",)))

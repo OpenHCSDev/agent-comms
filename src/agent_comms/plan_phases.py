@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, ClassVar
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.phase_evidence import (
     AllEvidence,
+    ClassFlagsAbsent,
     CommitMerged,
     FunctionLinesAtMost,
     NoExactCopies,
@@ -330,11 +331,11 @@ FLAG = r"(: ClassVar\[bool\])? = (True|False)$"
 
 
 class LifecycleFlagsPhase(MultipleInheritancePhase):
-    """1A."""
+    """1A: flags declared on classes; a function's local named ``complete`` is not one."""
 
-    evidence = PatternAbsent(
-        r"^\s+(terminal|failed|successful|pending|active|executing"
-        r"|unresolved|deferred|complete|completed)" + FLAG
+    evidence = ClassFlagsAbsent(
+        ("terminal", "failed", "successful", "pending", "active", "executing",
+         "unresolved", "deferred", "complete", "completed")
     )
 
 

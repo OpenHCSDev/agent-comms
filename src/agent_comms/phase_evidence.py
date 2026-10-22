@@ -267,6 +267,41 @@ CLASS_HEADER = r"^\s*class [A-Za-z_][A-Za-z0-9_]*"
 
 
 @dataclass(frozen=True)
+class ClassFlagsAbsent(PhaseEvidence):
+    """No class body in ``src`` declares one of ``names`` as a bool flag, bare or ``ClassVar``.
+    A function's local or a dataclass field default of the same name is not a declared flag;
+    the grep only picks the files the AST then reads."""
+
+    names: tuple[str, ...]
+
+    def holds(self, reading: PlanReading) -> bool:
+        spelled = "|".join(self.names)
+        candidates = reading.main.git(
+            "grep", "-l", "-E", "-e", rf"^\s+({spelled})(: ClassVar\[bool\])? = (True|False)$",
+            reading.main.commit, "--", "src",
+        ).stdout.splitlines()
+        return not any(
+            self.flag(statement)
+            for candidate in candidates
+            for node in ast.walk(reading.main.module(candidate.split(":", 1)[1]))
+            if isinstance(node, ast.ClassDef)
+            for statement in node.body
+        )
+
+    def flag(self, statement: ast.stmt) -> bool:
+        match statement:
+            case ast.Assign(targets=[ast.Name(id=name)], value=ast.Constant(value=bool())):
+                return name in self.names
+            case ast.AnnAssign(target=ast.Name(id=name), annotation=ast.Subscript(value=ast.Name("ClassVar")),
+                               value=ast.Constant(value=bool())):
+                return name in self.names
+        return False
+
+    def describe(self) -> str:
+        return f"no class body flag {'|'.join(self.names)} on main"
+
+
+@dataclass(frozen=True)
 class OwnClassChecksAbsent(PhaseEvidence):
     """No ``isinstance`` in ``src`` names a class that ``src`` declares; checks against AST,
     typing and SDK types stay."""
