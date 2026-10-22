@@ -165,10 +165,7 @@ class Binding(BridgeStateTable, TypedTable, BindingRequest):
         state.mkdir(parents=True, exist_ok=True, mode=0o700)
         with closing(CoordinationStore.writer(state / BridgeStateTable.filename)) as db:
             db.execute('PRAGMA synchronous=FULL')
-            with SQLiteFile.write_transaction(db):
-                if not BridgeStateTable.stored_schema(db):
-                    BridgeStateTable.create_schema(db)
-            BridgeStateTable.reconcile_schema(db)
+            BridgeStateTable.install_schema(db)
             yield db
 
     def bind(self, db: CoordinationStore) -> Binding:

@@ -99,15 +99,6 @@ class TestHome(RuntimeHome):
         return Path(executable)
 
 
-def declared_files(root: Path) -> dict[Path, type[RootFile]]:
-    """Every existing file a declared owner names, with that owner, never a probe of listed
-    files: an undeclared file (a native writer's transient claim, a lock) has no owner, so
-    no rehearsal reads it and the copy never meets it."""
-    RootFile.load_declarations()
-    return {path: owner for owner, directory in RootFile.declarations_in(root)
-            for path in owner.matching_in(directory)}
-
-
 def _copy_database(source: Path, copy: Path) -> None:
     """Copy one database's committed state through SQLite's backup; its companions never."""
     copy.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -140,7 +131,7 @@ def practice_copy(root: Path, into: Path) -> Iterator[tuple[Path, PracticeMeasur
     witnesses = set(MaintenanceBarrier(RegistryFile.path_in(root)).witness_paths)
     log = WireLog(WireLog.path_in(root))
     registry = RegistryStore.at(root)
-    files = declared_files(root)
+    files = RootFile.existing_in(root)
     into.mkdir(mode=0o700)
 
     def copy(path: Path) -> None:
