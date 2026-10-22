@@ -24,6 +24,28 @@ if TYPE_CHECKING:
     from .coordination_snapshot import RecoverySnapshot
 
 
+class OrdinalRule:
+    increment: int = 0
+    predecessors: type = LifecycleState
+
+    def next_ordinal(self, previous: ExecutionState) -> int:
+        return (previous.current_attempt_ordinal or 0) + self.increment
+
+    def accepts(self, following: ExecutionState, previous: ExecutionState) -> bool:
+        return (isinstance(previous, self.predecessors)
+                and following.current_attempt_ordinal == (self.next_ordinal(previous) or None))
+
+
+class PreservedOrdinal(OrdinalRule):
+    """Keep the previous attempt, including its absence before the first start."""
+
+
+@dataclass(frozen=True)
+class AdvancedOrdinal(OrdinalRule):
+    predecessors: type
+    increment: int = 1
+
+
 @dataclass(frozen=True)
 class ExecutionState(DeclaredFamily, LifecycleState, affix="Execution"):
     starts_attempt: ClassVar[bool] = False
@@ -37,7 +59,7 @@ class ExecutionState(DeclaredFamily, LifecycleState, affix="Execution"):
 
     @property
     def next_attempt_ordinal(self) -> int:
-        return (self.current_attempt_ordinal or 0) + 1
+        return ActiveExecution.ordinal_rule.next_ordinal(self)
 
     def require_attempt_start(self) -> None:
         raise IdentityConflict("execution cannot start an attempt")
@@ -71,8 +93,10 @@ class ExecutionState(DeclaredFamily, LifecycleState, affix="Execution"):
     def accepts_attempt(self, phase) -> bool:
         return False
 
+    ordinal_rule: ClassVar[OrdinalRule] = PreservedOrdinal()
+
     def accepts_previous(self, previous: ExecutionState) -> bool:
-        return self.current_attempt_ordinal == previous.current_attempt_ordinal
+        return self.ordinal_rule.accepts(self, previous)
 
     def validate_snapshot(self, snapshot, authorized: bool) -> None:
         """State-specific cross-lifecycle rules, after common identities agree."""
@@ -140,6 +164,7 @@ class AttemptExecution(AttemptReference, ExecutionState):
 
 
 class ActiveExecution(Active, EngagedExecution, AttemptExecution):
+    ordinal_rule = AdvancedOrdinal(StartsAttempt)
 
     def require_final_response(self) -> None:
         pass
@@ -150,11 +175,6 @@ class ActiveExecution(Active, EngagedExecution, AttemptExecution):
 
     def accepts_attempt(self, phase):
         return phase.accepts_active_execution()
-
-    def accepts_previous(self, previous):
-        return (
-            previous.starts_attempt and self.ordinal == (previous.current_attempt_ordinal or 0) + 1
-        )
 
     def validate_snapshot(self, snapshot, authorized):
         if not snapshot.is_current:

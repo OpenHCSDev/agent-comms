@@ -1,4 +1,5 @@
 """Unit cards from real records, with unread failures isolated to their unit."""
+
 import json
 import time
 from dataclasses import replace
@@ -35,20 +36,61 @@ pytest_plugins = ("test_holder_standing_rules",)
 
 def recorded_turn(comms, calls):
     stamp = datetime.fromtimestamp(time.time(), UTC).isoformat()
-    rows = [dict(type="session", id="state-source", version=3, timestamp=stamp,
-                 cwd=str(comms.root)),
-            dict(type="message", id="input", timestamp=stamp,
-                 message=dict(role="user", content="Repair the existing owner"))]
+    rows = [
+        dict(type="session", id="state-source", version=3, timestamp=stamp, cwd=str(comms.root)),
+        dict(
+            type="message",
+            id="input",
+            timestamp=stamp,
+            message=dict(role="user", content="Repair the existing owner"),
+        ),
+    ]
     for index in range(calls):
-        rows.append(dict(type="message", id=f"call-{index}", timestamp=stamp,
-            message=dict(role="assistant", content=[dict(type="toolCall", id=f"read-{index}",
-                name="read", arguments=dict(path="owner.py"))], stopReason="toolUse")))
-        rows.append(dict(type="message", id=f"result-{index}", timestamp=stamp,
-            message=dict(role="toolResult", toolCallId=f"read-{index}", toolName="read",
-                isError=False, content=[dict(type="text", text="contents")])))
-    rows.append(dict(type="message", id="answer", timestamp=stamp,
-        message=dict(role="assistant", content=[dict(type="text", text="Continue the repair")],
-                     stopReason="stop")))
+        rows.append(
+            dict(
+                type="message",
+                id=f"call-{index}",
+                timestamp=stamp,
+                message=dict(
+                    role="assistant",
+                    content=[
+                        dict(
+                            type="toolCall",
+                            id=f"read-{index}",
+                            name="read",
+                            arguments=dict(path="owner.py"),
+                        )
+                    ],
+                    stopReason="toolUse",
+                ),
+            )
+        )
+        rows.append(
+            dict(
+                type="message",
+                id=f"result-{index}",
+                timestamp=stamp,
+                message=dict(
+                    role="toolResult",
+                    toolCallId=f"read-{index}",
+                    toolName="read",
+                    isError=False,
+                    content=[dict(type="text", text="contents")],
+                ),
+            )
+        )
+    rows.append(
+        dict(
+            type="message",
+            id="answer",
+            timestamp=stamp,
+            message=dict(
+                role="assistant",
+                content=[dict(type="text", text="Continue the repair")],
+                stopReason="stop",
+            ),
+        )
+    )
     path = comms.root / "state-source.jsonl"
     path.write_text("".join(json.dumps(row) + "\n" for row in rows))
     path.chmod(0o600)
@@ -80,32 +122,53 @@ def test_unit_state_family_uses_real_records(held_bus, tmp_path, member):
             publish(comms, unit, "lead", time.time() - AwaitingCommander.seconds - 1)
         elif member is Stuck:
             with comms.goals.todos.writing() as db:
-                for todo in comms.goals.todos.held_for_commander(comms.registry.require("lead").incarnation):
-                    replace(todo, order=replace(todo.order.checked(),
-                        first_call_deadline=RecordedEventTime(time.time() - 1))).upsert(db)
+                for todo in comms.goals.todos.held_for_commander(
+                    comms.registry.require("lead").incarnation
+                ):
+                    replace(
+                        todo,
+                        order=replace(
+                            todo.order.checked(),
+                            first_call_deadline=RecordedEventTime(time.time() - 1),
+                        ),
+                    ).upsert(db)
         elif member is Spinning:
             recorded_turn(comms, 2)
         elif member is StalledOnNothing:
             recorded_turn(comms, 1)
         elif member is DeliveredUnclosed:
-            for todo in comms.goals.todos.held_for_commander(comms.registry.require("lead").incarnation):
-                comms.goals.todos.apply(todo.id, DeliverTodo(todo.revision,
-                    comms.registry.require("lead").incarnation,
-                    OperationDelivery(at=RecordedEventTime(time.time())), todo.order.id))
+            for todo in comms.goals.todos.held_for_commander(
+                comms.registry.require("lead").incarnation
+            ):
+                comms.goals.todos.apply(
+                    todo.id,
+                    DeliverTodo(
+                        todo.revision,
+                        comms.registry.require("lead").incarnation,
+                        OperationDelivery(at=RecordedEventTime(time.time())),
+                        todo.order.id,
+                    ),
+                )
         elif member is Moving:
             pass  # Assigned work, before its first-call deadline.
         else:
             pytest.fail(f"New UnitState needs its real-record scenario: {member}")
         states = UnitState.current(comms, "lead", PullRequests())
-        state, = (state for state in states if state.unit.name == unit)
+        (state,) = (state for state in states if state.unit.name == unit)
         assert isinstance(state, member)
         assert state.unit == comms.registry.require(unit).incarnation
         assert state.default_action and state.unit.name in state.line()
-        assert not any(isinstance(state, sibling) for sibling in UnitState.worst_first()
-                       if sibling is not member)
+        assert not any(
+            isinstance(state, sibling)
+            for sibling in UnitState.worst_first()
+            if sibling is not member
+        )
         assert states == tuple(
-            state for expected in UnitState.worst_first()
-            for state in states if isinstance(state, expected))
+            state
+            for expected in UnitState.worst_first()
+            for state in states
+            if isinstance(state, expected)
+        )
         print(state.line())
 
 
@@ -113,8 +176,8 @@ def test_claim_is_a_commander_question_not_a_verified_delivery(held_bus, claim_o
     comms = held_bus
     claim = claim_order("P1")
     with LaunchRoot.from_path(comms.root).selected():
-        state, = state_cards(comms, AwaitingCommander)
-        question, = state.owed
+        (state,) = state_cards(comms, AwaitingCommander)
+        (question,) = state.owed
         assert question.message_id == claim.message.message_id
         assert question.seq > claim.message.answers[0].seq
         assert state_cards(comms, DeliveredUnclosed) == ()
@@ -124,8 +187,11 @@ def test_stopped_child_without_lead_orders_remains_in_the_frame(held_bus):
     child = replace(held_bus.registry.require("outsider"), parent=ForkedParent("lead"))
     held_bus.registry.register(child, StoppedThreadStatus())
     with LaunchRoot.from_path(held_bus.root).selected():
-        state, = (state for state in UnitState.current(held_bus, "lead", PullRequests())
-                  if state.unit == child.incarnation)
+        (state,) = (
+            state
+            for state in UnitState.current(held_bus, "lead", PullRequests())
+            if state.unit == child.incarnation
+        )
         assert isinstance(state, Idle)
         assert state.presence == StoppedThreadStatus()
 
@@ -138,15 +204,19 @@ def test_malformed_native_source_is_unreadable_not_idle(held_bus):
     del header["timestamp"]
     path.write_text("\n".join((json.dumps(header), *rows[1:])) + "\n")
     with LaunchRoot.from_path(held_bus.root).selected():
-        state, = state_cards(held_bus, Unreadable)
+        (state,) = state_cards(held_bus, Unreadable)
         assert state.unit.name == "worker"
         assert "timestamp" in state.reason
 
 
-@pytest.mark.parametrize("primary,broken_metadata", ((False, True), (True, True), (False, False)),
-                         ids=("home", "order", "nongit-home"))
+@pytest.mark.parametrize(
+    "primary,broken_metadata",
+    ((False, True), (True, True), (False, False)),
+    ids=("home", "order", "nongit-home"),
+)
 def test_heartbeat_keeps_every_unit_when_one_checkout_is_unreadable(
-        held_bus, tmp_path, primary, broken_metadata, installed_runtime):
+    held_bus, tmp_path, primary, broken_metadata, installed_runtime
+):
     import os
 
     from agent_comms.child_process import ProcessIdentity
@@ -168,9 +238,15 @@ def test_heartbeat_keeps_every_unit_when_one_checkout_is_unreadable(
         assert isinstance(cards[0], Unreadable)
         assert {card.unit.name for card in cards} >= {"worker", "outsider"}
         heartbeat.pass_body(held_bus, observed)
-        page = held_bus.bus.log.read_page(MessagePageRequest(DMDisplayScope.capture(
-            heartbeat.sender, "lead", held_bus.registry.snapshot(),
-        )))
+        page = held_bus.bus.log.read_page(
+            MessagePageRequest(
+                DMDisplayScope.capture(
+                    heartbeat.sender,
+                    "lead",
+                    held_bus.registry.snapshot(),
+                )
+            )
+        )
         message = next(row for row in page.messages if row.sender == heartbeat.sender)
         assert all(card.line() in message.body for card in cards)
         assert message.body.index(cards[0].line()) < message.body.index(cards[-1].line())

@@ -393,3 +393,48 @@ def test_a_registry_write_is_refused_to_all_but_the_maintenance_holder(tmp_path:
     comms.registry.declare(comms.registry.new_thread(name='b', tags=frozenset(), worktree='/wt'))
     assert 'b' in comms.registry
     gate.clear(hold)
+
+
+def test_a_carried_store_write_is_refused_to_all_but_the_maintenance_holder(tmp_path: Path, monkeypatch) -> None:
+    """Every file an installation carries gates its writers through its kind, CarriedWriter:
+    a bridge's transcript or a fork's todo write during a hold is refused instead of
+    changing a file the install's carry check compares, and the holder still writes."""
+    from agent_comms.external_transcript import ExternalTranscript
+    from agent_comms.maintenance_barrier import HOLDER_NONCE
+    from agent_comms.typed_table import CarriedWriter, DurableStore, DerivedStore, RuntimeWriter
+
+    assert issubclass(DurableStore, CarriedWriter) and issubclass(ExternalTranscript, CarriedWriter)
+    assert issubclass(DerivedStore, RuntimeWriter)
+    comms = Comms(tmp_path)
+    todos = comms.goals.todos
+    todos.allocate_problem()
+    before = todos.path.read_bytes()
+    gate = MaintenanceBarrier(comms.registry.store.path)
+    hold = gate.begin(MaintenanceOperator.current())
+    monkeypatch.delenv(HOLDER_NONCE, raising=False)
+    with pytest.raises(RelationViolationError):
+        todos.allocate_problem()
+    assert todos.path.read_bytes() == before
+    monkeypatch.setenv(HOLDER_NONCE, hold.nonce)
+    todos.allocate_problem()
+    gate.clear(hold)
+
+
+def test_every_carried_json_document_writes_through_the_maintenance_gate() -> None:
+    """A durable JSON document gets the gate from its kind, as the registry does, and the
+    runtime projection that running owners rewrite during maintenance does not."""
+    from agent_comms.bus_projection import AppendProjectionStore
+    from agent_comms.catalog_store import ChannelCatalog
+    from agent_comms.connector_store import ConnectorStore
+    from agent_comms.maintenance_barrier import CarriedDocument
+    from agent_comms.read_ledger import ReadLedger
+    from agent_comms.registry_store import RegistryStore
+    from agent_comms.relationships import RelationshipStore
+    from agent_comms.runtime_children import RuntimeChildrenStore
+    from agent_comms.runtime_info import RuntimeInfoStore
+    from agent_comms.shared_ledger import SharedLedger
+
+    for store in (ChannelCatalog, ConnectorStore, ReadLedger, RegistryStore, RelationshipStore,
+                  RuntimeChildrenStore, RuntimeInfoStore, SharedLedger):
+        assert issubclass(store, CarriedDocument), store
+    assert not issubclass(AppendProjectionStore, CarriedDocument)

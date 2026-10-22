@@ -167,10 +167,13 @@ class UnitState(UndatedStandingRule, declared_name=None):
             comms, commander, StandingRule.todos(comms, commander), now
         )
         # Claim originals come from one read here, so no unit's questions read can fail alone.
-        claims = OrderClaim.originals(comms, {
-            owner: tuple(claim for todo in todos for claim in todo.order.commander_claims())
-            for owner, todos in held.items()
-        })
+        claims = OrderClaim.originals(
+            comms,
+            {
+                owner: tuple(claim for todo in todos for claim in todo.order.commander_claims())
+                for owner, todos in held.items()
+            },
+        )
         readings = tuple(
             UnitObservation(
                 comms,

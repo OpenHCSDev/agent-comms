@@ -398,7 +398,7 @@ def test_install_waits_for_merges_to_settle_into_one_batch(
     Repo.git(checkout, "push", "origin", f"{graph.newer}:refs/heads/main")
     bus = Comms(tmp_path / "bus")
     config = CommanderConfig.on_machine("lead", (graph.repository,), bus.root, tmp_path / "home")
-    CommanderConfig.root_path(bus.root).write_text(config.model_dump_json())
+    CommanderConfig.path_in(bus.root).write_text(config.model_dump_json())
     merged = int(Repo.git(checkout, "log", "-1", "--format=%ct", graph.newer))
 
     monkeypatch.setattr(time, "time", lambda: merged + InstallDue.settle - 1)

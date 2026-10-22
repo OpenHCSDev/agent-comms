@@ -58,7 +58,7 @@ def fork_bus(tmp_path):
         text='Repair the commander workflow', goal_id='request', order=RequestGoalOrder()))
     core = Repo.of(Path(__file__).parents[1])
     config = Commander.on_machine('lead', (source, core), comms.root, tmp_path)
-    config.root_path(comms.root).write_text(config.model_dump_json())
+    config.path_in(comms.root).write_text(config.model_dump_json())
     now = time.time()
     order = PendingProblemOrder(
         id='first-order', owner=source.scope().shape.parents[0], scope=source.scope(),
@@ -144,7 +144,7 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     assert set(ctx.model_copy(deep=True).progress()) == {'P40'}
     assert ctx.held_orders() == (saved,)
     assert ctx.call(CommsTodoListTool(thread=ctx.commander)).todos == (saved,)
-    assert "working forks" in command(comms, 'capacity').stdout
+    assert "unjudged edits" in command(comms, 'capacity').stdout
     refused = command(comms, 'order', 'send', 'worker', body, '--fork', 'fork-two')
     assert refused.returncode != 0 and 'worker is assigned by fork-one' in refused.stderr
     assert store.get('P40') == saved

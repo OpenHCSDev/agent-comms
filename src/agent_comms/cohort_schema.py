@@ -10,18 +10,25 @@ from typing import Annotated, Literal
 from agent_comms.coordination_errors import SchemaVersionError
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_tables.assignments import WakeAssignment
-from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
+from agent_comms.coordination_tables.participants import OwnerGenerations, OwnerRecord, Participants
 from agent_comms.coordinator import Coordination
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
-from .field_codec import MalformedRecord
+from .field_codec import MalformedRecord, WireName
 from .typed_table import (
     Column,
+    ColumnGuard,
     DurableTables,
     ForeignKey,
+    FrozenColumn,
+    GuardedColumns,
+    GuardedInserts,
+    GuardedRelatedInserts,
+    ImmutableRows,
     Index,
+    InitialOneWayColumn,
+    NoDelete,
     SharedFileTables,
-    SQLiteForeignKeys,
     SQLiteJournalMode,
     TypedTable,
 )
@@ -48,10 +55,46 @@ class AwarenessTable(SharedFileTables, DurableTables):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ClaimBatchAcknowledgements(CohortTable, TypedTable, declared_name="claim_batch_receipts"):
+class ClaimBatchAcknowledgements(
+    InitialOneWayColumn,
+    GuardedColumns,
+    NoDelete,
+    CohortTable,
+    TypedTable,
+    declared_name="claim_batch_receipts",
+):
+    transition_column = "sealed"
+    transition_from = 0
+    transition_to = 1
+    column_guards = (
+        ColumnGuard(('sealed',), """(((SELECT COUNT(*) FROM cohort_delivery_receipts d
+        WHERE d.wire_root_id = OLD.wire_root_id AND d.wire_seq = OLD.wire_seq)
+        != OLD.member_count OR (SELECT COUNT(*) FROM cohort_delivery_receipts d
+        WHERE d.wire_root_id = OLD.wire_root_id AND d.wire_seq = OLD.wire_seq
+        AND d.kind = 'selected') != OLD.claim_count)
+        OR ((SELECT COUNT(*) FROM claim_batch_members m
+        WHERE m.wire_root_id = OLD.wire_root_id AND m.wire_seq = OLD.wire_seq)
+        != OLD.claim_count) OR (EXISTS (SELECT 1 FROM cohort_delivery_receipts d
+        WHERE d.wire_root_id = OLD.wire_root_id AND d.wire_seq = OLD.wire_seq
+        AND d.ordinal >= OLD.member_count) OR EXISTS (SELECT 1 FROM claim_batch_members m
+        WHERE m.wire_root_id = OLD.wire_root_id AND m.wire_seq = OLD.wire_seq
+        AND m.ordinal >= OLD.claim_count)) OR (EXISTS (SELECT 1 FROM claim_batch_members m
+        LEFT JOIN cohort_delivery_receipts d ON d.wire_root_id = m.wire_root_id
+        AND d.wire_seq = m.wire_seq AND d.claim_id = m.claim_id
+        WHERE m.wire_root_id = OLD.wire_root_id AND m.wire_seq = OLD.wire_seq
+        AND (d.claim_id IS NULL OR m.ordinal != (
+        SELECT COUNT(*) FROM cohort_delivery_receipts preceding
+        WHERE preceding.wire_root_id = OLD.wire_root_id AND preceding.wire_seq = OLD.wire_seq
+        AND preceding.kind = 'selected' AND preceding.ordinal < d.ordinal))))
+        OR (EXISTS (SELECT 1 FROM cohort_delivery_receipts d
+        JOIN wake_claims c ON c.recipient_lookup = d.recipient_lookup AND c.wire_seq = d.wire_seq
+        WHERE d.wire_root_id = OLD.wire_root_id AND d.wire_seq = OLD.wire_seq
+        AND d.kind = 'unmentioned_observer')))"""),
+    )
+
     wire_root_id: Annotated[
         str,
-        Column(
+        FrozenColumn(
             primary_key=True,
             check=(
                 "\n"
@@ -60,20 +103,20 @@ class ClaimBatchAcknowledgements(CohortTable, TypedTable, declared_name="claim_b
             ),
         ),
     ]
-    wire_seq: Annotated[int, Column(primary_key=True, check="wire_seq > 0")]
-    message_id: Annotated[str, Column(check="length(message_id) BETWEEN 1 AND 256")]
-    exact_target: Annotated[str, Column(check="length(exact_target) BETWEEN 1 AND 256")]
-    envelope_digest: Annotated[str, Column(check="length(envelope_digest) = 64")]
-    audience_digest: Annotated[str, Column(check="length(audience_digest) = 64")]
-    decisions_digest: Annotated[str, Column(check="length(decisions_digest) = 64")]
-    member_count: Annotated[int, Column(check="member_count BETWEEN 0 AND 4096")]
-    claim_count: Annotated[int, Column(check="claim_count BETWEEN 0 AND member_count")]
-    manifest_codec: Annotated[str, Column(check="length(manifest_codec) BETWEEN 1 AND 256")]
+    wire_seq: Annotated[int, FrozenColumn(primary_key=True, check="wire_seq > 0")]
+    message_id: Annotated[str, FrozenColumn(check="length(message_id) BETWEEN 1 AND 256")]
+    exact_target: Annotated[str, FrozenColumn(check="length(exact_target) BETWEEN 1 AND 256")]
+    envelope_digest: Annotated[str, FrozenColumn(check="length(envelope_digest) = 64")]
+    audience_digest: Annotated[str, FrozenColumn(check="length(audience_digest) = 64")]
+    decisions_digest: Annotated[str, FrozenColumn(check="length(decisions_digest) = 64")]
+    member_count: Annotated[int, FrozenColumn(check="member_count BETWEEN 0 AND 4096")]
+    claim_count: Annotated[int, FrozenColumn(check="claim_count BETWEEN 0 AND member_count")]
+    manifest_codec: Annotated[str, FrozenColumn(check="length(manifest_codec) BETWEEN 1 AND 256")]
     resolver_version: Annotated[
-        str, Column(check="length(resolver_version) BETWEEN 1 AND 256")
+        str, FrozenColumn(check="length(resolver_version) BETWEEN 1 AND 256")
     ]
-    policy_version: Annotated[str, Column(check="length(policy_version) BETWEEN 1 AND 256")]
-    accepted_at_ms: Annotated[int, Column(check="accepted_at_ms >= 0")]
+    policy_version: Annotated[str, FrozenColumn(check="length(policy_version) BETWEEN 1 AND 256")]
+    accepted_at_ms: Annotated[int, FrozenColumn(check="accepted_at_ms >= 0")]
     sealed: bool = False
     without_rowid = True
 
@@ -84,116 +127,18 @@ class ClaimBatchAcknowledgements(CohortTable, TypedTable, declared_name="claim_b
         if not self.sealed or self.message_id != assignment.message_id:
             raise ProjectionUnavailableError("selected source acknowledgement is unsealed or changed")
 
-    @classmethod
-    def trigger_bodies(cls):
-        return {
-            "cohort_receipt_insert_guard": (
-                "\n"
-                "        BEFORE INSERT ON claim_batch_receipts\n"
-                "        WHEN NEW.sealed != 0\n"
-                "        BEGIN SELECT RAISE(ABORT, 'cohort must be sealed after i"
-                "ts member rows'); END"
-            ),
-            "cohort_receipt_update_guard": (
-                "\n"
-                "        BEFORE UPDATE ON claim_batch_receipts\n"
-                "        WHEN OLD.sealed != 0 OR NEW.sealed != 1\n"
-                "          OR NEW.wire_root_id != OLD.wire_root_id OR NEW.wire_se"
-                "q != OLD.wire_seq\n"
-                "          OR NEW.message_id != OLD.message_id OR NEW.exact_targe"
-                "t != OLD.exact_target\n"
-                "          OR NEW.envelope_digest != OLD.envelope_digest\n"
-                "          OR NEW.audience_digest != OLD.audience_digest\n"
-                "          OR NEW.decisions_digest != OLD.decisions_digest\n"
-                "          OR NEW.member_count != OLD.member_count OR NEW.claim_c"
-                "ount != OLD.claim_count\n"
-                "          OR NEW.manifest_codec != OLD.manifest_codec\n"
-                "          OR NEW.resolver_version != OLD.resolver_version\n"
-                "          OR NEW.policy_version != OLD.policy_version\n"
-                "          OR NEW.accepted_at_ms != OLD.accepted_at_ms\n"
-                "        BEGIN SELECT RAISE(ABORT, 'cohort receipt facts are immu"
-                "table'); END"
-            ),
-            "cohort_receipt_seal_complete": (
-                "\n"
-                "        BEFORE UPDATE OF sealed ON claim_batch_receipts\n"
-                "        WHEN OLD.sealed = 0 AND NEW.sealed = 1\n"
-                "        BEGIN\n"
-                "            SELECT RAISE(ABORT, 'incomplete cohort delivery rece"
-                "ipts')\n"
-                "            WHERE (SELECT COUNT(*) FROM cohort_delivery_receipts"
-                " d\n"
-                "                   WHERE d.wire_root_id = OLD.wire_root_id AND d"
-                ".wire_seq = OLD.wire_seq)\n"
-                "                  != OLD.member_count\n"
-                "               OR (SELECT COUNT(*) FROM cohort_delivery_receipts"
-                " d\n"
-                "                   WHERE d.wire_root_id = OLD.wire_root_id AND d"
-                ".wire_seq = OLD.wire_seq\n"
-                "                     AND d.kind = 'selected') != OLD.claim_count"
-                ";\n"
-                "            SELECT RAISE(ABORT, 'incomplete cohort claim members"
-                "')\n"
-                "            WHERE (SELECT COUNT(*) FROM claim_batch_members m\n"
-                "                   WHERE m.wire_root_id = OLD.wire_root_id AND m"
-                ".wire_seq = OLD.wire_seq)\n"
-                "                  != OLD.claim_count;\n"
-                "            SELECT RAISE(ABORT, 'noncontiguous cohort receipt or"
-                "dinal')\n"
-                "            WHERE EXISTS (\n"
-                "                SELECT 1 FROM cohort_delivery_receipts d\n"
-                "                WHERE d.wire_root_id = OLD.wire_root_id AND d.wi"
-                "re_seq = OLD.wire_seq\n"
-                "                  AND d.ordinal >= OLD.member_count)\n"
-                "               OR EXISTS (\n"
-                "                SELECT 1 FROM claim_batch_members m\n"
-                "                WHERE m.wire_root_id = OLD.wire_root_id AND m.wi"
-                "re_seq = OLD.wire_seq\n"
-                "                  AND m.ordinal >= OLD.claim_count);\n"
-                "            SELECT RAISE(ABORT, 'cohort selected claim order doe"
-                "s not match delivery order')\n"
-                "            WHERE EXISTS (\n"
-                "                SELECT 1 FROM claim_batch_members m\n"
-                "                LEFT JOIN cohort_delivery_receipts d\n"
-                "                  ON d.wire_root_id = m.wire_root_id AND d.wire_"
-                "seq = m.wire_seq\n"
-                "                 AND d.claim_id = m.claim_id\n"
-                "                WHERE m.wire_root_id = OLD.wire_root_id AND m.wi"
-                "re_seq = OLD.wire_seq\n"
-                "                  AND (d.claim_id IS NULL OR m.ordinal != (\n"
-                "                    SELECT COUNT(*) FROM cohort_delivery_receipt"
-                "s preceding\n"
-                "                    WHERE preceding.wire_root_id = OLD.wire_root"
-                "_id\n"
-                "                      AND preceding.wire_seq = OLD.wire_seq\n"
-                "                      AND preceding.kind = 'selected' AND preced"
-                "ing.ordinal < d.ordinal\n"
-                "                  ))\n"
-                "            );\n"
-                "            SELECT RAISE(ABORT, 'unmentioned observer has an exi"
-                "sting wake claim')\n"
-                "            WHERE EXISTS (\n"
-                "                SELECT 1 FROM cohort_delivery_receipts d\n"
-                "                JOIN wake_claims c ON c.recipient_lookup = d.rec"
-                "ipient_lookup\n"
-                "                  AND c.wire_seq = d.wire_seq\n"
-                "                WHERE d.wire_root_id = OLD.wire_root_id AND d.wi"
-                "re_seq = OLD.wire_seq\n"
-                "                  AND d.kind = 'unmentioned_observer'\n"
-                "            );\n"
-                "        END"
-            ),
-            "cohort_receipt_delete_guard": (
-                "\n"
-                "        BEFORE DELETE ON claim_batch_receipts\n"
-                "        BEGIN SELECT RAISE(ABORT, 'cohort receipt cannot be dele"
-                "ted'); END"
-            ),
-        }
-
-
 @dataclass(frozen=True, kw_only=True)
-class ClaimBatchMembers(CohortTable, TypedTable):
+class ClaimBatchMembers(GuardedInserts, ImmutableRows, CohortTable, TypedTable):
+
+    insert_condition = """((SELECT sealed FROM claim_batch_receipts r
+        WHERE r.wire_root_id = NEW.wire_root_id AND r.wire_seq = NEW.wire_seq) != 0)
+        OR (NOT EXISTS (SELECT 1 FROM wake_claims c JOIN claim_batch_receipts r
+        ON r.wire_root_id = NEW.wire_root_id AND r.wire_seq = NEW.wire_seq
+        WHERE c.assignment_id = NEW.claim_id AND c.recipient_lookup = NEW.recipient_lookup
+        AND c.wire_seq = NEW.wire_seq AND c.message_id = r.message_id
+        AND c.resolver_version = r.resolver_version AND c.policy_version = r.policy_version
+        AND c.accepted_at_ms = r.accepted_at_ms))"""
+
     wire_root_id: Annotated[str, Column(primary_key=True)]
     wire_seq: Annotated[int, Column(primary_key=True)]
     ordinal: Annotated[int, Column(primary_key=True, check="ordinal >= 0")]
@@ -216,52 +161,28 @@ class ClaimBatchMembers(CohortTable, TypedTable):
             ),
         )
 
-    @classmethod
-    def trigger_bodies(cls):
-        return {
-            "cohort_members_insert_guard": (
-                " BEFORE INSERT ON clai"
-                "m_batch_members\n"
-                "        BEGIN\n"
-                "            SELECT RAISE(ABORT, 'sealed cohort rejects members')"
-                "\n"
-                "            WHERE (SELECT sealed FROM claim_batch_receipts r\n"
-                "                   WHERE r.wire_root_id = NEW.wire_root_id AND r"
-                ".wire_seq = NEW.wire_seq) != 0;\n"
-                "            SELECT RAISE(ABORT, 'claim member does not match coh"
-                "ort acceptance')\n"
-                "            WHERE NOT EXISTS (\n"
-                "                SELECT 1 FROM wake_claims c\n"
-                "                JOIN claim_batch_receipts r\n"
-                "                  ON r.wire_root_id = NEW.wire_root_id AND r.wir"
-                "e_seq = NEW.wire_seq\n"
-                "                WHERE c.assignment_id = NEW.claim_id\n"
-                "                  AND c.recipient_lookup = NEW.recipient_lookup\n"
-                "                  AND c.wire_seq = NEW.wire_seq\n"
-                "                  AND c.message_id = r.message_id\n"
-                "                  AND c.resolver_version = r.resolver_version\n"
-                "                  AND c.policy_version = r.policy_version\n"
-                "                  AND c.accepted_at_ms = r.accepted_at_ms);\n"
-                "        END"
-            ),
-            "cohort_members_update_guard": (
-                " BEFORE UPDATE ON clai"
-                "m_batch_members\n"
-                "        BEGIN SELECT RAISE(ABORT, 'cohort claim member is immuta"
-                "ble'); END"
-            ),
-            "cohort_members_delete_guard": (
-                " BEFORE DELETE ON clai"
-                "m_batch_members\n"
-                "        BEGIN SELECT RAISE(ABORT, 'cohort claim member cannot be"
-                " deleted'); END"
-            ),
-        }
-
-
 @dataclass(frozen=True, kw_only=True)
-class CohortDeliveryReceipts(CohortTable, TypedTable):
-    # Delivery selection kind is distinct from this table's nominal identity.
+class CohortDeliveries(
+    GuardedRelatedInserts,
+    GuardedInserts,
+    ImmutableRows,
+    CohortTable,
+    TypedTable,
+    declared_name="cohort_delivery_receipts",
+):
+    """Sealed deliveries, including observers that receive no execution claim."""
+
+    related_insert_target = WakeAssignment
+    related_insert_condition = """EXISTS (SELECT 1 FROM cohort_delivery_receipts d
+        JOIN claim_batch_receipts r ON r.wire_root_id=d.wire_root_id AND r.wire_seq=d.wire_seq
+        AND r.sealed=1 WHERE d.recipient_lookup=NEW.recipient_lookup AND d.wire_seq=NEW.wire_seq
+        AND d.kind='unmentioned_observer')"""
+    insert_condition = """((SELECT sealed FROM claim_batch_receipts r
+        WHERE r.wire_root_id = NEW.wire_root_id AND r.wire_seq = NEW.wire_seq) != 0)
+        OR (NEW.kind = 'selected' AND NOT EXISTS (SELECT 1 FROM claim_batch_members m
+        JOIN wake_claims c ON c.assignment_id = m.claim_id WHERE m.wire_root_id = NEW.wire_root_id
+        AND m.wire_seq = NEW.wire_seq AND m.claim_id = NEW.claim_id
+        AND m.recipient_lookup = NEW.recipient_lookup AND c.recipient = NEW.canonical_thread))"""
 
     wire_root_id: Annotated[str, Column(primary_key=True)]
     wire_seq: Annotated[int, Column(primary_key=True)]
@@ -319,67 +240,28 @@ class CohortDeliveryReceipts(CohortTable, TypedTable):
             ),
         )
 
-    @classmethod
-    def trigger_bodies(cls):
-        return {
-            "cohort_delivery_insert_guard": (
-                " BEFORE INSERT ON coh"
-                "ort_delivery_receipts\n"
-                "        BEGIN\n"
-                "            SELECT RAISE(ABORT, 'sealed cohort rejects delivery "
-                "receipts')\n"
-                "            WHERE (SELECT sealed FROM claim_batch_receipts r\n"
-                "                   WHERE r.wire_root_id = NEW.wire_root_id AND r"
-                ".wire_seq = NEW.wire_seq) != 0;\n"
-                "            SELECT RAISE(ABORT, 'selected delivery has no matchi"
-                "ng claim member')\n"
-                "            WHERE NEW.kind = 'selected' AND NOT EXISTS (\n"
-                "                SELECT 1 FROM claim_batch_members m\n"
-                "                JOIN wake_claims c ON c.assignment_id = m.claim_id\n"
-                "                WHERE m.wire_root_id = NEW.wire_root_id AND m.wi"
-                "re_seq = NEW.wire_seq\n"
-                "                  AND m.claim_id = NEW.claim_id\n"
-                "                  AND m.recipient_lookup = NEW.recipient_lookup\n"
-                "                  AND c.recipient = NEW.canonical_thread);\n"
-                "        END"
-            ),
-            "cohort_observer_claim_insert_guard": (
-                " BEFORE INSERT "
-                "ON wake_claims\n"
-                "        WHEN EXISTS (\n"
-                "            SELECT 1 FROM cohort_delivery_receipts d\n"
-                "            JOIN claim_batch_receipts r ON r.wire_root_id=d.wire"
-                "_root_id\n"
-                "              AND r.wire_seq=d.wire_seq AND r.sealed=1\n"
-                "            WHERE d.recipient_lookup=NEW.recipient_lookup AND d."
-                "wire_seq=NEW.wire_seq\n"
-                "              AND d.kind='unmentioned_observer')\n"
-                "        BEGIN SELECT RAISE(ABORT, 'no-wake observer cannot gain "
-                "an unbound wake claim'); END"
-            ),
-            "cohort_delivery_update_guard": (
-                " BEFORE UPDATE ON coh"
-                "ort_delivery_receipts\n"
-                "        BEGIN SELECT RAISE(ABORT, 'cohort delivery receipt is im"
-                "mutable'); END"
-            ),
-            "cohort_delivery_delete_guard": (
-                " BEFORE DELETE ON coh"
-                "ort_delivery_receipts\n"
-                "        BEGIN SELECT RAISE(ABORT, 'cohort delivery receipt canno"
-                "t be deleted'); END"
-            ),
-        }
-
-
 @dataclass(frozen=True, kw_only=True)
-class AwarenessClaimGenerations(AwarenessTable, TypedTable):
+class AwarenessClaimGenerations(
+    OwnerRecord, GuardedInserts, ImmutableRows, AwarenessTable, TypedTable
+):
+
+    insert_condition = """(NOT EXISTS (SELECT 1 FROM claim_batch_members m
+        JOIN wake_claims c ON c.assignment_id=m.claim_id JOIN claim_batch_receipts r
+        ON r.wire_root_id=m.wire_root_id AND r.wire_seq=m.wire_seq JOIN owner_generations g
+        ON g.owner_lookup=m.recipient_lookup WHERE m.claim_id=NEW.claim_id
+        AND m.wire_root_id=NEW.wire_root_id AND m.wire_seq=NEW.wire_seq
+        AND m.recipient_lookup=NEW.recipient_lookup AND c.recipient=NEW.canonical_thread
+        AND c.message_id=r.message_id AND r.sealed=0 AND g.owner_thread=NEW.canonical_thread
+        AND g.generation=NEW.owner_generation))"""
+
     claim_id: Annotated[str, Column(primary_key=True)]
     wire_root_id: str
     wire_seq: Annotated[int, Column(check="wire_seq > 0")]
-    recipient_lookup: str
-    canonical_thread: Annotated[
-        str, Column(check="length(canonical_thread) BETWEEN 1 AND 256")
+    owner_lookup: Annotated[str, WireName("recipient_lookup"), Column(record_key=True)]
+    owner_thread: Annotated[
+        str,
+        WireName("canonical_thread"),
+        Column(record_key=True, check="length(canonical_thread) BETWEEN 1 AND 256"),
     ]
     owner_generation: Annotated[int, Column(check="owner_generation > 0")]
 
@@ -389,17 +271,9 @@ class AwarenessClaimGenerations(AwarenessTable, TypedTable):
 
         if self.owner_generation < expected.generation:
             return False
-        if self.captured_owner != expected:
+        if self.owner_identity != expected:
             raise ProjectionUnavailableError("captured participant owner changed")
         return True
-
-    @property
-    def captured_owner(self) -> OwnerGenerations:
-        """The original acceptance's owner observation, not a current lease."""
-        return OwnerGenerations(
-            owner_lookup=self.recipient_lookup, owner_thread=self.canonical_thread,
-            generation=self.owner_generation,
-        )
 
     def require_selection(self, assignment: WakeAssignment, acknowledgement: ClaimBatchAcknowledgements) -> None:
         """Verify this immutable acceptance capture against its original claim."""
@@ -407,8 +281,8 @@ class AwarenessClaimGenerations(AwarenessTable, TypedTable):
 
         expected = type(self)(
             claim_id=assignment.assignment_id, wire_root_id=acknowledgement.wire_root_id,
-            wire_seq=assignment.wire_seq, recipient_lookup=assignment.recipient_lookup,
-            canonical_thread=assignment.recipient, owner_generation=self.owner_generation,
+            wire_seq=assignment.wire_seq, owner_lookup=assignment.recipient_lookup,
+            owner_thread=assignment.recipient, owner_generation=self.owner_generation,
         )
         if self != expected:
             raise ProjectionUnavailableError("selected source generation provenance changed")
@@ -428,7 +302,7 @@ class AwarenessClaimGenerations(AwarenessTable, TypedTable):
             execution_id=obligation.execution_id, assignment_id=self.claim_id,
             ordinal=link.ordinal,
         )
-        if self.captured_owner != original_owner or link != original_link:
+        if self.owner_identity != original_owner or link != original_link:
             raise ProjectionUnavailableError("open obligation has no exact owner provenance")
         if (self.claim_id, assignment.lifecycle.exact_target) != (
             assignment.assignment_id, obligation.exact_target
@@ -439,64 +313,13 @@ class AwarenessClaimGenerations(AwarenessTable, TypedTable):
     def references(cls):
         return (
             ForeignKey(("claim_id",), WakeAssignment, ("assignment_id",)),
-            ForeignKey(("recipient_lookup",), Participants, ("participant_lookup",)),
+            ForeignKey(("owner_lookup",), Participants, ("participant_lookup",)),
             ForeignKey(
                 ("wire_root_id", "wire_seq", "claim_id"),
                 ClaimBatchMembers,
                 ("wire_root_id", "wire_seq", "claim_id"),
             ),
         )
-
-    @classmethod
-    def trigger_bodies(cls):
-        return {
-            "awareness_generation_insert_guard": (
-                "\n"
-                "        BEFORE INSERT ON awareness_claim_generations BEGIN\n"
-                "            SELECT RAISE(ABORT, 'optional generation requires un"
-                "sealed exact claim/member')\n"
-                "            WHERE NOT EXISTS (\n"
-                "                SELECT 1 FROM claim_batch_members m JOIN wake_cl"
-                "aims c\n"
-                "                  ON c.assignment_id=m.claim_id JOIN claim_batch_rece"
-                "ipts r\n"
-                "                  ON r.wire_root_id=m.wire_root_id AND r.wire_se"
-                "q=m.wire_seq\n"
-                "                JOIN owner_generations g ON g.owner_lookup=m.rec"
-                "ipient_lookup\n"
-                "                WHERE m.claim_id=NEW.claim_id AND m.wire_root_id"
-                "=NEW.wire_root_id\n"
-                "                  AND m.wire_seq=NEW.wire_seq\n"
-                "                  AND m.recipient_lookup=NEW.recipient_lookup\n"
-                "                  AND c.recipient=NEW.canonical_thread\n"
-                "                  AND c.message_id=r.message_id AND r.sealed=0\n"
-                "                  AND g.owner_thread=NEW.canonical_thread\n"
-                "                  AND g.generation=NEW.owner_generation);\n"
-                "        END"
-            ),
-            "awareness_generation_update_guard": (
-                "\n"
-                "        BEFORE UPDATE ON awareness_claim_generations\n"
-                "        BEGIN SELECT RAISE(ABORT, 'optional generation is immuta"
-                "ble'); END"
-            ),
-            "awareness_generation_delete_guard": (
-                "\n"
-                "        BEFORE DELETE ON awareness_claim_generations\n"
-                "        BEGIN SELECT RAISE(ABORT, 'optional generation cannot be"
-                " deleted'); END"
-            ),
-        }
-
-
-def assert_cohort_schema(db: sqlite3.Connection) -> None:
-    if not CohortTable.stored_schema(db):
-        raise SchemaVersionError("private cohort schema is not installed")
-    if CohortTable.schema_differs(db) or SQLiteForeignKeys.read(
-        db.execute("PRAGMA foreign_keys")
-    ) != [SQLiteForeignKeys(True)]:
-        raise SchemaVersionError("private cohort schema is missing or drifted")
-
 
 def assert_optional_awareness_schema(db: sqlite3.Connection) -> None:
     if not AwarenessTable.stored_schema(db) or AwarenessTable.schema_differs(db):
@@ -515,7 +338,7 @@ def install_private_cohort_schema(store: Coordination) -> None:
         CoordinatorTable.require_schema(db)
         if not CohortTable.stored_schema(db):
             CohortTable.create_schema(db)
-        assert_cohort_schema(db)
+        CohortTable.require_installed(db)
         if SQLiteJournalMode.read(db.execute("PRAGMA journal_mode")) != [
             SQLiteJournalMode("delete")
         ]:

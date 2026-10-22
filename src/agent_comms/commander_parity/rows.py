@@ -292,7 +292,7 @@ class MeasuredLoadParityRow(ParityRow):
     capability = "Measured load and self-report"
     current = "`capacity.py` unit count"
     native = (
-        "`commander.capacity.Load.of` reports orders, review timers up, edits and forks; "
+        "`commander.capacity.Load.of` reports orders, review timers up and edits; "
         "self-report comparison unverified"
     )
     phases = (ControlPlanePhase,)

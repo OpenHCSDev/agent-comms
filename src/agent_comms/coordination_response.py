@@ -15,14 +15,13 @@ current owner fence, but never creates an absent row or manufactures owner loss.
 
 from __future__ import annotations
 
-import sqlite3
 import time
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from typing import Annotated, Type
 
-from agent_comms.cohort_schema import assert_cohort_schema
+from agent_comms.cohort_schema import CohortTable
 from agent_comms.coordination_errors import (
     IdentityConflict,
     PublicationActivationBlocked,
@@ -52,8 +51,8 @@ from agent_comms.typed_table import (
     Column,
     DurableTables,
     ForeignKey,
+    ImmutableRows,
     SharedFileTables,
-    SQLiteForeignKeys,
     SqlValue,
     TypedRow,
     TypedTable,
@@ -62,22 +61,14 @@ from agent_comms.typed_table import (
 from .locked_store import RegistryFile
 
 
-class ResponseTable(SharedFileTables, DurableTables, PrivateRuntimeSchema):
+class ResponseTable(ImmutableRows, SharedFileTables, DurableTables, PrivateRuntimeSchema):
     """An immutable response definition with its write checks and append evidence."""
+
+    schema_error = PublicationActivationBlocked
 
     @classmethod
     def install(cls, store) -> None:
         install_private_response_schema(store)
-
-    @classmethod
-    def trigger_bodies(cls) -> dict[str, str]:
-        return {
-            f"{cls.declared_name}_{operation.lower()}_guard": " "
-            f"BEFORE {operation} ON {cls.declared_name} "
-            "BEGIN SELECT RAISE(ABORT,'response evidence is frozen'); END"
-            for operation in ("UPDATE", "DELETE")
-        }
-
 
 @dataclass(frozen=True)
 class PublicationAppendDispatches(ResponseTable, TypedTable):
@@ -235,21 +226,12 @@ class SelectedResponseRoute(TypedRow):
             raise IdentityConflict("response sealed route differs from committed source")
 
 
-def _assert_response_schema(db: sqlite3.Connection) -> None:
-    if not ResponseTable.stored_schema(db):
-        raise PublicationActivationBlocked("private response schema is not installed")
-    if ResponseTable.schema_differs(db) or SQLiteForeignKeys.read(
-        db.execute("PRAGMA foreign_keys")
-    ) != [SQLiteForeignKeys(True)]:
-        raise PublicationActivationBlocked("private response schema has drifted")
-
-
 def install_private_response_schema(store: Coordination) -> None:
     """Install the current response tables on a fresh coordinator only."""
     with store.session.writing() as db:
         if not ResponseTable.stored_schema(db):
             ResponseTable.create_schema(db)
-        _assert_response_schema(db)
+        ResponseTable.require_installed(db)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -351,8 +333,8 @@ def _require_cohort_assignments(
     Caller already holds the bus file lock before the SQL transaction.
     """
     db = store.session._connection
-    _assert_response_schema(db)
-    assert_cohort_schema(db)
+    ResponseTable.require_installed(db)
+    CohortTable.require_installed(db)
     snapshot.require_wire_responses()
     metadata = bus.log.private_marker_unlocked()
     if metadata.root_id != wire_root_id:
@@ -555,7 +537,7 @@ def _settle_fenced_response(
             # a first attempt from a lost response/crash. If it commits but the
             # process dies before appending, no automatic retry is authorized.
             with store.session.writing() as db:
-                _assert_response_schema(db)
+                ResponseTable.require_installed(db)
                 terminal = _terminal_replay(store, fence, bus, wire_root_id, owner_witness, exact_target)
                 if terminal is not None:
                     return terminal
@@ -575,7 +557,7 @@ def _settle_fenced_response(
                 elif not prior.matches(wire_root_id, fence, exact_target):
                     raise IdentityConflict("response dispatch belongs to another root or owner")
         with store.session.writing() as db:
-            _assert_response_schema(db)
+            ResponseTable.require_installed(db)
             terminal = _terminal_replay(store, fence, bus, wire_root_id, owner_witness, exact_target)
             if terminal is not None:
                 return terminal

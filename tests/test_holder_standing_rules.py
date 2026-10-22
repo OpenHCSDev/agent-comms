@@ -115,12 +115,14 @@ def claim_order(held_bus):
         lead = held_bus.registry.require("lead").incarnation
         worker = held_bus.registry.require("worker").incarnation
         original = held_bus.messaging.send("lead", "worker", todo.order.instructions(todo)).message
-        todo = held_bus.goals.todos.apply(todo.id, OrderMessage(todo.revision, lead, original.message_id))
+        todo = held_bus.goals.todos.apply(
+            todo.id, OrderMessage(todo.revision, lead, original.message_id))
         claimed = OrderClaim.for_order(todo, worker, 1, "a" * 40,
                                       "Review the published repair", original.reference)
         claimed = replace(claimed, message=replace(
             claimed.message, timestamp=time.time() - AwaitingCommander.seconds - 1))
-        ClaimOrder(todo.revision, worker, todo.held().generation, claimed).record(held_bus.goals, todo.id)
+        ClaimOrder(todo.revision, worker, todo.held().generation, claimed).record(
+            held_bus.goals, todo.id)
         return claimed
     return claim
 
@@ -166,8 +168,8 @@ def test_an_active_goal_with_an_unresolved_attempt_is_reported_never_retried(hel
 
 def publish(comms, sender, target, timestamp, *, answers=()):
     return comms.bus.publisher.publish_ordinary(
-        Message(sender=sender, target=target, type=QuestionKind, body="Inspect the pending work", timestamp=timestamp,
-                answers=answers), origin=AgentOrigin(),
+        Message(sender=sender, target=target, type=QuestionKind, body="Inspect the pending work",
+                timestamp=timestamp, answers=answers), origin=AgentOrigin(),
     )
 
 

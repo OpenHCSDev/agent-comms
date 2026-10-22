@@ -16,8 +16,8 @@ from typing import Any, ClassVar
 
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, NullMember
-from .locked_store import DocumentConversion, LockedStore, RegistryFile
-from .maintenance_barrier import MaintenanceBarrier
+from .locked_store import DocumentConversion, RegistryFile
+from .maintenance_barrier import CarriedDocument
 from .native_input_owner import RegistryOwner
 from .private_path import FileObservation, FileRevision, MissingFile
 from .private_registry_guard import PrivateRegistryGuard, PublicRegistry, RegistryPrivacy
@@ -222,7 +222,7 @@ class RegistryGoalConversion(DocumentConversion):
 
 
 @dataclass(frozen=True, slots=True)
-class RegistryStore(RegistryFile, LockedStore[RegistryDocument]):
+class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument]):
     json_indent = 2
     conversion = RegistryGoalConversion
     cache: RegistryCache = field(init=False, compare=False, repr=False)
@@ -361,11 +361,7 @@ class RegistryStore(RegistryFile, LockedStore[RegistryDocument]):
         for revision in FileRevision.capture(self.path).revisions():
             self.cache.entry = RegistryRevision(revision, document.copy(), raw)
 
-    def _write_unlocked(self, text: str) -> None:
-        """Every registry write: maintenance refuses it to all but its holder, so a process the
-        installer did not stop (the connector, a bridge, a fork) cannot write the registry under
-        a carry and have the carry charged with it (install 48, 2026-10-21)."""
-        MaintenanceBarrier(self.path).assert_open_unlocked()
+    def _replace_unlocked(self, text: str) -> None:
         # The two-file private guard protocol cannot use A8's rollback writer.
         self.cache.entry = UncachedRegistry()
         self.private_guard_unlocked().write(self.path, text)
