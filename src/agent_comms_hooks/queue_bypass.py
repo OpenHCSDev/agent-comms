@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from typing import ClassVar
 
-from agent_comms_hooks import ClaudeToolHook, ClaudeToolHookProgram, HookRecord
-from agent_comms_hooks.shell import ShellCommand
+from agent_comms_hooks import BashRefusal
+from agent_comms_hooks.shell import Program, ShellCommand
+
+GH = Program("gh")
 
 
 class QueueBypass(ABC):
@@ -26,7 +27,7 @@ class QueueBypass(ABC):
 
     @classmethod
     def found(cls, command: ShellCommand) -> tuple[str, ...]:
-        if command.program != "gh":
+        if not GH.runs(command):
             return ()
         return tuple(
             member.__doc__ or member.__name__
@@ -53,42 +54,22 @@ class ApiMerge(QueueBypass):
         return args[:1] == ["api"] and any(map(cls.path.fullmatch, args))
 
 
-@dataclass(frozen=True)
-class GhCommand(HookRecord):
-    """The Bash tool's input, read for the merges it runs."""
-
-    command: str
-
-    def bypasses(self) -> tuple[str, ...]:
-        return tuple(
-            reason
-            for command in ShellCommand.split(self.command)
-            for reason in QueueBypass.found(command)
-        )
-
-
-class QueueBypassGuard(ClaudeToolHookProgram):
-    events = ("PreToolUse",)
-    tool = "Bash"
+class QueueBypassGuard(BashRefusal):
+    headline = "Merge around the queue refused"
+    advice = (
+        ". Only claude-ai lands work past the queue. Enqueue it with"
+        " `gh pr merge N --auto --merge`; the queue runs its checks and the"
+        " commander's head verdict."
+    )
 
     @classmethod
-    def command(cls) -> str:
-        return cls.console_script(f"{main.__module__}:{main.__name__}")
-
-
-def main() -> None:
-    hook = ClaudeToolHook.read()
-    reasons = GhCommand.decode(hook.tool_input).bypasses()
-    if reasons:
-        hook.respond(
-            permissionDecision="deny",
-            permissionDecisionReason=(
-                "Merge around the queue refused: " + "; ".join(reasons)
-                + ". Only claude-ai lands work past the queue. Enqueue it with"
-                " `gh pr merge N --auto --merge`; the queue runs its checks and the"
-                " commander's head verdict."
-            ),
+    def reasons(cls, command: str) -> tuple[str, ...]:
+        return tuple(
+            reason for simple in ShellCommand.split(command) for reason in QueueBypass.found(simple)
         )
+
+
+main = QueueBypassGuard.main
 
 
 if __name__ == "__main__":
