@@ -61,34 +61,34 @@ class InstalledHome:
 
 
 @pytest.fixture(scope="module")
-def installed_home(tmp_path_factory: pytest.TempPathFactory) -> Iterator[InstalledHome]:
+def installed_home(tmp_path_factory: pytest.TempPathFactory) -> InstalledHome:
     """A home holding what an installed machine has: the installer's uv, and as the
     installed runtime a build of the merge base this change lands on. Both cases share
     it, so the second reuses the staged runtime the first built, as a second install
     would. Package caches stay shared."""
-    with short_home(tmp_path_factory.mktemp("installed-home")) as home:
-        uv = home / ".local/state/agent-comms/upgrade-bus/uv"
-        uv.parent.mkdir(parents=True)
-        uv_program = shutil.which("uv")
-        assert uv_program is not None, "The installed-runtime fixture requires uv"
-        uv.symlink_to(uv_program)
-        caches = subprocess.run([uv, "cache", "dir"], check=True, capture_output=True, text=True)
-        environment = {**os.environ, "HOME": str(home), "UV_CACHE_DIR": caches.stdout.strip(),
-                       "npm_config_cache": str(Path.home() / ".npm")}
-        environment.pop("PYTHONPATH", None)
-        base = home / "outgoing-source"
-        archive = subprocess.run(
-            ["git", "-C", REPOSITORY, "archive", git("merge-base", "HEAD", "origin/main")],
-            check=True, capture_output=True).stdout
-        with tarfile.open(fileobj=BytesIO(archive)) as tree:
-            tree.extractall(base, filter="data")
-        runtime = home / ".local/share/agent-comms/runtimes/outgoing"
-        subprocess.run([uv, "venv", "-q", "--python", sys.executable, runtime],
-                       check=True, env=environment)
-        subprocess.run([uv, "pip", "install", "-q", "--python", runtime / "bin/python", base],
-                       check=True, env=environment)
-        (home / ".local/share/agent-comms/current").symlink_to(runtime, target_is_directory=True)
-        yield InstalledHome(environment, LaunchRuntime(runtime / "bin/python"))
+    home = tmp_path_factory.mktemp("installed-home")
+    uv = home / ".local/state/agent-comms/upgrade-bus/uv"
+    uv.parent.mkdir(parents=True)
+    uv_program = shutil.which("uv")
+    assert uv_program is not None, "The installed-runtime fixture requires uv"
+    uv.symlink_to(uv_program)
+    caches = subprocess.run([uv, "cache", "dir"], check=True, capture_output=True, text=True)
+    environment = {**os.environ, "HOME": str(home), "UV_CACHE_DIR": caches.stdout.strip(),
+                   "npm_config_cache": str(Path.home() / ".npm")}
+    environment.pop("PYTHONPATH", None)
+    base = home / "outgoing-source"
+    archive = subprocess.run(
+        ["git", "-C", REPOSITORY, "archive", git("merge-base", "HEAD", "origin/main")],
+        check=True, capture_output=True).stdout
+    with tarfile.open(fileobj=BytesIO(archive)) as tree:
+        tree.extractall(base, filter="data")
+    runtime = home / ".local/share/agent-comms/runtimes/outgoing"
+    subprocess.run([uv, "venv", "-q", "--python", sys.executable, runtime],
+                   check=True, env=environment)
+    subprocess.run([uv, "pip", "install", "-q", "--python", runtime / "bin/python", base],
+                   check=True, env=environment)
+    (home / ".local/share/agent-comms/current").symlink_to(runtime, target_is_directory=True)
+    return InstalledHome(environment, LaunchRuntime(runtime / "bin/python"))
 
 
 @pytest.mark.timeout(280)
@@ -160,7 +160,7 @@ class PublicationInterruptedRun(PublicationFailingRun):
 
 @pytest.fixture
 def publication_home(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch,
-                     tmp_path: Path) -> tuple[Path, LaunchRuntime]:
+                     tmp_path: Path) -> Iterator[tuple[Path, LaunchRuntime]]:
     """The hosted installed-runtime job supplies the build; source workers never build one."""
     candidate = LaunchRuntime.running()
     if not Path(agent_comms.__file__).resolve().is_relative_to(candidate.prefix.resolve()):
@@ -183,7 +183,10 @@ def publication_home(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyP
     )
     systemctl.chmod(0o700)
     monkeypatch.setenv("PATH", os.pathsep.join((str(binary), os.environ["PATH"])))
-    return Path(installed.environment["HOME"]), candidate
+    # Only the bridge socket needs a short locator; CLI storage keeps its trusted home.
+    with short_home(Path(installed.environment["HOME"])) as home:
+        monkeypatch.setenv("HOME", str(home))
+        yield home, candidate
 
 
 @pytest.mark.timeout(280)
