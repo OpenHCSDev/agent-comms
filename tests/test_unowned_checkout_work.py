@@ -17,13 +17,12 @@ from agent_comms.change_report import FileLine
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.standing import (
     CheckoutHeldWheelSpin,
-    CheckoutUnreadable,
     ReassignedWheelSpin,
     UnownedOrderWatch,
     UnownedWheelSpin,
     WaitingUnownedWheelSpin,
 )
-from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderReview
+from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation, CommanderReview
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import SetGoalAction
@@ -34,13 +33,12 @@ from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageDenied, StorageRule, shell_storage_effects
-from agent_comms.standing_rules import StandingRule
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import CoreWatcherIncarnation
-from agent_comms.todos import GoalRef, PendingProblemOrder, ReleaseTodo, StrikeReason
+from agent_comms.todos import GoalRef, PendingProblemOrder, PullRequests, ReleaseTodo, StrikeReason
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.work_branches import UnreadableCheckoutRead, WorkBranches
-from order_scope_fixture import FIX_SCOPE
+from agent_comms.ui_model.unit_state import UnitState, Unreadable
 
 
 def git(directory: Path, *arguments: str) -> str:
@@ -104,7 +102,7 @@ def test_a_second_repository_checkout_is_judged_by_its_source_before_it_exists(
 
 
 @pytest.fixture
-def checkout_bus(tmp_path: Path) -> Comms:
+def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Comms:
     home = tmp_path / 'declared-project'
     home.mkdir()
     git(home, 'init', '-q', '--initial-branch=main')
@@ -167,10 +165,7 @@ def checkout_bus(tmp_path: Path) -> Comms:
         turn_id='available', item_id='answer', events=(AssistantTranscript(
             'Ready for work', position='answer', timestamp=time.time()),))
     CommanderHeartbeat.register(c.registry)
-    CommanderConfig(
-        commander='lead', root=root, state=tmp_path / 'state', repos=(),
-        worktrees=rule.checkout_base, scratch=rule.scratch_base, disk=tmp_path,
-    ).write(tmp_path / 'config-home')
+    configured_repository(c)
     return c
 
 
@@ -197,11 +192,15 @@ def test_dirty_then_unpushed_then_pushed_linked_checkout(checkout_bus: Comms, tm
     with practice_copy(original.root, tmp_path / 'practice') as (root, _measurement):
         c = Comms(root)
         review = CommanderReview(frozenset())
+
+        def beat():
+            frame = CommanderObservation.read(c, c.registry.require('lead'))
+            review.wake(c, CommanderHeartbeat.sender, frame.thread, frame.rules, frame.states)
+
         with LaunchRoot.from_path(root).selected():
             (checkout / 'work.py').write_text('# not yet published\n')
             assert_retained(c)
-            review.wake(c, CommanderHeartbeat.sender, c.registry.require('lead'),
-                        StandingRule.broken(c, 'lead'))
+            beat()
             git(checkout, 'add', 'work.py')
             git(checkout, 'commit', '-q', '-m', 'Unpushed work')
             assert git(checkout, 'status', '--porcelain') == ''
@@ -214,20 +213,18 @@ def test_dirty_then_unpushed_then_pushed_linked_checkout(checkout_bus: Comms, tm
             assert isinstance(waiting[0], WaitingUnownedWheelSpin)
             UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
             assert c.goals.todos.get('P2').holder is None
-            review.wake(c, CommanderHeartbeat.sender, c.registry.require('lead'),
-                        StandingRule.broken(c, 'lead'))
+            beat()
             config.write(tmp_path / 'copy-home')
             available = UnownedWheelSpin.violations(c, 'lead')
             assert len(available) == 1
             assert isinstance(available[0], ReassignedWheelSpin)
             assert available[0].unit == 'idle'
-            assert set(available).isdisjoint(review.violations)
+            assert set(available).isdisjoint(review.rules)
             UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
             assigned = c.goals.todos.get('P2')
             assert assigned.holder == 'idle'
             assert c.registry.require('idle').goal.require().text
-            review.wake(c, CommanderHeartbeat.sender, c.registry.require('lead'),
-                        StandingRule.broken(c, 'lead'))
+            beat()
         drain_candidate_catchup(root)
         history = subprocess.run(
             (sys.executable, '-m', 'agent_comms.cli', '--root', str(root), 'history',
@@ -254,6 +251,8 @@ def test_unreadable_checkout_is_its_units_state_and_the_pass_carries_on(
             assert isinstance(read, UnreadableCheckoutRead) and read.holds_work
             UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
             assert c.goals.todos.get('P2') == before
-            unreadable, = CheckoutUnreadable.violations(c, 'lead')
-            assert (unreadable.unit, unreadable.checkout) == ('worker', checkout)
+            unreadable, = (state for state in UnitState.current(c, 'lead', PullRequests())
+                          if isinstance(state, Unreadable))
+            assert unreadable.unit == c.registry.require('worker').incarnation
+            assert str(checkout) in unreadable.reason
             assert 'not a git repository' in unreadable.line()

@@ -16,7 +16,7 @@ import subprocess
 import sys
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from functools import cache, cached_property, partial
@@ -71,13 +71,13 @@ from agent_comms.field_codec import (
     WireValue,
     boundary_decoder,
 )
-from agent_comms.goals import CheckedCommit, OrderCheck, ProblemGoalOrder
+from agent_comms.goals import CheckedCommit, GitCommandFailed, OrderCheck, ProblemGoalOrder
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message
 from agent_comms.order_runs import OrderRun
 from agent_comms.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from agent_comms.plan_phases import OrderPhase, UnplannedPhase
-from agent_comms.private_bus_checkpoint import PublicMessages
+from agent_comms.private_bus_checkpoint import CheckedRead, PublicMessages
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.progress_claims import MergedClaim, ProgressClaim, WorkingClaim
 from agent_comms.recorded_time import (
@@ -580,8 +580,13 @@ class PullRequests:
     def __init__(self, todos: Sequence[Todo] = ()) -> None:
         self._read: dict[tuple[RepositoryName, type[ListedPullRequest], str], tuple[PullRequest, ...]] = {}
         self._todos: dict[RepositoryName, dict[str, Todo]] = {}
+        self.register(todos)
+
+    def register(self, todos: Sequence[Todo]) -> Self:
+        """Register a frame's orders while preserving this read's existing GitHub facts."""
         for todo in todos:
             self._todos.setdefault(todo.repo, {})[todo.id] = todo
+        return self
 
     def listed(self, repo: RepositoryName, kind: type[ListedPullRequest],
                todo: Todo) -> tuple[PullRequest, ...]:
@@ -750,6 +755,9 @@ class ProgressCheckout(DeclaredFamily, affix="Checkout"):
     @abstractmethod
     def pushes(self, pattern: str) -> Iterator[tuple[str, float]]: ...
 
+    def require_read(self) -> None:
+        """A retired checkout needs no local read; present and unread ones decide."""
+
     def checked_commits(self, order: CheckedProblemOrder, refs: tuple[str, ...],
                         *excluded: str) -> Iterator[ProgressPoint]:
         return iter(())
@@ -775,6 +783,29 @@ class MissingCheckout(ProgressCheckout):
         return iter(())
 
 
+@dataclass(frozen=True)
+class UnreadCheckout(ProgressCheckout):
+    """A failed source read is data, never a missing checkout or no progress."""
+
+    reason: str
+
+    def require_read(self) -> None:
+        raise WorkBranchError(self.reason)
+
+    def commits(self, pattern: str, refs: tuple[str, ...],
+                *excluded: str) -> Iterator[ProgressPoint]:
+        raise WorkBranchError(self.reason)
+
+    def references(self, storage: StorageRule, owner: Thread) -> tuple[str, ...]:
+        return ()
+
+    def readings(self, source: ProgressSource) -> DistanceReadings:
+        raise WorkBranchError(self.reason)
+
+    def pushes(self, pattern: str) -> Iterator[tuple[str, float]]:
+        raise WorkBranchError(self.reason)
+
+
 class PresentCheckout(ProgressCheckout):
     default_reference: ClassVar[str] = "refs/remotes/origin/HEAD"
 
@@ -784,6 +815,9 @@ class PresentCheckout(ProgressCheckout):
 
     def git(self, *args: str) -> str:
         return CheckedCommit.git(str(self.path), *args)
+
+    def require_read(self) -> None:
+        self.git("rev-parse", "--git-dir")
 
     @cached_property
     def git_refs(self) -> tuple[str, ...]:
@@ -876,8 +910,13 @@ class ProgressSource:
         candidates = (Path(todo.order.checked().check.directory), *owned)
         path = next((path for path in candidates if (path / ".git").exists()),
                     next(iter(owned), candidates[0]))
-        checkout = PresentCheckout(path) if (path / ".git").exists() else MissingCheckout(path)
-        return cls(todo, checkout, pulls, checkout.references(storage, owner),
+        checkout: ProgressCheckout = (
+            PresentCheckout(path) if (path / ".git").exists() else MissingCheckout(path))
+        try:
+            references = checkout.references(storage, owner)
+        except (OSError, GitCommandFailed, WorkBranchError, subprocess.TimeoutExpired) as failure:
+            checkout, references = UnreadCheckout(path, str(failure)), ()
+        return cls(todo, checkout, pulls, references,
                    tuple(PresentCheckout(path) for path in owned if (path / ".git").exists()))
 
     @property
@@ -944,7 +983,7 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
         try:
             return next((progress for member in members
                          for progress in member.observations(source)), NoCommitProgress())
-        except (WorkBranchError, subprocess.TimeoutExpired) as unread:
+        except (OSError, GitCommandFailed, WorkBranchError, subprocess.TimeoutExpired) as unread:
             return UnreadProgress(str(unread))
 
     @property
@@ -1503,6 +1542,9 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         return ()
 
+    def commander_claims(self) -> tuple[OrderClaim, ...]:
+        return ()
+
     def closing_artifact(self) -> str:
         raise ValueError("Only a delivered order has closing evidence.")
 
@@ -1994,6 +2036,21 @@ class OrderClaim:
         if not self.message.body.strip():
             raise TodoError("A delivery claim needs its report text.")
 
+    def original(self, source: CheckedRead) -> Message:
+        row = PublicMessages.require(source.connection, message_id=self.message.message_id)
+        return replace(self.message, seq=row.seq)
+
+    @staticmethod
+    def originals[K](
+        comms: Comms, claims: Mapping[K, tuple[OrderClaim, ...]]
+    ) -> dict[K, tuple[Message, ...]]:
+        """Every claim's original from one checked read; no claim opens no read."""
+        if not any(claims.values()):
+            return {}
+        with comms.bus.log.checked_read() as source:
+            return {key: tuple(claim.original(source) for claim in held)
+                    for key, held in claims.items()}
+
     @classmethod
     def for_order(
         cls, todo: Todo, actor: ThreadIncarnation, number: int, head: str,
@@ -2017,6 +2074,9 @@ class ClaimedProblemOrder(DeliverableProblemOrder):
         """A corrected order to the claimant replaces its claim; another owner is a transfer."""
         if proposed.owner_identity != todo.holder_state.previous_assignment().owner_identity:
             self.require_transfer(todo)
+
+    def commander_claims(self) -> tuple[OrderClaim, ...]:
+        return (self.claim,)
 
     def observed_merges(self, repo: Repo, source: ProgressSource) -> tuple[MergedProblemOrder, ...]:
         return ()

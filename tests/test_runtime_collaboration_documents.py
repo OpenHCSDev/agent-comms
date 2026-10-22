@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
+from agent_comms.field_codec import FieldCodec
 from agent_comms.runtime_info import RuntimeInfoStore
 from agent_comms.shared_ledger import SharedLedger
 from test_locked_store import assert_writer_excluded
@@ -65,12 +66,15 @@ def test_free_form_ledger_has_no_retained_mutable_mirror(tmp_path, *, thread_reg
     }
     store.path.write_text(json.dumps(saved))
     snapshot = store.read()
-    snapshot.entries["nested"].clear()
-    assert SharedLedger(store.path).read().entries == saved
+    snapshot.value["nested"].value.clear()
+    assert FieldCodec.encode(SharedLedger(store.path).read()) == saved
     SharedLedger(store.path).merge({"other": [1, 2]}, "other")
     assert store.rename_thread("old", "new") == 2
-    assert store.read().entries["nested"] == {"new": ["new", None, True, 9, {"free": "old is prose"}]}
+    assert FieldCodec.encode(store.read())["nested"] == {"new": ["new", None, True, 9, {"free": "old is prose"}]}
     store.remove_threads((thread_registration.new_thread('new', frozenset(), str(tmp_path)),))
-    assert store.read().entries == {**saved, "nested": {}, "other": [1, 2], "last_updated_by": "other"}
+    assert FieldCodec.encode(store.read()) == {**saved, "nested": {}, "other": [1, 2], "last_updated_by": "other"}
+    unchanged = store.path.stat()
+    store.remove_threads((thread_registration.new_thread('absent', frozenset(), str(tmp_path)),))
+    assert store.path.stat() == unchanged
 
 
