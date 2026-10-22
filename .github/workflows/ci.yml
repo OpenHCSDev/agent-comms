@@ -1,8 +1,16 @@
 name: CI
 
 on:
+  # Every merge to main runs the whole suite. The queue's checks only collect it,
+  # so this run is what shows main red, and which merge made it red.
+  push:
+    branches: [main]
   workflow_dispatch:
   workflow_call:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 env:
   AC_NATIVE_STACK_BIN: ${{ github.workspace }}/stack/bin/pi-native

@@ -362,14 +362,13 @@ class OrderCheck:
                 return word
         return ""
 
-    def require_acceptance(self, checkout_base: Path) -> None:
-        """A new or corrected check must distinguish origin/main from delivered work."""
+    def require_acceptance(self, base: str, checkout_base: Path) -> None:
+        """The order state supplies the source preceding its delivered work."""
         self.require_writable()
-        CheckedCommit.git(self.directory, "fetch", "-q", "origin", "main")
         try:
-            ran = self.run_at("origin/main", self.directory, checkout_base)
+            ran = self.run_at(base, self.directory, checkout_base)
         except subprocess.TimeoutExpired as error:
-            raise ValueError("The order check timed out on origin/main.") from error
+            raise ValueError(f"The order check timed out on {base}.") from error
         if refused := self.result.distance(ran).unproven(self.command, 0):
             raise ValueError("; ".join(refused))
 
