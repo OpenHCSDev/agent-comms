@@ -27,7 +27,7 @@ from functools import partial
 from pathlib import Path
 from typing import Annotated, Literal
 
-from agent_comms.coordination_database import CoordinationStore
+from agent_comms.locked_store import SQLiteFile
 from agent_comms.coordination_errors import IdentityConflict
 
 from .private_path import ObservedPath
@@ -189,7 +189,7 @@ def _read_snapshot(directory: _PinnedDirectory, name: str) -> tuple[bytes, os.st
 
 
 def _connect(raw: bytes | None) -> sqlite3.Connection:
-    connection = CoordinationStore.writer(":memory:", isolation_level=None)
+    connection = SQLiteFile.writer(":memory:", isolation_level=None)
     try:
         if raw is not None:
             connection.deserialize(raw)

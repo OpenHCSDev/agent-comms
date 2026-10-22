@@ -1,27 +1,27 @@
-"""Typed JSON documents with canonical locks and durable atomic replacement."""
+"""Declared file behavior, owned SQLite connections, and durable JSON replacement."""
 
 from __future__ import annotations
 
 import hashlib
 import json
 import os
+import shutil
+import sqlite3
 import stat
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from functools import cache
 from importlib import import_module
 from pathlib import Path
 from pkgutil import walk_packages
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, Self, TypeVar
+from typing import Any, ClassVar, Generic, Self, TypeVar
 
+from .coordination_errors import CoordinationReadUnavailable
 from .field_codec import FieldCodec, MalformedRecord
 from .store_files import SharedLock, StoreLock, StoreLockOwner, StoreOwner, store_lock_path
-
-if TYPE_CHECKING:
-    import sqlite3
 
 T = TypeVar("T")
 
@@ -169,6 +169,23 @@ class RootFile:
         return frozenset((path,)) if path.is_file() else frozenset()
 
     @staticmethod
+    def content_owner(path: Path) -> type[RootFile]:
+        """The file behavior for an arbitrary resource, including undeclared files."""
+        return SQLiteFile if SQLiteFile.is_database(path) else RootFile
+
+    @staticmethod
+    def copy_file(source: str | Path, target: str | Path) -> Path:
+        return Path(shutil.copy2(source, target))
+
+    @staticmethod
+    def digest(path: Path) -> str:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    @staticmethod
+    def files(path: Path) -> tuple[Path, ...]:
+        return (path,)
+
+    @staticmethod
     @cache
     def load_declarations() -> None:
         """Import every module of the package once per process, so ``declarations_in`` walks
@@ -268,11 +285,158 @@ class RegistryFile(DurableFile, WireWakeFile):
     filename = "registry.json"
 
 
+class StoreContention(ABC):
+    """Typed SQLite busy behavior shared by snapshots and writers."""
+
+    @property
+    @abstractmethod
+    def timeout(self) -> float: ...
+
+    def reader(self, uri: str) -> sqlite3.Connection:
+        return sqlite3.connect(uri, uri=True, isolation_level=None, timeout=self.timeout)
+
+    def writer(
+        self, path: str | os.PathLike[str], options: dict[str, object]
+    ) -> sqlite3.Connection:
+        return sqlite3.connect(path, timeout=self.timeout, **options)
+
+
+@dataclass(frozen=True)
+class StoreWait(StoreContention):
+    timeout: ClassVar[float] = 5.0
+
+
+@dataclass(frozen=True)
+class StoreBusy(StoreContention):
+    """Do not wait when optional display or input work cannot acquire a SQLite lock."""
+
+    timeout: ClassVar[float] = 0.0
+
+    def reader(self, uri: str) -> sqlite3.Connection:
+        with CoordinationReadUnavailable.checking():
+            return super().reader(uri)
+
+
+DEFAULT_STORE_CONTENTION = StoreWait()
+
+
 class SQLiteFile(RootFile):
-    """A database and SQLite's companion files share their existing file owner."""
+    """SQLite connections, snapshots, copies and companions share one file owner."""
 
     __slots__ = ()
     companion_suffixes: ClassVar[tuple[str, ...]] = ("-wal", "-shm", "-journal")
+    header: ClassVar[bytes] = b"SQLite format 3\0"
+
+    @classmethod
+    def writer(
+        cls, path: str | os.PathLike[str], contention: StoreContention = DEFAULT_STORE_CONTENTION,
+        **options: object,
+    ) -> sqlite3.Connection:
+        """Open a writer through the store family's typed busy behavior."""
+        return cls.identifiers_only(contention.writer(path, options))
+
+    @staticmethod
+    def identifiers_only(db: sqlite3.Connection) -> sqlite3.Connection:
+        """A double-quoted name is an identifier, never a string: a missing column fails
+        as missing instead of reading back as a literal named after it."""
+        for option in (sqlite3.SQLITE_DBCONFIG_DQS_DML, sqlite3.SQLITE_DBCONFIG_DQS_DDL):
+            db.setconfig(option, False)
+        return db
+
+    @staticmethod
+    def begin_snapshot(db: sqlite3.Connection) -> None:
+        """Acquire one committed read revision before any consumer query."""
+        db.execute("BEGIN")
+        # BEGIN is lazy. Acquire the snapshot before schema decoders can
+        # reclassify BUSY as unsupported data or absent rows.
+        db.execute("SELECT name FROM sqlite_master LIMIT 1").fetchone()
+
+    @classmethod
+    def _configure_reader(cls, db: sqlite3.Connection) -> sqlite3.Connection:
+        try:
+            cls.identifiers_only(db)
+            db.row_factory = sqlite3.Row
+            db.execute("PRAGMA query_only=ON")
+            db.execute("PRAGMA foreign_keys=ON")
+            return db
+        except BaseException:
+            db.close()
+            raise
+
+    @classmethod
+    def _open_reader(
+        cls, path: Path, contention: StoreContention
+    ) -> sqlite3.Connection:
+        return cls._configure_reader(
+            contention.reader(path.resolve().as_uri() + "?mode=ro")
+        )
+
+    @classmethod
+    def _acquire_snapshot(cls, db: sqlite3.Connection) -> sqlite3.Connection:
+        try:
+            cls.begin_snapshot(db)
+            return db
+        except BaseException:
+            db.close()
+            raise
+
+    @classmethod
+    def read_snapshot(
+        cls, path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION
+    ) -> sqlite3.Connection:
+        """Open and acquire one consistent read-only snapshot with SQLite's busy handler."""
+        return cls._acquire_snapshot(cls._open_reader(path, contention))
+
+    @classmethod
+    def recovering_snapshot(cls, path: Path) -> sqlite3.Connection:
+        """Acquire evidence after SQLite is allowed to recover an existing hot journal."""
+        uri = path.resolve().as_uri() + "?mode=rw"
+        return cls._acquire_snapshot(cls._configure_reader(cls.writer(uri, uri=True)))
+
+    @classmethod
+    @contextmanager
+    def observing(
+        cls, path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION
+    ):
+        """Read existing committed data without initializing storage or permitting writes."""
+        with CoordinationReadUnavailable.checking():
+            try:
+                with closing(cls.read_snapshot(path, contention)) as db:
+                    try:
+                        yield db
+                    finally:
+                        if db.in_transaction:
+                            db.execute("ROLLBACK")
+            except sqlite3.OperationalError as error:
+                error.add_note(
+                    f"SQLite observation store: {path}; "
+                    f"SQLite error: {error.sqlite_errorname} ({error.sqlite_errorcode})"
+                )
+                raise
+
+    @classmethod
+    def is_database(cls, path: Path) -> bool:
+        with path.open("rb") as stream:
+            return stream.read(len(cls.header)) == cls.header
+
+    @classmethod
+    def copy_file(cls, source: str | Path, target: str | Path) -> Path:
+        """Copy a committed SQLite snapshot, excluding uncommitted companion bytes."""
+        source, target = Path(source), Path(target)
+        with (closing(cls.read_snapshot(source)) as original,
+              closing(cls.writer(target)) as copied):
+            original.backup(copied)
+        shutil.copystat(source, target)
+        return target
+
+    @classmethod
+    def digest(cls, path: Path) -> str:
+        """Hash a consistent SQLite schema and row dump, including committed WAL data."""
+        with closing(cls.read_snapshot(path)) as database:
+            content = hashlib.sha256()
+            for statement in database.iterdump():
+                content.update(statement.encode())
+            return content.hexdigest()
 
     @classmethod
     def files(cls, path: Path) -> tuple[Path, ...]:

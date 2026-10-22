@@ -22,7 +22,7 @@ if sys.platform == "linux":
 
 from agent_comms.child_process import AttachedChild, ProcessIdentity
 from agent_comms.comms import Comms
-from agent_comms.coordination_database import StoreBusy
+from agent_comms.locked_store import StoreBusy
 from agent_comms.coordinator import Coordination
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.diagnostics import PublicationMeasurements

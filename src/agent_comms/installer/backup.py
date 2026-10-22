@@ -1,12 +1,10 @@
 """The update owner's snapshots: whole buses or declared store files."""
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
 import shutil
-import sqlite3
 import stat
 import subprocess
 import sys
@@ -14,7 +12,7 @@ import tempfile
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Collection, Iterable
-from contextlib import closing, contextmanager
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from functools import cache
@@ -22,12 +20,11 @@ from pathlib import Path
 from string import Formatter
 from typing import ClassVar, Iterator, Self
 
-from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.interpreter_operation import HoldTranscriptsProbe
-from agent_comms.locked_store import LockedStore, RuntimeFile
+from agent_comms.locked_store import LockedStore, RootFile, RuntimeFile, SQLiteFile
 from agent_comms.store_files import _atomic_write_text
 
 
@@ -254,20 +251,14 @@ class StoreBackup(ResourceBackup):
 
     @staticmethod
     def digest(path: Path) -> str:
-        return (CoordinationStore.digest(path) if CoordinationStore.is_database(path)
-                else hashlib.sha256(path.read_bytes()).hexdigest())
+        return RootFile.content_owner(path).digest(path)
 
     @staticmethod
     def copy_file(source: str | Path, target: str | Path) -> Path:
         """Copy one store through its SQLite snapshot, never through live WAL bytes."""
         source, target = Path(source), Path(target)
-        if CoordinationStore.is_database(source):
-            with closing(CoordinationStore.read_snapshot(source)) as reader:
-                with closing(sqlite3.connect(target)) as writer:
-                    reader.backup(writer)
-            shutil.copystat(source, target)
-        else:
-            shutil.copy2(source, target)
+        owner = RootFile.content_owner(source)
+        owner.copy_file(source, target)
         return target
 
     @classmethod
@@ -285,14 +276,9 @@ class StoreBackup(ResourceBackup):
                     continue
                 if stat.S_ISSOCK(path.lstat().st_mode):
                     omitted.add(name)
-                elif (
-                    path.is_file()
-                    and not path.is_symlink()
-                    and CoordinationStore.is_database(path)
-                ):
-                    omitted.update(
-                        companion.name for companion in CoordinationStore.files(path)[1:]
-                    )
+                elif path.is_file() and not path.is_symlink():
+                    owner = RootFile.content_owner(path)
+                    omitted.update(companion.name for companion in owner.files(path)[1:])
             return omitted
 
         shutil.copytree(
@@ -348,7 +334,7 @@ class StoreBackup(ResourceBackup):
                     stage.unlink(missing_ok=True)
             else:
                 target.unlink(missing_ok=True)
-            for companion in CoordinationStore.files(target)[1:]:
+            for companion in SQLiteFile.files(target)[1:]:
                 companion.unlink(missing_ok=True)
         directory = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
         try:

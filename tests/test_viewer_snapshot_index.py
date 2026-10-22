@@ -8,14 +8,15 @@ from agent_comms.read_basis import NamedViewer
 import json
 import os
 import sqlite3
-from contextlib import closing
+from contextlib import closing, contextmanager
 
 import pytest
 
 from agent_comms.bus_display_index import BusDisplayIndex
 from agent_comms.bus_route_counts import BusRouteCounts
+from agent_comms.candidate_maintenance import drain_candidate_catchup
 from agent_comms.comms import wire
-from agent_comms.coordination_database import CoordinationStore
+from agent_comms.locked_store import SQLiteFile
 from agent_comms.errors import RelationViolationError, StoredHistoryUnreadable
 from agent_comms.wire_log import CurrentSnapshotOpening, OpenedWireSnapshot
 from agent_comms.ui_model.unread import ExactUnread
@@ -25,6 +26,20 @@ def positive_unread(snapshot):
     """Old sparse-count assertions inspect only positive entries of exact typed rows."""
     assert all(isinstance(value, ExactUnread) for value in snapshot.unread.values())
     return {name: value.count for name, value in snapshot.unread.items() if value.count}
+
+
+@contextmanager
+def refused_route_index(comms):
+    """Make a reader's derived store unavailable while no publisher is using it."""
+    drain_candidate_catchup(comms.root)
+    path = BusRouteCounts(comms.bus.log.path).path
+    for member in SQLiteFile.files(path):
+        member.unlink(missing_ok=True)
+    path.mkdir()
+    try:
+        yield path
+    finally:
+        path.rmdir()
 
 
 def test_display_metrics_store_only_append_facts(tmp_path):
@@ -78,22 +93,20 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
         seen = opened.query_page_index(lambda index: comms.bus.reads.capture_indexed(
             viewer.name, (direct,), comms.registry.snapshot(), opened, index, document=document))
     comms.bus.reads.mark_displayed(viewer.name, seen)
-    index_path = BusRouteCounts(comms.bus.log.path).path
-    if not indexed:
-        # A refused store is not permission to introduce a full-source reader.
-        index_path.mkdir()
-        with pytest.raises(sqlite3.OperationalError) as unavailable:
-            with closing(CoordinationStore.read_snapshot(index_path)):
-                pass
     with comms.views.presentation.snapshot(viewer=NamedViewer(viewer.name)) as (basis, source):
         before = {"#team": 1}
         sent = comms.views.last_sent_timestamps(comms.bus.activity_index.snapshot(source).sent.items(), registry=basis.registry)
         if indexed:
             assert comms.bus.pending_counts_opened(source, basis) == before
         else:
-            with pytest.raises(sqlite3.OperationalError) as refused:
-                comms.bus.pending_counts_opened(source, basis)
-            assert refused.value.sqlite_errorcode == unavailable.value.sqlite_errorcode
+            # A refused store is not permission to introduce a full-source reader.
+            with refused_route_index(comms) as index_path:
+                with pytest.raises(sqlite3.OperationalError) as unavailable:
+                    with closing(SQLiteFile.read_snapshot(index_path)):
+                        pass
+                with pytest.raises(sqlite3.OperationalError) as refused:
+                    comms.bus.pending_counts_opened(source, basis)
+                assert refused.value.sqlite_errorcode == unavailable.value.sqlite_errorcode
         document = comms.bus.reads.read()
         with WireLog(comms.bus.log.path).opened_wire_snapshot() as opened:
             displayed = opened.query_page_index(lambda index: comms.bus.reads.capture_indexed(
@@ -102,10 +115,10 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
         comms.messaging.send("bob", viewer.name, "later direct")
         comms.registry.rename("bob", "renamed-bob")
         if not indexed:
-            with pytest.raises(sqlite3.OperationalError) as refused:
-                comms.bus.pending_counts_opened(source, basis)
-            assert refused.value.sqlite_errorcode == unavailable.value.sqlite_errorcode
-            index_path.rmdir()
+            with refused_route_index(comms):
+                with pytest.raises(sqlite3.OperationalError) as refused:
+                    comms.bus.pending_counts_opened(source, basis)
+                assert refused.value.sqlite_errorcode == unavailable.value.sqlite_errorcode
         # Repair the derived resource, not the captured source or read ledger.
         assert comms.bus.pending_counts_opened(source, basis) == before
         assert comms.views.last_sent_timestamps(comms.bus.activity_index.snapshot(source).sent.items(), registry=basis.registry) == sent
@@ -264,6 +277,7 @@ def test_reserved_sequence_preserves_committed_read_cut_without_claim(tmp_path):
 
     comms, _ = _root(tmp_path)
     first = publish_initial(comms, 'sender', '#team', '@Alice first')
+    drain_candidate_catchup(comms.root)
     # This is the original durable state between reservation and append.
     # No second input or fabricated successful append resolves that uncertainty.
     with comms.bus.log.locked():

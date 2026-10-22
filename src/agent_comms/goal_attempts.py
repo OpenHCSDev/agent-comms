@@ -30,7 +30,6 @@ from uuid import uuid4
 
 from agent_comms.goal_turn_permit import GoalTurnPermit
 
-from .coordination_database import CoordinationStore
 from .declared_family import DeclaredFamily
 from .field_codec import MalformedRecord
 from .goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
@@ -705,7 +704,7 @@ class GoalAttemptStore(DurableFile, SQLiteFile):
         staging = Path(name)
         try:
             os.close(fd)
-            with closing(CoordinationStore.writer(staging, isolation_level=None)) as conn:
+            with closing(cls.writer(staging, isolation_level=None)) as conn:
                 conn.execute("PRAGMA journal_mode=DELETE")
                 conn.execute("PRAGMA synchronous=EXTRA")
                 conn.execute("PRAGMA foreign_keys=ON")
@@ -743,7 +742,7 @@ class GoalAttemptStore(DurableFile, SQLiteFile):
     def database(cls, path: Path) -> sqlite3.Connection:
         """Open this ledger's database, including a retained format at its carry boundary."""
         try:
-            conn = CoordinationStore.writer(path, isolation_level=None)
+            conn = cls.writer(path, isolation_level=None)
             conn.execute("PRAGMA foreign_keys=ON")
             conn.execute("PRAGMA synchronous=EXTRA")
             modes = SQLiteJournalMode.read(conn.execute("PRAGMA journal_mode"))

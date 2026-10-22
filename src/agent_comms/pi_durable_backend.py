@@ -21,7 +21,7 @@ from .agent_backend import (
     RuntimeLocation,
 )
 from .agent_events import Error
-from .coordination_database import CoordinationStore
+from .locked_store import SQLiteFile
 from .external_transcript import ExternalCut
 from .native_child import PiChild
 from .native_entries import StoredEntry
@@ -64,7 +64,7 @@ class DurableDatabase(SessionFiles, RuntimeLocation):
 
     @property
     def members(self):
-        return (*CoordinationStore.files(self.session), self.writer_lock)
+        return (*SQLiteFile.files(self.session), self.writer_lock)
 
     def storage_files(self):
         return (self,)

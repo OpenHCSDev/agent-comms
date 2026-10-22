@@ -15,7 +15,6 @@ from agent_comms.bus_tables import (
     BusTables,
     KeyedPublication,
 )
-from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message
@@ -56,7 +55,7 @@ class Bus(CarriedWriter):
 
     @contextmanager
     def writing(self):
-        with closing(CoordinationStore.writer(self.path, isolation_level=None)) as db:
+        with closing(self.writer(self.path, isolation_level=None)) as db:
             db.execute("PRAGMA foreign_keys=ON")
             with self.transaction(db):
                 yield db
@@ -78,20 +77,20 @@ class Bus(CarriedWriter):
         return FieldCodec.decode_record(member, values)
 
     def lookup(self, seq: int) -> BusRecord:
-        with CoordinationStore.observing(self.path) as db:
+        with self.observing(self.path) as db:
             headers = BusRow.select(db, seq=seq)
             if not headers:
                 raise RelationViolationError(f"Unknown bus sequence: {seq}")
             return self._record(db, headers[0])
 
     def page(self, before: int, limit: int) -> tuple[BusRecord, ...]:
-        with CoordinationStore.observing(self.path) as db:
+        with self.observing(self.path) as db:
             return tuple(self._record(db, row) for row in BusRow.select(
                 db, where="{seq} < ?", parameters=(before,),
                 order_by=("seq",), descending=True, limit=limit))
 
     def inbox(self, target: str, after: int, limit: int) -> tuple[BusRecord, ...]:
-        with CoordinationStore.observing(self.path) as db:
+        with self.observing(self.path) as db:
             addressed = Addressed.table.select(
                 db, where="{seq} > ?", parameters=(after,), order_by=("seq",), limit=limit,
                 target=target)

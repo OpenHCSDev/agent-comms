@@ -16,7 +16,6 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, NoReturn
 
-from .coordination_database import CoordinationStore
 from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily
 from .lifecycle_capability import Complete, LifecycleCapability
@@ -359,7 +358,7 @@ class BusRouteCounts(RuntimeWriter):
 
     def _open(self) -> sqlite3.Connection:
         self._initialize()
-        return CoordinationStore.read_snapshot(self.path)
+        return self.read_snapshot(self.path)
 
     def __exit__(self, _error_type, _error, _traceback) -> None:
         self.connection.close()
@@ -367,11 +366,11 @@ class BusRouteCounts(RuntimeWriter):
     def _initialize(self) -> None:
         """The writer alone creates the WAL store; no source bytes are decoded here."""
         if self.path.exists():
-            with closing(CoordinationStore.read_snapshot(self.path)) as current:
+            with closing(self.read_snapshot(self.path)) as current:
                 if (RecordedRouteSourceRow.present(current)
                         and SQLiteJournalMode.read(current.execute("PRAGMA journal_mode"))[0].journal_mode == "wal"):
                     return
-        with _store_lock(self.path), closing(CoordinationStore.writer(self.path)) as connection:
+        with _store_lock(self.path), closing(self.writer(self.path)) as connection:
             connection.execute("PRAGMA journal_mode=WAL")
             connection.execute("PRAGMA synchronous=FULL")
             with self.transaction(connection):
@@ -387,7 +386,7 @@ class BusRouteCounts(RuntimeWriter):
     def writing(self, *, blocking: bool = True) -> Iterator[sqlite3.Connection]:
         with (
             _store_lock(self.path, blocking=blocking),
-            closing(CoordinationStore.writer(self.path)) as connection,
+            closing(self.writer(self.path)) as connection,
         ):
             connection.execute("PRAGMA synchronous=FULL")
             with self.transaction(connection):

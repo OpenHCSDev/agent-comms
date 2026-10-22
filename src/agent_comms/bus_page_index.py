@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING, Annotated, BinaryIO, Literal
 
 from .bus_activity_index import ChannelActivity
 from .bus_display_index import DisplaySnapshot
-from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, MalformedRecord
 from .private_path import FileRevision
@@ -124,7 +123,7 @@ class BusPageIndex(DerivedStore):
     def connection(self):
         with ExitStack() as resources:
             db = resources.enter_context(self._attached(
-                lambda: closing(CoordinationStore.read_snapshot(self.path))))
+                lambda: closing(self.read_snapshot(self.path))))
             db.execute("ROLLBACK")
             self._resources.enter_context(resources.pop_all())
             return db
@@ -164,7 +163,7 @@ class BusPageIndex(DerivedStore):
         borrowed = self.connection.in_transaction
         try:
             if not borrowed:
-                CoordinationStore.begin_snapshot(self.connection)
+                self.begin_snapshot(self.connection)
             yield self
         finally:
             if not borrowed and self.connection.in_transaction:

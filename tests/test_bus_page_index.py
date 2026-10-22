@@ -14,7 +14,7 @@ from agent_comms.comms import Comms
 from agent_comms.cli import main
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.read_basis import AllChannelDisplayScope
-from agent_comms.coordination_database import CoordinationStore
+from agent_comms.locked_store import SQLiteFile
 from agent_comms.messages import InfoKind, Message
 from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 from agent_comms.store_files import _store_lock
@@ -62,11 +62,11 @@ def test_page_queries_require_owned_offsets_and_leave_archives_unchanged(tmp_pat
     with BusPageIndex(bus.log.path) as index:
         index.invalidate()
     assert [message.seq for message in bus.incoming_page('b', after=6).messages] == [9]
-    for member in CoordinationStore.files(path):
+    for member in SQLiteFile.files(path):
         member.unlink(missing_ok=True)
     assert [message.seq for message in bus.incoming_page('b', after=6).messages] == [9]
     assert path.exists()
-    for member in CoordinationStore.files(path):
+    for member in SQLiteFile.files(path):
         member.unlink(missing_ok=True)
     with closing(sqlite3.connect(path)) as db, db:  # an earlier declaration
         db.execute(f'CREATE TABLE "{BusPageRow.declared_name}" ("seq" INTEGER NOT NULL, '
@@ -97,7 +97,7 @@ def test_history_reader_repairs_both_derived_indexes(
     ):
         path = bus.log.path.with_name(name)
         if damage == 'missing':
-            for member in CoordinationStore.files(path):
+            for member in SQLiteFile.files(path):
                 member.unlink(missing_ok=True)
         else:
             with closing(sqlite3.connect(path)) as db, db:

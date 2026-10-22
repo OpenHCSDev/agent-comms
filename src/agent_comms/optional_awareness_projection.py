@@ -20,7 +20,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
-from agent_comms.coordination_database import CoordinationStore, StoreBusy
+from agent_comms.coordination_database import CoordinationStore
+from agent_comms.locked_store import StoreBusy
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment

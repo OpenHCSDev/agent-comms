@@ -9,16 +9,12 @@ from contextlib import ExitStack, contextmanager, nullcontext
 from functools import cached_property
 from typing import TYPE_CHECKING
 
-from agent_comms.coordination_database import (
-    DEFAULT_STORE_CONTENTION,
-    CoordinationStore,
-    StoreContention,
-)
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import (
     CoordinationReadUnavailable,
     IntegrityViolationError,
 )
-from agent_comms.locked_store import RegistryFile
+from agent_comms.locked_store import DEFAULT_STORE_CONTENTION, RegistryFile, StoreContention
 from agent_comms.store_files import StoreLockContention
 from agent_comms.wire_log import CurrentSnapshotOpening, WireLog
 

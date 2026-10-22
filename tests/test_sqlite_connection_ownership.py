@@ -7,21 +7,26 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.coordination_database import CoordinationStore, StoreBusy
+from agent_comms.coordination_database import CoordinationStore
+from agent_comms.locked_store import StoreBusy
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.coordination_session import CoordinationSession, system_clock
 from agent_comms.coordinator import Coordination
 
 PACKAGE = Path(__file__).parents[1] / "src" / "agent_comms"
-CONNECTION_OWNER = PACKAGE / "coordination_database.py"
+CONNECTION_OWNER = PACKAGE / "locked_store.py"
 
 
 def test_sqlite_connections_and_busy_policy_have_one_owner():
     direct_connections = []
     timeout_arguments = []
+    concrete_dependencies = []
     for path in PACKAGE.rglob("*.py"):
         tree = ast.parse(path.read_text(), filename=str(path))
         for node in ast.walk(tree):
+            if (path == CONNECTION_OWNER and isinstance(node, ast.ImportFrom)
+                    and any(name.name == "CoordinationStore" for name in node.names)):
+                concrete_dependencies.append(f"{path.relative_to(PACKAGE)}:{node.lineno}")
             if isinstance(node, ast.arg) and node.arg == "lock_timeout":
                 timeout_arguments.append(f"{path.relative_to(PACKAGE)}:{node.lineno}")
             if not isinstance(node, ast.Call):
@@ -38,6 +43,7 @@ def test_sqlite_connections_and_busy_policy_have_one_owner():
                 timeout_arguments.append(f"{path.relative_to(PACKAGE)}:{node.lineno}")
     assert direct_connections == []
     assert timeout_arguments == []
+    assert concrete_dependencies == []
 
 
 @pytest.mark.asyncio
@@ -122,7 +128,7 @@ async def test_resident_cancellation_joins_operation_before_retirement(tmp_path)
         with pytest.raises(asyncio.CancelledError):
             await pending
         assert finished.is_set()
-        assert await Coordination.run_read_async(path, lambda store: store.participants.get("joined").owner_thread) == "joined"
+        assert await Coordination.run_read_async(path, lambda store: store.participants.get("joined").owner_identity.owner_thread) == "joined"
 
 
 @pytest.mark.asyncio
@@ -147,7 +153,7 @@ async def test_nested_resident_scopes_restore_outer_and_standalone_routes(tmp_pa
         await Coordination.run_async(path, lambda store: store.participants.register(name, name, name))
 
     async def owner(path, name):
-        return await Coordination.run_read_async(path, lambda store: store.participants.get(name).owner_thread)
+        return await Coordination.run_read_async(path, lambda store: store.participants.get(name).owner_identity.owner_thread)
 
     async with Coordination.worker(outer):
         await register(outer, "outer")

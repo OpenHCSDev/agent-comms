@@ -57,6 +57,12 @@ found while tracing it in this change, including these unfinished repairs:
   resolution. Ask the selected runtime without accidentally importing the checkout.
 - [ ] Repair affected test setup, then exercise rehearsal, failure recovery and the
   installed entry path. Report source checks and actual installation separately.
+- [ ] Finish shared SQLite ownership: file copies, digests, connections and snapshots
+  belong to `SQLiteFile`; coordinator schema/session behavior stays in its subclass.
+  Migrate the generic consumers and delete the subclass dependencies.
+- [ ] Repair the paired Toad test family's stale agent ownership and launch setup,
+  then qualify a saved fork through immediate opening, a fresh DM, its first reply
+  and tab return. Fix demonstrated application defects uncovered on this path.
 
 #### Implemented ownership and migration order
 
@@ -92,8 +98,40 @@ these ownership relationships.
 Validation: 57 focused checks passed across carry execution, maintenance, package
 resolution, publication and install announcements. A real worker that writes then
 fails is restored from its backup. New probes ran under the outgoing installed
-interpreter and matched all 82 recorded packages. Full rehearsal, complete installer
-rollback and installed application qualification remain unfinished.
+interpreter and matched all 82 recorded packages. Five actual CLI rehearsal/native
+runtime checks passed. A complete CLI rollback test also passed: a real carry worker
+succeeds in rehearsal, writes then fails on the live private bus, and the installer
+restores the resource, checkout, runtime pointer, launcher, maintenance state and
+retained thread. Those results cover `f47cda95e`.
+
+SQLite connection, snapshot and copy behavior now belongs to `SQLiteFile`;
+coordinator, journal, installer and typed-store consumers use that owner.
+`DurableStore` composes installation reconciliation; `DerivedStore` owns runtime
+rebuilding and no longer enters the installer's carry set. This fixes disposable
+indexes demanding maintenance permission to rebuild. The final permission batch
+passed 47 checks, including planned/reconcile CLI, real session bridge, goal
+history, snapshots and required maintenance refusals. Earlier connection/copy
+batches passed 177 and 120 checks. NRA parsed all 461 production modules without
+omissions; dynamic resolution remains a semantic review responsibility. The
+complete CLI run against this committed batch is next.
+
+The saved-fork application journey passed against built Core `f47cda95e` and Toad
+`ca980312c`: real native parent answer and saved history, fork, immediate opening,
+fresh DM, first native reply, tab return and unchanged parent bytes (33.29 seconds).
+The loopback provider supplies replies; UI, ACP, native process and durable state
+are real. The paired Toad journey exposed stale fixture contracts:
+`Conversation.agent` was deleted for
+`agent_binding`, Core's model/thinking fields are typed, and its ACP declaration
+must opt into explicit root arguments. The native provider fixture also retained a
+deleted response-template protocol; current selected work returns ordinary answer
+text. These are being repaired in their existing owners and consumers, not patched
+with production aliases. A closed delivery observation additionally reads an agent
+before it has ever scheduled a read; the Toad integration owner is fixing that
+production lifetime defect. The same displayed journey exposed raw delivery-state
+dataclass text in the status line; `ThreadStatusModel` now uses the existing
+`MessageNotification.label` owner (38 focused status checks passed).
+No new runtime has been published to the live installation. The final changed
+packages still require installer rehearsal/recovery and installed journey checks.
 
 ### 2. Commander verbs take a fixed, small time
 

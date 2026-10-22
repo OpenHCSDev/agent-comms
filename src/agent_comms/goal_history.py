@@ -19,12 +19,11 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 
-from .coordination_database import CoordinationStore
 from .field_codec import FieldCodec, MalformedRecord, HistoryExclude
 from .goals import GoalDeclaration, NoGoal
 from .locked_store import DurableFile
 from .typed_table import (
-    Column, DurableTables, HeldBusFile, Index, JsonStorage, ReconciledFile, TypedTable,
+    Column, DurableTables, Index, JsonStorage, ReconciledFile, TypedTable,
 )
 
 
@@ -100,7 +99,7 @@ class GoalHistoryStore(DurableFile, ReconciledFile):
             if (not stat.S_ISREG(before.st_mode) or before.st_uid != os.geteuid()
                     or stat.S_IMODE(before.st_mode) != 0o600):
                 raise GoalHistoryError("Original goal history must be a private regular file.")
-            with closing(CoordinationStore.read_snapshot(path)) as connection:
+            with closing(cls.read_snapshot(path)) as connection:
                 GoalHistoryEntry.require_schema(connection)
                 rows = tuple(GoalHistoryEntry.select(connection, order_by=("sequence",)))
             after = path.lstat()
@@ -113,7 +112,7 @@ class GoalHistoryStore(DurableFile, ReconciledFile):
 
     def _connect(self) -> sqlite3.Connection:
         try:
-            connection = CoordinationStore.writer(self.path, isolation_level=None)
+            connection = self.writer(self.path, isolation_level=None)
             connection.execute("PRAGMA journal_mode=DELETE")
             connection.execute("PRAGMA synchronous=EXTRA")
             return connection
@@ -156,8 +155,7 @@ class GoalHistoryStore(DurableFile, ReconciledFile):
             raise GoalHistoryError("Goal history database must be owner-only.")
         try:
             with closing(self._connect()) as connection:
-                GoalHistoryEntry.install_schema(
-                    connection, HeldBusFile(GoalHistoryStore, self.path))
+                self.table_schema().install_schema(connection, self.schema_change(self.path))
             self._sync()
         except (OSError, sqlite3.Error) as error:
             raise GoalHistoryError("Goal history initialization is uncertain.") from error

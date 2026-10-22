@@ -3,23 +3,22 @@
 from __future__ import annotations
 
 import shutil
-import sqlite3
 import subprocess
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
-from contextlib import closing, contextmanager
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
 from agent_comms.field_codec import boundary_decoder
 from agent_comms.installer.backup import UpgradeRefused
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.locked_store import RegistryFile, RootFile, SQLiteFile
-from agent_comms.registry_store import RegistryStore
-from agent_comms.store_files import SharedLock, _store_lock
+from agent_comms.locked_store import RegistryFile, RootFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier
+from agent_comms.registry_store import RegistryStore
 from agent_comms.storage_rules import StorageRule
+from agent_comms.store_files import SharedLock, _store_lock
 from agent_comms.wire_log import WireLog
 
 
@@ -99,20 +98,6 @@ class TestHome(RuntimeHome):
         return Path(executable)
 
 
-def _copy_database(source: Path, copy: Path) -> None:
-    """Copy one database's committed state through SQLite's backup; its companions never."""
-    copy.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    with (closing(sqlite3.connect(f"file:{source}?mode=ro", uri=True)) as original,
-          closing(sqlite3.connect(copy)) as copied):
-        original.backup(copied)
-    shutil.copymode(source, copy)  # SQLite creates the copy under the umask
-
-
-def _copy_file(source: Path, copy: Path) -> None:
-    copy.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    shutil.copy2(source, copy)
-
-
 @contextmanager
 def practice_copy(root: Path, into: Path) -> Iterator[tuple[Path, PracticeMeasurement]]:
     """Copy the bus as files, so no runtime's code reads it to build the copy: the outgoing
@@ -136,8 +121,9 @@ def practice_copy(root: Path, into: Path) -> Iterator[tuple[Path, PracticeMeasur
 
     def copy(path: Path) -> None:
         owner = files.get(path, RootFile)
-        (_copy_database if issubclass(owner, SQLiteFile) else _copy_file)(
-            path, into / path.relative_to(root))
+        target = into / path.relative_to(root)
+        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        owner.copy_file(path, target)
 
     # The log's own file lock, never WireLog.locked(): that checks the index with the
     # target's code, which refuses a bus whose carries have not run yet. Each group is one

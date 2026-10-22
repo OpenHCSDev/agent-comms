@@ -20,6 +20,7 @@ from agent_comms.cli_commands import (
     ReadBackCliCommand,
     ReconcileStoresCliCommand,
 )
+from agent_comms.bus_page_index import BusPageIndex
 from agent_comms.maintenance_barrier import HOLDER_NONCE
 from agent_comms.typed_table import ReconciledFile
 from conftest import maintenance_held
@@ -82,12 +83,21 @@ def test_planned_reconcile_names_the_same_stores_and_writes_nothing(private_comm
     through: it must name what reconcile-stores rewrites and leave every byte alone."""
     root = private_comms.root
     dropped = drop_one_index_each(root)
+    # A schema-named runtime projection is rebuilt by its runtime, never carried
+    # or included in the installer's backup/reconcile set.
+    with BusPageIndex(private_comms.bus.log.path).writing() as db:
+        db.execute('CREATE TABLE retired_derived_shape (unused INTEGER)')
     with maintenance_held(root) as nonce:
         before = digests(root)
         completed = reconcile(root, nonce, PlannedReconcileCliCommand)
         assert completed.returncode == 0, completed.stdout + completed.stderr
         assert tuple(json.loads(completed.stdout)["rewritten"]) == tuple(sorted(dropped))
         assert digests(root) == before
+        completed = reconcile(root, nonce)
+        assert completed.returncode == 0, completed.stdout + completed.stderr
+        assert tuple(json.loads(completed.stdout)["rewritten"]) == tuple(sorted(dropped))
+    with closing(sqlite3.connect(BusPageIndex.path_in(root))) as db:
+        assert db.execute("SELECT 1 FROM sqlite_master WHERE name='retired_derived_shape'").fetchone()
 
 
 def test_read_back_under_the_hold_writes_nothing_on_a_drifted_bus(private_comms):

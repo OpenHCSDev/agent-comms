@@ -1834,7 +1834,7 @@ class PlannedReconcileCliCommand(StoreReconcileCliCommand, declared_name="planne
 
     @staticmethod
     def changes(owner: type[ReconciledFile], path: Path) -> bool:
-        with closing(CoordinationStore.read_snapshot(path)) as db:
+        with closing(owner.read_snapshot(path)) as db:
             return owner.table_schema().schema_differs(db)
 
     def execute(self, route: CommsRoute, output: TextIO) -> int:

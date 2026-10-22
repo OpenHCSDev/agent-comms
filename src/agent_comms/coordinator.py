@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Final, Self, TypeVar
 from .assignment_store import AssignmentStore
 from .attempt_store import AttemptStore
 from .child_process import join_retirement
-from .coordination_database import DEFAULT_STORE_CONTENTION, StoreContention
+from .locked_store import DEFAULT_STORE_CONTENTION, StoreContention
 from .coordination_session import (
     CoordinationSession,
     NativeCoordinationSession,

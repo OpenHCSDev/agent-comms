@@ -9,6 +9,7 @@ import json
 import os
 import signal
 import socket
+import sqlite3
 import sys
 import time
 import traceback
@@ -43,7 +44,6 @@ from agent_comms.cli_protocol import (
 )
 from agent_comms.comms import Comms
 from agent_comms.config_options import CatalogConfigOption, CatalogSelection, ConfigOptions
-from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, PathText
@@ -53,7 +53,7 @@ from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
 from agent_comms.typed_table import (
-    Column, DurableTables, ExpressionIndex, SoleWriterFile, TypedTable,
+    Column, DurableTables, ExpressionIndex, WriterOwnedFile, TypedTable,
 )
 from agent_comms_hooks.watch import HeldClaim, WatchClaim, WatchRecord
 
@@ -129,14 +129,14 @@ class BindingRequest(ABC):
     """What the command line asks of the state directory's one binding."""
 
     @abstractmethod
-    def bind(self, db: CoordinationStore) -> Binding: ...
+    def bind(self, db: sqlite3.Connection) -> Binding: ...
 
 
 @dataclass(frozen=True)
 class StoredBinding(BindingRequest):
     """No binding given: the directory's own, read without taking the writer."""
 
-    def bind(self, db: CoordinationStore) -> Binding:
+    def bind(self, db: sqlite3.Connection) -> Binding:
         rows = Binding.select(db)
         if len(rows) != 1:
             raise ValueError('Supply one complete Core/CLI binding for this state directory')
@@ -165,12 +165,12 @@ class Binding(BridgeStateTable, TypedTable, BindingRequest):
     @contextmanager
     def open(cls, state: Path):
         state.mkdir(parents=True, exist_ok=True, mode=0o700)
-        with closing(CoordinationStore.writer(state / BridgeStateTable.filename)) as db:
+        with closing(SQLiteFile.writer(state / BridgeStateTable.filename)) as db:
             db.execute('PRAGMA synchronous=FULL')
-            BridgeStateTable.install_schema(db, SoleWriterFile())
+            BridgeStateTable.install_schema(db, WriterOwnedFile())
             yield db
 
-    def bind(self, db: CoordinationStore) -> Binding:
+    def bind(self, db: sqlite3.Connection) -> Binding:
         """The first binding claims the directory; a later one must be the same."""
         with SQLiteFile.write_transaction(db):
             if not Binding.select(db):
@@ -272,7 +272,7 @@ class DeliveryRow(BridgeStateTable, TypedTable):
     indexes = (ExpressionIndex((sequence_sql,)),)
 
     @classmethod
-    def resume_after(cls, db: CoordinationStore) -> InboxStart:
+    def resume_after(cls, db: sqlite3.Connection) -> InboxStart:
         """The existing journal owns attempted progress, including uncertain emissions."""
         latest = cls.read(db.execute(
             f'SELECT {cls._column_list(tuple(cls.column_projection()))} FROM "{cls.declared_name}" '
@@ -574,7 +574,7 @@ class Serve(Watch):
             journal = state / BridgeStateTable.filename
             if not journal.is_file():
                 continue
-            with closing(CoordinationStore.read_snapshot(journal)) as db:
+            with closing(SQLiteFile.read_snapshot(journal)) as db:
                 bindings = Binding.select(db)
             for binding in bindings:
                 claim = WatchClaim(binding.thread, home)
@@ -744,7 +744,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
 
     options: BridgeOptions
     binding: Binding
-    db: CoordinationStore
+    db: sqlite3.Connection
 
     @cached_property
     def comms(self) -> Comms:
@@ -962,7 +962,7 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
     incoming_frame: ClassVar[type[MonitorIncomingFrame]]
     window_bytes: ClassVar[int]
 
-    def __init__(self, options: Options, binding: Binding, db: CoordinationStore) -> None:
+    def __init__(self, options: Options, binding: Binding, db: sqlite3.Connection) -> None:
         super().__init__(options, binding, db)
         self.reader: ReaderState = NoReader()
         self.reader_changed = asyncio.Condition()

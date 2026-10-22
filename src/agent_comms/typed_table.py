@@ -49,7 +49,9 @@ from .field_codec import (
     compile_decoder,
 )
 from .lifecycle import LifecycleState
-from .locked_store import DurableFile, FileStore, RegistryFile, RootFile, RuntimeFile, SQLiteFile
+from .locked_store import (
+    DurableFile, FileStore, RegistryFile, RootFile, RuntimeFile, SQLiteFile, StoreBusy,
+)
 from .maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier
 from .store_files import _store_lock
 
@@ -710,11 +712,15 @@ class HeldBusFile(SchemaChange):
             os.environ.get(HOLDER_NONCE, ""), f"Changing the schema of {self.path}")
 
 
-class SoleWriterFile(SchemaChange):
-    """A file one process writes alone: its schema follows that process's own code."""
+class WriterOwnedFile(SchemaChange):
+    """A writer-owned file follows its writer's schema without an installation carry.
+
+    Private bridge journals have one writer; derived stores use schema-specific
+    filenames and rebuild their rows from another authority.
+    """
 
     def require(self) -> None:
-        """The one writer is the one reader, so no other runtime meets the change."""
+        """The owning writer may rebuild this schema."""
 
 
 class TableSchema(ABC):
@@ -1784,12 +1790,14 @@ class ReconciledFile(SQLiteFile):
         """The declaration this file's schema is reconciled onto."""
 
     @classmethod
+    def schema_change(cls, path: Path) -> SchemaChange:
+        return HeldBusFile(cls, path)
+
+    @classmethod
     def reconcile_at(cls, path: Path) -> bool:
         """Whether reconciling the file at ``path`` changed it."""
-        from .coordination_database import CoordinationStore
-
-        with _store_lock(path), closing(CoordinationStore.writer(path, isolation_level=None)) as db:
-            return cls.table_schema().reconcile_schema(db, HeldBusFile(cls, path))
+        with _store_lock(path), closing(cls.writer(path, isolation_level=None)) as db:
+            return cls.table_schema().reconcile_schema(db, cls.schema_change(path))
 
 
 class CarriedWriter(StoreWriter, DurableFile):
@@ -1808,7 +1816,7 @@ class RuntimeWriter(StoreWriter, RuntimeFile):
         """No installation reads this file, so maintenance never refuses its writers."""
 
 
-class TypedStore(StoreWriter, TableSchema, ReconciledFile):
+class TypedStore(StoreWriter, TableSchema):
     """One owner-only SQLite file whose schema its TypedTable rows declare.
 
     Members name the file and their rows, and inherit DurableStore or DerivedStore.
@@ -1830,8 +1838,9 @@ class TypedStore(StoreWriter, TableSchema, ReconciledFile):
         return cls.rows
 
     @classmethod
-    def table_schema(cls) -> type[TableSchema]:
-        return cls
+    @abstractmethod
+    def schema_change(cls, path: Path) -> SchemaChange:
+        """Whether this file's schema belongs to installation or its runtime."""
 
     @classmethod
     def declares_schema(cls) -> bool:
@@ -1863,8 +1872,6 @@ class TypedStore(StoreWriter, TableSchema, ReconciledFile):
 
     def _open_writer(self, *, check_same_thread: bool = True) -> sqlite3.Connection:
         """Attach and install an absent store under the connection boundary."""
-        from .coordination_database import CoordinationStore
-
         # Never open/close an extra descriptor for an existing SQLite inode:
         # doing so can release another connection's process-wide fcntl locks.
         try:
@@ -1873,12 +1880,12 @@ class TypedStore(StoreWriter, TableSchema, ReconciledFile):
             pass
         else:
             os.close(descriptor)
-        connection = CoordinationStore.writer(
+        connection = self.writer(
             self.path, isolation_level=None, check_same_thread=check_same_thread)
         try:
             connection.execute(f"PRAGMA synchronous={self.synchronous}")
             # Under the attachment boundary: a derived file is rebuilt, a durable one carried.
-            self.install_schema(connection, HeldBusFile(type(self), self.path))
+            self.install_schema(connection, self.schema_change(self.path))
             if SQLiteJournalMode.read(connection.execute("PRAGMA journal_mode=WAL")) != [
                 SQLiteJournalMode("wal")
             ]:
@@ -1891,18 +1898,16 @@ class TypedStore(StoreWriter, TableSchema, ReconciledFile):
     @contextmanager
     def snapshot(self) -> Iterator[sqlite3.Connection]:
         """Read a committed store, or its declared empty schema before its first write."""
-        from .coordination_database import CoordinationStore, StoreBusy
-
         with ExitStack() as lifetime:
             if self.path.exists():
                 connection = lifetime.enter_context(self._attached(
-                    lambda: CoordinationStore.observing(self.path, StoreBusy())))
+                    lambda: self.observing(self.path, StoreBusy())))
             else:
                 connection = lifetime.enter_context(closing(
-                    sqlite3.connect(":memory:", isolation_level=None)))
+                    self.writer(":memory:", isolation_level=None)))
                 self.create_schema(connection)
-                CoordinationStore._configure_reader(connection)
-                CoordinationStore.begin_snapshot(connection)
+                self._configure_reader(connection)
+                self.begin_snapshot(connection)
             self.require_schema(connection)
             yield connection
 
@@ -1919,8 +1924,12 @@ class TypedStore(StoreWriter, TableSchema, ReconciledFile):
             yield connection
 
 
-class DurableStore(TypedStore, DurableTables, CarriedWriter):
+class DurableStore(ReconciledFile, TypedStore, DurableTables, CarriedWriter):
     """Rows nothing else can rebuild, in a file every installation carries."""
+
+    @classmethod
+    def table_schema(cls) -> type[TableSchema]:
+        return cls
 
 
 class DerivedStore(TypedStore, DerivedTables, RuntimeWriter):
@@ -1930,6 +1939,10 @@ class DerivedStore(TypedStore, DerivedTables, RuntimeWriter):
     The file is named by its declared schema: a runtime on another schema keeps its own
     file instead of rebuilding this one under the writer's lock.
     """
+
+    @classmethod
+    def schema_change(cls, path: Path) -> SchemaChange:
+        return WriterOwnedFile()
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)

@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pydantic import Field
 
 from agent_comms.cli_protocol import WireModel
-from agent_comms.coordination_database import CoordinationStore
+from agent_comms.locked_store import SQLiteFile
 from agent_comms.runtime_updates import RuntimeUpdate
 from agent_comms.typed_table import SQLiteSchemaObject, TypedRow
 
@@ -74,7 +74,7 @@ class OpenCodeDatabase(OpenCodeStore):
 
     def load(self) -> tuple[Session, Iterator[SavedMessage]]:
         session_id = self.session.require('OpenCode database imports require --session-id.')
-        with closing(CoordinationStore.read_snapshot(self.source)) as db:
+        with closing(SQLiteFile.read_snapshot(self.source)) as db:
             sessions = SessionRow.read(db.execute(
                 'SELECT id,directory,title,revert FROM session WHERE id=?', (session_id,)))
             if not sessions:

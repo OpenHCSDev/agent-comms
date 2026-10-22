@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from agent_comms.participant_identity import ParticipantIdentity
 
-from .coordination_database import CoordinationStore
+from .locked_store import SQLiteFile
 from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,
@@ -267,7 +267,7 @@ class NativeContextJournal(
                 ))
                 before = os.fstat(held.fileno())
                 NativeSessionFileRole.require(before)
-                db = ownership.enter_context(closing(CoordinationStore.recovering_snapshot(path)))
+                db = ownership.enter_context(closing(SQLiteFile.recovering_snapshot(path)))
                 if cls.schema_differs(db):
                     raise NativePiUnavailable("Native proof requires offline durable conversion")
                 if FileIdentity.from_stat(before) != FileIdentity.from_stat(path.lstat()):

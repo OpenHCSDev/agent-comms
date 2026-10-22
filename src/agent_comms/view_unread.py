@@ -14,9 +14,8 @@ from threading import Event, RLock
 from typing import TYPE_CHECKING, ClassVar, Annotated
 from weakref import WeakValueDictionary, finalize
 
-from .coordination_database import CoordinationStore, StoreBusy
 from .coordination_errors import CoordinationReadUnavailable
-from .locked_store import RuntimeFile, SQLiteFile
+from .locked_store import RuntimeFile, SQLiteFile, StoreBusy
 from .native_entries import NativeEntry
 from .native_transcript import SessionCut, reverse_records
 from .private_path import FileObservation, FileRevision, MissingFile
@@ -454,7 +453,7 @@ class TranscriptReadState(RuntimeFile, SQLiteFile, ThreadOwnedState):
             self._close_database()
         if self._connection is None:
             self.index_path.parent.mkdir(parents=True, exist_ok=True)
-            connection = CoordinationStore.writer(
+            connection = self.writer(
                 self.index_path, StoreBusy(), check_same_thread=False
             )
             try:
@@ -483,7 +482,7 @@ class TranscriptReadState(RuntimeFile, SQLiteFile, ThreadOwnedState):
 
     def _discard_database(self) -> None:
         self._close_database()
-        for path in CoordinationStore.files(self.index_path):
+        for path in self.files(self.index_path):
             path.unlink(missing_ok=True)
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
@@ -497,7 +496,7 @@ class TranscriptReadState(RuntimeFile, SQLiteFile, ThreadOwnedState):
             self._preparation.retire(sources)
             if not self.index_path.exists():
                 return
-            with closing(CoordinationStore.writer(self.index_path)) as database, database:
+            with closing(self.writer(self.index_path)) as database, database:
                 for table in TypedTable.members_with(ReplyIndexTable):
                     database.executemany(
                         f"DELETE FROM {table.declared_name} WHERE source = ?",
@@ -512,7 +511,7 @@ class TranscriptReadState(RuntimeFile, SQLiteFile, ThreadOwnedState):
         # Publish before reading committed counts, if the preparation has finished.
         self._preparation = self._preparation.finished(self, database, revisions)
         with database:
-            CoordinationStore.begin_snapshot(database)
+            self.begin_snapshot(database)
             indexes = ReplyIndex.for_sources(database, tuple(revisions))
             needed = {
                 source: ReplyRead(indexes[source], revision, seen[source])

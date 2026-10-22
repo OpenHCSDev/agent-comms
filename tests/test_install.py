@@ -112,7 +112,6 @@ def test_a_message_sent_while_the_bus_is_copied_never_splits_the_log_from_its_ch
     import threading
 
     from agent_comms.cli import main
-    from agent_comms.installer import practice
     from agent_comms.private_bus_checkpoint import WritableCheckpoint
 
     root, _ = bus(private_directory)
@@ -133,8 +132,8 @@ def test_a_message_sent_while_the_bus_is_copied_never_splits_the_log_from_its_ch
             writer.join(timeout=2)  # a writer held off by the bus lock stays out of the cut
         return connect(database, *args, **kwargs)
 
-    monkeypatch.setattr(practice.shutil, "copy2", copy_then_write)
-    monkeypatch.setattr(practice.sqlite3, "connect", connect_after_writer)
+    monkeypatch.setattr(shutil, "copy2", copy_then_write)
+    monkeypatch.setattr(sqlite3, "connect", connect_after_writer)
     with practice_copy(root, private_directory / "practice/bus") as (copy, _):
         monkeypatch.undo()
         writer.join(timeout=30)

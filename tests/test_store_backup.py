@@ -1,4 +1,5 @@
 """SQLite snapshots preserve committed WAL rows and restore absent resources."""
+import os
 import sqlite3
 
 import pytest
@@ -15,8 +16,16 @@ def test_tree_copy_keeps_committed_wal_rows(tmp_path):
         writer.execute('CREATE TABLE events (body TEXT)')
         writer.execute("INSERT INTO events VALUES ('retained')")
         writer.commit()
+        writer.execute("INSERT INTO events VALUES ('uncommitted')")
+        store.chmod(0o640)
+        os.utime(store, ns=(1_600_000_000_000_000_000, 1_600_000_001_000_000_000))
+        original = store.stat()
         target = tmp_path / 'copy'
         StoreBackup.copy_tree(root, target)
+        assert {path.name for path in target.iterdir()} == {store.name}
+        copied = (target / store.name).stat()
+        assert copied.st_mode == original.st_mode
+        assert copied.st_mtime_ns == original.st_mtime_ns
         with sqlite3.connect(target / store.name) as reader:
             assert reader.execute('SELECT body FROM events').fetchall() == [('retained',)]
 

@@ -83,8 +83,8 @@ class HoldTranscriptsProbe(RuntimeProbe[None]):
 
     def run(self) -> None:
         from contextlib import closing
-        from agent_comms.coordination_database import CoordinationStore
-        with closing(CoordinationStore.writer(self.path, isolation_level=None)) as writer:
+        from agent_comms.locked_store import SQLiteFile
+        with closing(SQLiteFile.writer(self.path, isolation_level=None)) as writer:
             writer.execute("BEGIN IMMEDIATE")
             with open(self.ready_fd, "wb") as held:
                 held.write(b"held")
