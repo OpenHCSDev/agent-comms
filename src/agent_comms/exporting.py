@@ -57,8 +57,9 @@ class JsonlFormat(SelectableWireExportFormat):
         return (self.json_record(metadata) + "\n").encode()
 
     def row(self, message: Message) -> bytes:
-        record = {"record": "message", "message": message.to_wire()}
-        return (self.json_record(record) + "\n").encode()
+        return (self.json_record({
+            "record": "message", "message": Message.from_message(message).to_wire(),
+        }) + "\n").encode()
 
 
 @dataclass(frozen=True)

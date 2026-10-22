@@ -425,6 +425,11 @@ class Message(Addressed, BusCapability):
     def message(self) -> Self:
         return self
 
+    @classmethod
+    def envelope_type(cls) -> type[Message]:
+        """The public message declaration this class's values carry."""
+        return Message
+
     def messages(self) -> tuple[Self, ...]:
         return (self,)
 
@@ -592,9 +597,8 @@ class BusRecord(Message, DeclaredFamily, affix="Record"):
 
     @classmethod
     def envelope_type(cls) -> type[Message]:
-        """The public message this record carries: its nearest Message no record extends."""
-        return next(base for base in cls.__mro__
-                    if issubclass(base, Message) and not issubclass(base, BusRecord))
+        """A record carries the envelope of the message declaration after it in the MRO."""
+        return super().envelope_type()
 
     @property
     def envelope(self) -> Message:
@@ -634,6 +638,10 @@ class Claimed(BusCapability):
 @dataclass(frozen=True, kw_only=True)
 class ClaimMessage(Claimed, Message):
     """A claimed message binds its transition to its public envelope identity."""
+
+    @classmethod
+    def envelope_type(cls) -> type[Message]:
+        return ClaimMessage
 
     @classmethod
     def of(cls, message: Message, transition: ClaimTransition) -> Self:

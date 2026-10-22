@@ -204,7 +204,7 @@ def test_large_release_reopens_and_exports_without_a_second_parser_limit(tmp_pat
     exported = [json.loads(line) for line in destination.read_text().splitlines()]
     assert acknowledgement.exported_messages == len(history)
     assert len(exported) == len(history) + 1 and exported[-1]["record"] == "message"
-    assert exported[-1]["message"] == committed.to_wire()
+    assert exported[-1]["message"] == Message.from_message(committed).to_wire()
 
 
 KILL_BEFORE_COMMIT = """
