@@ -33,16 +33,15 @@ class CommanderReview:
 
     def wake(self, comms: Comms, sender: str, commander: Thread,
              rules: tuple[StandingRule, ...], states: tuple[UnitState, ...]) -> None:
-        """Every pass beats with every unit's card, even when the frame is unchanged."""
+        """Every pass beats, so silence is a failure; an unchanged beat is one short line."""
         found_rules, found_states = frozenset(rules), frozenset(states)
         actionable = (*rules, *(state for state in states if state.attention()))
         old_rules = self.rules
         previous = self.rules | self.states
         if found_rules == self.rules and found_states == self.states and self.changed:
-            lines = [f"COMMANDER HEARTBEAT: unchanged since seq {self.changed},"
-                     f" {len(actionable)} violations."]
-            lines.extend(state.line() for state in states)
-            comms.messaging.send(sender, commander.name, "\n".join(lines))
+            comms.messaging.send(sender, commander.name,
+                                 f"COMMANDER HEARTBEAT: unchanged since seq {self.changed},"
+                                 f" {len(actionable)} violations.")
             return
         # Mark the observation before any effect; an uncertain publication is not replayed.
         self.rules, self.states = found_rules, found_states

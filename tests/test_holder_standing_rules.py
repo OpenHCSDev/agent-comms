@@ -468,10 +468,7 @@ def test_every_pass_beats_and_a_stale_beat_is_heartbeat_silent(held_bus, monkeyp
     changed, unchanged = (message for message in page.messages
                           if message.sender == CommanderHeartbeat.sender)
     assert "Standing rules clear." in changed.body
-    assert unchanged.body.splitlines() == [
-        f"COMMANDER HEARTBEAT: unchanged since seq {changed.seq}, 0 violations.",
-        *(state.line() for state in states),
-    ]
+    assert unchanged.body == f"COMMANDER HEARTBEAT: unchanged since seq {changed.seq}, 0 violations."
     assert HeartbeatSilent.violations(held_bus, "lead") == ()
     later = unchanged.timestamp + HeartbeatSilent.seconds + 1
     monkeypatch.setattr(time, "time", lambda: later)
