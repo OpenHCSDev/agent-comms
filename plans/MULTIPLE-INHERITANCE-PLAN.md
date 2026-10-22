@@ -59,6 +59,13 @@ remaining active consumers and the rest of phase 1A are unfinished.
 
 **1E, `DuplicatesPhase`.** The phase declaration retains the eight exact-shape candidate groups and their source paths: constructors, owner identity, computed triggers, wire-member lookup, schema assertions, references and annotation disclosure. Read each group semantically; share only the required answers that agree across supported evolution. Trace the additional near-shape constructor, parser and `apply` candidates at the historical audit head before retaining them as work. A shape match is a lead, not a proof that two facts are interchangeable.
 
+The current `NoExactCopies` gate violates that distinction: `ErasedBody` removes
+names, attributes and literal values before comparison. It equates
+`PiModel.wire_member` returning `ReportedModel` with `PiToolResult.wire_member`
+returning `ProvidedToolResult`. Those are different required answers. The MI fork
+owns replacing this false completion evidence with checks for traced ownership
+obligations; do not distort production code to make the shape comparison pass.
+
 ### Batch 2: field declarations and table capabilities
 
 **`FieldDirectivesPhase`.** One owner handles related field declarations and their readers together. The directive classes already exist in `FieldCodec` and `TypedTable`; extend them rather than introducing another metadata vocabulary. Fields attach the declared directives through `Annotated`.

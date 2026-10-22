@@ -179,10 +179,17 @@ The Toad fork has removed that outcome substitution in both app and ordinary
 tests: the catalogue supplies context, and actual failed app attempts retain
 their output and private roots. That repair is pushed in Toad `291fd4780`; its
 actual-harness regression passed. A fresh installed client-request attempt timed
-out after 90 seconds. Its retained evidence is
-`/home/ts/.cache/agent-scratch/toad-test-7f90sh_5`; the Toad binding fork owns the
-diagnosis and repair. This does not invalidate the completed saved-fork journey
-or establish the recorded SelectCurrent diagnosis.
+out after root shortened the harness's default 165-second budget to 90 seconds.
+Its retained evidence is `/home/ts/.cache/agent-scratch/toad-test-7f90sh_5`:
+the first permission/file edit completed, then replacement session startup had
+roughly six seconds left before termination. The Toad fork's source trace found
+no permission/startup dependency cycle. A fresh isolated attempt with the default
+budget finished in 25.59 seconds and failed after replacement session creation:
+`DB().session_get(saved)` returned `None` at the native test's title assertion.
+Its full child output is retained in
+`/home/ts/.cache/agent-scratch/toad-test-ich92jvs/stdout.log`; the Toad fork owns
+that persistence diagnosis and the accompanying retired-session notifications.
+Neither attempt establishes the recorded SelectCurrent diagnosis or a deadlock.
 
 ### 2. Commander verbs take a fixed, small time
 
