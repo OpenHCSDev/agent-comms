@@ -52,7 +52,7 @@ class InheritedEnvironment(Mapping[str, str]):
 INHERITED_ENVIRONMENT = InheritedEnvironment()
 
 
-@dataclass(frozen=True, eq=False)
+@dataclass(frozen=True)
 class LaunchRuntime:
     """One selected installation for a worker and its native executable.
 
@@ -65,17 +65,13 @@ class LaunchRuntime:
     @classmethod
     def running(cls) -> LaunchRuntime:
         """Keep ordinary launches on the calling process's installation."""
-        return RunningRuntime(Path(sys.executable))
-
-    def __eq__(self, other: object) -> bool:
-        return isinstance(other, LaunchRuntime) and self.interpreter == other.interpreter
-
-    def __hash__(self) -> int:
-        return hash(self.interpreter)
+        return cls(Path(sys.executable))
 
     def child_environment(self, environment: Mapping[str, str]) -> dict[str, str]:
-        """A selected installation's child gets exactly the environment its launcher built."""
-        return dict(environment)
+        """A child of this process's own interpreter imports the source this process
+        imported; any other installation's child gets exactly the environment its launcher
+        built."""
+        return RunningSource.serving(self).environment(environment)
 
     @staticmethod
     def current_pointer() -> Path:
@@ -110,13 +106,6 @@ class LaunchRuntime:
             raise ValueError("Target interpreter is unavailable")
 
 
-class RunningRuntime(LaunchRuntime):
-    """This process's own interpreter: its child imports the source this process imported."""
-
-    def child_environment(self, environment: Mapping[str, str]) -> dict[str, str]:
-        return RunningSource.current().environment(environment)
-
-
 @dataclass(frozen=True)
 class RunningSource(ABC):
     """Where this process imported agent_comms from.
@@ -126,6 +115,14 @@ class RunningSource(ABC):
     """
 
     root: Path
+
+    @staticmethod
+    def serving(runtime: LaunchRuntime) -> RunningSource:
+        """The source a runtime's children import: this process's own when the runtime is this
+        process's interpreter, otherwise that installation's site-packages."""
+        if runtime.interpreter == Path(sys.executable):
+            return RunningSource.current()
+        return InstalledSource(runtime.prefix)
 
     @staticmethod
     def current() -> RunningSource:
@@ -155,12 +152,11 @@ class CheckoutSource(RunningSource):
 class RestoredRuntime(LaunchRuntime):
     """Original-process recovery preserves its original import environment too."""
 
-    @classmethod
-    def running(cls) -> LaunchRuntime:
-        return cls(Path(sys.executable))
-
     def _environment(self, source: Mapping[str, str]) -> dict[str, str]:
         return dict(source)
+
+    def child_environment(self, environment: Mapping[str, str]) -> dict[str, str]:
+        return dict(environment)
 
 
 class ImportPath(DeclaredFamily, JsonShapeFamily, affix="ImportPath"):
