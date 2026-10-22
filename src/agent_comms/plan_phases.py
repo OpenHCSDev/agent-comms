@@ -463,3 +463,62 @@ class InstallerFileIdentityPhase(RemainingSlopPhase):
         ("src/agent_comms/installer",),
     )
 
+
+class ContextRequestKeyPhase(RemainingSlopPhase):
+    """4.2: context requests are keyed by the incarnation lookup, never the current name."""
+
+    evidence = PatternAbsent(r"\bthread_name\b", ("src/agent_comms/context_store.py",))
+
+
+class TurnStatePhase(RemainingSlopPhase):
+    """4.4: a FinishedTurn member of the turn-record family owns the last finished turn."""
+
+    evidence = PatternAbsent(r"\blast_finished_turn_id\b")
+
+
+class WireRenamesPhase(RemainingSlopPhase):
+    """4.6: our own wire keys equal the field names; no admission spellings remain."""
+
+    evidence = PatternAbsent(r"WireName\(\"admission")
+
+
+class OwnedDispatchPhase(RemainingSlopPhase):
+    """5.4: MroDispatch replaces the inbox double dispatch; one compact JSON encoder."""
+
+    evidence = AllEvidence((
+        PatternAbsent(r"class TurnInboxReceiver\b"),
+        PatternAbsent(r"separators=\(\",\", ?\":\"\)"),
+    ))
+
+
+class KindFamiliesPhase(RemainingSlopPhase):
+    """6.3: kinds are families whose members carry their behaviour and spelling."""
+
+    evidence = PatternAbsent(
+        r"class (TagAction|ExecutionOrigin|WhenBusy|ControlClassification|MembershipChange"
+        r"|ViewKind)\b")
+
+
+class RostersPhase(RemainingSlopPhase):
+    """6.4: rosters beside families are derived from the family."""
+
+    evidence = PatternAbsent(r"PI_0_85_1_EVENT_KINDS|THREAD_CAPABILITIES|serves_new_threads")
+
+
+class RecordsPhase(RemainingSlopPhase):
+    """7: dead connectivity facets go; document updates return their result."""
+
+    evidence = AllEvidence((
+        PatternAbsent(r"ConnectivityFacet|observe_connectivity"),
+        PatternAbsent(
+            r"^\s*nonlocal\b",
+            (
+                "src/agent_comms/read_ledger.py",
+                "src/agent_comms/relationships.py",
+                "src/agent_comms/shared_ledger.py",
+                "src/agent_comms/input_disposition.py",
+                "src/agent_comms/owner_lifecycle.py",
+            ),
+        ),
+    ))
+

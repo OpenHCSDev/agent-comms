@@ -221,6 +221,13 @@ Waves 4 to 8 were written on 2026-10-21 and declared no phase in `plan_phases.py
 | maintenance_admission | 9.1 | no hand `assert_open_unlocked()` in `agent_activity.py` or `wire_log.py` | the bus batch owners |
 | transcript_hold | 9.3 | no `transcripts_held` or `HOLD_TRANSCRIPTS` in the installer | claude-ai |
 | installer_file_identity | 9.2 | no string-typed `rewritten`, suffix `endswith`, or `name[:-4]` in the installer | claude-ai |
+| context_request_key | 4.2 | no `thread_name` in `context_store.py` | one unit (carry) |
+| turn_state | 4.4 | no `last_finished_turn_id` in src | one unit |
+| wire_renames | 4.6 | no `WireName("admission…` in src | one unit, Toad in lockstep |
+| owned_dispatch | 5.4 | no `TurnInboxReceiver`, no hand `separators=(",", ":")` | one unit |
+| kind_families | 6.3 | no `TagAction`, `ExecutionOrigin`, `WhenBusy`, `ControlClassification`, `MembershipChange` or `ViewKind` enum classes | by file |
+| rosters | 6.4 | no `PI_0_85_1_EVENT_KINDS`, `THREAD_CAPABILITIES` or `serves_new_threads` | one unit |
+| records | 7 | no `ConnectivityFacet`/`observe_connectivity`; no `nonlocal` in the five document updaters | one unit |
 
 9.4 is Tristan's ruleset change. 9.5, 9.6, 9.9, 9.10 and 9.11 are claude-ai's and are measured by their own numbers in this section: a touched-tests PR check, the full ratchet list in the job summary, commander calls under 3 s, one GitHub reader, and one stack lock. The order across plans stays Tristan's: the virtual bus batch first, then multiple inheritance, the commander-native plan, then this plan. Phases with no stored data run in parallel with all of them on disjoint files.
 
