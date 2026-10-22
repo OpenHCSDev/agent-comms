@@ -72,15 +72,13 @@ from agent_comms.field_codec import (
     boundary_decoder,
 )
 from agent_comms.goals import CheckedCommit, OrderCheck, ProblemGoalOrder
-from agent_comms.locked_store import RegistryFile
-from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message
 from agent_comms.order_runs import OrderRun
 from agent_comms.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from agent_comms.plan_phases import OrderPhase, UnplannedPhase
 from agent_comms.problem_number import ProblemNumber
-from agent_comms.progress_claims import MergedClaim, ProgressClaim
+from agent_comms.progress_claims import MergedClaim, ProgressClaim, WorkingClaim
 from agent_comms.recorded_time import (
     EventTime,
     RecordedEventTime,
@@ -117,6 +115,9 @@ class DeliveryEvidence(DeclaredFamily, affix="DeliveryEvidence"):
     def artifact(self) -> str:
         raise ValueError("No application evidence was supplied at delivery; pass --artifact FILE.")
 
+    def require_run(self, run: OrderRun) -> None:
+        run.require_artifact("")
+
 
 @dataclass(frozen=True)
 class NoDeliveryEvidence(DeliveryEvidence):
@@ -132,10 +133,19 @@ class FileDeliveryEvidence(DeliveryEvidence):
             raise ValueError("Delivery evidence must name an existing file.")
         return self.path
 
+    def require_run(self, run: OrderRun) -> None:
+        run.require_artifact(self.path)
+
 
 @dataclass(frozen=True, kw_only=True)
 class OrderDelivery(DeclaredFamily, StoryEvent, affix="Delivery"):
     at: EventTime = field(default_factory=UnrecordedEventTime)
+
+    def check_base(self, repo: Path) -> str:
+        raise ValueError("This delivery has no source commit to establish a check base.")
+
+    def done_claims(self, order: CheckedProblemOrder) -> tuple[ProgressClaim, ...]:
+        return ()
 
     @property
     def installation_commits(self) -> tuple[str, ...]:
@@ -191,6 +201,10 @@ class CheckedDelivery(OrderDelivery, declared_name=None):
     def closing_artifact(self) -> str:
         return self.evidence.artifact()
 
+    def done_claims(self, order: CheckedProblemOrder) -> tuple[ProgressClaim, ...]:
+        self.evidence.require_run(order.run)
+        return super().done_claims(order)
+
     @property
     def installation_build(self) -> BuildIdentity:
         return self.proof_build
@@ -237,6 +251,13 @@ class RecordedCommitDelivery(CheckedDelivery, declared_name="commit"):
     def __post_init__(self) -> None:
         GitCommitText.decode(self.commit)
         GitCommitText.decode(self.delivered)
+
+    def check_base(self, repo: Path) -> str:
+        return Repo.git(repo, "merge-base", self.delivered, WorkBranches.main).strip()
+
+    def done_claims(self, order: CheckedProblemOrder) -> tuple[ProgressClaim, ...]:
+        super().done_claims(order)
+        return (MergedClaim(self.delivered),)
 
     @property
     def delivered(self) -> str:
@@ -388,6 +409,13 @@ class CheckedCommitDelivery(CommitDelivery):
 
 @dataclass(frozen=True, kw_only=True)
 class OperationDelivery(CheckedDelivery):
+    def check_base(self, repo: Path) -> str:
+        return WorkBranches.main
+
+    def done_claims(self, order: CheckedProblemOrder) -> tuple[ProgressClaim, ...]:
+        super().done_claims(order)
+        return (WorkingClaim(self.evidence.artifact()),)
+
     @property
     def line(self) -> str:
         return "operation checked"
@@ -1414,9 +1442,11 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
     def line(self) -> str:
         return "No order"
 
+    def check_base(self, repo: Path) -> str:
+        raise ValueError("This problem has no active checked order.")
+
     def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
-        """Only pending and claimed orders take a check correction (DeliverableProblemOrder)."""
-        raise ValueError("Only a pending or claimed order takes a check correction.")
+        raise ValueError("Only an active checked order takes a check correction.")
 
     finding: Annotated[ProblemFinding, WireOmitDefault()] = field(
         default_factory=UnlocatedProblemFinding
@@ -1545,6 +1575,16 @@ class FixShape:
             location.require_class(root, revision)
 
 
+class DeliverySource(DeclaredFamily, affix="DeliverySource"):
+    """The command's decoded source, before a commit reference is resolved in its repository."""
+
+    @abstractmethod
+    def delivery(self, repo: Path, evidence: DeliveryEvidence) -> CheckedDelivery: ...
+
+    def require_report(self) -> None:
+        raise ValueError("Triage returns --seen REPORT, not a commit or operation.")
+
+
 @dataclass(frozen=True)
 class OrderScope[Delivery: OrderDelivery](DeclaredFamily, affix="Scope"):
     """What the commander authorizes, including the delivery type at its boundary."""
@@ -1573,10 +1613,21 @@ class OrderScope[Delivery: OrderDelivery](DeclaredFamily, affix="Scope"):
     ) -> dict[ProgressClaim, tuple[str, ...]]: ...
 
     @abstractmethod
+    def delivery(self, repo: Path, source: DeliverySource,
+                 screenshot: str, seen: str) -> Delivery: ...
+
+    @abstractmethod
     def completed(self, todo: Todo, delivery: Delivery) -> Todo: ...
 
 
 class TriageScope(OrderScope[ReportDelivery]):
+    def delivery(self, repo: Path, source: DeliverySource,
+                 screenshot: str, seen: str) -> ReportDelivery:
+        source.require_report()
+        if screenshot:
+            raise ValueError("Triage returns --seen REPORT, not a screenshot.")
+        return ReportDelivery(report=Path(seen).read_text())
+
     def instructions(self, problem: str) -> tuple[str, ...]:
         return ("Scope: triage; classify and report only. Do not edit source or deliver commits.",
                 "Return the report to your commander; do not open an implementation PR.")
@@ -1597,6 +1648,12 @@ class TriageScope(OrderScope[ReportDelivery]):
 @dataclass(frozen=True)
 class FixScope(OrderScope[CheckedDelivery]):
     shape: FixShape
+
+    def delivery(self, repo: Path, source: DeliverySource,
+                 screenshot: str, seen: str) -> CheckedDelivery:
+        path = seen or screenshot
+        evidence = FileDeliveryEvidence(path) if path else NoDeliveryEvidence()
+        return source.delivery(repo, evidence)
 
     def require_references(self, root: Path, revision: SourceRevision) -> None:
         self.shape.require_references(root, revision)
@@ -1819,7 +1876,22 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 
 
 @dataclass(frozen=True, kw_only=True)
-class AwaitingInstallationProblemOrder(CheckedProblemOrder, declared_name=None):
+class OpenProblemOrder(CheckedProblemOrder, declared_name=None):
+    """An active order keeps corrections and accepts its checked delivery by identity."""
+
+    def corrected(self, correction: CorrectCheckTodo) -> Self:
+        if correction.previous != self.check:
+            raise ValueError("The order's check changed since it was read; read it again.")
+        return replace(self, check=correction.check,
+                       check_corrections=(*self.check_corrections, correction))
+
+    def require_delivery(self, order_id: str) -> None:
+        if self.id != order_id:
+            raise ValueError("The order changed; refresh its state before delivering it.")
+
+
+@dataclass(frozen=True, kw_only=True)
+class AwaitingInstallationProblemOrder(OpenProblemOrder, declared_name=None):
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         return (todo,)
 
@@ -1828,6 +1900,9 @@ class AwaitingInstallationProblemOrder(CheckedProblemOrder, declared_name=None):
 class MergedProblemOrder(AwaitingInstallationProblemOrder):
     """The checked order installed by a merge, with its actual merge identity."""
     sha: str
+
+    def check_base(self, repo: Path) -> str:
+        return f'{self.sha}^1'
 
     @property
     def line(self) -> str:
@@ -1856,18 +1931,8 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
 
 
 @dataclass(frozen=True, kw_only=True)
-class DeliverableProblemOrder(CheckedProblemOrder, declared_name=None):
+class DeliverableProblemOrder(OpenProblemOrder, declared_name=None):
     """Pending work and a holder's claim both await the commander's delivery verdict."""
-
-    def corrected(self, correction: CorrectCheckTodo) -> DeliverableProblemOrder:
-        if correction.previous != self.check:
-            raise ValueError("The order's check changed since it was read; read it again.")
-        return replace(self, check=correction.check,
-                       check_corrections=(*self.check_corrections, correction))
-
-    def require_delivery(self, order_id: str) -> None:
-        if self.id != order_id:
-            raise ValueError("The order changed; refresh its state before delivering it.")
 
     def sent_back(self, reason: StrikeReason) -> PendingProblemOrder:
         return self.fresh_order(time.time(), (*self.edits, reason.text))
@@ -1887,6 +1952,9 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
     at: EventTime = field(default_factory=lambda: RecordedEventTime(time.time()))
     first_call_deadline: EventTime = field(
         default_factory=lambda: RecordedEventTime(time.time() + 120))
+
+    def check_base(self, repo: Path) -> str:
+        return WorkBranches.main
 
     def reissued(self, at: float) -> PendingProblemOrder:
         return self.fresh_order(at, self.edits)
@@ -1942,6 +2010,9 @@ class ClaimedProblemOrder(DeliverableProblemOrder):
     claim: OrderClaim
     line: ClassVar[str] = "Claimed by the unit, waiting on the commander's verdict"
 
+    def check_base(self, repo: Path) -> str:
+        return WorkBranches.main
+
     def require_reassignment(self, todo: Todo, proposed: Assignment) -> None:
         """A corrected order to the claimant replaces its claim; another owner is a transfer."""
         if proposed.owner_identity != todo.holder_state.previous_assignment().owner_identity:
@@ -1954,6 +2025,9 @@ class ClaimedProblemOrder(DeliverableProblemOrder):
 @dataclass(frozen=True, kw_only=True)
 class DeliveredProblemOrder(AwaitingInstallationProblemOrder):
     delivery: OrderDelivery
+
+    def check_base(self, repo: Path) -> str:
+        return self.delivery.check_base(repo)
 
     @property
     def line(self) -> str:
@@ -3369,16 +3443,6 @@ class TodoStore(DurableStore):
                 f"{self.path}: {type(error).__name__}: {error}"
             ) from error
 
-    @contextmanager
-    def writer_connection(
-        self, *, check_same_thread: bool = True
-    ) -> Iterator[sqlite3.Connection]:
-        with (
-            MaintenanceBarrier(RegistryFile.path_in(self.root)).allow_input(),
-            super().writer_connection(check_same_thread=check_same_thread) as connection,
-        ):
-            yield connection
-
     def allocate_problem(self) -> str:
         with self.writing() as db:
             return str(ProblemAllocation.allocate(db))
@@ -3386,11 +3450,16 @@ class TodoStore(DurableStore):
     @classmethod
     def require_unit_in(cls, db: sqlite3.Connection, unit: ThreadIncarnation,
                         assigner: ThreadIncarnation) -> None:
-        """The original open Todo owns who assigns its unit, under this transaction."""
+        """The original open Todo owns who assigns its unit, under this transaction.
+
+        Its commander outranks the fork that assigned it, so an order a fork left open,
+        even one whose fork has ended, is the commander's to replace; sibling forks
+        stay refused, since a fork never created a problem itself."""
         for todo in cls.held_in(db,
-                f'NOT ({Assignment.sql_field("parent")}=? '
-                f'AND {Assignment.sql_field("parent_created")}=?)',
-                (assigner.name, assigner.wire_birth), unit=unit):
+                f'NOT (({Assignment.sql_field("parent")}=? '
+                f'AND {Assignment.sql_field("parent_created")}=?) '
+                'OR (creator=? AND creator_created=?))',
+                (assigner.name, assigner.wire_birth) * 2, unit=unit):
             raise TodoError(
                 f"{unit.name} is assigned by {todo.held().parent} on open order "
                 f"{todo.order.checked().id} ({todo.id}); "

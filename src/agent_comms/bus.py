@@ -33,12 +33,11 @@ from agent_comms.envelope_claim_transitions import (
     ClaimOwner, ClaimProjection, ClaimTransition, RecordedScope, ResourceClaim,
 )
 from agent_comms.field_codec import FieldCodec
-from agent_comms.locked_store import BusFile, RegistryFile, StoreCommittedError
-from agent_comms.maintenance_barrier import MaintenanceBarrier
+from agent_comms.locked_store import BusFile, StoreCommittedError
 from agent_comms.messages import BusRecord, Claimed, ClaimMessage, Message
 from agent_comms.message_reference import MessageReference
 from agent_comms.private_path import FileIdentity, PresentPath
-from agent_comms.typed_table import SQLiteDatabase, WalStore
+from agent_comms.typed_table import CarriedWriter, SQLiteDatabase, WalStore
 from agent_comms.watched import Watched
 
 if TYPE_CHECKING:
@@ -321,7 +320,7 @@ class BusReader(RouteCounts, ABC):
             )
 
 
-class Bus(BusReader, WalStore, BusFile, Watched):
+class Bus(BusReader, WalStore, CarriedWriter, BusFile, Watched):
     """One SQLite transaction owns the sequence and all of a record's fields."""
 
     filename = "bus.sqlite3"
@@ -375,7 +374,6 @@ class Bus(BusReader, WalStore, BusFile, Watched):
         """One commit and notification lifetime for inserts and conditional claims."""
         with ExitStack() as writes:
             db = writes.enter_context(self.writing())
-            MaintenanceBarrier(RegistryFile.path_in(self.path.parent)).assert_open_unlocked()
             header = BusRow.require(db, seq=operation(db))
             committed = header.kind.read_from(db, header.seq)
             try:
