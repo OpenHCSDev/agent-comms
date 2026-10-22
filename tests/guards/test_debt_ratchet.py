@@ -20,6 +20,7 @@ from tools.debt_ratchet import (
     BannedVocabulary,
     BroadExceptDefault,
     BroadSwallow,
+    ContentCache,
     ForeignFieldSpellings,
     FrozenFieldWrite,
     FunctionLocalImport,
@@ -1230,3 +1231,12 @@ def test_growth_lines_end_the_merged_log(repo: Repository) -> None:
     )
     assert merged.returncode == 1
     assert merged.stdout.rstrip().splitlines()[-1].startswith(("grew ", "introduced "))
+
+
+def test_content_cache_digest_covers_a_module_only_loaded_indirectly():
+    """The ratchet never imports coordination_tables.attempts by name; agent_comms loads it
+    through its own imports. Its source is still one of the ratchet's measuring code, so a
+    change to it is a different cache key."""
+    indirect = Path(sys.modules["agent_comms.coordination_tables.attempts"].__file__).resolve()
+    assert indirect in ContentCache.sources()
+    assert indirect.is_relative_to(Path(__file__).resolve().parents[2] / "src")
