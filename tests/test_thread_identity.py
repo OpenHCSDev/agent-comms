@@ -21,7 +21,14 @@ from agent_comms.thread_identity import (
     RecordedThreadIncarnation,
     TurnIdentity,
 )
-from agent_comms.thread_status import IdleThreadStatus
+from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.thread_status import (
+    ArchivedThreadStatus,
+    ConnectedThreadStatus,
+    IdleThreadStatus,
+    RunningThreadStatus,
+    StoppedThreadStatus,
+)
 from agent_comms.turn_lease import FinishedTurnFence, NoFinishedTurn
 from agent_comms.thread_text import GivenThreadText, NoThreadText
 from agent_comms.thread_model import DeclaredModel
@@ -250,16 +257,49 @@ def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):
     assert all(sequence in seen for sequence in (message.seq, next_message.seq))
 
 
-def test_stopped_status_changes_do_not_invent_another_owner(tmp_path):
+@pytest.mark.parametrize("withdrawals", [
+    pytest.param((Registration.unregister, Registration.unregister, Registration.archive,
+                  Registration.begin_delete, Registration.remove), id="stop-archive-delete"),
+    pytest.param((Registration.archive, Registration.remove), id="archive-remove"),
+    pytest.param((Registration.remove,), id="remove"),
+])
+@pytest.mark.parametrize(("status", "revokes"), [
+    (RunningThreadStatus(), True),
+    (IdleThreadStatus(), True),
+    (StoppedThreadStatus(), False),
+    (ArchivedThreadStatus(), False),
+])
+def test_withdrawal_revokes_only_an_existing_owner(tmp_path, withdrawals, status, revokes):
     registry = registry_with_owner(tmp_path)
+    registry.register(registry.require("owner"), status=status)
+    before = registry.snapshot()
+    first, *remaining = withdrawals
+    first(registry, "owner")
+    after = registry.snapshot()
+    assert (after.owner_generations["owner"] > before.owner_generations["owner"]) == revokes
+    assert after.claim_generation("owner") > before.claim_generation("owner")
+    withdrawn = after.owner_generations["owner"]
+    for withdraw in remaining:
+        withdraw(registry, "owner")
+        current = registry.snapshot()
+        assert current.owner_generations["owner"] == withdrawn
+        assert current.claim_generation("owner") > after.claim_generation("owner")
+        after = current
+
+
+def test_external_unregister_revokes_owner_while_bridge_remains_connected(tmp_path):
+    registry = Registration(tmp_path / "registry.json")
+    registry.register(registry.new_thread(
+        "owner", frozenset(), str(tmp_path), execution=ExternalThreadExecution,
+        process_identity=ProcessIdentity.capture(os.getpid()),
+    ))
+    before = registry.snapshot()
+    assert before.status("owner") == ConnectedThreadStatus()
     registry.unregister("owner")
-    stopped = registry.snapshot().owner_identity("owner")
-    registry.unregister("owner")
-    registry.archive("owner")
-    registry.begin_delete("owner")
-    assert registry.snapshot().owner_identity("owner") == stopped
-    registry.remove("owner")
-    assert registry.snapshot().owner_generations["owner"] == stopped.generation
+    after = registry.snapshot()
+    assert after.status("owner") == before.status("owner")
+    assert after.owner_generations["owner"] > before.owner_generations["owner"]
+    assert after.claim_generation("owner") > before.claim_generation("owner")
 
 
 def test_same_launch_ignores_metadata_and_follows_process_session_and_model(tmp_path, *, thread_registration):

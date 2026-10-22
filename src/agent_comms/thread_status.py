@@ -15,6 +15,7 @@ from .thread_presentation import ThreadOwnerBinding, ThreadPresentation, Inactiv
 if TYPE_CHECKING:
     from .activity import ObservedActivity
     from .registry_document import RosterVisibility
+    from .thread_identity import GenerationCounter
     from .threads import Thread
 
 
@@ -76,6 +77,9 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
     def require_mutable(self, name: str) -> None:
         """Registration/heartbeat may update this thread's presence."""
 
+    def withdraw_owner(self, counter: GenerationCounter, name: str) -> None:
+        """Withdraw this presence without inventing an owner it did not hold."""
+
     def starts_owner(self, nxt: ThreadStatus) -> bool:
         return not self.active and nxt.active
 
@@ -122,6 +126,9 @@ class ActiveThreadPresence(AlwaysListed, Visible, ThreadStatus, declared_name=No
 
     def require_active(self) -> None:
         pass
+
+    def withdraw_owner(self, counter: GenerationCounter, name: str) -> None:
+        counter.advance(name)
 
     def for_deletion(self) -> ThreadStatus:
         raise RelationViolationError("Stop a running thread before permanently deleting it.")

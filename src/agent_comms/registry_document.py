@@ -550,8 +550,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
 
     def unregister(self, name: str) -> None:
         name = self.require(name).name
-        if self.status(name).active:
-            self.owners.advance(name)
+        self.status(name).withdraw_owner(self.owners, name)
         thread = self.threads[name]
         self.set_status(name, thread.execution.registered_status(thread, StoppedThreadStatus()))
         self.advance_claim(name)
@@ -559,8 +558,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
 
     def archive(self, name: str) -> None:
         name = self.require(name).name
-        if self.status(name).active:
-            self.owners.advance(name)
+        self.status(name).withdraw_owner(self.owners, name)
         self.set_status(name, ArchivedThreadStatus())
         self.advance_claim(name)
 
@@ -609,8 +607,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         )
         for child_name in detached:
             self.threads[child_name] = replace(self.threads[child_name], parent=NoParent())
-        if self.status(name).active:
-            self.owners.advance(name)
+        self.status(name).withdraw_owner(self.owners, name)
         self.advance_claim(name)
         del self.threads[name]
         self.statuses.pop(name, None)
