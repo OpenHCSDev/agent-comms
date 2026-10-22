@@ -1110,8 +1110,8 @@ class ObserverStatus(ABC):
     @abstractmethod
     def raise_if_failed(self) -> None: ...
 
-    def ended(self, pid: int, exit_status: int | None, error: str | None) -> ObserverDied:
-        return ObserverDied(pid, exit_status, error)
+    def failure(self, create: Callable[[], ObserverDied]) -> ObserverDied:
+        return create()
 
 
 class NoObserverFailure(ObserverStatus):
@@ -1138,7 +1138,7 @@ class ObserverDied(CoordinationError, ObserverStatus):
     def raise_if_failed(self) -> None:
         raise self
 
-    def ended(self, pid: int, exit_status: int | None, error: str | None) -> ObserverDied:
+    def failure(self, create: Callable[[], ObserverDied]) -> ObserverDied:
         return self
 
 
@@ -1341,7 +1341,9 @@ class ObservationProcess(AbstractContextManager):
         """The service ended (``error``: the traceback it sent): fail its awaited reads and say how it exited."""
         self._reader.close()
         self.process.join(timeout=2)
-        died = self.status.ended(self.process.pid, self.process.exitcode, error)
+        died = self.status.failure(
+            partial(ObserverDied, self.process.pid, self.process.exitcode, error)
+        )
         self.status = died
         self.abandon_reads(died)
         return died
