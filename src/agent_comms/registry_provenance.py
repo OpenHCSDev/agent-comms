@@ -205,10 +205,10 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
         return RetiredRecipient(recipient.recipient_lookup)
 
     @staticmethod
-    def capture(snapshot: RegistryProvenance) -> RegistryProvenance:
+    def capture(source: RegistryNames[ThreadProvenance]) -> RegistryProvenance:
         return RegistryProvenance(
             threads={
-                name: ThreadProvenance.capture(thread) for name, thread in snapshot.threads.items()
+                name: ThreadProvenance.capture(thread) for name, thread in source.threads.items()
             },
-            aliases=dict(snapshot.aliases),
+            aliases=dict(source.aliases),
         )
