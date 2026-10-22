@@ -305,18 +305,19 @@ class BranchRule:
 
 
 @dataclass(frozen=True)
-class RulesetGates(MainEvidence):
+class RulesetGates(PhaseEvidence):
     """The merge queue refuses a head without the review's verdict: an active rule on main
     requires the queue job that reads ``HeadReview.context``, and no actor of that rule's
-    ruleset skips it. A required check an actor skips gates nothing. Read once per main
-    commit."""
+    ruleset skips it. A required check an actor skips gates nothing. GitHub's rules change
+    without a main commit, so this is read once per reading, never cached by main's commit."""
 
     rules_query: ClassVar[str] = (
         "[.[] | {ruleset: .ruleset_id, required: [.parameters.required_status_checks[]?.context]}]"
     )
     bypass_query: ClassVar[str] = "[.bypass_actors[].bypass_mode]"
 
-    def read(self, main: MainTree) -> bool:
+    def holds(self, reading: PlanReading) -> bool:
+        main = reading.main
         rules = FieldCodec.decode(
             tuple[BranchRule, ...],
             self.api(main, f"rules/branches/{main.branch}", self.rules_query),

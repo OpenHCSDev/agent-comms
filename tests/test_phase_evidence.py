@@ -145,7 +145,7 @@ def test_ruleset_gates_only_while_no_actor_skips_the_review(tmp_path):
             def api(main, path, query):
                 return answers[path]
 
-        return Answered().read(main)
+        return Answered().holds(PlanReading((), main))
 
     assert gates(["pull_request"])
     assert gates([])
