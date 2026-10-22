@@ -11,6 +11,7 @@ import fcntl
 import hashlib
 import json
 import os
+import time
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
@@ -168,6 +169,10 @@ class WatchState:
         """Whether this session can be the bus thread named; unbound, it cannot be ruled out."""
         return True
 
+    def await_socket(self, absent: OSError) -> None:
+        """No bridge holds the claim, so its socket is gone, not between bridges."""
+        raise absent
+
 
 class UnclaimedWatch(WatchState):
     pass
@@ -215,6 +220,11 @@ class LiveWatch(RecordedWatch):
 
     def serving_claims(self) -> tuple[WatchClaim, ...]:
         return (self.claim,) if self.claim.socket_path.exists() else ()
+
+    def await_socket(self, absent: OSError) -> None:
+        """The claim's lock outlives the install's exec, so a held claim's absent socket is
+        the swap's gap: wait for the successor however long it starts."""
+        time.sleep(.05)
 
 
 class LapsedWatch(RecordedWatch):

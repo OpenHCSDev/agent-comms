@@ -777,8 +777,6 @@ class Commander(CommanderContext):
     def say(self, units: str, body_file: str,
             answers: tuple[MessageReference, ...] = ()) -> None:
         body = open(body_file).read()
-        if len(re.findall(r'(?m)^\s*\d+[.)] ', body)) >= 2:
-            sys.exit('Refused: an edit list needs a tracked order and review timer; use order send with a JSON file.')
         refuse(body, *OUTGOING)
         print(self.post(VerdictAudience(tuple(units.split(','))), body.rstrip(), answers))
 

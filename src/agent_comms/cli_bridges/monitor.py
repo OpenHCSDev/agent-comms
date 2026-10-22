@@ -8,7 +8,6 @@ import secrets
 import select
 import socket
 import sys
-import time
 from abc import abstractmethod
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -302,16 +301,14 @@ class InspectSession(SessionRequest):
             raise ValueError("Session bridge did not report its process and runtime")
         return reply
 
-    def awaited(self, claim: WatchClaim, seconds: float = 30) -> SessionInformation:
-        """An install swaps the endpoint; its socket is absent for that gap, not gone."""
-        deadline = time.monotonic() + seconds
+    def awaited(self, claim: WatchClaim) -> SessionInformation:
+        """An install swaps the endpoint; the claim's state says whether an absent socket is
+        that gap or gone."""
         while True:
             try:
                 return self.information(claim)
-            except (FileNotFoundError, ConnectionRefusedError):
-                if time.monotonic() >= deadline:
-                    raise
-                time.sleep(.05)
+            except (FileNotFoundError, ConnectionRefusedError) as absent:
+                claim.state().await_socket(absent)
 
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
         return SessionInformation(
