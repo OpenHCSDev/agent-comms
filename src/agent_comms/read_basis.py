@@ -839,7 +839,9 @@ class MessageDisplayScope(DeclaredFamily, ABC, affix="DisplayScope"):
             tuple(DisplayedConversation(conversation, (), sequence)
                   for conversation, sequence in prefixes.items()), RecordedBus(source.identity))
 
-    def intersection(self, other: MessageDisplayScope):
+    def intersection(
+        self, other: MessageDisplayScope,
+    ) -> tuple[str, tuple[object, ...]]:
         predicate, parameters = self.index_predicate
         other_predicate, other_parameters = other.index_predicate
         return f"({predicate}) AND ({other_predicate})", (*parameters, *other_parameters)

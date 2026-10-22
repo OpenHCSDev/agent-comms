@@ -5,17 +5,20 @@ from __future__ import annotations
 import hashlib
 import logging
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
-from agent_comms.coordination_errors import SchemaVersionError
+from agent_comms.coordination_errors import IdentityConflict, SchemaVersionError
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
 from agent_comms.coordinator import Coordination
 from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
+from .audience_manifest import MAX_AUDIENCE_BYTES
+from .coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
 from .field_codec import MalformedRecord
+from .response_acknowledgement import _canonical
 from .typed_table import (
     Column,
     DurableTables,
@@ -87,9 +90,6 @@ class ClaimBatchAcknowledgements(CohortTable, TypedTable, declared_name="claim_b
 
     @classmethod
     def decision_hash(cls, delivery: Delivered) -> str:
-        from .audience_manifest import MAX_AUDIENCE_BYTES
-        from .response_acknowledgement import _canonical
-
         encoded = _canonical([decision.to_wire() for decision in delivery.decisions])
         if len(encoded) > MAX_AUDIENCE_BYTES:
             raise ValueError("Private decision set exceeds its byte bound.")
@@ -100,8 +100,6 @@ class ClaimBatchAcknowledgements(CohortTable, TypedTable, declared_name="claim_b
         cls, delivery: Delivered, privacy: RegistryPrivacy, accepted_at_ms: int,
     ) -> ClaimBatchAcknowledgements:
         """Native acknowledgement facts derive from the actual delivered value."""
-        from .coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
-
         return cls(
             wire_root_id=privacy.namespace,
             wire_seq=delivery.seq,
@@ -119,10 +117,6 @@ class ClaimBatchAcknowledgements(CohortTable, TypedTable, declared_name="claim_b
         )
 
     def require_delivery(self, delivery: Delivered, privacy: RegistryPrivacy) -> None:
-        from dataclasses import replace
-
-        from .coordination_errors import IdentityConflict
-
         if replace(self, sealed=False) != self.for_delivery(delivery, privacy, self.accepted_at_ms):
             raise IdentityConflict("sealed cohort acknowledgement conflicts with committed bus")
 
