@@ -1,0 +1,91 @@
+== ratchet src (base merge-base 8a4266e062d240cefb80b3ccef1db4e52a1b9d2c)
+grew BannedVocabulary:src/agent_comms/bus.py +2
+grew BannedVocabulary:src/agent_comms/bus_publication.py +1
+grew BannedVocabulary:src/agent_comms/maintenance_barrier.py +1
+grew BannedVocabulary:src/agent_comms/restart_queue.py +1
+grew BooleanChainTerms:src/agent_comms/historical_views.py +4
+grew FunctionLocalImport:src/agent_comms/bus.py +1
+grew FunctionLocalImport:src/agent_comms/cohort_schema.py +5
+grew FunctionLocalImport:src/agent_comms/coordination_tables/publications.py +1
+grew FunctionLocalImport:src/agent_comms/cursor_owner.py +4
+grew FunctionLocalImport:src/agent_comms/cursor_publication.py +1
+grew FunctionLocalImport:src/agent_comms/history_views.py +3
+grew FunctionLocalImport:src/agent_comms/messages.py +4
+grew FunctionLocalImport:src/agent_comms/messaging.py +1
+grew FunctionLocalImport:src/agent_comms/private_nk_entrypoint.py +6
+grew FunctionLocalImport:src/agent_comms/private_registry_guard.py +8
+grew FunctionLocalImport:src/agent_comms/proven_source_coverage.py +1
+grew FunctionLocalImport:src/agent_comms/queued_input.py +1
+grew FunctionLocalImport:src/agent_comms/selected_participant.py +1
+grew FunctionLocalImport:src/agent_comms/task_sources.py +1
+grew GodClassExcess:src/agent_comms/goal_attempts.py::GoalAttemptStore +1
+grew LintFindings:src/agent_comms/acp.py +1
+grew LintFindings:src/agent_comms/bus.py +6
+grew LintFindings:src/agent_comms/bus_tables.py +4
+grew LintFindings:src/agent_comms/cohort_foreground.py +1
+grew LintFindings:src/agent_comms/cohort_schema.py +2
+grew LintFindings:src/agent_comms/coordination_cohort.py +1
+grew LintFindings:src/agent_comms/coordination_response.py +2
+grew LintFindings:src/agent_comms/coordination_tables/publications.py +2
+grew LintFindings:src/agent_comms/goal_attempts.py +1
+grew LintFindings:src/agent_comms/goal_management.py +1
+grew LintFindings:src/agent_comms/goal_waits.py +1
+grew LintFindings:src/agent_comms/history_views.py +1
+grew LintFindings:src/agent_comms/input_disposition.py +1
+grew LintFindings:src/agent_comms/input_origin.py +1
+grew LintFindings:src/agent_comms/message_bus.py +4
+grew LintFindings:src/agent_comms/owner_lifecycle.py +1
+grew LintFindings:src/agent_comms/page_traversal.py +1
+grew LintFindings:src/agent_comms/private_registry_guard.py +1
+grew LintFindings:src/agent_comms/registry_store.py +2
+grew LintFindings:src/agent_comms/restart_queue.py +3
+grew LintFindings:src/agent_comms/retained_task_facts.py +1
+grew LintFindings:src/agent_comms/runtime.py +1
+grew LintFindings:src/agent_comms/selected_participant.py +1
+grew LintFindings:src/agent_comms/selected_write_plan.py +1
+grew LintFindings:src/agent_comms/task_sources.py +1
+grew LintFindings:src/agent_comms/transcript_sources.py +1
+grew LintFindings:src/agent_comms/typed_table.py +3
+grew NoneAbsence:src/agent_comms/bus.py +3
+grew NoneAbsence:src/agent_comms/coordination_tables/publications.py +1
+grew NoneAbsence:src/agent_comms/registry_document.py +2
+grew NoneAbsence:src/agent_comms/registry_provenance.py +2
+grew NoneAbsence:src/agent_comms/thread_identity.py +6
+grew NoneAbsence:src/agent_comms/transcript_sources.py +1
+grew TypeErrors:src/agent_comms/acp.py +7
+grew TypeErrors:src/agent_comms/bus.py +21
+grew TypeErrors:src/agent_comms/bus_activity_index.py +2
+grew TypeErrors:src/agent_comms/bus_tables.py +3
+grew TypeErrors:src/agent_comms/commander/standing.py +1
+grew TypeErrors:src/agent_comms/history_views.py +1
+grew TypeErrors:src/agent_comms/messages.py +2
+grew TypeErrors:src/agent_comms/page_traversal.py +6
+grew TypeErrors:src/agent_comms/presentation.py +2
+grew TypeErrors:src/agent_comms/private_registry_guard.py +1
+grew TypeErrors:src/agent_comms/read_basis.py +3
+grew TypeErrors:src/agent_comms/selected_claim.py +1
+grew TypeErro
+rs:src/agent_comms/task_sources.py +1
+grew TypeErrors:src/agent_comms/transcript_sources.py +1
+grew UncarriedRecordFormat +1
+grew Unformatted:src/agent_comms/page_traversal.py +1
+introduced BannedVocabulary:src/agent_comms/bus.py at lines [68, 75]
+introduced BannedVocabulary:src/agent_comms/bus_publication.py at lines [71]
+introduced BannedVocabulary:src/agent_comms/maintenance_barrier.py at lines [316]
+introduced BannedVocabulary:src/agent_comms/restart_queue.py at lines [403]
+introduced NoneAbsence:src/agent_comms/bus.py at lines [177, 181, 223]
+introduced NoneAbsence:src/agent_comms/channel_management.py at lines [276]
+introduced NoneAbsence:src/agent_comms/coordination_cohort.py at lines [149]
+introduced NoneAbsence:src/agent_comms/coordination_tables/publications.py at lines [54]
+introduced NoneAbsence:src/agent_comms/input_drain.py at lines [411]
+introduced NoneAbsence:src/agent_comms/page_traversal.py at lines [127]
+introduced NoneAbsence:src/agent_comms/registry_document.py at lines [798, 799]
+introduced NoneAbsence:src/agent_comms/registry_provenance.py at lines [192, 193]
+introduced NoneAbsence:src/agent_comms/task_sources.py at lines [144, 164]
+introduced NoneAbsence:src/agent_comms/thread_identity.py at lines [536, 536, 603, 603, 674, 674]
+introduced NoneAbsence:src/agent_comms/transcript_sources.py at lines [490]
+== ratchet tools
+grew BannedVocabulary:tools/cutover/carry_bus_history.py +1
+grew ForeignFieldSpellings:tools/cutover/carry_bus_history.py +1
+grew StringSubscript +1
+introduced BannedVocabulary:tools/cutover/carry_bus_history.py at lines [692]
