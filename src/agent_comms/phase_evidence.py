@@ -8,6 +8,7 @@ Task acceptance never proves a phase. Each phase declares the evidence its plan'
 from __future__ import annotations
 
 import ast
+import copy
 import json
 import re
 import subprocess
@@ -221,8 +222,8 @@ class ErasedBody(ast.NodeTransformer):
 
     @classmethod
     def of(cls, function: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
-        erased = cls().visit(ast.Module([*function.body], []))
-        return ast.dump(function.args) + ast.dump(erased)
+        erased = cls().visit(copy.deepcopy(function))
+        return ast.dump(erased.args) + ast.dump(ast.Module(erased.body, []))
 
 
 @dataclass(frozen=True)
