@@ -14,6 +14,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .bus import Bus, BusReader
 from .channel_targets import CommandTarget
 from .coordination_errors import DMScopeChanged
 from .field_codec import FieldCodec, NullMember, SubclassUnion
@@ -33,7 +34,6 @@ from .sealed import Sealed
 from .store_files import SharedLock
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
-from .bus import Bus, BusReader
 
 if TYPE_CHECKING:
     from .bus_publication import Delivered

@@ -7,23 +7,23 @@ captured read; the wire, registry and input document remain the only authorities
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from abc import abstractmethod
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .input_attempt import StoredInput
-from .messages import ClaimMessage, Message
 from .message_reference import MessageReference
+from .messages import ClaimMessage, Message
 from .text_digest import TextDigest
 
 if TYPE_CHECKING:
     from .bus import BusReader
     from .input_disposition import InputDispositions
-    from .thread_identity import ThreadIncarnation
     from .registry_document import RegistrySnapshot
+    from .thread_identity import ThreadIncarnation
     from .threads import Thread
 
 

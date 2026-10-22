@@ -1,4 +1,4 @@
-"""Private, versioned bus sidebands; public projections must never consume them."""
+"""Declared delivery and publication capabilities for SQLite bus records."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import json
 import sqlite3
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar, Final, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.audience_manifest import FrozenAudience
 from agent_comms.bus_tables import BusRow
@@ -31,7 +31,6 @@ if TYPE_CHECKING:
     from .threads import Thread
 
 
-PRIVATE_WIRE_FIELD: Final = "_agent_comms_private_v1"
 class Delivered(BusRecord, declared_name=None):
     audience: FrozenAudience
     decisions: tuple[RecipientDecision, ...]
@@ -68,7 +67,7 @@ class Delivered(BusRecord, declared_name=None):
 
 
 class KeyedPublication(BusRecord, declared_name=None):
-    """One publication key binds one Message's content, not its encoded receipt."""
+    """One publication key binds Message content, not the acknowledgement encoding."""
 
     acknowledgement: KeyedResponseAcknowledgement
     publication_key: ClassVar[Generated] = Generated(

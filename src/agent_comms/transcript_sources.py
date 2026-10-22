@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from .transcript_events import TranscriptEvent
     from .turn_digests import TurnBound
 
+from .bus import Bus
 from .bus_publication import Delivered
 from .coordination_errors import StaleRevision, TranscriptChanged
 from .declared_family import DeclaredFamily
@@ -36,7 +37,6 @@ from .transcript_events import (
     UserTranscript,
 )
 from .typed_table import StoreWriter
-from .bus import Bus
 
 
 @dataclass(frozen=True)

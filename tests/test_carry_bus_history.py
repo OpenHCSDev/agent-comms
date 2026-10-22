@@ -15,6 +15,7 @@ import pytest
 # This fixture needs the removed writer, not a copy of its implementation.
 # The commit is an ancestor of this migration and is retired with the carry test.
 PREDECESSOR = "196582f6d"
+REPOSITORY = Path(__file__).resolve().parents[1]
 
 
 def publish_predecessor_history(directory: Path) -> None:
@@ -91,37 +92,20 @@ def publish_predecessor_history(directory: Path) -> None:
     empty.messaging.initialize_private_initial_protocol(history=())
 
 
-def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
-    from cutover.carry_bus_history import (
-        BusHistory,
-        ClaimHistoryRow,
-        HistoryLine,
-        HistoryMetadata,
-        HistoryOffset,
-    )
-
-    from agent_comms.bus import Bus, ClaimRecord, PublicRecord
+def predecessor_history(tmp_path: Path) -> Path:
+    """Create the original bus through its real publisher, shared by carry/rehearsal proof."""
     from agent_comms.core_stamp import WheelStamp
-    from agent_comms.errors import RelationViolationError, UnclaimedError
-    from agent_comms.field_codec import FieldCodec
-    from agent_comms.historical_views import HistoryArchive
-    from agent_comms.installer.backup import StoreBackup
-    from agent_comms.installer.carry import Carried
-    from agent_comms.messages import BusRecord
-    from agent_comms.read_ledger import ReadLedger
-    from agent_comms.recorded_bus import RecordedBusIdentity
 
-    checkout = Path(__file__).resolve().parents[1]
     archive = tmp_path / "publisher.tar"
     with archive.open("wb") as stream:
-        subprocess.run(["git", "archive", PREDECESSOR], cwd=checkout, stdout=stream, check=True)
+        subprocess.run(["git", "archive", PREDECESSOR], cwd=REPOSITORY, stdout=stream, check=True)
     predecessor = tmp_path / "publisher"
     predecessor.mkdir()
     with tarfile.open(archive) as tree:
         tree.extractall(predecessor, filter="data")
     archive.unlink()
     commit = subprocess.check_output(
-        ["git", "rev-parse", PREDECESSOR], cwd=checkout, text=True).strip()
+        ["git", "rev-parse", PREDECESSOR], cwd=REPOSITORY, text=True).strip()
     WheelStamp(commit).write(predecessor / "src" / "agent_comms" / "package_stamp.py")
     generated = tmp_path / "generated"
     runner = predecessor / Path(__file__).name
@@ -134,6 +118,29 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
         capture_output=True, text=True, timeout=60,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+    return generated
+
+
+def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
+    from cutover.carry_bus_history import (
+        BusHistory,
+        ClaimHistoryRow,
+        HistoryLine,
+        HistoryMetadata,
+        HistoryOffset,
+    )
+
+    from agent_comms.bus import Bus, ClaimRecord, PublicRecord
+    from agent_comms.errors import RelationViolationError, UnclaimedError
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.historical_views import HistoryArchive
+    from agent_comms.installer.backup import StoreBackup
+    from agent_comms.installer.carry import Carried
+    from agent_comms.messages import BusRecord
+    from agent_comms.read_ledger import ReadLedger
+    from agent_comms.recorded_bus import RecordedBusIdentity
+
+    generated = predecessor_history(tmp_path)
     original = generated / "destination"
     archived, = (original / "history").iterdir()
     root = tmp_path / "carried"
@@ -157,7 +164,7 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
     request = replace(dry, apply=True)
     completed = subprocess.run(
         [sys.executable, "-m", "agent_comms.installer.step_worker", request.name(), "carry",
-         json.dumps(FieldCodec.encode(request))], cwd=checkout,
+         json.dumps(FieldCodec.encode(request))], cwd=REPOSITORY,
         capture_output=True, text=True, timeout=60,
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr

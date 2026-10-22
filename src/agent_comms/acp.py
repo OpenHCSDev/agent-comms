@@ -50,6 +50,7 @@ from .cohort_foreground import _accept_visible_deliveries
 from .comms import Comms, wire
 from .coordination_cohort import next_sealed_assignment
 from .coordination_database import CoordinationStore
+from .cursor_owner import CursorOwner
 from .cursor_publication import CursorPublication
 from .field_codec import FieldCodec, MalformedRecord
 from .image_inputs import prompt_images
@@ -57,7 +58,6 @@ from .input_drain import InputDrain
 from .input_effects import InputEffects
 from .launch_root import LaunchRoot
 from .message_bus import MessageBus
-from .cursor_owner import CursorOwner
 from .publisher import ResponseWrites
 from .queued_input import DeliveredInput
 from .runtime import (
