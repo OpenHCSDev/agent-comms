@@ -5,6 +5,7 @@ CLI opens first reconciles a store behind the verb's back. Without the hold, a s
 differs is refused, naming the store, and the file stays as it was."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sqlite3
@@ -13,16 +14,27 @@ import sys
 from contextlib import closing
 from pathlib import Path
 
+from agent_comms.cli_commands import (
+    CliCommand,
+    PlannedReconcileCliCommand,
+    ReconcileStoresCliCommand,
+)
 from agent_comms.maintenance_barrier import HOLDER_NONCE
 from agent_comms.typed_table import ReconciledFile
 from conftest import maintenance_held
 
 
-def reconcile(root: Path, holder: str = "") -> subprocess.CompletedProcess:
+def reconcile(root: Path, holder: str = "",
+              command: type[CliCommand] = ReconcileStoresCliCommand) -> subprocess.CompletedProcess:
     return subprocess.run(
         [sys.executable, "-m", "agent_comms.cli", "--root", str(root),
-         "reconcile-stores"], capture_output=True, text=True, timeout=120,
+         *command.invocation()], capture_output=True, text=True, timeout=120,
         env={**os.environ, HOLDER_NONCE: holder})
+
+
+def digests(root: Path) -> dict[Path, str]:
+    return {path: hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in sorted(root.rglob("*")) if path.is_file()}
 
 
 def drop_one_index_each(root: Path) -> dict[str, str]:
@@ -62,3 +74,16 @@ def test_a_schema_change_outside_the_hold_is_refused_naming_the_store(private_co
     for name, index in dropped.items():
         with closing(sqlite3.connect(root / name)) as db:
             assert not db.execute("SELECT 1 FROM sqlite_master WHERE name=?", (index,)).fetchone()
+
+
+def test_planned_reconcile_names_the_same_stores_and_writes_nothing(private_comms):
+    """The installer asks this before its backup, under the hold that would let a write
+    through: it must name what reconcile-stores rewrites and leave every byte alone."""
+    root = private_comms.root
+    dropped = drop_one_index_each(root)
+    with maintenance_held(root) as nonce:
+        before = digests(root)
+        completed = reconcile(root, nonce, PlannedReconcileCliCommand)
+        assert completed.returncode == 0, completed.stdout + completed.stderr
+        assert tuple(json.loads(completed.stdout)["rewritten"]) == tuple(sorted(dropped))
+        assert digests(root) == before

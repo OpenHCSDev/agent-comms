@@ -17,7 +17,7 @@ import subprocess
 import time
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping
-from contextlib import aclosing
+from contextlib import aclosing, closing
 from dataclasses import dataclass, field, fields, replace
 from functools import partial
 from inspect import iscoroutinefunction, signature
@@ -877,7 +877,11 @@ class CliCommand(
 
     def run(self, ctx: Comms, output: TextIO) -> int:
         """Run this command and write its declared result."""
-        result: CliResult = self.apply(ctx)
+        return self.written(self.apply(ctx), output)
+
+    @staticmethod
+    def written(result: CliResult, output: TextIO) -> int:
+        """Write one declared result to the caller's stream; its exit code."""
         json.dump(result.to_wire(), output, indent=2)
         output.write("\n")
         return result.exit_code()
@@ -1745,16 +1749,49 @@ class ReadBackCliCommand(CliCommand, declared_name="read-back"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ReconcileStoresCliCommand(CliCommand, declared_name="reconcile-stores"):
+class StoreReconcileCliCommand(CliCommand):
+    """Every declared store whose schema differs from this runtime's declarations; each
+    member says what it does with one."""
+
+    @staticmethod
+    @abstractmethod
+    def changes(owner: type[ReconciledFile], path: Path) -> bool:
+        """Whether this member changes, or would change, the store at ``path``."""
+
+    def answer(self, root: Path) -> ReconciledStoresResult:
+        return ReconciledStoresResult(tuple(
+            str(path.relative_to(root))
+            for path, owner in sorted(ReconciledFile.existing_in(root).items())
+            if self.changes(owner, path)))
+
+    def apply(self, ctx: Comms) -> ReconciledStoresResult:
+        return self.answer(ctx.root)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReconcileStoresCliCommand(StoreReconcileCliCommand, declared_name="reconcile-stores"):
     help = ("Reconcile every declared store's schema onto this runtime's declarations; "
             "the installer runs it under maintenance after the outgoing owners stop")
 
-    def apply(self, ctx: Comms) -> ReconciledStoresResult:
-        rewritten = []
-        for path, owner in sorted(ReconciledFile.existing_in(ctx.root).items()):
-            if owner.reconcile_at(path):
-                rewritten.append(str(path.relative_to(ctx.root)))
-        return ReconciledStoresResult(tuple(rewritten))
+    @staticmethod
+    def changes(owner: type[ReconciledFile], path: Path) -> bool:
+        return owner.reconcile_at(path)
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlannedReconcileCliCommand(StoreReconcileCliCommand, declared_name="planned-reconcile"):
+    help = ("Name every store reconcile-stores would rewrite, reading each without writing; "
+            "the installer backs them up and checks them against its rehearsal first")
+
+    @staticmethod
+    def changes(owner: type[ReconciledFile], path: Path) -> bool:
+        with closing(CoordinationStore.read_snapshot(path)) as db:
+            return owner.table_schema().schema_differs(db)
+
+    def execute(self, route: CommsRoute, output: TextIO) -> int:
+        """Opening the bus opens stores, and opening a store reconciles its schema: before
+        the backup that write would have no copy, so only the stores themselves are read."""
+        return self.written(self.answer(route.root), output)
 
 
 @dataclass(frozen=True, kw_only=True)

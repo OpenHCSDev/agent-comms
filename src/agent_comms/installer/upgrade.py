@@ -45,6 +45,7 @@ from agent_comms.cli_commands import (
     BusReadBack,
     CliCommand,
     InstallResult,
+    PlannedReconcileCliCommand,
     ReadBackCliCommand,
     ReconciledStoresResult,
     ReconcileStoresCliCommand,
@@ -860,6 +861,11 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
     os.environ[HOLDER_NONCE] = held.nonce  # this run's own CLI calls read under its hold
     try:
         installed.owners(root, StopCliCommand, running)
+        planned = staged.cli(root, PlannedReconcileCliCommand, ReconciledStoresResult)
+        unrehearsed = sorted(frozenset(planned.rewritten) - frozenset(rehearsal_files.names))
+        if unrehearsed:
+            raise UpgradeRefused(
+                f"Reconcile would rewrite files the rehearsal did not: {unrehearsed}")
         with transcripts_held(root):
             before = bus_files(root)
             backup = StoreBackup.take(root, active_route_path(), selected, spill_dir)
