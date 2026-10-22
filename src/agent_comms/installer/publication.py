@@ -14,7 +14,11 @@ from typing import Annotated
 import agent_comms
 from agent_comms.field_codec import PathText
 from agent_comms.harness_install import Harness, replace_link
-from agent_comms.installer.runtime_resolution import RuntimeResolution
+from agent_comms.installer.runtime_resolution import (
+    ConsoleScriptPackage,
+    RuntimePackage,
+    RuntimeResolution,
+)
 from agent_comms.launch_runtime import LaunchRuntime
 
 
@@ -29,9 +33,11 @@ class RuntimePublication:
         if not Path(agent_comms.__file__).resolve().is_relative_to(binary.parent):
             raise ValueError("Editable Core cannot publish a runtime; build the selected source")
         RuntimeResolution.at(binary.parent)
+        packages = tuple(
+            member.distribution for member in RuntimePackage.members_with(ConsoleScriptPackage))
         links = {
             Path.home() / '.local/bin' / entry.name: binary / entry.name
-            for package in ('agent-comms', 'batrachian-toad')
+            for package in packages
             for entry in distribution(package).entry_points.select(group='console_scripts')
         }
         links |= Harness.published_links(Path.home())

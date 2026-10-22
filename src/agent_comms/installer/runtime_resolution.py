@@ -29,7 +29,11 @@ class RuntimePackage(DeclaredFamily, affix="Package"):
         return resolution.packages[cls.distribution].source.revision()
 
 
-class CorePackage(RuntimePackage):
+class ConsoleScriptPackage:
+    """A runtime package whose console scripts the installer publishes."""
+
+
+class CorePackage(RuntimePackage, ConsoleScriptPackage):
     distribution = "agent-comms"
     repository = RepositoryName("OpenHCSDev", "agent-comms")
 
@@ -38,7 +42,7 @@ class CorePackage(RuntimePackage):
         return resolution.core_commit
 
 
-class ToadPackage(RuntimePackage):
+class ToadPackage(RuntimePackage, ConsoleScriptPackage):
     distribution = "batrachian-toad"
     repository = RepositoryName("OpenHCSDev", "toad")
 
