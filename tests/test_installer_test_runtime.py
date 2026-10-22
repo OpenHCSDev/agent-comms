@@ -13,7 +13,7 @@ import pytest
 
 from agent_comms.installer import practice
 from agent_comms.installer.backup import SavedFile, UpgradeRefused
-from agent_comms.installer.upgrade import Stack
+from agent_comms.installer.upgrade import InstallCommands, Stack
 from agent_comms.launch_runtime import LaunchRuntime
 
 
@@ -107,7 +107,8 @@ def test_checkout_native_tests_use_a_private_runtime(tmp_path):
         path.relative_to(live_home): SavedFile.at(path)
         for path in (runtimes, retained, witness, current)
     }
-    bootstrap = Stack(repository, home=live_home, runtime=LaunchRuntime.running())
+    bootstrap = Stack(repository, InstallCommands(), home=live_home,
+                      runtime=LaunchRuntime.running())
     cache = subprocess.run(
         [bootstrap.uv, "cache", "dir"], check=True, capture_output=True, text=True
     ).stdout.strip()

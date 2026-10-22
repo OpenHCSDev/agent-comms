@@ -24,7 +24,13 @@ from agent_comms.cli_commands import InstallCliCommand, InstallResult
 from agent_comms.comms import client_wire
 from agent_comms.field_codec import FieldCodec, Id128Text, PathText
 from agent_comms.installer.backup import StoreBackup, UpgradeRefused
-from agent_comms.installer.upgrade import InstalledUpgrade, TargetTree, Upgrade, run, upgrade
+from agent_comms.installer.upgrade import (
+    InstallCommands,
+    InstalledUpgrade,
+    TargetTree,
+    Upgrade,
+    upgrade,
+)
 from agent_comms.messages import InfoKind, Message
 from agent_comms.service_sender import ServiceSender
 from agent_comms.storage_rules import StorageRule
@@ -92,8 +98,9 @@ class InstallRun:
     @classmethod
     def start(cls, command: InstallCliCommand, root: Path) -> InstallRun:
         checkout = command.checkout.resolve()
-        run("git", "-C", checkout, "fetch", "-q", "origin")
-        target = run("git", "-C", checkout, "rev-parse", "--verify",
+        commands = InstallCommands()
+        commands.run("git", "-C", checkout, "fetch", "-q", "origin")
+        target = commands.run("git", "-C", checkout, "rev-parse", "--verify",
                      f"{command.to}^{{commit}}").strip()
         parent = command.installer.scratch(StorageRule.load(root))
         parent.mkdir(mode=0o700, parents=True, exist_ok=True)

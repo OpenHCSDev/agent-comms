@@ -120,13 +120,44 @@ class RehearsalFiles:
             raise UpgradeRefused(f"Live carries changed files absent from rehearsal: {outside}")
 
 
-def run(*command: str | Path, cwd: Path = Path(), env: Mapping[str, str] = os.environ) -> str:
-    print("+", " ".join(map(str, command)), file=sys.stderr, flush=True)
-    completed = subprocess.run([str(part) for part in command], cwd=cwd, env=env,
-                               capture_output=True, text=True)
-    if completed.returncode:
-        raise UpgradeRefused(f"{command[0]} failed: {completed.stdout.strip()}\n{completed.stderr.strip()}")
-    return completed.stdout
+@dataclass(frozen=True)
+class TimedCommand:
+    """One command an install ran and how long it took."""
+
+    command: str
+    seconds: float
+
+    def line(self) -> str:
+        return f"{self.seconds:.1f}s {self.command}"
+
+
+@dataclass(frozen=True)
+class InstallCommands:
+    """The commands one install runs. Its stacks and steps run every command through it,
+    and the install's log and result both read what it ran."""
+
+    ran: list[TimedCommand] = field(default_factory=list)
+
+    @contextmanager
+    def timing(self, command: str) -> Iterator[None]:
+        print("+", command, file=sys.stderr, flush=True)
+        started = time.monotonic()
+        try:
+            yield
+        finally:
+            timed = TimedCommand(command, round(time.monotonic() - started, 1))
+            self.ran.append(timed)
+            print("=", timed.line(), file=sys.stderr, flush=True)
+
+    def run(self, *command: str | Path, cwd: Path = Path(),
+            env: Mapping[str, str] = os.environ) -> str:
+        with self.timing(" ".join(map(str, command))):
+            completed = subprocess.run([str(part) for part in command], cwd=cwd, env=env,
+                                       capture_output=True, text=True)
+        if completed.returncode:
+            raise UpgradeRefused(f"{command[0]} failed: {completed.stdout.strip()}\n"
+                                 f"{completed.stderr.strip()}")
+        return completed.stdout
 
 
 def carried(root: Path, before: dict[str, SavedFile], steps: tuple[StepRun, ...],
@@ -348,6 +379,15 @@ class Upgrade(DeclaredFamily, affix="Upgrade"):
 @dataclass(frozen=True)
 class RehearsedUpgrade(Upgrade):
     rehearsal: Rehearsal
+    commands: tuple[TimedCommand, ...] = field(kw_only=True)
+    """Every command the install ran, in the order each finished, with its time."""
+
+    def lines(self) -> tuple[str, ...]:
+        slowest = sorted(self.commands, key=lambda timed: timed.seconds, reverse=True)[:5]
+        return (*super().lines(),
+                f"Commands: {len(self.commands)} in "
+                f"{sum(timed.seconds for timed in self.commands):.1f}s; slowest:",
+                *(timed.line() for timed in slowest))
 
 
 @dataclass(frozen=True)
@@ -381,6 +421,7 @@ class Stack:
     """One built installation and the source checkout containing its install tools."""
 
     checkout: Path
+    commands: InstallCommands
     home: Path = HOME
     runtime: LaunchRuntime = field(default_factory=LaunchRuntime.installed)
 
@@ -402,14 +443,14 @@ class Stack:
             raise UpgradeRefused(f"No uv executable at {self.uv}; the installer runs only that uv")
 
     @classmethod
-    def build(cls, checkout: Path, home: Path = HOME) -> Stack:
+    def build(cls, checkout: Path, commands: InstallCommands, home: Path = HOME) -> Stack:
         """Resolve current mains once, then build or reuse their immutable installation."""
         Checkout(checkout).prepare()
-        source = cls(checkout, home, runtime=LaunchRuntime.running())
+        source = cls(checkout, commands, home, runtime=LaunchRuntime.running())
         source.require_uv()
-        run(source.uv, "lock", "--project", "stack", "--upgrade", "--python", "3.14",
-            cwd=checkout)
-        core = run("git", "-C", checkout, "rev-parse", "HEAD").strip()
+        commands.run(source.uv, "lock", "--project", "stack", "--upgrade", "--python", "3.14",
+                     cwd=checkout)
+        core = commands.run("git", "-C", checkout, "rev-parse", "HEAD").strip()
         resolution = hashlib.sha256(source.lock.read_bytes()).hexdigest()[:16]
         prefix = home / ".local/share/agent-comms/runtimes" / f"core-{core[:9]}-lock-{resolution}"
         built = replace(source, runtime=LaunchRuntime(prefix / "bin/python"))
@@ -420,9 +461,9 @@ class Stack:
         prefix.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         prefix.mkdir(mode=0o700)
         try:
-            run(source.uv, "sync", "--project", "stack", "--locked", "--python", "3.14",
-                "--no-editable", cwd=checkout,
-                env={**built.environment(), "UV_PROJECT_ENVIRONMENT": str(prefix)})
+            commands.run(source.uv, "sync", "--project", "stack", "--locked", "--python", "3.14",
+                         "--no-editable", cwd=checkout,
+                         env={**built.environment(), "UV_PROJECT_ENVIRONMENT": str(prefix)})
             built.install_native()
             RuntimeResolution.capture(built.python, core).save(prefix)
             built.imports()
@@ -433,29 +474,31 @@ class Stack:
 
     def test(self, *pytest_arguments: str) -> None:
         """Run checkout tests against this runtime's installed packages, never its source."""
-        run(self.uv, "pip", "install", "--python", self.python,
-            "-r", "pyproject.toml", "--extra", "dev", cwd=self.checkout,
-            env=self.environment())
-        core = run("git", "-C", self.checkout, "rev-parse", "HEAD").strip()
+        self.commands.run(self.uv, "pip", "install", "--python", self.python,
+                          "-r", "pyproject.toml", "--extra", "dev", cwd=self.checkout,
+                          env=self.environment())
+        core = self.commands.run("git", "-C", self.checkout, "rev-parse", "HEAD").strip()
         scratch = StorageRule().scratch_base
         scratch.mkdir(mode=0o700, parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=scratch, prefix=f"tests-{core[:12]}-") as temporary:
-            print(run("timeout", "300", self.python, "-m", "pytest", "-n", "0", "-q", "-s",
-                      "-o", "pythonpath=. tools", "-o", "faulthandler_timeout=60",
-                      "--basetemp", Path(temporary) / "pytest", "-p", "no:cacheprovider",
-                      *pytest_arguments, cwd=self.checkout, env=self.environment()), end="")
+            print(self.commands.run(
+                "timeout", "300", self.python, "-m", "pytest", "-n", "0", "-q", "-s",
+                "-o", "pythonpath=. tools", "-o", "faulthandler_timeout=60",
+                "--basetemp", Path(temporary) / "pytest", "-p", "no:cacheprovider",
+                *pytest_arguments, cwd=self.checkout, env=self.environment()), end="")
 
     def imports(self) -> None:
-        run(self.python, "-c", CLIENT_IMPORTS, cwd=self.checkout, env=self.environment())
+        self.commands.run(self.python, "-c", CLIENT_IMPORTS, cwd=self.checkout,
+                          env=self.environment())
 
     def install_native(self) -> None:
         """Build, copy and qualify this interpreter's native artifact before publication."""
-        run(self.checkout / "stack/bin/prepare-pi-native", "--python", self.python,
-            cwd=self.checkout, env=self.environment(self.checkout / "src"))
-        native = Path(run(self.python, "-c",
+        self.commands.run(self.checkout / "stack/bin/prepare-pi-native", "--python", self.python,
+                          cwd=self.checkout, env=self.environment(self.checkout / "src"))
+        native = Path(self.commands.run(self.python, "-c",
             "from agent_comms.native_package import pinned_location; print(pinned_location())",
             cwd=self.checkout, env=self.environment(self.checkout / "src")).strip())
-        package = Path(run(self.python, "-c",
+        package = Path(self.commands.run(self.python, "-c",
             "import agent_comms; from pathlib import Path; "
             "print(Path(agent_comms.__file__).parent)",
             cwd=self.checkout, env=self.environment()).strip())
@@ -465,7 +508,8 @@ class Stack:
         self.prepare_native()
 
     def prepare_native(self) -> None:
-        run(self.python, "-c", "from agent_comms.native_package import "
+        self.commands.run(
+            self.python, "-c", "from agent_comms.native_package import "
             "VerifiedNativePackage,pinned_native_package; "
             "from agent_comms.unit_instructions import UnitInstructions; "
             "VerifiedNativePackage.qualify(pinned_native_package()); UnitInstructions.prepare()",
@@ -473,9 +517,9 @@ class Stack:
 
     def publish(self) -> None:
         """The selected interpreter owns console metadata and harness declarations."""
-        run(
-            self.python, "-m", publication.__name__,
-            cwd=self.checkout, env=self.environment(),
+        self.commands.run(
+                          self.python, "-m", publication.__name__,
+                          cwd=self.checkout, env=self.environment(),
         )
 
     def environment(self, *paths: Path) -> dict:
@@ -496,9 +540,10 @@ class Stack:
         invocation = command.invocation(*arguments)
         verb = f"agent-comms {' '.join(invocation)}"
         for _ in range(240):
-            completed = subprocess.run(
-                [str(self.python), "-m", cli.__name__, "--root", str(root), *invocation],
-                cwd=self.checkout, env=self.environment(), capture_output=True, text=True)
+            with self.commands.timing(verb):
+                completed = subprocess.run(
+                    [str(self.python), "-m", cli.__name__, "--root", str(root), *invocation],
+                    cwd=self.checkout, env=self.environment(), capture_output=True, text=True)
             try:
                 if not completed.returncode:
                     return FieldCodec.decode(command.result_type(),
@@ -515,9 +560,9 @@ class Stack:
     def call_step(self, step: type[Carry], root: Path, tree: TargetTree,
                   method: str, **arguments: bool) -> str:
         """Run the step in the target tree with this stack's interpreter."""
-        output = run(self.python, "-m", step_worker.__name__, step.name(), method, root,
-                     json.dumps(arguments), cwd=tree.path,
-                     env=self.environment(*tree.source_paths()))
+        output = self.commands.run(self.python, "-m", step_worker.__name__, step.name(), method,
+                                   root, json.dumps(arguments), cwd=tree.path,
+                                   env=self.environment(*tree.source_paths()))
         return output.strip().splitlines()[-1]
 
     def backup_files(self, root: Path, pending: tuple[type[Carry], ...],
@@ -530,7 +575,7 @@ class Stack:
 
     def running_owners(self, root: Path) -> list[str]:
         """Use the restart request's receiving declaration in the selected runtime."""
-        selected = run(self.python, "-c", """import json, sys
+        selected = self.commands.run(self.python, "-c", """import json, sys
 from pathlib import Path
 from agent_comms.comms import Comms
 from agent_comms.owner_restart import OwnerRestartRequest
@@ -693,34 +738,37 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
             harnesses: Callable[[], InstallResult], report: InstallReport) -> Upgrade:
     """``scratch`` holds the target's worktree the launcher runs this source from; this
     run owns it and removes it. A live run ends by registering the ``harnesses``."""
-    current = run("git", "-C", checkout, "rev-parse", "HEAD").strip()
+    commands = InstallCommands()
+    current = commands.run("git", "-C", checkout, "rev-parse", "HEAD").strip()
     tree = TargetTree(checkout, scratch, target)
     try:
         if subprocess.run(["git", "-C", str(checkout), "merge-base", "--is-ancestor", current,
                            target]).returncode:
             raise UpgradeRefused(f"{target[:12]} does not follow the checkout's {current[:12]}")
-        if run("git", "-C", checkout, "status", "--porcelain", "--untracked-files=no").strip():
+        if commands.run("git", "-C", checkout, "status", "--porcelain",
+                        "--untracked-files=no").strip():
             raise UpgradeRefused("The checkout has local changes")
         try:
             chain = CarryChain.at(tree.path)
         except ValueError as error:
             raise UpgradeRefused(str(error)) from None
         member = Install.member(root, retire)
-        installed = Stack(checkout)
+        installed = Stack(checkout, commands)
         installed.require_uv()
         if not installed.python.exists():
             raise UpgradeRefused(f"No installed stack at {installed.python}")
-        staged = Stack.build(tree.path)
+        staged = Stack.build(tree.path, commands)
         install, rehearsal = member.rehearsed(checkout, root, current, target, chain,
                                               installed, staged, tree, installer, spill_dir)
         names = tuple(step.name() for step in install.pending)
         if rehearse_only:
-            return RehearsedUpgrade(current, target, root, names, rehearsal)
+            return RehearsedUpgrade(current, target, root, names, rehearsal,
+                                    commands=tuple(commands.ran))
         install.announce(report)
         bridges = SessionBridgeResumes()
         live_run = install.install(rehearsal, bridges)
         finished = InstalledUpgrade(current, target, root, names, rehearsal, live_run,
-                                    harnesses())
+                                    harnesses(), commands=tuple(commands.ran))
         result = (finished.extended(UnresumedUpgrade, unresumed=bridges.lines())
                   if bridges.failures else finished)
         report.finished(result)
@@ -874,7 +922,8 @@ class FreshInstall(Install[FreshRehearsal]):
         return FreshRehearsal()
 
     def live(self, rehearsal: FreshRehearsal) -> CreatedRun:
-        run("git", "-C", self.checkout, "merge", "--ff-only", "-q", self.target)
+        self.staged.commands.run("git", "-C", self.checkout, "merge", "--ff-only", "-q",
+                                 self.target)
         Checkout(self.checkout).prepare()
         self.staged.prepare_native()
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -935,7 +984,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
               f"maintenance cleared; owners: {started}", file=sys.stderr)
         raise
     try:
-        run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
+        staged.commands.run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
         Checkout(checkout).prepare()
         staged.prepare_native()
         passed = carry_and_read(root, before, pending, staged, staged, tree, stopping)
@@ -954,8 +1003,9 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
         restored = maintenance.read()
         restored_hold = restored.phase.hold_for(maintenance, restored, MaintenanceOperator.current())
         os.environ[HOLDER_NONCE] = restored_hold.nonce
-        if run("git", "-C", checkout, "rev-parse", "HEAD").strip() != current:
-            run("git", "-C", checkout, "reset", "-q", "--keep", current)
+        head = installed.commands.run("git", "-C", checkout, "rev-parse", "HEAD").strip()
+        if head != current:
+            installed.commands.run("git", "-C", checkout, "reset", "-q", "--keep", current)
             Checkout(checkout).prepare()
         # Republish only when current moved: the outgoing runtime may predate this publisher.
         if LaunchRuntime.installed().prefix.resolve() != installed.runtime.prefix.resolve():

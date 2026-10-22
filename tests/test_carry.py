@@ -26,6 +26,7 @@ from agent_comms.installer.carry import (
     CarryChain,
 )
 from agent_comms.installer.upgrade import (
+    InstallCommands,
     RehearsalFiles,
     Stack,
     StepRun,
@@ -147,7 +148,7 @@ def test_a_store_compares_by_its_rows_and_not_by_its_companion_files(tmp_path):
 @pytest.fixture
 def stack(tmp_path):
     """Use the test interpreter, not an unrelated installed runtime under HOME."""
-    return Stack(REPO, home=tmp_path, runtime=LaunchRuntime.running())
+    return Stack(REPO, InstallCommands(), home=tmp_path, runtime=LaunchRuntime.running())
 
 
 def test_restart_selection_uses_receiving_declaration_with_connected_cli_inbox(comms, stack):

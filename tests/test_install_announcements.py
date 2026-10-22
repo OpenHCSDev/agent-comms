@@ -25,6 +25,7 @@ from agent_comms.installer.upgrade import (
     RetiredRun,
     StartedOwner,
     StepRun,
+    TimedCommand,
     UnchangedRun,
     UnresumedUpgrade,
     Upgrade,
@@ -55,6 +56,7 @@ def test_typed_results_publish_as_installer_and_survive_history_read(private_com
     installed = InstalledUpgrade(
         found.source, found.target, found.root, found.pending, FreshRehearsal(),
         live, InstallResult(NoConfigFile(), {}),
+        commands=(TimedCommand("uv sync", 61.2), TimedCommand("git merge", 0.1)),
     )
     # The wire codec still carries the same result family and fields after factoring.
     decoded = FieldCodec.decode(Upgrade, FieldCodec.encode(installed))
@@ -67,6 +69,7 @@ def test_typed_results_publish_as_installer_and_survive_history_read(private_com
     assert tuple(message.reference for message in messages) == (started.reference, finished.reference)
     assert all(found.target[:12] in message.body for message in messages)
     assert all(line in messages[1].body for line in live.lines())
+    assert "Commands: 2 in 61.3s; slowest:\n61.2s uv sync\n0.1s git merge" in messages[1].body
     sender = comms.registry.require("installer")
     assert sender.execution is ExternalThreadExecution
 
@@ -120,6 +123,7 @@ def test_an_install_whose_bridges_did_not_resume_says_so_in_its_headline(private
     unresumed = UnresumedUpgrade(
         "a" * 40, "b" * 40, comms.root, (), FreshRehearsal(), UnchangedRun(),
         InstallResult(NoConfigFile(), {}), ("Not resumed: Session bridge copied-session",),
+        commands=(),
     )
     body = InstallReport(comms.root).finished(unresumed).body
     assert body.startswith(UnresumedUpgrade.finished)

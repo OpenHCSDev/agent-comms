@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path
 
 from agent_comms.installer.practice import TestHome
-from agent_comms.installer.upgrade import Stack
+from agent_comms.installer.upgrade import InstallCommands, Stack
 from agent_comms.storage_rules import StorageRule
 
 
@@ -32,7 +32,7 @@ def main() -> None:
         if home == Path.home().resolve():
             parser.error("--home must not name the live home")
         TestHome(home).prepare()
-        Stack.build(Path.cwd(), home).test(*arguments)
+        Stack.build(Path.cwd(), InstallCommands(), home).test(*arguments)
 
 
 if __name__ == "__main__":
