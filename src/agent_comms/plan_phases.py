@@ -480,7 +480,7 @@ class TurnStatePhase(RemainingSlopPhase):
 
 
 class WireRenamesPhase(RemainingSlopPhase):
-    """4.6: our own wire keys equal the field names; no older spellings of the claim scope remain."""
+    """4.6: our own wire keys equal the field names; no old claim-scope spellings remain."""
 
     evidence = PatternAbsent(r"WireName\(\"admission")
 
