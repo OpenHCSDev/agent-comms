@@ -1,28 +1,33 @@
 """Actual saved buses and transcripts, with colliding live/source sequences."""
 
-from agent_comms.bus import Bus, PublicRecord
-from agent_comms.installer.backup import bus_files
-
-from agent_comms.thread_text import SavedSessionFile
-from agent_comms.channel_targets import CommandTarget
-from agent_comms.read_basis import AllChannelDisplayScope, NamedViewer
 import json
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from agent_comms.historical_views import HistoricalMessage
-from agent_comms.messages import Message
-from agent_comms.page_traversal import HistoryCursor
+from agent_comms.bus import Bus, PublicRecord
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import HistoricalSourceChanged
-from agent_comms.historical_views import HistoryArchive
-from agent_comms.read_basis import ChannelConversation, ConversationCursor, ReadCursor, HistoricalSelection, ChannelSelection, DMSelection
+from agent_comms.historical_views import HistoricalMessage, HistoryArchive
+from agent_comms.installer.backup import bus_files
+from agent_comms.message_page import MessagePageRequest, PageBounds
+from agent_comms.messages import Message
+from agent_comms.page_traversal import HistoryCursor
+from agent_comms.read_basis import (
+    AllChannelDisplayScope,
+    ChannelConversation,
+    ChannelSelection,
+    ConversationCursor,
+    DMSelection,
+    HistoricalSelection,
+    NamedViewer,
+    ReadCursor,
+)
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import MessageRoute, TurnRouting
-from agent_comms.message_page import MessagePageRequest, PageBounds
-from agent_comms.page_traversal import OlderTraversal
+from agent_comms.thread_text import SavedSessionFile
 
 
 @pytest.mark.parametrize('exists', [False, True])
@@ -95,7 +100,7 @@ def test_all_history_backward_and_forward(migrated, method, args, reader):
     assert len({row.seq for row in rows}) < expected
     assert rows == sorted(rows, key=lambda row: row.view_order)
     forward = []
-    cursor = HistoryCursor(source.key, 0)
+    cursor = HistoryCursor(source=source.key, sequence=0)
     for _ in range(40):
         page = getattr(live.views, method)(*args, bounds=PageBounds(cursor.newer(), 2), **scope)
         forward.extend(page.messages)
@@ -123,7 +128,7 @@ def test_sparse_historical_ack_does_not_ack_live(migrated):
     viewer = live.messaging.user_identity(str(live.root))
     page = live.views.channel_display_page(
         "#team", viewer=NamedViewer(live.messaging.user_identity(str(live.root)).name),
-        bounds=PageBounds(OlderTraversal(100, source.key), 3),
+        bounds=PageBounds(HistoryCursor(source=source.key, sequence=100).older(), 3),
     )
     live.views.mark_page_read(page.select([page.messages[1].seq]), worktree=str(live.root))
     snapshot = live.registry.snapshot()
@@ -147,7 +152,7 @@ def test_sparse_historical_ack_does_not_ack_live(migrated):
 @pytest.mark.parametrize("archived", [False, True])
 def test_select_painted_page_keeps_its_source_with_attached_history(migrated, conversation, archived):
     _, _, live, source = migrated
-    bounds = PageBounds(OlderTraversal(100, source.key), 2) if archived else PageBounds(limit=2)
+    bounds = PageBounds(HistoryCursor(source=source.key, sequence=100).older(), 2) if archived else PageBounds(limit=2)
     if conversation == "channel":
         page = live.views.channel_display_page(
             "#team", viewer=live.views.display_viewer(str(live.root)), bounds=bounds,
@@ -228,12 +233,12 @@ def test_duplicate_and_newer_incarnations_sessions(tmp_path):
 def test_stale_cursor_is_rejected(migrated):
     _, _, live, _ = migrated
     with pytest.raises(HistoricalSourceChanged):
-        live.views.channel_display_page("#team", bounds=PageBounds(OlderTraversal(2, "detached")))
+        live.views.channel_display_page("#team", bounds=PageBounds(HistoryCursor(source="detached", sequence=2).older()))
 
 
 def test_recorded_transcript_witness_roundtrip_keeps_original_namespace(tmp_path):
     from agent_comms.field_codec import FieldCodec
-    from agent_comms.transcripts import TranscriptReadIdentity, RecordedTranscriptReadIdentity
+    from agent_comms.transcripts import RecordedTranscriptReadIdentity, TranscriptReadIdentity
 
     old, live = setup(tmp_path / "old", 1), setup(tmp_path / "live", 0)
     native = tmp_path / "recorded.jsonl"
@@ -313,7 +318,7 @@ def test_attach_only_reads_original_roots_and_rejects_changed_snapshot(tmp_path)
     assert not (Path(source.root) / "unknown-input.json").exists()
     page = live.views.channel_display_page(
         "#team", viewer=NamedViewer(live.messaging.user_identity(str(live.root)).name),
-        bounds=PageBounds(OlderTraversal(100, source.key)),
+        bounds=PageBounds(HistoryCursor(source=source.key, sequence=100).older()),
     )
     archived = Bus(Bus.path_in(Path(source.root)))
     template = page.messages[0]
@@ -323,7 +328,7 @@ def test_attach_only_reads_original_roots_and_rejects_changed_snapshot(tmp_path)
         live.views.mark_page_read(page, worktree=str(live.root))
     with pytest.raises(ValueError):
         live.views.channel_display_page(
-            "#team", bounds=PageBounds(OlderTraversal(100, source.key))
+            "#team", bounds=PageBounds(HistoryCursor(source=source.key, sequence=100).older())
         )
 
 
@@ -350,6 +355,7 @@ def test_missing_historical_peer_is_browsable_without_live_registration(migrated
 
 def test_historical_namespace_has_recorded_provenance_and_no_live_authority(migrated):
     from dataclasses import fields
+
     from agent_comms.field_codec import FieldCodec
     from agent_comms.registry_provenance import RegistryProvenance
     from agent_comms.thread_identity import ThreadProvenance

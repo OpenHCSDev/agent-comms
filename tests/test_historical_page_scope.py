@@ -1,20 +1,16 @@
-"""Source-owned history predicates and sound use of the existing offset index."""
-
-from agent_comms.bus import Bus
-
-import json
+"""Source-owned history predicates and sound sequence-indexed membership."""
 from dataclasses import replace
 
 import pytest
 
-from agent_comms.comms import Comms
+from agent_comms.bus import Bus, PublicRecord
 from agent_comms.channel_targets import CommandTarget
-from agent_comms.message_page import PageBounds
-from agent_comms.page_traversal import HistoryCursor
+from agent_comms.comms import Comms
 from agent_comms.mentions import ThreadMention
-from agent_comms.messages import Message, InfoKind
+from agent_comms.message_page import PageBounds
+from agent_comms.messages import InfoKind, Message
+from agent_comms.page_traversal import HistoryCursor
 from agent_comms.read_basis import NamedViewer
-from agent_comms.threads import Thread
 
 
 @pytest.fixture
@@ -46,14 +42,12 @@ def history(tmp_path):
             )
         elif seq == 235:
             message = replace(message, target="#all")
-        raw = (json.dumps(message.to_wire()) + "\n").encode()
-        rows.append((message, raw))
-    old.bus.log.path.write_bytes(b"".join(raw for _, raw in rows))
-    old.bus.log.path.chmod(0o600)
-    marker = old.bus.log.read_metadata_unlocked(required=True)
-    marker.last_seq = marker.claimed_after_seq = rows[-1][0].seq
-    old.bus.log.write_metadata_unlocked(marker)
+        published = old.bus.bus.append(
+            lambda seq, db: PublicRecord.from_message(replace(message, seq=seq))
+        )
+        rows.append(Message.from_message(published))
     live = Comms(tmp_path / "live")
+    Bus.install(Bus.path_in(live.root))
     # Deliberately different membership: source scope must not use live tags.
     live.registry.declare(live.registry.new_thread('alice', frozenset({'ops'}), str(live.root), created_at=500))
     live.registry.declare(live.registry.new_thread('alice-old', frozenset({'api'}), str(live.root), created_at=501))
@@ -107,21 +101,21 @@ def reader(live, kind):
 def test_complete_forward_and_reverse_traversal_preserves_membership(history, kind):
     live, source, rows = history
     read = reader(live, kind)
-    expected = [message.to_wire() for message, _ in rows if selected(kind, message)]
-    page = read(PageBounds(limit=2, max_bytes=600))
+    expected = [message.to_wire() for message in rows if selected(kind, message)]
+    page = read(PageBounds(limit=2))
     backward = [message.to_wire() for message in page.messages]
     for _ in range(len(rows) + 1):
         if not page.has_older:
             break
-        page = read(PageBounds(page.oldest_cursor.older(), 2, 600))
+        page = read(PageBounds(page.oldest_cursor.older(), 2))
         backward[0:0] = [message.to_wire() for message in page.messages]
     else:
         raise AssertionError("reverse history cursor did not terminate")
     assert backward == expected
-    cursor = HistoryCursor(source.key, 0)
+    cursor = HistoryCursor(source=source.key, sequence=0)
     forward = []
     for _ in range(len(rows) + 1):
-        page = read(PageBounds(cursor.newer(), 2, 600))
+        page = read(PageBounds(cursor.newer(), 2))
         forward.extend(message.to_wire() for message in page.messages)
         if not page.has_newer:
             break

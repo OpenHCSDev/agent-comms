@@ -11,10 +11,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-
 from . import relationships
 from .activity import Activity, ActivityData, ActivityState, ObservedActivity
 from .audience_manifest import FrozenRecipient
+from .bus import Bus, BusSnapshot
 from .bus_activity_index import ChannelActivity
 from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
@@ -26,21 +26,21 @@ from .display_order import ChannelSort, NameChannelSort
 from .display_references import DisplayReferences
 from .external_transcript import ExternalTranscript
 from .field_codec import (
+    Differs,
     FieldCodec,
     JsonShapeFamily,
     JsonShapeMember,
-    projected,
-    Differs,
     PresenceExclude,
     WatchPaths,
     WatchViews,
     WireExclude,
     WireInline,
     WireOmitDefault,
+    projected,
 )
+from .goal_attempts import GoalAttemptStore
 from .goal_presentation import GoalExecution
 from .goal_waits import GoalWaits
-from .goal_attempts import GoalAttemptStore
 from .mentions import MentionCandidate
 from .message_page import (
     NEWEST_PAGE,
@@ -84,7 +84,6 @@ from .thread_status import ThreadStatus, ThreadStatusName
 from .threads import Thread
 from .tool_result import ToolResult
 from .ui_model.unread import ExactUnread, IndexingUnread, UnobservedUnread, UnreadPresentation
-from .bus import Bus, BusSnapshot
 
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity, RecipientActivity
@@ -134,7 +133,7 @@ class OwnerOutcomes(OutcomeViewer):
 
     @classmethod
     def of(cls, owner: Thread) -> OwnerOutcomes:
-        return cls(owner.incarnation.lookup)
+        return cls(owner.incarnation.require_recorded().lookup)
 
     def includes(self, sender_lookup: str, recipient: FrozenRecipient) -> bool:
         return self.lookup in (sender_lookup, recipient.recipient_lookup)

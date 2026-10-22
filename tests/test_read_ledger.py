@@ -12,7 +12,7 @@ from agent_comms.comms import Comms, wire
 from agent_comms.coordination_errors import DMPaintedBoundChanged, StaleRevision
 from agent_comms.field_codec import FieldCodec
 from agent_comms.message_page import MessagePageRequest, PageBounds
-from agent_comms.page_traversal import OlderTraversal
+from agent_comms.page_traversal import PageCursor
 from agent_comms.presentation import ReadThrough
 from agent_comms.read_basis import (
     ChannelConversation,
@@ -245,7 +245,7 @@ def test_shown_only_property_across_pages_modes_and_reopen(tmp_path, seed):
             rng.choice(["#team", "#any"]),
             viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name),
             bounds=PageBounds(
-                limit=rng.randrange(1, 8), traversal=OlderTraversal(rng.choice([None, 6, 10]))
+                limit=rng.randrange(1, 8), traversal=FieldCodec.decode(PageCursor, rng.choice([None, 6, 10])).older()
             ),
         )
         if page.messages:
