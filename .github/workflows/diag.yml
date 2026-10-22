@@ -2,10 +2,12 @@ name: diag
 on:
   push:
     branches: ['diag/**']
+permissions:
+  contents: write
 jobs:
   diag:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
@@ -15,16 +17,12 @@ jobs:
         with:
           python-version-file: pyproject.toml
       - run: python -m pip install -q -e src/agent_comms/skills/refactor-audit -e '.[dev]' mypy
-      - name: run diag.sh and annotate its output
+      - name: run diag.sh and push its output to diag-out/<branch>
         shell: bash
         run: |
           set +e
-          bash diag.sh > out.txt 2>&1
-          echo "exit $?" >> out.txt
-          python - <<'PY'
-          text = open("out.txt").read()[-60000:]
-          chunks = [text[i:i+15000] for i in range(0, len(text), 15000)]
-          for n, chunk in enumerate(chunks):
-              body = chunk.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-              print(f"::error title=diag {n}::{body}")
-          PY
+          bash diag.sh > /tmp/out.txt 2>&1
+          echo "exit $?" >> /tmp/out.txt
+          git config user.name diag && git config user.email diag@users.noreply.github.com
+          git checkout -q --orphan out && git rm -rq --cached . && cp /tmp/out.txt out.txt
+          git add out.txt && git commit -qm out && git push -qf origin "HEAD:refs/heads/diag-out/${GITHUB_REF_NAME#diag/}"
