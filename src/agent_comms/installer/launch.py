@@ -25,6 +25,7 @@ from agent_comms.field_codec import FieldCodec, Id128Text, PathText
 from agent_comms.installer.outcome import (
     CarriedInstallError,
     CrashedInstall,
+    FailedInstall,
     FinishedInstall,
     InstallFailure,
     InstallOutcome,
@@ -34,7 +35,9 @@ from agent_comms.installer.reporting import InstalledWriter, RootWriter
 from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.installer.upgrade import (
     CarriedPass,
+    IncompleteRun,
     Install,
+    LiveRun,
     Stack,
     TargetTree,
     Upgrade,
@@ -57,10 +60,11 @@ class InstallReport(ServiceSender, MroDispatch):
     root: Path
     outgoing: Stack
     writer: RootWriter = field(init=False)
-    outcome: InstallOutcome = field(default_factory=UnfinishedInstall, init=False)
+    outcome: InstallOutcome = field(init=False)
 
     def __post_init__(self) -> None:
         self.writer = InstalledWriter(self.outgoing)
+        self.outcome = UnfinishedInstall(IncompleteRun())
 
     @classmethod
     def for_run(cls, request: InstallRun) -> InstallReport:
@@ -83,6 +87,10 @@ class InstallReport(ServiceSender, MroDispatch):
         if passed.root != self.root:
             raise ValueError("Carried pass belongs to a different install root")
         self.writing(passed.writer())
+
+    def record_live(self, result: LiveRun) -> LiveRun:
+        self.outcome = UnfinishedInstall(result)
+        return result
 
     def complete(self, result: Upgrade) -> Upgrade:
         self.outcome = FinishedInstall(result)
@@ -132,8 +140,9 @@ class InstallReport(ServiceSender, MroDispatch):
             # A caller cannot accidentally leave the context without its result.
             self.outcome.lines()
         except BaseException as error:
-            self.outcome = self.failure(error)
-            original = self.outcome.exception()
+            failure = self.failure(error)
+            self.outcome = FailedInstall(self.outcome.live_run(), failure)
+            original = failure.exception()
             raise original from original.__cause__
         finally:
             self.writer.post(self.root, self, self.outcome.lines())

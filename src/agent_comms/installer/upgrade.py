@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, cast
 
 from agent_comms.active_route import ActiveRoute, active_route_path, route_new_bus
-from agent_comms.cli_bridges.shared import BridgeResume, Serve
+from agent_comms.cli_bridges.shared import BridgePause, BridgeResume, Serve
 from agent_comms.cli_commands import InstallResult, ThreadsResult, WhoResult
 from agent_comms.cli_result import CliResult
 from agent_comms.declared_family import DeclaredFamily
@@ -276,10 +276,20 @@ class LiveRun(DeclaredFamily, affix="Run"):
     bridges: tuple[BridgeResume, ...] = ()
 
     def lines(self) -> tuple[str, ...]:
-        return (*self.details(), *(bridge.line() for bridge in self.bridges))
+        return (*self.details(), *self.bridge_lines())
+
+    def bridge_lines(self) -> tuple[str, ...]:
+        return tuple(bridge.line() for bridge in self.bridges)
 
     @abstractmethod
     def details(self) -> tuple[str, ...]: ...
+
+
+class IncompleteRun(LiveRun):
+    """No live result was returned; captured bridge outcomes remain reportable."""
+
+    def details(self) -> tuple[str, ...]:
+        return ()
 
 
 @dataclass(frozen=True)
@@ -332,6 +342,9 @@ class Upgrade(DeclaredFamily, affix="Upgrade"):
     root: Annotated[Path, PathText]
     pending: tuple[str, ...]
 
+    def live_run(self) -> LiveRun:
+        return IncompleteRun()
+
     def lines(self) -> tuple[str, ...]:
         return (f"{self.source[:12]} -> {self.target[:12]}",
                 f"Pending carries: {', '.join(self.pending) or 'none'}")
@@ -347,6 +360,9 @@ class InstalledUpgrade(RehearsedUpgrade):
     live: LiveRun
     install: InstallResult
     """The harnesses registered on the bus the target now reads."""
+
+    def live_run(self) -> LiveRun:
+        return self.live
 
     def lines(self) -> tuple[str, ...]:
         return (*super().lines(), *self.live.lines())
@@ -726,10 +742,17 @@ class Install[Rehearsed: Rehearsal](ABC):
         installed pointer, not a copied target version, selects its successor.
         """
         with ExitStack() as resources:
-            paused = tuple(bridge.pause(resources) for bridge in Serve.running(self.installed.home))
-            result = self.live(rehearsal)
-            self.report.dispatch_sync(result)
-            return replace(result, bridges=tuple(bridge.resume() for bridge in paused))
+            paused: list[BridgePause] = []
+            result: LiveRun = IncompleteRun()
+            try:
+                for bridge in Serve.running(self.installed.home):
+                    paused.append(bridge.pause(resources))
+                result = self.live(rehearsal)
+                self.report.dispatch_sync(result)
+            finally:
+                result = self.report.record_live(replace(
+                    result, bridges=tuple(bridge.resume() for bridge in paused)))
+            return result
 
     @abstractmethod
     def live(self, rehearsal: Rehearsed) -> LiveRun: ...

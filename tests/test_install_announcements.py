@@ -17,10 +17,10 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.backup import BackupReport, RestoreSpace, UpgradeRefused
 from agent_comms.installer.carry import Carried
 from agent_comms.installer.launch import InstallReport, InstallRun
-from agent_comms.installer.outcome import CrashedInstall
+from agent_comms.installer.outcome import CrashedInstall, FailedInstall
 from agent_comms.installer.reporting import InstalledWriter, PreparedFreshWriter
 from agent_comms.installer.upgrade import (
-    BusReadBack, CarriedRun, CreatedRun, FreshRehearsal, InstalledUpgrade,
+    BusReadBack, CarriedRun, CreatedRun, FreshRehearsal, IncompleteRun, InstalledUpgrade,
     RefusedOwner, RehearsalFiles, RetiredRun, StartedOwner,
     StepRun, UnchangedRun, Upgrade, upgrade,
 )
@@ -39,6 +39,7 @@ from conftest import declare_test_bus
         backup=BackupReport("saved-before-install", 1024), retired_backups=(),
     ), id="carried"),
     pytest.param(lambda root: UnchangedRun(), id="unchanged"),
+    pytest.param(lambda root: IncompleteRun(), id="incomplete"),
     pytest.param(lambda root: CreatedRun(("connector",), "created route"), id="created"),
     pytest.param(lambda root: RetiredRun(
         services=("connector",), route="created route", stopped=("worker",),
@@ -112,8 +113,9 @@ def test_install_failure_family_through_upgrade(refused_request, scratch_present
     assert messages[0].body.splitlines()[0] == "Install starting"
     assert messages[1].body.splitlines()[0].startswith("Install failed")
     assert all(message.sender == report.sender for message in messages)
-    assert isinstance(report.outcome, outcome_kind)
-    assert report.outcome.exception() is raised.value
+    assert isinstance(report.outcome, FailedInstall)
+    assert isinstance(report.outcome.failure, outcome_kind)
+    assert report.outcome.failure.exception() is raised.value
     assert isinstance(report.writer, InstalledWriter)
     assert report.outgoing.home == durable_home
     assert not request.scratch.exists()

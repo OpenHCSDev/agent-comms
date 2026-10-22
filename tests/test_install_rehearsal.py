@@ -26,12 +26,13 @@ import pytest
 
 import agent_comms
 from agent_comms.cli_bridges.monitor import InspectSession
+from agent_comms.cli_bridges.shared import ResumedBridge
 from agent_comms.cli_commands import HistoryCliCommand, InstallCliCommand
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.harness_install import replace_link
 from agent_comms.installer.launch import InstallReport, InstallRun
-from agent_comms.installer.outcome import CrashedInstall
+from agent_comms.installer.outcome import CrashedInstall, FailedInstall
 from agent_comms.installer.reporting import CarriedWriter
 from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.installer.upgrade import (
@@ -107,7 +108,8 @@ def test_install_rehearses_preserving_existing_data_and_publishing_its_result(
     installed = subprocess.run(
         [Path(sys.executable).with_name("agent-comms"), "--root", comms.root, "install",
          "--rehearse", "--checkout", checkout, "--to", "HEAD", "--project", checkout, *given],
-        cwd=checkout, env={**installed_home.environment, "PYTHONPATH": os.environ.get("PYTHONPATH", "")},
+        cwd=checkout,
+        env={**installed_home.environment, "PYTHONPATH": os.environ.get("PYTHONPATH", "")},
         capture_output=True, text=True, timeout=270)
     assert installed.returncode == 0, installed.stderr
     result = FieldCodec.decode(Upgrade, FieldCodec.parse(installed.stdout))
@@ -187,7 +189,8 @@ def publication_home(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyP
 @pytest.mark.timeout(280)
 @pytest.mark.parametrize("run_type,completion,terminal", (
     pytest.param(InstallRun, nullcontext(), "Install finished", id="finished"),
-    pytest.param(PublicationFailingRun, pytest.raises(RuntimeError), "Install failed", id="crashed"),
+    pytest.param(
+        PublicationFailingRun, pytest.raises(RuntimeError), "Install failed", id="crashed"),
     pytest.param(
         PublicationInterruptedRun, pytest.raises(KeyboardInterrupt), "Install failed",
         id="interrupted",
@@ -216,12 +219,14 @@ def test_live_upgrade_family_after_real_publication(
         with completion as caught:
             upgrade(request, report)
         assert isinstance(report.writer, CarriedWriter)
-        if isinstance(report.outcome, CrashedInstall):
-            error = report.outcome.error
+        if isinstance(report.outcome, FailedInstall):
+            failure = report.outcome.failure
+            assert isinstance(failure, CrashedInstall)
+            error = failure.error
             assert isinstance(error, PublicationFault)
             assert isinstance(caught, pytest.ExceptionInfo)
             assert caught.value is error
-            assert (report.outcome.frame.filename, report.outcome.frame.lineno) == (
+            assert (failure.frame.filename, failure.frame.lineno) == (
                 str(report.source.module_file(upgrade.__module__)), error.site.lineno,
             )
         assert RuntimeResolution.at(LaunchRuntime.installed().prefix).core_commit == target
@@ -236,6 +241,9 @@ def test_live_upgrade_family_after_real_publication(
         assert reports[0].body.splitlines()[0] == "Install starting"
         assert reports[1].body.splitlines()[0].startswith(terminal)
         assert all(line in reports[1].body for line in report.outcome.lines())
+        bridge_line = ResumedBridge(
+            copied.claim.thread, copied.observed.runtime, resumed.runtime).line()
+        assert reports[1].body.splitlines().count(bridge_line) == 1
         retained = {
             message.reference: message for message in HistoryCliCommand().apply(comms).messages
         }

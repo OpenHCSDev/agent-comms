@@ -8,7 +8,7 @@ from traceback import FrameSummary
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from agent_comms.installer.upgrade import CarriedPass, Upgrade
+    from agent_comms.installer.upgrade import CarriedPass, LiveRun, Upgrade
 
 
 @dataclass(frozen=True)
@@ -23,8 +23,21 @@ class InstallOutcome(ABC):
     @abstractmethod
     def lines(self) -> tuple[str, ...]: ...
 
+    @abstractmethod
+    def live_run(self) -> LiveRun: ...
 
-class UnfinishedInstall(InstallOutcome):
+
+@dataclass(frozen=True)
+class ObservedInstall(InstallOutcome):
+    """The live observation while no complete Upgrade owns it."""
+
+    live: LiveRun
+
+    def live_run(self) -> LiveRun:
+        return self.live
+
+
+class UnfinishedInstall(ObservedInstall):
     def lines(self) -> tuple[str, ...]:
         raise RuntimeError("Install exited without producing its result")
 
@@ -36,12 +49,26 @@ class FinishedInstall(InstallOutcome):
     def lines(self) -> tuple[str, ...]:
         return ("Install finished", *self.upgrade.lines())
 
+    def live_run(self) -> LiveRun:
+        return self.upgrade.live_run()
 
-class InstallFailure(InstallOutcome):
+
+class InstallFailure(ABC):
     """An error which supplies its terminal report and original exception."""
 
     @abstractmethod
+    def lines(self) -> tuple[str, ...]: ...
+
+    @abstractmethod
     def exception(self) -> BaseException: ...
+
+
+@dataclass(frozen=True)
+class FailedInstall(ObservedInstall):
+    failure: InstallFailure
+
+    def lines(self) -> tuple[str, ...]:
+        return (*self.failure.lines(), *self.live.bridge_lines())
 
 
 @dataclass(frozen=True)

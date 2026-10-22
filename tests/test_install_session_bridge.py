@@ -13,11 +13,17 @@ from pathlib import Path
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.cli_bridges.monitor import InspectSession, PauseSession
 from agent_comms.cli_bridges import claude
+from agent_comms.cli_bridges.monitor import InspectSession, PauseSession
 from agent_comms.cli_bridges.shared import (
-    MONITOR_FRAME, Binding, BridgeResume, MonitorProbe, ResumedBridge, Serve,
-    SessionBridge, UnobservedBridge,
+    MONITOR_FRAME,
+    Binding,
+    BridgeResume,
+    MonitorProbe,
+    ResumedBridge,
+    Serve,
+    SessionBridge,
+    UnobservedBridge,
 )
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
@@ -27,7 +33,8 @@ from agent_comms_hooks.session import started
 from agent_comms_hooks.watch import LapsedWatch, LiveWatch, WatchClaim, WatchRecord
 from source_programs import SourcePrograms
 
-SERVE_FROM_SOURCE = (sys.executable, '-c', 'from agent_comms.cli_bridges.claude import main; main()')
+SERVE_FROM_SOURCE = (
+    sys.executable, '-c', 'from agent_comms.cli_bridges.claude import main; main()')
 
 
 @dataclass(frozen=True)
@@ -129,7 +136,8 @@ def test_real_monitor_survives_bridge_retirement_and_requires_a_fresh_probe(tmp_
                 assert monitor.poll() is None
             assert copied.child.wait(timeout=15) == 0, copied.log.read_text()
             with copied.log.open('ab') as output:
-                successor = subprocess.Popen(copied.child.args, env=env, stdout=output, stderr=output)
+                successor = subprocess.Popen(
+                    copied.child.args, env=env, stdout=output, stderr=output)
             cleanup.callback(stop, successor)
             second = probe(monitor)
             assert second.session == first.session
