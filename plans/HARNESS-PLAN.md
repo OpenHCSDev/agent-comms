@@ -16,14 +16,14 @@ A silent or slow tool teaches the commander to work around it, and the workaroun
 
 ## Steps, in order
 
-### 1. One owner for "may I write"
+### 1. The live stores stay whole, and lock waits name their holder
 
-- The lock wait fails within seconds and names the holder's pid and command. A wait that cannot name its holder is a defect.
-- Every writer (connector, bridges, hooks, unit workers) takes its "may I write" answer from `MaintenanceBarrier`, so no install has to stop them by hand.
-- The hand-spelled `root / "wire"` lock paths go, as `plans/VIRTUAL-BUS-PLAN.md` already orders. One bus lock.
-- The transcript lock and every other separate install control are deleted once the barrier covers their writers.
+- `CoordinationStore.observed()` (`coordination_database.py:220`) and `is_database()` (`:118`) open a plain handle on the live database inside processes that hold SQLite locks on it; closing that handle drops the process's locks. This is the likely cause of the 2026-10-21 corruption (fork AL's forensics). The required answer is what sits at the path (missing, not a regular file, not our database, our store); the store's own read-only connection answers it, so the header read is deleted. Callers: `transcripts.py:397`, `coordination_tables/refusals.py:71`, `notification_assignment.py:350`, `installer/backup.py:271`.
+- Installer backup and restore (`installer/backup.py:271-278`, `:360-366`) take the store's own lock instead of relying on writers having been stopped.
+- The store lock wait (`store_files.py:157`) fails within seconds and names the holder's pid and command.
+- The bus wire lock and its hand-spelled paths belong to the virtual bus batch (#2549), which deletes them; this plan does not touch them.
 
-**Done when** `agent-comms install` is the whole procedure on the live bus, and a writer that holds a lock during an install is named in the install log within seconds.
+**Done when** no code outside a store's owner opens its live file, and a lock held during an install is named in the install log within seconds.
 
 ### 2. Commander verbs take a fixed, small time
 
@@ -32,15 +32,11 @@ A silent or slow tool teaches the commander to work around it, and the workaroun
 
 **Done when** `order say` and `order board` each answer in under one second on the live bus.
 
-### 2b. One measure of how much a change grows the source
+### 2b. The growth alarm counts code, not imports
 
-"How much did this change grow `src`" has three answers today: raw `git diff --stat`, the commander growth alarm's 40-net-line limit, and the multiple inheritance plan's "net src lines" in every PR body. All three count every line, so the `BusLockFile` factoring (047bccc65), which turned 22 declarations of the lock file name into one, read as +18 when its real growth was +6: twelve of the eighteen were import lines at the top of files.
+The growth alarm is commander-native phase 7's (`plans/commander-native-plan.md`, Growth alarm); this step only fixes its measure. Today three places count raw lines (`git diff --stat`, the alarm, PR bodies), so a factoring that turns 22 declarations into one reads as +18 when twelve of those lines are top-of-file imports. One AST-based measure drops the leading module-level imports, blank lines and comments (imports below the top still count), the alarm and PR bodies read it, and each report shows it beside the ratchet's fact measures.
 
-- One AST-based measure, declared once: parse each changed file before and after, drop the leading block of module-level imports, blank lines and comments, and count what remains. Imports below the top of a file still count; they are code, and usually a dependency cycle being dodged.
-- The ratchet, the growth alarm and PR bodies all read that one measure; their own line counting is deleted.
-- Each report shows lines beside facts: the ratchet's debt measures (string dispatch, type switches, rosters and the rest) are the verdict, and lines are only the signal.
-
-**Done when** the measure reports +6 for 047bccc65, and no other place in the tree counts net source lines.
+**Done when** the alarm is the only place that counts net source lines and it ignores top-of-file imports.
 
 ### 3. No silent failures
 
@@ -52,13 +48,7 @@ A silent or slow tool teaches the commander to work around it, and the workaroun
 
 **Done when** each case above, reproduced once on a practice copy, ends in a named answer or a recorded result.
 
-### 4. Pings, not a firehose
-
-- The heartbeat carries only new decisions, at most five lines, as `plans/commander-native-plan.md` phase 6 describes. Repeated lines and per-message vibe-check ids stop reaching the commander.
-
-**Done when** one hour of the live bus delivers each decision to the commander once.
-
-### 5. Plans that read as one
+### 4. Plans that read as one
 
 - Delete the dead files in `plans/`; keep the three live plans and this one.
 - Delete `REMAINING-SLOP-PLAN.md` or `remaining-slop-plan.md`, whichever is superseded.
@@ -66,9 +56,15 @@ A silent or slow tool teaches the commander to work around it, and the workaroun
 
 **Done when** `plans/` holds only plans someone is executing, and each states its target once.
 
+## Owned elsewhere, not restated here
+
+- Pings instead of a firehose: commander-native phase 6, the commander page (HUD).
+- The bus lock and every `wire` path: the virtual bus batch, #2549.
+
 ## Rules for this plan
 
 - Direct pushes to `main` for this plan only. Every other plan still lands through the merge queue.
 - Run only the tests the change touches, locally, in the background under a timeout.
 - Each change deletes what it replaces in the same commit.
+- Never touch a file another plan deletes (2026-10-21: the reverted 047bccc65 added 16 conflicts to #2549).
 - Say what is slow or broken the moment it shows, out loud, instead of working around it.
