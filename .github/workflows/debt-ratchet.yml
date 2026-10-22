@@ -87,7 +87,10 @@ jobs:
       - name: Install non-editable Core and test dependencies
         run: python -m pip install -e src/agent_comms/skills/refactor-audit '.[dev]'
       - name: Build the installer's private runtime and rehearse through its CLI
-        run: python -m agent_comms.installer.test_runtime tests/test_install_rehearsal.py tests/test_native_input_bus_path.py
+        run: >-
+          python -m agent_comms.installer.test_runtime tests/test_install_rehearsal.py
+          tests/test_native_input_bus_path.py
+          tests/test_install.py::test_install_routes_a_new_bus_and_replaces_only_a_route_that_selects_none
 
   review-verdict:
     name: review-verdict
