@@ -262,6 +262,16 @@ class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
             raise RelationViolationError("Maintenance witness inconsistent; new turns held")
         return self
 
+    @contextmanager
+    def holding(self) -> Iterator[Self]:
+        """This process, and every child it starts, acts as this hold's holder while the
+        block lasts, and as no holder after it."""
+        os.environ[HOLDER_NONCE] = self.nonce
+        try:
+            yield self
+        finally:
+            del os.environ[HOLDER_NONCE]
+
     def successor(self, phase: type[MaintenancePhase], nonce: str) -> MaintenanceState:
         if not self.phase().may_become(phase()):
             raise ValueError('Maintenance transition requires a valid expected successor')

@@ -626,11 +626,11 @@ def rehearse(practice: PracticeBus, root: Path, stack: Stack, installed: Stack,
             shutil.copy2(path, destination)
     stopping = before_stop(copied, pending, stack, tree)
     installed.running_owners(copied)
-    os.environ[HOLDER_NONCE] = MaintenanceBarrier(copied / "registry.json").begin(
-        MaintenanceOperator.current()).nonce
-    with transcripts_held(copied):
-        before = bus_files(copied)
-    passed = carry_and_read(copied, before, pending, stack, stack, tree, stopping)
+    hold = MaintenanceBarrier(copied / "registry.json").begin(MaintenanceOperator.current())
+    with hold.holding():
+        with transcripts_held(copied):
+            before = bus_files(copied)
+        passed = carry_and_read(copied, before, pending, stack, stack, tree, stopping)
     return passed.extended(CarriedRehearsal, copy=practice.measurement)
 
 
