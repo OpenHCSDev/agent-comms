@@ -703,7 +703,7 @@ def rehearse(practice: PracticeBus, root: Path, stack: Stack, installed: Stack,
     with hold.holding():
         with transcripts_held(copied):
             before = bus_files(copied)
-        passed = carry_and_read(copied, before, pending, stack, stack, tree, stopping)
+        passed = carry_and_read(copied, before, pending, stack, installed, tree, stopping)
     return passed.extended(CarriedRehearsal, copy=practice.measurement)
 
 
@@ -717,19 +717,21 @@ def reconcile_stores(root: Path, staged: Stack) -> StepRun:
 
 
 def carry_and_read(root: Path, before: dict[str, SavedFile], pending: tuple[type[Carry], ...],
-                   staged: Stack, reader: Stack, tree: TargetTree,
+                   staged: Stack, outgoing: Stack, tree: TargetTree,
                    stopping: tuple[StepRun, ...]) -> CarriedPass:
     """The pass a rehearsal and a live install share once ``before`` was read under the
     transcript hold. The hold is released first: SQLite cannot lend its writer lock to a
     step's process, so a step that writes the transcript store could not run under it.
 
-    The bus is read back before the carries and after them, on this root and by the same
-    reader, and the two must agree. The first read follows ``before``, so a write it made
-    is a change no step names and the carry check refuses it."""
-    carried_from = reader.verify(root)
+    The bus is read back before the carries and after them, on this root. The read before
+    the carries is taken by the outgoing runtime, which reads the bus in the format it was
+    written; the read after them is taken by the staged runtime. The two BusReadBack values
+    must agree. The first read follows ``before``, so a write it made is a change no step
+    names and the carry check refuses it."""
+    carried_from = outgoing.verify(root)
     steps = (*stopping, *carry_all(root, pending, staged, tree), reconcile_stores(root, staged))
     files = carried(root, before, steps, RehearsalFiles.declared(steps))
-    passed = CarriedPass(steps, files, reader.verify(root))
+    passed = CarriedPass(steps, files, staged.verify(root))
     passed.require_read(carried_from)
     return passed
 
@@ -988,7 +990,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
         staged.commands.run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
         Checkout(checkout).prepare()
         staged.prepare_native()
-        passed = carry_and_read(root, before, pending, staged, staged, tree, stopping)
+        passed = carry_and_read(root, before, pending, staged, installed, tree, stopping)
         passed.files.require_rehearsal(rehearsal_files)
         staged.publish()
         maintenance.clear(held)
