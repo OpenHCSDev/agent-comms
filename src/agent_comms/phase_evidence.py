@@ -75,7 +75,10 @@ class MainTree:
         checked = subprocess.run(
             ("git", "-C", str(self.repo.checkout), "cat-file", "--batch-check"),
             input="".join(f"{self.commit}:{path}\n" for path in paths),
-            capture_output=True, text=True, timeout=60, check=True,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=True,
         ).stdout.splitlines()
         for path, line in zip(paths, checked, strict=True):
             if not line.endswith(" missing"):
@@ -583,7 +586,8 @@ class ParentsShared(MainEvidence):
             *(
                 declared.name
                 for declared in Classes.of(
-                    module.tree for module in main.present_modules(self.paths))
+                    module.tree for module in main.present_modules(self.paths)
+                )
             ),
         }
         members = Counter(
