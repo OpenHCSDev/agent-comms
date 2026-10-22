@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
+from .bus import Bus
 from .bus_publication import Delivered
 from .bus_tables import DirectReplySource
 from .declared_family import DeclaredFamily
@@ -19,7 +20,6 @@ from .locked_store import WireWakeFile
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 from .typed_table import Column, DurableStore, ForeignKey, Index, TypedTable
-from .bus import Bus
 
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity

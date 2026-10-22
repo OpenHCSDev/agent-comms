@@ -11,8 +11,8 @@ from .field_codec import FieldCodec, NullMember, RecordMember, SubclassUnion
 
 if TYPE_CHECKING:
     from .bus import BusReader
-    from .messages import Message
     from .message_page import MessagePage, PageWindow
+    from .messages import Message
     from .read_basis import MessageDisplayScope
 
 

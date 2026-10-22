@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from .native_input_owner import RegistryOwner
     from .registry_document import RegistrySnapshot
     from .thread_identity import ThreadIncarnation
+from .bus_tables import DirectReplySource
 from .goal_presentation import (
     GoalExecution,
     GoalExecutionSource,
@@ -61,7 +62,6 @@ from .message_bus import MessageBus
 from .threads import Thread
 from .todos import SendBackVerdict, StrikeReason, Todo, TodoCommand, TodoStore
 from .turn_lease import TurnCompletion
-from .bus_tables import DirectReplySource
 
 _LOG = logging.getLogger(__name__)
 

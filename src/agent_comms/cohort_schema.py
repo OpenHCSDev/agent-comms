@@ -120,6 +120,7 @@ class ClaimBatchAcknowledgements(CohortTable, TypedTable, declared_name="claim_b
 
     def require_delivery(self, delivery: Delivered, privacy: RegistryPrivacy) -> None:
         from dataclasses import replace
+
         from .coordination_errors import IdentityConflict
 
         if replace(self, sealed=False) != self.for_delivery(delivery, privacy, self.accepted_at_ms):

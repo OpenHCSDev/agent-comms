@@ -26,7 +26,6 @@ from agent_comms.typed_table import (
     TypedTable,
 )
 
-
 if TYPE_CHECKING:
     from agent_comms.bus import BusReader
 
