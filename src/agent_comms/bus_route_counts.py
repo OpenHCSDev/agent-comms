@@ -20,7 +20,6 @@ from .coordination_database import CoordinationStore
 from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily
 from .lifecycle_capability import Complete, LifecycleCapability
-from .locked_store import RuntimeFile
 from .private_path import FileRevision
 from .read_basis import MessageDisplayScope, ReadCursor
 from .routing import DeliveryMessage, DeliveryScope
@@ -29,8 +28,8 @@ from .typed_table import (
     Column,
     ForeignKey,
     Index,
+    RuntimeWriter,
     SQLiteJournalMode,
-    StoreWriter,
     TypedRow,
     TypedTable,
 )
@@ -336,7 +335,7 @@ class RouteIndexRebuilding(CoordinationReadUnavailable):
         super().__init__(f"Route index covers {through} of {size} bytes")
 
 
-class BusRouteCounts(StoreWriter, RuntimeFile):
+class BusRouteCounts(RuntimeWriter):
     filename = f"bus_route_counts.v{RouteTable.schema}.sqlite3"
     rebuild_bytes = 4 * 1024 * 1024
 
