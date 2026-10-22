@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 
 from agent_comms.bus import Bus, BusSnapshot
 from agent_comms.bus_activity_index import ActivityClocks
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.channel_targets import NamedTarget
 from agent_comms.channels import AnyChannel
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import UnregisteredThreadError
@@ -113,7 +113,7 @@ class MessageBus[Writes: Publisher]:
             yield basis, source
 
     def inbox(
-        self, name: str, target: CommandTarget = AnyChannel.target(), *,
+        self, name: str, target: NamedTarget = AnyChannel.target(), *,
         after: InboxStart = FirstUnreadStart(), bounds: PageBounds = PageBounds(),
     ) -> Sequence[Message]:
         return list(self.inbox_at(
@@ -121,7 +121,7 @@ class MessageBus[Writes: Publisher]:
         ).page.messages)
 
     def inbox_at(
-        self, name: str, snapshot: RegistrySnapshot, target: CommandTarget = AnyChannel.target(), *,
+        self, name: str, snapshot: RegistrySnapshot, target: NamedTarget = AnyChannel.target(), *,
         after: InboxStart = FirstUnreadStart(), bounds: PageBounds = PageBounds(),
     ) -> InboxPage:
         catalog = self._channels.read()
@@ -192,7 +192,7 @@ class MessageBus[Writes: Publisher]:
                 if not maintenance.read().turn_pending:
                     return
 
-    def pending_count(self, name: str, target: CommandTarget = AnyChannel.target()) -> int:
+    def pending_count(self, name: str, target: NamedTarget = AnyChannel.target()) -> int:
         with self.snapshot() as (basis, source):
             counts = self._pending_projection(source, basis, [name])[name]
             return target.pending_count(counts, basis.registry,
@@ -243,7 +243,7 @@ class MessageBus[Writes: Publisher]:
         return basis.message_count
 
     def mark_delivered_through(
-        self, name: str, sequence: int, *, target: CommandTarget = AnyChannel.target(),
+        self, name: str, sequence: int, *, target: NamedTarget = AnyChannel.target(),
     ) -> None:
         if sequence < 0:
             raise ValueError("Delivery sequence cannot be negative.")
