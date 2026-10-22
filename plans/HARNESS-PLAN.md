@@ -191,6 +191,19 @@ Its full child output is retained in
 that persistence diagnosis and the accompanying retired-session notifications.
 Neither attempt establishes the recorded SelectCurrent diagnosis or a deadlock.
 
+The persistence cause is traced: Toad's `Session` declared SQL directives in
+dataclass metadata after Core's column compiler moved to `Annotated`. Fresh
+session rows therefore had a NULL `id` while insertion returned SQLite's rowid.
+The Toad binding fork owns the complete DB family repair: annotation-derived
+session and model-history tables, shared durable schema reconciliation, one
+transaction path and surfaced SQLite failures. Eight focused checks passed on
+the source checkpoint; final connection-owner and dependency cleanup follows.
+The installed user's sessions table already has a valid primary key and no rows;
+its model-history table has two rows requiring a one-time schema carry.
+That carry uses an explicit SQLite backup and transaction outside the bus-only
+installer carry contract. Root owns its execution and paired installation after
+the Toad fork's copy proof; the virtual-bus integration is not a prerequisite.
+
 ### 2. Commander verbs take a fixed, small time
 
 The installer ownership fork measured a cold read on installed Core `a500297f9`:
