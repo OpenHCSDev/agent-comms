@@ -2,8 +2,6 @@ name: diag
 on:
   push:
     branches: ['diag/**']
-permissions:
-  contents: write
 jobs:
   diag:
     runs-on: ubuntu-latest
@@ -17,12 +15,20 @@ jobs:
         with:
           python-version-file: pyproject.toml
       - run: python -m pip install -q -e src/agent_comms/skills/refactor-audit -e '.[dev]' mypy
-      - name: run diag.sh and push its output to diag-out/<branch>
+      - name: run diag.sh
         shell: bash
         run: |
           set +e
           bash diag.sh > /tmp/out.txt 2>&1
           echo "exit $?" >> /tmp/out.txt
-          git config user.name diag && git config user.email diag@users.noreply.github.com
-          git checkout -q --orphan out && git rm -rq --cached . && cp /tmp/out.txt out.txt
-          git add out.txt && git commit -qm out && git push -qf origin "HEAD:refs/heads/diag-out/${GITHUB_REF_NAME#diag/}"
+      - name: annotate output
+        shell: bash
+        run: |
+          python - <<'PY'
+          text = open("/tmp/out.txt").read()
+          size, kinds = 3800, ("error", "warning", "notice")
+          chunks = [text[i:i+size] for i in range(0, len(text), size)][:30]
+          for n, chunk in enumerate(chunks):
+              body = chunk.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              print(f"::{kinds[n // 10]} title=diag {n:02d}::{body}")
+          PY
