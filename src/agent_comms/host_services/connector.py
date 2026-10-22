@@ -36,6 +36,9 @@ class ConnectorService:
     store: ConnectorStore = field(default_factory=ConnectorStore.owned)
     port: int = PORT
 
+    def described(self) -> str:
+        return f"Connector on port {self.port} for {self.launch.path}"
+
     @property
     def result(self) -> RoundTripResult:
         return RoundTripResult(f"{CommsChannelsTool.declared_name} read alike on port {self.port}")

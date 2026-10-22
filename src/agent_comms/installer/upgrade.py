@@ -57,7 +57,7 @@ from agent_comms.comms import Comms
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText
-from agent_comms.host_services import HostService
+from agent_comms.host_services import HostService, RestartedService
 from agent_comms.install_choices import InstallerChoice
 from agent_comms.installer import publication, step_worker
 from agent_comms.installer.backup import (
@@ -268,10 +268,11 @@ class StoppedOwners:
 
 @dataclass(frozen=True)
 class RestartedServices:
-    services: tuple[str, ...]
+    services: tuple[RestartedService, ...]
 
     def service_lines(self) -> tuple[str, ...]:
-        return (f"Restarted services: {', '.join(self.services) or 'none'}",)
+        return (f"Restarted services: "
+                f"{', '.join(service.line() for service in self.services) or 'none'}",)
 
 
 class Rehearsal(DeclaredFamily, affix="Rehearsal"):

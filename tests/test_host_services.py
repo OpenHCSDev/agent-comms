@@ -82,7 +82,9 @@ def connector_service(comms, tmp_path, monkeypatch):
 def test_restart_proves_a_healthy_connector_on_its_installed_runtime(connector_service, capsys):
     service = connector_service
     result = service.restart_onto(Path(sys.executable))
-    assert str(Path(sys.executable)) in result
+    assert result.runtime == Path(sys.executable)
+    assert result.line() == (f"Connector on port {service.port} for {service.launch.path} "
+                             f"restarted onto {sys.executable}")
     assert service.result.round_trip in capsys.readouterr().err
     assert not service.store.read().access  # Its one short-lived proof grant was revoked.
 

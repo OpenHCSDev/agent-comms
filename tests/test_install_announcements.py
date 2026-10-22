@@ -10,6 +10,7 @@ from agent_comms.cli_commands import BusReadBack, HistoryCliCommand, InstallResu
 from agent_comms.commander.config import NoConfigFile
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.field_codec import FieldCodec
+from agent_comms.host_services import RestartedService
 from agent_comms.installer.backup import BackupReport, RestoreSpace, UpgradeRefused
 from agent_comms.installer.carry import Carried
 from agent_comms.installer.launch import InstallReport
@@ -35,18 +36,21 @@ from agent_comms.thread_execution import ExternalThreadExecution
 from conftest import declare_test_bus
 
 
+RESTARTED = RestartedService("Connector on port 1 for /bus", Path("/runtime/bin/python"))
+
+
 @pytest.mark.parametrize("live", (
     CarriedRun(
         steps=(StepRun("carry_order_scopes", Carried(6)),),
         files=RehearsalFiles(3, 1, ("todos.sqlite3",), 1024),
-        read=BusReadBack(2), stopped=("worker",), services=("connector",),
+        read=BusReadBack(2), stopped=("worker",), services=(RESTARTED,),
         started=(StartedOwner("worker"), RefusedOwner("busy", "already running")),
         restore_space=RestoreSpace(1024, 4096, 0.01),
         backup=BackupReport("saved-before-install", 1024), retired_backups=(),
     ),
     UnchangedRun(),
-    CreatedRun(("connector",), "created route"),
-    RetiredRun(services=("connector",), route="created route", stopped=("worker",),
+    CreatedRun((RESTARTED,), "created route"),
+    RetiredRun(services=(RESTARTED,), route="created route", stopped=("worker",),
                retired=Path("retired-bus")),
 ), ids=("carried", "unchanged", "created", "retired"))
 def test_typed_results_publish_as_installer_and_survive_history_read(private_comms, live):

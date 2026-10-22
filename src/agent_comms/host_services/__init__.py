@@ -15,14 +15,27 @@ import time
 from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar, Self
+from typing import Annotated, ClassVar, Self
 
 from ..declared_family import DeclaredFamily
+from ..field_codec import PathText
 from ..launch_runtime import LaunchRuntime
 
 
 class ServiceNotServingError(RuntimeError):
     """A restarted service did not serve its installed runtime's contract."""
+
+
+@dataclass(frozen=True)
+class RestartedService:
+    """One host service an install restarted, in its own words, and the runtime it now
+    serves from."""
+
+    service: str
+    runtime: Annotated[Path, PathText]
+
+    def line(self) -> str:
+        return f"{self.service} restarted onto {self.runtime}"
 
 
 class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
@@ -48,8 +61,12 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
     def serves(self) -> None:
         """Prove the service answers; raise ServiceNotServingError naming a failure."""
 
+    @abstractmethod
+    def described(self) -> str:
+        """This instance in the words an install's report and its failures use."""
+
     @classmethod
-    def restart_running(cls, installed: Path) -> tuple[str, ...]:
+    def restart_running(cls, installed: Path) -> tuple[RestartedService, ...]:
         """Restart every declared service running on this host onto ``installed``."""
         return tuple(
             instance.restart_onto(installed)
@@ -57,16 +74,16 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
             for instance in member.running()
         )
 
-    def restart_onto(self, installed: Path) -> str:
+    def restart_onto(self, installed: Path) -> RestartedService:
         self.restart()
-        failure = f"{self} did not serve again within {self.patience}s"
+        failure = f"{self.described()} did not serve again within {self.patience}s"
         for _ in range(self.patience):
             for instance in type(self).running():
                 runtime = instance.runtime()
                 if runtime == installed:
                     instance.serves()
-                    return f"{instance} restarted onto {installed}"
-                failure = f"{instance} runs {runtime}, not the installed {installed}"
+                    return RestartedService(instance.described(), installed)
+                failure = f"{instance.described()} runs {runtime}, not the installed {installed}"
             time.sleep(1)
         raise ServiceNotServingError(failure)
 
