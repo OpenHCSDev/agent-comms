@@ -22,7 +22,6 @@ from agent_comms.field_codec import DefaultExternalName, ExternalName, FieldCode
 from agent_comms.head_review import HeadReview
 from agent_comms.pinned_audit import ForeignAbsenceProbe, GodFunction, ParsedModule
 from agent_comms.repo import Repo
-from agent_comms.work_branches import WorkBranches
 
 if TYPE_CHECKING:
     from agent_comms.todos import Todo
@@ -37,10 +36,11 @@ class MainTree:
 
     repo: Repo
     commit: str
+    branch: ClassVar[str] = "main"
 
     @classmethod
     def of(cls, repo: Repo) -> MainTree:
-        return cls(repo, Repo.git(repo.checkout, "rev-parse", "origin/main").strip())
+        return cls(repo, Repo.git(repo.checkout, "rev-parse", f"origin/{cls.branch}").strip())
 
     def has(self, path: str) -> bool:
         return self.git("cat-file", "-e", f"{self.commit}:{path}").returncode == 0
@@ -322,7 +322,7 @@ class RulesetGates(MainEvidence):
     def read(self, main: MainTree) -> bool:
         rules = FieldCodec.decode(
             tuple[BranchRule, ...],
-            self.api(main, f"rules/branches/{WorkBranches.main}", self.rules_query),
+            self.api(main, f"rules/branches/{main.branch}", self.rules_query),
         )
         return any(
             self.unskipped(main, rule.ruleset)
@@ -347,7 +347,7 @@ class RulesetGates(MainEvidence):
 
     def describe(self) -> str:
         return (
-            f"an active rule on {WorkBranches.main} requires {HeadReview.queue_check}, the queue"
+            f"an active rule on {MainTree.branch} requires {HeadReview.queue_check}, the queue"
             f" job that reads {HeadReview.context}, and no actor of its ruleset skips it"
         )
 
