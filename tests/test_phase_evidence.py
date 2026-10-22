@@ -6,9 +6,12 @@ from agent_comms.phase_evidence import (
     AllEvidence,
     ClassFlagsAbsent,
     CommitMerged,
-    FunctionLinesAtMost,
+    EvidenceUnknown,
+    MainEvidence,
     MainTree,
+    NoAbsenceProbes,
     NoExactCopies,
+    NoGodFunction,
     OwnClassChecksAbsent,
     ParentsShared,
     PathsAbsent,
@@ -17,6 +20,8 @@ from agent_comms.phase_evidence import (
     PlanReading,
     RulesetGates,
 )
+from agent_comms.head_review import HeadReview
+from agent_comms.pinned_audit import GodFunction
 from agent_comms.plan_phases import ExternalBoundariesPhase, PlanPhase, RemainingSlopPhase
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
@@ -100,19 +105,24 @@ def test_source_shape_evidence_reads_declarations_on_main(tmp_path):
     reading = main_of(tmp_path, {
         "src/a.py": "class Store:\n" + copy + "\nclass Child(Store):\n    pass\n",
         "src/b.py": "class Other:\n" + copy.replace("path", "root") + "\n"
-                    "def long():\n" + "    x = 1\n" * 5 + "\n"
+                    "def long():\n" + "    x = 1\n" * GodFunction.threshold + "\n"
+                    "def probe(other):\n    return other.value is None\n"
                     "def check(value):\n    return isinstance(value, (int, Store))\n",
         "src/caps.py": "class Shared:\n    pass\n\nclass Lonely:\n    pass\n",
         "src/members.py": "from caps import Shared, Lonely\n"
                           "class One(Shared):\n    pass\nclass Two(Shared, Lonely):\n    pass\n",
     })
 
-    assert not reading.holds(NoExactCopies("__init__", ("src/a.py", "src/b.py")))
-    assert reading.holds(NoExactCopies("__init__", ("src/a.py",)))
-    assert reading.holds(FunctionLinesAtMost("src/b.py", "long", 6))
-    assert not reading.holds(FunctionLinesAtMost("src/b.py", "long", 5))
+    assert not reading.holds(NoExactCopies(("__init__",), ("src/a.py", "src/b.py")))
+    assert reading.holds(NoExactCopies(("__init__",), ("src/a.py",)))
+    assert not reading.holds(NoGodFunction("src/b.py", "long"))
+    assert reading.holds(NoGodFunction("src/b.py", "check"))
+    assert not reading.holds(NoAbsenceProbes(("src/b.py",)))
+    assert reading.holds(NoAbsenceProbes(("src/a.py",)))
     assert not reading.holds(OwnClassChecksAbsent())
-    assert not reading.holds(ParentsShared(("src/caps.py",)))
+    assert not reading.holds(ParentsShared(paths=("src/caps.py",)))
+    assert reading.holds(ParentsShared(names=("Shared",)))
+    assert not reading.holds(ParentsShared(names=("Missing",)))
 
 
 def test_ruleset_gates_only_without_an_always_bypass():
@@ -121,10 +131,14 @@ def test_ruleset_gates_only_without_an_always_bypass():
                    "parameters": {"required_status_checks": [{"context": "review-verdict"}]}}],
         "bypass_actors": [{"actor_type": "RepositoryRole", "bypass_mode": "pull_request"}],
     }
-    assert RulesetGates("review-verdict").gates(ruleset)
-    assert not RulesetGates("smoke").gates(ruleset)
+    gates = RulesetGates(HeadReview)
+    assert gates.gates(ruleset)
+    assert HeadReview.context in gates.describe()
     ruleset["bypass_actors"][0]["bypass_mode"] = "always"
-    assert not RulesetGates("review-verdict").gates(ruleset)
+    assert not gates.gates(ruleset)
+    ruleset["rules"][0]["parameters"]["required_status_checks"] = [{"context": "smoke"}]
+    ruleset["bypass_actors"] = []
+    assert not gates.gates(ruleset)
 
 
 def test_lifecycle_flags_count_class_bodies_not_locals(tmp_path):
@@ -136,3 +150,27 @@ def test_lifecycle_flags_count_class_bodies_not_locals(tmp_path):
                                                  "class Scope:\n    complete: bool = True\n"})
     assert not flagged.holds(ClassFlagsAbsent(("complete", "active")))
     assert flagged.holds(ClassFlagsAbsent(("complete",)))
+
+
+def test_main_evidence_reads_once_per_commit_and_unknown_is_reported(tmp_path):
+    reading = main_of(tmp_path, {"src/a.py": "x = 1\n"})
+    reads = []
+
+    class Counted(PatternPresent):
+        def read(self, main):
+            reads.append(main.commit)
+            return super().read(main)
+
+    counted = Counted("x = 1")
+    again = PlanReading((), reading.main)
+    assert reading.holds(counted) and again.holds(counted)
+    assert len(reads) == 1
+
+    class Unreadable(PatternPresent):
+        def read(self, main):
+            raise EvidenceUnknown("GitHub is down")
+
+    unreadable = Unreadable("x")
+    assert not reading.holds(unreadable)
+    assert reading.describe(unreadable).startswith("unknown (GitHub is down)")
+    assert (reading.main, unreadable) not in MainEvidence.results

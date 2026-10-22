@@ -609,14 +609,13 @@ class PullRequests:
             'merged: mergedAt updated: updatedAt }' for number in linked]
         query = (f'query {{ repository(owner: {json.dumps(repo.owner)}, '
                  f'name: {json.dumps(repo.name)}) {{ {" ".join(selections)} }} }}')
-        listed = subprocess.run(
-            ("gh", "api", "graphql", "-f", "query=" + query,
-             "--jq", '.data.repository | map_values((if .merged == null then '
-             '(if .closed then '
-             f'del(.merge,.merged) + {{kind: "{ClosedListedPullRequest.declared_name}"}} else '
-             f'del(.merge,.merged) + {{kind: "{UnmergedListedPullRequest.declared_name}"}} end) else '
-             f'. + {{kind: "{MergedListedPullRequest.declared_name}"}} end) | del(.closed))'),
-            capture_output=True, text=True, timeout=60)
+        listed = repo.api(
+            "graphql", "-f", "query=" + query,
+            "--jq", '.data.repository | map_values((if .merged == null then '
+            '(if .closed then '
+            f'del(.merge,.merged) + {{kind: "{ClosedListedPullRequest.declared_name}"}} else '
+            f'del(.merge,.merged) + {{kind: "{UnmergedListedPullRequest.declared_name}"}} end) else '
+            f'. + {{kind: "{MergedListedPullRequest.declared_name}"}} end) | del(.closed))')
         if listed.returncode:
             raise WorkBranchError(
                 listed.stderr.strip() or f"GitHub order lookup in {repo.to_wire()} failed.")

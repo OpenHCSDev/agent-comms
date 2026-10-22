@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 from dataclasses import dataclass
 from typing import ClassVar
 
@@ -36,6 +37,14 @@ class RepositoryName(WireValue):
 
     def to_wire(self) -> str:
         return "/".join(self.key)
+
+    def api(self, *arguments: str) -> subprocess.CompletedProcess[str]:
+        """The one GitHub reader: ``gh api`` with ``arguments``; callers judge the result."""
+        return subprocess.run(("gh", "api", *arguments), capture_output=True, text=True, timeout=60)
+
+    def rest(self, path: str, *arguments: str) -> subprocess.CompletedProcess[str]:
+        """``path`` under this repository's REST root."""
+        return self.api(f"repos/{self.to_wire()}/{path}", *arguments)
 
     @classmethod
     def from_wire(cls, data: object) -> RepositoryName:

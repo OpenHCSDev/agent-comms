@@ -12,12 +12,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.head_review import HeadReview
 from agent_comms.phase_evidence import (
     AllEvidence,
     ClassFlagsAbsent,
     CommitMerged,
-    FunctionLinesAtMost,
+    NoAbsenceProbes,
     NoExactCopies,
+    NoGodFunction,
     OwnClassChecksAbsent,
     ParentsShared,
     ParityEvidence,
@@ -163,7 +165,7 @@ class ReviewQueuePhase(CommanderNativePhase):
     merge, which an always-bypass actor would defeat."""
 
     after = (RecordPlanePhase,)
-    evidence = RulesetGates("review-verdict")
+    evidence = RulesetGates(HeadReview)
 
 
 COMMANDER = "src/agent_comms/commander/"
@@ -364,36 +366,38 @@ class TriggersPhase(MultipleInheritancePhase):
 
 
 class DuplicatesPhase(MultipleInheritancePhase):
-    """1E: the five certain exact groups the plan lists; the uncertain ones need their readers
-    traced first."""
+    """1E: the plan's eight exact groups; its three near groups need their readers traced."""
 
     evidence = AllEvidence(
         tuple(
-            NoExactCopies(name, tuple(f"src/agent_comms/{path}" for path in paths))
-            for name, paths in (
-                ("__init__", ("attempt_store.py", "cli_bridges/opencode.py", "cli_bridges/shared.py",
-                              "external_transcript.py", "recovery_reader.py")),
-                ("trigger_bodies", ("coordination_response.py", "native_prompt_binding.py",
-                                    "private_sidecar.py")),
-                ("__init__", ("durable_turn.py", "execution_store.py", "exporting.py", "publisher.py")),
-                ("wire_member", ("pi_payloads.py",)),
-                ("references", ("coordination_tables/attempts.py", "coordination_tables/recovery.py",
-                                "coordination_tables/responses.py")),
+            NoExactCopies(names, tuple(f"src/agent_comms/{path}" for path in paths))
+            for names, paths in (
+                (("__init__",), ("attempt_store.py", "cli_bridges/opencode.py", "cli_bridges/shared.py",
+                                 "external_transcript.py", "recovery_reader.py")),
+                (("captured_owner", "owner_identity"),
+                 ("cohort_schema.py", "coordination_tables/attempts.py", "native_input_record.py",
+                  "participant_store.py")),
+                (("trigger_bodies",), ("coordination_response.py", "native_prompt_binding.py",
+                                       "private_sidecar.py")),
+                (("__init__",), ("durable_turn.py", "execution_store.py", "exporting.py", "publisher.py")),
+                (("wire_member",), ("pi_payloads.py",)),
+                (("_assert_response_schema", "assert_cohort_schema", "assert_native_runtime_schema"),
+                 ("cohort_schema.py", "coordinated_runtime_schema.py", "coordination_response.py")),
+                (("references",), ("coordination_tables/attempts.py", "coordination_tables/recovery.py",
+                                   "coordination_tables/responses.py")),
+                (("annotation_disclosure", "disclosure_for"), ("pi_payloads.py", "turn_context.py")),
             )
         )
     )
 
 
 class FieldDirectivesPhase(MultipleInheritancePhase):
-    """Batch 2: the field groups and table mixins the plan names are declared. The bus groups
-    are deleted by the virtual bus, and ``Addressed`` is the bus's own."""
+    """Batch 2: the field groups and table mixins the plan names exist and each has members.
+    The bus groups are deleted by the virtual bus, and ``Addressed`` is the bus's own."""
 
-    evidence = AllEvidence(
-        tuple(
-            PatternPresent(rf"^class {mixin}\b")
-            for mixin in ("TurnItem", "ClaimScoped", "SingletonRow", "SchemaMeta", "Revisioned",
-                          "ExecutionKeyed", "WithoutRowid")
-        )
+    evidence = ParentsShared(
+        names=("TurnItem", "ClaimScoped", "SingletonRow", "SchemaMeta", "Revisioned",
+               "ExecutionKeyed", "WithoutRowid")
     )
 
     after = (
@@ -416,7 +420,7 @@ class InheritanceCleanupPhase(MultipleInheritancePhase):
     """Batch 4: no lifecycle capability is left with one member."""
 
     after = (OwnTypeChecksPhase,)
-    evidence = ParentsShared(("src/agent_comms/lifecycle_capability.py",))
+    evidence = ParentsShared(paths=("src/agent_comms/lifecycle_capability.py",))
 
 
 class DeadModulesPhase(RemainingSlopPhase):
@@ -439,10 +443,9 @@ class TransitionScaffoldingPhase(RemainingSlopPhase):
 
 
 class AbsencePhase(RemainingSlopPhase):
-    """2.1: the seven heaviest files first; every ``is None`` test there decides behaviour."""
+    """2.1: the seven heaviest files first, measured by the census's absence probe."""
 
-    evidence = PatternAbsent(
-        r"\bis (not )?None\b",
+    evidence = NoAbsenceProbes(
         tuple(
             f"src/agent_comms/{path}"
             for path in ("typed_table.py", "backend.py", "input_drain.py", "turn_watchdog.py",
@@ -460,7 +463,7 @@ class TypeSwitchesPhase(RemainingSlopPhase):
 class OrderSendPhase(RemainingSlopPhase):
     """2.5: ``send`` keeps only the dispatch; its parts move to the order types."""
 
-    evidence = FunctionLinesAtMost("src/agent_comms/commander/order.py", "send", 40)
+    evidence = NoGodFunction("src/agent_comms/commander/order.py", "send")
 
 
 class ExternalBoundariesPhase(RemainingSlopPhase):

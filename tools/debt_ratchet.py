@@ -32,26 +32,7 @@ from dataclasses import dataclass
 from functools import cache, cached_property, partial
 from pathlib import Path
 
-sys.path.insert(
-    0,
-    str(
-        Path(__file__).resolve().parents[1]
-        / subprocess.check_output(
-            [
-                "git",
-                "config",
-                "--file",
-                str(Path(__file__).resolve().parents[1] / ".gitmodules"),
-                "--get",
-                "submodule.src/agent_comms/skills/refactor-audit.path",
-            ],
-            text=True,
-        ).strip()
-        / "scripts"
-    ),
-)
-
-import audit
+from agent_comms.pinned_audit import audit
 from audit.findings import Package as AuditPackage, ParsedModule as AuditModule, RawShape
 from audit.repository import Repository as AuditRepository
 from audit.handler_declarations import BuiltinHandlerDeclarations
