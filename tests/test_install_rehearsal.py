@@ -12,8 +12,6 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-import tarfile
-from io import BytesIO
 from pathlib import Path
 
 import pytest
@@ -21,7 +19,7 @@ import pytest
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.backup import bus_files
 from agent_comms.installer.practice import TestHome
-from agent_comms.repo import Checkout
+from agent_comms.repo import Checkout, ScratchCheckout
 from agent_comms.installer.upgrade import CarriedRehearsal, RehearsedUpgrade, Upgrade
 from conftest import declare_test_bus, publish_initial
 
@@ -47,15 +45,17 @@ def installed_home(tmp_path_factory) -> dict[str, str]:
     environment = {**os.environ, "HOME": str(home), "UV_CACHE_DIR": caches.stdout.strip(),
                    "npm_config_cache": str(Path.home() / ".npm")}
     environment.pop("PYTHONPATH", None)
-    base = home / "outgoing-source"
-    archive = subprocess.run(["git", "-C", REPOSITORY, "archive", git("merge-base", "HEAD", "origin/main")],
-                             check=True, capture_output=True).stdout
-    with tarfile.open(fileobj=BytesIO(archive)) as tree:
-        tree.extractall(base, filter="data")
+    # The checkout owner adds the tree with its pinned submodules; `git archive` drops them.
+    base = ScratchCheckout.add(REPOSITORY, home / "outgoing-source",
+                               git("merge-base", "HEAD", "origin/main"), "--detach")
     runtime = home / ".local/share/agent-comms/runtimes/outgoing"
-    subprocess.run([uv, "venv", "-q", "--python", sys.executable, runtime], check=True, env=environment)
-    subprocess.run([uv, "pip", "install", "-q", "--python", runtime / "bin/python", base],
-                   check=True, env=environment)
+    try:
+        subprocess.run([uv, "venv", "-q", "--python", sys.executable, runtime], check=True,
+                       env=environment)
+        subprocess.run([uv, "pip", "install", "-q", "--python", runtime / "bin/python", base.path],
+                       check=True, env=environment)
+    finally:
+        base.retire()
     (home / ".local/share/agent-comms/current").symlink_to(runtime, target_is_directory=True)
     return environment
 
