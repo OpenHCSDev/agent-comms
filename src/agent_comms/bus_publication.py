@@ -251,9 +251,9 @@ class InitialOrigin(ABC):
     ) -> None:
         """Append the reserved row, reporting a failure as this origin requires."""
 
+    @abstractmethod
     def published(self, goals: Goals, message: Message) -> None:
-        """What a committed message from this origin records beyond the bus: nothing, unless
-        the origin speaks for the owner."""
+        """What a committed message from this origin records beyond the bus."""
 
 
 class OwnerVoiceOrigin(InitialOrigin):
@@ -268,6 +268,9 @@ class OwnerVoiceOrigin(InitialOrigin):
 @dataclass(frozen=True, slots=True)
 class AgentOrigin(InitialOrigin):
     """An executable thread's owner; it may resend under the same message id."""
+
+    def published(self, goals: Goals, message: Message) -> None:
+        """An agent's message directs no thread: only the owner's voice does."""
 
     def require_sender(
         self, message: Message, sender_thread: Thread, snapshot: RegistrySnapshot

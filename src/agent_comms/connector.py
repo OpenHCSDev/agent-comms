@@ -58,7 +58,7 @@ from .connector_store import (
     AuthorizationRequest, ClaudeCallback,
     ConnectorGrants, ConnectorStore, IssuedTokens, RegisteredClient, TrustedBrowser, digest,
 )
-from .messages import Message, QuestionKind
+from .messages import QuestionKind
 from .commander.standing import UnownedOrderWatch
 from .commander_heartbeat import CommanderHeartbeat
 from .coordinator import Coordination

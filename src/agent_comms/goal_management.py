@@ -17,6 +17,7 @@ from .agent_activity import AgentActivity
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError
 from .goal_actions import (
+    DirectiveGoalAction,
     GoalAction,
     GoalActionContext,
     GoalPrecondition,
@@ -38,6 +39,7 @@ from .registration import Registration
 if TYPE_CHECKING:
     from .agent_events import GoalChange
     from .message_reference import MessageReference
+    from .messages import Message
     from .native_input_owner import RegistryOwner
     from .registry_document import RegistrySnapshot
     from .thread_identity import ThreadIncarnation
@@ -419,6 +421,11 @@ class Goals:
             if not wait.matches(original, current.incarnation.require_recorded()):
                 return False
         return wait.consume_reply(self.waits, goal.id)
+
+    def direct(self, name: str, message: Message) -> None:
+        """The owner's plain message to ``name`` becomes a directive on its goal."""
+        self.update_goal(name, DirectiveGoalAction(
+            text=message.body, seq=message.seq, at=message.timestamp))
 
     def update_goal[Result: GoalDeclaration](
         self,

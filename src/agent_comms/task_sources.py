@@ -273,10 +273,7 @@ class TaskAttachment(DeclaredFamily, affix="TaskAttachment"):
 class NoTaskAttachment(TaskAttachment, declared_name="absent"):
     def direct(self, goals: Goals, message: Message) -> None:
         """A plain owner message is a request wherever its destination holds them."""
-        from .goal_actions import DirectiveGoalAction
-
-        CommandTarget.named(message.target).direct(
-            goals, DirectiveGoalAction(text=message.body, seq=message.seq, at=message.timestamp))
+        CommandTarget.named(message.target).direct(goals, message)
 
 
 @dataclass(frozen=True)
