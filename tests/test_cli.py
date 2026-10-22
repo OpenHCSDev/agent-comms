@@ -16,11 +16,13 @@ from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.thread_model import UndeclaredModel
 from agent_comms.cli_commands import CommandSelectionChanged
 from agent_comms.lifecycle_capability import Successful
+from conftest import installed_comms
 
 
 @pytest.fixture
-def cli(capsys):
-
+def cli(capsys, tmp_path):
+    """The command line over a root the installer prepared, as every installed root is."""
+    Bus.install(Bus.path_in(tmp_path))
     root = None
 
     def run(root_path, *argv: str) -> tuple[int, dict | None]:
@@ -114,22 +116,20 @@ class TestCliSuccess:
     def test_send_notice_and_conversation_record_channel_wake_modes(self, cli, comms):
         from agent_comms.cli_bridges.shared import Send
         from agent_comms.messages import SendableRole, NoticeRole
+        from agent_comms.wake_policy import BoundedTriageWake, PassiveWake
         import argparse
 
         comms.channels.create_tag("comms")
         for name in ("sender", "one", "two"):
             tags = frozenset() if name == "sender" else frozenset({"comms"})
             comms.registry.declare(comms.registry.new_thread(name, tags, str(comms.root)))
-        Bus.install(Bus.path_in(comms.root))
-        for role, expected in (("notice", "passive"), ("conversation", "bounded_triage")):
+        for role, expected in (("notice", PassiveWake()), ("conversation", BoundedTriageWake())):
             code, sent = cli(comms.root, "send", "--from", "sender", "--to", "#comms",
                              "--body", "public record", "--role", role)
             assert code == 0
-            row = next(json.loads(line) for line in comms.bus.log.path.read_text().splitlines()
-                       if json.loads(line)["id"] == sent["id"])
-            manifest = row["_agent_comms_private_v1"]["initial"]
-            assert len(manifest["audience"]["recipients"]) == 2
-            assert [decision["wake_mode"] for decision in manifest["decisions"]] == [expected] * 2
+            delivery, = comms.bus.bus.lookup_message(sent["id"]).deliveries()
+            assert len(delivery.audience.recipients) == 2
+            assert [decision.wake_policy() for decision in delivery.decisions] == [expected] * 2
         parser = argparse.ArgumentParser()
         Send.add_arguments(parser)
         bridged = Send.from_arguments(parser.parse_args(
@@ -313,10 +313,9 @@ class TestDeclaredTargetActions:
 class TestSelectedTargetActions:
     @staticmethod
     def declared(root):
-        from agent_comms.comms import wire
         from agent_comms.thread_status import StoppedThreadStatus
 
-        comms = wire(root)
+        comms = installed_comms(root)
         for name, tags in (("alpha", {"team"}), ("beta", {"other"})):
             comms.registry.declare(comms.registry.new_thread(name, frozenset(tags), str(root)), StoppedThreadStatus())
         return comms

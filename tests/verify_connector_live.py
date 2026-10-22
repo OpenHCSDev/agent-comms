@@ -66,7 +66,7 @@ def main(scratch: Path):
             print(f"source={Path(sys.modules['agent_comms.comms'].__file__).parent}")
             print("entrypoint=agent-comms-connector serve --root <scratch> --port <loopback-port>")
             with store.granted("scratch curl proof") as token:
-                before = comms.bus.log.latest_sequence()
+                before = comms.bus.bus.revision()
                 output = curl_call(port, token, "Fix the candidate now")
                 print("published owner wording:\n" + output.strip())
                 response, status = output.strip().rsplit("\n", 1)
@@ -90,7 +90,7 @@ def main(scratch: Path):
 
                 # Unknown destinations are still genuine refused sends. Exercise
                 # the real connector path, not a fabricated refusal-table entry.
-                before = comms.bus.log.latest_sequence()
+                before = comms.bus.bus.revision()
                 output = curl_call(port, token, "", arguments={
                     "from": "claude-ai", "to": "#missing-channel", "body": "Fix this now",
                 })
@@ -98,7 +98,7 @@ def main(scratch: Path):
                 result = json.loads(response)["result"]
                 assert status.split()[0] == "200" and result["isError"] is True
                 assert "Unknown channel" in response
-                assert comms.bus.log.latest_sequence() == before, "a refused send committed bytes"
+                assert comms.bus.bus.revision() == before, "a refused send committed bytes"
                 readback = subprocess.run(
                     read_command, env=environment, capture_output=True, text=True)
                 assert readback.returncode == 0, readback.stdout + readback.stderr

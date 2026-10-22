@@ -264,6 +264,7 @@ def pr_commander(tmp_path, monkeypatch, proof_build_checkouts):
                      for row, body in requests},
     }))
     monkeypatch.setenv("PATH", os.pathsep.join((str(binaries), os.environ["PATH"])))
+    Bus.install(Bus.path_in(tmp_path))
     lead = Registration(tmp_path / "registry.json").new_thread(
         'lead', frozenset(), str(source.checkout), created_at=1.0)
     rule = StorageRule(checkout_base=source.checkout.parent)
@@ -386,10 +387,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
             copied = Comms(root)
             with LaunchRoot.from_path(root).selected():
                 ctx.model_copy(update={'root': root, 'state': root / 'state'}).write(root / 'config-home')
-                # Create the declared inode before the external probes open it read-only.
-                with copied.bus.locked():
-                    pass
-                lock = shlex.quote(str(store_lock_path(copied.bus.path)))
+                lock = shlex.quote(str(store_lock_path(copied.bus.bus.path)))
                 calls = ctx.root / "watcher-children.txt"
                 calls.write_text("")
                 binaries = ctx.root / "watcher-bin"
@@ -444,8 +442,7 @@ def test_reused_enforcement_rejects_a_new_idle_goal(checkout_bus, caplog):
         changed = checkout_bus.goals.update_goal(selected.name, SetGoalAction(
             text="New independent work after the idle observation"))
         before = checkout_bus.goals.todos.get(item.rule.todo.id)
-        with checkout_bus.bus.locked():
-            watch.pass_body(checkout_bus, observed)
+        watch.pass_body(checkout_bus, observed)
         assert checkout_bus.registry.require(selected.name).goal == changed
         assert checkout_bus.goals.todos.get(before.id) == before
         rejected = caplog.records[-1].args[0]

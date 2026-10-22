@@ -11,6 +11,7 @@ from agent_comms.cli_bridges.shared import Binding, Watch
 from agent_comms.runtime_updates import ThreadOutput
 from agent_comms.cli_protocol import EarlierItems, WATCH_LINE
 from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.external_transcript import ExternalItemRow
 from agent_comms.thread_execution import ExternalThreadExecution
@@ -55,7 +56,7 @@ async def test_pager_requests_two_older_pages_through_the_bridges_real_socket(tm
     await runner.setup()
     socket_path = tmp_path.parent / 'codex.sock'
     await web.UnixSite(runner, str(socket_path)).start()
-    comms = wire(tmp_path / 'root')
+    comms = installed_comms(tmp_path / 'root')
     comms.registry.declare(comms.registry.new_thread('cli', frozenset(), str(tmp_path),
                                                    execution=ExternalThreadExecution))
     transcript = comms.transcripts.external('cli')

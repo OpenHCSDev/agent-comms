@@ -274,7 +274,7 @@ def test_original_context_wire_captures_are_indexed_not_public_messages(tmp_path
     page = comms.contexts.page(owner.name, comms.registry)
     assert tuple(resource.value for resource in page.resources) == (captured,)
     assert read_history(comms) == []
-    assert comms.bus.log.latest_sequence() == 0
+    assert comms.bus.bus.revision() == 0
     assert captured.public_text_recorded
     assert not replace(captured, segments=(replace(captured.segments[0], captured_text=()),))\
         .public_text_recorded

@@ -1,8 +1,7 @@
-"""Source-owned history predicates and sound use of the existing offset index."""
+"""Source-owned history predicates and sound use of the sequence index."""
 
 from agent_comms.bus import Bus
 
-import json
 from dataclasses import replace
 
 import pytest
@@ -24,7 +23,6 @@ def history(tmp_path):
     for created, name in enumerate(("bob", "carol"), start=11):
         old.registry.declare(old.registry.new_thread(name, frozenset({'ops'}), str(old.root), created_at=created))
     old.registry.rename("alice-old", "alice")
-    Bus.install(Bus.path_in(old.root))
     rows = []
     for seq in range(1, 241):
         message = Message(
@@ -46,13 +44,8 @@ def history(tmp_path):
             )
         elif seq == 235:
             message = replace(message, target="#all")
-        raw = (json.dumps(message.to_wire()) + "\n").encode()
-        rows.append((message, raw))
-    old.bus.log.path.write_bytes(b"".join(raw for _, raw in rows))
-    old.bus.log.path.chmod(0o600)
-    marker = old.bus.log.read_metadata_unlocked(required=True)
-    marker.last_seq = marker.claimed_after_seq = rows[-1][0].seq
-    old.bus.log.write_metadata_unlocked(marker)
+        rows.append(message)
+    Bus.install(Bus.path_in(old.root), history=rows)
     live = Comms(tmp_path / "live")
     # Deliberately different membership: source scope must not use live tags.
     live.registry.declare(live.registry.new_thread('alice', frozenset({'ops'}), str(live.root), created_at=500))
@@ -107,7 +100,7 @@ def reader(live, kind):
 def test_complete_forward_and_reverse_traversal_preserves_membership(history, kind):
     live, source, rows = history
     read = reader(live, kind)
-    expected = [message.to_wire() for message, _ in rows if selected(kind, message)]
+    expected = [message.to_wire() for message in rows if selected(kind, message)]
     page = read(PageBounds(limit=2, max_bytes=600))
     backward = [message.to_wire() for message in page.messages]
     for _ in range(len(rows) + 1):

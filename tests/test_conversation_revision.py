@@ -2,17 +2,17 @@
 
 import pytest
 
-from agent_comms.comms import wire
 from agent_comms.historical_views import (
     ChannelDisplayHistory,
     ConversationObservation,
     DMDisplayHistory,
     DMDisplayIdentity,
 )
+from conftest import installed_comms
 
 
 def declared_wire(root):
-    comms = wire(root)
+    comms = installed_comms(root)
     comms.registry.declare(comms.registry.new_thread(name='peer', tags=frozenset({'comms'}), worktree=str(root)))
     return comms
 

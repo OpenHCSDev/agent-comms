@@ -27,7 +27,7 @@ from agent_comms.page_traversal import OlderTraversal
 
 @pytest.mark.parametrize('exists', [False, True])
 def test_catalogue_creation_or_change_during_read_is_rejected(tmp_path, exists):
-    archive = HistoryArchive(tmp_path / 'bus.jsonl')
+    archive = HistoryArchive(Bus.path_in(tmp_path))
     if exists:
         archive.path.write_text('[]')
     with pytest.raises(HistoricalSourceChanged):
@@ -37,7 +37,7 @@ def test_catalogue_creation_or_change_during_read_is_rejected(tmp_path, exists):
 
 
 def test_missing_catalogue_is_empty_without_creating_it(tmp_path):
-    archive = HistoryArchive(tmp_path / 'bus.jsonl')
+    archive = HistoryArchive(Bus.path_in(tmp_path))
     assert archive.sources() == ()
     assert not archive.path.exists()
 

@@ -6,6 +6,7 @@ import json
 import pytest
 
 from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.routing import ScheduledTurn, TurnRouting
 from agent_comms.threads import Thread
 from agent_comms.native_entries import TranscriptProjection
@@ -28,7 +29,7 @@ def append_input(path, native_id, text, *, role="user"):
 
 
 def test_bound_input_overrides_turn_wide_annotation_without_attributing_quotes(tmp_path):
-    comms = wire(tmp_path / "wire")
+    comms = installed_comms(tmp_path / "wire")
     comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path)))
     comms.registry.declare(comms.registry.new_thread('peer', frozenset(), str(tmp_path)))
     first = comms.messaging.send("peer", "worker", "Original input").message
@@ -69,7 +70,7 @@ def test_bound_input_overrides_turn_wide_annotation_without_attributing_quotes(t
 
 
 def test_bound_route_rejects_changed_text_and_conflicting_rebind(tmp_path):
-    comms = wire(tmp_path / "wire")
+    comms = installed_comms(tmp_path / "wire")
     comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path)))
     comms.registry.declare(comms.registry.new_thread('peer', frozenset(), str(tmp_path)))
     incoming = comms.messaging.send("peer", "worker", "Verified input").message

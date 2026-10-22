@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from agent_comms.comms import Comms
+from conftest import installed_comms
 from agent_comms.context_segments.partner_activity import PartnerActivitySegment
 from agent_comms.goal_actions import CompletedGoalAction, GoalPrecondition, SetGoalAction
 from agent_comms.goal_states import ActiveGoal, CompletedGoal
@@ -26,7 +26,7 @@ from agent_comms.turn_context import CoordinationSegment, NextContextTurn, TurnC
 
 
 def _wire(tmp_path, *threads):
-    comms = Comms(tmp_path / "wire")
+    comms = installed_comms(tmp_path / "wire")
     for created, (name, tags) in enumerate(threads, start=1):
         comms.registry.declare(
             comms.registry.new_thread(name, frozenset(tags), str(tmp_path), created_at=20000.0 + created)
@@ -146,8 +146,7 @@ def test_a_collaborators_goal_change_reaches_its_partner_as_a_typed_item_without
     shown = json.loads(_partner_activity(comms, "owner")[0].text().splitlines()[-1])
     assert shown[0]["peer"] == "partner" and shown[0]["state"] == "completed"
     # The change is read at the partner's next turn: nothing was sent and nobody was woken.
-    with comms.bus.log.opened_wire_snapshot() as source:
-        assert tuple(source.public_records()) == ()
+    assert comms.bus.bus.revision() == 0
     assert comms.bus.pending_counts_all(["owner", "partner", "mate"]) == dict.fromkeys(
         ("owner", "partner", "mate"), 0
     )

@@ -3,12 +3,12 @@ from agent_comms.messages import NoticeRole
 from dataclasses import replace
 
 from agent_comms.comms import Comms
+from agent_comms.retained_task_facts import RetainedTaskFacts
 from bus_record_fixture import context_comms
 
 
 def facts_for(comms, owner):
-    with comms.bus.log.checked_read() as source:
-        return tuple(source.retained_task_facts(owner.incarnation))
+    return RetainedTaskFacts.capture(comms.bus.bus, owner.incarnation).facts
 
 
 def test_ordinary_peer_reply_preserves_facts_but_new_user_instruction_changes_them(tmp_path):

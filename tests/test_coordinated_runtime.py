@@ -66,7 +66,7 @@ def _root(
     target = "beta" if direct else "#team"
     body = body if body is not None else ("@beta Compute 17+25." if mentioned else "Compute 17+25.")
     message = publish_initial(comms, "sender", target, body)
-    initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
+    initial = comms.bus.bus.delivery(message.seq)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         for recipient in initial.audience.recipients:
             store.participants.register(

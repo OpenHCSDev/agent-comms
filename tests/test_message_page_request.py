@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 import pytest
 
-from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.message_page import MessagePageRequest, PageBounds
 from agent_comms.page_traversal import NewerTraversal, OlderTraversal
@@ -29,7 +29,7 @@ class ReviewScope(MessageDisplayScope):
 def test_new_scope_preserves_sequence_progress_and_edges(
     tmp_path, traversal, first, has_older, has_newer,
 ):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     for name in ("sender", "recipient"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'review'}), str(tmp_path)))
     messages = [
@@ -54,7 +54,7 @@ def test_new_scope_preserves_sequence_progress_and_edges(
 
 @pytest.mark.parametrize("conversation", ["dm", "channel"])
 def test_dm_and_channel_pages_by_default_and_explicit_bounds(tmp_path, conversation):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     for name in ("sender", "recipient"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'review'}), str(tmp_path)))
     target = "recipient" if conversation == "dm" else "#review"

@@ -25,7 +25,11 @@ from agent_comms.assignment_states import (
     FullPendingAssignment,
 )
 from agent_comms.bus_publication import PRIVATE_WIRE_FIELD
-from agent_comms.cohort_schema import CohortDeliveryReceipts, install_private_cohort_schema
+from agent_comms.cohort_schema import (
+    ClaimBatchAcknowledgements,
+    CohortDeliveryReceipts,
+    install_private_cohort_schema,
+)
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import (
     accept_delivery_cohort,
@@ -45,7 +49,6 @@ from agent_comms.exporting import (
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.thread_status import ArchivedThreadStatus
 from agent_comms.wake_policy import BoundedTriageWake, FullWake, MessageAudience
-from agent_comms.message_page import PageBounds
 
 pytestmark = pytest.mark.skipif(
     sys.platform == "win32", reason="private initial bus requires POSIX owner/directory durability"
@@ -81,18 +84,11 @@ def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
 def test_private_initial_opt_in_full_n_observer_and_exact_public_projection(tmp_path: Path) -> None:
     comms, coordinator, root_id, lookups = _root(tmp_path)
     assert len(root_id) == 32
-    assert (tmp_path / "comms" / "bus_meta.json").stat().st_mode & 0o777 == 0o600
     message = publish_initial(comms, "sender", "#team", "Hello @Alice")
-    raw = json.loads((tmp_path / "comms" / "bus.jsonl").read_text())
-    assert (tmp_path / "comms" / "bus.jsonl").stat().st_mode & 0o777 == 0o600
-    assert set(raw[PRIVATE_WIRE_FIELD]) == {"kind", "version", "initial"}
-    assert raw[PRIVATE_WIRE_FIELD]["kind"] == "initial"
-    assert raw["seq"] == message.seq and raw["id"] == message.message_id
+    assert comms.bus.bus.path.stat().st_mode & 0o777 == 0o600
+    verified = comms.bus.bus.delivery(message.seq)
+    assert (verified.seq, verified.message_id) == (message.seq, message.message_id)
     assert all(PRIVATE_WIRE_FIELD not in item.to_wire() for item in read_history(comms))
-    assert [item.seq for item in read_history(comms, bounds=PageBounds(max_bytes=32))] == [
-        message.seq
-    ]
-    verified = comms.bus.log.read_delivery_cohort(root_id, message.seq)
     assert [r.recipient_lookup for r in verified.audience.recipients] == sorted(
         (lookups["Alice"], lookups["Bob"])
     )
@@ -113,13 +109,10 @@ def test_private_initial_opt_in_full_n_observer_and_exact_public_projection(tmp_
     assert sum(row["claim_id"] is None for row in delivery_rows) == 1
 
 
-def test_initial_sideband_never_enters_export_or_public_page_budget(tmp_path: Path) -> None:
+def test_initial_sideband_never_enters_export(tmp_path: Path) -> None:
     comms, _coordinator, _root_id, _lookups = _root(tmp_path)
-    first = publish_initial(comms, "sender", "#team", "first @Alice")
-    second = publish_initial(comms, "sender", "#team", "second @Bob")
-    budget = sum(len(json.dumps(message.to_wire()).encode()) + 1 for message in (first, second))
-    page = read_history(comms, bounds=PageBounds(max_bytes=budget))
-    assert [item.seq for item in page] == [first.seq, second.seq]
+    publish_initial(comms, "sender", "#team", "first @Alice")
+    publish_initial(comms, "sender", "#team", "second @Bob")
     output = tmp_path / "public.jsonl"
     comms.views.export_wire(
         output,
@@ -265,30 +258,15 @@ def test_no_wake_observer_cannot_gain_legacy_claim_after_seal(tmp_path: Path) ->
     assert store.session._connection.execute("SELECT COUNT(*) FROM wake_claims").fetchone()[0] == 1
 
 
-def test_corrupt_initial_and_wrong_root_rejected_before_sql(tmp_path: Path) -> None:
-    comms, store, root_id, _lookups = _root(tmp_path)
+def test_wrong_root_rejected_before_sql(tmp_path: Path) -> None:
+    comms, store, _root_id, _lookups = _root(tmp_path)
     sent = publish_initial(comms, "sender", "#team", "Hello @Alice")
     with pytest.raises(IdentityConflict):
         accept_delivery_cohort(comms.bus, "a" * 32, sent.seq, store)
-    bus_path = tmp_path / "comms" / "bus.jsonl"
-    original = bus_path.read_bytes()
-    row = json.loads(original)
-    row[PRIVATE_WIRE_FIELD]["initial"]["decisions"][0]["recipient_lookup"] = "imposter"
-    bus_path.write_text(json.dumps(row) + "\n")
-    with pytest.raises(
-        RelationViolationError
-    ):
-        accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
     assert (
         store.session._connection.execute("SELECT COUNT(*) FROM claim_batch_receipts").fetchone()[0]
         == 0
     )
-    bus_path.write_bytes(original[:-1])
-    with pytest.raises(
-        RelationViolationError
-    ):
-        accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
-    bus_path.write_bytes(original)
 
 
 def test_keyed_response_replay_after_initial_row_and_receipt_backed_page(tmp_path: Path) -> None:
@@ -305,14 +283,14 @@ def test_keyed_response_replay_after_initial_row_and_receipt_backed_page(tmp_pat
             case.store, case.bus, case.fence,
             exact_target=case.reply_target, owner_witness=case.witness,
         )
-        first = case.bus.log.read_keyed_response(intent)
+        first = intent.published_message(case.bus.bus)
         publish_fenced_response(
             case.store, case.bus, case.fence,
             exact_target=case.reply_target, owner_witness=case.witness,
         )
-        assert case.bus.log.read_keyed_response(intent) == first
+        assert intent.published_message(case.bus.bus) == first
         assert [m.seq for m in read_history(case.comms)] == [case.origin_seq, first.seq]
-        delivery = case.bus.log.read_delivery_cohort(case.root_id, first.seq)
+        delivery = case.bus.bus.delivery(first.seq)
         assert delivery.audience.canonical_members == {"sender"}
         assert delivery.decisions[0].wake_mode.triage
     finally:
@@ -343,29 +321,10 @@ def test_all_channel_excludes_sender_and_nonexecutors(
 def test_wrong_and_partial_db_receipt_never_accepts_one_n_member(tmp_path: Path) -> None:
     comms, store, root_id, lookups = _root(tmp_path)
     sent = publish_initial(comms, "sender", "#team", "Hello @Alice")
-    proof = comms.bus.log.read_delivery_cohort(root_id, sent.seq)
+    proof = comms.bus.bus.delivery(sent.seq)
+    unsealed = ClaimBatchAcknowledgements.for_delivery(proof, comms.registry.prepare_native_root(), 8)
     with store.session.writing() as db:
-        db.execute(
-            "INSERT INTO claim_batch_receipts (wire_root_id,wire_seq,message_id,exact_target,"
-            "envelope_digest,audience_digest,decisions_digest,member_count,claim_count,"
-            "manifest_codec,resolver_version,policy_version,accepted_at_ms,sealed)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0)",
-            (
-                root_id,
-                sent.seq,
-                sent.message_id,
-                sent.target,
-                proof.audience.wire_envelope_digest,
-                proof.audience.digest,
-                proof.decisions_digest,
-                2,
-                1,
-                proof.manifest_codec,
-                proof.resolver_version,
-                proof.policy_version,
-                8,
-            ),
-        )
+        unsealed.insert(db)
     with pytest.raises(IdentityConflict):
         accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
     assert sealed_cohort_assignments(store, lookups["Alice"]) == ()
@@ -376,41 +335,13 @@ def test_wrong_and_partial_db_receipt_never_accepts_one_n_member(tmp_path: Path)
     assert store.session._connection.execute("SELECT COUNT(*) FROM wake_claims").fetchone()[0] == 0
 
 
-def test_reader_rejects_later_corrupt_row_even_for_earlier_valid_seq(tmp_path: Path) -> None:
-    comms, store, root_id, _lookups = _root(tmp_path)
-    sent = publish_initial(comms, "sender", "Alice", "first")
-    bus_path = tmp_path / "comms" / "bus.jsonl"
-    with bus_path.open("ab") as output:
-        output.write(b'{"seq": true}\n')
-    with pytest.raises(RelationViolationError):
-        accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
-    assert (
-        store.session._connection.execute("SELECT COUNT(*) FROM claim_batch_receipts").fetchone()[0]
-        == 0
-    )
-
-
-def test_existing_bus_cannot_acquire_private_marker(tmp_path: Path) -> None:
-    root = tmp_path / "legacy"
-    root.mkdir(mode=0o700)
-    default = Comms(root)
-    default.registry.register(default.registry.new_thread(name='sender', tags=frozenset(), worktree=str(root)))
-    default.registry.register(default.registry.new_thread(name='Alice', tags=frozenset(), worktree=str(root)))
-    default.messaging.send("sender", "Alice", "ordinary").message
-    gated = Comms(root)
-    before = (root / "bus.jsonl").read_bytes()
-    with pytest.raises(RelationViolationError):
-        Bus.install(Bus.path_in(gated.root))
-    assert (root / "bus.jsonl").read_bytes() == before
-
-
 def test_archived_direct_recipient_has_no_eligible_wake(tmp_path: Path) -> None:
     comms, _store, _root_id, _lookups = _root(tmp_path)
     comms.registry.archive("Alice")
     assert comms.registry.status("Alice") == ArchivedThreadStatus()
     with pytest.raises(RelationViolationError):
         publish_initial(comms, "sender", "Alice", "must not wake")
-    assert comms.bus.log.latest_sequence() == 0
+    assert comms.bus.bus.revision() == 0
 
 
 def test_private_issuer_rejects_untrusted_ancestor_and_collision(tmp_path: Path) -> None:
@@ -421,8 +352,8 @@ def test_private_issuer_rejects_untrusted_ancestor_and_collision(tmp_path: Path)
     open_parent.chmod(0o777)
     try:
         with pytest.raises(RelationViolationError):
-            Bus.install(Bus.path_in(Comms(root).root))
-        assert not (root / "bus_meta.json").exists()
+            Comms(root).registry.prepare_native_root()
+        assert not Bus.path_in(root).exists()
     finally:
         open_parent.chmod(0o700)
 
@@ -433,7 +364,7 @@ def test_private_issuer_rejects_untrusted_ancestor_and_collision(tmp_path: Path)
         comms.registry.register(
             comms.registry.new_thread(name='duplicate', tags=frozenset({'other'}), worktree=str(tmp_path), created_at=17002.0)
         )
-    assert comms.bus.log.latest_sequence() == 0
+    assert comms.bus.bus.revision() == 0
 
 
 def test_simultaneous_accepts_one_applied_one_replay(tmp_path: Path) -> None:

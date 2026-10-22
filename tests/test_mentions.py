@@ -6,6 +6,7 @@ from agent_comms.tool_caller import NoThreadCaller
 
 from agent_comms.mentions import MentionQuery
 from agent_comms.comms import Comms
+from conftest import installed_comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.mentions import MentionCandidate, ThreadMention
 from agent_comms.messages import Message, AlertKind, InfoKind
@@ -16,7 +17,7 @@ from agent_comms.thread_model import DeclaredModel
 
 
 def test_mentions_are_addressees_without_changing_channel_delivery(tmp_path):
-    comms = Comms(tmp_path)
+    comms = installed_comms(tmp_path)
     for name in ("alpha", "beta"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path)))
     message = comms.messaging.send_user_message(
@@ -38,7 +39,7 @@ def test_mentions_are_addressees_without_changing_channel_delivery(tmp_path):
 
 
 def test_aliases_resolve_but_emails_paths_and_unknown_names_are_plain_text(tmp_path):
-    comms = Comms(tmp_path)
+    comms = installed_comms(tmp_path)
     comms.registry.declare(comms.registry.new_thread('alpha', frozenset({'team'}), str(tmp_path)))
     comms.registry.rename("alpha", "renamed")
     message = comms.messaging.send_user_message(
@@ -52,7 +53,7 @@ def test_aliases_resolve_but_emails_paths_and_unknown_names_are_plain_text(tmp_p
 
 
 def test_channel_response_eligibility_is_typed_and_unknown_mentions_are_collective(tmp_path):
-    comms = Comms(tmp_path)
+    comms = installed_comms(tmp_path)
     for name in ("alpha", "beta"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path)))
 
@@ -161,7 +162,7 @@ def test_completion_uses_the_model_syntax_at_the_cursor():
 def test_failed_delivery_posts_a_non_waking_notice_to_the_origin(tmp_path):
     from agent_comms.messages import AlertKind
 
-    comms = Comms(tmp_path)
+    comms = installed_comms(tmp_path)
     for name in ("sender", "owner"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path)))
     # A notice never wakes its recipient, so failure feedback cannot loop.
@@ -239,7 +240,7 @@ def test_inbox_rejects_an_empty_target(tmp_path):
 
 
 def test_committed_channel_mention_follows_recipient_renames_without_expanding_audience(tmp_path):
-    comms = Comms(tmp_path)
+    comms = installed_comms(tmp_path)
     for name, tags in [("alpha", {"team"}), ("observer", {"team"}), ("outsider", set())]:
         comms.registry.declare(comms.registry.new_thread(name, frozenset(tags), str(tmp_path)))
     message = comms.messaging.send_user_message("#team", "@alpha please review", worktree=str(tmp_path))

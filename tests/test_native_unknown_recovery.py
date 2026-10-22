@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.attempt_recovery import RecoveryMonitorCapability, VerifiedOwnerLoss
+from agent_comms.bus import Bus
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.private_path import FileRevision
 from agent_comms.cli import main as cli_main
@@ -103,7 +104,7 @@ def recover_starting_owner(released_starting):
         assert before.attempt.lifecycle.starting
         assert NativeRuntimeInput.count(store.session._connection) == 0
         inputs = input_evidence(store)
-    bus = (released_starting / "bus.jsonl").read_bytes()
+    bus = Bus(Bus.path_in(released_starting)).revision()
     dispositions = FileRevision.capture(InputDispositions.path_in(released_starting))
     RecoveryMonitorCapability.recover_owner(released_starting, owner)
     with Coordination(released_starting / "coordination.sqlite3") as store:
@@ -117,7 +118,7 @@ def recover_starting_owner(released_starting):
             owner_lookup=owner.incarnation.lookup).unresolved
         assert input_evidence(store) == inputs
         assert NativeRuntimeInput.count(store.session._connection) == 0
-    assert (released_starting / "bus.jsonl").read_bytes() == bus
+    assert Bus(Bus.path_in(released_starting)).revision() == bus
     assert FileRevision.capture(InputDispositions.path_in(released_starting)) == dispositions
 
 
@@ -289,7 +290,7 @@ def test_stop_of_previously_released_dead_owner_settles_without_replay(released_
     process, exit_allowed, root, _root_id, execution_id, input_id = released_unknown
     leave(process, exit_allowed)
     comms = Comms(root)
-    before_bus = (root / "bus.jsonl").read_bytes()
+    before_bus = comms.bus.bus.revision()
     with Coordination(str(root / "coordination.sqlite3")) as store:
         before_input = input_evidence(store)
         assert store.snapshots.get(execution_id).is_current
@@ -301,7 +302,7 @@ def test_stop_of_previously_released_dead_owner_settles_without_replay(released_
         assert snapshot.replay.facts & ReplayFact.UNKNOWN_EFFECTS
         assert not snapshot.replay.replay_safe
         assert input_evidence(store) == before_input
-    assert (root / "bus.jsonl").read_bytes() == before_bus
+    assert comms.bus.bus.revision() == before_bus
     assert input_id in str(before_input)
 
 
@@ -376,7 +377,7 @@ def test_dead_original_settles_unknown_beside_a_live_successor(released_unknown)
     leave(process, exit_allowed)
     comms = Comms(root)
     successor = running_successor(comms)
-    before_bus = (root / "bus.jsonl").read_bytes()
+    before_bus = comms.bus.bus.revision()
     with Coordination(root / "coordination.sqlite3") as store:
         before_input = input_evidence(store)
         RecoveryMonitorCapability.abandon_released_native_attempt(store, execution_id)
@@ -385,7 +386,7 @@ def test_dead_original_settles_unknown_beside_a_live_successor(released_unknown)
         assert after.replay.facts & ReplayFact.UNKNOWN_EFFECTS
         assert not after.replay.replay_safe
         assert input_evidence(store) == before_input
-    assert (root / "bus.jsonl").read_bytes() == before_bus
+    assert comms.bus.bus.revision() == before_bus
     assert comms.registry.require("beta") == successor
     assert successor.executing
     comms.registry.release_turn(successor.require_turn_lease())

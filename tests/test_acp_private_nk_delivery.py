@@ -118,7 +118,7 @@ def test_private_rename_refuses_mismatched_sql_owner_before_registry_mutation(tm
         comms.threads._rename_thread("beta", "gamma")
     assert comms.registry.require("beta").name == "beta"
     assert "gamma" not in comms.registry
-    assert comms.bus.log.latest_sequence() == 0
+    assert comms.bus.bus.revision() == 0
 
 
 def test_private_rename_of_unregistered_participant_takes_the_plain_path(tmp_path):

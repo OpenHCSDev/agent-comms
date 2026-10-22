@@ -44,7 +44,7 @@ def assert_published_once(comms):
 ))
 async def test_cli_child_waits_then_publishes_once(held_bus, arguments):
     comms = held_bus
-    before = comms.bus.log.path.read_bytes()
+    before = comms.bus.bus.revision()
     env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / 'src'))
     child = await asyncio.create_subprocess_exec(
         sys.executable, '-m', 'agent_comms.cli', '--root', str(comms.root),
@@ -55,7 +55,7 @@ async def test_cli_child_waits_then_publishes_once(held_bus, arguments):
         with pytest.raises(TimeoutError):
             await asyncio.wait_for(asyncio.shield(completed), 1)
         assert child.returncode is None
-        assert comms.bus.log.path.read_bytes() == before
+        assert comms.bus.bus.revision() == before
     except BaseException:
         child.kill()
         await completed
@@ -69,14 +69,14 @@ async def test_cli_child_waits_then_publishes_once(held_bus, arguments):
 
 async def test_native_thread_caller_waits_then_publishes_once(held_bus):
     comms = held_bus
-    before = comms.bus.log.path.read_bytes()
+    before = comms.bus.bus.revision()
     pending = asyncio.create_task(asyncio.to_thread(
         invoke_tool, comms, 'comms_send',
         {'from': 'sender', 'to': 'recipient', 'body': 'held publication'},
         caller=ThreadCaller('sender')))
     with pytest.raises(TimeoutError):
         await asyncio.wait_for(asyncio.shield(pending), .25)
-    assert comms.bus.log.path.read_bytes() == before
+    assert comms.bus.bus.revision() == before
     comms.owners.maintenance.clear(comms.owners.maintenance.read())
     await asyncio.wait_for(pending, 15)
     assert_published_once(comms)

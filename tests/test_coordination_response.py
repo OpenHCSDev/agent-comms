@@ -77,7 +77,7 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
     original = publish_initial(comms, 
         "sender", target, "Need owner to consider and reply."
     )
-    original_record = comms.bus.log.read_delivery_cohort(root_id, original.seq)
+    original_record = comms.bus.bus.delivery(original.seq)
     assert len(original_record.audience.recipients) == 1
     recipient = original_record.audience.recipients[0]
     bus = responder(comms.root, comms.registry)
@@ -96,7 +96,7 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
     sources = [SelectedSource(assignment.assignment_id, store.assignments, original_record)]
     for extra_target in extra_targets:
         message = publish_initial(comms, "sender", extra_target, "Another original question")
-        delivery = comms.bus.log.read_delivery_cohort(root_id, message.seq)
+        delivery = comms.bus.bus.delivery(message.seq)
         acknowledgement = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
         (extra_assignment,) = acknowledgement.assignments
         sources.append(SelectedSource(extra_assignment.assignment_id, store.assignments, delivery))
@@ -172,7 +172,7 @@ def test_original_routes_prepare_together_and_release_one_attempt_only_after_all
                 exact_target=routes[0], owner_witness=case.witness,
             )
         assert not case.store.snapshots.get("exec").publication_evidence
-        assert case.bus.log.read_keyed_response(first) is None
+        assert first.published_message(case.bus.bus) is None
         prepare_fenced_response(
             case.store, case.bus, case.fence, "Direct questions combined",
             exact_target=routes[1], owner_witness=case.witness,
@@ -195,7 +195,7 @@ def test_original_routes_prepare_together_and_release_one_attempt_only_after_all
         assert settled.current_execution_id == NoPointedExecution()
         for route in routes:
             intent, acknowledgement = settled.require_published_evidence(route)
-            message = case.bus.log.read_keyed_response(intent)
+            message = intent.published_message(case.bus.bus)
             assert message.reference == acknowledgement.reference and message.target == route
             assert message.answers == tuple(
                 assignment.source for assignment in settled.assignments
@@ -220,10 +220,10 @@ def test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay(tmp_path: Path, di
         intent = result.value
         assert intent.exact_target == case.reply_target
         assert type(case.store.snapshots.get("exec").require_wire_response(case.reply_target).lifecycle) is PublishingResponse
-        assert case.bus.log.read_keyed_response(intent) is None
+        assert intent.published_message(case.bus.bus) is None
         with pytest.raises(PublicationUncertain):
             resolve_existing_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
-        assert case.comms.bus.log.latest_sequence() == case.origin_seq
+        assert case.comms.bus.bus.revision() == case.origin_seq
         assert isinstance(
             prepare_fenced_response(
                 case.store,
@@ -243,7 +243,7 @@ def test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay(tmp_path: Path, di
         assert ResponseObligation.response_record(published.publication_evidence, case.reply_target) is not None
         assert type(published.assignments[0].lifecycle) is CompletedAssignment
         assert ResponseObligation.response_record(published.publication_evidence, case.reply_target).seq == case.origin_seq + 1
-        response = case.bus.log.read_keyed_response(intent)
+        response = intent.published_message(case.bus.bus)
         assert response is not None and response.target == case.reply_target
         assert "_agent_comms_private_v1" not in response.to_wire()
         assert isinstance(
@@ -279,7 +279,7 @@ def test_response_requires_exact_same_root_coordinator(tmp_path: Path) -> None:
                 case.store, alien_bus, case.fence, "not allowed", exact_target=case.reply_target, owner_witness=case.witness
             )
         assert type(case.store.snapshots.get("exec").require_wire_response(case.reply_target).lifecycle) is PendingResponse
-        assert case.comms.bus.log.latest_sequence() == case.origin_seq
+        assert case.comms.bus.bus.revision() == case.origin_seq
     finally:
         case.close()
 
@@ -297,7 +297,7 @@ def test_stale_owner_and_conflicting_payload_cannot_publish(tmp_path: Path) -> N
         stale = replace(case.fence, revision=case.fence.revision - 1)
         with pytest.raises(StaleRevision):
             publish_fenced_response(case.store, case.bus, stale, exact_target=case.reply_target, owner_witness=case.witness)
-        assert case.bus.log.read_keyed_response(intent) is None
+        assert intent.published_message(case.bus.bus) is None
         assert (
             case.store.session._connection.execute(
                 "SELECT COUNT(*) FROM publication_append_dispatches"
@@ -339,7 +339,7 @@ def test_response_requires_current_exact_live_turn(tmp_path, change):
                 case.store, case.bus, case.fence, "must not publish",
                 exact_target=case.reply_target, owner_witness=witness,
             )
-        assert case.bus.log.latest_sequence() == case.origin_seq
+        assert case.bus.bus.revision() == case.origin_seq
         assert ResponseObligation.response_record(case.store.snapshots.get("exec").publication_intents, case.reply_target) is None
     finally:
         case.close()
@@ -376,11 +376,10 @@ def test_response_answers_the_messages_its_turn_took_in(tmp_path: Path) -> None:
         publish_fenced_response(
             case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness
         )
-        response = case.bus.log.read_keyed_response(intent)
-        original = case.bus.log.read_delivery_cohort(case.root_id, case.origin_seq)
+        response = intent.published_message(case.bus.bus)
+        original = case.bus.bus.delivery(case.origin_seq)
         assert response.answers == (original.message.reference, follow_up.reference)
-        with case.bus.log.checked_read() as source:
-            replies = tuple(source.replies((original.message.reference, follow_up.reference)))
-        assert [reply.message.reference for reply in replies] == [response.reference] * 2
+        replies = case.bus.bus.replies((original.message.reference, follow_up.reference))
+        assert [reply.message.reference for reply in replies] == [response.reference]
     finally:
         case.close()

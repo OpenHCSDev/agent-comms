@@ -1,7 +1,7 @@
 """Idle observations avoid repeated work without becoming delivery authority."""
 
 from bus_history import read_history
-from conftest import await_event_or_task, publish_initial
+from conftest import publish_initial
 from agent_comms.messages import NoticeRole
 import asyncio
 import os
@@ -17,18 +17,17 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.messages import AlertKind, InfoKind, Message
 from agent_comms.private_path import FileRevision
-from agent_comms.store_files import StoreLockContention, _store_lock
+from agent_comms.store_files import _store_lock
 from test_acp_private_nk_delivery import _session
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
 
 @pytest.mark.asyncio
-async def test_checked_observation_waits_and_joins_its_owned_worker(tmp_path):
+async def test_observation_waits_for_the_held_bus_attachment(tmp_path):
     comms, agent, root_id = _session(tmp_path)
-    log = comms.bus.log
     # A busy original source is pending, not an unavailable inbox. Cancelling
     # one waiter must leave the holder and the other observations intact.
-    with _store_lock(log.path):
+    with _store_lock(comms.bus.bus.path):
         tasks = [asyncio.create_task(agent.inputs._observe_private_revision("beta", root_id))
                  for _ in range(3)]
         await asyncio.sleep(0.08)
@@ -40,64 +39,6 @@ async def test_checked_observation_waits_and_joins_its_owned_worker(tmp_path):
     observed = await asyncio.wait_for(asyncio.gather(*tasks[1:]), 5)
     assert observed[0] == observed[1]
 
-    # Once acquired, cancellation must join the original callback before its
-    # descriptor closes. The worker consumes the prefix record off the loop.
-    entered, finish = asyncio.Event(), threading.Event()
-    loop = asyncio.get_running_loop()
-    loop_thread = threading.get_ident()
-
-    def consume(source):
-        assert threading.get_ident() != loop_thread
-        source.require_current()
-        loop.call_soon_threadsafe(entered.set)
-        assert finish.wait(5)
-        return source.committed_sequence()
-
-    task = asyncio.create_task(log.read_checked_async(consume))
-    try:
-        await await_event_or_task(entered.wait(), task)
-        task.cancel()
-        await asyncio.sleep(0.04)
-        assert not task.done()
-        with pytest.raises(BlockingIOError):
-            with _store_lock(log.path, blocking=False):
-                pass
-    finally:
-        finish.set()
-    with pytest.raises(asyncio.CancelledError):
-        await task
-
-    with log.checked_read(blocking=False) as source:
-        source.require_current()
-
-    # A completed read must release physical ownership before its result is
-    # delivered to the event loop. Otherwise synchronous final publication
-    # waits on this same process while preventing the awaited file close.
-    entered.clear()
-    finish.clear()
-    task = asyncio.create_task(log.read_checked_async(consume))
-    await await_event_or_task(entered.wait(), task)
-    finish.set()
-    # This synchronous wait keeps the loop from processing the completed
-    # Future; the worker must release the real lock regardless.
-    with log.checked_read(contention=StoreLockContention(5.0)) as source:
-        source.require_current()
-    assert not task.done()
-    await task
-
-    # Callback refusal remains the original error and releases its resource.
-    failure = ValueError("original consumer refusal")
-
-    def refuse(source):
-        source.require_current()
-        raise failure
-
-    with pytest.raises(ValueError) as raised:
-        await log.read_checked_async(refuse)
-    assert raised.value is failure
-    with log.checked_read(blocking=False) as source:
-        source.require_current()
-
 
 @pytest.mark.asyncio
 async def test_empty_delivery_recovery_does_not_wait_for_wire_writer(tmp_path):
@@ -107,7 +48,7 @@ async def test_empty_delivery_recovery_does_not_wait_for_wire_writer(tmp_path):
     entered, release = threading.Event(), threading.Event()
 
     def writer():
-        with _store_lock(comms._wire_lock_path):
+        with comms.bus.bus.writing():
             entered.set()
             assert release.wait(5)
 
@@ -148,7 +89,7 @@ async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path
             await progress.done(events.Done("refused", False))
             # A real writer holds the bus, so the failure notice's worker waits
             # on the flock while the turn is cancelled.
-            with _store_lock(comms.root / "bus.jsonl"):
+            with _store_lock(comms.bus.bus.path):
                 task = asyncio.create_task(progress.publish_result())
                 await asyncio.sleep(0.04)
                 task.cancel()

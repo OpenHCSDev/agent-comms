@@ -6,6 +6,7 @@ import pytest
 from agent_comms.registration import Registration
 from agent_comms.channels import AllChannel
 from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.errors import UnknownChannelError, UnregisteredThreadError
 from agent_comms.messages import Message, InfoKind
 from agent_comms.read_basis import NamedViewer
@@ -127,7 +128,7 @@ class TestChannelsDerived:
         assert chat.channels.channels() == ["#any", "#none", "#all", "#ci", "#docs"]
 
     def test_channels_empty_wire(self, tmp_path):
-        comms = wire(tmp_path / "fresh")
+        comms = installed_comms(tmp_path / "fresh")
         assert comms.channels.channels() == ["#any", "#none", "#all"]
 
 

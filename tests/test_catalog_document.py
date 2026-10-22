@@ -5,11 +5,14 @@ from dataclasses import dataclass
 
 import pytest
 
+from agent_comms.bus import Bus
 from agent_comms.comms import wire
 from agent_comms.messages import Message, InfoKind
 
 
 def test_independent_writers_merge_under_wire_then_document_lock(tmp_path):
+    Bus.install(Bus.path_in(tmp_path))
+
     def create(index):
         client = wire(tmp_path)
         name = f"tag-{index}"

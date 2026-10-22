@@ -29,7 +29,7 @@ def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_p
     database = root / "coordination.sqlite3"
     captured = NotificationAssignment.read(root, (initial,))
     original = captured.resolve(root)
-    wire_before = comms.bus.log.path.read_bytes()
+    wire_before = comms.bus.bus.revision()
     assert original
     with Coordination(str(database)) as writer:
         with writer.session.writing():
@@ -46,7 +46,7 @@ def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_p
     assert reopened.resolve(root) == original
     with TranscriptRead.publication_source(root) as native_read:
         assert native_read is not None
-    assert comms.bus.log.path.read_bytes() == wire_before
+    assert comms.bus.bus.revision() == wire_before
 
 
 @pytest.mark.parametrize('direct', [False, True])
@@ -89,7 +89,7 @@ def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):
                                                worktree=str(tmp_path))
     with Coordination(str(root/'coordination.sqlite3')) as store:
         before = WakeAssignment.select(store.session._connection)
-    wire_before = comms.bus.log.path.read_bytes()
+    wire_before = comms.bus.bus.revision()
     notices = comms.views.message_notifications_for_references((message.reference,))[message.seq,message.message_id]
     beta = next(notice for notice in notices if notice.recipient=='beta')
     assert beta.state == ContextualProgress(UnrecordedProgress())
@@ -98,7 +98,7 @@ def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):
     with Coordination(str(root/'coordination.sqlite3')) as store:
         assert WakeAssignment.select(store.session._connection)==before
     assert not any(row.wire_seq==message.seq for row in before)
-    assert comms.bus.log.path.read_bytes()==wire_before
+    assert comms.bus.bus.revision() == wire_before
     # The immutable source's recipient survives rename; current readiness must
     # join its original birth rather than manufacture a new membership/claim.
     comms.registry.rename('beta','renamed')
@@ -141,9 +141,9 @@ def test_publication_intent_joins_original_sender_and_target_only(tmp_path):  # 
     _path, _root_id, comms, initial, _people = _root(tmp_path)
     reply = comms.messaging.send("beta", "sender", "First original reply").message
     source = AssignedTranscriptSource.for_thread(
-        comms.root, comms.registry.require("beta"), comms.bus.log
+        comms.root, comms.registry.require("beta"), comms.bus.bus
     )
-    original = tuple(source.rows("w.seq=?", (reply.seq,)))
+    original = source.rows(sequences=(reply.seq,))
     lookup = RecordedThreadIncarnation("fixture", source.recipient.created_at).lookup
     intent = TurnRouting((initial.message.reference,), MessageRoute("beta", ("sender", "alpha")))
     # A later send can fail; this first committed subset stays a valid relation.
@@ -169,7 +169,7 @@ def test_open_sender_source_advances_without_a_native_tool_copy(tmp_path):  # no
         {"from": "beta", "to": "sender", "body": "Original outgoing ownership reply"},
         caller=NoThreadCaller(),
     ))
-    message, = comms.bus.log.messages_for_references((acknowledgement.message.source,))
+    message, = comms.bus.bus.messages_for_references((acknowledgement.message.source,))
     after = comms.transcripts.capture_page_read("beta")
     assert after.identity.wire_frontier.sequence == message.seq
     assert not before.current()
@@ -208,9 +208,9 @@ def test_unrelated_canonical_append_keeps_open_source_content(tmp_path):  # noqa
 def test_open_source_rejects_replaced_wire_inode(tmp_path):  # noqa: F811
     _path, _root_id, comms, _initial, _people = _root(tmp_path)
     before = comms.transcripts.capture_page_read("beta")
-    replacement = comms.bus.log.path.with_suffix(".replacement")
-    replacement.write_bytes(comms.bus.log.path.read_bytes())
-    replacement.replace(comms.bus.log.path)
+    replacement = comms.bus.bus.path.with_suffix(".replacement")
+    comms.bus.bus.backup(replacement)
+    replacement.replace(comms.bus.bus.path)
     with pytest.raises(RelationViolationError):
         before.content_current()
 
@@ -237,23 +237,20 @@ def test_published_source_binding_keeps_exact_original_request(tmp_path):  # noq
         comms.transcripts.bind_page_read("renamed", identity)
 
 
-def test_original_open_checked_prefix_expires_with_canonical_lock(tmp_path):  # noqa: F811
+def test_read_snapshot_is_query_only_and_expires_with_its_connection(tmp_path):  # noqa: F811
     import sqlite3
 
     _path, _root_id, comms, initial, _people = _root(tmp_path)
-    with comms.bus.log.checked_read() as source:
-        assert source.connection.execute("PRAGMA query_only").fetchone()[0] == 1
-        assert tuple(source.references((initial.message.reference,))) == (initial,)
-    assert source.stream.closed
+    with comms.bus.bus.reading() as source, source.observing() as connection:
+        assert connection.execute("PRAGMA query_only").fetchone()[0] == 1
+        assert source.deliveries_for_references((initial.message.reference,)) == (initial,)
     with pytest.raises(sqlite3.ProgrammingError):
-        source.connection.execute("SELECT 1")
-    with pytest.raises(RelationViolationError):
-        tuple(source.references((initial.message.reference,)))
+        source.deliveries_for_references((initial.message.reference,))
 
 
 def test_missing_checked_wire_cannot_be_an_empty_presentation(tmp_path):  # noqa: F811
     _path, _root_id, comms, _initial, _people = _root(tmp_path)
-    comms.bus.log.path.unlink()
+    comms.bus.bus.path.unlink()
     with pytest.raises(
         RelationViolationError,
     ):
@@ -264,6 +261,6 @@ def test_bus_guard_preserves_the_callers_original_failure(tmp_path):  # noqa: F8
     _path, _root_id, comms, _initial, _people = _root(tmp_path)
     failure = OSError("Caller-owned failure after actual durability claim_scope")
     with pytest.raises(OSError) as raised:
-        with comms.bus.log.locked():
+        with comms.bus.bus.writing():
             raise failure
     assert raised.value is failure
