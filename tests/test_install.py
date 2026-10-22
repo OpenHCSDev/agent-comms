@@ -18,7 +18,8 @@ from agent_comms.commander.config import (
 )
 from agent_comms.installer.backup import UpgradeRefused, bus_files
 from agent_comms.installer.carry import CarryChain
-from agent_comms.installer.practice import declared_files, practice_copy
+from agent_comms.installer.practice import practice_copy
+from agent_comms.locked_store import RootFile
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.wire_log import WireLog
@@ -82,7 +83,7 @@ def test_practice_copy_is_the_declared_files_without_its_maintenance_witnesses(p
     (root / "sessions").mkdir(exist_ok=True)
     (root / "sessions/.pr48-writer-transient").write_text("claim")
     saved = bus_files(root)
-    files = declared_files(root)
+    files = RootFile.existing_in(root)
     declared = {str(path.relative_to(root)) for path in files}
     databases = {str(path.relative_to(root)) for path, owner in files.items()
                  if issubclass(owner, SQLiteFile)}

@@ -618,13 +618,21 @@ def rehearse(practice: PracticeBus, root: Path, stack: Stack, installed: Stack,
     return passed.extended(CarriedRehearsal, copy=practice.measurement)
 
 
+def reconcile_stores(root: Path, staged: Stack) -> StepRun:
+    """The target's runtime reconciles every store onto its declarations after the carries,
+    under the hold, and names each file it rewrote, so the backup and the rehearsal account
+    for the schema change like any carry's rewrite."""
+    rewritten = tuple(staged.cli(root, "reconcile-stores")["rewritten"])
+    return StepRun("reconcile-stores", Carried(len(rewritten), rewritten=rewritten))
+
+
 def carry_and_read(root: Path, before: dict[str, SavedFile], pending: tuple[type[Carry], ...],
                    staged: Stack, reader: Stack, tree: TargetTree,
                    stopping: tuple[StepRun, ...]) -> CarriedPass:
     """The pass a rehearsal and a live install share once ``before`` was read under the
     transcript hold. The hold is released first: SQLite cannot lend its writer lock to a
     step's process, so a step that writes the transcript store could not run under it."""
-    steps = (*stopping, *carry_all(root, pending, staged, tree))
+    steps = (*stopping, *carry_all(root, pending, staged, tree), reconcile_stores(root, staged))
     files = carried(root, before, steps, RehearsalFiles.declared(steps))
     return CarriedPass(steps, files, reader.verify(root))
 
@@ -830,7 +838,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
     and reads back its own owners."""
     expected = frozenset(rehearsal_files.names) | frozenset(
         str(path.relative_to(root)) for path in staged.backup_files(root, pending, tree))
-    selected = tuple(root / name for name in sorted(expected)) if pending else ()
+    selected = tuple(root / name for name in sorted(expected))
     restore = RestoreSpace.measure(max(
         rehearsal_files.restore_bytes,
         sum(path.stat().st_size for path in selected if path.exists()),

@@ -22,8 +22,8 @@ from typing import Annotated, Literal
 from .coordination_database import CoordinationStore
 from .field_codec import FieldCodec, MalformedRecord, HistoryExclude
 from .goals import GoalDeclaration, NoGoal
-from .locked_store import DurableFile, SQLiteFile
-from .typed_table import Column, DurableTables, Index, JsonStorage, TypedTable
+from .locked_store import DurableFile
+from .typed_table import Column, DurableTables, Index, JsonStorage, ReconciledFile, TypedTable
 
 
 class GoalHistoryError(RuntimeError):
@@ -70,10 +70,14 @@ class GoalHistoryEntry(TypedTable, DurableTables):
         return FieldCodec.encode_record(self.recorded())
 
 
-class GoalHistoryStore(DurableFile, SQLiteFile):
+class GoalHistoryStore(DurableFile, ReconciledFile):
     """One journal per registry root; callers hold the registry file lock."""
 
     filename = "goal_history.sqlite3"
+
+    @classmethod
+    def table_schema(cls) -> type[GoalHistoryEntry]:
+        return GoalHistoryEntry
 
     def __init__(self, registry_path: Path):
         self.registry_path = registry_path
@@ -150,10 +154,7 @@ class GoalHistoryStore(DurableFile, SQLiteFile):
             raise GoalHistoryError("Goal history database must be owner-only.")
         try:
             with closing(self._connect()) as connection:
-                with self.write_transaction(connection):
-                    if not GoalHistoryEntry.stored_schema(connection):
-                        GoalHistoryEntry.create_schema(connection)
-                GoalHistoryEntry.reconcile_schema(connection)
+                GoalHistoryEntry.install_schema(connection)
             self._sync()
         except (OSError, sqlite3.Error) as error:
             raise GoalHistoryError("Goal history initialization is uncertain.") from error
