@@ -1,0 +1,30 @@
+name: diag
+on:
+  push:
+    branches: ['diag/**']
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: pyproject.toml
+      - run: python -m pip install -q -e src/agent_comms/skills/refactor-audit -e '.[dev]' mypy
+      - name: run diag.sh and annotate its output
+        shell: bash
+        run: |
+          set +e
+          bash diag.sh > out.txt 2>&1
+          echo "exit $?" >> out.txt
+          python - <<'PY'
+          text = open("out.txt").read()[-60000:]
+          chunks = [text[i:i+15000] for i in range(0, len(text), 15000)]
+          for n, chunk in enumerate(chunks):
+              body = chunk.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              print(f"::error title=diag {n}::{body}")
+          PY
