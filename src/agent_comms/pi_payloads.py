@@ -191,6 +191,7 @@ class PiPayload(ExternalField):
         return cls
 
     @classmethod
+    @boundary_decoder
     def decode_fields(
         cls, value: dict[str, JsonValue], decoded: dict[str, object],
     ) -> dict[str, object]:

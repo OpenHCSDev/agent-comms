@@ -2131,12 +2131,14 @@ class _ArrayDecoder(ValueDecoder[Any]):
     def encode_items(self, items: Iterable[object]) -> list[object]:
         return [self.items[0].encode(item) for item in items]
 
-    def decode_items(self, data: object, read: Callable[[ValueDecoder[object], object], object]):
+    def decode_items(
+        self, data: object, read: Callable[[ValueDecoder[object], object], object],
+    ) -> object:
         if not isinstance(data, list):
             raise MalformedRecord("Expected a JSON array.")
         return self.container(read(plan, value) for plan, value in self.plan_items(data))
 
-    def plan_items(self, data: list[object]):
+    def plan_items(self, data: list[object]) -> Iterable[tuple[ValueDecoder[object], object]]:
         return ((self.items[0], value) for value in data)
 
 
@@ -2171,7 +2173,7 @@ class _VariadicTupleDecoder(_TupleDecoder):
 
 
 class _FixedTupleDecoder(_TupleDecoder):
-    def plan_items(self, data: list[object]):
+    def plan_items(self, data: list[object]) -> Iterable[tuple[ValueDecoder[object], object]]:
         with MalformedRecord.refusing("Tuple length does not match declaration"):
             return tuple(zip(self.items, data, strict=True))
 
@@ -2233,7 +2235,14 @@ class _DictDecoder(ValueDecoder[Any]):
             data, lambda plan, value: plan.decode_external(value, record),
         ))
 
-    def decode_entries(self, data: object, read: Callable[[ValueDecoder[object], object], object]):
+    @staticmethod
+    @abstractmethod
+    def entries(data: object) -> Iterable[tuple[object, object]]:
+        """The wire entries, as the key kind spells them: an object or a list of pairs."""
+
+    def decode_entries(
+        self, data: object, read: Callable[[ValueDecoder[object], object], object],
+    ) -> dict[object, object]:
         return {read(self.key, key): read(self.value, value) for key, value in self.entries(data)}
 
     def decode_keys(self, data, keys, selections):
