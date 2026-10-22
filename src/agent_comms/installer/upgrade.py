@@ -110,6 +110,11 @@ class RehearsalFiles:
     names: tuple[str, ...]
     restore_bytes: int
 
+    @classmethod
+    def none(cls) -> RehearsalFiles:
+        """The files of a rehearsal that rewrote nothing."""
+        return cls(0, 0, (), 0)
+
     @staticmethod
     def declared(steps: tuple[StepRun, ...]) -> frozenset[str]:
         return frozenset(name for step in steps for name in step.carried.rewritten)
@@ -296,7 +301,7 @@ class UncopiedRehearsal(RehearsedFiles):
     practice copy was taken and the live pass may rewrite nothing. Its own planned
     reconcile, under the hold, still refuses before any write if it names a file."""
 
-    files: RehearsalFiles = RehearsalFiles(0, 0, (), 0)
+    files: RehearsalFiles = field(default_factory=RehearsalFiles.none)
 
 
 @dataclass(frozen=True)
@@ -743,8 +748,10 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
     current = commands.run("git", "-C", checkout, "rev-parse", "HEAD").strip()
     tree = TargetTree(checkout, scratch, target)
     try:
-        if subprocess.run(["git", "-C", str(checkout), "merge-base", "--is-ancestor", current,
-                           target]).returncode:
+        ancestry = ["git", "-C", str(checkout), "merge-base", "--is-ancestor", current, target]
+        with commands.timing(" ".join(ancestry)):
+            answer = subprocess.run(ancestry)
+        if answer.returncode:
             raise UpgradeRefused(f"{target[:12]} does not follow the checkout's {current[:12]}")
         if commands.run("git", "-C", checkout, "status", "--porcelain",
                         "--untracked-files=no").strip():
@@ -1008,9 +1015,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
         if head != current:
             installed.commands.run("git", "-C", checkout, "reset", "-q", "--keep", current)
             Checkout(checkout).prepare()
-        # Republish only when current moved: the outgoing runtime may predate this publisher.
-        if LaunchRuntime.installed().prefix.resolve() != installed.runtime.prefix.resolve():
-            installed.publish()
+        installed.publish()
         maintenance.clear(restored_hold)
         started = installed.start(root, running)
         print(f"install: restored after failure ({type(error).__name__}: {error}); "
