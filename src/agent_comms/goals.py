@@ -551,8 +551,8 @@ class RequestDirective:
 @dataclass(frozen=True)
 class RequestGoalOrder(GoalOrder):
     """An owner request on the commander's own Goal: each order names the one it serves, and the
-    request stays open until no order serving it is open. Each owner directive the commander
-    receives is recorded on it when it arrives."""
+    request stays open until no order serving it is open. Each directive the commander receives
+    from the owner or claude-ai is recorded on it when it arrives."""
 
     directives: tuple[RequestDirective, ...] = ()
 

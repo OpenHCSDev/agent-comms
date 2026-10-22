@@ -40,6 +40,7 @@ from aiohttp.web_urldispatcher import AbstractResource, ResourceRoute, SystemRou
 from pydantic import JsonValue
 
 
+from .bus_publication import DirectorOrigin
 from .cli_bridges.shared import DeclaredVerb
 from .cli_protocol import CoreError
 from .command import Command
@@ -51,14 +52,13 @@ from .field_codec import (
     Argument, FieldCodec, GitCommitText, MalformedRecord, PathText, WireName, WireOmitDefault,
     boundary_decoder,
 )
-from .goal_actions import DirectiveGoalAction
 from .host_services import HostService, SystemdUserService
 from .connector_store import (
     CODE_SECONDS, ApprovalQueueFull, ApprovalRefused, AuthorizationQuery,
     AuthorizationRequest, ClaudeCallback,
     ConnectorGrants, ConnectorStore, IssuedTokens, RegisteredClient, TrustedBrowser, digest,
 )
-from .messages import Message, QuestionKind
+from .messages import QuestionKind
 from .commander.standing import UnownedOrderWatch
 from .commander_heartbeat import CommanderHeartbeat
 from .coordinator import Coordination
@@ -78,20 +78,16 @@ PORT = 18766
 
 @dataclass(frozen=True)
 class DirectorCaller(ThreadCaller):
-    """claude-ai speaks for the owner: each message it sends a thread is a directive, recorded as a
-    request when that thread holds owner requests."""
+    """claude-ai speaks for the owner, so its sends carry the director origin, which records each
+    message to a thread as a directive like the owner's own."""
 
     def require_directive(self, comms: Comms, body: str) -> None:
         """A directive passes DirectiveText. claude-ai directs the commanders, so the
         commander rules review does not gate it."""
         DirectiveText.require(body)
 
-    def sent(self, comms: Comms, message: Message) -> None:
-        if message.target in comms.registry:  # a channel holds no requests
-            comms.goals.update_goal(
-                message.target,
-                DirectiveGoalAction(text=message.body, seq=message.seq, at=message.timestamp),
-            )
+    def origin(self) -> DirectorOrigin:
+        return DirectorOrigin()
 
 
 class ConnectorTool(ToolRequest[DirectorCaller], affix="ConnectorTool"):

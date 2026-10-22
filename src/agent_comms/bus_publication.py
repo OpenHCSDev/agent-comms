@@ -26,6 +26,7 @@ from .wire_record import MessageWireRecord
 if TYPE_CHECKING:
     from .audience_manifest import FrozenAudience
     from .delivery_policy import DeliveryManifest
+    from .goal_management import Goals
     from .private_bus_checkpoint import CheckedRead
     from .registry_document import RegistrySnapshot
     from .threads import Thread
@@ -250,10 +251,26 @@ class InitialOrigin(ABC):
     ) -> None:
         """Append the reserved row, reporting a failure as this origin requires."""
 
+    @abstractmethod
+    def published(self, goals: Goals, message: Message) -> None:
+        """What a committed message from this origin records beyond the bus."""
+
+
+class OwnerVoiceOrigin(InitialOrigin):
+    """An origin that speaks for the owner; its message may direct the thread it reaches."""
+
+    __slots__ = ()
+
+    def published(self, goals: Goals, message: Message) -> None:
+        message.task.direct(goals, message)
+
 
 @dataclass(frozen=True, slots=True)
 class AgentOrigin(InitialOrigin):
     """An executable thread's owner; it may resend under the same message id."""
+
+    def published(self, goals: Goals, message: Message) -> None:
+        """An agent's message directs no thread: only the owner's voice does."""
 
     def require_sender(
         self, message: Message, sender_thread: Thread, snapshot: RegistrySnapshot
@@ -272,7 +289,12 @@ class AgentOrigin(InitialOrigin):
 
 
 @dataclass(frozen=True, slots=True)
-class HumanOrigin(InitialOrigin):
+class DirectorOrigin(OwnerVoiceOrigin, AgentOrigin):
+    """claude-ai's thread, which speaks for the owner on the bus."""
+
+
+@dataclass(frozen=True, slots=True)
+class HumanOrigin(OwnerVoiceOrigin):
     """Cooperative local UI origin, checked against the registered USER under lock.
 
     This is not a cryptographic credential against another process of this UID.
@@ -282,6 +304,10 @@ class HumanOrigin(InitialOrigin):
     sender: str
     created_at: float
     worktree: str
+
+    @classmethod
+    def of(cls, user: Thread) -> HumanOrigin:
+        return cls(user.name, user.created_at, user.worktree)
 
     def require_sender(
         self, message: Message, sender_thread: Thread, snapshot: RegistrySnapshot

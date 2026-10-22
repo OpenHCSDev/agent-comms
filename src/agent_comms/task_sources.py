@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Annotated, TYPE_CHECKING
 
 
+from .channel_targets import CommandTarget
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, WireOmitDefault
@@ -22,6 +23,7 @@ from .thread_identity import (
 from .turn_context import Provenance, WireProvenance
 
 if TYPE_CHECKING:
+    from .goal_management import Goals
     from .input_attempt import StoredInput
     from .input_disposition import InputDispositions
     from .messages import Message
@@ -213,6 +215,10 @@ class TaskAttachment(DeclaredFamily, affix="TaskAttachment"):
     def annotation_rules(self, message: Message, facts) -> tuple[str, ...]:
         return ()
 
+    def direct(self, goals: Goals, message: Message) -> None:
+        """An owner message carrying a task is acted on by that task's declaration, not
+        recorded as a request."""
+
     def original_text_source(self, message: Message, originals: dict[MessageReference, Message]) -> Message:
         return message
 
@@ -265,7 +271,9 @@ class TaskAttachment(DeclaredFamily, affix="TaskAttachment"):
 
 @dataclass(frozen=True)
 class NoTaskAttachment(TaskAttachment, declared_name="absent"):
-    pass
+    def direct(self, goals: Goals, message: Message) -> None:
+        """A plain owner message is a request wherever its destination holds them."""
+        CommandTarget.named(message.target).direct(goals, message)
 
 
 @dataclass(frozen=True)
