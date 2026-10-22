@@ -20,6 +20,7 @@ from agent_comms.coordination_errors import (
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.typed_table import (
     CarriedWriter,
+    HeldBusFile,
     ReconciledFile,
     SQLiteTableName,
     StoreWriter,
@@ -264,7 +265,7 @@ class CoordinationStore(CarriedWriter, ReconciledFile):
         self._connection = self._open_connection(contention)
         try:
             self._configure_connection()
-            CoordinatorTable.reconcile_schema(self._connection)
+            CoordinatorTable.install_schema(self._connection, HeldBusFile(CoordinationStore, self.path))
             self._enforce_private_modes()
         except BaseException:
             self._connection.close()

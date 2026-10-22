@@ -451,7 +451,7 @@ class Stack:
         route index is still being built."""
         for _ in range(240):
             completed = subprocess.run(
-                [str(self.python), "-c", "from agent_comms.cli import main; main()", "--root", str(root),
+                [str(self.python), "-m", "agent_comms.cli", "--root", str(root),
                  *arguments], cwd=self.checkout, env=self.environment(), capture_output=True,
                 text=True)
             if "Route index covers" not in completed.stdout:
