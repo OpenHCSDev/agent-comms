@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, Type, cast, dataclass_transform
 
 from agent_comms.bus_tables import Addressed, BusCapability, HeldResources
-from agent_comms.response_acknowledgement import _canonical, public_envelope_digest
 from agent_comms.response_policy import InformationalPolicy, ResponseEligibility, ResponsePolicy
 from agent_comms.typed_table import Column
 
@@ -27,7 +26,6 @@ from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,
     InlineRecord,
-    MalformedRecord,
     NullMember,
     PublicationExclude,
     WireName,
@@ -525,38 +523,11 @@ class Message(Addressed, BusCapability):
 
     @classmethod
     def from_wire(cls, data: Mapping) -> Message:
-        from .bus_publication import PRIVATE_WIRE_FIELD
-
-        # ID is derived; private authority is independently validated by the bus.
-        public = {
-            key: value for key, value in data.items() if key not in ("id", PRIVATE_WIRE_FIELD)
-        }
+        # Content identity is derived from the declared message fields.
+        public = {key: value for key, value in data.items() if key != "id"}
         plan = FieldCodec.field_plan(Message, 'type')
         kind = cast(type[MessageKind], plan.value.decode(plan.raw(public)))
         return kind.decode_message({"ts": 0.0, **public})
-
-    @classmethod
-    def from_committed_wire(cls, record: Mapping) -> Message:
-        """One strict public-envelope boundary for full, indexed and cohort readers."""
-        from .audience_manifest import MAX_WIRE_SEQ
-        from .bus_publication import PRIVATE_WIRE_FIELD
-
-        if not isinstance(record, Mapping):
-            raise MalformedRecord("Bus row is not an object.")
-        public = {key: value for key, value in record.items() if key != PRIVATE_WIRE_FIELD}
-        message = cls.from_wire(public)
-        if _canonical(public) != _canonical(message.to_wire()):
-            raise MalformedRecord("Noncanonical public bus envelope.")
-        if not 0 < message.seq <= MAX_WIRE_SEQ:
-            raise MalformedRecord("Bus sequence is outside the durable range.")
-        public_envelope_digest(public)
-        return message
-
-    def require_retained_claim(self, claimed_after_seq: int) -> None:
-        if self.seq > claimed_after_seq:
-            raise RelationViolationError(
-                "Unattested public initial exceeds the retained history boundary."
-            )
 
     def response_eligibility(
         self, audience: Sequence[str], *, aliases: Mapping[str, str] | None = None
@@ -642,6 +613,3 @@ class ClaimMessage(Claimed, Message):
         from .retained_task_facts import ClaimTaskFact
         yield from super().retained_task_facts()
         yield ClaimTaskFact(ClaimMessage.of(self, self.claim_transition))
-
-    def require_retained_claim(self, claimed_after_seq: int) -> None:
-        """The envelope carries its own committed claim facts."""

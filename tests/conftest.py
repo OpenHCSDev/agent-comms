@@ -119,7 +119,7 @@ def reader(root: Path) -> Comms:
 
 def responder(root: Path, registry: Registration) -> MessageBus[ParticipantPublisher]:
     """The selected owner publishes replies and releases its attempt's claims."""
-    return MessageBus(root / "bus.jsonl", registry, ParticipantPublisher)
+    return MessageBus(root, registry, ParticipantPublisher)
 
 
 def publish_initial(comms, sender, target, body, type=InfoKind, *, role=ConversationRole()):
