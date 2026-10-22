@@ -10,9 +10,9 @@ from __future__ import annotations
 import asyncio
 import json
 from abc import abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import partial
-from typing import TYPE_CHECKING, ClassVar, Literal, Self, Annotated
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from acp.schema import PromptResponse, SetSessionConfigOptionResponse
 from pydantic import BaseModel, JsonValue
@@ -221,19 +221,21 @@ class SubscribeRuntimeRequest(RuntimeRequest):
         await ctx.send(OwnerAnnouncement())
         ctx.server.clients.setdefault(ctx.session_id, set()).add(ctx.client)
         await agent.emit_session_identity(ctx.session_id, ctx.name, client=ctx.client)
-        await agent.sessions.transcript.subscribe(self.thread, client=ctx.client)
-        await agent.turns.publish_turn_state(AcpEventConsumer(agent, ctx.session_id, ctx.client))
-        await agent.inputs.emit_input_delivery_changed(ctx.session_id, client=ctx.client)
-        metadata = await agent.sessions.metadata(ctx.name)
-        await ctx.send(
-            OwnerReady(
-                ready=metadata,
-                controller_token=ctx.client.token,
+        async with agent.sessions.transcript.subscribe(self.thread, client=ctx.client):
+            await agent.turns.publish_turn_state(
+                AcpEventConsumer(agent, ctx.session_id, ctx.client)
             )
-        )
-        await agent.sessions.config.observe_configuration(ctx.session_id, ctx.client)
-        while line := await ctx.reader.readline():
-            ClientLine.read(line).answer(ctx.client)
+            await agent.inputs.emit_input_delivery_changed(ctx.session_id, client=ctx.client)
+            metadata = await agent.sessions.metadata(ctx.name)
+            await ctx.send(
+                OwnerReady(
+                    ready=metadata,
+                    controller_token=ctx.client.token,
+                )
+            )
+            async with agent.sessions.config.observe_configuration(ctx.session_id, ctx.client):
+                while line := await ctx.reader.readline():
+                    ClientLine.read(line).answer(ctx.client)
 
 
 @dataclass(frozen=True, slots=True)

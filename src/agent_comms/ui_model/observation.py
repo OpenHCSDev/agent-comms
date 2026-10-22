@@ -1104,7 +1104,22 @@ class ObservationFailed(ServiceResult):
         raise process.ended(self.error)
 
 
-class ObserverDied(CoordinationError):
+class ObserverStatus(ABC):
+    """The reported observer outcome owns whether a request can proceed."""
+
+    @abstractmethod
+    def raise_if_failed(self) -> None: ...
+
+    def failure(self, create: Callable[[], ObserverDied]) -> ObserverDied:
+        return create()
+
+
+class NoObserverFailure(ObserverStatus):
+    def raise_if_failed(self) -> None:
+        return None
+
+
+class ObserverDied(CoordinationError, ObserverStatus):
     """The observation service's process ended while the UI was using it.
 
     The UI does not run on what it last observed: it reports this and exits.
@@ -1119,6 +1134,12 @@ class ObserverDied(CoordinationError):
         else:
             how = f"exited with status {exit_status}"
         super().__init__(f"The comms observer (pid {pid}) {how}" + (f":\n{error}" if error else ""))
+
+    def raise_if_failed(self) -> None:
+        raise self
+
+    def failure(self, create: Callable[[], ObserverDied]) -> ObserverDied:
+        return self
 
 
 class ObservationService:
@@ -1278,8 +1299,7 @@ class ObservationProcess(AbstractContextManager):
         self._resources = ExitStack()
         self.request_ids = itertools.count(1)
         self.reads: dict[int, asyncio.Future] = {}
-        # Set by ``results`` when it reads that the service ended.
-        self.died: ObserverDied | None = None
+        self.status: ObserverStatus = NoObserverFailure()
         context = multiprocessing.get_context("spawn")
         with ExitStack() as acquisition:
             self.connection, child = context.Pipe()
@@ -1303,35 +1323,36 @@ class ObservationProcess(AbstractContextManager):
         return self.connection.fileno()
 
     def request(self, request: ObservationRequest) -> None:
-        """Tell the service what the UI shows now; a service that ended is not told.
-
-        Its end is reported by ``results`` alone. A pipe that breaks here
-        belongs to a service ``results`` has not read the end of yet: the
-        same closed pipe is readable there.
-        """
-        if self.died is None and not self.connection.closed:
-            try:
-                self.connection.send(request)
-            except BrokenPipeError:
-                pass
+        """Tell the service what the UI shows, or report its end to this caller."""
+        self.status.raise_if_failed()
+        if self.connection.closed:
+            raise StaleRevision("Cannot request a retired Comms observation process")
+        try:
+            self.connection.send(request)
+        except BrokenPipeError as error:
+            died = self.ended(str(error))
+        else:
+            return
+        # The pickler's failed-send traceback retains an exported BytesIO
+        # view. ObserverDied carries the cause text, not that pipe buffer.
+        raise died
 
     def ended(self, error: str | None) -> ObserverDied:
         """The service ended (``error``: the traceback it sent): fail its awaited reads and say how it exited."""
         self._reader.close()
         self.process.join(timeout=2)
-        self.died = ObserverDied(self.process.pid, self.process.exitcode, error)
-        self.abandon_reads(self.died)
-        return self.died
+        died = self.status.failure(
+            partial(ObserverDied, self.process.pid, self.process.exitcode, error)
+        )
+        self.status = died
+        self.abandon_reads(died)
+        return died
 
     async def read(self, request: AwaitedRead):
         """Send ``request`` and await its answer, delivered by ``results``.
 
         Cancelling the caller cancels the read; an unserved read is dropped.
         """
-        if self.died is not None:
-            raise self.died
-        if self.connection.closed:
-            raise StaleRevision("Cannot read a retired Comms observation process")
         request = replace(request, request_id=next(self.request_ids))
         waiter = asyncio.get_running_loop().create_future()
         self.reads[request.request_id] = waiter
@@ -1344,6 +1365,12 @@ class ObservationProcess(AbstractContextManager):
             raise
         finally:
             self.reads.pop(request.request_id, None)
+            # A send can fail before this coroutine awaits its future. Settle
+            # that local waiter without losing the request's ObserverDied.
+            if not waiter.done():
+                waiter.cancel()
+            elif not waiter.cancelled():
+                waiter.exception()
 
     def abandon_reads(self, error: Exception) -> None:
         """The reader's retirement settles its waiters with the original cause."""

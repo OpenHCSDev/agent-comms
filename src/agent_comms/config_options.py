@@ -6,7 +6,8 @@ import asyncio
 import os
 from abc import abstractmethod
 from collections import Counter
-from contextlib import aclosing
+from collections.abc import AsyncIterator, Iterable
+from contextlib import aclosing, asynccontextmanager
 from dataclasses import dataclass
 from functools import cached_property, partial
 from pathlib import Path
@@ -23,6 +24,7 @@ from acp.schema import (
 
 from .active_route import CommsRoute, resolve_comms_route
 from .agent_backend import UseSettings
+from .child_process import join_retirement
 from .comms import Comms
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
@@ -340,6 +342,7 @@ class SessionConfigOptions(ConfigOptions):
         self.catalog_publish_lock = asyncio.Lock()
         self.publications: dict[str, ConfigOptionUpdate] = {}
         self._publication_sessions: set[str] = set()
+        self._menus: set[asyncio.Task[None]] = set()
         self.observer = self.runtime.background(self._observe_configuration())
         # The stored settings each session's owner last saw, to notice a change.
         # The model and thinking level each running turn currently uses.
@@ -431,10 +434,30 @@ class SessionConfigOptions(ConfigOptions):
         await self.effects.turns.goals.sync_goal_execution(session_id, name)
         await self.use_stored_settings(session_id, name)
 
-    async def observe_configuration(self, session_id: str, client: Client | SocketClient) -> None:
-        """Subscribe an ACP consumer and supply its own initial configuration."""
+    def start_menu(self, session_id: str, client: Client | SocketClient) -> asyncio.Task[None]:
+        """Retain initial publication until it finishes or its consumer retires."""
         self._publication_sessions.add(session_id)
-        self.runtime.background(self.send_menu(client, session_id))
+        task = self.runtime.background(self.send_menu(client, session_id))
+        self._menus.add(task)
+        task.add_done_callback(self._menus.discard)
+        return task
+
+    @asynccontextmanager
+    async def observe_configuration(
+        self, session_id: str, client: Client | SocketClient,
+    ) -> AsyncIterator[None]:
+        """An attached socket owns its initial catalog wait through disconnect."""
+        task = self.start_menu(session_id, client)
+        try:
+            yield
+        finally:
+            await self.retire_observations((task,))
+
+    async def retire_observations(self, tasks: Iterable[asyncio.Task[None]]) -> None:
+        pending = tuple(tasks)
+        for task in pending:
+            task.cancel()
+        await join_retirement(asyncio.gather(*pending, return_exceptions=True))
 
     async def send_menu(self, client: Client | SocketClient, session_id: str) -> None:
         options = await self.options_for_session(session_id)
@@ -467,8 +490,7 @@ class SessionConfigOptions(ConfigOptions):
                     await self.publish_configuration(session_id)
 
     async def close(self) -> None:
-        self.observer.cancel()
-        await asyncio.gather(self.observer, return_exceptions=True)
+        await self.retire_observations((*self._menus, self.observer))
         self._publication_sessions.clear()
 
     async def publish_configuration(

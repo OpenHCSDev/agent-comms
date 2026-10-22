@@ -228,7 +228,7 @@ async def test_unknown_saved_member_does_not_kill_the_real_observation_process(c
                 )
                 if sidebar is not None:
                     break
-        assert process.process.is_alive() and process.died is None
+        assert process.process.is_alive()
         process.request(ObserveThreads(frozenset({"saved"})))
         async with asyncio.timeout(30):
             while True:
@@ -262,7 +262,7 @@ async def test_unknown_saved_member_does_not_kill_the_real_observation_process(c
                 # An unchanged error no longer emits an unrelated extra wake.
                 await asyncio.sleep(0)
         assert await waiting == {}
-        assert process.process.is_alive() and process.died is None
+        assert process.process.is_alive()
         assert comms.contexts.path.read_bytes() == original
         assert comms.bus.log.path.read_bytes() == original_bus
     finally:
