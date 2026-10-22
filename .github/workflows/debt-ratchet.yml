@@ -67,6 +67,8 @@ jobs:
         uses: ./.github/actions/prepare-native
       - name: Install locked runtime host dependencies
         working-directory: src/agent_comms
+        # The default shell is a script path relative to the checkout root.
+        shell: bash
         run: npm ci --ignore-scripts --omit=dev --no-audit --no-fund
       - name: Run every test file the change touches
         env:
