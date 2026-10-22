@@ -67,7 +67,8 @@ async def release_starting_attempt(directory):
 
 
 def starting_owner(directory, output, exit_allowed):
-    output.put(str(asyncio.run(release_starting_attempt(directory))))
+    with closing(output):
+        output.send(str(asyncio.run(release_starting_attempt(directory))))
     if not exit_allowed.wait(15):
         raise TimeoutError("test must release starting owner")
 
@@ -75,21 +76,20 @@ def starting_owner(directory, output, exit_allowed):
 @pytest.fixture
 def released_starting(tmp_path):
     context = multiprocessing.get_context("spawn")
-    output, exit_allowed = context.Queue(), context.Event()
-    process = context.Process(target=starting_owner, args=(str(tmp_path), output, exit_allowed))
+    output, announcement = context.Pipe(duplex=False)
+    exit_allowed = context.Event()
+    process = context.Process(
+        target=starting_owner, args=(str(tmp_path), announcement, exit_allowed)
+    )
     process.start()
-    try:
-        root = Path(output.get(timeout=10))
-        leave(process, exit_allowed)
-        yield root
-    finally:
-        exit_allowed.set()
-        process.join(10)
-        if process.is_alive():
-            process.terminate()
-            process.join(5)
-        output.close()
-        assert process.exitcode == 0
+    announcement.close()
+    with closing(output):
+        try:
+            root = Path(output.recv())
+            leave(process, exit_allowed)
+            yield root
+        finally:
+            leave(process, exit_allowed)
 
 
 def recover_starting_owner(released_starting):
@@ -111,8 +111,9 @@ def recover_starting_owner(released_starting):
         after.attempt.lifecycle.require(Failed, ValueError("failure required"))
         assert not after.is_current
         assert after.attempt.reason_code == GivenReasonCode("released_native_unknown")
-        assert after.replay.facts & ReplayFact.UNKNOWN_EFFECTS
-        assert not after.replay.replay_safe
+        replay = after.replay.require_assessment()
+        assert replay.facts & ReplayFact.UNKNOWN_EFFECTS
+        assert not replay.replay_safe
         assert not CurrentExecutions.require(store.session._connection,
             owner_lookup=owner.incarnation.lookup).unresolved
         assert input_evidence(store) == inputs
@@ -246,7 +247,8 @@ def test_recover_owner_refuses_a_conflicting_input_identity(released_starting, c
 
 def unknown_owner(directory, history, output, exit_allowed):
     source = asyncio.run(release_native_input(Path(directory), history))
-    output.put((str(source.root), source.root_id, source.execution_id, source.input_id))
+    with closing(output):
+        output.send((str(source.root), source.root_id, source.execution_id, source.input_id))
     if not exit_allowed.wait(15):
         raise TimeoutError("test must release fixture process")
 
@@ -254,27 +256,27 @@ def unknown_owner(directory, history, output, exit_allowed):
 @pytest.fixture(params=NativeSendHistory.members_with(UnknownHistory), ids=lambda history: history.declared_name)
 def released_unknown(tmp_path, request):
     context = multiprocessing.get_context("spawn")
-    output, exit_allowed = context.Queue(), context.Event()
+    output, announcement = context.Pipe(duplex=False)
+    exit_allowed = context.Event()
     process = context.Process(
-        target=unknown_owner, args=(str(tmp_path), request.param, output, exit_allowed)
+        target=unknown_owner, args=(str(tmp_path), request.param, announcement, exit_allowed)
     )
     process.start()
-    try:
-        root, root_id, execution_id, input_id = output.get(timeout=10)
-        yield process, exit_allowed, Path(root), root_id, execution_id, input_id
-    finally:
-        exit_allowed.set()
-        process.join(10)
-        if process.is_alive():
-            process.terminate()
-            process.join(5)
-        output.close()
-        assert process.exitcode == 0
+    announcement.close()
+    with closing(output):
+        try:
+            root, root_id, execution_id, input_id = output.recv()
+            yield process, exit_allowed, Path(root), root_id, execution_id, input_id
+        finally:
+            leave(process, exit_allowed)
 
 
 def leave(process, exit_allowed):
     exit_allowed.set()
     process.join(5)
+    if process.is_alive():
+        process.terminate()
+        process.join(5)
     assert process.exitcode == 0
 
 
@@ -298,8 +300,9 @@ def test_stop_of_previously_released_dead_owner_settles_without_replay(released_
         snapshot = store.snapshots.get(execution_id)
         assert not snapshot.is_current
         assert type(snapshot.execution.lifecycle) is FailedExecution
-        assert snapshot.replay.facts & ReplayFact.UNKNOWN_EFFECTS
-        assert not snapshot.replay.replay_safe
+        replay = snapshot.replay.require_assessment()
+        assert replay.facts & ReplayFact.UNKNOWN_EFFECTS
+        assert not replay.replay_safe
         assert input_evidence(store) == before_input
     assert (root / "bus.jsonl").read_bytes() == before_bus
     assert input_id in str(before_input)
@@ -382,8 +385,9 @@ def test_dead_original_settles_unknown_beside_a_live_successor(released_unknown)
         RecoveryMonitorCapability.abandon_released_native_attempt(store, execution_id)
         after = store.snapshots.get(execution_id)
         assert not after.is_current and isinstance(after.attempt.lifecycle, Failed)
-        assert after.replay.facts & ReplayFact.UNKNOWN_EFFECTS
-        assert not after.replay.replay_safe
+        replay = after.replay.require_assessment()
+        assert replay.facts & ReplayFact.UNKNOWN_EFFECTS
+        assert not replay.replay_safe
         assert input_evidence(store) == before_input
     assert (root / "bus.jsonl").read_bytes() == before_bus
     assert comms.registry.require("beta") == successor
@@ -410,4 +414,4 @@ def test_unknown_settlement_is_atomic_on_existing_store(tmp_path):
             fence, expected_pointer_revision=before.pointer_revision
         ).value
         assert not after.is_current and not after.can_retry
-        assert after.replay.facts & ReplayFact.UNKNOWN_EFFECTS
+        assert after.replay.require_assessment().facts & ReplayFact.UNKNOWN_EFFECTS

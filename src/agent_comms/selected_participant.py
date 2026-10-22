@@ -11,13 +11,13 @@ from functools import partial
 from agent_comms.reason_codes import GivenReasonCode
 from .agent_events import CompactionEvent, NativePhaseChanged
 from .bus_publication import CommittedDelivery
-from .cohort_schema import assert_cohort_schema
+from .cohort_schema import CohortTable
 from .comms import Comms
+from agent_comms.native_runtime_input import NativeRuntimeTable
 from .context_store import UNREAD_CONTEXT, ContextPrior
-from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_cohort import _claim_record, pending_sealed_assignments
 from .coordination_errors import IdentityConflict, StaleFence
-from .coordination_response import LiveResponseOwner, _assert_response_schema
+from .coordination_response import LiveResponseOwner, ResponseTable
 from .coordination_snapshot import RecoverySnapshot
 from .coordination_tables.assignments import WakeAssignment
 from .coordination_tables.executions import ExecutionOrigin
@@ -107,7 +107,7 @@ class SelectedParticipant(MroDispatch):
                 expected_generation=self.identity.generation,
             ).value
             self.identity = ParticipantOwner(
-                self.owner.thread, participant.participant_generation
+                self.owner.thread, participant.owner_identity.generation
             )
         await self.require_current()
 
@@ -161,7 +161,7 @@ class SelectedParticipant(MroDispatch):
         if not pending:
             yield None
             return
-        identity = ParticipantOwner(owner.thread, participant.participant_generation)
+        identity = ParticipantOwner(owner.thread, participant.owner_identity.generation)
         with cursor_delivery.measurements.operation("model_selection"):
             model = await Coordination.run_worker(lambda: cls.configured_model(comms, name))
         lease = cls.lease(comms, owner)
@@ -241,11 +241,11 @@ class SelectedParticipant(MroDispatch):
             thread=thread, claimed_generation=generation
         ).resolve_retained(store, bus)
         with store.session.read():
-            assert_cohort_schema(store.session._connection)
-            _assert_response_schema(store.session._connection)
-            assert_native_runtime_schema(store.session._connection)
+            CohortTable.require_installed(store.session._connection)
+            ResponseTable.require_installed(store.session._connection)
+            NativeRuntimeTable.require_installed(store.session._connection)
             participant = store.participants.get(lookup)
-            identity = ParticipantOwner(thread, participant.participant_generation)
+            identity = ParticipantOwner(thread, participant.owner_identity.generation)
             identity.require(store, lookup)
             pending = pending_sealed_assignments(
                 store, lookup, thread.name, after_seq=after_seq
@@ -313,7 +313,7 @@ class SelectedParticipant(MroDispatch):
 
         def verify(resource: Coordination):
             with resource.session.read():
-                assert_cohort_schema(resource.session._connection)
+                CohortTable.require_installed(resource.session._connection)
                 for assignment, initial in zip(assignments, originals, strict=True):
                     acknowledgement = _claim_record(resource.session._connection, initial)
                     if not any(row.assignment_id == assignment.assignment_id

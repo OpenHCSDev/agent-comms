@@ -16,7 +16,7 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 
 from .bus_publication import CommittedDelivery
-from .cohort_schema import assert_cohort_schema
+from .cohort_schema import CohortTable
 from .comms import Comms
 from .coordination_cohort import _claim_record
 from .coordination_database import CoordinationStore
@@ -72,7 +72,7 @@ def _verify_selected_wake_state(
     if generation != claim_scope.owner_claimed_generation or turn.id != claim_scope.turn_id:
         raise IdentityConflict("Wake source or owner turn does not match")
     with store.session.read():
-        assert_cohort_schema(store.session._connection)
+        CohortTable.require_installed(store.session._connection)
         acknowledgement = _claim_record(store.session._connection, initial)
         if not any(
             assignment.assignment_id == claim_scope.wake_assignment_id

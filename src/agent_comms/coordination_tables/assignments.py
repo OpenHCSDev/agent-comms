@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Annotated, ClassVar
 from dataclasses import dataclass, replace
+from typing import Annotated, ClassVar
 
-from agent_comms.assignment_states import AssignmentState
+from agent_comms.assignment_states import AssignmentState, EngagedAssignment
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
     POLICY_VERSION,
@@ -17,20 +17,52 @@ from agent_comms.coordination_contracts import (
 )
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.envelope_claim_transitions import AssignmentBinding
-from agent_comms.field_codec import projected, SnapshotExclude, WireName
+from agent_comms.field_codec import SnapshotExclude, WireName, projected
 from agent_comms.message_reference import MessageReference
 from agent_comms.typed_table import (
     Column,
+    FirstValueState,
     ForeignKey,
+    FrozenColumn,
     Generated,
+    GuardedInserts,
+    ImmutableRows,
+    IncrementingColumn,
     Index,
+    LifecycleChanges,
+    LifecycleTransitions,
+    MonotoneColumns,
+    NoDelete,
+    NonDecreasing,
+    RequiredColumn,
     TypedTable,
+    WriteOnceColumns,
 )
 from agent_comms.wake_policy import MessageAudience
 
 
 @dataclass(frozen=True, slots=True)
-class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
+class WakeAssignment(
+    WriteOnceColumns,
+    FirstValueState,
+    RequiredColumn,
+    LifecycleTransitions,
+    LifecycleChanges,
+    IncrementingColumn,
+    MonotoneColumns,
+    NoDelete,
+    CoordinatorTable,
+    TypedTable,
+    declared_name="wake_claims",
+):
+    write_once_columns = ('triage_verdict', 'execution_id', 'exact_target')
+    initial_value_column = 'execution_id'
+    initial_value_state = EngagedAssignment
+    dependent_column = 'exact_target'
+    required_column = 'execution_id'
+
+    column_orders = (NonDecreasing(('updated_at_ms',)),)
+
     @property
     def recipient_identity(self):
         from agent_comms.audience_manifest import FrozenRecipient
@@ -109,22 +141,22 @@ class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
     assignment_id: Annotated[
         str,
         WireName("claim_id"),
-        Column(primary_key=True, check="length(assignment_id) BETWEEN 1 AND 256"),
+        FrozenColumn(primary_key=True, check="length(assignment_id) BETWEEN 1 AND 256"),
     ]
-    recipient: Annotated[str, Column(check="length(recipient) BETWEEN 1 AND 256")]
-    recipient_lookup: str
-    wire_seq: Annotated[int, Column(check="wire_seq > 0")]
-    message_id: Annotated[str, Column(check="length(message_id) BETWEEN 1 AND 256")]
-    audience: MessageAudience
+    recipient: Annotated[str, FrozenColumn(check="length(recipient) BETWEEN 1 AND 256")]
+    recipient_lookup: Annotated[str, FrozenColumn()]
+    wire_seq: Annotated[int, FrozenColumn(check="wire_seq > 0")]
+    message_id: Annotated[str, FrozenColumn(check="length(message_id) BETWEEN 1 AND 256")]
+    audience: Annotated[MessageAudience, FrozenColumn()]
     lifecycle: Annotated[AssignmentState, SnapshotExclude()]
-    accepted_at_ms: Annotated[int, Column(check="accepted_at_ms >= 0")]
+    accepted_at_ms: Annotated[int, FrozenColumn(check="accepted_at_ms >= 0")]
     updated_at_ms: Annotated[int, Column(check="updated_at_ms >= accepted_at_ms")]
     revision: Annotated[int, Column(check="revision > 0")] = 1
     resolver_version: Annotated[
-        str, Column(check="length(resolver_version) BETWEEN 1 AND 256")
+        str, FrozenColumn(check="length(resolver_version) BETWEEN 1 AND 256")
     ] = RESOLVER_VERSION
     policy_version: Annotated[
-        str, Column(check="length(policy_version) BETWEEN 1 AND 256")
+        str, FrozenColumn(check="length(policy_version) BETWEEN 1 AND 256")
     ] = POLICY_VERSION
 
     @projected(view="snapshot", name="disposition")
@@ -182,7 +214,7 @@ class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
     )
     wake_mode: ClassVar[Generated] = Generated(
         str,
-        Column(generated="({assignment_mode})", check="wake_mode IN ({wake_names})"),
+        FrozenColumn(generated="({assignment_mode})", check="wake_mode IN ({wake_names})"),
     )
     triage_verdict: ClassVar[Generated] = Generated(
         str,
@@ -241,58 +273,19 @@ class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
             ),
         )
 
-    @classmethod
-    def trigger_bodies(cls):
-        return {
-            "claim_transition_frozen_facts": (
-                """
-BEFORE UPDATE ON wake_claims
-BEGIN
-    SELECT RAISE(ABORT, 'claim disposition must change')
-    WHERE (json_extract(NEW.lifecycle, '$.kind')) = (json_extract(OLD.lifecycle, '$.kind'));
-    SELECT RAISE(ABORT, 'claim transition rewrites acceptance')
-    WHERE NEW.assignment_id IS NOT OLD.assignment_id
-       OR NEW.recipient_lookup IS NOT OLD.recipient_lookup
-       OR NEW.wire_seq IS NOT OLD.wire_seq
-       OR NEW.message_id IS NOT OLD.message_id
-       OR NEW.recipient IS NOT OLD.recipient
-       OR NEW.audience IS NOT OLD.audience
-       OR (({assignment_mode_new})) IS NOT (({assignment_mode_old}))
-       OR NEW.resolver_version IS NOT OLD.resolver_version
-       OR NEW.policy_version IS NOT OLD.policy_version
-       OR NEW.accepted_at_ms IS NOT OLD.accepted_at_ms
-       OR NEW.revision != OLD.revision + 1
-       OR NEW.updated_at_ms < OLD.updated_at_ms;
-    SELECT RAISE(ABORT, 'claim transition erases engagement facts')
-    WHERE ((({assignment_verdict_old})) IS NOT NULL
-           AND (({assignment_verdict_new})) IS NOT (({assignment_verdict_old})))
-       OR ((json_extract(OLD.lifecycle, '$.decision.execution_id')) IS NOT NULL AND (json_extract(NEW.lifecycle, '$.decision.execution_id')) IS NOT (json_extract(OLD.lifecycle, '$.decision.execution_id')))
-       OR ((json_extract(OLD.lifecycle, '$.decision.exact_target')) IS NOT NULL AND (json_extract(NEW.lifecycle, '$.decision.exact_target')) IS NOT (json_extract(OLD.lifecycle, '$.decision.exact_target')))
-       OR ((json_extract(OLD.lifecycle, '$.decision.exact_target')) IS NULL AND (json_extract(NEW.lifecycle, '$.decision.exact_target')) IS NOT NULL
-           AND (json_extract(NEW.lifecycle, '$.decision.execution_id')) IS NULL)
-       OR ((json_extract(OLD.lifecycle, '$.decision.execution_id')) IS NULL AND (json_extract(NEW.lifecycle, '$.decision.execution_id')) IS NOT NULL
-           AND (json_extract(NEW.lifecycle, '$.kind')) != 'engaged');
-    SELECT RAISE(ABORT, 'claim disposition edge is not realizable')
-    WHERE (json_extract(OLD.lifecycle, '$.kind')) != (json_extract(NEW.lifecycle, '$.kind')) AND NOT ({assignment_edges}
-    );
-    SELECT RAISE(ABORT, 'pre-engagement failure cannot invent execution')
-    WHERE (json_extract(NEW.lifecycle, '$.kind')) = 'failed' AND (json_extract(OLD.lifecycle, '$.decision.execution_id')) IS NULL
-      AND (json_extract(NEW.lifecycle, '$.decision.execution_id')) IS NOT NULL;
-    SELECT RAISE(ABORT, 'post-engagement deferral cannot become pending')
-    WHERE (json_extract(OLD.lifecycle, '$.kind')) = 'deferred' AND (json_extract(OLD.lifecycle, '$.decision.execution_id')) IS NOT NULL
-      AND (json_extract(NEW.lifecycle, '$.kind')) IN ('triage_pending', 'full_pending');
-END"""
-            ),
-            "wake_claim_delete_frozen": (
-                """ BEFORE DELETE ON wake_claims BEGIN
-    SELECT RAISE(ABORT, 'wake claim cannot be deleted');
-END"""
-            ),
-        }
-
-
 @dataclass(frozen=True, slots=True)
-class ExecutionAssignmentLink(CoordinatorTable, TypedTable, declared_name="execution_claims"):
+class ExecutionAssignmentLink(
+    GuardedInserts, ImmutableRows, CoordinatorTable, TypedTable, declared_name="execution_claims"
+):
+
+    insert_condition = """(NOT EXISTS (SELECT 1 FROM executions e
+        WHERE e.execution_id = NEW.execution_id AND e.status IN ({unstarted_execution_names}))
+        OR NEW.ordinal != (SELECT count(*) FROM execution_claims
+        WHERE execution_id = NEW.execution_id)) OR (NOT EXISTS (
+        SELECT 1 FROM executions e JOIN wake_claims c ON c.execution_id = e.execution_id
+        WHERE e.execution_id = NEW.execution_id AND c.assignment_id = NEW.assignment_id
+        AND c.exact_target IS NOT NULL AND c.recipient_lookup = e.owner_lookup ))"""
+
     execution_id: Annotated[str, Column(primary_key=True)]
     assignment_id: Annotated[str, WireName("claim_id"), Column(unique=True)]
     ordinal: Annotated[int, Column(primary_key=True, check="ordinal>=0")]
@@ -315,47 +308,3 @@ class ExecutionAssignmentLink(CoordinatorTable, TypedTable, declared_name="execu
                 ("assignment_id", "execution_id"), WakeAssignment, ("assignment_id", "execution_id")
             ),
         )
-
-    @classmethod
-    def trigger_bodies(cls):
-        return {
-            "execution_claim_membership_insert": (
-                """ BEFORE INSERT ON
-    execution_claims
-    WHEN NOT EXISTS (SELECT 1 FROM executions e WHERE e.execution_id =
-    NEW.execution_id
-      AND e.status IN ({unstarted_execution_names}))
-     OR NEW.ordinal != (SELECT count(*) FROM execution_claims
-                        WHERE execution_id = NEW.execution_id)
-    BEGIN SELECT RAISE(ABORT,
-    'execution claims require initial contiguous membership' ); END"""
-            ),
-            "execution_claim_target_insert": (
-                """
-    BEFORE INSERT ON execution_claims
-    WHEN NOT EXISTS (
-        SELECT 1 FROM executions e JOIN wake_claims c
-          ON c.execution_id = e.execution_id
-        WHERE e.execution_id = NEW.execution_id AND c.assignment_id = NEW.assignment_id
-          AND c.exact_target IS NOT NULL
-          AND c.recipient_lookup = e.owner_lookup
-    )
-    BEGIN
-        SELECT RAISE(ABORT, 'claim target does not match execution target');
-    END"""
-            ),
-            "execution_claim_target_update": (
-                """
-    BEFORE UPDATE ON execution_claims
-    BEGIN
-        SELECT RAISE(ABORT, 'execution claim relation is immutable');
-    END"""
-            ),
-            "execution_claim_delete_frozen": (
-                """ BEFORE DELETE ON
-    execution_claims BEGIN
-        SELECT RAISE(ABORT, 'execution claim relation cannot be deleted'
-        );
-    END"""
-            ),
-        }

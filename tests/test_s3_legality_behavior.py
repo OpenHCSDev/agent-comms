@@ -11,7 +11,8 @@ from agent_comms.attempt_states import AttemptState, LiveAttempt
 from agent_comms.lifecycle_capability import Complete, Failed, Successful, Terminal, Active
 from agent_comms.coordination_errors import IntegrityViolationError
 from agent_comms.coordination_snapshot import RecoverySnapshot
-from agent_comms.coordination_tables.attempts import ReplayAssessments, ReplayFact
+from agent_comms.coordination_tables.attempts import ReplayFact
+from agent_comms.coordination_tables.executions import ReplayAssessments
 from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,

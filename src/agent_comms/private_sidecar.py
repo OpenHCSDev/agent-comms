@@ -35,6 +35,7 @@ from .store_files import StoreOwner
 from .typed_table import (
     AllObjectsTables,
     Column,
+    ImmutableRows,
     SQLiteForeignKeys,
     SQLiteSchemaObject,
     TypedRow,
@@ -202,19 +203,9 @@ def _connect(raw: bytes | None) -> sqlite3.Connection:
 
 
 @dataclass(frozen=True)
-class SnapshotMeta(TypedTable):
+class SnapshotMeta(ImmutableRows, TypedTable):
     singleton: Annotated[Literal[1], Column(primary_key=True)]
     ddl_digest: str
-
-    @classmethod
-    def trigger_bodies(cls) -> dict[str, str]:
-        return {
-            f"{cls.declared_name}_{operation.lower()}_guard": " "
-            f"BEFORE {operation} ON {cls.declared_name} "
-            "BEGIN SELECT RAISE(ABORT,'snapshot schema is immutable'); END"
-            for operation in ("UPDATE", "DELETE")
-        }
-
 
 @dataclass(frozen=True)
 class _Database(TypedRow):

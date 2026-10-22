@@ -14,7 +14,7 @@ from typing import Annotated, ClassVar, Literal, TYPE_CHECKING
 
 from .coordination_contracts import validate_execution_id
 from .coordination_errors import IdentityConflict, UnrecordedNativeContext
-from .coordination_tables.participants import OwnerGenerations
+from .coordination_tables.participants import OwnerGenerations, OwnerRecord
 from .declared_family import DeclaredFamily
 from .field_codec import (
     FieldCodec,
@@ -406,7 +406,7 @@ class NativeInputReference(NativeContextReference):
         owner.require_recorded_reference(db, self)
 
 
-class NativeInputRecord(ABC):
+class NativeInputRecord(OwnerRecord, ABC):
     input_id: str
     execution: NativeInputExecution
     owner_lookup: str
@@ -416,14 +416,6 @@ class NativeInputRecord(ABC):
     @property
     def reference_stage(self) -> type[NativeInputExecution]:
         return type(self.execution)
-
-    @property
-    def owner_identity(self) -> OwnerGenerations:
-        return OwnerGenerations(
-            owner_lookup=self.owner_lookup,
-            owner_thread=self.owner_thread,
-            generation=self.owner_generation,
-        )
 
     @property
     def identity(self) -> NativeInputIdentity:
