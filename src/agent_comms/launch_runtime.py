@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping, MutableMapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
@@ -288,7 +288,7 @@ class RestartEnvironment(EnvironmentRecord):
         return directory.expanduser().resolve()
 
     @classmethod
-    def inherit(cls, environment: Mapping[str, str]):
+    def inherit(cls, environment: Mapping[str, str]) -> Self:
         values = cls.inherited(environment)
         native_name, agent_name = cls.variable("native_config"), cls.variable("agent_directory")
         values[native_name] = (
