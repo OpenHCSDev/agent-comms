@@ -336,7 +336,7 @@ class RehearsedUpgrade(Upgrade):
 
 
 @dataclass(frozen=True)
-class InstalledUpgrade(RehearsedUpgrade):
+class InstalledUpgrade(RehearsedUpgrade, Extendable):
     live: LiveRun
     install: InstallResult
     """The harnesses registered on the bus the target now reads."""
@@ -704,9 +704,10 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
         install.announce(report)
         bridges = SessionBridgeResumes()
         live_run = install.install(rehearsal, bridges)
-        installed = (current, target, root, names, rehearsal, live_run, harnesses())
-        result = (UnresumedUpgrade(*installed, bridges.lines()) if bridges.failures
-                  else InstalledUpgrade(*installed))
+        finished = InstalledUpgrade(current, target, root, names, rehearsal, live_run,
+                                    harnesses())
+        result = (finished.extended(UnresumedUpgrade, unresumed=bridges.lines())
+                  if bridges.failures else finished)
         report.finished(result)
         bridges.require_resumed()
         return result
