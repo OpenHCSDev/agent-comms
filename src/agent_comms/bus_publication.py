@@ -68,7 +68,7 @@ class Delivered(BusRecord, declared_name=None):
 
 
 class KeyedPublication(BusRecord, declared_name=None):
-    """One publication key binds one Message's content, not its encoded receipt."""
+    """One publication key binds Message content, not the acknowledgement encoding."""
 
     acknowledgement: KeyedResponseAcknowledgement
     publication_key: ClassVar[Generated] = Generated(

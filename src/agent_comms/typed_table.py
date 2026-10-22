@@ -46,7 +46,16 @@ from .field_codec import (
     WireValue,
     compile_decoder,
 )
-from .locked_store import DurableFile, FileStore, PublishedSQLiteFile, RuntimeFile, SQLiteFile, StoreCommittedError
+from .locked_store import (
+    DurableFile,
+    FileStore,
+    PublishedSQLiteFile,
+    RegistryFile,
+    RuntimeFile,
+    SQLiteFile,
+    StoreCommittedError,
+)
+from .maintenance_barrier import MaintenanceBarrier
 
 RelatedRow = TypeVar("RelatedRow", bound="TypedRow")
 
@@ -1261,7 +1270,7 @@ class StoreWriter(PublishedSQLiteFile, FileStore):
     """A transaction capability shared by stores and their turn-owned writers.
 
     Whether the file outlives an installation belongs to each store: it inherits
-    DurableFile or RuntimeFile, and a TypedStore inherits DurableStore or DerivedStore.
+    CarriedWriter or RuntimeWriter, and a TypedStore inherits DurableStore or DerivedStore.
     """
 
     def __init__(self, path: Path) -> None:
@@ -1279,13 +1288,34 @@ class StoreWriter(PublishedSQLiteFile, FileStore):
     @contextmanager
     def transaction(self, connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
         """Publish through the physical store after its row transaction commits."""
+        self.require_maintenance_open()
         with self.publishing_changes(connection, self.store.path):
             with self.write_transaction(connection):
                 yield connection
 
     @abstractmethod
+    def require_maintenance_open(self) -> None:
+        """Whether maintenance refuses this writer, which the file's kind declares."""
+
+    @abstractmethod
     def writing(self) -> AbstractContextManager[sqlite3.Connection]:
         """Borrow one committed write transaction from this lifetime owner."""
+
+
+class CarriedWriter(StoreWriter, DurableFile):
+    """A writer of a file every installation carries: while maintenance runs, only its
+    holder writes it, so the install's carry check sees no other change."""
+
+    def require_maintenance_open(self) -> None:
+        MaintenanceBarrier(RegistryFile.path_in(self.bus_root(self.path))).assert_open_unlocked()
+
+
+class RuntimeWriter(StoreWriter, RuntimeFile):
+    """A writer of a file no carry writes: running owners rewrite it at any time,
+    maintenance included."""
+
+    def require_maintenance_open(self) -> None:
+        """No installation reads this file, so maintenance never refuses its writers."""
 
 
 class WalStore(StoreWriter):
@@ -1425,11 +1455,11 @@ class TypedStore(WalStore, TableSchema):
             yield connection
 
 
-class DurableStore(TypedStore, DurableTables, DurableFile):
+class DurableStore(TypedStore, DurableTables, CarriedWriter):
     """Rows nothing else can rebuild, in a file every installation carries."""
 
 
-class DerivedStore(TypedStore, DerivedTables, RuntimeFile):
+class DerivedStore(TypedStore, DerivedTables, RuntimeWriter):
     """Rows rebuilt from another source, in a file running owners rewrite at any time,
     maintenance included, so no installation backs it up, carries it or checks it.
 

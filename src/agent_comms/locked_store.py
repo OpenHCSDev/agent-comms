@@ -148,6 +148,11 @@ class RootFile:
         return Path(root) / cls.filename.format(**parts)
 
     @classmethod
+    def bus_root(cls, path: Path) -> Path:
+        """The bus root a file of this declaration at ``path`` lives under."""
+        return path.parents[len(Path(cls.root_directory).parts)]
+
+    @classmethod
     def member_paths(cls, path: Path) -> frozenset[Path]:
         """The resources composed onto one declared primary file."""
         return frozenset((path, store_lock_path(path)))

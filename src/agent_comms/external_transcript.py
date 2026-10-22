@@ -554,6 +554,9 @@ class TurnDraftPublication(DraftPublication, StoreWriter):
     def store(self) -> ExternalTranscript:
         return self.transcript
 
+    def require_maintenance_open(self) -> None:
+        self.transcript.require_maintenance_open()
+
     @contextmanager
     def writing(self):
         with self.transaction(self.connection):

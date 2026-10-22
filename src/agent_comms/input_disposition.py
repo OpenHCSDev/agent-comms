@@ -12,7 +12,6 @@ from agent_comms import field_codec
 
 from .channel_targets import CommandTarget
 from .errors import RelationViolationError
-from .lifecycle_capability import Unresolved
 from .input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
     GoalInputDecision,
@@ -26,6 +25,7 @@ from .input_attempt import (
     UnresolvedInput,
 )
 from .input_origin import InputOrigin, UnattributedInputOrigin
+from .lifecycle_capability import Unresolved
 from .message_reference import MessageReference
 from .messages import Message
 from .threads import Thread
@@ -34,8 +34,8 @@ from .typed_table import Column, DurableStore, Generated, Index, TypedTable, sql
 
 if TYPE_CHECKING:
     from .bus import BusReader
-    from .private_registry_guard import RegistryPrivacy
     from .channel_input_batch import SingleInputBatch
+    from .private_registry_guard import RegistryPrivacy
     from .registry_document import RegistrySnapshot
     from .thread_identity import TurnId
     from .turn_lease import TurnLeaseFence

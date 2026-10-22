@@ -23,7 +23,7 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, ToolRefusedError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .lifecycle import LifecycleState
-from .locked_store import DurableFile
+from .locked_store import DurableFile, LockedStore, RegistryFile
 from .send_outcome import GrantedSend, HeldSend
 from .store_files import (
     SharedLock,
@@ -424,3 +424,18 @@ class MaintenanceBarrier(MaintenanceIngress):
         await self._current_unlocked().observed_async(self)
         async with _async_store_lock(self.registry_path, mode=SharedLock()):
             yield self._current_unlocked()
+
+
+class CarriedDocument[T](DurableFile, LockedStore[T]):
+    """A JSON document every installation carries: while maintenance runs, only its holder
+    replaces it, so the install's carry check never charges another writer's change."""
+
+    __slots__ = ()
+
+    def _write_unlocked(self, text: str) -> None:
+        MaintenanceBarrier(RegistryFile.path_in(self.bus_root(self.path))).assert_open_unlocked()
+        self._replace_unlocked(text)
+
+    def _replace_unlocked(self, text: str) -> None:
+        """The document's own atomic replacement."""
+        super()._write_unlocked(text)

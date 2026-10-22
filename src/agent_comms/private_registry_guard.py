@@ -25,8 +25,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Annotated, TYPE_CHECKING
-
+from typing import TYPE_CHECKING, Annotated
 
 from . import store_files
 from .coordination_database import CoordinationStore
@@ -39,9 +38,9 @@ from .private_path import fsync_directory
 if TYPE_CHECKING:
     from .acp_extension import CursorAdvancedUpdate, CursorScope
     from .cursor_publication import CursorPublication
+    from .private_nk_entrypoint import RootLaunch
     from .registry_document import RegistrySnapshot
     from .threads import Thread
-    from .private_nk_entrypoint import RootLaunch
 
 _MAGIC = b"ACRG"
 _VERSION = 1

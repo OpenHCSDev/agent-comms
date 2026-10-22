@@ -162,6 +162,9 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     assert retired.returncode == 0, retired.stderr
     assert not comms.registry.status('fork-one').receiving
     assert store.get('P40') == saved
+    # The ended fork's open order is the commander's to replace; nobody else's.
+    with store.snapshot() as db:
+        store.require_unit_in(db, saved.held().owner_identity, parent.incarnation)
 
 
 def test_fork_and_parent_judge_show_same_unjudged_edits(fork_bus):

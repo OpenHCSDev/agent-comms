@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from typing import Annotated, TYPE_CHECKING
-
+from typing import TYPE_CHECKING, Annotated
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -22,10 +21,10 @@ from .thread_identity import (
 from .turn_context import Provenance, WireProvenance
 
 if TYPE_CHECKING:
+    from .bus import BusReader
     from .input_attempt import StoredInput
     from .input_disposition import InputDispositions
     from .messages import Message
-    from .bus import BusReader
     from .registry_document import RegistrySnapshot
     from .threads import Thread
 
