@@ -22,52 +22,57 @@ import subprocess
 import sys
 import time
 from abc import abstractmethod
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from pathlib import Path
-from collections.abc import Sequence
 from typing import Annotated, ClassVar, Self
 
-from pydantic import PrivateAttr
+from pydantic import Field, InstanceOf, PrivateAttr
 
 from agent_comms.change_report import FileLine, MainRevision, NoSourceReference
 from agent_comms.cli_bridges.shared import DeclaredVerb
+from agent_comms.commander.config import CommanderConfig, CommanderRole
+from agent_comms.commander.standing import UnownedWheelSpin
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import (
+    Argument,
+    DecodedValue,
     FieldCodec,
     MalformedRecord,
+    Normalize,
     NullMember,
     SingleFieldValue,
     SubclassUnion,
     boundary_decoder,
-    Argument,
-    Normalize,
 )
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.goals import OrderCheck, ProblemGoalOrder
 from agent_comms.message_reference import MessageReference
+from agent_comms.messages import Message
 from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.plan_phases import OrderPhase
-from agent_comms.progress_claims import MergedClaim, WorkingClaim
+from agent_comms.problem_number import ProblemNumber
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
-from agent_comms.standing_rules import HuntDue
+from agent_comms.standing_rules import HuntDue, OwedAnswer
 from agent_comms.storage_rules import UnitStorage
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import (
     BluntText,
+    CheckedDelivery,
     CleanHunt,
     CommitDelivery,
+    DeliveryEvidence,
+    DeliverySource,
     DirectiveText,
-    FileDeliveryEvidence,
     LocatedProblemFinding,
     MeasuredReview,
-    NoDeliveryEvidence,
     NoSuccessor,
     OperationDelivery,
+    OrderDelivery,
     OrderedHunt,
     OrderMessage,
     OrderProgress,
@@ -86,13 +91,12 @@ from agent_comms.todos import (
     VoidStrikeTodo,
     WithdrawTodo,
 )
-from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
+from agent_comms.tool_caller import CommanderForkCaller, NoThreadCaller
 from agent_comms.tools import (
     CommsChangeProblemTool,
     CommsFireTool,
     CommsOrderCheckTool,
     CommsOrderDoneTool,
-    CommsOrderDeliverTool,
     CommsOrderServeTool,
     CommsOrderTool,
     CommsProblemCloseTool,
@@ -100,8 +104,6 @@ from agent_comms.tools import (
     CommsTodoListTool,
     TodoList,
 )
-from agent_comms.commander.config import CommanderConfig, CommanderRole
-from agent_comms.commander.standing import UnitAskUnanswered, UnownedWheelSpin
 
 OUTGOING = DirectiveText.OUTGOING  # every commander text passes each one
 
@@ -177,6 +179,61 @@ def forwarders_added(diff, sources=()):
                if m.group(2) not in kept and not state_call.search(diff[m.start():m.end() + 200].split('\n+', 2)[1] if '\n+' in diff[m.start():m.end()+200] else '')])
 
 
+class CommandDeliverySource(DeliverySource, declared_name=None):
+    @classmethod
+    def from_text(cls, text: str) -> CommandDeliverySource:
+        # Reserved arguments derive from declarations; every other token is a Git reference.
+        return ArgumentDeliverySource.member_or_default(text, ReferenceDeliverySource).from_argument(text)
+
+
+class ArgumentDeliverySource(CommandDeliverySource, declared_name=None):
+    @classmethod
+    def from_argument(cls, text: str) -> Self:
+        return cls()
+
+
+@dataclass(frozen=True)
+class ReferenceDeliverySource(ArgumentDeliverySource, declared_name=None):
+    reference: str
+
+    @classmethod
+    def from_argument(cls, text: str) -> Self:
+        if not text.strip():
+            raise ValueError("A commit delivery needs a nonempty Git reference.")
+        return cls(text)
+
+
+@dataclass(frozen=True)
+class NoDeliverySource(CommandDeliverySource):
+    def require_report(self) -> None:
+        pass
+
+    def delivery(self, repo: Path, evidence: DeliveryEvidence) -> CheckedDelivery:
+        raise ValueError("A fix delivery needs --sha COMMIT or --sha op.")
+
+
+@dataclass(frozen=True)
+class OpDeliverySource(ArgumentDeliverySource):
+    def delivery(self, repo: Path, evidence: DeliveryEvidence) -> CheckedDelivery:
+        return OperationDelivery(evidence=evidence)
+
+
+@dataclass(frozen=True)
+class CommitDeliverySource(ReferenceDeliverySource):
+    def delivery(self, repo: Path, evidence: DeliveryEvidence) -> CheckedDelivery:
+        delivered = Repo.git(repo, 'rev-parse', '--verify', f'{self.reference}^{{commit}}').strip()
+        diff = Repo.git(repo, 'show', '--first-parent', '-m', '--format=', delivered)
+        changed = re.findall(r'^\+\+\+ b/(\S+\.py)$', diff, re.M)
+        sources = [Repo.git(repo, 'show', f'{delivered}:{path}') for path in changed]
+        if added := forwarders_added(diff, sources):
+            raise ValueError(f'Refused: {delivered} adds forwarders {added[:5]}; '
+                             'slop never counts as delivery. Order the hierarchy fix.')
+        return CommitDelivery(
+            commit=Repo.git(repo, 'rev-parse', '--verify', 'HEAD^{commit}').strip(),
+            delivered_commit=delivered, evidence=evidence,
+        )
+
+
 @dataclass(frozen=True)
 class OrderFile:
     """CLI context and prose around the same order the native tools accept."""
@@ -226,15 +283,12 @@ STAGES = (
 )  # where a mistake was caught; later is worse
 
 
-def revision(repo: str, ref: str) -> str:
-    """Resolve a supplied Git revision once at the command boundary."""
-    return subprocess.check_output(
-        ['git', '-C', repo, 'rev-parse', '--verify', f'{ref}^{{commit}}'], text=True).strip()
-
-
 class CommanderContext(CommanderConfig):
     """The selected root's bus and canonical reads, shared by command families."""
 
+    actor: Annotated[
+        InstanceOf[CommanderForkCaller] | InstanceOf[NoThreadCaller], Field(exclude=True)
+    ] = NoThreadCaller()
     _comms: Comms = PrivateAttr()
 
     def model_post_init(self, context: object) -> None:
@@ -260,15 +314,23 @@ class CommanderContext(CommanderConfig):
     def incarnation(self) -> ThreadIncarnation:
         return self.comms.registry.require(self.commander).incarnation
 
+    @property
+    def actor_name(self) -> str:
+        return self.actor.acting_name(self.commander)
+
+    @property
+    def actor_identity(self) -> ThreadIncarnation:
+        return self.actor.as_thread(self.commander).identity(self.comms)
+
     def post(self, audience: VerdictAudience, body: str,
              answers: tuple[MessageReference, ...] = ()) -> str:
         target = audience.threads[0] if len(audience.threads) == 1 else '#comms'
-        published = self.comms.messaging.send(self.commander, target,
+        published = self.comms.messaging.send(self.actor_name, target,
             audience.addressed(target, body), answers=answers)
         return published.message.message_id
 
     def call(self, tool):
-        return ThreadCaller(self.commander).invoke(tool, self.comms)
+        return self.actor.as_thread(self.commander).invoke(tool, self.comms)
 
     def todos(self):
         return self.comms.goals.todos.for_commander(self.incarnation)
@@ -285,13 +347,14 @@ class CommanderContext(CommanderConfig):
         return tuple(todo for todo in self.todos() if todo.holder)
 
     def held_by(self, unit: str) -> tuple[Todo, ...]:
-        return self.comms.goals.todos.held_by(self.incarnation, unit)
+        return self.comms.goals.todos.held_by(
+            self.incarnation, self.comms.registry.require(unit).incarnation)
 
     def units(self) -> frozenset[str]:
         return self.comms.goals.todos.units(self.incarnation)
 
     def progress(self) -> dict[str, OrderProgress]:
-        listed: TodoList = self.call(CommsTodoListTool())
+        listed: TodoList = self.call(CommsTodoListTool(thread=self.commander))
         return listed.progress
 
     def importers(self, modules: set[str], check: OrderCheck) -> list[str]:
@@ -307,6 +370,24 @@ class CommanderContext(CommanderConfig):
     def last_activity(self, unit):
         thread = self.comms.registry.require(unit)
         return thread.runtime.history_source(self.comms.root, thread.incarnation).last_tool_call()
+
+    def board_text(self) -> str:
+        """Render the live Todo view without saving a competing board file."""
+        lines = ['# Fleet board', '',
+                 "Live view of Core's Todo store; no board file is saved.", '',
+                 '| Problem | Owner file | Owner | Order | Due | Check | Progress | Order state '
+                 '| Strikes | Owner last acted |',
+                 '|---|---|---|---|---|---|---|---|---|---|']
+        listed, read = self.todos(), self.progress()
+        activity = {unit: self.last_activity(unit) for unit in {t.holder for t in listed if t.holder}}
+        for t in sorted(listed, key=lambda t: ProblemNumber.parse(t.id).number):
+            lines.append(f'| {t.id}: {t.text.replace("|", "&#124;")} | {t.order.board_cells(t)} | '
+                         f'{read[t.id].line if t.id in read else "-"} | {t.order.line} | '
+                         f'{t.strike_count} | {activity[t.holder].clock() if t.holder else "-"} |')
+        history = self.comms.goals.todos.history_for_commander(self.incarnation)
+        lines += ['', '## Withdrawn orders', '',
+                  *(f'- {line}' for t in history for line in t.order.withdrawals(t))]
+        return '\n'.join(lines) + '\n'
 
 
 class Reassignment(SubclassUnion, affix="Reassignment"):
@@ -424,7 +505,7 @@ class Commander(CommanderContext):
             problems.append(f'{unit} already holds orders '
                             f'{", ".join(todo.id for todo in busy)}; '
                             f'running units holding no order: {", ".join(idle) or "none"}')
-        if not group or any(not re.fullmatch(r'P[1-9]\d*', pid) for pid in group):
+        if not group or any(not ProblemNumber.accepts(pid) for pid in group):
             problems.append('problems: fix: supply an array of P<n> IDs, or use order problem')
         if new and document.problems:
             problems.append('problems: fix: omit IDs when creating a new problem')
@@ -439,12 +520,14 @@ class Commander(CommanderContext):
                     validate()
             except MalformedRecord as error:
                 problems.append(f'{label}: {error}; fix: name an existing source location or directory')
-        # Send and correction ask the check's owner the same question on clean main.
+        # The new order owns the source against which its check must fail.
         try:
             with MalformedRecord.refusing('order.check'):
                 order.require_writable()
                 if Path(check.directory).is_dir():
-                    check.require_acceptance(self.worktrees)
+                    Repo.git(Path(check.directory), 'fetch', '-q', 'origin', 'main')
+                    base = order.check_base(Path(check.directory))
+                    check.require_acceptance(base, self.worktrees)
         except MalformedRecord as error:
             problems.append(f'order.check: {error}; fix: supply a focused measurable command')
         references = list(dict.fromkeys((
@@ -499,18 +582,19 @@ class Commander(CommanderContext):
         if new:
             self.call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
                 problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1],
-                order=order, request=request, review_at=review_at, commander=self.commander)))
+                order=order, request=request, review_at=review_at, commander=self.commander,
+                assigner=self.actor_identity)))
         for pid in [] if new else group:
             self.call(CommsOrderTool(owner=unit, order=OrderGoalAction(
                 problem=pid, expected_revision=self.comms.goals.todos.get(pid).revision,
-                assigner=self.incarnation, traced=traced,
+                assigner=self.actor_identity, traced=traced,
                 order=order, request=request, review_at=review_at, commander=self.commander)))
         message += "\n" + "\n".join(line for pid in group for line in order.scope.instructions(pid))
         sent = self.post(VerdictAudience((unit,)), message, answers)
         # The message is each order's recorded link; a verdict citing it lands on that order.
         for pid in group:
             self.call(CommsChangeProblemTool(problem=pid, operation=OrderMessage(
-                self.comms.goals.todos.get(pid).revision, self.incarnation, sent)))
+                self.comms.goals.todos.get(pid).revision, self.actor_identity, sent)))
         for other, text in taken.items():
             self.post(VerdictAudience((other,)), text)
         print(f'{measured.summary}; review timer {review_at.clock()}')
@@ -526,16 +610,17 @@ class Commander(CommanderContext):
                         evidence=(order.owner,))
 
     def correct_check(self, pid: str, line: str, why: str) -> None:
-        """Replace a wrong check using the same rule as send; done still checks the delivered SHA."""
+        """Correct the current check against the source preceding this order's delivery."""
         todo = self.comms.goals.todos.get(pid)
-        if not todo.state.open or not todo.pending:
-            sys.exit(f'Refused: {pid} has no pending order')
+        order = todo.order.checked()
         check = self.read_check(line)
         if len(why.split()) < 8:
             sys.exit('Refused: --why says what was wrong with the recorded check (8+ words)')
-        check.require_acceptance(self.worktrees)
+        repo = self.repo_directory(check.directory)
+        Repo.git(repo, 'fetch', '-q', 'origin', 'main')
+        check.require_acceptance(order.check_base(repo), self.worktrees)
         self.call(CommsOrderCheckTool(problem=pid, check=check, why=why))
-        print(f'{pid}: order {todo.order.id} now checks `{check.command}`')
+        print(f'{pid}: order {order.id} now checks `{check.command}`')
 
     def say(self, units: str, body_file: str,
             answers: tuple[MessageReference, ...] = ()) -> None:
@@ -554,8 +639,7 @@ class Commander(CommanderContext):
         if checkout.is_dir():
             self.comms.goals.todos.require_recurrence_declaration(
                 document.order, location, checkout, document.slop, time.time())
-        history = self.comms.goals.todos.history_for_commander(self.incarnation)
-        pid = f'P{max([int(t.id[1:]) for t in history if t.id[1:].isdigit()] + [0]) + 1}'
+        pid = self.comms.goals.todos.allocate_problem()
         self.send(unit, document, new=(pid, document.defect),
              disk=disk, finding=LocatedProblemFinding(location), answers=answers)
         print(pid)
@@ -565,24 +649,6 @@ class Commander(CommanderContext):
         evidence = artifact or self.comms.goals.todos.get(pid).order.closing_artifact()
         self.call(CommsProblemCloseTool(problem=pid, works=works, artifact=evidence))
         print(f'{pid} closed')
-
-    def board_text(self) -> str:
-        """Render the live Todo view without saving a competing board file."""
-        lines = ['# Fleet board', '',
-                 "Live view of Core's Todo store; no board file is saved.", '',
-                 '| Problem | Owner file | Owner | Order | Due | Check | Progress | Order state '
-                 '| Strikes | Owner last acted |',
-                 '|---|---|---|---|---|---|---|---|---|---|']
-        listed, read = self.todos(), self.progress()
-        activity = {unit: self.last_activity(unit) for unit in {t.holder for t in listed if t.holder}}
-        for t in sorted(listed, key=lambda t: int(t.id[1:]) if t.id[1:].isdigit() else 0):
-            lines.append(f'| {t.id}: {t.text.replace("|", "&#124;")} | {t.order.board_cells(t)} | '
-                         f'{read[t.id].line if t.id in read else "-"} | {t.order.line} | '
-                         f'{t.strike_count} | {activity[t.holder].clock() if t.holder else "-"} |')
-        history = self.comms.goals.todos.history_for_commander(self.incarnation)
-        lines += ['', '## Withdrawn orders', '',
-                  *(f'- {line}' for t in history for line in t.order.withdrawals(t))]
-        return '\n'.join(lines) + '\n'
 
     def on_record(self, line: str, recorded: str, audience: VerdictAudience,
                   answers: tuple[MessageReference, ...] = ()) -> None:
@@ -610,7 +676,7 @@ class Commander(CommanderContext):
         todo.state.require_open(todo)
         if todo.held().owner != unit:
             sys.exit(f'Refused: {unit} does not hold {task}; strike the unit that holds it.')
-        self.recorded(unit, todo, kind(todo.revision, self.incarnation, todo.held(),
+        self.recorded(unit, todo, kind(todo.revision, self.actor_identity, todo.held(),
                                       f'{why} (caught by {caught})',
                                       evidence=evidence), answers)
 
@@ -633,23 +699,14 @@ class Commander(CommanderContext):
         self.on_record(line, 'Strike', VerdictAudience.of(unit, todo.goal), answers)
         print(f'{unit}: {n} strike(s) on {todo.id}' + (f'. Reassign {todo.id} now and freeze its branch.' if n >= 2 else ''))
 
-    def done(self, pid, sha, screenshot='', seen=''):
-        """Core runs the delivery's check at its checked commit and strikes a late delivered commit
-        in the same revision; this posts the strikes Core recorded."""
+    def done(self, pid: str, delivery: OrderDelivery) -> None:
+        """Storage is checked here; the delivery owns its evidence and claims."""
         todo = self.comms.goals.todos.get(pid)
         todo.state.require_open(todo)
-        todo.order.checked().require_delivery(todo.order.id)
+        order = todo.order.checked()
+        order.require_delivery(order.id)
         unit = todo.held().owner
-        repo = str(self.repo_directory(todo.order.check.directory))
-        operation = sha == 'op'  # an operation on live state, not a commit: the check runs now and now is delivery
-        if not operation:
-            diff = subprocess.run(['git', '-C', repo, 'show', '--first-parent',
-                '-m', '--format=', sha], capture_output=True, text=True).stdout
-            changed = re.findall(r'^\+\+\+ b/(\S+\.py)$', diff, re.M)
-            after = [subprocess.run(['git', '-C', repo, 'show', f'{sha}:{f}'],
-                capture_output=True, text=True).stdout for f in changed]
-            if added := forwarders_added(diff, after):
-                sys.exit(f'Refused: {sha} adds forwarders {added[:5]}; slop never counts as delivery. Order the hierarchy fix.')
+        claims = delivery.done_claims(order)
         thread = self.comms.registry.require(unit)
         storage = UnitStorage.read(self.comms.registry.storage_rule, thread)
         for checkout in storage.rule.problem_checkouts(unit, pid):
@@ -660,19 +717,9 @@ class Commander(CommanderContext):
             storage.require_quota()
         except SelectedToolDenied as quota:
             sys.exit(f'Refused: {unit}: {quota}; storage rule: it cleans up before the order counts as done.')
-        todo.order.run.require_artifact(seen or screenshot)
-        evidence = FileDeliveryEvidence(seen or screenshot) if seen or screenshot else NoDeliveryEvidence()
-        if operation:
-            delivery = OperationDelivery(evidence=evidence)
-            claim = WorkingClaim(evidence.artifact())
-        else:
-            delivered_commit = revision(repo, sha)
-            delivery = CommitDelivery(commit=revision(repo, 'HEAD'),
-                                      delivered_commit=delivered_commit, evidence=evidence)
-            claim = MergedClaim(delivery.delivered)
         self.call(CommsOrderDoneTool(problem=pid,
-            order_id=todo.order.id, delivery=delivery, claims=(claim,)))
-        print(f'{unit}: order {todo.order.id} delivered as {delivery.delivered if not operation else sha}')
+            order_id=order.id, delivery=delivery, claims=claims))
+        print(f'{unit}: order {order.id} delivered as {delivery.work}')
 
     def hunt(self, where, why, sent):
         """Record the commander's source read, whether or not it became an order."""
@@ -735,17 +782,20 @@ class CommanderVerb(CommanderRole, DeclaredVerb, affix="Verb"):
     """One commander verb: its options are its fields, its parser comes from them, and run() does the work."""
 
     fork: Annotated[
-        ThreadCaller | NoThreadCaller,
+        CommanderForkCaller | NoThreadCaller,
         Normalize(FieldCodec.encode),
         Argument(
-            flags=("--fork",), options={"type": ThreadCaller, "help": "the acting thread's name"}
+            flags=("--fork",), options={"type": CommanderForkCaller, "help": "the acting thread's name"}
         ),
     ] = NoThreadCaller()
 
     def who(self, ctx: Commander) -> str:
-        return self.fork.acting_name(ctx.commander)
+        return ctx.actor_name
 
     def apply(self, ctx: Commander) -> None:
+        self.require_commander(ctx.comms.registry.require(ctx.commander))
+        self.fork.commanding(ctx.comms, ctx.commander)
+        ctx = ctx.model_copy(update={'actor': self.fork})
         self.gate(ctx)
         self.run(ctx)
 
@@ -776,28 +826,27 @@ class DirectiveVerb(CommanderVerb):
         ),
     ] = ()
 
+    def named(self, ctx: Commander) -> tuple[Message, ...]:
+        """The named messages still open. A name that is no longer open (answered, or out of
+        the owed set since it was read) needs no answer and is dropped, never refused: the
+        owed set moves while the commander writes, and refusing the whole verb over a closed
+        name livelocked the gate while a chokehold held the fleet (2026-10-21 22:12). A name
+        that is wrong leaves its real message owed, and the gate below refuses that."""
+        return tuple(message for message in OwedAnswer.answerable(ctx.comms, self.who(ctx))
+                     if message.message_id in self.answers)
+
     def answer_references(self, ctx: Commander) -> tuple[MessageReference, ...]:
-        thread = ctx.comms.registry.require(self.who(ctx))
-        answerable = (*(message for goal in thread.goal.active()
-                        for message in goal.order.directive_messages(ctx.comms.goals)),
-                      *UnitAskUnanswered.asks(ctx.comms, thread.name, time.time()))
-        originals = tuple(message for message in answerable if message.message_id in self.answers)
-        if set(self.answers) != {message.message_id for message in originals}:
-            sys.exit('REFUSED: --answers must name original directives on this request '
-                     'or unanswered unit messages to this commander.')
-        return tuple(message.reference for message in originals)
+        return tuple(message.reference for message in self.named(ctx))
 
     def gate(self, ctx: Commander) -> None:
-        answers = self.answer_references(ctx)
-        thread = ctx.comms.registry.require(self.who(ctx))
-        overdue = tuple(directive.original(ctx.comms.goals)
-                        for goal in thread.goal.active()
-                        for directive in goal.order.overdue_directives(
-                            goal, ctx.comms.goals, thread.incarnation, time.time()))
-        if overdue and not answers:
-            lines = '\n'.join(f'{message.message_id}: {message.body[:80]}' for message in overdue)
-            sys.exit('REFUSED, nothing recorded: overdue owner directives:\n' + lines
-                     + '\nReply to the original message or use --answers MESSAGE_ID.')
+        named = self.named(ctx)
+        owed = tuple(rule for rule in OwedAnswer.broken(ctx.comms, self.who(ctx))
+                     if not rule.answered_by(named))
+        if owed:
+            lines = '\n'.join(f'{rule.line()}: {rule.message.body[:80]}' for rule in owed)
+            sys.exit('REFUSED, nothing recorded: messages owed an answer:\n' + lines
+                     + '\nReply to the original message or use --answers MESSAGE_ID. An answer '
+                     'that must wait is sent now: "waiting on X, owner Y".')
         super().gate(ctx)
 
 
@@ -918,29 +967,6 @@ class WithdrawVerb(OrderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class DeliverVerb(OrderVerb):
-    help = "record your delivery claim and answer the commander"
-    problem: Annotated[str, Argument(flags=("problem",), options={"metavar": "PROBLEM"})]
-    pull_request: Annotated[int, Argument(flags=("--pr",))]
-    head: Annotated[str, Argument(flags=("--sha",))]
-    report_file: Annotated[str, Argument(flags=("--report-file",))]
-
-    def gate(self, ctx: Commander) -> None:
-        ctx.comms.registry.require(self.who(ctx)).role.require_executable(
-            ValueError("A delivery claim requires a registered unit.")
-        )
-
-    def run(self, ctx: Commander) -> None:
-        ThreadCaller(self.who(ctx)).invoke(
-            CommsOrderDeliverTool(
-                problem=self.problem, pull_request=self.pull_request,
-                head=self.head, report=Path(self.report_file).read_text(),
-            ), ctx.comms,
-        )
-        print(f'{self.problem}: delivery claim recorded')
-
-
-@dataclass(frozen=True, kw_only=True)
 class DoneVerb(OrderVerb):
     help = "Core checks the delivered commit; late delivery is a strike"
     unit: Annotated[str, Argument(flags=("unit",), options={"metavar": "UNIT"})]
@@ -952,11 +978,14 @@ class DoneVerb(OrderVerb):
         ),
     ]
     sha: Annotated[
-        str,
+        CommandDeliverySource,
+        Normalize(DecodedValue),
         Argument(
-            flags=("--sha",), options={"help": "commit in the recorded checkout, or op"}
+            flags=("--sha",),
+            options={"type": CommandDeliverySource.from_text, "choices": None,
+                     "help": "for a fix: commit in the recorded checkout, or op"},
         ),
-    ]
+    ] = dataclasses.field(default_factory=NoDeliverySource)
     screenshot: Annotated[
         str,
         Argument(
@@ -972,7 +1001,10 @@ class DoneVerb(OrderVerb):
 
     def run(self, ctx: Commander) -> None:
         todo = ctx.comms.goals.todos.resolve_order(ctx.incarnation, self.unit, self.problem)
-        ctx.done(todo.id, self.sha, self.screenshot, self.seen)
+        order = todo.order.checked()
+        delivery = order.scope.delivery(
+            ctx.repo_directory(order.check.directory), self.sha, self.screenshot, self.seen)
+        ctx.done(todo.id, delivery)
 
 
 @dataclass(frozen=True)
@@ -1033,7 +1065,8 @@ class PullRequestVerb(OrderVerb, declared_name="pr"):
         todo = ctx.comms.goals.todos.get(self.pid)
         source = Repo.of(Path.cwd())
         holder = ctx.comms.registry.require(todo.held().owner)
-        if not ctx.comms.registry.storage_rule.owns_checkout(holder, source.checkout):
+        storage = ctx.comms.registry.storage_rule
+        if not storage.owns_checkout(holder, source.checkout, source.checkout):
             raise ValueError(f"Run order pr from a source checkout owned by {holder.name}.")
         if not source.holds(todo):
             sys.exit(f'Refused: current checkout belongs to {source.github.to_wire()}, '
@@ -1090,6 +1123,15 @@ class SayVerb(OrderVerb, DirectiveVerb):
 
     def run(self, ctx: Commander) -> None:
         ctx.say(self.units, self.body_file, self.answer_references(ctx))
+
+
+@dataclass(frozen=True, kw_only=True)
+class RetireVerb(OrderVerb):
+    help = "stop a commander fork without discarding its open orders"
+
+    def run(self, ctx: Commander) -> None:
+        ctx.actor.retire(ctx.comms)
+        print(f'{ctx.actor_name} retired')
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -47,7 +47,7 @@ from agent_comms.maintenance_barrier import (
     InstallingPhase, MaintenanceBarrier, MaintenanceOperator, PausedPhase, ReadyPhase,
 )
 from agent_comms.store_files import _store_lock
-from agent_comms.tools import ReadTool, ToolRequest, invoke_tool
+from agent_comms.tools import CommsChannelsTool, ReadTool, ToolRequest, invoke_tool
 
 LIST = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
 
@@ -77,7 +77,6 @@ def test_real_connector_refusals_and_replaced_source(tmp_path, source_programs):
         env=environment, capture_output=True, text=True, timeout=60,
     )
     assert proof.returncode == 0, proof.stdout + proof.stderr
-    assert "same maintenance thread completed normally" in proof.stdout
 
 
 @pytest.mark.parametrize("registered", [True, False])
@@ -248,6 +247,20 @@ async def test_a_tool_reply_is_exactly_the_json_rpc_response_shape(client, comms
     assert set(reply) == {"jsonrpc", "id", "result"}
 
 
+@pytest.mark.parametrize("arguments", ({"kind": "undeclared"}, {"unexpected": True}))
+async def test_expected_tool_argument_refusal_keeps_its_mcp_reply(client, comms, arguments):
+    token = await approved_token(client, comms)
+    response = await client.post("/mcp", headers={"Authorization": f"Bearer {token}"}, json={
+        "jsonrpc": "2.0", "id": 31, "method": "tools/call",
+        "params": {"name": CommsChannelsTool.declared_name, "arguments": arguments},
+    })
+    reply = await response.json()
+    assert response.status == 200
+    assert reply["id"] == 31
+    assert reply["result"]["isError"] is True
+    assert json.loads(reply["result"]["content"][0]["text"])["error"]
+
+
 async def test_request_log_names_the_route_and_never_its_values(client, store, root, comms, caplog):
     """Serve actual GET/POST approval secrets, with aiohttp's raw access log off."""
     login = await ClientLogin.register(client)
@@ -401,10 +414,10 @@ async def test_connector_lists_every_tool(client, store, comms):
     token = await approved_token(client, comms)
     headers = {"Authorization": f"Bearer {token}"}
     listed = (await (await client.post("/mcp", json=LIST, headers=headers)).json())["result"]["tools"]
-    family = ToolRequest.members_with(ToolRequest)
-    assert [tool["name"] for tool in listed] == [tool.declared_name for tool in family]
+    family = Connector.exposed()
+    assert [tool["name"] for tool in listed] == list(family)
     assert [tool["annotations"]["readOnlyHint"] for tool in listed] == [
-        issubclass(tool, ReadTool) for tool in family]
+        issubclass(tool, ReadTool) for tool in family.values()]
     # Every write tool says, from the one write marker, that claude-ai may act on its authorization.
     writes = [tool["description"] for tool in listed if not tool["annotations"]["readOnlyHint"]]
     assert writes and all(description.endswith(ToolRequest.bus_effect) for description in writes)

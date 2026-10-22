@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.lifecycle_capability import Active
+
 import dataclasses
 import json
 import sys
@@ -72,7 +74,7 @@ from .goal_actions import (
     TransitionGoalAction,
 )
 from .goal_history import RecordedGoalRevision
-from .goal_presentation import GoalSnapshot, ThreadGoalExecution
+from .goal_presentation import GoalSnapshot, GoalExecution
 from .goal_waits import NoStandbyReview, StandbyReview
 from .goals import Goal, GoalDeclaration, OrderCheck
 from .message_bus import HeldBusWrite
@@ -221,7 +223,7 @@ class GoalSet(OwnGoalPublication):
 
 @dataclass(frozen=True)
 class GoalProgress(OwnGoalPublication, GoalSnapshot):
-    execution: Annotated[ThreadGoalExecution, WireName("goal_execution")]
+    execution: Annotated[GoalExecution, WireName("goal_execution")]
 
 
 @dataclass(frozen=True)
@@ -830,7 +832,7 @@ class CommsResumeGoalTool(ThreadToolRequest):
             ),
         )
         goal = goal.require()
-        if not goal.state.active or goal.progress != progress:
+        if not goal.state.items_with(Active, goal) or goal.progress != progress:
             raise ToolRefusedError("Goal changed during resume; refresh its state.")
         return GoalUpdated(goal)
 
@@ -882,9 +884,9 @@ class CommsTodoTool(ThreadToolRequest):
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged | ProblemClosed:
         todo = comms.goals.todos.get(self.problem)
-        actor = comms.registry.require(caller.name).incarnation
+        actor = caller.identity(comms)
         return self.result(comms.goals.change_problem(
-            self.problem, self.operation_for(todo, actor, comms), caller.name))
+            self.problem, self.operation_for(todo, actor, comms), caller.commander(comms).name))
 
     @abstractmethod
     def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
@@ -901,7 +903,7 @@ class CommsChangeProblemTool(CommsTodoTool, declared_name="comms_todo"):
     ]
 
     def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
-        return self.operation
+        return self.operation.authored_by(actor)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -947,7 +949,7 @@ class CommsFireTool(ThreadToolRequest):
     reason: Annotated[StrikeReason, *tool_field("What the unit did, plainly")]
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> TodoList:
-        return TodoList(comms.goals.fire(self.unit, self.reason, caller.name))
+        return TodoList(comms.goals.fire(self.unit, self.reason, caller.identity(comms)))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1026,7 +1028,7 @@ class CommsOrderTool(ThreadToolRequest):
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> ProblemOrdered:
         goal = comms.goals.update_goal(self.owner, self.order.bound_to(
-            comms.registry.require(caller.name).incarnation))
+            caller.identity(comms), caller.commander(comms).incarnation))
         return ProblemOrdered(goal, comms.goals.todos.get(self.order.problem))
 
 

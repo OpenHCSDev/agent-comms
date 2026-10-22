@@ -20,7 +20,7 @@ def test_turn_family_round_trip_keeps_its_original_wire_form(turn):
 def test_idle_turn_answers_without_an_active_record():
     idle = NoTurn()
     assert FieldCodec.encode(idle) is None
-    assert not idle.executing
+    idle.require_idle()
     assert idle.report_turn == ''
     assert not idle.matches(TurnId('turn'))
     assert not idle.started_by(10000)

@@ -1,17 +1,18 @@
-"""At session start, resume and compaction, write the commander's sources and order them read.
+"""At session start, resume and compaction, write the commander's sources, order them read once,
+and deal the reminder deck.
 
 The sources are the commander's voice, the indictment, the recorded failures, the commander skill,
 the packaged rules and the refactor-audit catalog's index; a rung file is read when an order or
 roast cites its pattern ID. Claude Code caps
 injected hook text at 10,000 characters and the sources are far longer, so they
 go into parts beside the transcript and the hook injects the order to read
-each part. The reread hook repeats that order as context grows.
+each part, once. The reminder hook then puts one short slice inline every few tool calls.
 """
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
-from pathlib import Path
 from typing import ClassVar
 
 from pydantic import ValidationError
@@ -21,12 +22,12 @@ from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.rule_file import RuleFile
 from agent_comms.todos import Slop
 from agent_comms_hooks import ClaudeHookProgram
-from agent_comms_hooks.reread import ContextCadence, SourcesOrder, ToolUseReminder
+from agent_comms_hooks.reread import CommanderDeck
 from agent_comms_hooks.watch import WatchClaim
 
 
 @dataclass(frozen=True)
-class CommanderStart(SourcesOrder):
+class CommanderStart(CommanderDeck):
     part_chars: ClassVar[int] = 60_000
     """The most characters one Read of a part returns in full."""
     unreadable: ClassVar[tuple[type[Exception], ...]] = (
@@ -34,7 +35,7 @@ class CommanderStart(SourcesOrder):
     )
     """How the installed commander configuration fails to read; the sources still go out."""
 
-    def due(self, tokens: int) -> bool:
+    def due(self) -> bool:
         """Every session the commander's bridge binding does not rule out: a session bound to
         another bus thread (a Claude unit) never gets the commander's sources."""
         try:
@@ -43,12 +44,25 @@ class CommanderStart(SourcesOrder):
             return True
         return WatchClaim(self.session_id).state().may_serve(commander)
 
+    def take(self) -> tuple[str, ...]:
+        """The order to read every part, once; the deck carries the sources after it."""
+        if not self.due():
+            return ()
+        self.prepare()
+        parts = sorted(self.parts.iterdir())
+        return (
+            f"Read each of these {len(parts)} files in full with the Read tool before any other"
+            " action: they are the indictment, the recorded failures, the commander skill, every"
+            " packaged rule and the refactor-audit catalog index. A summary or memory of them"
+            " does not count as reading them. This order is given once per session start or"
+            " compaction; a short slice of them comes back inline every few tool calls.\n"
+            + "\n".join(str(part) for part in parts),
+        )
+
     def prepare(self) -> None:
-        """A start or compaction drops what was read, so every reminder is due again."""
-        for member in ToolUseReminder.__subclasses__():
-            Path(self.transcript_path).with_suffix(member.mark_suffix).unlink(missing_ok=True)
-        self.voice.write_text(CommanderConfig.packaged_voice().read_text(encoding="utf-8"), encoding="utf-8")
-        self.drift.write_text("\n".join(RuleFile.drift_tells()), encoding="utf-8")
+        """A start or compaction drops what was read: the deck is dealt again from its start."""
+        self.calls.unlink(missing_ok=True)
+        self.deck.write_text(json.dumps(self.slices()), encoding="utf-8")
         self.parts.mkdir(exist_ok=True)
         for old in self.parts.iterdir():
             old.unlink()
@@ -62,6 +76,33 @@ class CommanderStart(SourcesOrder):
             size += len(line)
         for number, chunk in enumerate(chunks, 1):
             (self.parts / f"{number:02}.md").write_text("".join(chunk), encoding="utf-8")
+
+    @classmethod
+    def slices(cls) -> list[str]:
+        """The voice, the indictment, the drift tells and the recorded failures, one slice of each
+        per round, so each comes back every fourth slice and the longest source runs through once.
+        The failures are the habits caught so far; they are called out by name, repeatedly."""
+        voice = cls.paragraphs(CommanderConfig.packaged_voice().read_text(encoding="utf-8"))
+        indictment = cls.paragraphs(
+            CommanderConfig.packaged_indictment().read_text(encoding="utf-8"))
+        tells = RuleFile.drift_tells()
+        failures = tuple(f"Recorded failure {line}" for line in PostmortemFailure.catalog().splitlines())
+        streams = (voice, indictment, tells, failures)
+        rounds = max(len(stream) for stream in streams)
+        return [stream[number % len(stream)] for number in range(rounds) for stream in streams]
+
+    @staticmethod
+    def paragraphs(text: str) -> tuple[str, ...]:
+        """Blank-line paragraphs; a heading stays with the paragraph it introduces."""
+        found: list[str] = []
+        heading = ""
+        for block in (block.strip() for block in text.split("\n\n")):
+            if block.startswith("#"):
+                heading = f"{heading}{block}\n"
+            elif block:
+                found.append(heading + block)
+                heading = ""
+        return tuple(found)
 
     @classmethod
     def sources(cls) -> str:
@@ -94,7 +135,9 @@ class SkillText(ClaudeHookProgram):
 
 
 def main() -> None:
-    ContextCadence.remind(CommanderStart)
+    start = CommanderStart.read()
+    for text in start.take():
+        start.warn(text)
 
 
 if __name__ == "__main__":

@@ -11,6 +11,7 @@ import math
 import subprocess
 import time
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
 from agent_comms.goal_actions import (
@@ -68,7 +69,9 @@ class WorkDispatch:
         )
         self.action.request_ref(GoalActionContext(comms.goals, candidate))
         comms.registry.require_declaration_available(candidate, StoppedThreadStatus())
-        CheckoutStorageEffect(checkout).check(StorageProjection(storage, candidate))
+        CheckoutStorageEffect(checkout, Path(self.action.order.check.directory)).check(
+            StorageProjection(storage, candidate)
+        )
         subprocess.run(
             ("git", "-C", self.action.order.check.directory, "fetch", "origin", "main"),
             check=True,
@@ -146,6 +149,7 @@ class CheckedPhaseTask(PhaseTask):
             order=order,
             request=order.request(commander, (self.problem,)),
             commander=commander.name,
+            assigner=commander.incarnation,
             review_at=RecordedEventTime(now + self.review_seconds),
         )
         WorkDispatch(action, revision=0).start(comms)

@@ -33,7 +33,7 @@ def held_commander(pr_commander):
     RequestAddVerb(text="Repair the copied order workflow without changing original retained state").run(source)
     lead = source.comms.registry.require(source.commander)
     todo = source.comms.goals.todos.create(
-        "P1", source.repos[0].github, "Repair the held workflow", creator=lead,
+        "P1", source.repos[0].github, "Repair the held workflow", creator=lead, assigner=lead.incarnation,
         owner=worker, generation="initial-order", goal=GoalRef(lead.name, lead.created_at, lead.goal.require().id),
         review_at=RecordedEventTime(time.time() + 1000), order=order(source.repos[0]),
     )
@@ -93,7 +93,7 @@ def test_second_unplanned_order_is_refused_without_recording(held_commander):
     )
     lead = ctx.comms.registry.require(ctx.commander)
     ctx.comms.goals.todos.create(
-        "P2", ctx.repos[0].github, "Repair the second workflow", creator=lead, owner=lead,
+        "P2", ctx.repos[0].github, "Repair the second workflow", creator=lead, assigner=lead.incarnation, owner=lead,
         generation="second-workflow", goal=GoalRef(lead.name, lead.created_at, lead.goal.require().id),
         review_at=RecordedEventTime(time.time() + 1000), order=document.order,
     )

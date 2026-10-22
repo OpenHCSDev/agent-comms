@@ -15,10 +15,10 @@ from agent_comms.field_codec import (
     AcceptsNull,
     BoundedText,
     EnvelopeSequence,
-    Id128Text,
     ExternalJsonShape,
     FieldCodec,
     FieldRepresentation,
+    Id128Text,
     MalformedRecord,
 )
 from agent_comms.native_startup import NativeStartupPolicy
@@ -31,6 +31,7 @@ from agent_comms.pi_payloads import (
     PiDelta,
     PiDiagnostic,
     PiMessage,
+    PiPayload,
     PiResponseData,
     SessionSwitchData,
     StateData,
@@ -40,6 +41,7 @@ from agent_comms.pi_payloads import (
     UnknownData,
     UnknownPayload,
 )
+from agent_comms.pi_vocabulary import CompactionReason, PiStopReason
 from agent_comms.turn_output import TurnOutput
 from agent_comms.turn_phase import AcceptsPrompt, ModelWaitPhase
 from agent_comms.turn_watchdog import ModelWait, ProgressWatchdog
@@ -107,6 +109,7 @@ def test_opaque_retains_the_record_while_known_content_projects_declared_fields(
     (PiDiagnostic, {"type": "future_diagnostic", "extra": [1]}),
     (PiMessage, {"role": "future_message", "extra": [1]}),
     (PiDelta, {"type": "future_delta", "extra": [1]}),
+    (PiEvent, {"type": "future_notice", "extra": [1]}),
 ])
 def test_open_payload_derives_unknown_selection_from_each_family(family, wire):
     unknown, = family.members_with(UnknownPayload)
@@ -117,11 +120,10 @@ def test_open_payload_derives_unknown_selection_from_each_family(family, wire):
     assert unknown.from_wire(wire) == decoded
 
 
-def test_opaque_event_entry_and_tool_data_keep_the_original_external_shape():
+def test_opaque_entry_and_tool_data_keep_the_original_external_shape():
     from agent_comms.native_entries import NativeEntry
 
     for family, wire in (
-        (PiEvent, {"type": "future_notice", "extra": [1]}),
         (NativeEntry, {"type": "future_entry", "timestamp": "2026-10-21T00:00:00Z", "extra": [1]}),
         (NativeToolDetails, {"extra": [1]}),
         (UnknownData, [1, {"extra": True}]),
@@ -160,6 +162,100 @@ async def test_delta_siblings_share_progress_and_inherit_default_emission():
     assert phase.model_progress() is phase
 
 
+def test_external_fields_use_their_declared_type_not_their_parent_or_field_name():
+    from agent_comms.pi_payloads import (
+        AbsentMessage,
+        MissingToolResult,
+        NoToolDetails,
+        PiModel,
+        PiPayload,
+        PiToolResult,
+        UnreportedModel,
+    )
+    from agent_comms.pi_vocabulary import (
+        CompactionReason,
+        OverflowCompactionReason,
+        PiStopReason,
+        StopStopReason,
+    )
+
+    @dataclass(frozen=True)
+    class RenamedFields(PiPayload):
+        notice: PiMessage
+        ending: type[PiStopReason]
+        cause: type[CompactionReason]
+        result: PiToolResult
+        extra: NativeToolDetails
+        selected: PiModel
+        history: tuple[PiMessage, ...]
+        optional: PiMessage | None
+
+    decoded = RenamedFields.from_wire({
+        "notice": None, "ending": "stop", "cause": "overflow", "result": None,
+        "extra": None, "selected": None, "history": [{"role": "user", "content": "hi"}],
+        "optional": None,
+    })
+    assert decoded.notice == AbsentMessage()
+    assert decoded.ending is StopStopReason
+    assert decoded.cause is OverflowCompactionReason
+    assert decoded.result == MissingToolResult()
+    assert decoded.extra == NoToolDetails()
+    assert decoded.selected == UnreportedModel()
+    assert decoded.history[0].text == "hi"
+    assert decoded.optional is None
+
+
+@pytest.mark.parametrize("data", [[{"role": "user"}], [{"role": "user"}, 1, 2]])
+def test_external_fixed_tuples_refuse_wrong_lengths_at_the_codec_boundary(data):
+    with pytest.raises(MalformedRecord):
+        FieldCodec.normalize_external(tuple[PiMessage, int], data, {})
+
+
+@pytest.mark.parametrize("family, spelling", [(PiStopReason, "stop"), (CompactionReason, "overflow")])
+def test_external_name_families_derive_one_default_without_accepting_invalid_values(family, spelling):
+    from agent_comms.field_codec import DefaultExternalName
+    known = family.member_named(spelling)
+    fallback, = family.members_with(DefaultExternalName)
+    assert family.from_external(spelling) is known
+    for value in (None, "future_value"):
+        assert family.from_external(value) is fallback
+    with pytest.raises(ValueError):
+        known.from_external("future_value")
+    for value in (True, 5, object()):
+        with pytest.raises(MalformedRecord):
+            family.from_external(value)
+
+
+@pytest.mark.parametrize("value", [None, False, "3", {}, 1.5, 0, -1, 2])
+def test_measured_totals_share_one_declared_integer_policy(value):
+    from agent_comms.pi_payloads import PiContextUsage, PiUsage
+
+    totals = (PiUsage.from_wire({"totalTokens": value}).total_tokens,
+              PiContextUsage.from_wire({"tokens": value}).tokens)
+    assert [FieldCodec.encode(total) for total in totals] == ([2, 2] if value == 2 else [None, None])
+
+
+@pytest.mark.parametrize("value", [False, "3", {}, 1.5])
+def test_retained_totals_reject_values_only_external_ingress_may_treat_as_unreported(value):
+    from agent_comms.pi_payloads import PiContextUsage, PiUsage
+
+    for family, key in ((PiUsage, "totalTokens"), (PiContextUsage, "tokens")):
+        with pytest.raises(MalformedRecord):
+            FieldCodec.decode(family, {key: value})
+
+
+@pytest.mark.parametrize("command", ["switch_session", "watch", "compact_durable"])
+def test_exact_response_capability_covers_sdk_and_durable_commands(command):
+    from agent_comms import pi_durable_backend  # Registers the actual host command family.
+    from agent_comms.pi_events import Response
+
+    wire = {"id": "proof", "type": "response", "command": command,
+            "success": False, "error": "failed"}
+    assert Response.from_wire(wire).error.value_or("") == "failed"
+    with pytest.raises(MalformedRecord):
+        Response.from_wire({**wire, "extra": True})
+
+
 def test_strict_fields_rejects_extra_keys_while_ordinary_response_projects_them():
     assert SessionSwitchData in PiResponseData.members_with(StrictFields)
     assert StateData not in PiResponseData.members_with(StrictFields)
@@ -167,6 +263,95 @@ def test_strict_fields_rejects_extra_keys_while_ordinary_response_projects_them(
     with pytest.raises(MalformedRecord):
         SessionSwitchData.from_wire({"cancelled": False, "extra": True})
     assert StateData.from_wire({"extra": True}) == StateData.from_wire({})
+
+
+def test_external_null_members_and_nullable_names_use_their_declarations():
+    from agent_comms.field_codec import ExternalNullMember
+    from agent_comms.pi_payloads import PiModel
+
+    for family in (PiMessage, PiModel, PiResponseData):
+        member, = family.members_with(ExternalNullMember)
+        assert family.from_wire(None) == member()
+
+    @dataclass(frozen=True)
+    class NullableName(PiPayload):
+        ending: type[PiStopReason] | None
+
+    assert NullableName.from_wire({"ending": None}).ending is None
+    known = PiStopReason.member_named("stop")
+    assert NullableName.from_wire({"ending": "stop"}).ending is known
+    resolved = FieldCodec.normalize_external(type[PiStopReason], "stop", {})
+    assert FieldCodec.decode(type[PiStopReason], resolved) is known
+    with pytest.raises(MalformedRecord):
+        FieldCodec.decode(type[PiStopReason], known)
+
+
+def test_response_command_owns_data_normalization_without_redecoding_its_identity():
+    from agent_comms.pi_commands import PiCommand
+    from agent_comms.pi_events import Response
+
+    seen = []
+
+    class ObservedReply(PiCommand):
+        response_payload = StateData
+
+        @classmethod
+        def normalize_response_data(cls, value):
+            seen.append(value)
+            return super().normalize_response_data(value)
+
+    payload = {"model": None}
+    response = Response.from_wire({
+        "type": "response", "command": ObservedReply.declared_name,
+        "data": payload, "success": True,
+    })
+    assert response.command is ObservedReply
+    assert response.data == StateData.from_wire(payload)
+    assert seen == [payload]
+
+
+@pytest.mark.parametrize("command", [None, False, 1, {}])
+def test_malformed_response_commands_are_not_unknown_commands(command):
+    from agent_comms.pi_events import Response
+
+    with pytest.raises(MalformedRecord):
+        Response.from_wire({"type": "response", "command": command})
+
+
+def test_union_container_shape_does_not_skip_member_validation_and_normalization():
+    @dataclass(frozen=True)
+    class ContainerOrMessage(PiPayload):
+        selected: dict[str, int] | PiMessage
+
+    message = ContainerOrMessage.from_wire({"selected": {"role": "user", "content": "hi"}})
+    assert isinstance(message.selected, PiMessage)
+    assert message.selected.text == "hi"
+    assert ContainerOrMessage.from_wire({"selected": {"items": 3}}).selected == {"items": 3}
+
+
+@pytest.mark.parametrize("wire", [
+    {"type": "text_start", "contentIndex": 0},
+    {"type": "text_delta", "delta": "native text"},
+    {"type": "text_end", "contentIndex": 0},
+])
+def test_native_delta_records_are_not_normalized_as_the_null_union_member(wire):
+    event = PiEvent.from_wire({"type": "message_update", "assistantMessageEvent": wire})
+    assert event.assistant_message_event.to_wire() == wire
+
+
+def test_exact_envelope_derives_additional_response_fields():
+    from agent_comms.pi_events import Response
+
+    @dataclass(frozen=True, kw_only=True)
+    class HeaderProofResponse(Response):
+        receipt: str = ""
+
+    wire = {"type": HeaderProofResponse.declared_name, "command": "switch_session",
+            "id": "proof", "success": False, "error": "failed", "receipt": "seen"}
+    assert HeaderProofResponse.from_wire(wire).receipt == "seen"
+    del wire["receipt"]
+    with pytest.raises(MalformedRecord):
+        HeaderProofResponse.from_wire(wire)
 
 
 @dataclass

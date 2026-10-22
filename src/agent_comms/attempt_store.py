@@ -25,8 +25,6 @@ from agent_comms.coordination_tables.recovery import (
     OwnerConnectivity,
     RecoveryAudit,
 )
-from agent_comms.coordination_tables.responses import ResponseObligation
-from agent_comms.obligation_states import PendingResponse
 from agent_comms.owner_fence import OwnerFence
 from agent_comms.participant_store import ParticipantStore
 from agent_comms.turn_failure import TurnFailure
@@ -87,13 +85,7 @@ class AttemptStore:
         """Revoke prior replay proof and reengage coupled response/claim state atomically."""
         db, execution = self.session._connection, snapshot.execution
         for obligation in snapshot.obligations:
-            if obligation.lifecycle.deferred:
-                ResponseObligation.update(
-                    db, where="execution_id=? AND exact_target=?",
-                    parameters=(request.execution_id, obligation.exact_target),
-                    lifecycle=PendingResponse(), revision=obligation.revision + 1,
-                    reason_code=NoReasonCode(), updated_at_ms=self.session.now(obligation.updated_at_ms),
-                )
+            obligation.lifecycle.resume_response(self.session, obligation, request.execution_id)
         if execution.lifecycle.retry:
             for assignment in snapshot.assignments:
                 WakeAssignment.update(
@@ -150,7 +142,7 @@ class AttemptStore:
     ) -> Applied[StartResult]:
         if any(type(value) is not bool for value in (backend_done, process_dead, progress)):
             raise ValueError("attempt finality and progress must be booleans")
-        if phase.terminal:
+        if phase.items_with(TerminalAttempt, phase):
             raise IdentityConflict("terminal phases require atomic settlement")
         with self.session.writing():
             snapshot, attempt = self.require_fence(fence)

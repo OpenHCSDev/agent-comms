@@ -19,7 +19,7 @@ from agent_comms.comms import Comms
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms_hooks.session import started
-from agent_comms_hooks.watch import LapsedWatch, WatchClaim, WatchRecord
+from agent_comms_hooks.watch import LiveWatch, WatchClaim, WatchRecord
 
 
 def test_session_start_hook_exit_preserves_the_recorded_owner_for_install_pause(
@@ -90,7 +90,7 @@ def test_session_start_hook_exit_preserves_the_recorded_owner_for_install_pause(
             with ExitStack() as resources:
                 (paused,) = bridge.pause(resources)
                 assert paused.bridge.observed.owner == expected
-                assert isinstance(claim.state(), LapsedWatch)
+                assert isinstance(claim.state(), LiveWatch)
                 assert owner.poll() is None
             # Installer EOF stops the retired process; it grants no replay or
             # fallback launch. Waiting on its identity does not require parenthood.

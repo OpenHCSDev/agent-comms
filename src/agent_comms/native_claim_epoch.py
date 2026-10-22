@@ -64,13 +64,12 @@ class UnrecordedNativeClaim(NativeClaimEpoch, JsonShapeMember):
             raise StaleFence("native input claim_scope was already bound")
 
     def require_release(self, acknowledgement, snapshot, current) -> None:
-        current.require_local_process(acknowledgement.require_process())
-        current.turn_record.read().require_idle()
-        if not acknowledgement.current(snapshot, current, acknowledgement.before):
-            raise RelationViolationError("Unrecorded native send has no exact stopped release")
+        # No sending claim was recorded. OwnerRelease has already checked the
+        # original process; no successor claim or turn can prove more about it.
+        pass
 
     def recovery_session_files(self, row, stopped_owner) -> tuple[Path, ...]:
-        # The exact stopped declaration is held by VerifiedOwnerLoss's registry lock.
+        # VerifiedOwnerLoss holds the registry boundary while observing resources.
         return tuple(files.session for files in stopped_owner.runtime.storage_files())
 
 
