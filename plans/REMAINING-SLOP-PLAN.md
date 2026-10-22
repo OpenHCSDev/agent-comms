@@ -218,7 +218,7 @@ Waves 4 to 8 were written on 2026-10-21 and declared no phase in `plan_phases.py
 | failure_reason | 6.2 | no `FailureReason` in src | one unit |
 | hand_precedence | 6.1 | no integer `precedence`, `priority`, `classification_priority`, `proof_order` or `action_order` assignment in src | one unit, before failure_reason |
 | dead_tools | 8 | the two dead tools absent | any unit, one PR |
-| maintenance_admission | 9.1 | no hand `assert_open_unlocked()` in `agent_activity.py` or `wire_log.py` | the bus batch owners |
+| maintenance_gate | 9.1 | no hand `assert_open_unlocked()` in `agent_activity.py` or `wire_log.py` | the bus batch owners |
 | transcript_hold | 9.3 | no `transcripts_held` or `HOLD_TRANSCRIPTS` in the installer | claude-ai |
 | installer_file_identity | 9.2 | no string-typed `rewritten`, suffix `endswith`, or `name[:-4]` in the installer | claude-ai |
 | context_request_key | 4.2 | no `thread_name` in `context_store.py` | one unit (carry) |

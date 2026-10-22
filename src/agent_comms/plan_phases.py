@@ -394,7 +394,8 @@ class FormatIdentityPhase(RemainingSlopPhase):
     """4.7: the FieldCodec-derived schema is a stored format's identity."""
 
     evidence = PatternAbsent(
-        r"format_fingerprint|_canonical_schema|convert_format|source_fingerprints")
+        r"format_fingerprint|_canonical_schema|convert_format|source_fingerprints"
+    )
 
 
 class DirectoryFsyncPhase(RemainingSlopPhase):
@@ -422,7 +423,8 @@ class HandPrecedencePhase(RemainingSlopPhase):
 
     evidence = PatternAbsent(
         r"^\s*(precedence|priority|classification_priority|proof_order|action_order)"
-        r"(: ClassVar\[int\])? = [0-9]")
+        r"(: ClassVar\[int\])? = [0-9]"
+    )
 
 
 class FailureReasonPhase(RemainingSlopPhase):
@@ -436,10 +438,11 @@ class DeadToolsPhase(RemainingSlopPhase):
     """8: unreferenced tools."""
 
     evidence = PathsAbsent(
-        ("tools/codex_duplicate_execution_hook.py", "tools/prove_commander_dispatch.py"))
+        ("tools/codex_duplicate_execution_hook.py", "tools/prove_commander_dispatch.py")
+    )
 
 
-class MaintenanceAdmissionPhase(RemainingSlopPhase):
+class MaintenanceGatePhase(RemainingSlopPhase):
     """9.1: a carried file's kind refuses writers during maintenance; no hand-placed check."""
 
     evidence = PatternAbsent(
@@ -477,7 +480,7 @@ class TurnStatePhase(RemainingSlopPhase):
 
 
 class WireRenamesPhase(RemainingSlopPhase):
-    """4.6: our own wire keys equal the field names; no admission spellings remain."""
+    """4.6: our own wire keys equal the field names; no older spellings of the claim scope remain."""
 
     evidence = PatternAbsent(r"WireName\(\"admission")
 
@@ -485,10 +488,12 @@ class WireRenamesPhase(RemainingSlopPhase):
 class OwnedDispatchPhase(RemainingSlopPhase):
     """5.4: MroDispatch replaces the inbox double dispatch; one compact JSON encoder."""
 
-    evidence = AllEvidence((
-        PatternAbsent(r"class TurnInboxReceiver\b"),
-        PatternAbsent(r"separators=\(\",\", ?\":\"\)"),
-    ))
+    evidence = AllEvidence(
+        (
+            PatternAbsent(r"class TurnInboxReceiver\b"),
+            PatternAbsent(r"separators=\(\",\", ?\":\"\)"),
+        )
+    )
 
 
 class KindFamiliesPhase(RemainingSlopPhase):
@@ -496,7 +501,8 @@ class KindFamiliesPhase(RemainingSlopPhase):
 
     evidence = PatternAbsent(
         r"class (TagAction|ExecutionOrigin|WhenBusy|ControlClassification|MembershipChange"
-        r"|ViewKind)\b")
+        r"|ViewKind)\b"
+    )
 
 
 class RostersPhase(RemainingSlopPhase):
@@ -508,17 +514,18 @@ class RostersPhase(RemainingSlopPhase):
 class RecordsPhase(RemainingSlopPhase):
     """7: dead connectivity facets go; document updates return their result."""
 
-    evidence = AllEvidence((
-        PatternAbsent(r"ConnectivityFacet|observe_connectivity"),
-        PatternAbsent(
-            r"^\s*nonlocal\b",
-            (
-                "src/agent_comms/read_ledger.py",
-                "src/agent_comms/relationships.py",
-                "src/agent_comms/shared_ledger.py",
-                "src/agent_comms/input_disposition.py",
-                "src/agent_comms/owner_lifecycle.py",
+    evidence = AllEvidence(
+        (
+            PatternAbsent(r"ConnectivityFacet|observe_connectivity"),
+            PatternAbsent(
+                r"^\s*nonlocal\b",
+                (
+                    "src/agent_comms/read_ledger.py",
+                    "src/agent_comms/relationships.py",
+                    "src/agent_comms/shared_ledger.py",
+                    "src/agent_comms/input_disposition.py",
+                    "src/agent_comms/owner_lifecycle.py",
+                ),
             ),
-        ),
-    ))
-
+        )
+    )
