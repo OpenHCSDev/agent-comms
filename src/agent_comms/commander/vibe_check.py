@@ -128,7 +128,12 @@ class Escalation:
         return any(message.sender == self.message.sender for message in named)
 
 
-class AnswersOwedDegradation(Degradation):
+class BlocksRelease:
+    """A degraded signal the commander clears this turn, so a chokehold holds its units until
+    the signal is gone: a quote is the answer, never the relief."""
+
+
+class AnswersOwedDegradation(Degradation, BlocksRelease):
     """Messages to the commander are waiting past their window; each message is one sign."""
 
     @classmethod
@@ -157,10 +162,10 @@ class PlanStalledDegradation(Degradation):
         return int(math.log2(max(held, PlanStalled.window) / PlanStalled.window))
 
 
-class OverloadDegradation(Degradation):
-    """More owed orders, expired timers and unjudged edits per reader than one thread keeps up
-    with. Forking adds readers, so a commander relieves this by forking; load moves every beat,
-    so it stops the commander once per round while it stays over."""
+class OverloadDegradation(Degradation, BlocksRelease):
+    """More owed orders, expired timers and unjudged edits than one commander keeps up with.
+    Forks relieve it by judging and ordering, which lowers the debt; load moves every beat, so
+    it stops the commander once per round while it stays over."""
 
     ceiling: ClassVar[float] = 100.0
     round_seconds: ClassVar[int] = 30 * 60
@@ -168,7 +173,7 @@ class OverloadDegradation(Degradation):
     @classmethod
     def found(cls, comms: Comms, commander: str) -> tuple[Sign, ...]:
         load = Load.of(comms, commander)
-        if load.share < cls.ceiling:
+        if load.total < cls.ceiling:
             return ()
         return (Sign(cls, (int(time.time() // cls.round_seconds),),
                      f"{load}, over {cls.ceiling:.0f}"),)
@@ -347,6 +352,15 @@ class ChokeholdAnswer(UndatedStandingRule, declared_name=None):
         )[:1]
 
     @staticmethod
+    def blocking(comms: Comms, commander: str) -> tuple[Sign, ...]:
+        """The signs still degraded that a quote does not clear."""
+        return tuple(
+            sign
+            for member in Degradation.members_with(BlocksRelease)
+            for sign in member.found(comms, commander)
+        )
+
+    @staticmethod
     def held(comms: Comms) -> tuple[str, ...]:
         return tuple(
             name
@@ -361,7 +375,7 @@ class ChokeholdReleased(ChokeholdAnswer):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        if not cls.held(comms):
+        if not cls.held(comms) or ChokeholdAnswer.blocking(comms, commander):
             return ()
         return tuple(
             cls(answer) for answer in cls.newest(comms, commander) if Indictment.quoted(answer.body)
@@ -379,6 +393,38 @@ class ChokeholdReleased(ChokeholdAnswer):
 
     def line(self) -> str:
         return f"CHOKEHOLD RELEASED by {self.answer.seq}:{self.answer.message_id}"
+
+
+@dataclass(frozen=True)
+class ChokeholdHeld(ChokeholdAnswer):
+    """The answer quotes the indictment while load or owed answers stay degraded: the units stay
+    paused until those clear, and the commander is told which."""
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        if not cls.held(comms) or not cls.blocking(comms, commander):
+            return ()
+        return tuple(
+            cls(answer) for answer in cls.newest(comms, commander) if Indictment.quoted(answer.body)
+        )
+
+    def enforce(self, comms: Comms, commander: str) -> None:
+        verdict = f"Quoted, and still degraded: {self.answer.seq}:{self.answer.message_id}."
+        ChokeholdSender.burst_once(
+            comms,
+            commander,
+            (
+                verdict,
+                *(sign.line for sign in self.blocking(comms, commander)),
+                "Your units stay paused until these clear. Fork judges and answer; a quote is"
+                " not relief.",
+            ),
+            verdict,
+        )
+
+    def line(self) -> str:
+        return (f"CHOKEHOLD HOLDS: answer {self.answer.seq}:{self.answer.message_id} quoted, but"
+                " load or owed answers are still degraded")
 
 
 @dataclass(frozen=True)
