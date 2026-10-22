@@ -25,6 +25,26 @@ A silent or slow tool teaches the commander to work around it, and the workaroun
 
 **Done when** no code outside a store's owner opens its live file, and a lock held during an install is named in the install log within seconds.
 
+### 1b. A head can be judged for a plan phase, not only for an order
+
+`judge head` (`commander/judge.py:166`) accepts only an order the commander holds. A PR that serves a plan phase directly (claude-ai's #2601, the phase-evidence PR #2595, commander fixes such as #2548) can never get the `agent-comms/review` verdict, so the merge queue's review-verdict job refuses it forever; the only way through was the admin bypass. The gate is right; the verdict knows one kind of purpose too few.
+
+- What a reviewed head serves is a family: an order (today's `ReviewedHeadVerdict` on a Todo) and a plan phase (a `PlanPhase` declared in `plan_phases.py`). `judge head` takes either and records the verdict through the same Core tool, which posts `agent-comms/review`.
+- No new string or roster names the purpose: the phase is found by its declared name in the `PlanPhase` family.
+
+**Done when** `judge head ReviewQueuePhase SHA --serves "..."` posts `agent-comms/review` on that head and the queue's review-verdict job passes it.
+
+### 1c. Installs never let a second runtime change the live stores
+
+Found 2026-10-22: a store writer reconciles any schema difference on open (`coordination_database.py:262`, `typed_table.py:1812`, `goal_history.py:156`, `cli_bridges/shared.py:170`), so any newer-code process that opens the live bus migrates it, outside maintenance and before the backup. Install 53 left the live coordination store on the new schema and aborted; the old runtime then refused the store and every unit failed to restart.
+
+- `reconcile_schema` takes the writer, and inside its existing schema-differs branch asks `writer.require_schema_change()`: allowed only while this process holds the bus's maintenance hold (`MaintenanceStatus.require_held_by(holder)`: the open member refuses, a held member compares nonces). One rule for every StoreWriter; fresh empty stores still create their schema.
+- The installer reconciles each declared store under the hold, after the backup, with the staged runtime, so owners start against stores that already match.
+- Step dry runs and `before_stop` run on the practice copy and under the hold, never on the live root before it.
+- `maintenance_barrier.py:452` `ingress_async` stops holding the shared wire lock across its caller's awaits (the open test `test_no_wire_lock_scope_or_yielded_caller_contains_await` names it); held across waits, the fleet's shared locks starved installs 52 and 53 of the exclusive lock.
+
+**Done when** a newer runtime opening the live bus outside an install fails loudly naming the store and the hold it lacks, and an install with running units completes without anyone stopping them by hand.
+
 ### 2. Commander verbs take a fixed, small time
 
 - Profile one verb end to end on the live bus with nothing else running.
