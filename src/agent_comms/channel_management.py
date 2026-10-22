@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, ClassVar
 from enum import Enum
 from pathlib import Path
 
+from .locked_store import BusLockFile
 from .active_route import guard_original_root_write
 from .bus_publication import AgentOrigin
 from .channel_targets import ChannelTarget, Tag
@@ -131,7 +132,7 @@ class ChannelManagement:
         self.root = root
         self.registry = registry
         self.bus = bus
-        self._wire_lock_path = root / "wire"
+        self._wire_lock_path = BusLockFile.path_in(root)
         self.threads = threads
         self.catalog = threads.catalog
 

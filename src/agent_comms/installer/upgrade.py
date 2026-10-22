@@ -36,6 +36,7 @@ from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
+from ..locked_store import BusLockFile
 from agent_comms.active_route import ActiveRoute, active_route_path, route_new_bus
 from agent_comms.cli_commands import InstallResult, ThreadsResult, WhoResult
 from agent_comms.cli_result import CliResult
@@ -549,7 +550,7 @@ def before_stop(
     root: Path, pending: tuple[type[Carry], ...], stack: Stack, tree: TargetTree
 ) -> tuple[StepRun, ...]:
     """What the running installation needs before its own stop command reads the bus."""
-    with _store_lock(root / "wire"):
+    with _store_lock(BusLockFile.path_in(root)):
         return tuple(StepRun(step.name(), carry(step, root, stack, tree, "--before-stop", "--apply"))
                      for step in pending)
 
@@ -559,7 +560,7 @@ def carry_all(
 ) -> tuple[StepRun, ...]:
     results = []
     for step in pending:
-        with _store_lock(root / "wire"):
+        with _store_lock(BusLockFile.path_in(root)):
             results.append(StepRun(step.name(), carry(step, root, stack, tree, "--apply")))
     return tuple(results)
 

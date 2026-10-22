@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 from uuid import uuid4
 
+from .locked_store import BusLockFile
 from agent_comms import field_codec
 
 from .active_route import resolve_comms_route
@@ -278,7 +279,7 @@ class OwnerLifecycle:
         self.bus = bus
         self.goals = goals
         self.messaging = messaging
-        self._wire_lock_path = root / "wire"
+        self._wire_lock_path = BusLockFile.path_in(root)
         self.maintenance = MaintenanceBarrier(registry.store.path)
         self.releases = OwnerReleaseStore(root)
 

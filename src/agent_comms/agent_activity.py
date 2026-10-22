@@ -10,7 +10,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .locked_store import RegistryFile
+from .locked_store import RegistryFile, BusLockFile
 from .native_input_owner import RegistryOwner
 from .notification_progress import AcknowledgedProgress
 
@@ -115,7 +115,7 @@ class LiveRecipientActivity(RecipientActivity):
 class AgentActivity:
     def __init__(self, root: Path, registry: Registration):
         self.registry = registry
-        self._wire_lock_path = root / "wire"
+        self._wire_lock_path = BusLockFile.path_in(root)
         self.activity = ActivityStore.at(root)
         self.runtime_info = RuntimeInfoStore.at(root)
 

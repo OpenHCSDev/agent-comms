@@ -49,7 +49,7 @@ from .errors import (
     StoredHistoryUnreadable,
 )
 from .field_codec import FieldCodec, MalformedRecord
-from .locked_store import DurableFile, RegistryFile, WireWakeFile
+from .locked_store import DurableFile, RegistryFile, WireWakeFile, BusLockFile
 from .maintenance_barrier import MaintenanceBarrier
 from .messages import Message
 from .private_bus_checkpoint import CheckedRead, WritableCheckpoint
@@ -665,7 +665,7 @@ class WireLog(DurableFile, WireWakeFile, StoreLockOwner):
         from .retained_task_facts import RetainedTaskFacts
 
         with (
-            _store_lock(self.path.parent / "wire", mode=SharedLock()),
+            _store_lock(BusLockFile.path_in(self.path.parent), mode=SharedLock()),
             self.checked_read() as source,
         ):
             snapshot = registry.snapshot()

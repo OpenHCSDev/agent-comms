@@ -17,6 +17,7 @@ from pathlib import Path
 from threading import RLock
 from typing import TYPE_CHECKING, ClassVar, Literal, Annotated
 
+from .locked_store import BusLockFile
 from agent_comms import field_codec
 
 from . import presentation
@@ -694,7 +695,7 @@ class ThreadRelationships:
         self.registry = registry
         self.bus = bus
         self.views = views
-        self._wire_lock_path = root / "wire"
+        self._wire_lock_path = BusLockFile.path_in(root)
         self.store = RelationshipStore.at(root)
         self._lock = RLock()
         self._recent_revision: FileObservation = MissingFile()

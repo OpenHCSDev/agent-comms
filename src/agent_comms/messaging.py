@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from pathlib import Path
 
+from .locked_store import BusLockFile
 from .active_route import guard_original_root_write
 from .bus_publication import AgentOrigin, HumanOrigin
 from .change_report import NoChangeReport, ReportEvidence
@@ -36,7 +37,7 @@ class Messaging:
         self.root = root
         self.registry = registry
         self.bus = bus
-        self._wire_lock_path = root / "wire"
+        self._wire_lock_path = BusLockFile.path_in(root)
 
     def send(
         self,

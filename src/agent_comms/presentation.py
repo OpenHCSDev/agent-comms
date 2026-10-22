@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 
+from .locked_store import BusLockFile
 from . import relationships
 from .activity import Activity, ActivityData, ActivityState, ObservedActivity
 from .audience_manifest import FrozenRecipient
@@ -439,7 +440,7 @@ class BusPresentation:
         self.agents = agents
         self.goals = goals
         self._path = bus.log.path
-        self._wire_lock_path = bus.log.path.parent / "wire"
+        self._wire_lock_path = BusLockFile.path_in(bus.log.path.parent)
         self._display_indexes: dict[str, BusDisplayIndex] = {}
 
     def display_index(self, viewer: str) -> BusDisplayIndex:
