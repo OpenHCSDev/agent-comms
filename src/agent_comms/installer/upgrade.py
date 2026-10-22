@@ -1015,9 +1015,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[t
         if head != current:
             installed.commands.run("git", "-C", checkout, "reset", "-q", "--keep", current)
             Checkout(checkout).prepare()
-        # Republish only when current moved: the outgoing runtime may predate this publisher.
-        if LaunchRuntime.installed().prefix.resolve() != installed.runtime.prefix.resolve():
-            installed.publish()
+        installed.publish()
         maintenance.clear(restored_hold)
         started = installed.start(root, running)
         print(f"install: restored after failure ({type(error).__name__}: {error}); "
