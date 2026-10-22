@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from agent_comms.installer.upgrade import CarriedPass, LiveRun, Upgrade
 
 
-@dataclass(frozen=True)
+@dataclass
 class CarriedInstallError(BaseException):
     """Completion failed after publication; the root did not roll back."""
 

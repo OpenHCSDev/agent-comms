@@ -1,4 +1,5 @@
 """Install arguments retain the caller's paths across the target child's cwd."""
+from dataclasses import replace
 from pathlib import Path
 
 from agent_comms.cli import build_parser
@@ -29,7 +30,9 @@ def test_install_paths_decode_before_the_target_child_changes_directory(
 
     # This is the payload InstallRun.launch sends to the target's installer.
     install = InstallRun(command, private_directory / "bus", child, "a" * 40)
-    payload = FieldCodec.encode_record(install)
+    alias = private_directory / "target-alias"
+    alias.symlink_to(child, target_is_directory=True)
+    payload = FieldCodec.encode_record(replace(install, scratch=alias))
     monkeypatch.chdir(child)
     assert FieldCodec.decode(InstallRun, payload) == install
 

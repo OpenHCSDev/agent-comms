@@ -21,7 +21,7 @@ from typing import Annotated, ClassVar, TextIO, cast
 import agent_comms.installer
 from agent_comms.cli_commands import InstallCliCommand, InstallResult
 from agent_comms.comms import client_wire
-from agent_comms.field_codec import FieldCodec, Id128Text, PathText
+from agent_comms.field_codec import AbsolutePathText, FieldCodec, Id128Text, PathText
 from agent_comms.installer.outcome import (
     CarriedInstallError,
     CrashedInstall,
@@ -152,7 +152,7 @@ class InstallReport(ServiceSender, MroDispatch):
 class InstallRun:
     command: InstallCliCommand
     root: Annotated[Path, PathText]
-    scratch: Annotated[Path, PathText]
+    scratch: Annotated[Path, AbsolutePathText]
     target: str
 
     @classmethod
@@ -162,7 +162,7 @@ class InstallRun:
                      f"{command.to}^{{commit}}").strip()
         parent = command.installer.scratch(StorageRule.load(root))
         parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        scratch = Path(tempfile.mkdtemp(dir=parent, prefix="install-"))
+        scratch = AbsolutePathText.from_text(tempfile.mkdtemp(dir=parent, prefix="install-"))
         request = cls(command, root, scratch, target)
         TargetTree.from_run(request).add()
         return request
