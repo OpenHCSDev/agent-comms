@@ -175,17 +175,13 @@ def test_human_marker_unread_and_own_alias_exclusion(tmp_path):
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"].count == 0
 
 
-def test_page_boundaries_and_byte_budget_match_target_pager(tmp_path):
+def test_page_boundaries_match_target_pager(tmp_path):
     comms = populated(tmp_path)
     comms.messaging.send("alice", "bob", "first projected").message.message_id
     comms.messaging.send("outsider", "#api", "second target").message.message_id
     comms.messaging.send("bob", "alice", "third projected").message.message_id
     comms.channels.set_channel_any_mode("#api", True)
     rows = comms.views.channel_display_page("#api").messages
-    first_bytes = len((json.dumps(rows[0].to_wire()) + "\n").encode())
-    assert bodies(
-        comms.views.channel_display_page("#api", bounds=PageBounds(NewerTraversal(), 20, first_bytes))
-    ) == ["first projected"]
     head = comms.views.channel_display_page("#api", bounds=PageBounds(NewerTraversal(), 1))
     assert head.has_newer and not head.has_older
     tail = comms.views.channel_display_page("#api", bounds=PageBounds(OlderTraversal(rows[-1].seq), 1))

@@ -138,7 +138,6 @@ class TestCliSuccess:
         assert SendableRole.names() == ("conversation", "notice")
 
     def test_acknowledge_marks_only_its_references_beside_a_reader(self, cli, tmp_path):
-        import fcntl
         import threading
         from agent_comms.comms import wire
 
@@ -148,10 +147,9 @@ class TestCliSuccess:
             cli(tmp_path, "send", "--from", "a", "--to", "b", "--body", body)
         comms = wire(tmp_path)
         second = comms.bus.inbox("b")[1]
-        # A page reader holds the shared wire lock; an acknowledgment must not
+        # A page reader holds an open bus snapshot; an acknowledgment must not
         # wait for it, so it never queues readers behind an exclusive request.
-        with open(tmp_path / ".wire.lock", "rb") as reader:
-            fcntl.flock(reader, fcntl.LOCK_SH)
+        with comms.bus.bus.reading():
             acknowledged = []
             worker = threading.Thread(target=lambda: acknowledged.append(
                 comms.messaging.acknowledge("b", (second.reference,))))
