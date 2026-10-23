@@ -320,7 +320,7 @@ def test_absent_history_leaves_schema_repair_to_reconcile(tmp_path):
     from cutover.carry_bus_history import BusHistory, HistoryOffset
 
     from agent_comms.bus import Bus, BusSchema, PublicRecord
-    from agent_comms.bus_tables import Addressed
+    from agent_comms.messages import (Addressed)
     from agent_comms.errors import RelationViolationError
     from agent_comms.installer.backup import bus_files
     from agent_comms.installer.carry import Carried

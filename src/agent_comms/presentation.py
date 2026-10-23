@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .activity_clocks import ChannelActivity
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
@@ -15,7 +16,6 @@ from . import relationships
 from .activity import Activity, ActivityData, ActivityState, ObservedActivity
 from .audience_manifest import FrozenRecipient
 from .bus import Bus, BusSnapshot
-from .bus_activity_index import ChannelActivity
 from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
 from .cli_result import CliResult
