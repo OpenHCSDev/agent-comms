@@ -58,6 +58,7 @@ def test_root_runtime_attachment_family(tmp_path):
 def test_comms_creates_a_private_root_and_refuses_foreign_stores(tmp_path):
     created = wire(tmp_path / "created")
     assert RootRuntimeStore.at(created.root).read().prefix == LaunchRuntime.running().prefix
+    assert Bus(Bus.path_in(created.root)).revision() == 0
 
     root = tmp_path / "bus"
     other = LaunchRuntime(tmp_path / "other/bin/python")
