@@ -786,7 +786,7 @@ class TableSchema(ABC):
     The file's schema is derived from its member rows' declarations. Whether a stored
     schema that differs is rebuilt or refused is the file's parent: DerivedTables or
     DurableTables. A marker class every table of a file inherits names its members;
-    a store names its rows.
+    a store names its rows' marker.
     """
 
     __slots__ = ()
@@ -2269,16 +2269,22 @@ class WalStore(StoreWriter):
             self._retire_committed(lifetime)
 
 
+class StoreRows:
+    """The marker a store's rows inherit; the store names it once and derives its rows."""
+
+    __slots__ = ()
+
+
 class TypedStore(WalStore, TableSchema):
     """One owner-only SQLite file whose schema its TypedTable rows declare.
 
-    Members name the file and their rows, and inherit DurableStore or DerivedStore.
+    Members name the file and their rows' marker, and inherit DurableStore or DerivedStore.
     A transaction installs an absent store; a snapshot reads it as an empty in-memory
     schema without creating storage. Readers refuse a schema that differs; the
     writer reconciles it as the member's kind of file does.
     """
 
-    rows: ClassVar[tuple[type[TypedTable], ...]]
+    tables: ClassVar[type[StoreRows]]
     root: Path
 
     @property
@@ -2287,7 +2293,7 @@ class TypedStore(WalStore, TableSchema):
 
     @classmethod
     def schema_rows(cls) -> tuple[type[TypedTable], ...]:
-        return cls.rows
+        return TypedTable.members_with(cls.tables)
 
     @classmethod
     @abstractmethod
@@ -2296,7 +2302,7 @@ class TypedStore(WalStore, TableSchema):
 
     @classmethod
     def declares_schema(cls) -> bool:
-        return "rows" in vars(cls)
+        return "tables" in vars(cls)
 
     @contextmanager
     def _open_writer(self, *, check_same_thread: bool = True) -> Iterator[sqlite3.Connection]:

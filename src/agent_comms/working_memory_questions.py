@@ -19,7 +19,10 @@ class SpanAnswer(DeclaredFamily, affix="Answer"):
 
 
 class SpanKind(SpanAnswer):
-    follow_ups: ClassVar[tuple[type[SpanQuestion], ...]] = ()
+    @classmethod
+    def follow_ups(cls) -> tuple[type[SpanQuestion], ...]:
+        """The questions asked of a span after its kind is known."""
+        return ()
 
 
 class ObligationAnswer(SpanAnswer):
@@ -132,17 +135,21 @@ class KindQuestion(SpanQuestion):
         return cls.require_answer(answer).section
 
 
-class ObligationQuestion(SpanQuestion):
+class RuleQuestion(SpanQuestion, declared_name=None):
+    """A question asked only of a rule span; each one declares itself one."""
+
+
+class ObligationQuestion(RuleQuestion):
     answer_family = ObligationAnswer
     instructions = "What obligation does this literal rule express?"
 
 
-class RuleScopeQuestion(SpanQuestion):
+class RuleScopeQuestion(RuleQuestion):
     answer_family = RuleScopeAnswer
     instructions = "What scope does the literal rule explicitly establish?"
 
 
-class RelationToOwnerRulesQuestion(SpanQuestion):
+class RelationToOwnerRulesQuestion(RuleQuestion):
     answer_family = OwnerRelationAnswer
     instructions = "Compare the literal rule to the supplied typed owner rules. Do not invent rules."
 
@@ -159,14 +166,20 @@ class FulfilledQuestion(SpanQuestion):
 
 class RuleSpan(SpanKind):
     criteria = "States what the agent must or must not do, or explicitly prefers."
-    follow_ups = (ObligationQuestion, RuleScopeQuestion, RelationToOwnerRulesQuestion)
     section = "Obeys"
+
+    @classmethod
+    def follow_ups(cls) -> tuple[type[SpanQuestion], ...]:
+        return SpanQuestion.members_with(RuleQuestion)
 
 
 class CommitmentSpan(SpanKind):
     criteria = "States something the agent promises or intends to do."
-    follow_ups = (FulfilledQuestion,)
     section = "Promised"
+
+    @classmethod
+    def follow_ups(cls) -> tuple[type[SpanQuestion], ...]:
+        return (FulfilledQuestion,)
 
 
 class OtherSpan(SpanKind):

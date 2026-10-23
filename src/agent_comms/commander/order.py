@@ -108,8 +108,6 @@ from agent_comms.tools import (
     TodoList,
 )
 
-OUTGOING = DirectiveText.OUTGOING  # every commander text passes each one
-
 
 def refuse(text, *families):
     """Core's text families decide what the commander may write; nothing is recorded when one refuses."""
@@ -300,7 +298,7 @@ class OrderFile:
         return f'{self.defect}\n{self.why_stupid}{reason}'
 
     def problems_found(self, clean: bool) -> list[str]:
-        wording: tuple[type[OrderWords], ...] = (*OUTGOING, OrderText)
+        wording: tuple[type[OrderWords], ...] = (*DirectiveText.checks(), OrderText)
         problems = [f'{name}: {error}; fix: state the defect plainly without wording rules on code'
                     for name, text in (('defect', self.defect), ('why_stupid', self.why_stupid))
                     for family in wording
@@ -641,7 +639,7 @@ class Commander(CommanderContext):
     def say(self, units: str, body_file: str,
             answers: tuple[MessageReference, ...] = ()) -> None:
         body = open(body_file).read()
-        refuse(body, *OUTGOING)
+        refuse(body, *DirectiveText.checks())
         print(self.post(VerdictAudience(tuple(units.split(','))), body.rstrip(), answers))
 
     def close(self, pid, works, artifact=''):
@@ -684,7 +682,7 @@ class Commander(CommanderContext):
                  answers: tuple[MessageReference, ...] = ()) -> None:
         """Core records the strike on the task's Todo, then posts it to #comms."""
         refuse(strike.reason,
-            *OUTGOING)  # posted to #comms, so refused before Core records the strike
+            *DirectiveText.checks())  # posted to #comms, so refused before Core records the strike
         if (self.call(CommsChangeProblemTool(problem=todo.id, operation=strike))
                 .todo.revision == todo.revision):
             return
@@ -741,7 +739,8 @@ class Commander(CommanderContext):
         if not live:
             sys.exit(at.refusal(task))
         voided = live[-1]
-        refuse(why, *OUTGOING)  # posted to #comms, so refused before Core records the void
+        # posted to #comms, so refused before Core records the void
+        refuse(why, *DirectiveText.checks())
         self.call(CommsChangeProblemTool(problem=task, operation=VoidStrikeTodo(
             todo.revision, self.incarnation, voided, why)))
         unit = voided.previous.owner
@@ -757,7 +756,8 @@ class Commander(CommanderContext):
         The reason goes on the public record and to the unit that held it."""
         todo = self.comms.goals.todos.get(pid)
         todo.order.require_withdrawal()
-        refuse(why, *OUTGOING)  # posted to #comms and the holder, so refused before Core records it
+        # posted to #comms and the holder, so refused before Core records it
+        refuse(why, *DirectiveText.checks())
         previous = todo.holder_state.previous_assignment()
         self.call(CommsChangeProblemTool(problem=pid, operation=WithdrawTodo(
             todo.revision, self.incarnation, previous, why,

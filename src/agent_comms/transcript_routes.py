@@ -14,11 +14,15 @@ from .errors import RelationViolationError
 from .field_codec import MalformedRecord
 from .private_path import FileObservation, FileRevision
 from .routing import TurnRouting
-from .typed_table import Column, DurableStore, TypedTable, WithoutRowid
+from .typed_table import Column, DurableStore, StoreRows, WithoutRowid
+
+
+class TranscriptRoutesRows(StoreRows):
+    """The tables of TranscriptRoutes; each row declares itself one."""
 
 
 @dataclass(frozen=True)
-class TranscriptRoute(WithoutRowid):
+class TranscriptRoute(TranscriptRoutesRows, WithoutRowid):
     session_file: Annotated[str, Column(primary_key=True)]
     entry_id: Annotated[str, Column(primary_key=True)]
     routing: TurnRouting
@@ -29,7 +33,7 @@ class TranscriptRoute(WithoutRowid):
 
 
 @dataclass(frozen=True)
-class InputDisplay(WithoutRowid):
+class InputDisplay(TranscriptRoutesRows, WithoutRowid):
     """Owner-authored presentation for one native input; None text means internal."""
 
     native_id: Annotated[str, Column(primary_key=True)]
@@ -88,7 +92,7 @@ class TranscriptRoutes(DurableStore):
 
     root: Path
     filename: ClassVar[str] = "transcript_routes.sqlite3"
-    rows: ClassVar[tuple[type[TypedTable], ...]] = (TranscriptRoute, InputDisplay)
+    tables = TranscriptRoutesRows
 
     def revision(self) -> FileObservation:
         return FileRevision.capture(self.source_paths(self.root)[0])
