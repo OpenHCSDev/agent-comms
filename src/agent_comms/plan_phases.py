@@ -431,7 +431,7 @@ class DuplicatesPhase(MultipleInheritancePhase):
                 ),
                 (
                     ("annotation_disclosure", "disclosure_for"),
-                    ("pi_payloads.py", "turn_context.py"),
+                    ("pi_payloads.py", "turn_context.py", "annotation_disclosure.py"),
                 ),
             )
         )

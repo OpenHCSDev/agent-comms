@@ -943,6 +943,7 @@ class NativeAnnotations(NativeMessages):
                 return PiMessage.from_wire(message).disclosure_for(span)
         raise ValueError("Annotation names no original native message")
 
+
 @dataclass(frozen=True, kw_only=True)
 class TranscriptSegment(NativeAnnotations, MeasuredNativeSegment):
     keyframe_interval: ClassVar[int] = 32
