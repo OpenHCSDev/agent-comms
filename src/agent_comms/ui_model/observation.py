@@ -889,8 +889,8 @@ class ViewReading(Observation[ObserveViews]):
 class ServiceResult(ABC):
     """What the service sends; each declares how the UI side receives it."""
 
-    def retire_request(self, pending: dict[int, ReadRequest], request: ReadRequest) -> None:
-        pending.pop(request.request_id)
+    def retire_request(self, service: ObservationService, request: ReadRequest) -> None:
+        service.pending.pop(request.request_id)
 
     @abstractmethod
     def received(self, process: ObservationProcess, observed: list[Observed]) -> None: ...
@@ -924,9 +924,11 @@ class ReadBusy(ServiceResult):
     """Source busy: the original read remains pending, not a failed input."""
 
     request_id: int
+    # SQLite announces no lock release, so the service tries the read again after this pause.
+    retry_seconds: ClassVar[float] = 0.2
 
-    def retire_request(self, pending: dict[int, ReadRequest], request: ReadRequest) -> None:
-        pass
+    def retire_request(self, service: ObservationService, request: ReadRequest) -> None:
+        service.busy.set()
 
     @property
     def title(self) -> str:
@@ -1171,6 +1173,8 @@ class ObservationService:
         self.connection = connection
         self.interest: ObservationInterest = LiveObservationInterest()
         self.changed = asyncio.Event()
+        # A read answered busy, until the service tries the pending reads again.
+        self.busy = asyncio.Event()
         self.revision: ReadState = NoRevision()
         self.observe_due = True
         # Store reads the UI awaits, in arrival order, until served or cancelled.
@@ -1237,7 +1241,7 @@ class ObservationService:
             attempted.add(request_id)
             answer = request.answer(self.comms)
             self.send(answer)
-            answer.retire_request(self.pending, request)
+            answer.retire_request(self, request)
             await asyncio.sleep(0)
 
     async def observe(self, attempted: set[int]) -> None:
@@ -1254,6 +1258,14 @@ class ObservationService:
             await asyncio.sleep(WireRevision.expiry_seconds - now % WireRevision.expiry_seconds)
             self.observe_again()
 
+    async def retry_busy(self) -> None:
+        """A busy source frees without a commit, so no watched source changes."""
+        while not self.closed:
+            await self.busy.wait()
+            self.busy.clear()
+            await asyncio.sleep(ReadBusy.retry_seconds)
+            self.changed.set()
+
     async def run(self) -> None:
         loop = asyncio.get_running_loop()
         # Request and watcher defects belong to the service process boundary;
@@ -1262,6 +1274,7 @@ class ObservationService:
             loop.add_reader(self.connection.fileno(), self.receive)
             watching = self.tasks.create_task(self.watch())
             expiring = self.tasks.create_task(self.expire())
+            retrying = self.tasks.create_task(self.retry_busy())
             try:
                 while not self.closed:
                     await self.changed.wait()
@@ -1276,6 +1289,7 @@ class ObservationService:
                 loop.remove_reader(self.connection.fileno())
                 watching.cancel()
                 expiring.cancel()
+                retrying.cancel()
                 self.pending.clear()
                 self.comms.views.transcript_reads.close()
 
