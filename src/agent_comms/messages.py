@@ -189,6 +189,7 @@ class HeldResources(BusProjectionTables):
         except (ClaimTransitionError, IdentityConflict) as error:
             raise RelationViolationError("Committed claim transition is inconsistent.") from error
 
+
 class ProjectionPass(ABC, ProjectionSource):
     """How one projection pass writes the rows its records derive: an append writes its
     few rows at once."""
