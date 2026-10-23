@@ -281,7 +281,15 @@ already establishes the frozen recipient incarnation. All sixteen counted
 replays match: a 100-reply page loads exactly 100 full deliveries, with 170–601
 message reads and 148–363 milliseconds in the completed counted replay.
 An earlier cold cell hit its one-second cutoff; that failed run is retained.
-Neither replay establishes constant cost. Ordinary participant pages retain
+That comparison was against the rejected full-manifest replacement, not the
+original cache. A paired source replay of the actual pre-change
+`received(source=DirectReplySource)` query on the same four saved-range
+100-reply pages costs 52–105 milliseconds with 100 delivery decodes. The new
+query costs 101–218 milliseconds with 170–601 message reads plus 100 delivery
+decodes: 1.3–4.2 times slower in those cases. Removing the stored answer closes
+the maintenance defect; this direct-query runtime regression remains owned by
+the control-plane worker. Neither replay establishes constant cost.
+Ordinary participant pages retain
 their SQL limit. Conversation pages query each declared `ParticipantSource`
 member up to that limit, then combine the bounded candidates before decoding.
 The retained one-message case takes 50 SQLite instructions on both short and
