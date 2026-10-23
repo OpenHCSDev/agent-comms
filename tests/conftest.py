@@ -11,11 +11,6 @@ import sysconfig
 import tempfile
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
-from pydantic import JsonValue
-from agent_comms.field_codec import FieldCodec
-from agent_comms.pi_payloads import PiMessage
-from agent_comms.native_entries import SessionEntry
-from agent_comms.tool_declaration import ToolDeclaration
 from contextlib import AsyncExitStack, contextmanager
 from pathlib import Path
 
@@ -55,25 +50,25 @@ pytest_plugins = (goal_owner_fixture.__name__,)
 class TranscriptRecords:
     """Fixed test time, projected through each record's declared constructor."""
 
-    def __init__(self) -> None:
+    def __init__(self):
         from agent_comms.field_codec import RecordedTimestamp
 
         self.timestamp = RecordedTimestamp("2026-10-01T00:00:00.000Z")
 
-    def event[T](self, declaration: Callable[..., T], *args: str, **facts: JsonValue | ToolDeclaration) -> T:
+    def event(self, declaration, *args, **facts):
         return declaration(*args, timestamp=self.timestamp.at.timestamp(), **facts)
 
-    def entry[T](self, declaration: Callable[..., T], **facts: JsonValue | PiMessage) -> T:
+    def entry(self, declaration, **facts):
         return declaration(timestamp=self.timestamp, **facts)
 
-    def message(self, payload: dict[str, JsonValue], **coordinates: JsonValue) -> dict[str, JsonValue]:
+    def message(self, payload, **coordinates):
         from agent_comms.native_entries import MessageEntry
         from agent_comms.pi_payloads import PiMessage
 
         entry = self.entry(MessageEntry, message=PiMessage.from_wire(payload), **coordinates)
-        return {**FieldCodec.decode(dict[str, JsonValue], entry.to_wire()), "message": payload}
+        return {**entry.to_wire(), "message": payload}
 
-    def session(self, **coordinates: JsonValue) -> SessionEntry:
+    def session(self, **coordinates):
         from agent_comms.native_entries import SessionEntry
 
         return self.entry(SessionEntry, **coordinates)
@@ -120,7 +115,7 @@ _MANAGED_RUNTIME_ENVIRONMENT = frozenset({
 })
 
 
-async def await_event_or_task[Result, Work](event: Awaitable[Result], task: asyncio.Task[Work]) -> Result:
+async def await_event_or_task(event: Awaitable[object], task: asyncio.Task) -> object:
     """A producer failure ends its event wait with the original exception."""
     observed = asyncio.ensure_future(event)
     try:

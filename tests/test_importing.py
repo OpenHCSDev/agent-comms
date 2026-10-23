@@ -1,4 +1,7 @@
 
+from agent_comms.comms import Comms
+from agent_comms.registration import Registration
+from agent_comms.thread_text import ThreadText
 from agent_comms.bus import Bus
 import asyncio
 import json
