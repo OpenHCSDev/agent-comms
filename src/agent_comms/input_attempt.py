@@ -168,7 +168,8 @@ class InputAttempt(LifecycleCapability, DeclaredFamily, affix="Input"):
 class InputDeliveryScope(DeclaredFamily, affix="InputDeliveryScope"):
     """The queue evidence available to this delivery read, not an input outcome."""
 
-    owner_queue: ClassVar[bool] = False
+    pending_label: ClassVar[str] = "unconfirmed"
+    notices_label: ClassVar[str] = "historical notices"
 
     @abstractmethod
     def historical_notice(self, row: StoredInput) -> bool:
@@ -184,7 +185,8 @@ class UnobservedInputDeliveryScope(NullMember, InputDeliveryScope, declared_name
 @dataclass(frozen=True)
 class OwnerQueueInputDeliveryScope(InputDeliveryScope, declared_name="owner_queue"):
     keys: frozenset[str]
-    owner_queue: ClassVar[bool] = True
+    pending_label: ClassVar[str] = "awaiting start"
+    notices_label: ClassVar[str] = "earlier notices"
 
     def historical_notice(self, row: StoredInput) -> bool:
         return row.key not in self.keys
