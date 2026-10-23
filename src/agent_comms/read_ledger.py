@@ -32,7 +32,7 @@ from .read_basis import (
 )
 from .recorded_bus import NoRecordedBus, RecordedBus, RecordedBusIdentity
 from .sealed import Sealed
-from .store_files import SharedLock
+from .store_files import DependentStateTier, SharedLock
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 
@@ -110,7 +110,7 @@ class ReadDocument:
         )
 
 
-class ReadLedger(Sealed, ThreadOwnedState, CarriedDocument[ReadDocument]):
+class ReadLedger(Sealed, ThreadOwnedState, CarriedDocument[ReadDocument], DependentStateTier):
     filename = "read_ledger.json"
 
     record_type = ReadDocument

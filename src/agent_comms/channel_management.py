@@ -300,6 +300,6 @@ class ChannelManagement:
 
     def _apply_tag_change(self, name: str, replacement: str | None,
                              cohort: tuple[Thread, ...]) -> None:
-        with self.catalog.editing() as document:
+        with self.registry.store.locked(), self.catalog.editing() as document:
             document.change_tag(name, replacement)
             self.registry.change_tag(cohort, name, replacement)
