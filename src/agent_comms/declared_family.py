@@ -89,7 +89,10 @@ class _FamilyMeta(AutoRegisterMeta, ABCMeta):
         return cast(_FamilyMeta, cls)
 
     @staticmethod
-    def _register_class(cls, key, config, replaces=None):
+    def _register_class(
+        cls: type[DeclaredFamily], key: Hashable, config: RegistryConfig,
+        replaces: object = None,
+    ) -> type | None:
         # Check constructed declarations; lazy discovery cannot run inside class construction.
         cls.validate_selection(dict.values(config.registry_dict))
         return AutoRegisterMeta._register_class(cls, key, config, replaces=replaces)
@@ -253,7 +256,10 @@ class UniqueExternalSelector(ABC):
     @classmethod
     def validate_selection(cls, members: Iterable[type[DeclaredFamily]]) -> None:
         for member in members:
-            if member.declared_name != cls.declared_name and member.selection_key() == cls.selection_key():
+            if (
+                member.declared_name != cls.declared_name
+                and member.selection_key() == cls.selection_key()
+            ):
                 raise DuplicateRegistryKeyError(
                     f"{cls.__name__} and {member.__name__} declare the same "
                     f"external selector {cls.selection_key()!r}"
