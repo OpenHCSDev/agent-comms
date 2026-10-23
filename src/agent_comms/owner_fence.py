@@ -39,7 +39,7 @@ class OwnerFence:
     def authority(self) -> AttemptAuthority:
         return AttemptAuthority(
             self.execution_id, self.attempt_ordinal, self.owner_lookup,
-            self.owner_generation, FenceTokenDigest.of(self.token),
+            self.owner_generation, _digest(self.token),
         )
 
     def __post_init__(self) -> None:
@@ -56,11 +56,11 @@ def prepare_fence_token() -> str:
     return secrets.token_hex(32)
 
 
-class FenceTokenDigest(MroDispatch):
-    @classmethod
-    def of(cls, token: str) -> str:
-        return cls.handler_for(type(token))(token)
+def _digest(token: str) -> str:
+    return FenceTokenDigest.handler_for(type(token))(token)
 
+
+class FenceTokenDigest(MroDispatch):
     @handles(str)
     @staticmethod
     def text(token: str) -> str:
