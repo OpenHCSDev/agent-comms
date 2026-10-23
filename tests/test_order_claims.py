@@ -30,6 +30,7 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import (
     CommsHistoryTool, CommsHudTool, CommsOrderDeliverTool, CommsVerdictTool, TodoChanged,
 )
+from test_held_problem_orders import merge_two_commit_fix
 from test_todos import order, thread
 
 pytest_plugins = ("test_held_problem_orders",)
@@ -88,11 +89,42 @@ def test_claim_verdict_family_on_retained_copy(held_commander):
     response = CommsOrderDeliverTool.invoke(comms, request.arguments, caller=ThreadCaller("worker"))
     assert isinstance(FieldCodec.decode(TodoChanged, response).todo.order, ClaimedProblemOrder)
     with chdir(ctx.repos[0].checkout):
-        main(["done", "worker", "P1", "--sha", sha], ctx)
+        main(["done", "worker", "P1"], ctx)
     delivered = comms.goals.todos.get("P1")
     assert isinstance(delivered.order, DeliveredProblemOrder)
-    assert delivered.order.delivery.delivered == sha
+    assert delivered.order.delivery.delivered == delivered.order.delivery.commit
     assert not delivered.pending
+
+
+def test_claimed_check_correction_reads_the_base_the_fix_was_built_on(
+    held_commander, cited_source, tmp_path,
+):
+    """Once the claimed PR merges, current main passes every correct check; the claim's own
+    branch point still holds the defect, so a correct check is accepted and done records it."""
+    ctx = held_commander
+    comms = ctx.comms
+    base, first, merge = merge_two_commit_fix(cited_source, tmp_path / "bin", 4)
+    original = comms.goals.todos.get("P1")
+    comms.goals.update_goal("worker", SetGoalAction(
+        text=ProblemGoalOrder.text, order=ProblemGoalOrder(),
+        goal_id=original.held().generation,
+    ))
+    head = cited_source.git(cited_source.checkout, "rev-parse", "fix/4").strip()
+    ThreadCaller("worker").invoke(CommsOrderDeliverTool(
+        problem="P1", pull_request=4, head=head,
+        report="The count fix is merged; check the merged tree.",
+    ), comms)
+    claimed = comms.goals.todos.get("P1")
+    assert claimed.order.check_base(cited_source.checkout) == base
+    with chdir(cited_source.checkout):
+        main(["check", "P1", "--check", f"{cited_source.checkout} :: cat count.txt -> 0",
+              "--why", "The old check counted a legitimate use outside the fixed file"], ctx)
+        main(["done", "worker", "P1"], ctx)
+    delivered = comms.goals.todos.get("P1")
+    assert isinstance(delivered.order, DeliveredProblemOrder)
+    assert delivered.order.check.command == "cat count.txt"
+    assert (delivered.order.delivery.delivered, delivered.order.delivery.commit) == (first, merge)
+    assert delivered.strike_count == claimed.strike_count
 
 
 def test_failed_check_strike_releases_at_the_updated_revision(held_commander):
