@@ -7,7 +7,6 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
-from .diagnostics import FailureReason
 from .native_arguments import SelectedModel
 
 if TYPE_CHECKING:
@@ -18,7 +17,6 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class TurnFailure(DeclaredFamily):
     text: str
-    code: ClassVar[str | None] = None
     # A failure of the model request itself; Pi re-sending that request ends it.
     ends_with_request_retry: ClassVar[bool] = False
 
@@ -54,19 +52,26 @@ class InputIdUnavailable(TurnFailure):
     def with_startup_diagnostics(self, stderr: str) -> TurnFailure:
         return self.with_text(self.text + "\nBackend startup reported:\n" + stderr)
 
-    code = FailureReason.INPUT_ID_UNAVAILABLE
+
+
+class NativePreflightTimeout(InputIdUnavailable):
+    """Input-ID preflight expired before the native child attested."""
+
+
+class NativePreflightExit(InputIdUnavailable):
+    """The native child exited before input-ID preflight attested."""
 
 
 class IdentityUncertain(TurnFailure):
-    code = FailureReason.IDENTITY_UNCERTAIN
+    pass
 
 
 class AuthorityChanged(TurnFailure):
-    code = FailureReason.AUTHORITY_CHANGED
+    pass
 
 
 class FollowupUnrecognized(TurnFailure):
-    code = FailureReason.FOLLOWUP_UNRECOGNIZED
+    pass
 
 
 class TerminalFailure(TurnFailure):
@@ -84,7 +89,6 @@ class TerminalFailure(TurnFailure):
 
 
 class InputMissing(TerminalFailure):
-    code = FailureReason.INPUT_MISSING
     default_text = "Pi RPC run ended without this prompt's user message start."
 
     @classmethod
@@ -112,7 +116,6 @@ class ModelRequestFailed(TurnFailure):
 
         raise NativePiTerminalFailure(self.text, proof, model, self)
 
-    code = FailureReason.MODEL_REQUEST_FAILED
     ends_with_request_retry = True
 
 
@@ -141,7 +144,6 @@ class ProviderTransportFailed(RetryableProviderFailure, ModelRequestFailed):
 
 
 class FinalStopMissing(TerminalFailure):
-    code = FailureReason.FINAL_STOP_MISSING
     default_text = "Pi RPC run ended without an authoritative final assistant stop."
 
     @classmethod
@@ -154,7 +156,6 @@ class FinalStopMissing(TerminalFailure):
 
 
 class QueuedInputMissing(TerminalFailure):
-    code = FailureReason.QUEUED_INPUT_MISSING
     default_text = "Pi RPC run ended with an unstarted queued input; delivery is uncertain."
 
     @classmethod
@@ -176,3 +177,11 @@ class ExtensionUiFailed(TurnFailure):
 
 class BackendDidNotExit(TurnFailure):
     pass
+
+
+class BackendFailed(TurnFailure):
+    """A failed terminal without a more specific native failure declaration."""
+
+
+class NativeLaunchInvalid(BackendFailed):
+    """The configured native launch could not be acquired."""

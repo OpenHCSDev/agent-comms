@@ -269,7 +269,7 @@ class AttemptFailedExecution(BlockedExecution, RetryableExecution):
 
     @property
     def reason(self) -> str:
-        return self.evidence.reason.value
+        return self.evidence.failure.declared_name
 
 
 class GoalPublicationSnapshot(ABC):

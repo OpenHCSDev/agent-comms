@@ -7,7 +7,7 @@ ACP publication constructs SDK updates directly from these declared fields.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from functools import partial
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -22,7 +22,7 @@ from .acp_failure import (
 )
 from .turn_terminal import FailedGoalTurn
 from .turn_goal_account import OriginGoalSettlement, VerifiedGoalSettlement
-from .diagnostics import FailureReason, terminal_failure_reason
+from .turn_failure import BackendFailed, TurnFailure
 from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
 from .field_codec import NullMember
@@ -258,7 +258,7 @@ class CompactionEnd(CompactionEvent):
 class Done(AgentEvent, FailedGoalTurn):
     text: str
     ok: bool
-    reason_code: str | None = None
+    failure: TurnFailure | None = None
     diagnostic: dict[str, Any] | None = None
     outcome: NativeTurnOutcome = field(default_factory=UnresolvedNativeTurnOutcome)
     # Immutable completion snapshot of TurnOutput's already decoded result.
@@ -272,8 +272,12 @@ class Done(AgentEvent, FailedGoalTurn):
         return replace(self, outcome=outcome)
 
     @property
-    def failure_reason(self) -> FailureReason:
-        return terminal_failure_reason(asdict(self))
+    def failure_kind(self) -> type[TurnFailure]:
+        return BackendFailed if self.failure is None else type(self.failure)
+
+    @property
+    def reason_code(self) -> str | None:
+        return None if self.ok else self.failure_kind.declared_name
 
     def failure_observation(self, account, permit, captured):
         return None if self.ok else super().failure_observation(account, permit, captured)

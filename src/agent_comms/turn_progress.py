@@ -322,7 +322,8 @@ class TurnProgress(events.AgentEventConsumer):
                 self.comms.root,
                 turn_id=self.turn_lease.turn_id,
                 thread=self.thread_name,
-                event=vars(terminal),
+                failure=terminal.failure_kind,
+                measurements=terminal.diagnostic,
                 sequences=(),
             )
             results = []
