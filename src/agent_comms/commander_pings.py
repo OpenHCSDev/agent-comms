@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.commander_service import CommanderService
 from agent_comms.errors import RelationViolationError
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import (
@@ -100,9 +101,7 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
 
     def require_publication(self, sender: str, registry: RegistrySnapshot,
                             original_source: BusReader) -> None:
-        from agent_comms.commander_heartbeat import CommanderHeartbeat
-
-        if registry.require(sender).incarnation != registry.require(CommanderHeartbeat.sender).incarnation:
+        if registry.require(sender).incarnation != registry.require(CommanderService.sender).incarnation:
             raise RelationViolationError("Only the commander heartbeat publishes its observations")
 
     def require_target(self, target: str, registry: RegistrySnapshot) -> None:
@@ -111,11 +110,9 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
 
     @classmethod
     def latest(cls, comms: Comms, commander: ThreadIncarnation) -> CommanderUpdate | None:
-        from agent_comms.commander_heartbeat import CommanderHeartbeat
-
         snapshot = comms.registry.snapshot()
         messages = comms.bus.bus.latest_addressed(
-            snapshot.names_for(CommanderHeartbeat.sender), snapshot.names_for(commander.name),
+            snapshot.names_for(CommanderService.sender), snapshot.names_for(commander.name),
         )
         if not messages:
             return None
