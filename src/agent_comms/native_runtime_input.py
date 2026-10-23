@@ -344,10 +344,6 @@ class SelectedSlotState(DeclaredFamily, affix="Slot"):
     def require_acknowledged(cls) -> None:
         raise SelectedToolDenied("Selected tool outcome UNKNOWN; no terminal acknowledgement")
 
-    @classmethod
-    def carried(cls, incoming: type[SelectedSlotState]) -> type[SelectedSlotState]:
-        return incoming
-
 
 class ConsumedSlot(SelectedSlotState):
     @classmethod
@@ -359,12 +355,6 @@ class AcknowledgedSlot(SelectedSlotState):
     @classmethod
     def require_acknowledged(cls) -> None:
         pass
-
-    @classmethod
-    def carried(cls, incoming: type[SelectedSlotState]) -> type[SelectedSlotState]:
-        # A carry interrupted after deleting .done files must not erase the
-        # acknowledgement already committed in this store.
-        return cls
 
 
 @dataclass(frozen=True)
@@ -398,16 +388,6 @@ class SelectedToolSlot(NativeRuntimeTable, WithoutRowid):
     def verify(self, call_id: str) -> None:
         self.require_call(call_id)
         self.state.require_acknowledged()
-
-    def carry(self, db: sqlite3.Connection) -> None:
-        """Transfer a legacy slot, preserving an earlier committed acknowledgement."""
-        if self.insert_if_absent(db).rowcount == 1:
-            return
-        current = self.require(db, input_id=self.input_id)
-        current.require_call(self.call_id)
-        state = current.state.carried(self.state)
-        if state is not current.state:
-            current.acknowledge(db, self.call_id)
 
 
 @dataclass(frozen=True)

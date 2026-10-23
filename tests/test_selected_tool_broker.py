@@ -225,8 +225,9 @@ async def test_listener_isolated_from_previous_turn_and_keeps_consumed_slot(
     observed: list[broker.SelectedToolRequest] = []
 
     def accept(request: broker.SelectedToolRequest) -> None:
-        broker.consume_selected_slot(slot_store, input_id, request.call_id)
-        broker.record_selected_terminal(slot_store.session.path, input_id, request.call_id)
+        with Coordination(slot_store.session.path) as store:
+            broker.consume_selected_slot(store, input_id, request.call_id)
+            broker.record_selected_terminal(store.session.path, input_id, request.call_id)
         observed.append(request)
 
     server = broker.SelectedToolSocket(tool_listener(tmp_path, token), accept, pid=os.getpid())
