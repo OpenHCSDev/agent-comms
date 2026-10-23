@@ -1,6 +1,7 @@
 """Current delivery queries skip retired sender incarnations."""
 
 from agent_comms.read_basis import NamedViewer
+from agent_comms.page_traversal import OlderTraversal
 import pytest
 
 from agent_comms.routing import DeliveryScope
@@ -25,7 +26,7 @@ def test_discovery_ignores_retired_source_history(tmp_path, rebound, comms):
                         basis.registry, {viewer: scope}, {viewer: basis.seen(source)},
                     ) == {viewer: {'sender': 1}}
                     listed = [r.seq for r in source.unseen_deliveries(
-                        basis.registry, scope, basis.seen(source))]
+                        basis.registry, scope, basis.seen(source), traversal=OlderTraversal())]
                     assert listed == [original.seq]
                 finally:
                     db.set_progress_handler(None, 0)

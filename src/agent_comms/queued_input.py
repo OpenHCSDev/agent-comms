@@ -13,14 +13,13 @@ from dataclasses import dataclass, field, replace
 from functools import partial
 from typing import TYPE_CHECKING, Generic, Self, TypeVar
 
-from acp import RequestError
 
 from .assignment_states import DeferredAssignment, DeliveredAssignment
 from .child_process import ProcessIdentity
 from .controller import Controller
 from .coordination_cohort import pending_sealed_assignments
 from .coordination_database import CoordinationStore
-from .coordination_errors import IdentityConflict, StaleRevision
+from .coordination_errors import IdentityConflict, RequestRefused, StaleRevision
 from .coordination_session import ReadNativeCoordinationSession
 from .coordinator import Coordination
 from .errors import RelationViolationError
@@ -156,7 +155,7 @@ class QueuedInput:
     def require_capacity(cls, inputs: InputDrain, sources: tuple[TurnInputSource, ...]) -> None:
         """Follow-ups cannot exceed the original live awaiting-start allowance."""
         if cls.remaining_capacity(inputs, sources) <= 0:
-            raise RequestError.invalid_params(
+            raise RequestRefused.invalid_params(
                 {"reason": "Too many follow-up inputs awaiting their own user start."}
             )
 

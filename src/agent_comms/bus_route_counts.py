@@ -74,17 +74,32 @@ class RouteCounts:
             json_each(sender.value) AS lookup
         UNION ALL
         SELECT * FROM unrecorded WHERE sender_lookup IS NOT NULL
-    ), candidates AS MATERIALIZED (
-        SELECT owner.key AS actor,row.*,
-            delivery_since(owner.key,row.sender,row.target,row.sender_lookup,addressed.seq) AS since
+    ), route_since AS MATERIALIZED (
+        SELECT owner.key AS actor,recipient.value AS recipient_lookup,
+            route.target,route.sender,route.sender_lookup,
+            delivery_since(owner.key,route.sender,route.target,route.sender_lookup,0) AS unaddressed,
+            delivery_since(owner.key,route.sender,route.target,route.sender_lookup,1) AS addressed
         FROM arguments,json_each(arguments.targets) AS owner,json_each(owner.value) AS target
         JOIN json_each(arguments.recipients) AS recipient ON recipient.key=owner.key
         JOIN route_keys AS route ON route.target=target.value
+        WHERE EXISTS (
+            SELECT 1 FROM "{BusRouteCounts.declared_name}" AS row
+            WHERE row.target=route.target AND row.sender=route.sender
+                AND row.sender_lookup=route.sender_lookup
+                AND row.seq>(SELECT after FROM arguments)
+                AND row.seq<=(SELECT through FROM arguments)
+                AND {ReadCursor.above_floor("row.seq", "owner.key", "row.target")}
+        )
+    ), candidates AS MATERIALIZED (
+        SELECT route.actor,row.*,
+            CASE WHEN addressed.seq IS NULL THEN route.unaddressed ELSE route.addressed END AS since
+        FROM route_since AS route
         JOIN "{BusRouteCounts.declared_name}" AS row ON row.target=route.target
             AND row.sender=route.sender AND row.sender_lookup=route.sender_lookup
         LEFT JOIN "{ReceivedSource.declared_name}" AS addressed
-            ON addressed.lookup=recipient.value AND addressed.seq=row.seq
+            ON addressed.lookup=route.recipient_lookup AND addressed.seq=row.seq
         WHERE row.seq>(SELECT after FROM arguments) AND row.seq<=(SELECT through FROM arguments)
+            AND {ReadCursor.above_floor("row.seq", "route.actor", "row.target")}
     ), requests AS MATERIALIZED (
         SELECT * FROM candidates WHERE since IS NOT NULL AND timestamp>=since
     )'''
@@ -99,18 +114,19 @@ class RouteCounts:
             )
             senders = registry.sender_bindings
             bindings = (
+                *ReadCursor.sql_bindings(registry,
+                    {actor: seen[actor].counted(delivery, registry)
+                     for actor, delivery in deliveries.items()}).values(),
                 json.dumps({actor: sorted(delivery.index_targets)
                             for actor, delivery in deliveries.items()}),
                 json.dumps({actor: registry.require(actor).incarnation.require_recorded().lookup
                             for actor in deliveries}),
                 senders["senders"], senders["unrecorded"], BusRow.last_seq(db), after,
-                *ReadCursor.sql_bindings(registry,
-                    {actor: seen[actor].counted(delivery, registry)
-                     for actor, delivery in deliveries.items()}).values(),
                 *parameters,
             )
             return row_type.read(db.execute(
-                f'WITH {self._requests}, {ReadCursor.sql("?")}, {ReadCursor.joined_sql} {query}',
+                f'''WITH {ReadCursor.sql("?")}, {ReadCursor.floor_sql},
+                {self._requests}, {ReadCursor.joined_sql} {query}''',
                 bindings))
 
     def unseen_counts(self, registry, deliveries, seen, *, after: int = 0):
