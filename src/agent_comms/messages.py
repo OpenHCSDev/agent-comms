@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import agent_comms
 from .turn_origin import TurnOrigin
 import builtins
 import hashlib
@@ -73,11 +74,11 @@ class BusProjectionTables(ProducedRow, SharedFileTables, DerivedTables):
     @classmethod
     def producer_classes(cls) -> tuple[type, ...]:
         record_owners = (
-            owner for record in BusRecord.members_with(BusCapability)
+            owner for record in BusRecord.discover_members(agent_comms, BusCapability)
             for owner in record.__mro__ if owner is not object
         )
         return tuple(dict.fromkeys((
-            *record_owners, *ClaimTransition.members_with(ClaimTransition),
+            *record_owners, *ClaimTransition.discover_members(agent_comms, ClaimTransition),
         )))
 
     @classmethod
