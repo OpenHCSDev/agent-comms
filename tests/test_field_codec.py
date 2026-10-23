@@ -11,10 +11,8 @@ import pytest
 
 from agent_comms.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.field_codec import (
-    ClaimId,
     DeclaredWireType,
     FieldCodec,
-    GoalId,
     Id128,
     Id128Text,
     InputId,
@@ -27,7 +25,6 @@ from agent_comms.field_codec import (
     PathText,
     RecordMember,
     RecordedTimestamp,
-    RootId,
     SnapshotExclude,
     SubclassUnion,
     TextRepresentation,
@@ -991,10 +988,15 @@ def test_nominal_ids_roundtrip_preserves_wire_schema_and_refuses_wrong_kind() ->
     assert FieldCodec.record_schema(_NominalIdentityRow)["properties"] == {
         "nominal": spelling, "annotated": spelling, "plain": {"type": "string"}, "turn": spelling,
     }
-    for kind in (ClaimId, TurnId, GoalId, RootId, InputId):
+    for kind in Id128.__subclasses__():
         assert type(kind.mint()) is kind
         assert type(FieldCodec.decode(kind, str(value))) is kind
         assert FieldCodec.value_schema(kind) == spelling
+
+    class SpecializedTurnId(TurnId):
+        pass
+
+    assert FieldCodec.encode(SpecializedTurnId(value), TurnId) == str(value)
     with pytest.raises(TypeError):
         FieldCodec.encode(_NominalIdentityRow(value, value, value, InputId(value)))
 

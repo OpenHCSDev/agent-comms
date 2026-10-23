@@ -1726,6 +1726,10 @@ class ClaimId(Id128):
     pass
 
 
+class AssignmentGeneration(Id128):
+    pass
+
+
 class TurnId(Id128):
     pass
 
@@ -1735,6 +1739,10 @@ class GoalId(Id128):
 
 
 class RootId(Id128):
+    pass
+
+
+class ThreadLookup(Id128):
     pass
 
 
