@@ -116,7 +116,7 @@ class RegistryOwner:
                 process=ProcessIdentity.capture(os.getpid()),
                 goal_permission=self.goal_permission,
             ).require_valid()
-        except ReservationViolationError as error:
+        except (ReservationViolationError, RelationViolationError) as error:
             raise StaleFence(f"{reason}: {error}") from error
 
     def require_snapshot(self, snapshot: RegistrySnapshot, reason: str) -> None:
