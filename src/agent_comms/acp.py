@@ -234,7 +234,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         """Reassemble SDK fields and expanded metadata using the SDK declaration."""
         metadata = parameters.pop("_meta", None) or parameters.pop("field_meta", None) or {}
         if not isinstance(metadata, dict):
-            raise RequestError.invalid_params({"reason": "ACP metadata must be an object"})
+            raise RequestRefused.invalid_params(
+                {"reason": "ACP metadata must be an object"}
+            )
         fields = {name: value for name, value in parameters.items() if name in model.model_fields}
         expanded = {
             name: value for name, value in parameters.items() if name not in model.model_fields
@@ -242,7 +244,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         try:
             return model.model_validate({**fields, "field_meta": {**metadata, **expanded}})
         except ValidationError as error:
-            raise RequestError.invalid_params({"reason": str(error)}) from error
+            raise RequestRefused.invalid_params({"reason": str(error)}) from error
 
     @answers_refusals
     async def new_session(
@@ -287,7 +289,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         try:
             command = decode_request(request.field_meta)
         except MalformedRecord as error:
-            raise RequestError.invalid_params({"reason": str(error)}) from error
+            raise RequestRefused.invalid_params({"reason": str(error)}) from error
         # Literal /compact is the external ACP text command; ours uses a record.
         text = self._prompt_text(request).strip()
         if re.match(r"^/compact(?:\s|$)", text):
@@ -296,7 +298,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         try:
             return await AcpRequestConsumer(self, request).run(command)
         except NativeTurnError as error:
-            raise RequestError.internal_error(error.request.error_data()) from error.__cause__
+            raise RequestRefused.internal_error(error.request.error_data()) from error.__cause__
 
     async def _compact_request(self, session_id: str, instructions: str | None) -> PromptResponse:
         from . import manual_compaction_bridge
@@ -323,7 +325,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         controller = self._runtime.controller.get()
         attached = self.sessions.client if controller is UNBOUND_CONTROLLER else controller
         if attached is None:
-            raise RequestError.invalid_params(
+            raise RequestRefused.invalid_params(
                 {"reason": "Selected write requires attached ACP controller"}
             )
         scope = await Coordination.run_worker(partial(self.cursors.scope, owner, session_id))
@@ -353,9 +355,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         try:
             images = prompt_images(request)
         except ValueError as error:
-            raise RequestError.invalid_params({"reason": str(error)}) from error
+            raise RequestRefused.invalid_params({"reason": str(error)}) from error
         if images and text.lstrip().startswith((*NamedTarget.sigils(), RELAY_PREFIX)):
-            raise RequestError.invalid_params(
+            raise RequestRefused.invalid_params(
                 {"reason": "Send images to an agent thread, not as a coordination relay."}
             )
         if (
@@ -394,9 +396,13 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
     @staticmethod
     def _require_compaction_text(request: PromptRequest) -> None:
         if len(request.prompt) != 1:
-            raise RequestError.invalid_params({"reason": "/compact requires one text block."})
+            raise RequestRefused.invalid_params(
+                {"reason": "/compact requires one text block."}
+            )
         if not isinstance(request.prompt[0], TextContentBlock):
-            raise RequestError.invalid_params({"reason": "/compact requires text only."})
+            raise RequestRefused.invalid_params(
+                {"reason": "/compact requires text only."}
+            )
 
     async def emit_session_identity(
         self, session_id: str, name: str, client: SessionUpdateSink,
