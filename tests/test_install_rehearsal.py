@@ -42,7 +42,7 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.messages import Message
 from agent_comms.registry_store import RegistryStore
-from agent_comms.repo import Checkout
+from agent_comms.repo import ScratchCheckout
 from agent_comms.root_runtime import RootRuntime
 from agent_comms.storage_rules import StorageRule
 from agent_comms.typed_table import ReconciledFile
@@ -50,6 +50,19 @@ from conftest import declare_test_bus, publish_initial
 from agent_comms.threads import Thread
 
 REPOSITORY = Path(__file__).resolve().parents[1]
+
+
+def shared_clone(path: Path) -> ScratchCheckout:
+    subprocess.run(["git", "clone", "--shared", "-q", REPOSITORY, path], check=True)
+    return ScratchCheckout.prepared(path)
+
+
+def declare_storage(root: Path, scratch: Path) -> None:
+    """A test bus declares its own storage rule; its practice copy is kilobytes,
+    and the machine's floor belongs to the live bus's rule.
+    """
+    StorageRule.path_in(root).write_text(json.dumps(FieldCodec.encode(
+        StorageRule(scratch_base=scratch, floor_gib=0))))
 
 
 @pytest.fixture(scope="module")
@@ -66,7 +79,7 @@ def installed_home(tmp_path_factory) -> dict[str, str]:
     environment = {**os.environ, "HOME": str(home), "UV_CACHE_DIR": caches.stdout.strip(),
                    "npm_config_cache": str(Path.home() / ".npm")}
     environment.pop("PYTHONPATH", None)
-    outgoing = Stack.build(Checkout.prepared(REPOSITORY), InstallCommands(), home)
+    outgoing = Stack.build(shared_clone(tmp_path_factory.mktemp("installed-source") / "checkout"), InstallCommands(), home)
     assert (outgoing.runtime.package_root / "__init__.py").is_file()
     (home / ".local/share/agent-comms/current").symlink_to(
         outgoing.runtime.prefix, target_is_directory=True)
@@ -77,6 +90,7 @@ def installed_home(tmp_path_factory) -> dict[str, str]:
 def installed_comms(private_comms, installed_home):
     """An installed machine's bus belongs to its installed runtime, not to the test
     process that declared it."""
+    declare_storage(private_comms.root, private_comms.root.parent / "install-scratch")
     with pytest.MonkeyPatch.context() as installed:
         installed.setenv("HOME", installed_home["HOME"])
         RootRuntime.publish(private_comms.root, LaunchRuntime.installed())
@@ -86,9 +100,7 @@ def installed_comms(private_comms, installed_home):
 @pytest.fixture(scope="module")
 def install_checkout(tmp_path_factory) -> Path:
     """Unchanged targets reuse one built revision; fault cases restore this checkout."""
-    checkout = tmp_path_factory.mktemp("install-checkout") / "checkout"
-    subprocess.run(["git", "clone", "--shared", "-q", REPOSITORY, checkout], check=True)
-    Checkout(checkout).prepare()
+    checkout = shared_clone(tmp_path_factory.mktemp("install-checkout") / "checkout").path
     subprocess.run(["git", "-C", checkout, "-c", "user.name=Installer test",
                     "-c", "user.email=installer@example.invalid", "commit", "--allow-empty",
                     "-qm", "Record the incoming installer qualification revision"], check=True)
@@ -99,9 +111,7 @@ def test_runtime_producer_digests_ignore_foreign_source(installed_home, tmp_path
     """A dirty review checkout may read through the runtime interpreter, never publish its digests."""
     home = Path(installed_home["HOME"])
     runtime = LaunchRuntime((home / ".local/share/agent-comms/current").resolve() / "bin/python")
-    foreign = tmp_path / "review"
-    subprocess.run(["git", "clone", "--shared", "-q", REPOSITORY, foreign], check=True)
-    Checkout(foreign).prepare()
+    foreign = shared_clone(tmp_path / "review").path
     source = foreign / "src/agent_comms/messages.py"
     source.write_text(source.read_text().replace(
         '"""Reverse lookups are derived from the record, in its append transaction."""',
@@ -328,8 +338,7 @@ def test_installed_entry_reports_completion_after_target_source_retirement(
         declare_test_bus(installed_comms, channels=("comms",))
     scratch = tmp_path / "install-scratch"
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
-    StorageRule.path_in(root).write_text(json.dumps(FieldCodec.encode(
-        StorageRule(scratch_base=scratch, floor_gib=10))))
+    declare_storage(root, scratch)
     home = Path(installed_home["HOME"])
     outgoing = home / ".local/share/agent-comms/current/bin/agent-comms"
     # The caller and terminal publisher import installed packages. Only InstallRun's
