@@ -110,6 +110,10 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     def heartbeat_line(self, current: Sequence[Self]) -> str:
         return self.line()
 
+    def heartbeat_change(self, current: Sequence[Self]) -> tuple[str, ...]:
+        prefix = "RULE" if current else "NO LONGER CURRENT:"
+        return (f"{prefix} {self.heartbeat_line(current or (self,))}",)
+
     @staticmethod
     def _heartbeat_groups(rules: Iterable[StandingRule]) -> dict[object, list[StandingRule]]:
         groups: dict[object, list[StandingRule]] = defaultdict(list)
@@ -128,8 +132,7 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
             if frozenset(old) == frozenset(new):
                 continue
             rule = (new or old)[0]
-            prefix = "RULE" if new else "NO LONGER CURRENT:"
-            lines.append(f"{prefix} {rule.heartbeat_line(new or old)}")
+            lines.extend(rule.heartbeat_change(new))
         return tuple(lines)
 
     @staticmethod
@@ -181,6 +184,25 @@ class UndatedStandingRule(StandingRule, declared_name=None):
 
     def broke_after(self, after: float) -> bool:
         return True
+
+
+@dataclass(frozen=True)
+class LostTools(UndatedStandingRule):
+    thread: ThreadIncarnation
+    change: str
+
+    @classmethod
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState]) -> tuple[Self, ...]:
+        return tuple(cls(unit.source.thread.incarnation, change)
+                     for unit in observed
+                     for change in unit.source.thread.lost_tools())
+
+    def line(self) -> str:
+        return f"{self.thread.name}: {self.change}"
+
+    def heartbeat_change(self, current: Sequence[Self]) -> tuple[str, ...]:
+        return super().heartbeat_change(current) if current else ()
 
 
 @dataclass(frozen=True)

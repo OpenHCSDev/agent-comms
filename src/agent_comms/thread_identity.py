@@ -21,6 +21,7 @@ from .declared_family import DeclaredFamily, UniqueExternalSelector, UnknownFami
 from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,
+    SingleFieldValue,
     WireValue,
 )
 from .response_policy import CollectivePolicy, InformationalPolicy, ResponsePolicy
@@ -36,6 +37,54 @@ if TYPE_CHECKING:
     from .todos import Todo
 
 T = TypeVar("T")
+
+
+@dataclass(frozen=True, slots=True)
+class ToolName(SingleFieldValue):
+    """A name supplied by the runtime's offered-tool declaration."""
+
+    value: str
+
+
+@dataclass(frozen=True)
+class OfferedTools(DeclaredFamily, affix="OfferedTools"):
+    """A runtime reports its catalogue, or explicitly does not report it."""
+
+    version: str
+
+    @abstractmethod
+    def changes_from(self, previous: OfferedTools) -> tuple[str, ...]: ...
+
+    @abstractmethod
+    def before_reported(self, current: ReportedTools) -> tuple[str, ...]: ...
+
+    def before_unreported(self, version: str) -> tuple[str, ...]:
+        return self.unreported_change(version)
+
+    def unreported_change(self, version: str) -> tuple[str, ...]:
+        return ((f"runtime {self.version} -> {version}, tool set unreported",)
+                if self.version != version else ())
+
+
+@dataclass(frozen=True)
+class ReportedTools(OfferedTools):
+    names: frozenset[ToolName]
+
+    def changes_from(self, previous: OfferedTools) -> tuple[str, ...]:
+        return previous.before_reported(self)
+
+    def before_reported(self, current: ReportedTools) -> tuple[str, ...]:
+        missing = self.names - current.names
+        return ((f"missing tools {', '.join(sorted(name.value for name in missing))}; "
+                 f"runtime {current.version}",) if missing else ())
+
+
+class UnreportedTools(OfferedTools):
+    def changes_from(self, previous: OfferedTools) -> tuple[str, ...]:
+        return previous.before_unreported(self.version)
+
+    def before_reported(self, current: ReportedTools) -> tuple[str, ...]:
+        return self.unreported_change(current.version)
 
 
 @dataclass(frozen=True, slots=True)

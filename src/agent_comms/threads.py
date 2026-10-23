@@ -56,6 +56,7 @@ from .thread_execution import NativeThreadExecution, ThreadExecution
 from .thread_creation import CreationSeconds, CreationTime, GeneratedCreationTime
 from .thread_identity import (
     AgentThreadRole,
+    OfferedTools,
     ThreadIncarnation,
     ThreadIncarnationRecord,
     ThreadRole,
@@ -287,6 +288,21 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
     turn_record: TurnRecord = field(default_factory=NoTurnRecord)
     channel_scope_generation: int = 0
     turn_generation: int = 0
+    offered_tools: Annotated[
+        tuple[OfferedTools, ...], RegistrationPolicy(InheritPrevious), WireOmitDefault()
+    ] = field(default=(), kw_only=True)
+
+    def observing_tools(self, offered: OfferedTools) -> Thread:
+        """Keep two distinct runtime observations in the original thread record."""
+        if self.offered_tools and self.offered_tools[0] == offered:
+            return self
+        return replace(self, offered_tools=(offered, *self.offered_tools[:1]))
+
+    def lost_tools(self) -> tuple[str, ...]:
+        if len(self.offered_tools) != 2:
+            return ()
+        current, previous = self.offered_tools
+        return current.changes_from(previous)
 
     def require_commander(self) -> None:
         """The thread's declared provider owns eligibility to command."""
