@@ -125,7 +125,8 @@ def claim_order(held_bus):
         todo = held_bus.goals.todos.apply(
             todo.id, OrderMessage(todo.revision, lead, original.message_id))
         claimed = OrderClaim.for_order(todo, worker, 1, "a" * 40,
-                                      "Review the published repair", original.reference)
+                                      "Review the published repair", original.reference,
+                                      store=held_bus.goals.todos)
         claimed = replace(claimed, message=replace(
             claimed.message, timestamp=time.time() - AwaitingCommander.seconds - 1))
         ClaimOrder(todo.revision, worker, todo.held().generation, claimed).record(

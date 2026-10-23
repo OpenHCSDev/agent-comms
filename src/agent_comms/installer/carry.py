@@ -4,8 +4,9 @@ A step is one module in ``tools/cutover``, ``carry_<what>.py``, holding one ``Ca
 subclass. Only ``agent-comms install`` runs it, with the target revision's ``src`` and
 ``tools``, so every step runs against the source it is installed with. A step is
 idempotent: data it already carried reports no change, so a step's own dry run is the
-one owner of whether a bus still needs it. Steps run in the order the main line added
-them, from the first whose dry run reports a change. An edited step is judged by what
+one owner of whether a bus still needs it. Declared dependencies constrain the order
+the main line added steps, starting at the first whose dry run reports a change.
+An edited step is judged by what
 it does now, never by its name. A finished step is retired by deleting its file once
 every bus has run it.
 """
@@ -113,7 +114,7 @@ class RetireInputsOperation(CarryOperation[Carried]):
 
 @dataclass(frozen=True)
 class CarryChain:
-    """Every step a tree declares, in the order the main line added them."""
+    """Every declared step, dependency order first and addition order for independent steps."""
 
     steps: tuple[type[Carry], ...]
 
