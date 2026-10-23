@@ -1,6 +1,7 @@
 """Retire with the one-shot carry after the retained buses have been installed."""
 
 import os
+import shutil
 import subprocess
 import sys
 from contextlib import closing
@@ -52,8 +53,10 @@ def test_carry_keeps_existing_attempts_inputs_and_bindings(tmp_path):
 
     source = outgoing_source(tmp_path / "predecessor", PREDECESSOR)
     generated = tmp_path / "generated"
+    runner = source / Path(__file__).name
+    shutil.copyfile(__file__, runner)
     result = subprocess.run(
-        [sys.executable, str(Path(__file__).resolve()), str(generated)], cwd=source,
+        [sys.executable, str(runner), str(generated)], cwd=source,
         env={**os.environ, "PYTHONPATH": os.pathsep.join((str(source / "src"), str(source / "tests")))},
         capture_output=True, text=True, timeout=60,
     )

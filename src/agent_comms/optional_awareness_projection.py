@@ -29,7 +29,6 @@ from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import OwnerGenerations
 from agent_comms.coordination_tables.responses import ResponseObligation
 
-from .audience_manifest import FrozenRecipient
 from .bus_publication import Delivered
 from .child_process import ProcessIdentity
 from .cohort_schema import (

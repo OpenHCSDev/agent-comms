@@ -21,6 +21,7 @@ from agent_comms.locked_store import SQLiteFile
 from agent_comms.native_prompt_binding import PromptBinding
 from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from agent_comms.store_files import _store_lock
+from agent_comms.typed_table import HeldBusFile
 
 
 class ThreadNameOwners(Carry):
@@ -86,7 +87,7 @@ class ThreadNameOwners(Carry):
                 changed += len(pending) + aliases
                 if apply:
                     owner = CoordinationStore if path.name == CoordinationStore.filename else PromptBinding
-                    owner.schema_change(path).require()
+                    HeldBusFile(owner, path).require()
                     with closing(SQLiteFile.writer(path)) as destination:
                         db.backup(destination)
                     rewritten.append(str(path.relative_to(self.root)))

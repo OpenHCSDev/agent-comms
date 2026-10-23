@@ -24,7 +24,7 @@ import stat
 import struct
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, NoReturn
 
@@ -33,7 +33,7 @@ from . import store_files
 from .coordination_database import CoordinationStore
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, Id128Text, MalformedRecord, WireName
+from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .locked_store import DurableFile, WireWakeFile
 from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 
