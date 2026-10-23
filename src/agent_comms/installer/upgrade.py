@@ -105,6 +105,8 @@ from agent_comms.installer.reporting import RootWriter, RuntimeWriter, UnpostedW
 from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
 from agent_comms.locked_store import BusFile, RootFile
+from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
+from agent_comms.runtime_processes import RuntimeProcesses
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
     MaintenanceOperator,
@@ -402,12 +404,14 @@ class InstalledUpgrade(RehearsedUpgrade, Extendable):
     live: LiveRun
     install: InstallResult
     """The harnesses registered on the bus the target now reads."""
+    processes: RuntimeProcesses = field(kw_only=True, default=RuntimeProcesses(()))
+    """Applications still running an outgoing runtime; reported, never signalled."""
 
     finished: ClassVar[str] = "Install finished"
     """The headline of the post that reports this upgrade."""
 
     def lines(self) -> tuple[str, ...]:
-        return (*super().lines(), *self.live.lines())
+        return (*super().lines(), *self.live.lines(), *self.processes.lines())
 
 
 @dataclass(frozen=True)
@@ -543,12 +547,14 @@ class Stack:
     def prepare_native(self) -> None:
         self.probe(PrepareNativeProbe())
 
-    def publish(self) -> None:
-        """The selected interpreter owns console metadata and harness declarations."""
+    def publish(self, root: Path) -> None:
+        """The selected interpreter owns console metadata and harness declarations, and
+        ``root`` belongs to this stack's runtime from now on."""
         self.commands.run(
                           self.python, "-m", publication.__name__,
                           cwd=self.checkout, env=self.environment(),
         )
+        RootRuntime.publish(root, self.runtime)
 
     def environment(self, *paths: Path) -> dict:
         """Use the artifact's packages; carry steps also select the target tree's source."""
@@ -776,7 +782,7 @@ class Install[Rehearsed: Rehearsal](ABC):
         """The converted bus's route is ready before new runtime entrypoints open it."""
         incoming = ActiveRoute(self.root.absolute(), RecordedBusIdentity.capture(Bus.path_in(self.root)))
         route = backup.rebind_route(incoming, selected)
-        self.staged.publish()
+        self.staged.publish(self.root)
         return route
 
     @staticmethod
@@ -807,7 +813,8 @@ class Install[Rehearsed: Rehearsal](ABC):
         live_run = self.install(rehearsal, bridges, report)
         finished = InstalledUpgrade(
             rehearsed.source, rehearsed.target, rehearsed.root, rehearsed.pending,
-            rehearsed.rehearsal, live_run, harnesses(), commands=tuple(self.staged.commands.ran))
+            rehearsed.rehearsal, live_run, harnesses(), commands=tuple(self.staged.commands.ran),
+            processes=RuntimeProcesses.observe(self.staged.runtime))
         return (finished.extended(UnresumedUpgrade, unresumed=bridges.lines())
                 if bridges.failures else finished)
 
@@ -933,7 +940,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                 RootFile.content_owner(source).copy_file(source, destination)
         self.installed.running_owners(copied)
         maintenance = MaintenanceBarrier(RegistryStore.at(copied).path)
-        hold = maintenance.begin(MaintenanceOperator.current())
+        hold = maintenance.retarget(maintenance.begin(MaintenanceOperator.current()), stack.runtime)
         with hold.holding():
             migration = PreparedMigration.capture(hold, self.installed)
             passed = migration.carry(pending, stack, self.tree)
@@ -954,6 +961,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
             sum(path.stat().st_size for path in selected if path.exists()),
         ), self.root.parent)
         restore.require()
+        RootRuntimeStore.at(self.root).adopt(self.installed.runtime)
         running = self.installed.running_owners(self.root)
         maintenance = MaintenanceBarrier(RegistryStore.at(self.root).path)
         held = maintenance.begin(MaintenanceOperator.current())
@@ -962,6 +970,9 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
         try:
             try:
                 self.installed.owners(self.root, StopCliCommand, running)
+                held = maintenance.retarget(held, self.staged.runtime)
+                holder.close()
+                holder.enter_context(held.holding())
                 planned = self.staged.cli(self.root, PlannedReconcileCliCommand)
                 unrehearsed = sorted(frozenset(planned.rewritten) - frozenset(rehearsal.files.names))
                 if unrehearsed:
@@ -1003,7 +1014,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                 if head != self.current:
                     self.installed.commands.run("git", "-C", self.checkout, "reset", "-q", "--keep", self.current)
                     Checkout(self.checkout).prepare()
-                self.installed.publish()
+                self.installed.publish(self.root)
                 holder.close()
                 maintenance.clear(restored_hold)
                 started = self.installed.start(self.root, running)
@@ -1042,7 +1053,7 @@ class UnchangedInstall(ExistingBusInstall[UnchangedRehearsal]):
         return UnchangedRehearsal()
 
     def live(self, rehearsal: UnchangedRehearsal, report: InstallReport) -> UnchangedRun:
-        self.installed.publish()
+        self.installed.publish(self.root)
         report.writer = RuntimeWriter(self.root, self.installed, InstalledProgram())
         return UnchangedRun()
 
@@ -1082,7 +1093,7 @@ class FreshInstall(Install[FreshRehearsal]):
             services = HostService.restart_running(self.staged.python)
         except BaseException:
             backup.restore_route()
-            self.installed.publish()
+            self.installed.publish(self.root)
             raise
         backup.retain(self.spill_dir)
         return CreatedRun(services, route)
