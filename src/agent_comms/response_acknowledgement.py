@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import math
 from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -30,13 +29,7 @@ def _canonical(value: object) -> bytes:
 
 def public_envelope_digest(record: Mapping[str, object]) -> str:
     """Bind every public wire field without including the private sideband."""
-    timestamp = record.get("ts")
-    if (
-        isinstance(timestamp, bool)
-        or not isinstance(timestamp, (int, float))
-        or not math.isfinite(timestamp)
-    ):
-        raise MalformedRecord("A keyed wire timestamp must be finite.")
+    FieldCodec.decode(float, record.get("ts"))
     return hashlib.sha256(_canonical(record)).hexdigest()
 
 

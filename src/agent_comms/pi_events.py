@@ -39,7 +39,7 @@ from .pi_payloads import (
     UnknownPayload,
     UnreportedUsage,
 )
-from .pi_vocabulary import CompactionReason, UnknownCompactionReason
+from .pi_vocabulary import CompactionReason, ExternalChoice, UnknownCompactionReason
 from .request_progress import RequestProgress
 from .tool_declaration import ToolDeclaration
 
@@ -366,8 +366,7 @@ class ReasonedCompaction(NativePiEvent, DurablePiEvent):
     """A compaction record owns decoding its external reason."""
 
     def __post_init__(self):
-        if not isinstance(self.reason, type):
-            object.__setattr__(self, "reason", CompactionReason.from_external(self.reason))
+        object.__setattr__(self, "reason", ExternalChoice.of(self.reason, CompactionReason))
 
     @abstractmethod
     def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]: ...

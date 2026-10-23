@@ -872,7 +872,7 @@ class PrivateEvidenceRead:
 
 
 def _session_location(directory: Path, candidate: str) -> Path:
-    if not isinstance(candidate, str) or not candidate:
+    if not candidate:
         raise NativePiUnavailable("Native Pi omitted its session file")
     path = Path(candidate)
     if not path.is_absolute() or path.parent != directory or path.suffix != ".jsonl":

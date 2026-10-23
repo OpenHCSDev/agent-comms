@@ -27,6 +27,7 @@ from .registration_change import (
     UpdatedRegistration,
 )
 from .repo import Repo, RepositorySelection
+from .mro_dispatch import MroDispatch, handles
 from .registry_provenance import (
     DeletedThread,
     RegisteredRecipient,
@@ -242,7 +243,7 @@ class OwnRow(SnapshotValue[dict]):
 
 
 @dataclass(frozen=True)
-class ThreadSection:
+class ThreadSection(MroDispatch):
     """A document field holding one row per thread name. Its field plan owns both the
     wire key and the attribute, so a revision reuses unchanged rows without naming them."""
 
@@ -253,9 +254,15 @@ class ThreadSection:
 
     def decoded(self, document: object) -> MutableMapping[str, object]:
         rows = self.plan.current(document)
-        if not isinstance(rows, MutableMapping):
-            raise TypeError(f"{self.plan.name} does not hold one row per thread")
+        return next(self.handlers_for(rows))(rows)
+
+    @handles(MutableMapping)
+    def mutable(self, rows: MutableMapping[str, object]) -> MutableMapping[str, object]:
         return rows
+
+    @handles(object)
+    def invalid(self, rows: object) -> MutableMapping[str, object]:
+        raise TypeError(f"{self.plan.name} does not hold one row per thread")
 
     def kept(self, raw: Mapping[str, object], earlier_raw: Mapping[str, object],
              earlier: object) -> frozenset[str]:

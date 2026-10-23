@@ -11,6 +11,7 @@ from itertools import groupby
 from typing import TYPE_CHECKING, Annotated, AsyncIterator, ClassVar, NoReturn, Self, Union
 
 from pydantic import (
+    BaseModel,
     Discriminator,
     InstanceOf,
     PlainSerializer,
@@ -25,7 +26,8 @@ from typing_extensions import TypeForm
 from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .external_transcript import RequestedEarlierPage
-from .field_codec import TimestampText
+from .field_codec import FieldCodec, TimestampText
+from .mro_dispatch import MroDispatch, handles
 from .maintenance_barrier import MaintenanceHeldError
 from .messages import Message
 from .recorded_time import UnrecordedTimeError
@@ -55,7 +57,8 @@ class TimestampedWire(WireModel):
     @model_validator(mode='before')
     @classmethod
     def require_source_time(cls, value):
-        if isinstance(value, dict) and value.get('timestamp') is None:
+        value = FieldCodec.decode(dict[str, object], value)
+        if value.get('timestamp') is None:
             raise UnrecordedTimeError(f'{cls.__name__} has no recorded timestamp')
         return value
 
@@ -93,9 +96,7 @@ class TaggedWire(DeclaredWireFamily, WireModel, ABC, affix="", declared_name=Non
     @classmethod
     def declared_union(cls) -> TypeForm[Self]:
         def tag(value: object) -> str:
-            if isinstance(value, cls):
-                return value.tag()
-            return cls.tag_of(value)
+            return WireDiscriminator.of(value, cls)
         variants = []
         declarations = sorted(cls.members_with(cls), key=lambda member: member.tag())
         for wire_tag, group in groupby(declarations, key=lambda member: member.tag()):
@@ -108,6 +109,24 @@ class TaggedWire(DeclaredWireFamily, WireModel, ABC, affix="", declared_name=Non
             alternatives = Union[tuple(reversed(tuple(hierarchy.static_order())))]
             variants.append(Annotated[alternatives, Tag(wire_tag)])
         return Annotated[Union[tuple(variants)], Discriminator(tag)]
+
+
+class WireDiscriminator(MroDispatch):
+    """Pydantic may supply a decoded member or raw wire data to its discriminator."""
+
+    @classmethod
+    def of(cls, value: object, family: type[TaggedWire]) -> str:
+        return cls.handler_for(type(value))(value, family)
+
+    @handles(BaseModel)
+    @staticmethod
+    def declared(value: TaggedWire, family: type[TaggedWire]) -> str:
+        return value.tag()
+
+    @handles(object)
+    @staticmethod
+    def external(value: object, family: type[TaggedWire]) -> str:
+        return family.tag_of(value)
 
 
 class OpenWire(TaggedWire, ABC, declared_name=None):

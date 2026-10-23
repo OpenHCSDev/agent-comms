@@ -10,6 +10,9 @@ from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Annotated, Callable, ClassVar
 
+from pydantic import BaseModel
+
+from .mro_dispatch import MroDispatch, handles
 
 from .acp_failure import (
     ACPFailure,
@@ -52,6 +55,24 @@ if TYPE_CHECKING:
     from acp.schema import AgentMessageChunk
 
     from .input_drain import InputDrain
+
+
+class AcpPromptContent(MroDispatch):
+    """The ACP SDK supplies either its model or an already serialized content block."""
+
+    @classmethod
+    def wire(cls, block: object) -> dict[str, object]:
+        return cls.handler_for(type(block))(block)
+
+    @handles(dict)
+    @staticmethod
+    def serialized(block: dict[str, object]) -> dict[str, object]:
+        return block
+
+    @handles(BaseModel)
+    @staticmethod
+    def model(block: BaseModel) -> dict[str, object]:
+        return block.model_dump(by_alias=True, exclude_none=True)
 
 
 class AgentCommsUpdate(DeclaredFamily, affix="Update"):

@@ -27,9 +27,28 @@ from .field_codec import (
     WireValue,
 )
 from .repo import GitCommandError, Repo
+from .mro_dispatch import MroDispatch, handles
 
 if TYPE_CHECKING:
     from .todos import PullRequestLink
+
+
+class SourceClass(MroDispatch):
+    """AST class declarations expose their body and line; other nodes expose neither."""
+
+    @classmethod
+    def of(cls, node: ast.AST) -> tuple[ast.ClassDef, ...]:
+        return cls.handler_for(type(node))(node)
+
+    @handles(ast.ClassDef)
+    @staticmethod
+    def declaration(node: ast.ClassDef) -> tuple[ast.ClassDef, ...]:
+        return (node,)
+
+    @handles(ast.AST)
+    @staticmethod
+    def other(node: ast.AST) -> tuple[ast.ClassDef, ...]:
+        return ()
 
 
 class MissingSourceLine(ToolRefusedError):
@@ -155,8 +174,8 @@ class FileLine(WireValue, SourceReference):
         file = repository.module_file(declaration.__module__).as_posix()
         body = ast.parse('\n'.join(revision.lines(repository.checkout, file)), filename=file).body
         for name in declaration.__qualname__.split('.'):
-            for node in body:
-                if isinstance(node, ast.ClassDef) and node.name == name:
+            for node in (declaration for item in body for declaration in SourceClass.of(item)):
+                if node.name == name:
                     body = node.body
                     break
             else:
@@ -168,8 +187,8 @@ class FileLine(WireValue, SourceReference):
 
     def require_class(self, repository: Path, revision: SourceRevision) -> None:
         tree = ast.parse('\n'.join(revision.lines(repository, self.file)), filename=self.file)
-        if not any(isinstance(node, ast.ClassDef) and node.lineno == self.line
-                   for node in ast.walk(tree)):
+        if not any(node.lineno == self.line for item in ast.walk(tree)
+                   for node in SourceClass.of(item)):
             raise MissingSourceLine(
                 f"scope shape reference {self.to_wire()} must name a class declaration"
             )
