@@ -41,7 +41,9 @@ class RegistrySessionLocation(RecordMember, SessionFile, declared_name=None):
     def __eq__(self, other: object) -> bool:
         """A bus path is relative and an external one absolute, so the path is the location;
         the root a registry bound it to says where it is read, not which one it is."""
-        return isinstance(other, RegistrySessionLocation) and self.path == other.path
+        if not isinstance(other, RegistrySessionLocation):
+            return NotImplemented
+        return self.path == other.path
 
     def __hash__(self) -> int:
         return hash(self.path)

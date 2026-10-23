@@ -9,6 +9,15 @@ from agent_comms.cli_commands import (
     CheckpointCliCommand, CleanCheckpoint, PushUnknownCheckpoint, PushedCheckpoint, RefusedCheckpoint,
 )
 from bus_record_fixture import context_comms
+from fixture_git import ENVIRONMENT
+
+
+@pytest.fixture(autouse=True)
+def _fixture_identity(monkeypatch):
+    """The checkpoint command commits through its own git, so the identity rides the
+    environment that git inherits, never a repository's config."""
+    for name, value in ENVIRONMENT.items():
+        monkeypatch.setenv(name, value)
 
 
 def _git(worktree: Path, *arguments: str):
@@ -23,8 +32,6 @@ def _repo(tmp_path: Path, name: str, *, remote: bool = True) -> Path:
     worktree = tmp_path / name
     worktree.mkdir()
     _git(worktree, "init", "-q", "-b", "main")
-    _git(worktree, "config", "user.name", "agent")
-    _git(worktree, "config", "user.email", "agent@example.com")
     if remote:
         _git(tmp_path, "init", "-q", "--bare", f"{name}.origin.git")
         _git(worktree, "remote", "add", "origin", str(tmp_path / f"{name}.origin.git"))
