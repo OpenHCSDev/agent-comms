@@ -71,7 +71,7 @@ class ConnectivityFacet(
             raise ValueError("revision must be positive and observed_at_ms non-negative")
 
 @dataclass(frozen=True, slots=True)
-class RecoveryAudit(ImmutableRows, CoordinatorTable, TypedTable):
+class RecoveryAudit(ImmutableRows, ExecutionReference, CoordinatorTable, TypedTable):
     # Recovery condition is a stored fact; row identity is the table family tag.
 
     execution_id: Annotated[str, field_codec.SnapshotExclude()]
@@ -99,12 +99,10 @@ class RecoveryAudit(ImmutableRows, CoordinatorTable, TypedTable):
     indexes = (Index(("execution_id", "audit_id")),)
 
     @classmethod
-    def references(cls):
+    def references(cls) -> tuple[ForeignKey, ...]:
         from agent_comms.coordination_tables.attempts import AttemptRecord
-        from agent_comms.coordination_tables.executions import ExecutionRecord
 
-        return (
-            ForeignKey(("execution_id",), ExecutionRecord, ("execution_id",), on_delete="RESTRICT"),
+        return super().references() + (
             ForeignKey(
                 ("execution_id", "attempt"), AttemptRecord, ("execution_id", "attempt_ordinal")
             ),

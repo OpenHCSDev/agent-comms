@@ -2,17 +2,28 @@
 
 import ast
 from typing import Annotated
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pytest
 
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_schema import CoordinatorTable
+from agent_comms.coordination_tables.executions import ExecutionReference
+from agent_comms.coordination_tables.recovery import RecoveryAudit
 from agent_comms.typed_table import Column, TypedTable
 
 pytestmark = pytest.mark.refactor_guard
 SOURCE = Path(__file__).resolve().parents[2] / "src" / "agent_comms"
+
+
+def test_recovery_audit_inherits_changes_to_execution_restriction(monkeypatch):
+    restriction = replace(ExecutionReference.references()[0], deferred=True)
+    monkeypatch.setattr(
+        ExecutionReference, "references", classmethod(lambda cls: (restriction,))
+    )
+
+    assert restriction.sql(RecoveryAudit) in RecoveryAudit.ddl()[0]
 
 
 def test_deleted_coordinator_aggregate_has_no_callers():
