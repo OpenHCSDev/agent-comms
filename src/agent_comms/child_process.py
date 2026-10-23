@@ -22,7 +22,7 @@ import sys
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Generator, Mapping
+from collections.abc import Callable, Generator, Iterator, Mapping
 from concurrent.futures import Future, ProcessPoolExecutor
 from contextlib import (
     AbstractContextManager,
@@ -266,15 +266,22 @@ class ProcessIdentity(RecordMember, ProcessState):
     def signal(self, signum: int) -> None:
         Platform.current().send(self, signum)
 
+    def lineage(self) -> Iterator[ProcessIdentity]:
+        """This incarnation and its exact ancestors, ending at PID 1."""
+        platform = Platform.current()
+        current = self
+        while True:
+            yield current
+            if current.pid == 1:
+                return
+            current = platform.parent_identity(current.pid)
+
     def require_ancestor_of(self, pid: int) -> None:
         """A supplied process is authority only for its actual descendant."""
         platform = Platform.current()
         platform.require(self)
-        current = platform.identity(pid)
-        while current.pid > 1:
-            if current == self:
-                return
-            current = platform.parent_identity(current.pid)
+        if self in platform.identity(pid).lineage():
+            return
         raise IdentityMismatchError('The declared process is not an ancestor of this hook')
 
     async def wait_exited(self) -> None:

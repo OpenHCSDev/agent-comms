@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import os
+import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
 from agent_comms.child_process import IdentityMismatchError, Platform, ProcessIdentity
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.runtime_children import ApplicationChildInitiator
 
@@ -72,6 +74,7 @@ class RuntimeProcesses:
         outcomes: list[RuntimeProcessOutcome] = []
         platform = Platform.current()
         observer = ProcessIdentity.capture(os.getpid())
+        lineage: frozenset[ProcessIdentity] = frozenset(observer.lineage())
         for entry in proc.iterdir():
             if not entry.name.isdecimal():
                 continue
@@ -93,10 +96,7 @@ class RuntimeProcesses:
             if runtime.prefix == target.prefix:
                 continue
             try:
-                ancestor = identity
-                while ancestor.pid > 1 and ancestor != observer:
-                    ancestor = platform.parent_identity(ancestor.pid)
-                if ancestor == observer:
+                if identity in lineage or observer in identity.lineage():
                     continue
                 parent = platform.parent_identity(pid)
                 application = RuntimeApplication(parent, platform.process_name(parent.pid))
@@ -116,3 +116,8 @@ class RuntimeProcesses:
                 )
             )
         return cls(tuple(outcomes))
+
+
+if __name__ == "__main__":
+    print(FieldCodec.compact(FieldCodec.encode(RuntimeProcesses.observe(
+        LaunchRuntime.from_interpreter(sys.argv[1])))))

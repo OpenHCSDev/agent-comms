@@ -29,29 +29,32 @@ def test_runtime_process_family(tmp_path, monkeypatch):
     for runtime in (old, target):
         runtime.interpreter.parent.mkdir(parents=True)
         runtime.interpreter.symlink_to(sys.executable)
+        configuration = Path(sys.prefix) / "pyvenv.cfg"
+        if configuration.is_file():
+            (runtime.prefix / "pyvenv.cfg").symlink_to(configuration)
+            (runtime.prefix / "lib").symlink_to(Path(sys.prefix) / "lib", target_is_directory=True)
     with ExitStack() as cleanup:
         children = []
         for runtime in (old, target):
-            child = subprocess.Popen([str(runtime.interpreter), "-c", "import time; time.sleep(120)"])
+            child = subprocess.Popen([
+                str(runtime.interpreter), str(Path(__file__).with_name("runtime_process_sleeper.py")),
+            ])
             cleanup.callback(stop, child)
             children.append(child)
         assert not RuntimeProcesses.observe(target).outcomes
-        # Observe from a sibling: these applications are not that observer's children.
-        observed = subprocess.run(
-            [sys.executable, "-c",
-             "import json, sys; "
-             "from agent_comms.field_codec import FieldCodec; "
-             "from agent_comms.launch_runtime import LaunchRuntime; "
-             "from agent_comms.runtime_processes import RuntimeProcesses; "
-             "print(json.dumps(FieldCodec.encode(RuntimeProcesses.observe("
-             "LaunchRuntime.from_interpreter(sys.argv[1])))))",
+        # Its old-runtime parent is ours; sibling old-runtime applications are not.
+        with subprocess.Popen(
+            [str(old.interpreter), str(Path(__file__).with_name("runtime_process_parent.py")),
              str(target.interpreter)],
-            check=True, capture_output=True, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
             env=LaunchRuntime.running().child_environment(os.environ),
-        )
-        snapshot = FieldCodec.decode(RuntimeProcesses, FieldCodec.parse(observed.stdout))
+        ) as observer_parent:
+            observed, errors = observer_parent.communicate(timeout=30)
+            assert observer_parent.returncode == 0, errors
+        snapshot = FieldCodec.decode(RuntimeProcesses, FieldCodec.parse(observed))
         (outcome,) = snapshot.outcomes
         assert isinstance(outcome, UnretiredRuntimeProcess)
+        assert outcome.process.pid != observer_parent.pid
         assert outcome.process == ProcessIdentity.capture(children[0].pid)
         assert outcome.process.prefix == old.prefix
         assert outcome.process.application.process == ProcessIdentity.capture(os.getpid())
