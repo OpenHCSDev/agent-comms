@@ -211,7 +211,9 @@ def test_claim_scope_cannot_decode_a_registry_process_owner(tmp_path):
                   LiveCursorScope("official-session", "a" * 32, claim_scope, owner.require_process().pid)):
         encoded = FieldCodec.encode(scope)
         assert FieldCodec.decode(type(scope), encoded) == scope
-        encoded["claim_scope"] = FieldCodec.encode(registry_owner)
+        wire_key = FieldCodec.record_key(type(scope), "claimed_identity")
+        assert wire_key == "admission"
+        encoded[wire_key] = FieldCodec.encode(registry_owner)
         with pytest.raises(ValueError):
             FieldCodec.decode(type(scope), encoded)
     assert FieldCodec.decode(ClaimedIdentity, FieldCodec.encode(claim_scope)) == claim_scope

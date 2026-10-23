@@ -120,7 +120,7 @@ class HumanInputOrigin(InputOrigin):
 
     root_id: Annotated[str, Id128Text]
     author: HumanOrigin
-    claim_scope: Annotated[ClaimedIdentity, WireName("admission")]
+    claimed_identity: Annotated[ClaimedIdentity, WireName("admission")]
     project: str
     goal: GoalCheckpoint
 
@@ -154,7 +154,7 @@ class HumanInputOrigin(InputOrigin):
             comms.registry.store.private_guard_unlocked().require_root(
                 self.root_id, RelationViolationError("User input origin belongs to another native namespace"),
             )
-        if self.claim_scope != claim_scope:
+        if self.claimed_identity != claim_scope:
             raise RelationViolationError("User input origin attachment changed")
         self.author.require_registered(snapshot)
         owner = snapshot.require_active(claim_scope.incarnation.name)
@@ -170,12 +170,12 @@ class HumanInputOrigin(InputOrigin):
         return self
 
     def applies(self, owner: Thread, snapshot: RegistrySnapshot) -> bool:
-        return (self.claim_scope.incarnation.resolved(snapshot) == owner.incarnation
+        return (self.claimed_identity.incarnation.resolved(snapshot) == owner.incarnation
                 and (self.project, self.goal) == (owner.worktree, owner.goal.captured))
 
     def matches_owner(self, recorded_name, incarnation):
         """The captured original birth survives a rename, unlike a neutral name."""
-        authorized = self.claim_scope.incarnation.require_recorded()
+        authorized = self.claimed_identity.incarnation.require_recorded()
         original = incarnation.require_recorded()
         return (recorded_name == authorized.name
                 and authorized.created_at == original.created_at)

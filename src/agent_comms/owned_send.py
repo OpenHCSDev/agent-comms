@@ -53,7 +53,7 @@ class OwnedSend(CodingToolOwner):
     session_id: str
     thread: Thread
     turn: TurnId
-    claim_scope: int
+    claim_generation: int
     original: OriginalTurnInput
     goal_permit: GoalTurnPermit
 
@@ -80,7 +80,7 @@ class OwnedSend(CodingToolOwner):
             current=current,
             registry=snapshot,
             canonical=canonical,
-            claim_scope=self.claim_scope,
+            claim_generation=self.claim_generation,
             turn=self.turn,
         ).require_valid()
         InputKeysCheck(source=source, text=text).require_valid()
@@ -119,7 +119,7 @@ class OwnedSend(CodingToolOwner):
                 AcceptedInputCheck(
                     acknowledgement=accepted,
                     current=current,
-                    claim_scope=self.claim_scope,
+                    claim_generation=self.claim_generation,
                     input_id=source.accepted_id,
                     keys=source.keys,
                     inputs=self.inputs,
@@ -138,7 +138,7 @@ class OwnedSend(CodingToolOwner):
         # never reinterpret a failed durable operation as a retryable policy refusal.
         if not self.inputs.dispositions.bind_turn_input(
             source.keys,
-            claim_scope=self.claim_scope,
+            claim_scope=self.claim_generation,
             turn_id=self.turn.value,
             native_id=native_id,
             text=sent_text,
@@ -191,7 +191,7 @@ class OwnedSend(CodingToolOwner):
             self.verify(store, turn, snapshot)
             owner = snapshot.require(self.owner_name)
             canonical = resource.normalized(Path(owner.worktree))
-            scope = NativeClaim(owner_claimed_generation=self.claim_scope,
+            scope = NativeClaim(owner_claimed_generation=self.claim_generation,
                                 operation_id=slot, turn_id=self.turn.value,
                                 input_id=turn.command.input_id)
             return boundary.bus.publisher._publish_acquisition_unlocked(

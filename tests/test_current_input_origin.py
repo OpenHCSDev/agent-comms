@@ -93,7 +93,7 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
     assert row.context_provenance() in contribution.provenance
     native_id = "b" * 32
     sent = "User follow-up:\n" + command.user_text
-    assert inputs.bind(key, claim_scope=row.claim_scope, turn_id="held-native", native_id=native_id, text=sent)
+    assert inputs.bind(key, claim_scope=row.claim_generation, turn_id="held-native", native_id=native_id, text=sent)
     assert inputs.started(key, turn_id="held-native", native_id=native_id, text=sent)
     # Existing terminal settlement never rewrites a started original as
     # unsent or grants a replay; the native completion owns that.
@@ -130,7 +130,7 @@ async def test_foreign_or_changed_origin_refused_before_any_reservation(live_own
 async def test_historical_unknown_author_stays_neutral_and_human_scope_invalidates(live_owner):
     comms, agent = live_owner
     origin = capture(comms)
-    neutral = ReservedInput("old", None, "beta", origin.claim_scope.claimed_generation,
+    neutral = ReservedInput("old", None, "beta", origin.claimed_identity.claimed_generation,
                             "beta", "Exact old user-looking text")
     payload = FieldCodec.encode(neutral)
     assert "origin" not in payload

@@ -274,7 +274,7 @@ class ClaimIdentity:
 @dataclass(frozen=True)
 class AcquiringClaim(ClaimIdentity):
     generation: Annotated[str, Id128Text]
-    claim_scope: Annotated[ClaimScope, WireName("admission")]
+    resource_scope: Annotated[ClaimScope, WireName("admission")]
 
 
 @dataclass(frozen=True)
@@ -351,7 +351,7 @@ class Acquisition(ClaimTransition, declared_name=None):
         default=(), kw_only=True
     )
     generation: Annotated[str, Id128Text] = field(kw_only=True)
-    claim_scope: ClassVar[ClaimScope]
+    resource_scope: ClassVar[ClaimScope]
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -372,7 +372,7 @@ class Acquisition(ClaimTransition, declared_name=None):
 
     @property
     def operation_ids(self) -> tuple[str, ...]:
-        return self.claim_scope.operation_ids
+        return self.resource_scope.operation_ids
 
     def require_holders(self, previous: ClaimProjection) -> None:
         for resource in self.claims:
@@ -390,7 +390,7 @@ class Acquisition(ClaimTransition, declared_name=None):
 class WakeClaims(RecordMember, Acquisition, AcquiringClaim):
     """An acquisition published today; its row records the scope it serves."""
 
-    claim_scope: Annotated[RecordedScope, WireName("admission")]
+    resource_scope: Annotated[RecordedScope, WireName("admission")]
 
 
 @dataclass(frozen=True)
@@ -400,7 +400,7 @@ class UnscopedClaims(RecordMember, Acquisition):
     Only bus history holds this row; no writer publishes one.
     """
 
-    claim_scope: ClassVar[ClaimScope] = UnrecordedScope()
+    resource_scope: ClassVar[ClaimScope] = UnrecordedScope()
 
 
 @dataclass(frozen=True)
@@ -447,7 +447,7 @@ class ClaimOwner(AcquiringClaim, ResourceClaim):
     def acquire(
         self, scope: RecordedScope, registry: RegistrySnapshot, publish: Callable[[], ClaimOwner]
     ) -> ClaimOwner:
-        return self if self.claim_scope.reuses(scope) and self.live(registry) else publish()
+        return self if self.resource_scope.reuses(scope) and self.live(registry) else publish()
 
     def require_holder(self, owner: str, incarnation: str) -> None:
         if (self.owner, self.incarnation) != (owner, incarnation):
@@ -457,7 +457,7 @@ class ClaimOwner(AcquiringClaim, ResourceClaim):
         incarnation = RecordedThreadIncarnation(self.owner, float(self.incarnation))
         return any(
             thread.process_alive
-            and self.claim_scope.held_at(registry.claim_generation(thread.name))
+            and self.resource_scope.held_at(registry.claim_generation(thread.name))
             for thread in registry.active_threads(registry.threads_for(incarnation))
         )
 

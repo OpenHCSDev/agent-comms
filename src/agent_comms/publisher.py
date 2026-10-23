@@ -173,7 +173,7 @@ class ClaimWrites(Publisher):
         build = self._claim_builder(
             snapshot, ClaimNoticeKind.claimed(owner),
             partial(WakeClaims, incarnation=str(owner.created_at), claims=(resource,),
-                    generation=Id128Text.mint(), claim_scope=claim), activity=activity,
+                    generation=Id128Text.mint(), resource_scope=claim), activity=activity,
         )
         return self._claim_result(lambda: self.bus.acquire_resource_claim(resource, claim, snapshot, build))
 

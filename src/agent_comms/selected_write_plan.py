@@ -53,7 +53,7 @@ class SelectedWriteBinding:
     root_id: str
     source: MessageReference
     assignment_id: str
-    claim_scope: Annotated[ClaimedIdentity, WireName("admission")]
+    claimed_identity: Annotated[ClaimedIdentity, WireName("admission")]
 
 
 @dataclass(frozen=True, kw_only=True)

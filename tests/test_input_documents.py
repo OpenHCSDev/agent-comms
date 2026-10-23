@@ -88,7 +88,7 @@ def test_saved_discriminator_and_optional_notices_roundtrip_without_replay(tmp_p
     from agent_comms.text_digest import TextDigest
 
     saved = FieldCodec.encode(BoundUnknownInput(
-        key="acp:old", sequence=None, owner="worker", claim_scope=1,
+        key="acp:old", sequence=None, owner="worker", claim_generation=1,
         target="worker", source_text="Retain me", turn_id="turn", native_id="a" * 32,
         sent_digest=TextDigest.of("Exact sent text"), notice_dismissed=True,
         goal_reviews={"goal": GoalInputDecision(goal_revision=7, turn_id="review")},

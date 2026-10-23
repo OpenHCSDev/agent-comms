@@ -28,7 +28,7 @@ def test_unscoped_history_row_decodes_projects_never_live_and_releases(tmp_path)
     assert FieldCodec.encode(transition) == stored
     transition.require_new_operation(lambda operation: pytest.fail("no operation was recorded"))
     held = transition.project(ClaimProjection())
-    assert held[resource].claim_scope == UnrecordedScope()
+    assert held[resource].resource_scope == UnrecordedScope()
     registry = comms.registry.snapshot()
     assert not held[resource].live(registry)
 
@@ -37,7 +37,7 @@ def test_unscoped_history_row_decodes_projects_never_live_and_releases(tmp_path)
     taken = WakeClaims(
         owner="peer", incarnation=str(peer.created_at), seq=2, message_id="msg-2",
         claims=(resource,), generation=G2,
-        claim_scope=NativeClaim(owner_claimed_generation=1, operation_id="c" * 32,
+        resource_scope=NativeClaim(owner_claimed_generation=1, operation_id="c" * 32,
                                 turn_id="turn-2", input_id="input-2"),
     ).apply(held, registry)
     assert taken[resource].owner == "peer"

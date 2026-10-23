@@ -131,7 +131,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 comms, store, claim_scope, owner.name, ExistingFileClaim(Path(resource))
             )
             selected_owner = Comms(root).bus.bus.claim_projection()[str(resource)]
-            assert selected_owner.claim_scope == claim_scope
+            assert selected_owner.resource_scope == claim_scope
             assert selected_owner.resource == str(resource)
             assert (
                 publish_selected_resource_claim(

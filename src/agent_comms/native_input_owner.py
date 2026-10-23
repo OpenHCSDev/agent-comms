@@ -73,7 +73,7 @@ class RegistryOwner:
         try:
             GoalRegistryIdentityCheck(
                 expected=expected, actual=self.thread,
-                expected_claim=claim_scope, claim_scope=self.claimed_generation,
+                expected_claim=claim_scope, claim_generation=self.claimed_generation,
                 process=ProcessIdentity.capture(os.getpid()),
                 goal_permission=OwnerGoalPermission(expected.goal),
             ).require_valid()
@@ -112,7 +112,7 @@ class RegistryOwner:
                 expected=self.thread,
                 actual=actual,
                 expected_claim=self.claimed_generation,
-                claim_scope=claim_scope,
+                claim_generation=claim_scope,
                 process=ProcessIdentity.capture(os.getpid()),
                 goal_permission=self.goal_permission,
             ).require_valid()
