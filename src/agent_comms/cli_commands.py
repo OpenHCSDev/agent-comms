@@ -29,6 +29,7 @@ from agent_comms.coordination_errors import RequestRefused
 from pydantic import JsonValue
 
 from agent_comms.errors import ToolRefusedError
+from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, StartedOwner
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.lifecycle_capability import LifecycleCapability, Successful
 from agent_comms.message_bus import HeldBusWrite
@@ -276,8 +277,11 @@ class TargetAction:
                 'bound_count': len(self.bound)}
 
 
-class TargetOutcome(LifecycleCapability):
+class TargetOutcome(LifecycleCapability, ABC):
     """One attempted selection member; failure never claims absence of effects."""
+
+    @abstractmethod
+    def owner_start(self) -> OwnerStart: ...
 
     def reconnect_targets(self) -> tuple[str, ...]:
         return ()
@@ -291,6 +295,9 @@ class TargetCompleted(Successful, TargetOutcome, RecordMember):
     target: str
     command: CliCommand
     result: Annotated[CliResult, WireValue]
+
+    def owner_start(self) -> OwnerStart:
+        return StartedOwner(self.target)
 
     @classmethod
     def from_wire(cls, data: JsonValue) -> Self:
@@ -313,6 +320,9 @@ class TargetFailed(TargetOutcome):
 
     def __str__(self) -> str:
         return f"{self.target}: {self.error_type}: {self.error}"
+
+    def owner_start(self) -> OwnerStart:
+        return RefusedOwner(self.target, str(self))
 
 
 @dataclass(frozen=True)

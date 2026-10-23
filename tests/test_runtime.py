@@ -110,7 +110,9 @@ def test_owner_cursor_scope_rebases_only_attachment_session_alias():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("request_original", [False, True])
-async def test_subscription_replay_uses_requested_alias(tmp_path, request_original, private_comms):
+async def test_subscription_replay_uses_requested_alias(
+    tmp_path, request_original, private_comms, native_runtime_package
+):
     from agent_comms.coordinator import Coordination
     from agent_comms.launch_root import LaunchRoot
 
@@ -316,7 +318,9 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
 
 
 @pytest.mark.asyncio
-async def test_new_session_metadata_has_a_display_title_before_first_switch(tmp_path):
+async def test_new_session_metadata_has_a_display_title_before_first_switch(
+    tmp_path, native_runtime_package
+):
     comms = wire(tmp_path / "wire")
     agent = canonical_agent(comms, agent_bin=GivenBinary("/bin/echo"))
     try:

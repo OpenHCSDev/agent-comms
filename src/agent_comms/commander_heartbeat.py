@@ -5,10 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from agent_comms.commander_service import CommanderService
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.message_bus import WatchPass
-from agent_comms.registration import Registration
-from agent_comms.service_sender import ServiceSender
 from agent_comms.standing_rules import StandingRule
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.threads import Thread
@@ -17,8 +16,7 @@ from agent_comms.ui_model.unit_state import UnitState
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
-    from agent_comms.goal_management import Goals
-    from agent_comms.todos import OwnerRequest, Todo
+    from agent_comms.todos import Todo
 
 
 @dataclass
@@ -81,24 +79,8 @@ class CommanderObservation:
 
 
 @dataclass
-class CommanderHeartbeat(ServiceSender, WatchPass[tuple[CommanderObservation, ...]]):
-    sender = "commander-heartbeat"
+class CommanderHeartbeat(CommanderService, WatchPass[tuple[CommanderObservation, ...]]):
     reviews: dict[ThreadIncarnation, CommanderReview] = field(default_factory=dict)
-
-    @classmethod
-    def requested_by(cls, thread: Thread, goals: Goals) -> tuple[OwnerRequest, ...]:
-        """The oldest open request makes a live holder owed service, even before its first beat."""
-        return (goals.todos.open_requests(thread.incarnation, limit=1, descending=False)
-                if thread.process_alive else ())
-
-    @classmethod
-    def commanders(cls, registry: Registration, goals: Goals) -> tuple[Thread, ...]:
-        """The live request holders whose current incarnation owns commander work."""
-        return tuple(
-            thread
-            for thread in registry.all_threads().values()
-            if cls.requested_by(thread, goals)
-        )
 
     def observe(self, comms: Comms) -> tuple[CommanderObservation, ...]:
         return tuple(

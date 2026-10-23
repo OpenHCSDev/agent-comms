@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from abc import ABC
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Annotated, ClassVar, Self
@@ -35,7 +34,7 @@ class EditCall:
     problem: str
 
 
-class ToolAction(ABC):
+class ToolAction:
     """A tool capability, composed beside its declaration family."""
 
     members: ClassVar[set[type[ToolAction]]] = set()
