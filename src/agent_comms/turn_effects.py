@@ -5,16 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
-from acp.schema import (
-    AudioContentBlock, EmbeddedResourceContentBlock, ImageContentBlock,
-    ResourceContentBlock, TextContentBlock,
-)
-from pydantic import JsonValue
-
-type PromptBlock = (
-    TextContentBlock | ImageContentBlock | AudioContentBlock
-    | ResourceContentBlock | EmbeddedResourceContentBlock | dict[str, JsonValue]
-)
+from acp.schema import PromptRequest
 
 if TYPE_CHECKING:
     from .runtime import RuntimeServer
@@ -32,4 +23,4 @@ class TurnEffects(ABC):
 
     @staticmethod
     @abstractmethod
-    def _prompt_text(prompt: list[PromptBlock]) -> str: ...
+    def _prompt_text(request: PromptRequest) -> str: ...

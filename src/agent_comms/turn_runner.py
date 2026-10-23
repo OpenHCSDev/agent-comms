@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from acp.exceptions import RequestError
 from acp.schema import (
+    PromptRequest,
     PromptResponse,
 )
 from pydantic import JsonValue
@@ -28,7 +29,7 @@ from .goal_actions import (
     PausedGoalAction,
 )
 from .goal_scheduler import GoalScheduler
-from .image_inputs import ImageInput, prompt_images
+from .image_inputs import ImageInput
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from .messages import Message
 from .mro_dispatch import MroDispatch, handles
@@ -43,11 +44,11 @@ from .runtime import (
 )
 from .threads import Thread
 from .transcript_updates import TurnTranscriptUpdate
-from .turn_effects import PromptBlock, TurnEffects
+from .turn_effects import TurnEffects
 from .turn_lease import TurnLeaseFence, TurnState
+from .turn_outcome import TurnOutcome
 from .turn_phase import CancellingPhase, TurnPhase
 from .turn_terminal import TurnInterruption
-from .turn_outcome import TurnOutcome
 
 if TYPE_CHECKING:
     from . import pi_events as pi
@@ -177,18 +178,22 @@ class TurnRunner:
         return context.require_session_file(thread.runtime.path)
 
     async def prompt_owned(
-        self, session_id: str, prompt: list[PromptBlock], *, display_text: str | None = None,
+        self,
+        request: PromptRequest,
+        *,
+        images: tuple[ImageInput, ...],
+        display_text: str | None = None,
         input_id: str | None = None,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> PromptResponse:
+        session_id = request.session_id
         turn_task = asyncio.current_task()
         assert turn_task is not None
         self.turn_tasks[session_id] = turn_task
         try:
             thread_name = await self.sessions.sync_identity(session_id)
             await Coordination.run_worker(partial(self.comms.registry.require, thread_name))
-            text = self.effects._prompt_text(prompt)
-            images = prompt_images(prompt)
+            text = self.effects._prompt_text(request)
             agent_task: str | None = None
             relay_text: str | None = None
             if text.startswith(AGENT_PREFIX):
