@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .class_fact import ClassFact
 from abc import abstractmethod
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -18,6 +19,12 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class ResponsePolicy(DeclaredFamily, ProjectionSource, affix="Policy"):
+
+    @ClassFact
+    def writes(cls) -> tuple[type, ...]:
+        from .bus_tables import AwaitingAnswerSource
+        return (AwaitingAnswerSource,)
+
     starts_turn = False
     separate_turn = False
 
@@ -121,6 +128,12 @@ class InformationalPolicy(NoChannelRecipients, ResponsePolicy):
 
 @dataclass(frozen=True, slots=True)
 class ResponseEligibility(ProjectionSource):
+
+    @ClassFact
+    def writes(cls) -> tuple[type, ...]:
+        from .bus_tables import AwaitingAnswerSource
+        return (AwaitingAnswerSource,)
+
     policy: ResponsePolicy
     recipients: tuple[str, ...] = ()
 

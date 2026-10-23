@@ -1,6 +1,7 @@
 """Current delivery counts query derived rows in the bus's own read snapshot."""
 from __future__ import annotations
 
+from .class_fact import ClassFact
 import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, ClassVar
@@ -16,6 +17,11 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class BusRouteCounts(BusProjectionTables):
+
+    @ClassFact
+    def writes(cls) -> tuple[type, ...]:
+        return (BusRouteCounts,)
+
     seq: Annotated[int, Column(primary_key=True)]
     target: str
     sender: str

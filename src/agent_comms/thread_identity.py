@@ -6,6 +6,7 @@ does not create a new historical thread; a new turn does not change its owner.
 
 from __future__ import annotations
 
+from .class_fact import ClassFact
 import hashlib
 import math
 from abc import ABC, abstractmethod
@@ -590,6 +591,13 @@ class GenerationCounter(ProjectionSource):
 
 class ThreadRole(DeclaredFamily, ProjectionSource, affix="ThreadRole"):
     """Whether a thread executes turns is the member's type; its wire name is its spelling."""
+
+    @ClassFact
+    def writes(cls) -> tuple[type, ...]:
+        from .bus_activity_index import BusActivityIndex
+        from .bus_display_index import BusDisplayIndex
+        return (BusActivityIndex, BusDisplayIndex)
+
 
     origin_label: ClassVar[str]
 

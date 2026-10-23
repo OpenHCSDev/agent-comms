@@ -87,7 +87,8 @@ class FrozenAudience(ProjectionSource):
     @ClassFact
     def writes(cls) -> tuple[type, ...]:
         from .bus_tables import SentSource, ReceivedSource, AwaitingAnswerSource
-        return (SentSource, ReceivedSource, AwaitingAnswerSource)
+        from .bus_route_counts import BusRouteCounts
+        return (SentSource, ReceivedSource, AwaitingAnswerSource, BusRouteCounts)
 
 
     wire_seq: int

@@ -386,7 +386,8 @@ class MessageKind(DeclaredFamily, ProjectionSource, affix="Kind"):
     @ClassFact
     def writes(cls) -> tuple[type, ...]:
         from .bus_route_counts import BusRouteCounts
-        return (BusRouteCounts,)
+        from .bus_tables import AwaitingAnswerSource
+        return (BusRouteCounts, AwaitingAnswerSource)
 
 
     conversation_message: ClassVar[bool] = True
@@ -421,7 +422,8 @@ class ClaimNoticeKind(MessageKind, declared_name="claim-notice"):
     @ClassFact
     def writes(cls) -> tuple[type, ...]:
         from .bus_route_counts import BusRouteCounts
-        return (BusRouteCounts,)
+        from .bus_tables import AwaitingAnswerSource
+        return (BusRouteCounts, AwaitingAnswerSource)
 
 
     conversation_message = False
@@ -537,6 +539,12 @@ class NoMembershipChange(NullMember, ProjectionSource):
 class MessageRoleWire(ProjectionSource):
     """The unchanged external fields, decoded once into a message role."""
 
+    @ClassFact
+    def writes(cls) -> tuple[type, ...]:
+        from .bus_tables import MessageIdentitySource
+        return (MessageIdentitySource,)
+
+
     change: Annotated[
         type[MembershipTransition] | NoMembershipChange,
         WireName("membership"),
@@ -550,6 +558,12 @@ class MessageRoleWire(ProjectionSource):
 
 
 class MessageRole(InlineRecord, ProjectionSource):
+
+    @ClassFact
+    def writes(cls) -> tuple[type, ...]:
+        from .bus_tables import MessageIdentitySource
+        return (MessageIdentitySource,)
+
     category: ClassVar[type[MessageCategory]]
 
     @abstractmethod
@@ -594,7 +608,8 @@ class InformationalMessage(ProjectionSource):
     @ClassFact
     def writes(cls) -> tuple[type, ...]:
         from .bus_activity_index import SentActivity
-        return (SentActivity,)
+        from .bus_tables import AwaitingAnswerSource
+        return (SentActivity, AwaitingAnswerSource)
 
     def response_policy(self, message):
         return InformationalPolicy.instance()
@@ -609,13 +624,27 @@ class InformationalMessage(ProjectionSource):
         return PassiveWake()
 
 
-@dataclass(frozen=True, slots=True)
-class ConversationRole(SendableRole):
+class ConversationActivity(ProjectionSource):
+    """Conversation activity owns its rows independently of reply eligibility."""
 
     @ClassFact
     def writes(cls) -> tuple[type, ...]:
         from .bus_activity_index import SentActivity
         return (SentActivity,)
+
+    def activity_rows(self, message: Message) -> tuple[TypedTable, ...]:
+        from .bus_activity_index import SentActivity
+
+        return (SentActivity(message.sender, message.timestamp),)
+
+
+@dataclass(frozen=True, slots=True)
+class ConversationRole(ConversationActivity, SendableRole):
+
+    @ClassFact
+    def writes(cls) -> tuple[type, ...]:
+        from .bus_tables import AwaitingAnswerSource
+        return (AwaitingAnswerSource,)
 
     category = InboundCategory
 
@@ -627,11 +656,6 @@ class ConversationRole(SendableRole):
 
     def counts_as_conversation(self):
         return True
-
-    def activity_rows(self, message):
-        from .bus_activity_index import SentActivity
-
-        return (SentActivity(message.sender, message.timestamp),)
 
     def as_historical(self):
         return HistoricalConversationRole()

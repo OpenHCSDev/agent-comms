@@ -2008,10 +2008,6 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
 
     shared_producers: ClassVar[tuple[type, ...]] = (TypedTable, TypedRow, FieldCodec)
 
-    @ClassFact
-    def writes(cls) -> tuple[type, ...]:
-        return (cls,)
-
     @classmethod
     def producer_digest(cls) -> str:
         return cls._producer_digest()
@@ -2030,9 +2026,15 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
     def producer_owners(cls) -> tuple[type, ...]:
         """Only this table's declared writers and their inherited implementations."""
         owners = set(cls.shared_producers)
-        for writer in ProjectionSource.writers_for(cls):
-            owners.update(parent for parent in writer.__mro__
-                          if parent.__module__.partition(".")[0] == __package__)
+        owners.update(parent for parent in cls.__mro__
+                      if parent.__module__.partition(".")[0] == __package__)
+        writers = ProjectionSource.writers_for(cls)
+        for writer in writers:
+            owners.update(
+                parent for parent in writer.__mro__
+                if parent.__module__.partition(".")[0] == __package__
+                and ("writes" not in vars(parent) or parent in writers)
+            )
         return tuple(sorted(owners, key=lambda owner: (owner.__module__, owner.__qualname__)))
 
 
