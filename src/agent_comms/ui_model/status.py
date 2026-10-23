@@ -21,7 +21,7 @@ from agent_comms.thread_presentation import (
     ThreadPresentationStatus,
 )
 from agent_comms.ui_model.changes import KeyedModel
-from agent_comms.ui_model.delivery import InputDelivery
+from agent_comms.ui_model.delivery import DeliveryView
 
 if TYPE_CHECKING:
     from agent_comms.ui_model.observation import ThreadsObserved, UnreadableHistory
@@ -44,7 +44,7 @@ class ThreadStatusModel:
     def status(self) -> ThreadPresentationStatus:
         return self.presentation.status
 
-    def with_delivery(self, delivery: InputDelivery) -> ThreadStatusModel:
+    def with_delivery(self, delivery: DeliveryView) -> ThreadStatusModel:
         return replace(self, presentation=delivery.presentation(self.presentation))
 
     def disconnected(self, status: SessionDisconnected) -> ThreadStatusModel:
