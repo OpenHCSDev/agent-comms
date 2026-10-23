@@ -1491,7 +1491,7 @@ def test_other_public_evidence_flags_require_exact_bool(db_path: Path, invalid: 
                 )
             assert db.get("exec") == before
         for field in ("replay_safe", "side_effects_possible"):
-            flags = {"replay_safe": True, "side_effects_possible": False}
+            flags: dict[str, bool | str | int | None] = {"replay_safe": True, "side_effects_possible": False}
             flags[field] = invalid
             with pytest.raises(ValueError):
                 db.observe_replay(
