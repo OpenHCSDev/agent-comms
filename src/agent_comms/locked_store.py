@@ -163,6 +163,21 @@ class RootFile:
                 for path in owner.matching_in(directory)}
 
     @classmethod
+    def archived_roots(cls, directory: Path) -> tuple[Path, ...]:
+        """Whole bus roots this declaration keeps as immutable copies under ``directory``."""
+        return ()
+
+    @classmethod
+    def primaries_in(cls, root: Path) -> dict[Path, type[Self]]:
+        """Existing declared files under ``root`` and every root archived in it, each with
+        its own owner, so an archived store's companions stay with that store."""
+        primaries = cls.existing_in(root)
+        for owner, directory in RootFile.declarations_in(root):
+            for archived in owner.archived_roots(directory):
+                primaries.update(cls.primaries_in(archived))
+        return primaries
+
+    @classmethod
     def owned_files(
         cls, root: Path, paths: Collection[Path],
     ) -> dict[DeclaredFile | UndeclaredFile, type[RootFile]]:
@@ -172,7 +187,7 @@ class RootFile:
         undeclared existing file acquires content behavior without inventing a
         store declaration for it.
         """
-        primaries = cls.existing_in(root)
+        primaries = cls.primaries_in(root)
         declarations = {member: owner for owner, directory in cls.declarations_in(root)
                         for member in owner.files_in(directory)}
         declarations.update(primaries)

@@ -253,16 +253,13 @@ def without_mutation_guards(db: sqlite3.Connection, table: type[TypedTable]) -> 
 
 
 @pytest.fixture
-def scratch_root(tmp_path_factory):
+def scratch_root(durable_home):
+    """The test's own agent-scratch, derived from the storage rule under the test's HOME."""
     from agent_comms.storage_rules import StorageRule
 
-    base = tmp_path_factory.getbasetemp()
-    scratch = StorageRule().scratch_base.resolve()
-    if not base.resolve().is_relative_to(scratch):
-        base = scratch / "pytest"
-        base.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="check-root-", dir=base) as directory:
-        yield Path(directory)
+    root = StorageRule().scratch_base / "pytest" / "check-root"
+    root.mkdir(parents=True)
+    return root
 
 
 @pytest.fixture
