@@ -37,14 +37,8 @@ from agent_comms.todos import (
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ToolCaller
-from agent_comms.tools import (
-    CommsChangeProblemTool,
-    CommsFireTool,
-    CommsOrderDoneTool,
-    CommsTodoCreateTool,
-    CommsVerdictTool,
-    ToolRequest,
-)
+from agent_comms.order_tools import CommsChangeProblemTool, CommsFireTool, CommsOrderDoneTool, CommsTodoCreateTool, CommsVerdictTool
+from agent_comms.tool_request import ToolRequest
 from agent_comms.turn_digests import OrderEditsRead, TurnsSince
 
 CHECKOUT = Path(__file__).resolve().parents[2]

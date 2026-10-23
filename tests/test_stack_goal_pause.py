@@ -248,7 +248,7 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(
                     paused.state.declared_name == "paused"
                     and comms.registry.require("project").goal.state.pause_source.declared_name == "owner"
                 )
-                from agent_comms.tools import ToolRequest
+                from agent_comms.tool_request import ToolRequest
                 from agent_comms.tool_caller import ThreadCaller
 
                 monkeypatch.setenv("AGENT_COMMS_THREAD", "project")

@@ -21,7 +21,8 @@ from agent_comms.goal_actions import (
     StandbyGoalAction,
 )
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.tools import CommsInboxTool, ToolRequest
+from agent_comms.tools import CommsInboxTool
+from agent_comms.tool_request import ToolRequest
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.read_basis import NamedViewer
 from stored_inputs import stored_inputs

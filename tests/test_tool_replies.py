@@ -3,9 +3,7 @@ from typing import get_type_hints
 
 from agent_comms.comms import Comms
 from agent_comms.tool_result import ToolResult
-from agent_comms.tools import (
-    ToolRequest,
-)
+from agent_comms.tool_request import ToolRequest
 
 
 def result_type(tool: type[ToolRequest]) -> type:

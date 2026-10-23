@@ -200,8 +200,8 @@ class StoryPhase(CommanderNativePhase):
     after = (RecordPlanePhase,)
     evidence = AllEvidence(
         (
-            ClassDeclared("CommsOrderStoryTool", ("src/agent_comms/tools.py",)),
-            ClassDeclared("CommsFleetStoryTool", ("src/agent_comms/tools.py",)),
+            ClassDeclared("CommsOrderStoryTool", ("src/agent_comms/order_tools.py",)),
+            ClassDeclared("CommsFleetStoryTool", ("src/agent_comms/order_tools.py",)),
             PatternAbsent(r"^def roast\b", (COMMANDER + "judge.py",)),
         )
     )

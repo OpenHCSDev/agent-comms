@@ -95,18 +95,7 @@ from agent_comms.todos import (
 )
 from agent_comms.slop import Slop
 from agent_comms.tool_caller import CommanderForkCaller, NoThreadCaller
-from agent_comms.tools import (
-    CommsChangeProblemTool,
-    CommsFireTool,
-    CommsOrderCheckTool,
-    CommsOrderDoneTool,
-    CommsOrderServeTool,
-    CommsOrderTool,
-    CommsProblemCloseTool,
-    CommsTodoCreateTool,
-    CommsTodoListTool,
-    TodoList,
-)
+from agent_comms.order_tools import CommsChangeProblemTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderServeTool, CommsOrderTool, CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, TodoList
 
 
 def refuse(text, *families):

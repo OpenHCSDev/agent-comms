@@ -32,7 +32,7 @@ from agent_comms.repo import Repo
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.tools import CommsCommanderLoadTool, CommsHudTool, CommsTodoListTool
+from agent_comms.order_tools import CommsCommanderLoadTool, CommsHudTool, CommsTodoListTool
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.slop import DeclarationDerivation, Slop
 from agent_comms.todos import (

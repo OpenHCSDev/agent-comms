@@ -136,7 +136,8 @@ def test_foreign_protocol_owners_decode_canonical_preview_arguments():
 def test_core_commands_share_native_identity_without_changing_external_decode():
     from agent_comms.native_tool_call import CodingCall
     from agent_comms.native_tools import NativeToolDeclaration, NativeExecutableTool, NativeRequestTools
-    from agent_comms.tools import CommsSendTool, ToolRequest
+    from agent_comms.tools import CommsSendTool
+    from agent_comms.tool_request import ToolRequest
 
     schemas = NativeRequestTools.catalog()
     assert {schema["name"] for schema in schemas} == {
