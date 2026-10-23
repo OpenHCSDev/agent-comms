@@ -24,7 +24,7 @@ async def test_trusted_load_recovers_after_real_flock_contention(tmp_path, priva
     comms.registry.declare(owner)
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.participants.register(
-            comms.registry.require(owner.name).incarnation.lookup, committed=True
+            owner.incarnation.lookup, committed=True
         )
     agent = CommsAgent(
         comms,

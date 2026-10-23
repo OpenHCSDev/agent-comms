@@ -11,7 +11,6 @@ from contextlib import AsyncExitStack
 import pytest
 
 import agent_comms.agent_events as events
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.coordinator import Coordination
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.owned_turn import OwnedTurn
@@ -123,7 +122,7 @@ def _covered_session(tmp_path):
     comms.registry.declare(other)
     with Coordination(comms.root / "coordination.sqlite3") as store:
         store.participants.register(
-            RecordedThreadIncarnation("fixture", other.created_at).lookup, committed=True,
+            other.incarnation.lookup, committed=True,
         )
     publish_initial(comms, "sender", other.name, "another recipient's original source")
     return comms, agent, root_id
