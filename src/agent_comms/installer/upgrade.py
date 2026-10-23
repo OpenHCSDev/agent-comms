@@ -86,6 +86,7 @@ from agent_comms.installer.interpreter_operation import (
     ClientImportsProbe,
     PackageRootProbe,
     PrepareNativeProbe,
+    PrepareProducerDigestsProbe,
     ProbeProgram,
     PublicationProbe,
     RetainedProgram,
@@ -510,7 +511,7 @@ class Stack:
             if not RuntimeResolution.at(prefix).matches(source.lock, built, core):
                 raise UpgradeRefused("Existing built runtime differs from its resolved inputs")
             built.stage_native()
-            built.prepare_native()
+            built.prepare_runtime()
             return built
         prefix.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         prefix.mkdir(mode=0o700)
@@ -590,7 +591,7 @@ class Stack:
         destination = package / "_native" / layout
         destination.parents[2].mkdir(mode=0o700, parents=True)
         link_sealed_tree(native, destination)
-        self.prepare_native()
+        self.prepare_runtime()
 
     def keep_native(self, native: Path, layout: Path) -> None:
         """Publish a fresh build under its pin whole, and retire other pins' builds: each
@@ -605,7 +606,8 @@ class Stack:
         finally:
             shutil.rmtree(stage, ignore_errors=True)
 
-    def prepare_native(self) -> None:
+    def prepare_runtime(self) -> None:
+        self.probe(PrepareProducerDigestsProbe())
         self.probe(PrepareNativeProbe())
 
     def publish(self, root: Path) -> None:
