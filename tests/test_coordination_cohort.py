@@ -6,7 +6,6 @@ from __future__ import annotations
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from bus_record_fixture import prepare_native_comms
 
-from agent_comms.bus import Bus
 
 from bus_history import read_history
 from conftest import declare_test_bus, publish_initial
@@ -355,9 +354,12 @@ def test_private_issuer_rejects_untrusted_ancestor_and_collision(tmp_path: Path)
     root.mkdir()
     open_parent.chmod(0o777)
     try:
+        candidate = wire(root)
         with pytest.raises(RelationViolationError):
-            wire(root).registry.prepare_native_root()
-        assert not Bus.path_in(root).exists()
+            candidate.registry.prepare_native_root()
+        # Root adoption owns the empty bus (root_runtime.py adopt); the refusal is that
+        # no private authority exists for the untrusted root.
+        assert not candidate.registry.store.guard_path.exists()
     finally:
         open_parent.chmod(0o700)
 

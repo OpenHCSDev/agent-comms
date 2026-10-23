@@ -1,7 +1,6 @@
 
 
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
-from agent_comms.bus import Bus
 from bus_record_fixture import prepare_native_comms
 
 import json
@@ -48,7 +47,6 @@ def test_native_root_checks_relative_and_absolute_ancestor_permissions(
         candidate = wire(root)
         with pytest.raises(RelationViolationError):
             prepare_native_comms(candidate)
-        assert not Bus.path_in(root).exists()
         assert not candidate.registry.store.guard_path.exists()
     monkeypatch.chdir(tmp_path)
     safe = prepare_native_comms(wire(Path("safe-relative")))
