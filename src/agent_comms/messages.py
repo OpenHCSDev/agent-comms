@@ -504,6 +504,12 @@ class ChangeReportKind(SendableMessageKind, declared_name="change-report"):
 
 
 class MembershipTransition(DeclaredFamily, ProjectionSource, affix="Membership"):
+    @ClassFact
+    def writes(cls) -> tuple[type, ...]:
+        from .bus_activity_index import SentActivity
+        from .bus_tables import AwaitingAnswerSource
+        return (SentActivity, AwaitingAnswerSource)
+
     @classmethod
     def conversation_role(cls) -> MembershipConversationRole:
         return MembershipConversationRole(cls)
@@ -531,6 +537,13 @@ class LeftMembership(MembershipTransition):
 
 @dataclass(frozen=True, slots=True)
 class NoMembershipChange(NullMember, ProjectionSource):
+
+    @ClassFact
+    def writes(cls) -> tuple[type, ...]:
+        from .bus_activity_index import SentActivity
+        from .bus_tables import AwaitingAnswerSource
+        return (SentActivity, AwaitingAnswerSource)
+
     def conversation_role(self):
         return ConversationRole()
 
@@ -541,8 +554,9 @@ class MessageRoleWire(ProjectionSource):
 
     @ClassFact
     def writes(cls) -> tuple[type, ...]:
-        from .bus_tables import MessageIdentitySource
-        return (MessageIdentitySource,)
+        from .bus_activity_index import SentActivity
+        from .bus_tables import AwaitingAnswerSource
+        return (SentActivity, AwaitingAnswerSource)
 
 
     change: Annotated[
@@ -561,8 +575,9 @@ class MessageRole(InlineRecord, ProjectionSource):
 
     @ClassFact
     def writes(cls) -> tuple[type, ...]:
-        from .bus_tables import MessageIdentitySource
-        return (MessageIdentitySource,)
+        from .bus_activity_index import SentActivity
+        from .bus_tables import AwaitingAnswerSource
+        return (SentActivity, AwaitingAnswerSource)
 
     category: ClassVar[type[MessageCategory]]
 
@@ -759,8 +774,6 @@ class Message(Addressed, BusCapability, TurnOrigin):
     time; the hash-derived ``message_id`` is identity only and is not ordered.
     """
 
-
-
     body: Annotated[str, WireName("text"), WireOrder(6)]
     type: Annotated[builtins.type[MessageKind], WireOrder(5)]
     timestamp: Annotated[float, WireName("ts"), WireOrder(4), Column(index=True)] = (
@@ -790,7 +803,6 @@ class Message(Addressed, BusCapability, TurnOrigin):
     answers: Annotated[
         tuple[MessageReference, ...], WireOmitDefault(), WireOrder(14)
     ] = ()
-
 
     @classmethod
     def from_message(cls, message: Message, **capabilities: object) -> Self:
