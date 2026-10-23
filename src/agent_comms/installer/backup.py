@@ -325,9 +325,11 @@ class StoreBackup(ResourceBackup):
                        for member in owner.files(path) if member != path)
 
         def transient(directory: str, names: list[str]) -> set[str]:
+            # A regular file written after the owners were read has no owner to copy it.
             return {path.name for path in (Path(directory) / name for name in names)
                     if path in omitted or LockedStore.is_staging(path)
-                    or stat.S_ISSOCK(path.lstat().st_mode)}
+                    or stat.S_ISSOCK(mode := path.lstat().st_mode)
+                    or (stat.S_ISREG(mode) and path not in owners)}
 
         def copy_file(original: str, destination: str) -> Path:
             return owners[Path(original)].copy_file(original, destination)

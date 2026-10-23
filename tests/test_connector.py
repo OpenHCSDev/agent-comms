@@ -69,13 +69,14 @@ def test_real_connector_refusals_and_replaced_source(tmp_path, source_programs):
     """The actual serve entrypoint, curl transport and production maintenance thread."""
     import os
     import subprocess
-    import sys
 
     project = Path(__file__).resolve().parents[1]
     environment = {**os.environ, "PYTHONPATH": str(project / "src"),
                    "PATH": os.pathsep.join((str(source_programs.prefix / "bin"), os.environ["PATH"]))}
+    # The proof creates the root it serves, so it runs under the serving runtime.
     proof = subprocess.run(
-        [sys.executable, "-X", "faulthandler", str(project / "tests/verify_connector_live.py"),
+        [str(source_programs.prefix / "bin/python"), "-X", "faulthandler",
+         str(project / "tests/verify_connector_live.py"),
          str(tmp_path / "live-connector")],
         env=environment, capture_output=True, text=True, timeout=60,
     )
