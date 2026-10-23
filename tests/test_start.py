@@ -1,5 +1,4 @@
 
-from agent_comms.bus import Bus
 import asyncio
 import sys
 
@@ -21,8 +20,8 @@ async def test_real_stopped_owner_starts_through_shared_agent_tool(tmp_path, mon
     source = tmp_path / "saved.jsonl"
     source.touch()
     comms = wire(tmp_path / "wire")
-    Bus.install(Bus.path_in(comms.root))
-    comms.registry.declare(Thread('worker', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
+    declared = RegistrySessionLocation.from_path(str(source), comms.root)
+    comms.registry.declare(Thread('worker', frozenset(), str(tmp_path), session_file=declared))
     comms.registry.unregister("worker")
     try:
         result = await asyncio.to_thread(invoke_tool, comms, "comms_start", {"name": "worker"}, caller=NoThreadCaller())
@@ -32,6 +31,6 @@ async def test_real_stopped_owner_starts_through_shared_agent_tool(tmp_path, mon
                 await asyncio.sleep(0.05)
         again = await asyncio.to_thread(invoke_tool, comms, "comms_start", {"name": "worker"}, caller=NoThreadCaller())
         assert not again["launched"] and again["pid"] == result["pid"]
-        assert comms.registry.require("worker").session_file == str(source)
+        assert comms.registry.require("worker").session_file == declared.bound_to(comms.root)
     finally:
         await asyncio.to_thread(comms.owners.stop, "worker")
