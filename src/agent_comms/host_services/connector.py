@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 import json
 import sys
 import urllib.request
@@ -10,18 +9,25 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Self
 
-from . import ServiceNotServingError, SystemdUserService
 from ..active_route import ActiveRoute
 from ..comms import client_wire
 from ..connector import (
-    CALLER, LOOPBACK, PORT, ConnectorOptions, ConnectorVerb, ServeVerb,
-    ToolCall, ToolsCallMessage, ToolsCallReply,
+    CALLER,
+    LOOPBACK,
+    PORT,
+    ConnectorOptions,
+    ConnectorVerb,
+    ServeVerb,
+    ToolCall,
+    ToolsCallMessage,
+    ToolsCallReply,
 )
 from ..connector_store import ConnectorStore
-from ..field_codec import Argument, FieldCodec, MalformedRecord, PathText
 from ..errors import RelationViolationError, ToolRefusedError
+from ..field_codec import Argument, FieldCodec, MalformedRecord, PathText
 from ..launch_root import LaunchRoot
 from ..tools import CommsChannelsTool
+from . import ServiceNotServingError, SystemdUserService
 
 
 @dataclass(frozen=True)
@@ -52,21 +58,30 @@ class ConnectorService:
                 request = urllib.request.Request(
                     f"http://{LOOPBACK}:{self.port}/mcp",
                     data=json.dumps(FieldCodec.encode(call)).encode(),
-                    headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Content-Type": "application/json",
+                    },
                 )
                 with urllib.request.urlopen(request, timeout=60) as response:
                     reply = FieldCodec.decode(ToolsCallReply, json.load(response)).result
             if reply.is_error:
                 raise ServiceNotServingError(
-                    f"Connector round trip returned an error: {' '.join(item.text for item in reply.content)}"
+                    "Connector round trip returned an error: "
+                    f"{' '.join(item.text for item in reply.content)}"
                 )
             with client_wire(self.launch.path) as comms:
                 if reply.structured_content != CommsChannelsTool.invoke(comms, {}, caller=CALLER):
                     raise ServiceNotServingError(
                         f"Connector on port {self.port} reads another bus than {self.launch.path}"
                     )
-        except (MalformedRecord, json.JSONDecodeError, OSError,
-                RelationViolationError, ToolRefusedError) as error:
+        except (
+            MalformedRecord,
+            json.JSONDecodeError,
+            OSError,
+            RelationViolationError,
+            ToolRefusedError,
+        ) as error:
             raise ServiceNotServingError(f"Connector round trip failed: {error}") from error
         print(f"connector round trip: {self.result.round_trip}", file=sys.stderr)
 
@@ -102,9 +117,12 @@ class InstallServiceVerb(ConnectorOptions, declared_name="install-service"):
 
     def apply(self, ctx: ConnectorStore) -> int | str:
         service = SystemdConnectorService(
-            launch=LaunchRoot.from_path(self.root), store=ctx, port=self.port,
+            launch=LaunchRoot.from_path(self.root),
+            store=ctx,
+            port=self.port,
         )
         service.install(service.exec_arguments(self.issuer))
+        service.enable()
         print(service.unit_file())
         return 0
 
@@ -122,7 +140,9 @@ class RoundTripVerb(ConnectorVerb):
     ] = PORT
 
     def apply(self, ctx: ConnectorStore) -> int | str:
-        service = ConnectorService(launch=LaunchRoot.from_path(self.root), store=ctx, port=self.port)
+        service = ConnectorService(
+            launch=LaunchRoot.from_path(self.root), store=ctx, port=self.port
+        )
         try:
             service.serves()
         except ServiceNotServingError as error:

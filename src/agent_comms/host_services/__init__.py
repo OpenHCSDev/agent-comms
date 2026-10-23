@@ -120,13 +120,14 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
 class SystemdUserService(HostService, declared_name=None):
     """Systemd owns the unit's process; its definition starts that process again.
 
-    Its owned unit declares readiness. The process reports READY=1 once it serves,
-    so a restart returns only when it is serving. Systemd, not this configuration,
-    owns the current PID.
+    Each member declares its readiness options. Systemd, not this configuration,
+    owns the current PID; the member's serving proof checks the running service.
     """
 
     program: ClassVar[str]
     unit: ClassVar[str]
+    service_options: ClassVar[tuple[str, ...]] = ("Type=notify", "NotifyAccess=main")
+
     @classmethod
     def unit_file(cls) -> Path:
         return Path.home() / ".config/systemd/user" / cls.unit
@@ -134,25 +135,38 @@ class SystemdUserService(HostService, declared_name=None):
     def unit_name(self) -> str:
         return self.unit
 
-    def unit_text(self, arguments: tuple[str, ...]) -> str:
-        executable = LaunchRuntime.current_pointer() / "bin" / self.program
+    @classmethod
+    def command_line(cls, arguments: tuple[str, ...]) -> str:
+        executable = LaunchRuntime.current_pointer() / "bin" / cls.program
         # systemd uses C-quoted words, then expands specifiers and environment
         # references. Protect literal percent/dollar signs before quoting.
-        command = " ".join(json.dumps(word.replace("%", "%%").replace("$", "$$"),
-                                      ensure_ascii=False)
-                           for word in (str(executable), *arguments))
+        return " ".join(
+            json.dumps(word.replace("%", "%%").replace("$", "$$"), ensure_ascii=False)
+            for word in (str(executable), *arguments)
+        )
+
+    @classmethod
+    def render_unit(cls, command: str) -> str:
+        options = "\n".join(cls.service_options)
         return (
-            f"[Unit]\nDescription={self.unit}\n\n"
-            "[Service]\nType=notify\nNotifyAccess=main\n"
+            f"[Unit]\nDescription={cls.unit}\n\n"
+            f"[Service]\n{options}\n"
             f"ExecStart={command}\nRestart=on-failure\n\n"
             "[Install]\nWantedBy=default.target\n"
         )
 
-    def install(self, arguments: tuple[str, ...]) -> None:
-        self.unit_file().parent.mkdir(parents=True, exist_ok=True)
-        self.unit_file().write_text(self.unit_text(arguments), encoding="utf-8")
+    @classmethod
+    def unit_text(cls, arguments: tuple[str, ...]) -> str:
+        return cls.render_unit(cls.command_line(arguments))
+
+    @classmethod
+    def install(cls, arguments: tuple[str, ...] = ()) -> None:
+        cls.unit_file().parent.mkdir(parents=True, exist_ok=True)
+        cls.unit_file().write_text(cls.unit_text(arguments), encoding="utf-8")
         subprocess.run(("systemctl", "--user", "daemon-reload"), check=True)
-        subprocess.run(("systemctl", "--user", "enable", self.unit), check=True)
+
+    def enable(self) -> None:
+        subprocess.run(("systemctl", "--user", "enable", self.unit_name()), check=True)
 
     @classmethod
     def _pid_for(cls, name: str) -> int:
@@ -170,10 +184,12 @@ class SystemdUserService(HostService, declared_name=None):
         ).strip()
         if Path(loaded).resolve() != unit.resolve():
             return 0
-        return int(subprocess.check_output(
-            ("systemctl", "--user", "show", "-p", "MainPID", "--value", name),
-            text=True,
-        ))
+        return int(
+            subprocess.check_output(
+                ("systemctl", "--user", "show", "-p", "MainPID", "--value", name),
+                text=True,
+            )
+        )
 
     def pid(self) -> int:
         return self._pid_for(self.unit_name())
