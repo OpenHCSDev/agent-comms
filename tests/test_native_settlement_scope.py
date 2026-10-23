@@ -16,18 +16,18 @@ from agent_comms.selected_claim import publish_selected_resource_claim
 from test_claim_bus_read import selected_turn, settle_failed
 
 
-def test_recovery_does_not_release_a_claim_from_a_dead_owner():
-    with selected_turn() as (comms, store, selected, resource):
-        claim = publish_selected_resource_claim(
-            comms, store, selected, "Alice", ExistingFileClaim(resource)
-        )
-        owner = comms.registry.require("Alice")
-        comms.registry.register(replace(owner, process_identity=NoProcess()), StoppedThreadStatus())
-        before = comms.bus.bus.revision()
-        settle_failed(store)
-        assert comms.bus.bus.revision() == before
-        assert comms.bus.bus.claim_projection()[str(resource)] == claim
-        assert not comms.bus.bus.claim_projection().live_in(comms.registry.snapshot())
+def test_recovery_does_not_release_a_claim_from_a_dead_owner(selected_turn):
+    (comms, store, selected, resource) = selected_turn
+    claim = publish_selected_resource_claim(
+        comms, store, selected, "Alice", ExistingFileClaim(resource)
+    )
+    owner = comms.registry.require("Alice")
+    comms.registry.register(replace(owner, process_identity=NoProcess()), StoppedThreadStatus())
+    before = comms.bus.bus.revision()
+    settle_failed(store)
+    assert comms.bus.bus.revision() == before
+    assert comms.bus.bus.claim_projection()[str(resource)] == claim
+    assert not comms.bus.bus.claim_projection().live_in(comms.registry.snapshot())
 
 
 def test_standalone_session_never_guesses_native_resources_from_bus_file(tmp_path):
