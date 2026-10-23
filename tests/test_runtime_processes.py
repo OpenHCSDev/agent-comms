@@ -8,7 +8,6 @@ from pathlib import Path
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.field_codec import FieldCodec
-from agent_comms.installer.upgrade import LiveRun, UnchangedRun
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.runtime_processes import (
     RuntimeProcessOutcome,
@@ -49,10 +48,9 @@ def test_runtime_process_family(tmp_path):
         assert outcome.process.application.describe() in outcome.line()
         # Neither discovery nor rendering gains the right to terminate an application.
         assert all(child.poll() is None for child in children)
-        run = UnchangedRun(processes=snapshot.outcomes)
-        decoded = FieldCodec.decode(LiveRun, FieldCodec.encode(run))
-        assert decoded == run
-        assert outcome.line() in decoded.lines()
+        decoded = FieldCodec.decode(RuntimeProcesses, FieldCodec.encode(snapshot))
+        assert decoded == snapshot
+        assert decoded.lines() == (outcome.line(),)
         assert FieldCodec.decode(RuntimeProcessOutcome, FieldCodec.encode(outcome)) == outcome
         stop(children[0])  # Only its actual launcher closes this child.
         assert not RuntimeProcesses.observe(target).outcomes

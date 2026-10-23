@@ -63,6 +63,9 @@ class RuntimeProcesses:
 
     outcomes: tuple[RuntimeProcessOutcome, ...]
 
+    def lines(self) -> tuple[str, ...]:
+        return tuple(outcome.line() for outcome in self.outcomes)
+
     @classmethod
     def observe(cls, target: LaunchRuntime, proc: Path = Path("/proc")) -> RuntimeProcesses:
         directory = target.prefix.parent
