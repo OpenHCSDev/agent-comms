@@ -14,7 +14,14 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, Type, cast, dataclass_transform
 
-from agent_comms.bus_tables import Addressed, BusCapability, BusRow, HeldResources
+from agent_comms.bus_tables import (
+    Addressed,
+    BusCapability,
+    BusRow,
+    ClaimHolders,
+    HeldResources,
+    StoredHolders,
+)
 from agent_comms.response_policy import InformationalPolicy, ResponseEligibility, ResponsePolicy
 from agent_comms.typed_table import Column
 
@@ -591,7 +598,7 @@ class BusRecord(Message, DeclaredFamily, affix="Record"):
         stored = replace(self, seq=seq)
         for row in stored.rows():
             row.insert(db)
-        stored.project_into(db)
+        stored.project_into(db, StoredHolders())
         return stored.seq
 
     @property
@@ -629,14 +636,11 @@ class Claimed(BusCapability):
     def require_claim_transition(self) -> ClaimTransition:
         return self.claim_transition
 
-    def replay_claim(self, db: sqlite3.Connection) -> None:
+    def project_into(self, db: sqlite3.Connection, holders: ClaimHolders) -> None:
         """Append and the shared derived rebuild replay this same original transition."""
-        projected = HeldResources.project(db, self.claim_transition)
-        HeldResources.apply(db, self.claim_transition, projected)
-
-    def project_into(self, db: sqlite3.Connection) -> None:
-        super().project_into(db)
-        self.replay_claim(db)
+        super().project_into(db, holders)
+        projected = HeldResources.project(db, self.claim_transition, holders)
+        HeldResources.apply(db, self.claim_transition, projected, holders)
 
 
 @dataclass(frozen=True, kw_only=True)
