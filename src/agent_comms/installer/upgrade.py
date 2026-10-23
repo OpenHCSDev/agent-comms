@@ -37,7 +37,9 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from pydantic import TypeAdapter
 
-from agent_comms.active_route import ActiveRoute, RouteFile, active_route_path, route_directory
+from agent_comms.active_route import (
+    ActiveRoute, RouteFile, RouteFileSelection, active_route_path, route_directory,
+)
 from agent_comms.bus import Bus
 from agent_comms.cli_bridges.shared import BridgeResume, Serve, SessionBridgeResumes
 from agent_comms.cli_commands import (
@@ -87,7 +89,6 @@ from agent_comms.installer.interpreter_operation import (
     ProbeProgram,
     PublicationProbe,
     RetainedProgram,
-    RouteSelection,
     RunningOwnersProbe,
     RuntimeProbe,
     SelectedRouteProbe,
@@ -837,14 +838,14 @@ class Install[Rehearsed: Rehearsal](ABC):
         return RouteFile.read(active_route_path()).outgoing_writer(
             RuntimeWriter(root, installed), UnpostedWriter())
 
-    def backed_up(self, files: tuple[Path, ...]) -> tuple[StoreBackup, RouteSelection]:
+    def backed_up(self, files: tuple[Path, ...]) -> tuple[StoreBackup, RouteFileSelection]:
         backup = StoreBackup.take(self.root, active_route_path(), files, self.spill_dir)
         with route_directory(backup.route):
             backup.require_route_revision()
-            selected = self.installed.probe(SelectedRouteProbe())
+            selected = self.staged.probe(SelectedRouteProbe())
         return backup, selected
 
-    def publish(self, backup: StoreBackup, selected: RouteSelection) -> str:
+    def publish(self, backup: StoreBackup, selected: RouteFileSelection) -> str:
         """The converted bus's route is ready before new runtime entrypoints open it."""
         incoming = ActiveRoute(self.root.absolute(), RecordedBusIdentity.capture(Bus.path_in(self.root)))
         route = backup.rebind_route(incoming, selected)

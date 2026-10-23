@@ -8,7 +8,7 @@ from abc import ABC, ABCMeta, abstractmethod
 from collections.abc import Hashable, Iterable, Mapping
 from functools import cache
 from types import ModuleType
-from typing import Any, ClassVar, Self, cast
+from typing import ClassVar, Self, cast
 
 from metaclass_registry import (
     AutoRegisterMeta,
@@ -33,11 +33,11 @@ class FamilyMeta(AutoRegisterMeta, ABCMeta):
         mcs,
         name: str,
         bases: tuple[type, ...],
-        namespace: dict[str, Any],
+        namespace: dict[str, object],
         *,
         affix: str | None = None,
         discovery_package: str | None = None,
-        **class_options: Any,
+        **class_options: object,
     ) -> FamilyMeta:
         family_bases = FamilyBases.of(bases)
         roots = {
