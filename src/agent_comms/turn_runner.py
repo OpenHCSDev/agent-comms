@@ -29,7 +29,7 @@ from .goal_actions import (
     PausedGoalAction,
 )
 from .goal_scheduler import GoalScheduler
-from .image_inputs import ImageInput
+from .image_input import ImageInput
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from .messages import Message
 from .mro_dispatch import MroDispatch, handles

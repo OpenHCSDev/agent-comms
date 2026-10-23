@@ -11,8 +11,6 @@ from dataclasses import dataclass, field, replace
 from functools import partial
 from typing import TYPE_CHECKING, ClassVar
 
-from acp.schema import ToolKind
-
 from .acp_failure import (
     FailedNativeTurnOutcome,
     FailureSource,
@@ -22,9 +20,6 @@ from .acp_failure import (
     UnrecordedFailureSource,
     UnresolvedNativeTurnOutcome,
 )
-from .turn_terminal import FailedGoalTurn
-from .turn_goal_account import OriginGoalSettlement, VerifiedGoalSettlement
-from .turn_failure import BackendFailed, TurnFailure
 from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
 from .field_codec import NullMember
@@ -32,7 +27,6 @@ from .input_attempt import InputAttempt
 from .mro_dispatch import MroDispatch, handles
 from .native_failures import NativePiUnavailable
 from .pi_counts import PiCount, UnreportedCount
-from .thread_model import ThreadModel, UndeclaredModel
 from .pi_payloads import McpLiveAcknowledgement, PiDiagnostic, PiRequestId, PiUsage
 from .pi_vocabulary import (
     CompactionReason,
@@ -40,8 +34,12 @@ from .pi_vocabulary import (
     ThinkingLevelField,
     UnknownCompactionReason,
 )
-from .tool_declaration import ToolDeclaration
+from .thread_model import ThreadModel, UndeclaredModel
+from .tool_declaration import OtherAction, ToolAction, ToolDeclaration
 from .tool_results import NoSentMessage, NoToolDiff, ToolDiff
+from .turn_failure import BackendFailed, TurnFailure
+from .turn_goal_account import OriginGoalSettlement, VerifiedGoalSettlement
+from .turn_terminal import FailedGoalTurn
 
 if TYPE_CHECKING:
     from .agent_event_updates import AcpEventConsumer
@@ -203,13 +201,13 @@ class ToolEvent(AgentEvent):
 class ToolStart(ToolEvent):
     title: str = ""
     args: object = None
-    kind: ToolKind = "other"
+    kind: type[ToolAction] = OtherAction
 
     @classmethod
     def from_call(cls, call_id: str, name: str, arguments: object) -> ToolStart:
         declaration = ToolDeclaration.for_name(name)
         title = ToolDeclaration.caption(name, ToolDeclaration.record(name, arguments, call_id=call_id))
-        return cls(call_id, name, title, arguments, declaration.acp_kind)
+        return cls(call_id, name, title, arguments, declaration.declared_action())
 
 
 @dataclass(frozen=True)
