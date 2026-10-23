@@ -437,10 +437,8 @@ class UnclaimedResource(ResourceClaim):
 
 @dataclass(frozen=True)
 class ClaimOwner(AcquiringClaim, ResourceClaim):
+    # Built only by Acquisition.claimed from a validated acquisition and one of its own claims.
     resource: Annotated[str, ResourcePathText]
-
-    def __post_init__(self) -> None:
-        FieldCodec.require_fields(self)
 
     def acquire(
         self, scope: RecordedScope, registry: RegistrySnapshot, publish: Callable[[], ClaimOwner]
