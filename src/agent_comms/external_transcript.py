@@ -393,6 +393,22 @@ class StoreRead(TranscriptSource):
                     for event in row.events_in(self.connection)))
                 for turn_id in ids)
 
+    def tool_call_count(self, since: float) -> int:
+        """Count each original call once, including its still-open draft in this snapshot."""
+        call = "$." + FieldCodec.record_key(ToolStartTranscript, "tool_call_id")
+        stamp = "$." + FieldCodec.record_key(ToolStartTranscript, "timestamp")
+        kind = "$." + ToolStartTranscript.family_discriminator
+        return self.connection.execute(
+            'SELECT count(DISTINCT call_id) FROM ('
+            f'SELECT call_id,kind,timestamp FROM "{ExternalEventRow.declared_name}" WHERE thread=? '
+            'UNION ALL '
+            'SELECT json_extract(item.value,?),json_extract(item.value,?),json_extract(item.value,?) '
+            f'FROM "{DraftRow.declared_name}" AS draft,json_each(draft.events) AS item '
+            'WHERE draft.thread=?) WHERE kind=? AND timestamp>=?',
+            (self.transcript.lookup, call, kind, stamp, self.transcript.lookup,
+             FieldCodec.encode(ToolStartTranscript), since),
+        ).fetchone()[0]
+
     def unjudged(self, todo):
         where, parameters = ExternalEventRow.unjudged_query(self.transcript.lookup, todo)
         with closing(self.connection.execute(
