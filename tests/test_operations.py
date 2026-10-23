@@ -374,7 +374,7 @@ class TestThreadOps:
         assert wired.registry.require("planner").tags == frozenset({"base"})
         assert wired.registry.require("fixer").parent == ForkedParent("planner")
         assert wired.agents.activity.current_for(("planner",), active=frozenset({"planner"}))["planner"].detail == "renaming"
-        assert wired.agents.agent_info_of("planner").model_or("") == "test/model"
+        assert wired.agents.agent_info_of("planner").model == DeclaredModel("test/model")
         ledger = FieldCodec.encode(wired.ledger.read())
         assert isinstance(ledger, dict)
         assert ledger["owner"] == "planner"
