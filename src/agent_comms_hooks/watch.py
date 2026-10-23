@@ -30,9 +30,9 @@ class SessionRefusedError(ValueError):
 class NoSessionBridge(RuntimeError):
     """No bridge holds this claim: nothing is delivered until connect starts one."""
 
-    def __init__(self) -> None:
+    def __init__(self, session: str) -> None:
         super().__init__(
-            'No session bridge is running for this claim; its log names why it stopped. '
+            f'No session bridge is running for session {session}; its log names why it stopped. '
             'Start it with agent-comms-claude-bridge connect.')
 
 
@@ -189,9 +189,9 @@ class WatchState:
         announce()
         return True
 
-    def await_socket(self, absent: OSError) -> None:
+    def await_socket(self, claim: WatchClaim, absent: OSError) -> None:
         """No bridge holds the claim, so its socket is gone, not between bridges."""
-        raise NoSessionBridge() from absent
+        raise NoSessionBridge(claim.thread) from absent
 
 
 class UnclaimedWatch(WatchState):
@@ -245,7 +245,7 @@ class LiveWatch(RecordedWatch):
         """A held claim's absent socket is an install's swap, not an outage."""
         return False
 
-    def await_socket(self, absent: OSError) -> None:
+    def await_socket(self, claim: WatchClaim, absent: OSError) -> None:
         """The claim's lock outlives the install's exec, so a held claim's absent socket is
         the swap's gap: wait for the successor however long it starts."""
         time.sleep(.05)
