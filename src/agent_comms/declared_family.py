@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pkgutil
 import re
 from abc import ABC, ABCMeta, abstractmethod
 from collections.abc import Hashable, Iterable, Mapping
@@ -15,7 +16,7 @@ from metaclass_registry import (
     LazyDiscoveryDict,
     RegistryConfig,
 )
-from metaclass_registry.discovery import discover_registry_classes
+from metaclass_registry.discovery import import_module_preserving_root_logging
 from pydantic import BaseModel
 from pydantic._internal._model_construction import ModelMetaclass
 
@@ -220,7 +221,10 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
     @staticmethod
     @cache
     def _discover_package(package: ModuleType) -> None:
-        discover_registry_classes(package.__path__, package.__name__ + ".", DeclaredFamily)
+        """Import each module of the package once, so its members register themselves."""
+        for module in pkgutil.iter_modules(package.__path__, package.__name__ + "."):
+            if not module.ispkg:
+                import_module_preserving_root_logging(module.name)
 
     @classmethod
     def members_with(cls, capability: type) -> tuple[type[Self], ...]:
