@@ -48,7 +48,8 @@ manifest="$stack_root/pi-native.sha256"
 identity=$("$python" -I "$repo_root/src/agent_comms/native_build_inputs.py" \
     "$repo_root" "$(node --version)" "$(npm --version)" "${PI_MCP_DEPENDENCY_PACKAGE:-}")
 read -r build_id preparation_stamp <<< "$identity"
-target="$stack_root/.pi-native-$build_id"
+store_root=$(native store)
+target="$store_root/.pi-native-$build_id"
 stamp_name=.prepared-inputs.sha256
 bedrock=node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
 
@@ -59,50 +60,34 @@ verify() (
 )
 
 publish() (
-    local prepared=$1 deployment deployment_package deployment_stage
+    local prepared=$1 deployment
     if [[ -z "$publish_root" ]]; then
-        printf 'PI_NATIVE_BIN=%s/bin/pi-native\n' "$stack_root"
-        return
-    fi
-    mkdir -p -- "$publish_root"
-    publish_root=$(cd -- "$publish_root" && pwd -P)
-    deployment="$publish_root/.pi-native-$build_id"
-    deployment_package="$deployment/node_modules/@earendil-works/pi-coding-agent"
-    if [[ -e "$deployment" ]]; then
-        native \
-            publish_sources "$repo_root" "$deployment_package"
+        native qualify "$prepared/node_modules/@earendil-works/pi-coding-agent"
     else
-        deployment_stage=$(mktemp -d "$publish_root/.native-current-$build_id.stage.XXXXXXXX")
-        trap 'native retire "$deployment_stage"' EXIT
-        mkdir -p -- "$deployment_stage/node_modules/@earendil-works"
-        cp -a -- "$prepared/node_modules/@earendil-works/pi-coding-agent" \
-            "$deployment_stage/node_modules/@earendil-works/pi-coding-agent"
-        native \
-            publish_sources "$repo_root" \
-            "$deployment_stage/node_modules/@earendil-works/pi-coding-agent"
-        mv -- "$deployment_stage" "$deployment"
-        trap - EXIT
+        mkdir -p -- "$publish_root"
+        publish_root=$(cd -- "$publish_root" && pwd -P)
+        deployment="$publish_root/.pi-native-$build_id"
+        native publish_sources "$repo_root" "$prepared/node_modules/@earendil-works/pi-coding-agent"
+        native link "$publish_root"
+        printf 'PI_NATIVE_DEPLOYMENT=%s\n' "$deployment"
     fi
-    printf 'PI_NATIVE_DEPLOYMENT=%s\n' "$deployment"
     printf 'PI_NATIVE_BIN=%s/bin/pi-native\n' "$stack_root"
 )
 
-# This script owns stack/'s builds: once $target is accepted, every other pin's
-# finished build is retired, as the installer retires its prepared copies. A
-# .pi-native.stage.* directory belongs to a run that may still hold it; its own
-# trap removes it.
 accept() (
     publish "$target"
+    native link "$stack_root"
+    # Checkouts own only links. A build can still serve another runtime after a
+    # checkout drops its link, so artifact retirement belongs to the store.
     for stale in "$stack_root"/.pi-native-????????????????; do
-        if [[ -d "$stale" && "$stale" != "$target" ]]; then
-            native retire "$stale"
+        if [[ -L "$stale" && "$stale" != "$stack_root/.pi-native-$build_id" ]]; then
+            rm -- "$stale"
         fi
     done
 )
 
 if [[ "$update_pins" == false && -f "$target/$stamp_name" \
       && $(< "$target/$stamp_name") == "$preparation_stamp" ]]; then
-    native qualify "$target/node_modules/@earendil-works/pi-coding-agent"
     accept
     exit 0
 fi
@@ -146,7 +131,7 @@ if [[ "$prepared" != "${TMPDIR:-/var/tmp}"/agent-comms-pi-native-*/node_modules/
     exit 1
 fi
 
-stage=$(mktemp -d "$stack_root/.pi-native.stage.XXXXXXXX")
+stage=$(mktemp -d "$store_root/.pi-native.stage.XXXXXXXX")
 trap 'native retire "$stage"; rm -rf -- "$scratch_root" "$stock_root"' EXIT
 mv -- "$scratch_root/node_modules" "$stage/node_modules"
 cp -- "$stock/$bedrock" "$stage/node_modules/@earendil-works/pi-coding-agent/$bedrock"
@@ -186,13 +171,13 @@ patch --batch --fuzz=0 --no-backup-if-mismatch -p1 \
     "$stage/node_modules/@earendil-works/pi-coding-agent" \
     ${PI_MCP_DEPENDENCY_PACKAGE:+"$PI_MCP_DEPENDENCY_PACKAGE"}
 native share_resources \
-    "$stage/node_modules/@earendil-works/pi-coding-agent" "$stack_root"
+    "$stage/node_modules/@earendil-works/pi-coding-agent" "$store_root"
 if [[ "$update_pins" == true ]]; then
     native write_manifest "$native_package"
     identity=$("$python" -I "$repo_root/src/agent_comms/native_build_inputs.py" \
         "$repo_root" "$(node --version)" "$(npm --version)" "${PI_MCP_DEPENDENCY_PACKAGE:-}")
     read -r build_id preparation_stamp <<< "$identity"
-    target="$stack_root/.pi-native-$build_id"
+    target="$store_root/.pi-native-$build_id"
 fi
 if ! verify "$stage"; then
     printf 'The built native tree differs from %s. If a source or the stock release\n' "$manifest" >&2

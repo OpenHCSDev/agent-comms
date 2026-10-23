@@ -7,16 +7,18 @@ import sys
 from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Annotated
+from pathlib import Path
 
 from agent_comms import field_codec
 from agent_comms.command import Command
 from agent_comms.declared_verb import DeclaredVerb
 from agent_comms.native_package import (
+    MANIFEST,
+    NativePackageStore,
     VerifiedNativePackage,
     install_declared_sources,
     package_tree_digest,
     pinned_native_package,
-    remove_native_tree,
     share_native_resources,
     write_native_manifest,
 )
@@ -82,7 +84,26 @@ class RetireVerb(PackageVerb):
     help = "Remove an owned tree containing sealed native directories"
 
     def apply(self, ctx: None = None) -> None:
-        remove_native_tree(self.package)
+        NativePackageStore.at_home(Path.home()).retire(self.package)
+
+
+@dataclass(frozen=True, kw_only=True)
+class StoreVerb(NativePackageVerb):
+    help = "Prepare and print the native artifact store"
+
+    def apply(self, ctx: None = None) -> None:
+        store = NativePackageStore.at_home(Path.home())
+        store.prepare()
+        print(store.path)
+
+
+@dataclass(frozen=True, kw_only=True)
+class LinkVerb(NativePackageVerb):
+    help = "Bind this manifest's prepared artifact into a resource directory"
+    root: Annotated[StoragePath, field_codec.Argument(flags=("root",))]
+
+    def apply(self, ctx: None = None) -> None:
+        NativePackageStore.at_home(Path.home()).link(MANIFEST, self.root)
 
 
 @dataclass(frozen=True, kw_only=True)

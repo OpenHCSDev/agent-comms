@@ -72,14 +72,14 @@ def pinned_package_for(manifest: Path) -> Path:
 
 
 def pinned_location() -> Path:
-    return pinned_package_for(MANIFEST)
+    return pinned_package_for(MANIFEST).resolve()
 
 
 def pinned_native_package() -> Path:
     if not (package := pinned_location()).is_dir():
         raise NativePackageMissing(f"Pinned native package directory is missing: {package}; "
                                    f"run {MANIFEST.parent / 'bin/prepare-pi-native'} first")
-    return package
+    return package.resolve(strict=True)
 
 
 @dataclass
@@ -205,17 +205,38 @@ def seal_native_tree(root: Path) -> None:
         Path(directory).chmod(SealedPackageInventory.permissions)
 
 
-def unseal_native_directories(root: Path) -> None:
-    """Retirement may unlink owned trees; shared file inodes are never made writable."""
-    for directory, _, _ in os.walk(root):
-        path = Path(directory)
-        path.chmod(stat.S_IMODE(path.lstat().st_mode) | stat.S_IWUSR)
+@dataclass(frozen=True)
+class NativePackageStore:
+    """Prepared trees live here; checkouts and interpreters publish links to them."""
 
+    path: Path
 
-def remove_native_tree(root: Path) -> None:
-    """Retire an owned build or runtime containing sealed native directories."""
-    unseal_native_directories(root)
-    shutil.rmtree(root)
+    @classmethod
+    def at_home(cls, home: Path) -> NativePackageStore:
+        return cls(home / ".local/share/agent-comms/native")
+
+    def prepare(self) -> None:
+        self.path.mkdir(mode=0o700, parents=True, exist_ok=True)
+
+    def package_for(self, manifest: Path) -> Path:
+        return self.path / pinned_package_for(manifest).relative_to(manifest.parent)
+
+    def link(self, manifest: Path, resources: Path) -> None:
+        build = self.package_for(manifest).parents[2]
+        destination = resources / build.name
+        resources.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if destination.is_symlink() and destination.resolve(strict=True) == build.resolve(strict=True):
+            return
+        destination.symlink_to(build, target_is_directory=True)
+
+    def retire(self, build: Path) -> None:
+        """Only this store retires sealed trees; shared file inodes stay read-only."""
+        if build.parent.resolve() != self.path.resolve() or build.is_symlink():
+            raise NativePackageError("Sealed native retirement requires an owned store directory")
+        for directory, _, _ in os.walk(build):
+            path = Path(directory)
+            path.chmod(stat.S_IMODE(path.lstat().st_mode) | stat.S_IWUSR)
+        shutil.rmtree(build)
 
 
 def package_tree_digest(root: Path) -> str:
@@ -283,22 +304,6 @@ def share_native_resources(root: Path, deployments: Path) -> dict[str, int]:
     package_tree_digest(root)
     return {"shared_files": shared_files, "shared_content_bytes": shared_bytes}
 
-
-def link_sealed_tree(source: Path, destination: Path) -> None:
-    """Publish a sealed build at another path by sharing its file inodes.
-
-    A sealed build never changes in place: every regular file is read-only, and a declared
-    source replaces its own inode (``install_declared_sources``). So each copy of a build
-    holds the same bytes, and sharing the inodes is the copy. A writable file would become a
-    mutable shared resource, which the package inventory refuses, so it is refused here first.
-    """
-
-    def link(original: str, copy: str) -> None:
-        if os.lstat(original).st_mode & 0o222:
-            raise NativePackageError(f"Native package resource is writable: {original}")
-        os.link(original, copy, follow_symlinks=False)
-
-    shutil.copytree(source, destination, symlinks=True, copy_function=link)
 
 def write_native_manifest(root: Path) -> None:
     """Commit an assembled package through the existing diagnostic/tree format.
@@ -522,7 +527,8 @@ class VerifiedNativePackage:
         layout = Path(PACKAGE_LAYOUT).parts
         if root.parts[-len(layout):] != layout:
             raise NativePackageError("Canonical native Pi package layout is required")
-        if not root.is_relative_to(MANIFEST.parent):
+        binding = MANIFEST.parent / root.parents[2].name / PACKAGE_LAYOUT
+        if binding.resolve() != root:
             raise NativePackageError("Native Pi package is outside this code's native resources")
         for ancestor in (root, *root.parents):
             failed = TrustedAncestorRole.violation(ancestor.lstat())
