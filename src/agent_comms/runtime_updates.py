@@ -208,6 +208,9 @@ class ReadingPhase(ABC):
 class RuntimeUpdate(ABC):
     """One change a runtime reports about its thread."""
 
+    def trail_events(self) -> tuple[object, ...]:
+        return ()
+
     def during(self, phase: ReadingPhase) -> tuple[RuntimeUpdate, ...]:
         return (self,)
 
@@ -278,6 +281,9 @@ class FinishedItem(TurnItem, RuntimeUpdate):
     """One CLI item's complete presentation, identified by its producer."""
 
     events: tuple[TranscriptEvent, ...]
+
+    def trail_events(self) -> tuple[object, ...]:
+        return self.events
 
     def publish(self, output: ThreadOutput) -> None:
         output.transcript.finish(turn_id=self.turn_id, item_id=self.item_id, events=self.events)

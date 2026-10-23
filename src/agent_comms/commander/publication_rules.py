@@ -2,21 +2,18 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Self
 
-from agent_comms.comms import Comms
-from agent_comms.standing_rules import UndatedStandingRule
+from agent_comms.standing_rules import HeldBranch, HeldBranchRule
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import PullRequestLink, UnmergedListedPullRequest
-from agent_comms.ui_model.unit_state import UnitState
-from agent_comms.work_branches import UnpushedHead, WorkBranches
+from agent_comms.work_branches import UnpushedHead
 
 
 @dataclass(frozen=True)
-class UnpushedBranch(UndatedStandingRule):
+class UnpushedBranch(HeldBranchRule):
     problem: str
     order: str
     holder: ThreadIncarnation
@@ -24,14 +21,12 @@ class UnpushedBranch(UndatedStandingRule):
     unpublished: UnpushedHead
 
     @classmethod
-    def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState]) -> tuple[Self, ...]:
-        return tuple(cls(todo.id, todo.order.checked().id, unit,
-                         state.source.thread.project_path, unpublished)
-                     for state in observed for unit in state.readable_units()
-                     if state.source.todos
-                     for unpublished in WorkBranches(state.source.thread.project_path).unpushed()
-                     for todo in state.source.todos)
+    def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
+        return tuple(cls(held.problem, held.todo.order.checked().id, held.holder,
+                         held.source.thread.project_path, unpublished)
+                     for held in branches
+                     for unpublished in held.source.pulls.checkout(
+                         held.source.thread.project_path).branches.unpushed(held.difference))
 
     def line(self) -> str:
         return (f"UNPUSHED: {self.order} ({self.problem}), holder {self.holder.name}, "
@@ -41,7 +36,7 @@ class UnpushedBranch(UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class EmptyPullRequest(UndatedStandingRule):
+class EmptyPullRequest(HeldBranchRule):
     problem: str
     order: str
     holder: ThreadIncarnation
@@ -50,19 +45,17 @@ class EmptyPullRequest(UndatedStandingRule):
     head: str
 
     @classmethod
-    def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState]) -> tuple[Self, ...]:
+    def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
         found = []
-        for state in observed:
-            for unit in state.readable_units():
-                branches = WorkBranches(state.source.thread.project_path)
-                for todo in state.source.todos:
-                    for pull in state.source.pulls.listed(todo.repo, UnmergedListedPullRequest, todo):
-                        compared = branches.pull_request_diff(pull.base, pull.head)
-                        if not compared.paths:
-                            found.append(cls(todo.id, todo.order.checked().id, unit,
-                                             PullRequestLink(todo.repo, pull.number),
-                                             compared.base, compared.head))
+        for held in branches:
+            reader = held.source.pulls.checkout(held.source.thread.project_path).branches
+            todo = held.todo
+            for pull in held.source.pulls.listed(todo.repo, UnmergedListedPullRequest, todo):
+                compared = reader.pull_request_diff(pull.base, pull.head)
+                if not compared.paths:
+                    found.append(cls(held.problem, todo.order.checked().id, held.holder,
+                                     PullRequestLink(todo.repo, pull.number),
+                                     compared.base, compared.head))
         return tuple(found)
 
     def line(self) -> str:

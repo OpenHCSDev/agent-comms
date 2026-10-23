@@ -12,6 +12,7 @@ import subprocess
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -22,6 +23,7 @@ from .cli_protocol import WireModel
 from .declared_family import DeclaredFamily
 from .field_codec import projected
 from .repo import Repo
+from .repository_name import RepositoryName
 
 if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
@@ -73,6 +75,19 @@ class WorkBranch:
     @projected(view="wire")
     def linked(self) -> bool:
         return bool(self.links)
+
+
+@dataclass(frozen=True)
+class BranchDifference:
+    """One branch against an immutable origin/main cut, shared by its consumers."""
+
+    repository: RepositoryName
+    branch: str
+    head: str
+    moved_at: float
+    main: str
+    behind: int
+    files: frozenset[str]
 
 
 class ForgeAnswer(WireModel):
@@ -164,6 +179,9 @@ class WorkBranches:
     """One repository's branches with commits that main does not have."""
 
     checkout: Path
+    _remote_heads: dict[tuple[str, str], tuple[str, ...]] = field(
+        default_factory=dict, init=False, repr=False, compare=False,
+    )
     main: ClassVar[str] = "main"
     timeout: ClassVar[float] = 60.0
 
@@ -239,9 +257,12 @@ query($owner: String!, $name: String!, $after: String) {
             self._run("git", "fetch", "--quiet", "--no-tags", "--", remote, *missing)
 
     def remote_heads(self, remote: str, reference: str) -> tuple[str, ...]:
-        return tuple(line.split()[0] for line in self._run(
-            "git", "ls-remote", "--refs", remote, reference,
-        ).splitlines())
+        key = remote, reference
+        if key not in self._remote_heads:
+            self._remote_heads[key] = tuple(line.split()[0] for line in self._run(
+                "git", "ls-remote", "--refs", remote, reference,
+            ).splitlines())
+        return self._remote_heads[key]
 
     def pull_request_diff(self, base: str, head: str) -> BranchComparison:
         published = self.remote_heads("origin", f"refs/heads/{base}")
@@ -254,10 +275,10 @@ query($owner: String!, $name: String!, $after: String) {
         ).split("\0") if name)
         return BranchComparison(base_head, head, paths)
 
-    def unpushed(self) -> tuple[UnpushedHead, ...]:
+    def unpushed(self, difference: BranchDifference) -> tuple[UnpushedHead, ...]:
         """Compare this HEAD with its actual upstream, without trusting a stale tracking ref."""
-        head = self._run("git", "rev-parse", "HEAD").strip()
-        reference = self._run("git", "rev-parse", "--symbolic-full-name", "HEAD").strip()
+        head = difference.head
+        reference = f"refs/heads/{difference.branch}"
         upstream = self._run("git", "for-each-ref", "--format=%(upstream)", reference).strip()
         if upstream:
             remote, remote_ref = self._run(
@@ -277,12 +298,35 @@ query($owner: String!, $name: String!, $after: String) {
             "git", "for-each-ref", "--format=%(refname)", "refs/remotes/",
         ).splitlines() if ref != upstream)
         count = int(self._run("git", "rev-list", "--count", head, "--not", *remotes))
-        return (UnpushedHead(head, count, upstream),)
+        return (UnpushedHead(head, count, upstream),) if count else ()
 
-    @property
+    @cached_property
     def repository(self) -> tuple[str, str]:
         repository = Repo.of(self.checkout).github
         return repository.owner, repository.name
+
+    @cached_property
+    def origin_main(self) -> str:
+        return self._run("git", "rev-parse", f"refs/remotes/origin/{self.main}").strip()
+
+    def difference(self, main: str) -> BranchDifference:
+        """Git owns ancestry and changed paths; pin both commits before comparing."""
+        movement = self._run(
+            "git", "reflog", "show", "-1", "--date=unix", "--format=%H%x00%gD", "HEAD",
+        ).strip()
+        try:
+            head, selector = movement.split("\0")
+            moved_at = float(selector.rsplit("@{", 1)[1].removesuffix("}"))
+        except (ValueError, IndexError) as unread:
+            raise WorkBranchError(f"HEAD reflog in {self.checkout} has no readable movement time") from unread
+        branch = self._run("git", "rev-parse", "--abbrev-ref", "HEAD").strip()
+        base = self._run("git", "merge-base", main, head).strip()
+        behind = int(self._run("git", "rev-list", "--count", f"{base}..{main}"))
+        files = frozenset(path for path in self._run(
+            "git", "diff", "--name-only", "-z", "--no-renames", base, head,
+        ).split("\0") if path)
+        return BranchDifference(RepositoryName(*self.repository), branch, head, moved_at,
+                                main, behind, files)
 
     def _pages(self, query: str, answer: type[ForgeQuery], **variables: str):
         pages: list[tuple[str, ...]] = [()]

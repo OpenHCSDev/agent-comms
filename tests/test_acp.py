@@ -1,7 +1,7 @@
 """ACP server tests against the official agent-client-protocol library.
 
 Exercises the agent the way real clients (Toad, Zed) do: through
-``acp.run_agent`` over real stdio pipes, plus direct handler-level tests.
+Core's ACP connection over real stdio pipes, plus direct handler-level tests.
 """
 
 from agent_comms.bus import Bus

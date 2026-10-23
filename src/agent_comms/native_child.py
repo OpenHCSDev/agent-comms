@@ -8,11 +8,12 @@ from collections.abc import Callable, Collection, Coroutine
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar, NoReturn
 
 from .pi_events import PiEvent
 
 from .child_process import AttachedChild, ChildOutcome, join_retirement
+from .declared_family import DeclaredFamily
 from .launch_runtime import INHERITED_ENVIRONMENT
 from .native_attestation import NativeAttestation, PendingAttestation
 from .native_pi import NativePiRpcLaunch
@@ -24,6 +25,51 @@ from .session_revision import SessionRevision
 
 if TYPE_CHECKING:
     from .turn_context import Provenance
+
+
+class RetirementState(DeclaredFamily):
+    """The shutdown result owns completion, failure and cancellation behavior."""
+
+    retired: ClassVar[bool] = False
+
+    @property
+    def release_failure(self) -> BaseException | None:
+        return None
+
+    @abstractmethod
+    def require_outcome(self) -> ChildOutcome: ...
+
+    def interrupted(self, cancellation: asyncio.CancelledError) -> NoReturn:
+        raise cancellation
+
+
+class RetirementPending(RetirementState):
+    def require_outcome(self) -> ChildOutcome:
+        raise RuntimeError("Pi child retirement has not completed")
+
+
+@dataclass(frozen=True)
+class Retired(RetirementState):
+    outcome: ChildOutcome
+    retired: ClassVar[bool] = True
+
+    def require_outcome(self) -> ChildOutcome:
+        return self.outcome
+
+
+@dataclass(frozen=True)
+class RetirementFailed(RetirementState):
+    error: BaseException
+
+    @property
+    def release_failure(self) -> BaseException:
+        return self.error
+
+    def require_outcome(self) -> ChildOutcome:
+        raise self.error
+
+    def interrupted(self, cancellation: asyncio.CancelledError) -> NoReturn:
+        raise cancellation from self.error
 
 
 class InputForwarder(ABC):
@@ -89,7 +135,7 @@ class PiChild:
     resources: ExitStack = field(default_factory=ExitStack, repr=False, kw_only=True)
     transport: AsyncExitStack = field(default_factory=AsyncExitStack, repr=False, kw_only=True)
     forwarding: InputForwarder = field(default_factory=NoInputForwarder, init=False, repr=False)
-    _close_job: asyncio.Task[ChildOutcome | BaseException] | None = field(default=None, init=False, repr=False)
+    _close_job: asyncio.Task[RetirementState] | None = field(default=None, init=False, repr=False)
 
     def send(self, command) -> asyncio.Future:
         future = self.reader.track(command)
@@ -123,21 +169,23 @@ class PiChild:
         return response.data.require_payload()
 
     @property
-    def retirement_result(self) -> ChildOutcome | BaseException | None:
+    def retirement_result(self) -> RetirementState:
         """The original completed shutdown result; pending work has no result."""
         job = self._close_job
         if job is None or not job.done() or job.cancelled():
-            return None
-        return job.exception() or job.result()
+            return RetirementPending()
+        error = job.exception()
+        if error is not None:
+            return RetirementFailed(error)
+        return job.result()
 
     @property
     def retired(self) -> bool:
-        return isinstance(self.retirement_result, ChildOutcome)
+        return self.retirement_result.retired
 
     @property
     def release_failure(self) -> BaseException | None:
-        result = self.retirement_result
-        return result if isinstance(result, BaseException) else None
+        return self.retirement_result.release_failure
 
     def forward_input(self, operation: Callable[[], Coroutine[None, None, None]]) -> None:
         self.forwarding = self.forwarding.start(operation)
@@ -162,15 +210,11 @@ class PiChild:
         try:
             result = await join_retirement(job)
         except asyncio.CancelledError as cancellation:
-            if isinstance(error := job.result(), BaseException):
-                raise cancellation from error
-            raise
-        if isinstance(result, BaseException):
-            raise result
-        return result
+            job.result().interrupted(cancellation)
+        return result.require_outcome()
 
-    async def _shutdown(self, *, graceful: bool) -> ChildOutcome | BaseException:
-        # Return the original error: asyncio otherwise discards a typed
+    async def _shutdown(self, *, graceful: bool) -> RetirementState:
+        # Retain the original error: asyncio otherwise discards a typed
         # CancelledError after its first observation by a task-result reader.
         try:
             try:
@@ -193,8 +237,8 @@ class PiChild:
                 else:
                     self.resources.close()
         except BaseException as error:
-            return error
-        return outcome
+            return RetirementFailed(error)
+        return Retired(outcome)
 
     @asynccontextmanager
     async def failures(self):
