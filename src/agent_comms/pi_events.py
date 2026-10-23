@@ -11,7 +11,7 @@ from . import agent_events as events
 from . import turn_phase as phases
 from .acp_failure import UnrecordedFailureSource
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, FieldPlan, WireName, WireOmitDefault
+from .field_codec import FieldCodec, FieldPlan, WireName, WireNullDefault, WireOmitDefault
 from .native_input_record import NativeInputCommit, NativeInputLocation
 from .native_pi import NativePiOperationFailed
 from .native_turn_context import NativeContextManifestData
@@ -135,6 +135,9 @@ class PiEvent(OpenPayload, affix=""):
 
     def responds_to(self, request: PiCommand) -> bool:
         return False
+
+    def correlate_or_deliver(self, channel, on_event: Callable[[PiEvent], None]) -> None:
+        on_event(self)
 
 
 class NativePiEvent(PiEvent, declared_name=None):
@@ -699,7 +702,7 @@ class MessageUpdate(phases.AcceptsPrompt, NativePiEvent, DurablePiEvent):
     message: PiMessage = field(
         default_factory=AbsentMessage
     )
-    usage: Annotated[PiUsage, WireOmitDefault()] = UnreportedUsage()
+    usage: Annotated[PiUsage, WireOmitDefault(), WireNullDefault()] = UnreportedUsage()
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         if self.message.update_context and not session.native.attestation.uncertain:
@@ -756,6 +759,9 @@ class Response(NativePiEvent, DurablePiEvent):
         return not self.success.value_or(True)
 
     async def deliver_to(self, channel) -> None:
+        channel.correlate(self)
+
+    def correlate_or_deliver(self, channel, on_event: Callable[[PiEvent], None]) -> None:
         channel.correlate(self)
 
     def responds_to(self, request: PiCommand) -> bool:

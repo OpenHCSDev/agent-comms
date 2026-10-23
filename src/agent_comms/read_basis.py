@@ -832,7 +832,7 @@ class MessageDisplayScope(DeclaredFamily, ABC, affix="DisplayScope"):
         for row in source.latest_conversations(predicate, parameters, through):
             conversation = self.read_key(row.sender, row.target, snapshot)
             prefixes[conversation] = max(prefixes.get(conversation, 0), row.seq)
-        return DisplayBasis(viewer, snapshot.require(viewer).created_at,
+        return DisplayBasis(viewer, snapshot.require(viewer).incarnation.wire_birth,
             tuple(DisplayedConversation(conversation, (), sequence)
                   for conversation, sequence in prefixes.items()), RecordedBus(source.identity))
 
@@ -1022,7 +1022,7 @@ class AllChannelDisplayScope(AllTargetsDisplayScope):
 
     def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
                     source: BusSnapshot, *, document, through: int) -> DisplayBasis:
-        return DisplayBasis(viewer, snapshot.require(viewer).created_at,
+        return DisplayBasis(viewer, snapshot.require(viewer).incarnation.wire_birth,
             (DisplayedConversation(AllConversation(), (), through),),
             RecordedBus(source.identity))
 

@@ -199,6 +199,10 @@ class WireOmitDefault(FlagDirective):
     pass
 
 
+class WireNullDefault(FlagDirective):
+    """An explicit external null has the same meaning as an omitted field."""
+
+
 class WireTransient(FlagDirective):
     pass
 
@@ -568,6 +572,9 @@ class FieldPlan:
     ) -> dict[str, object]:
         return self.decoded(data)
 
+    def decoded_external(self, data: dict[str, object]) -> dict[str, object]:
+        return self.decoded_using(data, lambda raw: self.value.decode_external(raw, data))
+
     def decoded_selected(self, data, keys, selections):
         return self.decoded_using(data, lambda value: self.value.decode_keys(value, keys, selections))
 
@@ -608,6 +615,14 @@ class TransientFieldPlan(DeclaredFieldPlan):
 
     directives = (WireTransient,)
     records = False
+
+
+class NullDefaultFieldPlan(DeclaredFieldPlan):
+    directives = (WireNullDefault,)
+
+    def captured(self, data: object) -> dict[str, object]:
+        return {name: value for name, value in super().captured(data).items()
+                if value is not None}
 
 
 class NullMemberOmission(DeclaredFieldPlan):

@@ -26,7 +26,7 @@ from .native_tool_call import (
     SelectedToolDenied,
     ToolOutcomeUnknown,
 )
-from .pi_payloads import PiContent, ToolCallContent
+from .pi_payloads import PiContent
 from .private_path import PrivateDirectoryRole, PrivateSocketRole
 
 if TYPE_CHECKING:

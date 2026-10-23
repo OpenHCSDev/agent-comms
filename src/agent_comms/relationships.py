@@ -367,7 +367,7 @@ class SortableRelationshipGroup(RelationshipGroup):
     @classmethod
     def ordered(cls, document: RelationshipDocument, owner: Thread,
                 order: type[ThreadSort]) -> RelationshipDocument:
-        row = RelationshipOrder(owner.name, owner.created_at, cls, order)
+        row = RelationshipOrder(owner.name, owner.incarnation.wire_birth, cls, order)
         return replace(document, orders=tuple(
             saved for saved in document.orders if saved.identity != row.identity
         ) + (row,))
@@ -619,7 +619,7 @@ class AddRelationshipEdit(RetainingRelationshipEdit):
             return ctx.active
         now = time.time()
         return Collaboration(
-            ctx.first.name, peer.name, ctx.first.created_at, peer.created_at, self.note, now, now
+            ctx.first.name, peer.name, ctx.first.incarnation.wire_birth, peer.incarnation.wire_birth, self.note, now, now
         )
 
 

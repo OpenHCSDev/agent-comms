@@ -263,7 +263,7 @@ class DeliveryScope(MessageDisplayScope):
         incarnation = source.incarnation
         if sender_lookup not in self.sender_lookups(incarnation, incarnation.require_recorded):
             return None
-        return max(source.created_at, snapshot.threads[self.actor].created_at)
+        return max(source.incarnation.wire_birth, snapshot.threads[self.actor].incarnation.wire_birth)
 
     def unread(
         self, delivery: DeliveryMessage, snapshot: RegistryProvenance, seen: ReadCursor

@@ -187,7 +187,7 @@ class HumanOrigin(OwnerVoiceOrigin):
 
     @classmethod
     def of(cls, user: Thread) -> HumanOrigin:
-        return cls(user.name, user.created_at, user.worktree)
+        return cls(user.name, user.incarnation.wire_birth, user.worktree)
 
     def require_sender(
         self, message: Message, sender_thread: Thread, snapshot: RegistrySnapshot

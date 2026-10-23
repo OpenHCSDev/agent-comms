@@ -1,3 +1,4 @@
+import ast
 import subprocess
 from pathlib import Path
 
@@ -7,6 +8,7 @@ from agent_comms.head_review import HeadReview
 from agent_comms.phase_evidence import (
     AllEvidence,
     ClassFlagsAbsent,
+    ClassChecks,
     CommitMerged,
     MainEvidence,
     MainTree,
@@ -199,6 +201,50 @@ def test_source_shape_evidence_reads_declarations_on_main(tmp_path):
     assert not reading.holds(ParentsShared(paths=("src/caps.py",)))
     assert reading.holds(ParentsShared(names=("Shared",)))
     assert not reading.holds(ParentsShared(names=("Missing",)))
+
+
+@pytest.mark.parametrize(("source", "allowed"), (
+    ("class Value:\n"
+     "    def __eq__(self, other):\n"
+     "        if not isinstance(other, Value):\n"
+     "            return NotImplemented\n"
+     "        return self.key == other.key\n", True),
+    ("class Value:\n"
+     "    def __lt__(self, other):\n"
+     "        if not isinstance(other, Value):\n"
+     "            return NotImplemented\n"
+     "        return isinstance(self.key, Value)\n", False),
+    ("class Value:\n"
+     "    def __eq__(self, other):\n"
+     "        if not isinstance(other, Value):\n"
+     "            return False\n", False),
+    ("NotImplemented = False\n"
+     "class Value:\n"
+     "    def __eq__(self, other):\n"
+     "        if not isinstance(other, Value):\n"
+     "            return NotImplemented\n", False),
+    ("class Value:\n"
+     "    def __eq__(self, other):\n"
+     "        NotImplemented = False\n"
+     "        if not isinstance(other, Value):\n"
+     "            return NotImplemented\n", False),
+    ("class Value:\n"
+     "    def __eq__(self, other):\n"
+     "        if not isinstance(self.key, Value):\n"
+     "            return NotImplemented\n", False),
+    ("class Value: pass\n"
+     "def __eq__(self, other):\n"
+     "    if not isinstance(other, Value):\n"
+     "        return NotImplemented\n", False),
+    ("class Value:\n"
+     "    def __hash__(self):\n"
+     "        if not isinstance(self, Value):\n"
+     "            return NotImplemented\n", False),
+))
+def test_only_foreign_comparison_refusal_exempts_an_owned_type_check(source, allowed):
+    checks = ClassChecks()
+    checks.visit(ast.parse(source))
+    assert (not checks.declared & checks.checked) is allowed
 
 
 @pytest.mark.parametrize(("required", "unskipped", "expected"), (

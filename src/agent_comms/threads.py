@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property
@@ -54,6 +53,7 @@ from .storage_rules import StoragePath, StorageRoots, StorageRule
 from .store_files import AtomicFile
 from .task_sources import TaskScope
 from .thread_execution import NativeThreadExecution, ThreadExecution
+from .thread_creation import CreationSeconds, CreationTime, GeneratedCreationTime
 from .thread_identity import (
     AgentThreadRole,
     ThreadIncarnation,
@@ -70,14 +70,6 @@ from .turn_lease import FinishedTurn, NoTurnRecord, TurnLease, TurnLeaseFence, T
 if TYPE_CHECKING:
     from .goal_management import Goals
     from .launch_runtime import ThreadLaunch
-
-
-class _GeneratedCreationTime(float):
-    """Transient marker for default timestamps; never persisted as claim authority."""
-
-
-def _thread_creation_time() -> float:
-    return _GeneratedCreationTime(time.time())
 
 
 @dataclass(frozen=True)
@@ -189,7 +181,7 @@ class ThreadProvenance:
     name: str = field(kw_only=False)
     tags: Annotated[frozenset[str], RegistrationPolicy(InheritEmpty)] = field(kw_only=False)
     worktree: str = field(kw_only=False)
-    created_at: Annotated[float, WireRequired()]
+    created_at: Annotated[CreationTime, CreationSeconds, WireRequired()]
     session_file: Annotated[SessionFile, RegistrationPolicy(InheritApplied)] = field(
         default_factory=NoSessionFile
     )
@@ -216,6 +208,8 @@ class ThreadProvenance:
             raise ValueError(f"Thread name {name!r} must be alphanumeric with hyphens/underscores.")
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "created_at", FieldCodec.decode(
+            Annotated[CreationTime, CreationSeconds], self.created_at))
         self.require_name(self.incarnation.name)
         if not self.worktree:
             raise ValueError("Thread worktree cannot be empty.")
@@ -236,7 +230,7 @@ class ThreadProvenance:
     @cached_property
     def incarnation(self) -> ThreadIncarnation:
         """The declaration's birth member, created once and shared by its readers."""
-        return ThreadIncarnationRecord(self.name, self.created_at).incarnation()
+        return ThreadIncarnationRecord(self.name, self.created_at.to_wire()).incarnation()
 
 
 @dataclass(frozen=True, slots=True)
@@ -263,10 +257,9 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
     goal: Annotated[GoalDeclaration, RegistrationPolicy(GoalDeclaration)] = (
         field(default_factory=NoGoal)
     )
-    created_at: Annotated[float, WireRequired()] = field(
-        default_factory=_thread_creation_time, kw_only=True
+    created_at: Annotated[CreationTime, CreationSeconds, WireRequired()] = field(
+        default_factory=GeneratedCreationTime.now, kw_only=True
     )
-    _generated_created_at: bool = field(init=False, default=False, repr=False, compare=False)
     storage_roots: Annotated[
         StorageRoots, RegistrationPolicy(InheritPrevious)
     ] = field(kw_only=True)
@@ -391,10 +384,6 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         return self.path_in(root, lookup=self.incarnation.require_recorded().lookup, name="")
 
     def __post_init__(self) -> None:
-        generated = isinstance(self.created_at, _GeneratedCreationTime)
-        object.__setattr__(self, "_generated_created_at", generated)
-        if generated:
-            object.__setattr__(self, "created_at", float(self.created_at))
         super(Thread, self).__post_init__()
         self.incarnation.require_recorded()  # Archives may lack a birth; live threads may not.
         self.process_identity.require_held_by(self.role)
@@ -518,16 +507,14 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         return result
 
     def for_claim(self, name: str) -> Thread:
-        """Assign an allocated name without turning a generated clock into caller identity."""
-        created = _GeneratedCreationTime(self.created_at) if self._generated_created_at else self.created_at
-        return replace(self, name=name, created_at=created)
+        """Assign an allocated name, retaining the creation value's allocation policy."""
+        return replace(self, name=name)
 
     def for_registration(self, canonical_name: str, previous: Thread | None) -> Thread:
         """Resolve metadata once from its field declarations, retaining exact identity.
 
-        An unchanged declaration is returned intact: replacing it would discard
-        the transient generated-creation marker used by the locked registry to
-        resolve clock collisions. Executor and turn authority are not metadata.
+        Executor and turn authority are not metadata. The creation value retains
+        its own allocation policy across replacements.
         """
         inherited = {}
         if previous is not None:

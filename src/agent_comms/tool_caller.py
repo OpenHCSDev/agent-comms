@@ -169,7 +169,7 @@ class CommanderForkCaller(ThreadCaller):
 
     def identity(self, comms: Comms) -> ThreadIncarnation:
         fork = comms.registry.require(self.name)
-        return CommanderForkIdentity(fork.name, fork.created_at, self.commander(comms).incarnation)
+        return fork.incarnation.require_recorded().acting_for(self.commander(comms).incarnation)
 
     def retire(self, comms: Comms) -> None:
         comms.registry.unregister(self.name)

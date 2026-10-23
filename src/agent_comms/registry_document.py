@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
@@ -574,19 +573,8 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
             )
             return change.restarted() if new_owner else change
         if any(existing.created_at == thread.created_at for existing in self.threads.values()):
-            # The Windows wall clock can return the same value for six
-            # independent default-constructed threads. Allocate a distinct
-            # identity under this store lock, but never rewrite an explicit
-            # caller-supplied creation identity or alias someone else's claim.
-            if not thread._generated_created_at:
-                raise RelationViolationError("Registry creation identities collide.")
             used = {existing.created_at for existing in self.threads.values()}
-            candidate = float(thread.created_at)
-            while candidate in used:
-                candidate = math.nextafter(candidate, math.inf)
-            if not math.isfinite(candidate):
-                raise RelationViolationError("Registry creation identities collide.")
-            thread = replace(thread, created_at=candidate)
+            thread = replace(thread, created_at=thread.created_at.distinct_from(used))
 
         change = InitialRegistration(thread=thread, status=status)
         return change.restarted() if new_owner else change

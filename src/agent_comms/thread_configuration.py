@@ -24,7 +24,7 @@ class ThreadConfiguration:
         thread = self.registry.require(name)
         info = self.agents.agent_info_of(thread.name)
         return CoordinationChangedUpdate(
-            RecordedThreadIncarnation(thread.name, thread.created_at),
+            thread.incarnation.require_recorded(),
             str(self.root.resolve()),
             ProcessIdentity.capture(os.getpid()),
             thread.worktree,

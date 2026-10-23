@@ -249,7 +249,7 @@ class OwnerReleaseStore(ThreadOwnedState, DurableStore):
     def record(self, thread: Thread, before: int, after: int) -> None:
         thread.turn_record.read().require_idle()
         with self.writing() as db:
-            OwnerReleaseEvidence(thread.name, thread.created_at, thread.process_identity, before, after).upsert(db)
+            OwnerReleaseEvidence(thread.name, thread.incarnation.wire_birth, thread.process_identity, before, after).upsert(db)
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
         with self.writing() as db:

@@ -152,7 +152,7 @@ class ReadLedger(Sealed, ThreadOwnedState, CarriedDocument[ReadDocument]):
             grouped.setdefault(conversation, set()).add(message.seq)
         with source.reading() as captured:
             return DisplayBasis(
-                viewer, snapshot.threads[viewer].created_at,
+                viewer, snapshot.threads[viewer].incarnation.wire_birth,
                 tuple(DisplayedConversation(
                     conversation, sequences := tuple(sorted(members)),
                     self._proved_read_prefix(
