@@ -62,8 +62,8 @@ class ParkedThreads(Carry):
             )
             for name in changed:
                 edit.document.set_work_state(name, parked)
-            edit.commit()
             if changed:
+                edit.commit()
                 rewritten.extend(registry.written)
         del raw["parked"]
         AtomicFile(self.configuration).write_text(json.dumps(raw, indent=1) + "\n")
@@ -71,5 +71,5 @@ class ParkedThreads(Carry):
         return Carried(
             len(changed) + 1,
             {"parked_threads": len(selected)},
-            tuple(str(path.relative_to(self.root)) for path in rewritten),
+            tuple(path.relative_to(self.root) for path in rewritten),
         )
