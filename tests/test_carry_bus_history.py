@@ -25,6 +25,8 @@ def publish_predecessor_history(directory: Path) -> None:
     from agent_comms.coordination_tables.publications import PublicationIntents
     from agent_comms.coordination_tables.responses import ResponseObligation
     from agent_comms.historical_views import HistoryArchive
+    from agent_comms.goal_actions import SetGoalAction
+    from agent_comms.goals import RequestGoalOrder
     from agent_comms.installer.backup import StoreBackup
     from agent_comms.messages import InfoKind, Message
     from agent_comms.obligation_states import PublishingResponse
@@ -73,6 +75,10 @@ def publish_predecessor_history(directory: Path) -> None:
             intent, conversation=conversation, registry_snapshot=comms.registry.snapshot(),
             activity=activity,
         )
+    comms.goals.update_goal("owner", SetGoalAction(
+        text="Preserve this independent owner request", goal_id="retained-request",
+        order=RequestGoalOrder(),
+    ))
     owner = comms.registry.snapshot().require("owner").incarnation.require_recorded()
     document = ReadDocument(
         messages={owner: ReadCursor({AllConversation(): ConversationCursor(1, (3,))})},
@@ -136,10 +142,18 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
     from agent_comms.historical_views import HistoryArchive
     from agent_comms.installer.backup import StoreBackup, bus_files
     from agent_comms.installer.carry import Carried, MigrateOperation
+    from agent_comms.installer.carry import CarryChain
     from agent_comms.installer.upgrade import RehearsalFiles, StepRun, carried
     from agent_comms.messages import BusRecord
     from agent_comms.read_ledger import ReadLedger
     from agent_comms.recorded_bus import RecordedBusIdentity
+    from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+    from agent_comms.registry_store import RegistryStore
+    from agent_comms.todos import TodoStore
+    from cutover.carry_owner_requests import OwnerRequests
+
+    chain = CarryChain.at(REPOSITORY)
+    assert chain.steps.index(OwnerRequests) < chain.steps.index(BusHistory)
 
     generated = predecessor_history(tmp_path)
     original = generated / "destination"
@@ -163,20 +177,31 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
     assert all(not Bus.path_in(root / relative).exists() for relative in relatives)
     assert not tuple(spill.iterdir())
     operation = MigrateOperation(True)
-    saved = bus_files(root)
+    requests = OwnerRequests(root, original, spill)
+    request_dry_run = requests.carry(apply=False)
+    assert request_dry_run.detail["requests"] == 2
+    maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
+    hold = maintenance.begin(MaintenanceOperator.current())
+    with hold.holding():
+        saved = bus_files(root)
+        request_result = requests.carry(apply=True)
+        assert request_result.detail == request_dry_run.detail
+        assert requests.carry(apply=False).changed == 0
     result_path = tmp_path / "carried.json"
-    completed = subprocess.run(
-        [sys.executable, "-m", "agent_comms.installer.step_worker", request.name(),
-         json.dumps(FieldCodec.encode(request)), json.dumps(FieldCodec.encode(operation)),
-         str(result_path)], cwd=REPOSITORY,
-        env={**os.environ, "PYTHONPATH": os.pathsep.join(
-            map(str, (REPOSITORY / "src", REPOSITORY / "tools")))},
-        capture_output=True, text=True, timeout=60,
-    )
+    with hold.holding():
+        completed = subprocess.run(
+            [sys.executable, "-m", "agent_comms.installer.step_worker", request.name(),
+             json.dumps(FieldCodec.encode(request)), json.dumps(FieldCodec.encode(operation)),
+             str(result_path)], cwd=REPOSITORY,
+            env={**os.environ, "PYTHONPATH": os.pathsep.join(
+                map(str, (REPOSITORY / "src", REPOSITORY / "tools")))},
+            capture_output=True, text=True, timeout=60,
+        )
     assert completed.returncode == 0, completed.stdout + completed.stderr
     result = operation.decode_answer(result_path.read_text())
-    steps = (StepRun(request.name(), result),)
+    steps = (StepRun(requests.name(), request_result), StepRun(request.name(), result))
     carried(root, saved, steps, RehearsalFiles.declared(steps))
+    maintenance.clear(hold)
     assert result.changed == 8
     assert {key: result.detail[key] for key in ("rows", "continuous", "round_tripped")} == {
         "rows": 8, "continuous": 8, "round_tripped": 8,
@@ -188,6 +213,11 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
     assert not tuple(spill.iterdir())
     for relative in relatives:
         directory = root / relative
+        registry = RegistryStore.at(directory).read()
+        owner_requests = TodoStore(directory).open_requests(registry.threads["owner"].incarnation)
+        assert len(owner_requests) == 1
+        assert owner_requests[0].id.value == "retained-request"
+        assert owner_requests[0].text == "Preserve this independent owner request"
         source = directory / BusHistory.filename
         metadata = HistoryMetadata.read(source.parent)
         assert RecordedBusIdentity.capture(source) == identities[relative]

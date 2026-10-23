@@ -28,8 +28,7 @@ from agent_comms.commander.order import CommanderContext
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import Argument, FieldCodec, PathText
-from agent_comms.goal_actions import SetGoalAction
-from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
+from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.messages import Message
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.plan_phases import RecordPlanePhase
@@ -150,14 +149,8 @@ class RunProofCommand(ProofCommand):
             ),
             StoppedThreadStatus(),
         )
-        comms.goals.update_goal(
-            commander.name,
-            SetGoalAction(
-                text="Verify one rotation-started native unit on this scratch bus only.",
-                goal_id=uuid4().hex,
-                order=RequestGoalOrder(),
-            ),
-        )
+        comms.goals.todos.add_request(commander.incarnation,
+            'Verify one rotation-started native unit on this scratch bus only.')
         CommanderConfig(
             commander=commander.name,
             root=root,

@@ -31,7 +31,8 @@ from agent_comms.connector import Connector
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction, PausedGoalAction, SetGoalAction
-from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
+from agent_comms.goals import CountCheckResult, OrderCheck
+from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_status import StoppedThreadStatus
@@ -60,6 +61,8 @@ def seed(root: Path, project: Path) -> None:
     comms.goals.update_goal(
         "claude-ai", SetGoalAction(text="Measure the connector calls.", goal_id="probe-goal")
     )
+    comms.goals.todos.add_request(comms.registry.require('claude-ai').incarnation,
+                                 'Measure the connector calls.')
     original = comms.messaging.send("worker", "claude-ai", "Original scratch history.").message
     assert original.sender == "worker"
     for worker in threading.enumerate():
@@ -84,7 +87,8 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
     order = CreateProblemGoalAction(
         problem="P1",
         order=pending,
-        request="request",
+        request=NewestOpenRequest().for_order(comms.goals.todos,
+                                              comms.registry.require('claude-ai').incarnation),
         review_at=RecordedEventTime(time.time() + 600),
         commander="claude-ai", assigner=comms.registry.require('claude-ai').incarnation,
         repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"),
@@ -105,18 +109,8 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
         "comms_order_work",
         "comms_unjudged",
     }
-    if name in order_tools:
-        from agent_comms.goal_actions import ClearGoalAction
-
-        comms.goals.update_goal("claude-ai", ClearGoalAction())
-        comms.goals.update_goal(
-            "claude-ai",
-            SetGoalAction(
-                text="Measure the connector calls.", goal_id="request", order=RequestGoalOrder()
-            ),
-        )
-        if name != "comms_todo_create":
-            CommsTodoCreateTool(owner="worker", order=order).apply(comms, ThreadCaller("claude-ai"))
+    if name in order_tools - {'comms_todo_create'}:
+        CommsTodoCreateTool(owner="worker", order=order).apply(comms, ThreadCaller("claude-ai"))
     if name == "comms_resume_goal":
         comms.goals.update_goal(
             "claude-ai", PausedGoalAction(progress="Paused only on this scratch bus.")

@@ -4,8 +4,9 @@ A step is one module in ``tools/cutover``, ``carry_<what>.py``, holding one ``Ca
 subclass. Only ``agent-comms install`` runs it, with the target revision's ``src`` and
 ``tools``, so every step runs against the source it is installed with. A step is
 idempotent: data it already carried reports no change, so a step's own dry run is the
-one owner of whether a bus still needs it. Steps run in the order the main line added
-them, from the first whose dry run reports a change. An edited step is judged by what
+one owner of whether a bus still needs it. Declared dependencies constrain the order
+the main line added steps, starting at the first whose dry run reports a change.
+An edited step is judged by what
 it does now, never by its name. A finished step is retired by deleting its file once
 every bus has run it.
 """
@@ -17,6 +18,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from importlib import import_module
+from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import Annotated, ClassVar
 
@@ -47,6 +49,8 @@ class Carry(ABC):
     spill_dir: Annotated[Path, PathText]
 
     declared: ClassVar[dict[str, type[Carry]]] = {}
+    precedes: ClassVar[tuple[type[Carry], ...]] = ()
+    """Steps whose decoders require this step's output, regardless of addition date."""
     """Every step imported so far, by its module name."""
 
     def __init_subclass__(cls, **kwargs: object) -> None:
@@ -110,7 +114,7 @@ class RetireInputsOperation(CarryOperation[Carried]):
 
 @dataclass(frozen=True)
 class CarryChain:
-    """Every step a tree declares, in the order the main line added them."""
+    """Every declared step, dependency order first and addition order for independent steps."""
 
     steps: tuple[type[Carry], ...]
 
@@ -130,7 +134,13 @@ class CarryChain:
         unordered = sorted(step.name() for step in steps if step.name() not in added)
         if unordered:
             raise ValueError(f"{unordered} are not on the main line, so nothing orders them")
-        return cls(tuple(sorted(steps, key=lambda step: added[step.name()])))
+        ordered = sorted(steps, key=lambda step: added[step.name()])
+        dependencies = {step: set() for step in ordered}
+        for step in ordered:
+            for later in step.precedes:
+                if later in dependencies:
+                    dependencies[later].add(step)
+        return cls(tuple(TopologicalSorter(dependencies).static_order()))
 
     def pending(self, dry_run: Callable[[type[Carry]], Carried]) -> tuple[type[Carry], ...]:
         """Every step from the first whose dry run reports a change. A later step's dry run

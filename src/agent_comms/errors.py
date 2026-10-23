@@ -64,6 +64,10 @@ class HumanSendError(RelationViolationError):
 class HumanSendRefusedError(ToolRefusedError, HumanSendError):
     """The send transaction rolled back; the human's message was not sent."""
 
+    def __init__(self, cause: Exception) -> None:
+        self.cause = cause
+        super().__init__(f"Message was not sent: {cause}")
+
 
 class CommittedMessageError(RuntimeError):
     """The message was sent; signalling or connection retirement then failed."""

@@ -8,16 +8,19 @@ snapshots can change without erasing this journal.
 
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 import stat
 import time
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Annotated, Literal
 
+from agent_comms.field_codec import WireOmitDefault
+from agent_comms.owner_requests import NoRequestRevision, RequestAtRevision, RequestRevision
 
 from .field_codec import FieldCodec, MalformedRecord, HistoryExclude
 from .goals import GoalDeclaration, NoGoal
@@ -31,26 +34,42 @@ class GoalHistoryError(RuntimeError):
     """Goal history could not be durably written or reconciled."""
 
 
+@dataclass(frozen=True, kw_only=True)
+class RequestHistory:
+    """Moved request data stays linked to its original history observation."""
+
+    request_before: Annotated[
+        RequestRevision, Column(storage=JsonStorage, nullable=True), WireOmitDefault(),
+    ] = NoRequestRevision()
+    request_after: Annotated[
+        RequestRevision, Column(storage=JsonStorage, nullable=True), WireOmitDefault(),
+    ] = NoRequestRevision()
+
+    @classmethod
+    def endpoint_columns(cls) -> dict[str, str]:
+        """Request-prefix fields declare the goal endpoint each preserves."""
+        return {entry.name.removeprefix("request_"): entry.name for entry in fields(RequestHistory)}
+
+    @property
+    def request_revisions(self) -> tuple[RequestRevision, ...]:
+        return tuple(getattr(self, entry.name) for entry in fields(RequestHistory))
+
+
 @dataclass(frozen=True)
-class RecordedGoalRevision:
+class RecordedGoalRevision(RequestHistory):
     """A history entry's public fields; its owner key and journal state stay in the store."""
-    sequence: int
-    kind: Literal["transition", "baseline", "observed_gap"]
-    observed_at: float
-    before: GoalDeclaration
-    after: GoalDeclaration
-
-
-@dataclass(frozen=True)
-class GoalHistoryEntry(TypedTable, DurableTables):
-    # The durable kind field is a journal fact, not the TypedTable family tag.
-    schema_error = GoalHistoryError
-
     sequence: Annotated[int, Column(primary_key=True)]
     kind: Literal["transition", "baseline", "observed_gap"]
     observed_at: float
     before: Annotated[GoalDeclaration, Column(storage=JsonStorage, nullable=True)]
     after: Annotated[GoalDeclaration, Column(storage=JsonStorage, nullable=True)]
+
+
+@dataclass(frozen=True)
+class GoalHistoryEntry(RecordedGoalRevision, TypedTable, DurableTables):
+    # The durable kind field is a journal fact, not the TypedTable family tag.
+    schema_error = GoalHistoryError
+
     owner_created_at: Annotated[float, HistoryExclude()] = field(
         kw_only=True
     )
@@ -59,13 +78,43 @@ class GoalHistoryEntry(TypedTable, DurableTables):
     ] = field(kw_only=True)
     indexes = (Index(("owner_created_at", "sequence")),)
 
+    @classmethod
+    def orders_with_replacement(
+        cls, db: sqlite3.Connection, column: str, replacement: str, *,
+        order_kind: str, where: str = "1",
+    ) -> sqlite3.Cursor:
+        """Read matching endpoint orders through this table's column declaration."""
+        selected = cls._column_list((column,))
+        return db.execute(
+            f'SELECT {cls._column_list(("sequence", "observed_at", "owner_created_at"))}, '
+            f"json_set({selected}, '$.order', json(?)) AS goal, "
+            f"coalesce(json_extract({selected}, '$.order.directives'), '[]') AS directives "
+            f'FROM "{cls.declared_name}" '
+            f"WHERE json_extract({selected}, '$.order.kind')=? AND ({where}) "
+            f'ORDER BY {cls._column_list(("sequence",))}', (replacement, order_kind))
+
+    @classmethod
+    def move_request_order(
+        cls, db: sqlite3.Connection, column: str, sequence: int,
+        request: RequestAtRevision, replacement: str,
+    ) -> None:
+        """Move an endpoint's request to its prefix without dropping the goal observation."""
+        goal_column = cls._column_list((column,))
+        prefix_column = cls._column_list((cls.endpoint_columns()[column],))
+        db.execute(
+            f'UPDATE "{cls.declared_name}" '
+            f"SET {goal_column}=json_set({goal_column}, '$.order', json(?)), {prefix_column}=? "
+            f'WHERE {cls._column_list(("sequence",))}=?',
+            (replacement, json.dumps(FieldCodec.encode(request)), sequence))
+
     def reports_turn(self, turn_id: str) -> bool:
         """A committed goal revision records its original model reporting turn."""
         return self.after.reports_turn(turn_id)
 
     def recorded(self) -> RecordedGoalRevision:
-        return RecordedGoalRevision(
-            self.sequence, self.kind, self.observed_at, self.before, self.after)
+        return FieldCodec.construct(RecordedGoalRevision, {
+            entry.name: getattr(self, entry.name) for entry in fields(RecordedGoalRevision)
+        })
 
     def to_wire(self) -> dict[str, object]:
         return FieldCodec.encode_record(self.recorded())

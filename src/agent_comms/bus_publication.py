@@ -185,15 +185,18 @@ class HumanOrigin(OwnerVoiceOrigin):
 
         with source.observing() as db:
             if MessageIdentitySource.exists(db, sender=sender, message_id=message_id):
-                raise HumanSendRefusedError("Human message identity was already published.")
+                raise HumanSendRefusedError(RelationViolationError(
+                    "Human message identity was already published."))
 
     def append(self, bus: Bus, build: RecordBuilder) -> BusRecord:
         try:
             return bus.append(build)
-        except CommittedMessageError:
+        except (CommittedMessageError, HumanSendRefusedError):
             raise
-        except Exception as error:
-            raise HumanSendRefusedError(f"Message was not sent: {error}") from error
+        except (OSError, sqlite3.Error, ValueError) as error:
+            # The transaction owns rollback for storage and declared-data refusals.
+            # Programming errors propagate as defects, not ordinary send refusals.
+            raise HumanSendRefusedError(error) from error
 
     def require_registered(self, snapshot: RegistrySnapshot) -> None:
         """Check the determining USER declaration, never a transport or prose role."""

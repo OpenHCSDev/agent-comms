@@ -105,6 +105,10 @@ class CarryCatalogSource(SubclassUnion, ABC, affix=""):
     def require_snapshot(self) -> None: ...
 
     @abstractmethod
+    def carried_registry(self, mapped: Path) -> CarryCatalogSource:
+        """Reseal a registry carried before the bus format changes."""
+
+    @abstractmethod
     def converted(
         self,
         root: Path,
@@ -185,6 +189,13 @@ class HistoryCatalogSource(RecordMember, CarryCatalogSource):
         ):
             raise RelationViolationError(f"Retired archive changed before carrying: {original}")
 
+    def carried_registry(self, mapped: Path) -> CarryCatalogSource:
+        return replace(
+            self, root=str(mapped),
+            snapshot_bus_revision=FileRevision.capture(mapped / BusHistory.filename),
+            snapshot_registry_revision=FileRevision.capture(RegistryFile.path_in(mapped)),
+        )
+
     def converted(
         self,
         root: Path,
@@ -221,6 +232,17 @@ class ConvertedHistorySource(HistorySource, RecordMember, CarryCatalogSource):
     def require_snapshot(self) -> None:
         self.validate()
 
+    def carried_registry(self, mapped: Path) -> CarryCatalogSource:
+        bus = Bus(Bus.path_in(mapped))
+        source = replace(
+            self, root=str(mapped),
+            snapshot_bus_identity=RecordedBusIdentity.capture(bus.path),
+            snapshot_bus_revision=bus.revision(),
+            snapshot_registry_revision=FileRevision.capture(RegistryFile.path_in(mapped)),
+        )
+        source.validate()
+        return source
+
     def converted(
         self,
         root: Path,
@@ -228,16 +250,7 @@ class ConvertedHistorySource(HistorySource, RecordMember, CarryCatalogSource):
         bindings: Mapping[RecordedBusIdentity, RecordedBusIdentity],
     ) -> tuple[HistorySource, Carried]:
         mapped = self.mapped_root(root, original_root)
-        bus = Bus(Bus.path_in(mapped))
-        source = replace(
-            self,
-            root=str(mapped),
-            snapshot_bus_identity=RecordedBusIdentity.capture(bus.path),
-            snapshot_bus_revision=bus.revision(),
-            snapshot_registry_revision=FileRevision.capture(RegistryFile.path_in(mapped)),
-        )
-        source.validate()
-        return source, Carried(0)
+        return self.carried_registry(mapped), Carried(0)
 
 
 class HistoryDecision(SubclassUnion, ABC, affix="HistoryDecision"):

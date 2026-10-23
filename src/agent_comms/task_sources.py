@@ -12,6 +12,7 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec, WireOmitDefault
 from .goals import GoalDeclaration, GoalRevision
 from .message_reference import MessageReference
+from .owner_requests import OwnerRequestId, RequestDirective
 from .thread_identity import (
     RecordedThreadIncarnation,
     ThreadIncarnation,
@@ -270,6 +271,18 @@ class NoTaskAttachment(TaskAttachment, declared_name="absent"):
     def direct(self, goals: Goals, message: Message) -> None:
         """A plain owner message is a request wherever its destination holds them."""
         CommandTarget.named(message.target).direct(goals, message)
+
+
+@dataclass(frozen=True)
+class OwnerRequestAttachment(TaskAttachment):
+    """The selected requests stay bound to their original committed directive."""
+
+    requests: tuple[OwnerRequestId, ...]
+
+    def direct(self, goals: Goals, message: Message) -> None:
+        directive = RequestDirective.from_message(message)
+        for request in self.requests:
+            goals.todos.record_directive(request, directive)
 
 
 @dataclass(frozen=True)
