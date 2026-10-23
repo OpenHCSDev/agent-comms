@@ -12,8 +12,6 @@ from pathlib import Path
 from typing import Annotated
 
 import agent_comms
-from agent_comms.active_route import RouteFile, RouteFileSelection, active_route_path
-from agent_comms.installer.interpreter_operation import RuntimeProbe
 from agent_comms.field_codec import PathText
 from agent_comms.harness_install import Harness, replace_link
 from agent_comms.installer.runtime_resolution import (
@@ -65,11 +63,3 @@ class RuntimePublication:
         replace_link(current, selected)
         for harness in Harness.present(Path.home()):
             harness.configure()
-
-
-
-class SelectedRouteProbe(RuntimeProbe[RouteFileSelection]):
-    """The staged runtime reads the published route before source changes."""
-
-    def run(self) -> RouteFileSelection:
-        return RouteFile.read(active_route_path()).selection()

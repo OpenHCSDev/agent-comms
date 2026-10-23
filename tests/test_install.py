@@ -20,7 +20,8 @@ from agent_comms.comms import wire
 from agent_comms.commander.config import GivenRepos, NamedCommander
 from agent_comms.registry_document import NoCommanderProject, RegisteredCommanderProject
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.installer.backup import UpgradeRefused, bus_files
+from agent_comms.installer.refusals import UpgradeRefused
+from agent_comms.installer.backup import bus_files
 from agent_comms.installer.carry import CarryChain
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.locked_store import BusFile, RootFile, SQLiteFile
@@ -148,7 +149,7 @@ def test_a_message_sent_while_the_bus_is_copied_preserves_one_database_cut(
 
 def test_install_report_encodes_its_registered_harnesses() -> None:
     # The live install printed nothing: its report's field type had no codec.
-    from agent_comms.cli_commands import InstallResult
+    from agent_comms.installer.probes.harnesses import InstallResult
     from agent_comms.field_codec import FieldCodec
 
     for config in (RegisteredCommanderProject(RecordedThreadIncarnation("lead", 1.0), ()),

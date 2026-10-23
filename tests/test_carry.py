@@ -12,17 +12,10 @@ import pytest
 from tools.debt_ratchet import UncarriedRecordFormat, git
 
 from agent_comms.cli_commands import ArchiveCliCommand
-from agent_comms.installer.backup import (
-    StoreBackup,
-    UpgradeRefused,
-    bus_files,
-)
-from agent_comms.installer.carry import (
-    STEPS,
-    Carried,
-    Carry,
-    MigrateOperation,
-)
+from agent_comms.installer.backup import StoreBackup, bus_files
+from agent_comms.installer.refusals import UpgradeRefused
+from agent_comms.installer.carry import STEPS
+from agent_comms.installer.probes.carry import Carried, Carry, MigrateOperation
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import TargetProgram
 from agent_comms.installer.upgrade import (
@@ -47,7 +40,7 @@ REPO = Path(__file__).resolve().parents[1]
 
 def step_source() -> str:
     return (
-        "from agent_comms.installer.carry import Carried, Carry\n\n"
+        "from agent_comms.installer.probes.carry import Carried, Carry\n\n"
         "class Step(Carry):\n"
         "    opened_files = ()\n"
         "    def carry(self, *, apply):\n        return Carried(0)\n"
@@ -152,7 +145,7 @@ def noisy_step(tmp_path_factory):
     module = tree.path / "tools" / "cutover" / "carry_noisy.py"
     module.write_text(
         "from pathlib import Path\n"
-        "from agent_comms.installer.carry import Carry, Carried\n"
+        "from agent_comms.installer.probes.carry import Carry, Carried\n"
         "class Noisy(Carry):\n"
         "    opened_files = ()\n"
         "    def carry(self, *, apply):\n"
