@@ -7,7 +7,15 @@ from copyreg import __newobj__
 from typing import Never
 
 
-class CoordinationError(RuntimeError):
+class DrainDeferred(Exception):  # noqa: N818 - capability, not an outcome
+    """A failure an inbox drain records and retries later instead of stopping on."""
+
+
+class DrainUnavailable(DrainDeferred):
+    """A failure meaning the drain's store or coordinator is unavailable right now."""
+
+
+class CoordinationError(RuntimeError, DrainUnavailable):
     """Base class for fail-loud coordinator errors."""
 
     def __reduce__(self):
@@ -15,7 +23,11 @@ class CoordinationError(RuntimeError):
         return __newobj__, (type(self), *self.args), self.__dict__ | {"__cause__": self.__cause__}
 
 
-class CoordinationReadUnavailable(CoordinationError):
+class DeferredRead(Exception):  # noqa: N818 - capability, not an outcome
+    """A read refused only for now, for currentness or contention; retrying may answer it."""
+
+
+class CoordinationReadUnavailable(CoordinationError, DeferredRead):
     """No committed SQLite snapshot was acquired; no absence is established."""
 
     @classmethod
@@ -55,7 +67,7 @@ class ParticipantNotRegistered(IdentityConflict):  # noqa: N818 - nominal outcom
     """No participant aggregate is recorded for the lookup."""
 
 
-class StaleRevision(CoordinationError):  # noqa: N818 - nominal outcome name
+class StaleRevision(CoordinationError, DeferredRead):  # noqa: N818 - nominal outcome name
     """The supplied CAS revision is not the authoritative revision."""
 
 

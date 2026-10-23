@@ -106,6 +106,7 @@ from agent_comms.thread_identity import (
 )
 from agent_comms.threads import Thread
 from agent_comms.typed_table import (
+    StoreRows,
     TableReference,
     Column,
     DurableStore,
@@ -1296,7 +1297,11 @@ class OrderWords(WireValue):
         return sorted({m.group(0).lower() for m in cls.REFUSED.finditer(cls.CITED.sub(' ', text))})
 
 
-class PlainText(OrderWords):
+class DirectiveWords(OrderWords):
+    """A wording check every text sent to units passes; each check declares itself one."""
+
+
+class PlainText(DirectiveWords):
     """Prose in the words the user uses: no word that hides what happened."""
 
     REFUSED = re.compile(r'\b(custody|admission|admit\w*|receipt\w*|checkpoint\w*|provenance|authority|authorities|witness\w*|lattice|surface|disposition\w*|invariant\w*|semantic\w*|ownership|lifecycle|acceptance|canonical|retained|borrow(?:ed|er|ers)?|bounded|certif\w*|recertif\w*|candidate|fence\w*|sidecar\w*|substrate|installed-path|source[- ]paired|exact[- ]head|integration owner|separately owned|follow-?up|remaining scope|not claimed|remains held|load[- ]bearing|cutover|carr(?:y|ies) across|declared dependency|qualifying)\b', re.I)
@@ -1352,7 +1357,7 @@ class BluntText(BluntWords, OrderWords):
         return not found
 
 
-class FairText(OrderWords):
+class FairText(DirectiveWords):
     """The OOPSLA paper proves multiple parents derive every required pair with nothing outside, which composition and
     forwarding supply outside (Fig 3, Thm 4.6): faulting inheritance itself is dogma, not a restated fact.
     Only explanatory prose is checked; code and banned-action fields are not prose."""
@@ -1366,7 +1371,7 @@ class FairText(OrderWords):
                "name the restated fact and the declaration that derives it.")
 
 
-class HierarchyText(OrderWords):
+class HierarchyText(DirectiveWords):
     """A forwarder restates an implementation pair: explanatory prose must fix the
     hierarchy rather than preserve a forwarding route."""
 
@@ -1379,12 +1384,13 @@ class DirectiveText:
     """What the commander and the owner's voice send units: order send, order say and the
     connector's send refuse a text failing any of these."""
 
-    OUTGOING: ClassVar[tuple[type[OrderWords], ...]] = (
-        FairText, HierarchyText, PlainText)
+    @staticmethod
+    def checks() -> tuple[type[DirectiveWords], ...]:
+        return tuple(DirectiveWords.__subclasses__())
 
     @classmethod
     def refused(cls, text: str) -> tuple[str, ...]:
-        return tuple(refused for family in cls.OUTGOING if (refused := family.refused(text)))
+        return tuple(refused for family in cls.checks() if (refused := family.refused(text)))
 
     @classmethod
     def require(cls, text: str) -> None:
@@ -2443,8 +2449,12 @@ class OrderedHunt(Hunt):
             raise ValueError("The hunt must name this commander's current order.")
 
 
+class TodoStoreRows(StoreRows):
+    """The tables of TodoStore; each row declares itself one."""
+
+
 @dataclass(frozen=True)
-class HuntRecord(TypedTable):
+class HuntRecord(TodoStoreRows, TypedTable):
     id: Annotated[str, Column(primary_key=True)]
     commander: Annotated[ThreadIncarnation, Column(index=True)]
     hunt: Hunt
@@ -3348,7 +3358,7 @@ class ChangeTodoState(TodoOperation):
 
 
 @dataclass(frozen=True, slots=True)
-class OwnerRequest(TypedTable, SharedFileTables, DurableTables):
+class OwnerRequest(TodoStoreRows, TypedTable, SharedFileTables, DurableTables):
     """One owner's request, independent of any current turn goal."""
 
     indexes = (Index(("commander_created_at", "state", "created_at")),)
@@ -3395,7 +3405,7 @@ class OwnerRequest(TypedTable, SharedFileTables, DurableTables):
 
 
 @dataclass(frozen=True, slots=True)
-class Todo(TypedTable):
+class Todo(TodoStoreRows, TypedTable):
     unit_index: ClassVar[ExpressionIndex] = ExpressionIndex((
         Assignment.sql_field('owner'), Assignment.sql_field('owner_created'), '{state}',
     ))
@@ -3683,7 +3693,7 @@ def _participant(thread: Thread) -> ThreadIncarnation:
 
 
 @dataclass(frozen=True)
-class ProblemAllocation(TypedTable):
+class ProblemAllocation(TodoStoreRows, TypedTable):
     """Only issued, unsent numbers; creating a Todo removes its allocation row.
 
     SQLite's sequence remembers issuance, while Todo.id owns every created identity.
@@ -3782,7 +3792,7 @@ class TodoStore(OwnerRequestStore):
 
     root: Path
     filename: ClassVar[str] = "todos.sqlite3"
-    rows: ClassVar[tuple[type[TypedTable], ...]] = (OwnerRequest, Todo, HuntRecord, ProblemAllocation)
+    tables = TodoStoreRows
 
     @contextmanager
     def writing(self) -> Iterator[sqlite3.Connection]:

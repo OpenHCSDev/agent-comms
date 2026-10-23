@@ -16,13 +16,14 @@ from .activity import (
     StoppedDrainDiagnostic,
     UnavailableDrainDiagnostic,
 )
-from .coordination_errors import CoordinationError
+from .coordination_errors import DrainDeferred, DrainUnavailable
 from .coordinator import Coordination
-from .errors import RelationViolationError
 from .native_failures import NativeRequestFailure
 
-UNAVAILABLE_DRAIN_ERRORS = (OSError, sqlite3.Error, CoordinationError, RequestError, RelationViolationError)
-DEFERRED_DRAIN_ERRORS = (NativeRequestFailure, *UNAVAILABLE_DRAIN_ERRORS)
+# Failures raised outside our hierarchy, which cannot inherit the drain capabilities.
+EXTERNAL_UNAVAILABLE_ERRORS = (OSError, sqlite3.Error, RequestError)
+UNAVAILABLE_DRAIN_ERRORS = (DrainUnavailable, *EXTERNAL_UNAVAILABLE_ERRORS)
+DEFERRED_DRAIN_ERRORS = (DrainDeferred, *EXTERNAL_UNAVAILABLE_ERRORS)
 
 if TYPE_CHECKING:
     from .comms import Comms
