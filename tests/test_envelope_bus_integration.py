@@ -235,6 +235,7 @@ import os, signal, sys
 from pathlib import Path
 sys.path.insert(0, sys.argv[2])
 sys.path.insert(0, str(Path(sys.argv[2]).parent / 'tests'))
+from agent_comms.bus import Bus
 from agent_comms.comms import wire
 from test_envelope_bus_integration import acquire_message
 """ + kill + """
