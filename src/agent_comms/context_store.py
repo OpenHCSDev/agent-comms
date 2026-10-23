@@ -186,7 +186,7 @@ class ContextSegmentVersion(TypedTable):
 
     @classmethod
     def append(cls, db: sqlite3.Connection, segment: RecordedSegmentManifest) -> int:
-        encoded = json.dumps(FieldCodec.encode(segment), sort_keys=True, separators=(",", ":"))
+        encoded = FieldCodec.compact(FieldCodec.encode(segment), sort_keys=True)
         digest = hashlib.sha256(encoded.encode()).hexdigest()
         rows = cls.select(db, digest=digest)
         if rows:

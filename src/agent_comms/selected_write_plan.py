@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import json
 import os
 from contextlib import suppress
 from dataclasses import dataclass, fields
@@ -220,7 +219,7 @@ class SelectedWritePlans(DurableFile, PatternFile):
                 expected_attempt_ordinal=1, operation_id=operation_id, resource=str(path),
                 contents_b64=base64.b64encode(raw).decode("ascii"), digest=hashlib.sha256(raw).hexdigest(),
             )
-            data = json.dumps(FieldCodec.encode(record), sort_keys=True, separators=(",", ":")).encode()
+            data = FieldCodec.compact(FieldCodec.encode(record), sort_keys=True).encode()
             try:
                 fd = os.open(
                     record_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600
@@ -270,6 +269,4 @@ class SelectedWritePlans(DurableFile, PatternFile):
         if accepted.operation_id != operation_id:
             raise IdentityConflict("Selected write intent is no longer unique")
         completed = accepted.applied()
-        AtomicFile(path).write_bytes(json.dumps(
-            FieldCodec.encode(completed), sort_keys=True, separators=(",", ":")
-        ).encode())
+        AtomicFile(path).write_bytes(FieldCodec.compact(FieldCodec.encode(completed), sort_keys=True).encode())

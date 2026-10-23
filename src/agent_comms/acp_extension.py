@@ -6,7 +6,6 @@ they never authorize a native send, restore a queue, or replay an UNKNOWN input.
 
 from __future__ import annotations
 
-import json
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from hashlib import sha256
@@ -399,7 +398,7 @@ class CursorEnvelope:
     @property
     def digest(self) -> str:
         return sha256(
-            json.dumps(FieldCodec.encode(self), sort_keys=True, separators=(",", ":")).encode()
+            FieldCodec.compact(FieldCodec.encode(self), sort_keys=True).encode()
         ).hexdigest()
 
 
@@ -571,7 +570,7 @@ class QueueChangedUpdate(AgentCommsUpdate):
     @property
     def digest(self) -> str:
         return sha256(
-            json.dumps(FieldCodec.encode(self), sort_keys=True, separators=(",", ":")).encode()
+            FieldCodec.compact(FieldCodec.encode(self), sort_keys=True).encode()
         ).hexdigest()
 
 
