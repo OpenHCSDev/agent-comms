@@ -15,6 +15,7 @@ from .child_process import NoProcess, ProcessIdentity
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import (
+    ExternalJsonShape,
     FieldCodec,
     MalformedRecord,
     FieldPlan,
@@ -231,7 +232,7 @@ class SnapshotValue[Value](ThreadSlice[Value]):
         return policy
 
 
-class OwnRow(SnapshotValue[dict]):
+class OwnRow[Rows](SnapshotValue[Rows]):
     """The row under the thread's own name."""
 
     @staticmethod
@@ -239,12 +240,132 @@ class OwnRow(SnapshotValue[dict]):
         return {canonical: raw[canonical]} if canonical in raw else {}
 
     @classmethod
+    @abstractmethod
+    def reuse(cls, rows: Mapping[str, object], kept: frozenset[str],
+              earlier: Rows, changed: Rows) -> None: ...
+
+
+class MappingRowsSlice(OwnRow[MutableMapping]):
+    @classmethod
     def copy(cls, value: Mapping) -> dict:
         return dict(value)
 
     @classmethod
     def freeze(cls, value: Mapping) -> Mapping:
         return MappingProxyType(cls.copy(value))
+
+    @classmethod
+    def reuse(cls, rows: Mapping[str, object], kept: frozenset[str],
+              earlier: MutableMapping, changed: MutableMapping) -> None:
+        merged = {name: (earlier if name in kept else changed)[name] for name in rows}
+        changed.clear()
+        changed.update(merged)
+
+
+class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
+    """A revision's thread rows, decoded and bound only when read."""
+
+    def __init__(self) -> None:
+        self._raw: dict[str, object] = {}
+        self._decoded: dict[str, Thread] = {}
+        self._binding: Callable[[Thread], Thread] = self.unbound
+
+    @staticmethod
+    def unbound(thread: Thread) -> Thread:
+        return thread
+
+    def bind(self, binding: Callable[[Thread], Thread]) -> None:
+        self._binding = binding
+        self._decoded = {name: binding(thread) for name, thread in self._decoded.items()}
+
+    def __getitem__(self, name: str) -> Thread:
+        if name not in self._decoded:
+            self._decoded[name] = self._binding(FieldCodec.decode(Thread, self._raw[name]))
+        return self._decoded[name]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(dict.fromkeys((*self._raw, *self._decoded)))
+
+    def __len__(self) -> int:
+        return len(self._raw.keys() | self._decoded.keys())
+
+    def __contains__(self, name: object) -> bool:
+        return name in self._raw or name in self._decoded
+
+    def __setitem__(self, name: str, thread: Thread) -> None:
+        if thread.name != name:
+            raise MalformedRecord("thread name differs from its declaration")
+        self._decoded[name] = self._binding(thread)
+        self._raw.pop(name, None)
+
+    def __delitem__(self, name: str) -> None:
+        if name not in self:
+            raise KeyError(name)
+        self._raw.pop(name, None)
+        self._decoded.pop(name, None)
+
+    def to_wire(self) -> dict[str, object]:
+        return {**self._raw, **{name: FieldCodec.encode(thread)
+                               for name, thread in self._decoded.items()}}
+
+    @classmethod
+    def from_wire(cls, raw: object) -> Self:
+        if not isinstance(raw, dict):
+            raise MalformedRecord("registry threads must be an object")
+        for name, row in raw.items():
+            if not isinstance(name, str) or not isinstance(row, dict) or row.get("name") != name:
+                raise MalformedRecord("thread name differs from its declaration")
+        result = cls()
+        result._raw = dict(raw)
+        return result
+
+    @classmethod
+    def from_threads(cls, threads: Mapping[str, Thread]) -> Self:
+        result = cls()
+        result.update(threads)
+        return result
+
+    def copy(self) -> ThreadRows:
+        result = ThreadRows()
+        result._raw = self._raw.copy()
+        result._decoded = self._decoded.copy()
+        result._binding = self._binding
+        return result
+
+    def freeze(self) -> ThreadRows:
+        result = FrozenThreadRows()
+        result._raw = self._raw.copy()
+        result._decoded = self._decoded.copy()
+        result._binding = self._binding
+        return result
+
+    def reuse(self, rows: Mapping[str, object], kept: frozenset[str], earlier: ThreadRows) -> None:
+        self._raw = dict(rows)
+        self._decoded = {name: earlier._decoded[name] for name in kept if name in earlier._decoded}
+        self._binding = earlier._binding
+
+
+class FrozenThreadRows(ThreadRows):
+    def __setitem__(self, name: str, thread: Thread) -> None:
+        raise TypeError("snapshot thread rows are read-only")
+
+    def __delitem__(self, name: str) -> None:
+        raise TypeError("snapshot thread rows are read-only")
+
+
+class ThreadRowsSlice(OwnRow[ThreadRows]):
+    @classmethod
+    def copy(cls, value: ThreadRows) -> ThreadRows:
+        return value.copy()
+
+    @classmethod
+    def freeze(cls, value: ThreadRows) -> ThreadRows:
+        return value.freeze()
+
+    @classmethod
+    def reuse(cls, rows: Mapping[str, object], kept: frozenset[str],
+              earlier: ThreadRows, changed: ThreadRows) -> None:
+        changed.reuse(rows, kept, earlier)
 
 
 @dataclass(frozen=True)
@@ -282,13 +403,13 @@ class ThreadSection:
               changed: object) -> None:
         """Fill ``changed``'s own rows, in wire order, with the earlier decoded value of
         every kept name; ``changed`` decoded only the rows that differ."""
-        reused, fresh = self.decoded(earlier), self.decoded(changed)
-        merged = {name: (reused if name in kept else fresh)[name] for name in self.rows(raw)}
-        fresh.clear()
-        fresh.update(merged)
+        kind = ThreadSlice.of(self.plan)
+        if not issubclass(kind, OwnRow):
+            raise TypeError(f"{self.plan.name} does not hold reusable rows")
+        kind.reuse(self.rows(raw), kept, self.plan.current(earlier), self.plan.current(changed))
 
 
-class AliasesOf(OwnRow):
+class AliasesOf(MappingRowsSlice):
     """The aliases that point at the thread; they also resolve its canonical name."""
 
     @staticmethod
@@ -404,7 +525,7 @@ class RegisteredCommanderProject(CommanderProject):
 
 
 @ThreadSlice.required
-@dataclass(slots=True)
+@dataclass
 class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
     version: Annotated[
         Literal[1], SlicePolicy(WholeDocumentValue), WireRequired()
@@ -415,13 +536,13 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
     commander_project: Annotated[
         CommanderProject, SlicePolicy(WholeDocumentValue), WireOmitDefault()
     ] = field(default_factory=NoCommanderProject)
-    threads: Annotated[dict[str, Thread], SlicePolicy(OwnRow)] = field(
+    threads: Annotated[ThreadRows, SlicePolicy(ThreadRowsSlice)] = field(
+        default_factory=ThreadRows
+    )
+    statuses: Annotated[dict[str, ThreadStatus], SlicePolicy(MappingRowsSlice)] = field(
         default_factory=dict
     )
-    statuses: Annotated[dict[str, ThreadStatus], SlicePolicy(OwnRow)] = field(
-        default_factory=dict
-    )
-    last_seen: Annotated[dict[str, float], SlicePolicy(OwnRow)] = field(
+    last_seen: Annotated[dict[str, float], SlicePolicy(MappingRowsSlice)] = field(
         default_factory=dict
     )
     aliases: Annotated[dict[str, str], SlicePolicy(AliasesOf)] = field(
@@ -434,14 +555,13 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         GenerationCounter, SlicePolicy(GenerationOf)
     ] = field(default_factory=GenerationCounter)
 
-    _human: UserThreadLookup[str] = field(init=False, repr=False, compare=False)
-
-    def __post_init__(self) -> None:
+    @cached_property
+    def _human(self) -> UserThreadLookup[str]:
         # This answer belongs to the decoded revision. Keep the name, not an
         # unbound Thread: store binding and later reads use the current row.
-        self._human = next((FoundUserThread(human.name)
-                            for thread in self.threads.values()
-                            for human in thread.role.human(thread)), NoUserThread())
+        return next((FoundUserThread(human.name)
+                     for thread in self.threads.values()
+                     for human in thread.role.human(thread)), NoUserThread())
 
     def user_thread(self) -> UserThreadLookup[Thread]:
         return self._human.map(self.require)
@@ -515,7 +635,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         return tuple(
             ThreadSection(plan)
             for plan in FieldCodec.field_plans(cls)
-            if plan.declared.init and plan.records and ThreadSlice.of(plan) is OwnRow
+            if plan.declared.init and plan.records and issubclass(ThreadSlice.of(plan), OwnRow)
         )
 
     @classmethod
@@ -545,8 +665,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
                 }})
                 for section, same in kept:
                     section.reuse(raw, same, decoded, changed)
-                # Construct again so derived state (the user thread) covers every row.
-                document = replace(changed)
+                document = changed
             names = set(document.threads)
             if names != set(document.statuses) or names != set(document.last_seen):
                 raise MalformedRecord("thread presence does not match declarations")
@@ -554,8 +673,6 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
                 raise MalformedRecord("missing owner generation")
             if not names <= document.claims.generations.keys():
                 raise MalformedRecord("missing claim_scope generation")
-            if any(name != thread.name for name, thread in document.threads.items()):
-                raise MalformedRecord("thread name differs from its declaration")
             if any(
                 target not in names or alias in names for alias, target in document.aliases.items()
             ):
@@ -853,17 +970,15 @@ class RegistryEntry:
 @dataclass(frozen=True, slots=True)
 class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryProvenance):
     purpose: Annotated[RootPurpose, SlicePolicy(WholeDocumentValue)]
-    threads: Annotated[Mapping[str, Thread], SlicePolicy(OwnRow)]
-    statuses: Annotated[Mapping[str, ThreadStatus], SlicePolicy(OwnRow)]
-    last_seen: Annotated[Mapping[str, float], SlicePolicy(OwnRow)]
-    aliases: Annotated[Mapping[str, str], SlicePolicy(OwnRow)]
-    owner_generations: Annotated[Mapping[str, int], SlicePolicy(OwnRow)]
-    _claimed_generations: Annotated[Mapping[str, int], SlicePolicy(OwnRow)] = field(repr=False)
+    threads: Annotated[ThreadRows, SlicePolicy(ThreadRowsSlice)]
+    statuses: Annotated[Mapping[str, ThreadStatus], SlicePolicy(MappingRowsSlice)]
+    last_seen: Annotated[Mapping[str, float], SlicePolicy(MappingRowsSlice)]
+    aliases: Annotated[Mapping[str, str], SlicePolicy(MappingRowsSlice)]
+    owner_generations: Annotated[Mapping[str, int], SlicePolicy(MappingRowsSlice)]
+    _claimed_generations: Annotated[Mapping[str, int], SlicePolicy(MappingRowsSlice)] = field(repr=False)
     commander_project: Annotated[CommanderProject, SlicePolicy(WholeDocumentValue)] = field(
         default_factory=NoCommanderProject
     )
-    by_lookup: Mapping[str, Thread] = field(init=False, repr=False, compare=False)
-
     def __post_init__(self) -> None:
         """Own each copied value and derive the birth index from the frozen threads."""
         for plan in FieldCodec.field_plans(type(self)):
@@ -871,14 +986,17 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
                 object.__setattr__(
                     self, plan.name, SnapshotValue.of(plan).freeze(getattr(self, plan.name)),
                 )
+        super(RegistrySnapshot, self).__post_init__()
+
+    @cached_property
+    def by_lookup(self) -> Mapping[str, Thread]:
         indexed: dict[str, Thread] = {}
         for thread in self.threads.values():
             lookup = thread.incarnation.require_recorded().lookup
             if lookup in indexed:
                 raise RelationViolationError("Registry creation identities collide.")
             indexed[lookup] = thread
-        object.__setattr__(self, "by_lookup", MappingProxyType(indexed))
-        super(RegistrySnapshot, self).__post_init__()
+        return MappingProxyType(indexed)
 
     def __reduce__(self) -> tuple[type[Self], tuple[object, ...]]:
         """Worker restoration preserves scalar policy and re-enters the constructor."""

@@ -5,6 +5,8 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.registry_document import ThreadRows
+
 from agent_comms.activity import Activity, ActivityState, ActivityStore
 from agent_comms.audience_manifest import FrozenRecipient
 from agent_comms.comms import wire
@@ -29,10 +31,10 @@ def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_own
         comms.registry.declare(Thread(name, frozenset(), str(tmp_path), created_at=birth))
     source = comms.registry.snapshot()
     with pytest.raises(RelationViolationError):
-        RegistrySnapshot.capture(replace(comms.registry.store.read(), threads={
+        RegistrySnapshot.capture(replace(comms.registry.store.read(), threads=ThreadRows.from_threads({
             **source.threads,
             "second": replace(source.threads["second"], created_at=1700.0),
-        }))
+        }))).by_lookup
     recorded = RegistryProvenance.capture(source)
     archived = replace(recorded, threads={
         **recorded.threads,

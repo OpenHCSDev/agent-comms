@@ -443,7 +443,7 @@ class Registration:
     def active_threads(self) -> Mapping[str, Thread]:
         with self.store.reading() as document:
             return {thread.name: thread
-                    for thread in document.active_threads(document.threads.values())}
+                    for thread in document.active_threads(document.active_candidates())}
 
     def peers(self, exclude: str) -> Sequence[str]:
         with self.store.reading() as document:

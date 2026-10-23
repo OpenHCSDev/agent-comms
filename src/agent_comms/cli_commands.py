@@ -1469,7 +1469,7 @@ class StatusCliCommand(CliCommand):
 
     def apply(self, ctx: Comms) -> CliResult:
         snapshot = ctx.registry.snapshot()
-        running = snapshot.active_threads(snapshot.threads.values())
+        running = snapshot.active_threads(snapshot.active_candidates())
         activities = ctx.agents.all_activity(running, snapshot=snapshot)
         return ActiveStatusResult(tuple(
             ThreadActivityRow(thread, activity.state, activity.detail, activity.timestamp)
