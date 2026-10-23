@@ -6,16 +6,24 @@ import json
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Annotated, Literal
-
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
 from .field_codec import FieldCodec, NullMember, WireContext, WireOmitDefault
 from .native_tool_call import CodingCall
-from .tool_denial import SelectedToolDenied
 from .recorded_time import EventTime
 from .storage_rules import WriteStorageEffect, physical_path, shell_storage_effects
-from .tool_declaration import EditCall, ReplacementEdit, ToolDeclaration, one_line
+from .tool_declaration import (
+    EditAction,
+    EditCall,
+    ExecuteAction,
+    ReadAction,
+    ReplacementEdit,
+    SearchAction,
+    ToolDeclaration,
+    one_line,
+)
+from .tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
     from .pi_payloads import PiToolResult
@@ -122,8 +130,7 @@ class PathTool:
 
 
 @dataclass(frozen=True, kw_only=True)
-class PatternSearchTool:
-    acp_kind = "search"
+class PatternSearchTool(SearchAction):
     pattern: str
     path: Annotated[str | UnsuppliedArgument, WireOmitDefault()] = UnsuppliedArgument()
 
@@ -152,8 +159,7 @@ class CodingTool(ArgumentTool, NativeExecutableTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ReadTool(PathTool, CodingTool):
-    acp_kind = "read"
+class ReadTool(ReadAction, PathTool, CodingTool):
     label = "Read"
     offset: Annotated[float | UnsuppliedArgument, WireOmitDefault()] = UnsuppliedArgument()
     limit: Annotated[float | UnsuppliedArgument, WireOmitDefault()] = UnsuppliedArgument()
@@ -163,8 +169,7 @@ class ReadTool(PathTool, CodingTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class BashTool(CodingTool):
-    acp_kind = "execute"
+class BashTool(ExecuteAction, CodingTool):
     label = "Run"
     command: str
     timeout: Annotated[float | UnsuppliedArgument, WireOmitDefault()] = UnsuppliedArgument()
@@ -179,8 +184,7 @@ class BashTool(CodingTool):
         return shell_storage_effects(self.command, cwd)
 
 
-class MutatingPathTool(PathTool):
-    acp_kind = "edit"
+class MutatingPathTool(EditAction, PathTool):
     claim_type: ClassVar[type[FileClaimPath]]
 
     def _parse_resource(self):
@@ -233,9 +237,8 @@ class WriteTool(MutatingPathTool, CodingTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class FilePatchTool(PathTool, ToolDeclaration):
+class FilePatchTool(EditAction, PathTool, ToolDeclaration):
     """A file change known by its path and diff alone (Codex's patch), without replacement text."""
-    acp_kind = "edit"
     label = "Edit"
 
 

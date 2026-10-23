@@ -1,5 +1,9 @@
 """Build identities shared by the isolated build hook and the running package."""
 
+import json
+import os
+import subprocess
+import sys
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -34,6 +38,25 @@ class CoreStamp(ABC):
 class WheelStamp(CoreStamp):
     value: str
     digests: dict[str, str]
+
+    @classmethod
+    def of_source(cls, src: Path, commit: str) -> WheelStamp:
+        """Import the bus's declared schema once while building its immutable wheel.
+
+        The custom hook requires the project's runtime dependencies in pyproject.toml;
+        hatchling alone cannot import the application in an isolated build.
+        """
+        return cls(
+            commit,
+            json.loads(
+                subprocess.check_output(
+                    (sys.executable, "-m", "agent_comms.producer_stamp"),
+                    cwd=src.parent,
+                    env={**os.environ, "PYTHONPATH": str(src)},
+                    text=True,
+                )
+            ),
+        )
 
     def commit(self) -> str:
         return self.value

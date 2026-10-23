@@ -3,11 +3,6 @@ import asyncio
 import json
 
 import pytest
-from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.pi_payloads import ReportedText, RequestId
-from agent_comms.field_codec import FieldCodec, MalformedRecord
-from agent_comms.native_entries import NativeEntry, StoredEntry, TranscriptProjection
-from agent_comms.recorded_time import UnrecordedTimeError
 
 from agent_comms.agent_backend import (
     FailedCompaction,
@@ -16,6 +11,8 @@ from agent_comms.agent_backend import (
     StaleCompaction,
 )
 from agent_comms.agent_events import Chunk, Error, Thinking, ToolStart
+from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.native_entries import NativeEntry, StoredEntry, TranscriptProjection
 from agent_comms.pi_commands import GetSessionStats
 from agent_comms.pi_counts import PiCount, UnreportedCount
 from agent_comms.pi_durable_backend import (
@@ -27,9 +24,12 @@ from agent_comms.pi_durable_backend import (
     Settle,
 )
 from agent_comms.pi_events import PiEvent, UnknownPiEvent
-from agent_comms.pi_payloads import PiContextUsage, ReportedContextUsage
+from agent_comms.pi_payloads import PiContextUsage, ReportedContextUsage, ReportedText, RequestId
 from agent_comms.pi_rpc import PiRpcChannel
+from agent_comms.recorded_time import UnrecordedTimeError
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.threads import Thread
+from agent_comms.tool_declaration import ReadAction
 
 
 def decode(wire):
@@ -57,7 +57,7 @@ def test_compaction_reply_decodes_directly_to_existing_outcome(result, expected)
         {'type': 'thinking_delta', 'contentIndex': 1, 'delta': 'reasoning'}}, (Thinking('reasoning'),)),
     ({'type': 'tool_execution_start', 'toolCallId': 'call', 'toolName': 'read',
       'args': {'path': 'source.py'}},
-     (ToolStart(id='call', name='read', title='Read source.py', kind='read', args={'path': 'source.py'}),)),
+     (ToolStart(id='call', name='read', title='Read source.py', kind=ReadAction, args={'path': 'source.py'}),)),
     ({'type': 'task_failed', 'taskId': 3, 'kind': 'tool', 'message': 'failed'}, (Error('failed'),)),
 ])
 def test_event_fields_and_changes_are_decoded_at_frame_ingress(event, expected):

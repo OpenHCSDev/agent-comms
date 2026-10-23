@@ -1,29 +1,36 @@
 """One tool declaration controls presentation without granting coding authority."""
 
 
-from conftest import transcript_records
-from dataclasses import dataclass
 import asyncio
 import json
+from dataclasses import dataclass
 
 import acp
 import pytest
 from acp.schema import ToolCallStart
 
 import agent_comms.agent_events as events
+from agent_comms.acp import SdkSessionConnection
 from agent_comms.agent_event_updates import AcpEventConsumer
 from agent_comms.comms import wire
-from agent_comms.acp import SdkSessionConnection
 from agent_comms.native_tools import BashTool, CodingTool, EditTool, ReadTool, WriteTool
-from agent_comms.tool_declaration import ReplacementEdit
-from agent_comms.tool_declaration import ToolDeclaration, UndeclaredTool
+from agent_comms.tool_declaration import (
+    EditAction,
+    ExecuteAction,
+    OtherAction,
+    ReadAction,
+    ReplacementEdit,
+    SearchAction,
+    ToolDeclaration,
+    UndeclaredTool,
+)
+from conftest import transcript_records
 from delivery_owner_fixture import canonical_agent
 
 
 async def test_new_tool_declaration_drives_presentation_without_coding_permission(acp_tools):
     @dataclass(frozen=True, kw_only=True)
-    class InspectFixtureTool(ToolDeclaration):
-        acp_kind = "search"
+    class InspectFixtureTool(SearchAction, ToolDeclaration):
         label = "Inspect"
         query: str
 
@@ -31,7 +38,7 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
             return self.query
 
     event = events.ToolStart.from_call("case", "inspect_fixture", {"query": "new declaration"})
-    assert (event.title, event.kind) == ("Inspect new declaration", "search")
+    assert (event.title, event.kind) == ("Inspect new declaration", SearchAction)
     owner, received = acp_tools
     await AcpEventConsumer(owner, "declared-tool", owner.sessions.client).dispatch(event)
     async with asyncio.timeout(3):
@@ -52,12 +59,12 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
         call = type(tool).from_call(tool.declared_name, tool.arguments, call_id="case")
         assert type(call) is type(tool)
         event = events.ToolStart.from_call("case", tool.declared_name, call.arguments)
-        assert event.kind == tool.acp_kind and event.args == tool.arguments
+        assert event.kind is tool.declared_action() and event.args == tool.arguments
         assert call.call_id == "case" and call.arguments == tool.arguments and tool.reads() in event.title
     unknown = events.ToolStart.from_call("unknown", "external_extension", {"private": "preserved"})
     assert (unknown.title, unknown.kind, unknown.args) == (
         "external_extension",
-        "other",
+        OtherAction,
         {"private": "preserved"},
     )
 
@@ -69,7 +76,7 @@ async def test_pattern_search_metadata_reaches_official_acp(acp_tools, name, lab
     arguments = {"pattern": "shared preview"}
     event = events.ToolStart.from_call("pattern-case", name, arguments)
     recorded = transcript_records.event(ToolStartTranscript, position=0, tool_call_id="pattern-case", tool_name=name, raw_input=arguments, tool=ToolDeclaration.record(name, arguments, call_id="pattern-case"))
-    assert (event.title, event.kind) == (f"{label} shared preview", "search")
+    assert (event.title, event.kind) == (f"{label} shared preview", SearchAction)
     assert (recorded.title, recorded.kind) == (event.title, event.kind)
     owner, received = acp_tools
     await AcpEventConsumer(owner, "pattern-tool", owner.sessions.client).dispatch(event)
@@ -84,8 +91,8 @@ async def test_pattern_search_metadata_reaches_official_acp(acp_tools, name, lab
 
 
 @pytest.mark.parametrize("name,label,kind", [
-    ("read", "Read", "read"), ("bash", "Run", "execute"),
-    ("edit", "Edit", "edit"), ("write", "Write", "edit"),
+    ("read", "Read", ReadAction), ("bash", "Run", ExecuteAction),
+    ("edit", "Edit", EditAction), ("write", "Write", EditAction),
 ])
 def test_recorded_metadata_does_not_require_an_executable_request(name, label, kind):
     from agent_comms.native_tool_call import CodingCall
@@ -110,9 +117,9 @@ def test_recorded_metadata_does_not_require_an_executable_request(name, label, k
 def test_foreign_protocol_owners_decode_canonical_preview_arguments():
     from agent_comms.cli_bridges.codex_protocol import FileChange, UpdatedFile
     from agent_comms.cli_bridges.opencode_parts import ToolPart
-    from agent_comms.tool_calls import ToolCall
     from agent_comms.field_codec import FieldCodec
     from agent_comms.native_tools import FilePatchTool
+    from agent_comms.tool_calls import ToolCall
     from agent_comms.transcript_events import TranscriptEvent
 
     start, end = FileChange(path="codex.txt", diff="@@ -1 +1 @@\\n-old\\n+new\\n",
@@ -135,7 +142,11 @@ def test_foreign_protocol_owners_decode_canonical_preview_arguments():
 
 def test_core_commands_share_native_identity_without_changing_external_decode():
     from agent_comms.native_tool_call import CodingCall
-    from agent_comms.native_tools import NativeToolDeclaration, NativeExecutableTool, NativeRequestTools
+    from agent_comms.native_tools import (
+        NativeExecutableTool,
+        NativeRequestTools,
+        NativeToolDeclaration,
+    )
     from agent_comms.tools import CommsSendTool, ToolRequest
 
     schemas = NativeRequestTools.catalog()

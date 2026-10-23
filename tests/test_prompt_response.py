@@ -4,7 +4,7 @@ import base64
 import pytest
 
 from agent_comms.field_codec import FieldCodec
-from agent_comms.image_inputs import ImageInput
+from agent_comms.image_input import ImageInput
 from agent_comms.native_tool_call import OwnerToolConnection
 from agent_comms.pi_commands import PiCommand, Prompt
 from agent_comms.pi_payloads import AnonymousRequest, RequestId

@@ -33,7 +33,7 @@ from .turn_outcome import TurnOutcome
 
 if TYPE_CHECKING:
     from .agent_events import AgentEvent
-    from .image_inputs import ImageInput
+    from .image_input import ImageInput
     from .launch_runtime import LaunchRuntime
     from .native_tool_call import NativeToolMode
     from .pi_events import DialogUiRequest, ExtensionUiChoice

@@ -6,11 +6,10 @@ import json
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, ClassVar, Annotated
+from typing import TYPE_CHECKING, Annotated, ClassVar
 from urllib.parse import quote
 
 from pydantic import JsonValue
-
 
 from . import tool_declaration
 from .declared_family import DeclaredFamily
@@ -420,8 +419,8 @@ class ToolTranscript(SilentTranscript, RecordedTranscript):
         return tool_declaration.ToolDeclaration.caption(self.tool_name, tool_declaration.NoToolRecord())
 
     @property
-    def kind(self) -> str:
-        return tool_declaration.ToolDeclaration.for_name(self.tool_name).acp_kind
+    def kind(self) -> type[tool_declaration.ToolAction]:
+        return tool_declaration.ToolDeclaration.for_name(self.tool_name).declared_action()
 
 
 @dataclass(frozen=True, kw_only=True)
