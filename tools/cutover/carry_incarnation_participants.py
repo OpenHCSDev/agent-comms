@@ -9,9 +9,11 @@ from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RegistryFile, RootFile
 from agent_comms.participant_store import ParticipantStore
 from agent_comms.registry_store import RegistryStore
+from cutover.carry_acceptance_frontier import AcceptanceFrontiers
 
 
 class IncarnationParticipants(Carry):
+    precedes = (AcceptanceFrontiers,)
     opened_files: ClassVar[tuple[type[RootFile], ...]] = (RegistryFile, CoordinationStore)
 
     def carry(self, *, apply: bool) -> Carried:

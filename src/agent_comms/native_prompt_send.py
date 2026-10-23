@@ -18,6 +18,7 @@ import time
 from collections.abc import Callable
 from contextlib import AbstractContextManager, ExitStack
 from typing import TYPE_CHECKING
+from .child_process import Platform
 from .diagnostics import PublicationMeasurements
 from .coordination_errors import CoordinationError
 from agent_comms.errors import RelationViolationError
@@ -144,7 +145,10 @@ async def send_fenced_prompt(
     Cancellation or a closed original pipe before grant proves no bytes. No
     authorized send is retried.
     """
-    if os.name != "posix" or not payload or timeout <= 0:
+    Platform.current().require_posix(
+        PromptSendNotWritten("Fenced prompt requires a live bounded POSIX pipe")
+    )
+    if not payload or timeout <= 0:
         raise PromptSendNotWritten("Fenced prompt requires a live bounded POSIX pipe")
     pipe = stdin.get_extra_info("pipe")
     transport = stdin.transport

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
@@ -19,22 +21,63 @@ class ForeignRuntimeError(RelationViolationError):
     """The caller is neither this root's owner nor its maintenance target."""
 
 
+class Attachment(ABC):
+    @abstractmethod
+    def proceed[Result](
+        self, attach: Callable[[], Result], succeed: Callable[[LaunchRuntime], Result],
+    ) -> Result: ...
+
+    @abstractmethod
+    def require(self) -> None: ...
+
+
+class Attached(Attachment):
+    def proceed[Result](
+        self, attach: Callable[[], Result], succeed: Callable[[LaunchRuntime], Result],
+    ) -> Result:
+        return attach()
+
+    def require(self) -> None:
+        return
+
+
+@dataclass(frozen=True)
+class Succession(Attachment):
+    owner: LaunchRuntime
+    root: Path
+    caller: LaunchRuntime
+
+    def proceed[Result](
+        self, attach: Callable[[], Result], succeed: Callable[[LaunchRuntime], Result],
+    ) -> Result:
+        return succeed(self.owner)
+
+    def require(self) -> None:
+        raise ForeignRuntimeError(
+            f"Root {self.root} belongs to runtime {self.owner.prefix}; "
+            f"foreign runtime {self.caller.prefix} cannot attach"
+        )
+
+
 @dataclass(frozen=True)
 class RootRuntime:
     prefix: Annotated[Path, PathText]
 
     @classmethod
-    def require_attachable(cls, root: Path, caller: LaunchRuntime) -> None:
+    def attachment(cls, root: Path, caller: LaunchRuntime) -> Attachment:
         store = RootRuntimeStore.at(root)
         owner = store.owner(caller)
         if owner.prefix == caller.prefix:
-            return
+            return Attached()
         if MaintenanceBarrier(RegistryFile.path_in(root)).read().allows_runtime(caller):
-            return
-        raise ForeignRuntimeError(
-            f"Root {root} belongs to runtime {owner.prefix}; "
-            f"foreign runtime {caller.prefix} cannot attach"
+            return Attached()
+        return Succession(
+            LaunchRuntime(owner.prefix / "bin/python"), root=root, caller=caller,
         )
+
+    @classmethod
+    def require_attachable(cls, root: Path, caller: LaunchRuntime) -> None:
+        cls.attachment(root, caller).require()
 
     @classmethod
     def publish(cls, root: Path, runtime: LaunchRuntime) -> None:

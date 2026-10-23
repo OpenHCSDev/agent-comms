@@ -6,12 +6,11 @@ fails closed; it never sends a message to a guessed root.
 
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 import time
 import uuid
-from abc import ABC, abstractmethod
+from abc import ABC
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
@@ -27,7 +26,7 @@ from .launch_root import LaunchRoot
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .private_path import ObservedPath, OwnedDirectoryRole, PrivateDirectoryRole, PrivateFileRole
 from .recorded_bus import RecordedBusIdentity
-from .store_files import UNBOUNDED_CONTENTION, SharedLock, StoreLockContention
+from .store_files import UNBOUNDED_CONTENTION, ExclusiveLock, SharedLock, StoreLockContention
 
 if TYPE_CHECKING:
     from .installer.reporting import RootWriter
@@ -53,7 +52,7 @@ class CommsRoute(ABC):
 
     @contextmanager
     def hold_client_route(self) -> Iterator[None]:
-        """Borrow the published route until this client's work has retired.
+        """Borrow the published route for one client call.
 
         An explicit selection of the published root is still its borrower.
         Independent private roots do not participate in default publication.
@@ -264,84 +263,16 @@ def guard_default_route_write(
         os.close(directory)
 
 
-class RouteLockHolder(DeclaredFamily, affix="LockHolder"):
-    """An observed Linux flock owner; diagnosis, not authority to signal it."""
-
-    @abstractmethod
-    def describe(self) -> str: ...
-
-
-@dataclass(frozen=True, slots=True)
-class IdentifiedLockHolder(RouteLockHolder):
-    pid: int
-
-    def describe(self) -> str:
-        return f"PID {self.pid}: {self.detail()}"
-
-    @abstractmethod
-    def detail(self) -> str: ...
-
-
-@dataclass(frozen=True, slots=True)
-class RunningLockHolder(IdentifiedLockHolder):
-    command: str
-
-    def detail(self) -> str:
-        return self.command
-
-
-class ExitedLockHolder(IdentifiedLockHolder):
-    def detail(self) -> str:
-        return "process exited"
-
-
-class EmptyCommandLockHolder(IdentifiedLockHolder):
-    def detail(self) -> str:
-        return "empty command"
-
-
-class UnidentifiedLockHolder(RouteLockHolder):
-    def describe(self) -> str:
-        return "kernel did not identify the owner"
-
-
-def route_lock_holders(directory: int) -> tuple[RouteLockHolder, ...]:
-    """Identify actual flock owners of this opened directory, not merely open FDs.
-
-    An OFD lock with no reported PID, inaccessible /proc, or a concurrent exit
-    is unknown; absence from this snapshot never proves sole ownership of the lock.
-    """
-    info = os.fstat(directory)
-    identity = f"{os.major(info.st_dev):02x}:{os.minor(info.st_dev):02x}:{info.st_ino}"
-    holders = []
-    with open('/proc/locks', encoding='ascii') as locks:
-        for line in locks:
-            fields = line.split()
-            if len(fields) < 8 or fields[1] != 'FLOCK' or fields[5] != identity:
-                continue
-            pid = int(fields[4])
-            if pid < 0:
-                holders.append(UnidentifiedLockHolder())
-                continue
-            try:
-                command = Path(f'/proc/{pid}/cmdline').read_bytes().replace(b'\0', b' ').decode('utf-8', 'replace').strip()
-            except FileNotFoundError:
-                holders.append(ExitedLockHolder(pid))
-            else:
-                holders.append(RunningLockHolder(pid, command) if command else EmptyCommandLockHolder(pid))
-    return tuple(holders)
-
-
 class RouteReadersHold(CoordinationError):
-    """A client still reads the default route; a route change never waits for it."""
+    """In-flight client calls exceeded the route publication's contention budget."""
 
 
 def acquire_exclusive_route_lock(directory: int) -> None:
-    """Take route EX now, or refuse naming every reader the owner must close."""
+    """Wait up to ten seconds for in-flight calls, then name the remaining holders."""
     try:
-        fcntl.flock(directory, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        StoreLockContention(10).acquire(directory, Platform.current(), mode=ExclusiveLock())
     except BlockingIOError as error:
-        detail = '; '.join(holder.describe() for holder in route_lock_holders(directory))
+        detail = '; '.join(holder.describe() for holder in Platform.current().lock_holders(directory))
         raise RouteReadersHold(
             f'default-route readers hold the route: '
             f'{detail or "unknown (lock changed during inspection)"}; close them and rerun'

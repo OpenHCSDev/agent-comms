@@ -7,6 +7,7 @@ import json
 import math
 import os
 import stat
+import sys
 import tempfile
 import threading
 import time
@@ -80,11 +81,17 @@ class StoreLockContention:
 
     def waits(self, descriptor: int, platform: Platform, *, mode: LockMode) -> Iterator[float]:
         """One physical acquisition algorithm; drivers own sync/async waiting."""
+        reported = False
         while True:
             begun = time.monotonic()
             try:
                 platform.try_store_lock(descriptor, mode=mode)
             except BlockingIOError:
+                if not reported:
+                    print("Waiting on a store lock held by " + "; ".join(
+                        holder.describe() for holder in platform.lock_holders(descriptor)),
+                        file=sys.stderr, flush=True)
+                    reported = True
                 self.remaining -= time.monotonic() - begun
                 if self.remaining <= 0:
                     raise
