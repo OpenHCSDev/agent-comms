@@ -19,7 +19,7 @@ from string import Formatter
 from typing import ClassVar, Iterator, Self
 
 from agent_comms.child_process import Platform
-from agent_comms.active_route import ActiveRoute, _route_directory, route_directory
+from agent_comms.active_route import ActiveRoute, _route_directory, active_route_path, route_directory
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.interpreter_operation import RouteSelection
@@ -175,6 +175,19 @@ class StoreBackup(ResourceBackup):
     def files(self) -> dict[str, str]:
         return FieldCodec.decode(dict[str, str],
                                  FieldCodec.parse((self.path / 'files.json').read_text()))
+
+    @classmethod
+    def interrupted(cls, root: Path, spill_dir: Path) -> tuple[StoreBackup, ...]:
+        if not spill_dir.exists():
+            return ()
+        route = active_route_path()
+        backups = (
+            cls(root, route, spill_dir / name.value)
+            for name in sorted(BackupName.matching(
+                root, (path.name for path in spill_dir.iterdir() if path.is_dir())
+            ), reverse=True)
+        )
+        return tuple(backup for backup in backups if not backup.original())
 
     def retire(self) -> Path:
         archived = self.path.with_name(f'{self.path.name}.restored-{time.time_ns()}')
