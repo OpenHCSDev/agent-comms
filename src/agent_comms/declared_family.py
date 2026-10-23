@@ -235,8 +235,16 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
         )
 
     @classmethod
+    def family_root(cls) -> type[DeclaredFamily]:
+        """The nominal root recorded when this declaration was constructed."""
+        root = cls._family_root
+        if root is None:
+            raise TypeError(f"{cls.__name__} has no declared family root")
+        return root
+
+    @classmethod
     def declared_position(cls) -> int:
-        root = cast(type[DeclaredFamily], cls._family_root)
+        root = cls.family_root()
         return root.members_with(root).index(cls)
 
 

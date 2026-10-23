@@ -13,7 +13,6 @@ import json
 import os
 import re
 import sqlite3
-import sys
 import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
@@ -1973,14 +1972,20 @@ class ProducedTable(ProducedRow, TypedTable, declared_name=None):
     @classmethod
     @cache
     def _producer_digest(cls) -> str:
-        producers = cls.producer_classes()
-        modules = {
-            cls.__module__,
-            *(row.__module__ for row in cls.members_with(cls)),
-            *(owner.__module__ for producer in producers
-              for owner in producer.__mro__ if owner is not object),
+        owners = {
+            owner
+            for row in (cls, *cls.members_with(cls))
+            for owner in row.__mro__
+            if issubclass(owner, cls)
         }
-        source = "\0".join(getsource(sys.modules[name]) for name in sorted(modules))
+        for producer in cls.producer_classes():
+            root = producer.family_root()
+            owners.update(owner for owner in producer.__mro__
+                          if issubclass(owner, cls) or issubclass(owner, root))
+        source = "\0".join(
+            f"{owner.__module__}.{owner.__qualname__}\0{getsource(owner)}"
+            for owner in sorted(owners, key=lambda owner: (owner.__module__, owner.__qualname__))
+        )
         return hashlib.sha256(source.encode()).hexdigest()
 
 
