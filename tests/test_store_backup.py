@@ -161,6 +161,23 @@ def test_store_backup_restores_wal_rows_and_removes_new_files(tmp_path):
     assert archived.exists()
 
 
+def test_store_backup_restores_a_file_whose_directory_a_carry_deleted(tmp_path):
+    """Install 24 died restoring a ledger file whose directory install 22's carry had
+    removed; restoring the file restores its directory."""
+    root = tmp_path / 'wire'
+    saved = root / 'imported_sessions' / 'retained.jsonl'
+    saved.parent.mkdir(parents=True)
+    saved.write_text('{"retained": true}\n')
+    route = tmp_path / 'route.json'
+    backup = StoreBackup.take(root, route, (saved,), tmp_path / 'spill')
+    saved.unlink()
+    saved.parent.rmdir()
+    backup.restore()
+    assert saved.read_text() == '{"retained": true}\n'
+    assert backup.stores_original()
+    assert not backup.restoring.exists()
+
+
 @pytest.mark.parametrize('root_name', ('ROOT', 'wire%[x]+.{}'))
 def test_backup_name_recognizes_only_its_own_complete_names(tmp_path, root_name):
     root = tmp_path / root_name
