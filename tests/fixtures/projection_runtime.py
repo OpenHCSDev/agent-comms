@@ -26,6 +26,7 @@ def main(source: Path, database: Path) -> None:
 
     from agent_comms.bus import Bus, PublicRecord
     from agent_comms.bus_tables import BusRow, BusSchema, MessageIdentitySource
+    from agent_comms.cli_commands import PlannedReconcileCliCommand
     from agent_comms.messages import InfoKind, Message
     from agent_comms.typed_table import ProjectionProducer, WriterOwnedFile
 
@@ -35,6 +36,7 @@ def main(source: Path, database: Path) -> None:
         bus.append(lambda seq, db: PublicRecord.from_message(
             Message("author", "worker", "same durable source", InfoKind, seq=seq),
         ))
+    planned = PlannedReconcileCliCommand.changes(Bus, database)
     with bus.writer_connection() as db:
         before = db.total_changes
         changed = BusSchema.reconcile_schema(db, WriterOwnedFile())
@@ -42,6 +44,7 @@ def main(source: Path, database: Path) -> None:
         print(json.dumps({
             "created": created,
             "reconciled": changed,
+            "planned": planned,
             "row_writes": db.total_changes - before,
             "ddl": BusSchema.declared_schema(),
             "source_rows": BusRow.count(db),

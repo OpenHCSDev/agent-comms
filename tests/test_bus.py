@@ -107,6 +107,7 @@ def test_changed_message_producer_rebuilds_real_projection_with_identical_ddl(tm
     unchanged = replay()
     assert built["policy"] == "DirectPolicy"
     assert not unchanged["reconciled"] and unchanged["row_writes"] == 0
+    assert not unchanged["planned"]
     producing_call = "CommandTarget.named(message.target).response_policy(message)"
     assert original.count(producing_call) == 1
     producer.write_text(original.replace(producing_call, "InformationalPolicy.instance()"))
@@ -116,12 +117,14 @@ def test_changed_message_producer_rebuilds_real_projection_with_identical_ddl(tm
     assert changed["source_rows"] == built["source_rows"] == 1
     assert changed["producer"] != built["producer"]
     assert changed["reconciled"] and changed["row_writes"] > 0
+    assert changed["planned"]
     assert changed["policy"] == "InformationalPolicy"
     assert changed["fresh"] and changed["integrity"] == "ok"
     assert changed["foreign_keys"] == []
     repeated = replay()
     assert repeated["policy"] == "InformationalPolicy"
     assert not repeated["reconciled"] and repeated["row_writes"] == 0
+    assert not repeated["planned"]
     # A changed producer that fails during replay cannot bless the old rows as current.
     producer.write_text(original.replace(producing_call, "1 / 0"))
     with pytest.raises(subprocess.CalledProcessError) as failed:
@@ -134,17 +137,7 @@ def test_changed_message_producer_rebuilds_real_projection_with_identical_ddl(tm
     producer.write_text(original.replace(producing_call, "InformationalPolicy.instance()"))
     recovered = replay()
     assert not recovered["reconciled"] and recovered["row_writes"] == 0
-    (tmp_path / "producer-replay.json").write_text(json.dumps({
-        "initial_policy": built["policy"],
-        "changed_policy": changed["policy"],
-        "same_ddl": changed["ddl"] == built["ddl"],
-        "same_durable_message": changed["source"] == built["source"],
-        "changed_producer": changed["producer"] != built["producer"],
-        "rebuild_writes": changed["row_writes"],
-        "unchanged_reopen_writes": repeated["row_writes"],
-        "failed_replay": "rolled back rows and producer witness",
-        "recovered_reopen_writes": recovered["row_writes"],
-    }, indent=2))
+    assert not recovered["planned"]
 
 
 @pytest.mark.parametrize("declaration", BusRecord.members_with(BusRecord))
