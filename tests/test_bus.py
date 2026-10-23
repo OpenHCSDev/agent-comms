@@ -1,8 +1,12 @@
 import os
+import shutil
 import signal
 import sqlite3
+import subprocess
+import sys
 from contextlib import closing, contextmanager
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -46,6 +50,207 @@ from agent_comms.typed_table import (
     WriterOwnedFile,
 )
 from bus_record_fixture import publication_processes, record_from
+
+
+@pytest.fixture
+def projection_source(tmp_path: Path) -> Path:
+    checkout = tmp_path / "producer-source"
+    source = checkout / "src" / "agent_comms"
+    original = Path(__file__).resolve().parents[1] / "src" / "agent_comms"
+    shutil.copytree(original, source, ignore=shutil.ignore_patterns("__pycache__", "skills"))
+    (source / "skills").symlink_to(original / "skills", target_is_directory=True)
+    subprocess.run(("git", "init", "-q", str(checkout)), check=True, capture_output=True)
+    subprocess.run(
+        (
+            "git",
+            "-C",
+            str(checkout),
+            "-c",
+            "user.name=Digest fixture",
+            "-c",
+            "user.email=digest@example.invalid",
+            "-c",
+            "commit.gpgsign=false",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "commit",
+            "--allow-empty",
+            "-qm",
+            "Source fixture",
+        ),
+        check=True,
+        capture_output=True,
+    )
+    return source
+
+
+def projection_source_digest(source: Path) -> str:
+    return subprocess.run(
+        (
+            sys.executable,
+            "-I",
+            "-c",
+            "import sys; sys.path.insert(0, sys.argv[1]); "
+            "from agent_comms.messages import BusProjectionTables; "
+            "print(BusProjectionTables._producer_digest())",
+            str(source.parent),
+        ),
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    ).stdout.strip()
+
+
+@pytest.mark.parametrize(
+    ("module", "old", "new"),
+    (
+        (
+            "typed_table.py",
+            "Durable files compare their stored DDL text",
+            "An unrelated infrastructure docstring: durable files compare their stored DDL text",
+        ),
+        (
+            "field_codec.py",
+            "class TimestampText(",
+            "def unrelated_projection_probe():\n    return 17\n\n\nclass TimestampText(",
+        ),
+    ),
+)
+def test_projection_digest_ignores_infrastructure_source(
+    projection_source: Path,
+    module: str,
+    old: str,
+    new: str,
+) -> None:
+    before = projection_source_digest(projection_source)
+    path = projection_source / module
+    original = path.read_text()
+    assert original.count(old) == 1
+    path.write_text(original.replace(old, new))
+    assert projection_source_digest(projection_source) == before
+
+
+@pytest.mark.parametrize(
+    ("module", "old", "new"),
+    (
+        (
+            "bus_publication.py",
+            "yield SentSource(self.audience.sender_lookup, self.seq)",
+            "yield SentSource(self.audience.sender_lookup, self.seq + 1)",
+        ),
+        ("bus_activity_index.py", '=max("{name}",excluded.', '=min("{name}",excluded.'),
+        (
+            "messages.py",
+            "for record in BusCapability.history(db):",
+            "for record in reversed(tuple(BusCapability.history(db))):",
+        ),
+        (
+            "messages.py",
+            "yield MessageIdentitySource(self.seq, self.message_id, self.sender)",
+            "yield MessageIdentitySource(self.seq, self.message_id, self.target)",
+        ),
+        (
+            "messages.py",
+            "HeldResources.apply(db, self.claim_transition, projected, holders)",
+            "HeldResources.apply(db, self.claim_transition, projected, holders)\n        del projected",
+        ),
+        (
+            "messages.py",
+            "return (SentActivity(message.sender, message.timestamp),)",
+            "return (SentActivity(message.target, message.timestamp),)",
+        ),
+        (
+            "messages.py",
+            "return (BusRouteCounts.from_message(message),)",
+            "return (BusRouteCounts.from_message(message), BusRouteCounts.from_message(message))",
+        ),
+        (
+            "channel_targets.py",
+            "    def direct_names(self) -> tuple[str, ...]:\n        return self.names\n",
+            "    def direct_names(self) -> tuple[str, ...]:\n        return self.names[:1]\n",
+        ),
+        (
+            "activity_clocks.py",
+            "message.sender_role.last_user_input(0.0, message.timestamp),",
+            "message.sender_role.last_user_input(1.0, message.timestamp),",
+        ),
+    ),
+)
+def test_projection_digest_tracks_producing_source(
+    projection_source: Path,
+    module: str,
+    old: str,
+    new: str,
+) -> None:
+    before = projection_source_digest(projection_source)
+    path = projection_source / module
+    original = path.read_text()
+    assert original.count(old) == 1
+    path.write_text(original.replace(old, new))
+    assert projection_source_digest(projection_source) != before
+
+
+# Mechanisms that decode, store and dispatch rows; their edits never change row content.
+PROJECTION_MECHANISM_MODULES = frozenset({
+    "agent_comms.core_stamp",
+    "agent_comms.declared_family",
+    "agent_comms.field_codec",
+    "agent_comms.mro_dispatch",
+    "agent_comms.package_stamp",  # CheckoutStamp reads HEAD through Repo.git
+    "agent_comms.projection_source",
+    "agent_comms.repo",
+    "agent_comms.typed_table",
+})
+
+
+def projection_rebuild_classes(bus: Bus) -> set[type]:
+    """Every agent_comms class whose own code ran while the projections were rebuilt."""
+    codes = set()
+
+    def profile(frame, event, argument):
+        if event == "call":
+            codes.add(frame.f_code)
+
+    with bus.writing() as db:
+        BusProjectionTables.reset_schema(db)  # imports and caches outside the profile
+        sys.setprofile(profile)
+        try:
+            BusProjectionTables.reset_schema(db)
+        finally:
+            sys.setprofile(None)
+    modules = {
+        module.__file__: module for name, module in tuple(sys.modules.items())
+        if name.startswith("agent_comms.") and getattr(module, "__file__", None)
+    }
+    classes = set()
+    for code in codes:
+        if code.co_filename not in modules:
+            continue
+        owner = modules[code.co_filename]
+        for part in code.co_qualname.split(".")[:-1]:
+            if part == "<locals>":
+                break
+            owner = getattr(owner, part)
+        if isinstance(owner, type):
+            classes.add(owner)
+    return classes
+
+
+def test_every_class_that_produces_projection_rows_is_in_the_digest(bus):
+    first = bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("author", "worker", "direct", InfoKind, seq=seq),
+    ))
+    bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("worker", "author", "reply", InfoKind, seq=seq, answers=(first.reference,)),
+    ))
+    owners = set(BusProjectionTables.producer_owners())
+    missing = sorted(
+        f"{owner.__module__}.{owner.__qualname__}"
+        for owner in projection_rebuild_classes(bus)
+        if owner.__module__ not in PROJECTION_MECHANISM_MODULES and owner not in owners
+    )
+    assert missing == []
 
 
 def test_bus_attachment_and_failed_write_do_not_install_a_schema(tmp_path):

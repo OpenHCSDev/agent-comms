@@ -32,7 +32,8 @@ from test_carry_bus_history import OUTGOING_V2, predecessor_history
 
 
 @pytest.fixture
-def route_bus(tmp_path):
+def route_bus(tmp_path, pinned_native):
+    """Publishing a route validates its launch, which acquires the pinned native build."""
     root = tmp_path / "wire"
     prepare_native_comms(wire(root))
     return ActiveRoute(root, RecordedBusIdentity.capture(Bus.path_in(root)))
@@ -176,18 +177,19 @@ path.chmod(0o600)
     assert written.returncode == 0, written.stdout + written.stderr
     path = home / ".local/state/agent-comms/active-route.json"
     assert json.loads(path.read_text())["version"] == 2
-    selected = InstallCommands().probe(
-        SelectedRouteProbe(), runtime.interpreter, env=environment, cwd=tmp_path,
-    )
-    assert selected == PublishedRouteSelection(root)
-    root.rename(root.with_name("retired"))
-    assert InstallCommands().probe(
-        SelectedRouteProbe(), runtime.interpreter, env=environment, cwd=tmp_path,
-    ) == NoRouteSelection()
-    path.unlink()
-    assert InstallCommands().probe(
-        SelectedRouteProbe(), runtime.interpreter, env=environment, cwd=tmp_path,
-    ) == NoRouteSelection()
+    with InstallCommands() as commands:
+        selected = commands.probe(
+            SelectedRouteProbe(), runtime.interpreter, env=environment, cwd=tmp_path,
+        )
+        assert selected == PublishedRouteSelection(root)
+        root.rename(root.with_name("retired"))
+        assert commands.probe(
+            SelectedRouteProbe(), runtime.interpreter, env=environment, cwd=tmp_path,
+        ) == NoRouteSelection()
+        path.unlink()
+        assert commands.probe(
+            SelectedRouteProbe(), runtime.interpreter, env=environment, cwd=tmp_path,
+        ) == NoRouteSelection()
 
 
 def test_failure_after_backup_link_restores_a_single_private_route(tmp_path, route_bus, monkeypatch):

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from agent_comms.lifecycle_capability import Active
 
-import os
 import re
 import shlex
 import signal
@@ -29,7 +28,7 @@ from .goal_states import ActiveGoal, GoalState
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from .turn_goal_permission import ContinuationGoalPermission, GoalPermission, InactiveGoalPermission
 from .registration_inheritance import RegistrationInheritance
-from .repo import ScratchCheckout
+from .repo import GitCommandError, Repo, ScratchCheckout
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .text_digest import TextDigest
 from .ui_model.goal import GoalDisplay
@@ -137,9 +136,9 @@ class ResolvedMentionBinding(GoalMentionBinding):
         contacts = tuple(
             GoalDerivedContact(
                 owner.name,
-                owner.created_at,
+                owner.incarnation.wire_birth,
                 executor.name,
-                executor.created_at,
+                executor.incarnation.wire_birth,
                 goal.id,
                 source.text_revision,
             )
@@ -383,7 +382,7 @@ class OrderCheck:
 
     def at(self, revision: str, repository: str, checkout_base: Path) -> ChildResult:
         """Read the result on ``revision``, or explicitly run the check in a detached checkout."""
-        sha = CheckedCommit.git(repository, "rev-parse", f"{revision}^{{commit}}").strip()
+        sha = Repo.git(repository, "rev-parse", f"{revision}^{{commit}}").strip()
         for recorded in self.recorded(sha, repository):
             return recorded
         try:
@@ -409,28 +408,6 @@ class OrderCheck:
         return ChildResult(ChildOutcome.from_returncode(run.returncode), run.stdout)
 
 
-class GitCommandFailed(RuntimeError):
-    """A Git operation failure, not malformed order data to aggregate and continue past."""
-
-    def __init__(self, repository: str, run: subprocess.CompletedProcess[str]):
-        self.run = run
-        detail = run.stderr.strip() or f"git failed with exit {run.returncode}"
-        super().__init__(f"Git in {repository}: {detail}")
-
-    def source_path_absent(self, sha: str, file: str) -> bool:
-        """Only Git's missing-path result, never a failed fetch or corrupt repository."""
-        return self.run.returncode == 128 and self.run.stderr in (
-            f"fatal: path '{file}' does not exist in '{sha}'\n",
-            f"fatal: path '{file}' exists on disk, but not in '{sha}'\n",
-        )
-
-    def no_check_ran_on(self, sha: str) -> bool:
-        """Git's absent-note reply, not a corrupt repository or an invalid revision."""
-        return self.run.returncode == 1 and self.run.stderr in (
-            "", f"error: no note found for object {sha}.\n",
-        )
-
-
 @dataclass(frozen=True)
 class CheckedCommit:
     """What an order's check printed at a commit. A commit's result never changes, so the git
@@ -448,28 +425,20 @@ class CheckedCommit:
     def result(self) -> ChildResult:
         return ChildResult(self.outcome, self.stdout.encode())
 
-    @staticmethod
-    def git(repository: str, *args: str) -> str:
-        run = subprocess.run(("git", "-C", repository, *args), capture_output=True, text=True,
-                             timeout=60, env=os.environ | {"LC_ALL": "C"})
-        if run.returncode:
-            raise GitCommandFailed(repository, run)
-        return run.stdout
-
     @classmethod
     def stored(cls, repository: str, sha: str) -> tuple[CheckedCommit, ...]:
         """Every check result the commit's note records; a commit no check ran on has none."""
         try:
-            cls.git(repository, *cls.NOTES, "list", sha)
-        except GitCommandFailed as failure:
+            Repo.git(repository, *cls.NOTES, "list", sha)
+        except GitCommandError as failure:
             if failure.no_check_ran_on(sha):
                 return ()  # No check ran on this commit.
             raise
         return tuple(FieldCodec.decode(cls, FieldCodec.parse(line)) for line in
-                     cls.git(repository, *cls.NOTES, "show", sha).splitlines() if line)
+                     Repo.git(repository, *cls.NOTES, "show", sha).splitlines() if line)
 
     def store(self, repository: str, sha: str) -> None:
-        self.git(repository, *self.NOTES, "append", "-m",
+        Repo.git(repository, *self.NOTES, "append", "-m",
                  FieldCodec.compact(FieldCodec.encode(self)), sha)
 
 

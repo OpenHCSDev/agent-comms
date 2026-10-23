@@ -119,7 +119,7 @@ class TestHandlers:
     @pytest.mark.parametrize("renamed", [False, True])
     async def test_snapshot_capability_replays_one_bounded_update(self, tmp_path, renamed):
         agent = self._agent(tmp_path)
-        await agent.initialize(1, {})
+        await agent.initialize(1)
         await agent.new_session("/wt/proj")
         path = tmp_path / "history.jsonl"
         records = [

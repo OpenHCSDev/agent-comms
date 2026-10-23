@@ -217,10 +217,23 @@ class NativeInputProof(DurableFile, ReconciledFile, PatternFile):
         return NativeContextJournal
 
 
-class SavedSessionFile(PatternFile):
+class BusTranscriptFile(PatternFile):
     """A bus location holding saved native transcripts and their writer locks."""
 
     __slots__ = ()
+
+    @classmethod
+    def member_paths(cls, path: Path) -> frozenset[Path]:
+        return super().member_paths(path) | frozenset(NativeSessionLocks(path).members)
+
+    @classmethod
+    def transient_paths(cls, path: Path) -> frozenset[Path]:
+        return super().transient_paths(path) | frozenset((NativeSessionLocks(path).writer_lock,))
+
+    @classmethod
+    def files_in(cls, root: Path) -> frozenset[Path]:
+        return super().files_in(root) | frozenset(
+            root.glob(str(NativeSessionLocks(cls.pattern()).writer_lock)))
 
     @classmethod
     def sessions_in(cls, root: Path) -> tuple[NativeSessionLocks, ...]:
@@ -233,15 +246,34 @@ class SavedSessionFile(PatternFile):
         )
 
 
-class PrivateSession(DurableFile, SavedSessionFile):
+class PrivateSession(DurableFile, BusTranscriptFile):
     """A thread's own session, created fresh for it."""
 
     __slots__ = ()
     filename = "sessions/enrolled-{session_id}.jsonl"
 
 
-class CheckSession(DurableFile, SavedSessionFile):
+class CheckSession(DurableFile, BusTranscriptFile):
     """A check root's copy of one selected worker's history, under its record's slot."""
 
     __slots__ = ()
     filename = "native-sessions/{slot}/enrolled-{session_id}.jsonl"
+
+
+class NativeAgentSettings(DurableFile, PatternFile):
+    """Pi's SettingsManager writes this file in the session's private agent directory."""
+
+    directory_name = ".native-pi-agent"
+    filename = f"native-sessions/{{lookup}}/{directory_name}/settings.json"
+
+    @classmethod
+    def prepare_directory(cls, session_directory: Path) -> Path:
+        directory = session_directory / cls.directory_name
+        NativeSessionFiles.prepare_private_directory(directory)
+        return directory
+
+
+class RetainedNativeWriteMarker(DurableFile, PatternFile):
+    """The retired PR48 writer left this after an uncertain write; retain its evidence."""
+
+    filename = "sessions/{session}.pr48-writer.lock"

@@ -7,7 +7,7 @@ from typing import ClassVar, Literal
 
 from pydantic import ConfigDict, Field, JsonValue, model_validator
 
-from agent_comms.cli_protocol import TaggedWire, TextWire, WireHeader, WireModel
+from agent_comms.cli_protocol import TaggedWire, TextWire, WireHeader
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.runtime_updates import (
     CompletedItem,
@@ -28,6 +28,8 @@ from agent_comms.transcript_events import (
     UserTranscript,
 )
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
+
+from ..wire_models import WireModel
 
 
 class MessageTime(WireModel):

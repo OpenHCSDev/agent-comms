@@ -49,7 +49,9 @@ async def test_a_killed_observer_is_reported_once_with_its_signal_and_fails_awai
         with pytest.raises(ObserverDied) as awaited:
             await waiting
         assert awaited.value is died.value
-        process.request(StopSidebar())  # what a closing view sends; the observer's end was already reported
+        with pytest.raises(ObserverDied) as stopping:
+            process.request(StopSidebar())  # what a closing view sends
+        assert stopping.value is died.value
         with pytest.raises(ObserverDied) as later:
             await process.read(ReadNotifications(str(comms.root), ()))
         assert later.value is died.value
@@ -81,7 +83,8 @@ async def test_unavailable_owner_reads_preserve_the_observer(
         with pytest.raises(refusal):
             await process.read(read_type(str(comms.root), owner.incarnation))
         assert await process.read(ReadNotifications(str(comms.root), ())) == {}
-        assert process.process.is_alive() and process.died is None
+        assert process.process.is_alive()
+        process.status.raise_if_failed()
 
 
 @pytest.mark.parametrize("read_type", OwnerRead.__subclasses__())
@@ -95,7 +98,8 @@ async def test_stale_owner_reads_preserve_the_observer(comms, durable_home, read
         with pytest.raises(StaleRevision if other_root else OwnerIdentityChangedError):
             await process.read(read_type(root, identity))
         assert await process.read(ReadNotifications(str(comms.root), ())) == {}
-        assert process.process.is_alive() and process.died is None
+        assert process.process.is_alive()
+        process.status.raise_if_failed()
 
 
 async def test_an_observer_that_failed_is_reported_with_its_own_traceback_and_exit_status(tmp_path, durable_home):

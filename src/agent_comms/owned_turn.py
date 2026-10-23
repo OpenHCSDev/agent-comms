@@ -7,7 +7,9 @@ from contextlib import AsyncExitStack, ExitStack, aclosing
 from dataclasses import replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, NoReturn
+from typing import TYPE_CHECKING, NoReturn
+
+from .image_inputs import ImageInput
 
 from acp import RequestError
 
@@ -83,7 +85,7 @@ class OwnedTurn:
         task: str,
         *,
         origins: tuple[Message, ...] = (),
-        images: tuple[Any, ...] = (),
+        images: tuple[ImageInput, ...] = (),
         original_keys: tuple[str, ...] = (),
         initial_display_text: str | None = None,
         autonomous_goal: bool = False,

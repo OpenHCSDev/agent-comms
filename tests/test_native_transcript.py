@@ -6,7 +6,7 @@ from dataclasses import fields
 
 import pytest
 
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.native_entries import MessageEntry, NativeEntry, TranscriptProjection, UnknownEntry
 from agent_comms.native_transcript import NativeTranscript
 from agent_comms.pi_payloads import UserMessage
@@ -78,9 +78,9 @@ def test_unknown_and_partial_entries_keep_byte_boundaries(tmp_path):
 
 @pytest.mark.parametrize("raw, error, match", [
     (encoded({"type": "message", "timestamp": "2026-10-01T00:00:00.000Z", "message": {"role": "assistant", "content": 42}}),
-     ValueError, r"^message\.content: Expected a JSON array\.; fix: supply tuple\[agent_comms\.pi_payloads\.PiContent, \.\.\.\]$"),
-    (b'{"type":"message"\n', json.JSONDecodeError,
-     r"^Expecting ',' delimiter: line 2 column 1 \(char 18\)$"),
+     ValueError, r"^message\.content: Expected a JSON array\.; fix: supply .*\btuple\[agent_comms\.pi_payloads\.PiContent, \.\.\.\]"),
+    (b'{"type":"message"\n', MalformedRecord,
+     r"^Invalid JSON: Expecting ',' delimiter: line 2 column 1 \(char 18\)$"),
 ])
 @pytest.mark.parametrize("read", [
     lambda reader, size: reader.forward(0, size),
@@ -90,7 +90,7 @@ def test_unknown_and_partial_entries_keep_byte_boundaries(tmp_path):
 def test_corrupt_complete_entries_raise_in_every_read_direction(tmp_path, raw, error, match, read):
     path = tmp_path / "corrupt.jsonl"
     path.write_bytes(raw)
-    with pytest.raises(error):
+    with pytest.raises(error, match=match):
         tuple(read(NativeTranscript(path), path.stat().st_size))
 
 

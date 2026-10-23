@@ -22,9 +22,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.cli_commands import HistoryCliCommand
-from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
+from agent_comms.history_result import ChannelHistoryPageResult
 from agent_comms.installer.backup import bus_files
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.practice import TestHome
@@ -37,19 +36,17 @@ from agent_comms.installer.upgrade import (
     Stack,
     Upgrade,
 )
+from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import MaintenanceBarrier
+from agent_comms.messages import Message
 from agent_comms.registry_store import RegistryStore
-from agent_comms.repo import Checkout, ScratchCheckout
+from agent_comms.repo import Checkout
+from agent_comms.root_runtime import RootRuntime
 from agent_comms.storage_rules import StorageRule
 from agent_comms.typed_table import ReconciledFile
 from conftest import declare_test_bus, publish_initial
 
 REPOSITORY = Path(__file__).resolve().parents[1]
-
-
-def git(*arguments: str) -> str:
-    return subprocess.run(["git", "-C", REPOSITORY, *arguments], check=True,
-                          capture_output=True, text=True).stdout.strip()
 
 
 @pytest.fixture(scope="module")
@@ -66,15 +63,20 @@ def installed_home(tmp_path_factory) -> dict[str, str]:
     environment = {**os.environ, "HOME": str(home), "UV_CACHE_DIR": caches.stdout.strip(),
                    "npm_config_cache": str(Path.home() / ".npm")}
     environment.pop("PYTHONPATH", None)
-    # The checkout owner adds the tree with its pinned submodules; `git archive` drops them.
-    base = ScratchCheckout.add(REPOSITORY, home / "outgoing-source", git("rev-parse", "HEAD"), "--detach")
-    try:
-        outgoing = Stack.build(base.path, InstallCommands(), home)
-    finally:
-        base.retire()
+    outgoing = Stack.build(REPOSITORY, InstallCommands(), home)
     (home / ".local/share/agent-comms/current").symlink_to(
         outgoing.runtime.prefix, target_is_directory=True)
     return environment
+
+
+@pytest.fixture
+def installed_comms(private_comms, installed_home):
+    """An installed machine's bus belongs to its installed runtime, not to the test
+    process that declared it."""
+    with pytest.MonkeyPatch.context() as installed:
+        installed.setenv("HOME", installed_home["HOME"])
+        RootRuntime.publish(private_comms.root, LaunchRuntime.installed())
+    return private_comms
 
 
 @pytest.fixture(scope="module")
@@ -89,7 +91,7 @@ def install_checkout(tmp_path_factory) -> Path:
     return checkout
 
 
-def drop_one_index(root: Path) -> str:
+def drop_one_index(root: Path) -> Path:
     """One declared store's schema drifts from both runtimes' declarations."""
     for path in sorted(ReconciledFile.existing_in(root)):
         with closing(sqlite3.connect(path)) as db:
@@ -98,7 +100,7 @@ def drop_one_index(root: Path) -> str:
             if index:
                 db.execute(f'DROP INDEX "{index[0]}"')
                 db.commit()
-                return str(path.relative_to(root))
+                return path.relative_to(root)
     raise AssertionError("No declared store has an index to drop")
 
 
@@ -106,13 +108,13 @@ def drop_one_index(root: Path) -> str:
 @pytest.mark.parametrize("repos, drifted", (
     ((), False), (("--repos",), True),
 ), ids=("kept-repos-current-stores", "given-repos-drifted-store"))
-def test_install_rehearses_without_changing_the_bus(private_comms, installed_home, install_checkout, tmp_path,
+def test_install_rehearses_without_changing_the_bus(installed_comms, installed_home, install_checkout, tmp_path,
                                                     repos, drifted):
     """Retained carry steps inspect a practice copy, even when no step is pending.
 
     Only the deliberately drifted store is rewritten; neither case changes the bus.
     """
-    comms = private_comms
+    comms = installed_comms
     declare_test_bus(comms, channels=("comms",), threads=(
         comms.registry.new_thread(name="worker", tags=frozenset(), worktree=str(tmp_path)),))
     publish_initial(comms, "worker", "#all", "One message before the install")
@@ -135,9 +137,33 @@ def test_install_rehearses_without_changing_the_bus(private_comms, installed_hom
 
 
 @pytest.mark.timeout(280)
+def test_rehearsal_refuses_changed_native_inputs(installed_comms, installed_home, install_checkout):
+    """The target's own installer refuses a stale pin before rehearsing the bus."""
+    checkout = install_checkout
+    declare_test_bus(installed_comms, channels=("comms",))
+    current = subprocess.check_output(
+        ["git", "-C", checkout, "rev-parse", "HEAD"], text=True).strip()
+    patch = checkout / "stack/stale-pin-test.py"
+    patch.write_text("# A native build input changed without rebuilding the pin.\n")
+    subprocess.run(["git", "-C", checkout, "add", patch], check=True)
+    subprocess.run(["git", "-C", checkout, "-c", "user.name=Installer test",
+                    "-c", "user.email=installer@example.invalid", "commit", "-qm",
+                    "Change a native input without updating its pin"], check=True)
+    target = subprocess.check_output(
+        ["git", "-C", checkout, "rev-parse", "HEAD"], text=True).strip()
+    subprocess.run(["git", "-C", checkout, "checkout", "--detach", "-q", current], check=True)
+    installed = subprocess.run(
+        [Path(sys.executable).with_name("agent-comms"), "--root", installed_comms.root, "install",
+         "--rehearse", "--checkout", checkout, "--to", target, "--project", checkout],
+        cwd=checkout, env=installed_home, capture_output=True, text=True, timeout=270)
+    assert installed.returncode != 0
+    assert "Native build inputs changed; rebuild with --update-pins" in installed.stderr
+
+
+@pytest.mark.timeout(280)
 def test_failed_live_migration_restores_data_checkout_and_runtime(
-        private_comms, installed_home, install_checkout, tmp_path):
-    comms, checkout = private_comms, install_checkout
+        installed_comms, installed_home, install_checkout, tmp_path):
+    comms, checkout = installed_comms, install_checkout
     declare_test_bus(comms, channels=("comms",), threads=(
         comms.registry.new_thread(name="worker", tags=frozenset(), worktree=str(tmp_path)),))
     publish_initial(comms, "worker", "#all", "Retained before migration")
@@ -150,9 +176,11 @@ def test_failed_live_migration_restores_data_checkout_and_runtime(
     step = checkout / "tools/cutover/carry_fault.py"
     step.write_text('''from pathlib import Path
 from agent_comms.installer.carry import Carry, Carried
+from agent_comms.locked_store import DurableFile
+class Saved(DurableFile):
+    filename = "saved"
 class Fault(Carry):
-    def backup_files(self):
-        return (self.root / "saved",)
+    opened_files = (Saved,)
     def carry(self, *, apply):
         if apply:
             (self.root / "saved").write_text("changed by the worker")
@@ -188,9 +216,9 @@ class Fault(Carry):
 
 @pytest.mark.timeout(280)
 def test_failed_publication_restores_absent_route_without_store_changes(
-        private_comms, installed_home, install_checkout, tmp_path):
+        installed_comms, installed_home, install_checkout, tmp_path):
     checkout = install_checkout
-    declare_test_bus(private_comms, channels=("comms",))
+    declare_test_bus(installed_comms, channels=("comms",))
     current = subprocess.check_output(
         ["git", "-C", checkout, "rev-parse", "HEAD"], text=True).strip()
     manifest = checkout / "pyproject.toml"
@@ -220,7 +248,7 @@ def test_failed_publication_restores_absent_route_without_store_changes(
     assert not route.exists()
 
     completed = subprocess.run(
-        [pointer / "bin/agent-comms", "--root", private_comms.root, "install",
+        [pointer / "bin/agent-comms", "--root", installed_comms.root, "install",
          "--checkout", checkout, "--to", target, "--project", checkout,
          "--spill-dir", tmp_path / "backups"], cwd=checkout,
         env={**installed_home, "HOME": str(home)}, capture_output=True, text=True, timeout=270,
@@ -233,17 +261,17 @@ def test_failed_publication_restores_absent_route_without_store_changes(
     assert blocker.read_text() == "An owner file that publication must preserve"
     assert subprocess.check_output(
         ["git", "-C", checkout, "rev-parse", "HEAD"], text=True).strip() == current
-    MaintenanceBarrier(RegistryStore.at(private_comms.root).path).read().phase.new_sends.require_open()
+    MaintenanceBarrier(RegistryStore.at(installed_comms.root).path).read().phase.new_sends.require_open()
 
 
 @pytest.mark.timeout(280)
 @pytest.mark.parametrize("fresh, live_kind", ((False, CarriedRun), (True, CreatedRun)),
                          ids=("retained-bus", "fresh-bus"))
 def test_installed_entry_reports_completion_after_target_source_retirement(
-        private_comms, installed_home, install_checkout, tmp_path, fresh, live_kind):
-    root = tmp_path / "new-bus" if fresh else private_comms.root
+        installed_comms, installed_home, install_checkout, tmp_path, fresh, live_kind):
+    root = tmp_path / "new-bus" if fresh else installed_comms.root
     if not fresh:
-        declare_test_bus(private_comms, channels=("comms",))
+        declare_test_bus(installed_comms, channels=("comms",))
     scratch = tmp_path / "install-scratch"
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     StorageRule.path_in(root).write_text(json.dumps(FieldCodec.encode(
@@ -261,7 +289,11 @@ def test_installed_entry_reports_completion_after_target_source_retirement(
     assert completed.returncode == 0, completed.stderr
     result = FieldCodec.decode(Upgrade, FieldCodec.parse(completed.stdout))
     assert isinstance(result, InstalledUpgrade) and type(result.live) is live_kind
-    history = tuple(reversed(HistoryCliCommand(target="#comms").apply(wire(root)).messages))
+    # The bus now belongs to the installed runtime, so its own CLI reads it.
+    read = subprocess.run([outgoing, "--root", root, "history", "--target", "#comms"],
+                          env=installed_home, capture_output=True, text=True, check=True, timeout=60)
+    page = FieldCodec.parse(read.stdout)[ChannelHistoryPageResult.messages_key]
+    history = tuple(reversed(FieldCodec.decode(tuple[Message, ...], page)))
     assert len(history) == (1 if fresh else 2)
     assert history[-1].sender == "installer"
     assert history[-1].body.startswith("Install finished")

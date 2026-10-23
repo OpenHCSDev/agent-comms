@@ -199,6 +199,11 @@ class ThreadProvenance:
         """The codec decoded both stored fields; their record owns this binding."""
         return self.session_file.location(self.backend)
 
+    @cached_property
+    def writable_runtime(self) -> RuntimeLocation:
+        """The runtime a launch writes; a copied bus refuses a harness transcript."""
+        return self.session_file.writable_location(self.backend)
+
     @property
     def display_title(self) -> str:
         return self.title.otherwise(self.name)
@@ -235,10 +240,15 @@ class ThreadProvenance:
         return ThreadIncarnationRecord(self.name, self.created_at.to_wire()).incarnation()
 
 
+class ThreadCatalog(DurableFile, PatternFile):
+    """The tool catalog a native launch reads from its thread's session directory."""
+
+    __slots__ = ()
+    filename: ClassVar[str] = "native-sessions/{lookup}/comms-catalog.json"
+
+
 @dataclass(frozen=True, slots=True)
-class Thread(DurableFile, PatternFile, ThreadProvenance):
-    filename: ClassVar[str] = "native-sessions/{lookup}/{name}"
-    catalog_filename: ClassVar[str] = "comms-catalog.json"
+class Thread(ThreadProvenance):
     """Declares one agent thread's identity and provenance."""
 
     parent: ThreadParent = field(default_factory=NoParent)
@@ -386,10 +396,8 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         if not arguments.loads(NativeRequestTools.native_extension(package)):
             return arguments.argv
         launch = LaunchRoot.from_path(root)
-        directory = self.native_session_directory(launch.path)
-        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-        path = self.path_in(launch.path, lookup=self.incarnation.require_recorded().lookup,
-                            name=self.catalog_filename)
+        path = self.catalog_path(launch.path)
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         catalog = ThreadToolCatalogResult(
             tuple(NativeRequestTools.catalog()), self.service_tier, launch.arguments(),
         )
@@ -402,8 +410,11 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
 
         return ThreadLaunch.from_thread(self)
 
+    def catalog_path(self, root: Path) -> Path:
+        return ThreadCatalog.path_in(root, lookup=self.incarnation.require_recorded().lookup)
+
     def native_session_directory(self, root: Path) -> Path:
-        return self.path_in(root, lookup=self.incarnation.require_recorded().lookup, name="")
+        return self.catalog_path(root).parent
 
     def __post_init__(self) -> None:
         super(Thread, self).__post_init__()

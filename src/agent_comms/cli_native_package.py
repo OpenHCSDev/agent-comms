@@ -9,12 +9,15 @@ from dataclasses import dataclass
 from typing import Annotated
 
 from agent_comms import field_codec
-from agent_comms.cli_bridges.shared import DeclaredVerb
 from agent_comms.command import Command
+from agent_comms.declared_verb import DeclaredVerb
 from agent_comms.native_package import (
+    MANIFEST,
     VerifiedNativePackage,
+    built_tree_pin,
     install_declared_sources,
     package_tree_digest,
+    pinned_native_package,
     share_native_resources,
     write_native_manifest,
 )
@@ -23,7 +26,7 @@ from agent_comms.unit_instructions import UnitInstructions
 
 
 @dataclass(frozen=True, kw_only=True)
-class NativePackageVerb(DeclaredVerb, Command, affix="Verb"):
+class NativePackageVerb(DeclaredVerb, Command[None, None], affix="Verb"):
     """One verb: its fields declare its parser, and apply() does the work."""
 
     @abstractmethod
@@ -67,6 +70,14 @@ class VerifyVerb(QualifiedPackageVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
+class BuildIdVerb(NativePackageVerb):
+    help = "Print which built tree this checkout's manifest pins"
+
+    def apply(self, ctx: None = None) -> None:
+        print(built_tree_pin(MANIFEST))
+
+
+@dataclass(frozen=True, kw_only=True)
 class DigestVerb(PackageVerb):
     help = "Print a package tree's digest"
 
@@ -97,7 +108,7 @@ class ShareResourcesVerb(PackageVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SourceInstallationVerb(PackageVerb):
+class SourceInstallationVerb(NativePackageVerb):
     """Install declared sources after the command's package boundary accepts them."""
 
     snapshot: Annotated[
@@ -113,16 +124,24 @@ class SourceInstallationVerb(PackageVerb):
     def apply(self, ctx: None = None) -> None:
         package = self._native_package()
         install_declared_sources(package.path, self.snapshot)
+        self.answer(package)
+
+    def answer(self, package: VerifiedNativePackage) -> None:
+        """Publication answers nothing: its output is the preparation script's."""
 
 
 @dataclass(frozen=True, kw_only=True)
 class InstallSourcesVerb(SourceInstallationVerb):
-    """Runtime source installation acquires its already-published package."""
+    """Runtime source installation acquires the package its manifest pins, and answers
+    that package's location for the launcher."""
 
-    help = "Install declared sources from this runtime's published package"
+    help = "Install declared sources into this runtime's pinned package and print it"
 
     def _native_package(self) -> VerifiedNativePackage:
-        return VerifiedNativePackage.acquire(self.package)
+        return VerifiedNativePackage.acquire(pinned_native_package())
+
+    def answer(self, package: VerifiedNativePackage) -> None:
+        print(package.path)
 
 
 @dataclass(frozen=True, kw_only=True)

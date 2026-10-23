@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from abc import ABC, abstractmethod
@@ -29,6 +30,33 @@ class RepositorySelection(ABC):
 
     @abstractmethod
     def without_commander(self) -> None: ...
+
+
+class GitCommandError(RuntimeError):
+    """A Git operation failure, not malformed order data to aggregate and continue past."""
+
+    def __init__(self, repository: str, run: subprocess.CompletedProcess[bytes]):
+        self.returncode = run.returncode
+        self.stderr = run.stderr.decode(errors="replace")
+        detail = self.stderr.strip() or f"git failed with exit {run.returncode}"
+        super().__init__(f"Git in {repository}: {detail}")
+
+    def source_path_absent(self, sha: str, file: str) -> bool:
+        """Only Git's missing-path result, never a failed fetch or corrupt repository."""
+        return self.returncode == 128 and self.stderr in (
+            f"fatal: path '{file}' does not exist in '{sha}'\n",
+            f"fatal: path '{file}' exists on disk, but not in '{sha}'\n",
+        )
+
+    def no_such_revision(self) -> bool:
+        """``rev-parse --verify --quiet``'s unresolved revision, not a broken repository."""
+        return self.returncode == 1 and not self.stderr
+
+    def no_check_ran_on(self, sha: str) -> bool:
+        """Git's absent-note reply, not a corrupt repository or an invalid revision."""
+        return self.returncode == 1 and self.stderr in (
+            "", f"error: no note found for object {sha}.\n",
+        )
 
 
 class Repo(BaseModel, WireValue):
@@ -92,34 +120,64 @@ class Repo(BaseModel, WireValue):
             self.git(self.checkout, "fetch", "-q", "origin")
             if not self.has_commit(sha):
                 return False
-        result = subprocess.run(
-            ("git", "-C", str(self.checkout), "merge-base", "--is-ancestor", sha, revision),
-            capture_output=True,
-            timeout=60,
-        )
-        if result.returncode not in (0, 1):
-            result.check_returncode()
-        return result.returncode == 0
+        return self.descends(self.checkout, sha, revision)
 
     def has_commit(self, sha: str) -> bool:
-        return (
-            subprocess.run(
-                ("git", "-C", str(self.checkout), "cat-file", "-e", f"{sha}^{{commit}}"),
-                capture_output=True,
-                timeout=30,
-            ).returncode
-            == 0
-        )
+        return self.answers(self.checkout, "rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}")
 
     @staticmethod
-    def git(checkout: Path, *args: str) -> str:
-        return subprocess.run(
-            ["git", "-C", str(checkout), *args],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=30,
-        ).stdout
+    def _run(
+        checkout: Path | str, *args: str, timeout: float = 60, input: bytes = b""
+    ) -> subprocess.CompletedProcess[bytes]:
+        """The one Git subprocess: C-locale output, bytes in and out."""
+        return subprocess.run(("git", "-C", str(checkout), *args), capture_output=True,
+                              input=input, timeout=timeout, env=os.environ | {"LC_ALL": "C"})
+
+    @classmethod
+    def git_bytes(cls, checkout: Path | str, *args: str, timeout: float = 60,
+                  input: str = "") -> bytes:
+        """Git's exact output, for answers sized in bytes (``cat-file --batch``); every
+        failure a GitCommandError."""
+        run = cls._run(checkout, *args, timeout=timeout, input=input.encode())
+        if run.returncode:
+            raise GitCommandError(str(checkout), run)
+        return run.stdout
+
+    @classmethod
+    def git(cls, checkout: Path | str, *args: str, timeout: float = 60, input: str = "") -> str:
+        """Git's output as text; every failure a GitCommandError."""
+        return cls.git_bytes(checkout, *args, timeout=timeout, input=input).decode()
+
+    @classmethod
+    def answers(cls, checkout: Path | str, *args: str) -> bool:
+        """A yes-or-no Git question: exit 0 is yes, exit 1 is no, and any other exit (no
+        repository, an unreadable object store) is a GitCommandError, never a no."""
+        run = cls._run(checkout, *args)
+        if run.returncode not in (0, 1):
+            raise GitCommandError(str(checkout), run)
+        return run.returncode == 0
+
+    @classmethod
+    def descends(cls, checkout: Path | str, ancestor: str, revision: str) -> bool:
+        """Whether ``revision`` holds ``ancestor`` in this checkout's history."""
+        return cls.answers(checkout, "merge-base", "--is-ancestor", ancestor, revision)
+
+    @classmethod
+    def store_serves(cls, store: Path, *args: str) -> bool:
+        """A question to one submodule store, pinned as the git directory so Git never
+        discovers the repository around it: any failure, a store holding no repository
+        included, means the store cannot serve."""
+        return cls._run(store, "--git-dir", ".", *args).returncode == 0
+
+    @classmethod
+    def grep(cls, checkout: Path | str, *args: str) -> tuple[str, ...]:
+        """``git grep`` rows: exit 1 means nothing matched."""
+        run = cls._run(checkout, "grep", *args)
+        if run.returncode == 1:
+            return ()
+        if run.returncode:
+            raise GitCommandError(str(checkout), run)
+        return tuple(run.stdout.decode().splitlines())
 
     @classmethod
     def of(cls, checkout: Path) -> Repo:
@@ -134,13 +192,6 @@ class CheckoutHoldsWorkError(Exception):
 
     def __init__(self, path: Path, changes: str):
         super().__init__(f"{path} holds uncommitted work:\n{changes}")
-
-
-class CheckoutPrepareError(Exception):
-    """Git could not populate a checkout's pinned submodules; its own words say why."""
-
-    def __init__(self, path: Path, stderr: str):
-        super().__init__(f"{path}: git submodule update failed:\n{stderr}")
 
 
 @dataclass(frozen=True)
@@ -174,12 +225,7 @@ class PinnedSubmodule:
         objects through alternates with no remote and no refs answers the first and fails
         the second the moment the pin moves ("transport 'file' not allowed")."""
         return all(
-            subprocess.run(
-                ("git", "--git-dir", str(self.store), *question),
-                capture_output=True,
-                timeout=30,
-            ).returncode
-            == 0
+            Repo.store_serves(self.store, *question)
             for question in (
                 ("rev-parse", "--verify", "--quiet", "HEAD^{commit}"),
                 ("remote", "get-url", "origin"),
@@ -216,13 +262,7 @@ class Checkout:
 
     @classmethod
     def add(cls, repository: Path | str, path: Path | str, revision: str, *options: str) -> Self:
-        subprocess.run(
-            ("git", "-C", str(repository), "worktree", "add", *options, str(path), revision),
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=60,
-        )
+        Repo.git(repository, "worktree", "add", *options, str(path), revision)
         checkout = cls(Path(path))
         checkout.prepare()
         return checkout
@@ -249,23 +289,8 @@ class Checkout:
         for module in modules:
             if module.broken():
                 module.clear()
-        update = subprocess.run(
-            (
-                "git",
-                "-C",
-                str(self.path),
-                "submodule",
-                "update",
-                "--init",
-                "--recursive",
-                "--checkout",
-            ),
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
-        if update.returncode:
-            raise CheckoutPrepareError(self.path, update.stderr)
+        Repo.git(self.path, "submodule", "update", "--init", "--recursive", "--checkout",
+                 timeout=300)
 
     def held_work(self) -> str:
         """Changes outside the pinned submodules, which retiring the tree would lose."""

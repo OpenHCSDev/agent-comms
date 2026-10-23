@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.bus import Bus, PublicRecord
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import HistoricalSourceChanged
 from agent_comms.historical_views import HistoricalMessage, HistoryArchive
@@ -28,7 +28,7 @@ from agent_comms.read_basis import (
 )
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import MessageRoute, TurnRouting
-from agent_comms.session_file import SavedSessionFile
+from agent_comms.session_file import RegistrySessionLocation
 
 
 @pytest.mark.parametrize('exists', [False, True])
@@ -87,7 +87,7 @@ def migrated(tmp_path):
     "method,args,reader",
     [
         ("channel_display_page", ("#team",), lambda live: dict(viewer=live.views.display_viewer(str(live.root)))),
-        ("dm_display_page", ("alice",), lambda live: dict(worktree=str(live.root))),
+        ("dm_display_page", (ThreadTarget("alice"),), lambda live: dict(worktree=str(live.root))),
         ("channel_display_page", ("#any",), lambda live: dict(viewer=live.views.display_viewer(str(live.root)))),
     ],
 )
@@ -159,7 +159,7 @@ def test_select_painted_page_keeps_its_source_with_attached_history(migrated, co
             "#team", viewer=live.views.display_viewer(str(live.root)), bounds=bounds,
         )
     else:
-        page = live.views.dm_display_page("alice", worktree=str(live.root), bounds=bounds)
+        page = live.views.dm_display_page(ThreadTarget("alice"), worktree=str(live.root), bounds=bounds)
     message = page.messages[-1]
     selected = page.select((message.seq,))
     assert selected.messages == (message,)
@@ -199,7 +199,7 @@ def test_duplicate_and_newer_incarnations_sessions(tmp_path):
     session.write_text("".join(json.dumps(r) + "\n" for r in records))
     with old.registry.store.editing() as edit:
         edit.document.threads["bob"] = replace(edit.document.threads["bob"], created_at=10.0)
-        edit.document.threads["alice"] = replace(edit.document.threads["alice"], session_file=SavedSessionFile(str(session)))
+        edit.document.threads["alice"] = replace(edit.document.threads["alice"], session_file=RegistrySessionLocation.from_path(str(session), tmp_path))
         edit.commit()
     routing = TurnRouting(reply=MessageRoute("alice", ("#team",)))
     old.transcripts.routes.record(str(session), ("two",), routing)
@@ -309,13 +309,19 @@ def test_normal_comms_api_contains_history_and_execution_stays_live(migrated):
         live.bus.bus).messages) == 4
 
 
+def root_bytes(root: Path) -> dict[Path, bytes]:
+    """The bytes of every member the backup owner records for this root."""
+    return {path: (root / path).read_bytes()
+            for members in bus_files(root).values() for path in members}
+
+
 def test_attach_only_reads_original_roots_and_rejects_changed_snapshot(tmp_path):
     old = setup(tmp_path / "old")
     (old.root / "unknown-input.json").write_text('{"verdict":"UNKNOWN"}')
-    original = {name: (old.root / name).read_bytes() for name in bus_files(old.root)}
+    original = root_bytes(old.root)
     live = setup(tmp_path / "live", 1)
     source = live.views.attach_history(old.root)
-    assert {name: (old.root / name).read_bytes() for name in bus_files(old.root)} == original
+    assert root_bytes(old.root) == original
     assert not (Path(source.root) / "unknown-input.json").exists()
     page = live.views.channel_display_page(
         "#team", viewer=NamedViewer(live.messaging.user_identity(str(live.root)).name),
@@ -348,7 +354,7 @@ def test_missing_historical_peer_is_browsable_without_live_registration(migrated
     _, _, live, source = migrated
     live.registry.unregister("alice")
     live.registry.remove("alice")
-    page = live.views.dm_display_page("alice", worktree=str(live.root))
+    page = live.views.dm_display_page(ThreadTarget("alice"), worktree=str(live.root))
     assert page.messages
     assert all(isinstance(message, HistoricalMessage) for message in page.messages)
     assert "alice" not in live.registry

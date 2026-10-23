@@ -9,21 +9,28 @@ from __future__ import annotations
 import hashlib
 import math
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
 from functools import cached_property
-from typing import TYPE_CHECKING, Callable, ClassVar, Self, TypeVar
-
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self, TypeVar
 
 from agent_comms.participant_identity import ParticipantIdentity
+
 from .cli_options import JsonFlagRecord
-from .declared_family import DeclaredFamily, UniqueExternalSelector, UnknownFamilyMember, declared_words
+from .declared_family import (
+    DeclaredFamily,
+    UniqueExternalSelector,
+    UnknownFamilyMember,
+    declared_words,
+)
 from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,
     SingleFieldValue,
+    WireName,
     WireValue,
 )
+from .projection_source import ProjectionSource
 from .response_policy import CollectivePolicy, InformationalPolicy, ResponsePolicy
 
 if TYPE_CHECKING:
@@ -105,8 +112,11 @@ class ObservedTools(OfferedTools, declared_name=None):
     version: str
 
     def unreported_change(self, version: str) -> tuple[str, ...]:
-        return ((f"runtime {self.version} -> {version}, tool set unreported",)
-                if self.version != version else ())
+        return (
+            (f"runtime {self.version} -> {version}, tool set unreported",)
+            if self.version != version
+            else ()
+        )
 
     def before_unreported(self, current: UnreportedTools) -> tuple[str, ...]:
         return self.unreported_change(current.version)
@@ -129,15 +139,22 @@ class ObservedTools(OfferedTools, declared_name=None):
 
 @dataclass(frozen=True)
 class ReportedTools(ObservedTools):
-    names: frozenset[ToolName]
+    # Not ``names``: dataclass would take the inherited DeclaredFamily.names as its default.
+    tools: Annotated[frozenset[ToolName], WireName("names")]
 
     def changes_from(self, previous: OfferedTools) -> tuple[str, ...]:
         return previous.before_reported(self)
 
     def before_reported(self, current: ReportedTools) -> tuple[str, ...]:
-        missing = self.names - current.names
-        return ((f"missing tools {', '.join(sorted(name.value for name in missing))}; "
-                 f"runtime {current.version}",) if missing else ())
+        missing = self.tools - current.tools
+        return (
+            (
+                f"missing tools {', '.join(sorted(name.value for name in missing))}; "
+                f"runtime {current.version}",
+            )
+            if missing
+            else ()
+        )
 
 
 class UnreportedTools(ObservedTools):
@@ -238,9 +255,14 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
     def recorded_names(self, snapshot: RegistryProvenance) -> tuple[ThreadIncarnation, ...]:
         """Original names retained for this exact current incarnation."""
         canonical = self.resolved(snapshot)
-        return (canonical, *(canonical.renamed(alias)
-                             for alias, name in snapshot.aliases.items()
-                             if name == canonical.name))
+        return (
+            canonical,
+            *(
+                canonical.renamed(alias)
+                for alias, name in snapshot.aliases.items()
+                if name == canonical.name
+            ),
+        )
 
 
 @dataclass(frozen=True, eq=False)
@@ -318,7 +340,9 @@ class CommanderForkIdentity(RecordedThreadIncarnation):
         return self.authority
 
 
-class BirthlessIncarnation(ThreadIncarnation, UniqueExternalSelector, DeclaredFamily, affix="Incarnation"):
+class BirthlessIncarnation(
+    ThreadIncarnation, UniqueExternalSelector, DeclaredFamily, affix="Incarnation"
+):
     """A member whose wire birth is a declared mark, not recorded evidence; never a lookup.
 
     Each member declares its mark in ``WIRE_BIRTH``; the record decodes a mark to its member."""
@@ -399,8 +423,6 @@ class CoreWatcherIncarnation(BirthlessIncarnation):
         return "Core's watcher"
 
 
-
-
 @dataclass(frozen=True, slots=True)
 class ThreadIncarnationRecord:
     """The single exact external name/birth record; members own its meaning."""
@@ -421,7 +443,7 @@ class ThreadIncarnationRecord:
 
 
 @dataclass(frozen=True, slots=True)
-class TurnId:
+class TurnId(ProjectionSource):
     value: str
 
     @classmethod
@@ -467,7 +489,10 @@ class ClaimedIdentity:
 
     def includes(self, previous: ClaimedIdentity) -> bool:
         """Compare order only within this registry's input-generation counter."""
-        return self.incarnation == previous.incarnation and self.claimed_generation >= previous.claimed_generation
+        return (
+            self.incarnation == previous.incarnation
+            and self.claimed_generation >= previous.claimed_generation
+        )
 
 
 @dataclass(frozen=True)
@@ -505,13 +530,19 @@ class TurnFence:
 
     def renamed(self, name: str) -> Self:
         """Registry alias resolution changes the name, never incarnation or epochs."""
-        return replace(self, identity=replace(
-            self.identity, incarnation=replace(self.identity.incarnation, name=name)
-        ))
+        return replace(
+            self,
+            identity=replace(
+                self.identity, incarnation=replace(self.identity.incarnation, name=name)
+            ),
+        )
 
     def can_attest(self, claim_scope: int) -> bool:
-        return (self.identity.generation > 0 and self.claimed_generation > 0
-                and self.claimed_generation == claim_scope)
+        return (
+            self.identity.generation > 0
+            and self.claimed_generation > 0
+            and self.claimed_generation == claim_scope
+        )
 
     def __eq__(self, other: object) -> bool:
         """Lease and finished observations share the same turn identity."""
@@ -525,7 +556,7 @@ class TurnFence:
 
 
 @dataclass(slots=True)
-class GenerationCounter:
+class GenerationCounter(ProjectionSource):
     """One monotonic allocation domain, including deleted-name tombstones."""
 
     counter: int = 0
@@ -558,7 +589,7 @@ class GenerationCounter:
         self.generations[new] = self.generations.pop(old)
 
 
-class ThreadRole(DeclaredFamily, affix="ThreadRole"):
+class ThreadRole(DeclaredFamily, ProjectionSource, affix="ThreadRole"):
     """Whether a thread executes turns is the member's type; its wire name is its spelling."""
 
     origin_label: ClassVar[str]
@@ -608,8 +639,12 @@ class ThreadRole(DeclaredFamily, affix="ThreadRole"):
     @classmethod
     @abstractmethod
     def displayed_recipient_effect(
-        cls, reads: ReadLedger, message: Message, thread: Thread,
-        snapshot: RegistryProvenance, document: ReadDocument | None,
+        cls,
+        reads: ReadLedger,
+        message: Message,
+        thread: Thread,
+        snapshot: RegistryProvenance,
+        document: ReadDocument | None,
     ) -> object:
         """Only a human recipient's display records a read."""
 
@@ -674,8 +709,12 @@ class AgentThreadRole(ThreadRole):
 
     @classmethod
     def displayed_recipient_effect(
-        cls, reads: ReadLedger, message: Message, thread: Thread,
-        snapshot: RegistryProvenance, document: ReadDocument | None,
+        cls,
+        reads: ReadLedger,
+        message: Message,
+        thread: Thread,
+        snapshot: RegistryProvenance,
+        document: ReadDocument | None,
     ) -> object:
         return ()
 
@@ -745,8 +784,12 @@ class UserThreadRole(ThreadRole):
 
     @classmethod
     def displayed_recipient_effect(
-        cls, reads: ReadLedger, message: Message, thread: Thread,
-        snapshot: RegistryProvenance, document: ReadDocument | None,
+        cls,
+        reads: ReadLedger,
+        message: Message,
+        thread: Thread,
+        snapshot: RegistryProvenance,
+        document: ReadDocument | None,
     ) -> object:
         return reads.displayed_incarnation(message, thread.incarnation, snapshot, document=document)
 

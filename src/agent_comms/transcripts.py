@@ -255,6 +255,16 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     after: TranscriptCursor | None
     through: TranscriptCursor | None
 
+    def __post_init__(self) -> None:
+        # A decoded witness reads its transcript under the root that published its thread.
+        bound = self.thread.session_file.bound_to(self.transcript_root)
+        if bound is not self.thread.session_file:
+            object.__setattr__(self, "thread", replace(self.thread, session_file=bound))
+
+    @property
+    def transcript_root(self) -> Path:
+        return Path(self.root)
+
     @projected(view="content", name="thread")
     def content_thread(self) -> ThreadIncarnation:
         return self.thread.incarnation
@@ -351,6 +361,10 @@ class LiveTranscriptReadIdentity(TranscriptReadIdentity):
 @dataclass(frozen=True, slots=True)
 class RecordedTranscriptReadIdentity(TranscriptReadIdentity):
     source: Annotated[HistorySource, ContentExclude()] = field(kw_only=True)
+
+    @property
+    def transcript_root(self) -> Path:
+        return Path(self.source.original_root)
 
     @property
     def historical_source(self) -> str:

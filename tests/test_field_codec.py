@@ -9,6 +9,7 @@ import pytest
 
 from agent_comms.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.field_codec import (
+    DeclaredWireType,
     FieldCodec,
     InlineRecord,
     JsonShapeFamily,
@@ -16,6 +17,7 @@ from agent_comms.field_codec import (
     MalformedRecord,
     NullMember,
     PathText,
+    RecordMember,
     RecordedTimestamp,
     SubclassUnion,
     TextRepresentation,
@@ -278,7 +280,8 @@ def test_subclass_union_slots_replacement_decodes_once_and_keeps_unions_independ
 
     def declare_number(union):
         @dataclass(frozen=True, slots=True)
-        class Number(union):
+        class Number(DeclaredWireType, union):
+            wire_type = int
             value: int
 
             def to_wire(self):
@@ -289,18 +292,14 @@ def test_subclass_union_slots_replacement_decodes_once_and_keeps_unions_independ
                 calls.append(cls)
                 return cls(FieldCodec.decode(int, data))
 
-            @classmethod
-            def schema(cls):
-                return FieldCodec.value_schema(int)
-
         return Number
 
     first = declare_number(First)
     second = declare_number(Second)
 
     @dataclass(frozen=True, slots=True)
-    class Text(OwnedWireText, First):
-        pass
+    class Text(DeclaredWireType, OwnedWireText, First):
+        wire_type = str
 
     @dataclass(frozen=True, slots=True)
     class Empty(NullMember, First):
@@ -323,19 +322,8 @@ def test_subclass_union_slots_replacement_decodes_once_and_keeps_unions_independ
         FieldCodec.decode(Second, "text")
 
     @dataclass(frozen=True, slots=True)
-    class Later(First):
+    class Later(RecordMember, First):
         entries: tuple[int, ...]
-
-        def to_wire(self):
-            return FieldCodec.encode_record(self)
-
-        @classmethod
-        def from_wire(cls, data):
-            return FieldCodec.decode_record(cls, data)
-
-        @classmethod
-        def schema(cls):
-            return FieldCodec.record_schema(cls)
 
     encoded = {"entries": [1, 2]}
     assert FieldCodec.encode(Later((1, 2))) == encoded

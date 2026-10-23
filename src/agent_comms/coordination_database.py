@@ -7,12 +7,12 @@ import sqlite3
 import stat
 import tempfile
 from abc import abstractmethod
-from contextlib import AbstractContextManager, contextmanager, suppress
+from contextlib import AbstractContextManager, closing, contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Self
 
-from agent_comms.coordination_errors import IntegrityViolationError
+from agent_comms.coordination_errors import CoordinationReadUnavailable, IntegrityViolationError
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.typed_table import (
     CarriedWriter,
@@ -21,9 +21,9 @@ from agent_comms.typed_table import (
     TableSchema,
 )
 
-from .declared_family import DeclaredFamily
 from .child_process import Platform
-from .locked_store import DEFAULT_STORE_CONTENTION, SQLiteFile, StoreContention
+from .declared_family import DeclaredFamily
+from .locked_store import DEFAULT_STORE_CONTENTION, StoreBusy, StoreContention
 
 
 class StoreFile(DeclaredFamily):
@@ -80,8 +80,8 @@ class CoordinationStore(CarriedWriter, ReconciledFile):
 
         return RegistryPrivacy.capture(path.parent).coordinator_schema()
 
-    @staticmethod
-    def observed(path: Path) -> StoreFile:
+    @classmethod
+    def observed(cls, path: Path) -> StoreFile:
         """Classify through SQLite without dropping another connection's process locks.
 
         Both rollback and WAL snapshots are readable. SQLite may maintain its own
@@ -92,19 +92,24 @@ class CoordinationStore(CarriedWriter, ReconciledFile):
             info = path.lstat()
             if not stat.S_ISREG(info.st_mode):
                 return InvalidStore("Coordinator is not a regular file")
-            database = SQLiteFile.is_database(path)
+            if not info.st_size:
+                return InvalidStore("Coordinator is empty")
+            with (
+                CoordinationReadUnavailable.checking(),
+                closing(cls.read_snapshot(path, StoreBusy())),
+            ):
+                pass
         except FileNotFoundError:
             return MissingStore()
         except PermissionError as error:
             return InvalidStore(str(error))
         except sqlite3.DatabaseError as error:
             return InvalidStore(str(error))
-        if not database:
-            return InvalidStore("Coordinator is not a SQLite database")
         return ReadableStore(path)
 
     def __init__(
-        self, path: str | os.PathLike[str],
+        self,
+        path: str | os.PathLike[str],
         contention: StoreContention = DEFAULT_STORE_CONTENTION,
     ) -> None:
         super().__init__(Path(path))

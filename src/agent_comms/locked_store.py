@@ -17,7 +17,9 @@ from functools import cache
 from importlib import import_module
 from pathlib import Path
 from pkgutil import walk_packages
-from typing import Any, ClassVar, Generic, Self, TypeVar
+from typing import ClassVar, Generic, Self, TypeVar
+
+from pydantic import JsonValue
 
 from .child_process import Platform
 from .coordination_errors import CoordinationReadUnavailable
@@ -50,7 +52,174 @@ class DocumentChange[D, R]:
         return cls(document, document)
 
 
-class JsonDocument(ABC, Generic[T]):
+class RootFile:
+    """A declared bus-file location, independent of its value or I/O constructor."""
+
+    __slots__ = ()
+    filename: ClassVar[str]
+    root_directory: ClassVar[str] = "."
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        """A declared file is either retained across installations or rewritten by its
+        running owner; a declaration that is neither has no install behaviour at all."""
+        super().__init_subclass__(**kwargs)
+        if "filename" in vars(cls) and not issubclass(cls, (DurableFile, RuntimeFile)):
+            raise TypeError(f"{cls.__qualname__} declares {cls.filename!r} but is neither "
+                            "a DurableFile nor a RuntimeFile")
+
+    @classmethod
+    def path_in(cls, root: Path | str, **parts: str) -> Path:
+        return Path(root) / cls.filename.format(**parts)
+
+    @classmethod
+    def directory_in(cls, root: Path | str) -> Path:
+        """The directory this declaration's files live in under the bus root ``root``;
+        ``bus_root`` is its inverse."""
+        return Path(root) / cls.root_directory
+
+    @classmethod
+    def bus_root(cls, path: Path) -> Path:
+        """The bus root a file of this declaration at ``path`` lives under: one parent per
+        directory its declared location names, the filename's own directories included."""
+        return path.parents[len((Path(cls.root_directory) / cls.filename).parts) - 1]
+
+    @classmethod
+    def member_paths(cls, path: Path) -> frozenset[Path]:
+        """The resources composed onto one declared primary file."""
+        return frozenset((path, store_lock_path(path)))
+
+    @classmethod
+    def transient_paths(cls, path: Path) -> frozenset[Path]:
+        return frozenset((store_lock_path(path),))
+
+    @classmethod
+    def snapshot_members(
+        cls, path: Path, observed: Mapping[Path, os.stat_result],
+    ) -> frozenset[Path]:
+        """Content changes count; lock and coordination files are not content."""
+        return frozenset((path,))
+
+    @classmethod
+    def files_in(cls, root: Path) -> frozenset[Path]:
+        return cls.member_paths(cls.path_in(root))
+
+    @classmethod
+    def matching_in(cls, root: Path) -> frozenset[Path]:
+        """The declared files themselves that exist, without their locks."""
+        path = cls.path_in(root)
+        return frozenset((path,)) if path.is_file() else frozenset()
+
+
+    @staticmethod
+    def copy_file(source: str | Path, target: str | Path) -> Path:
+        return Path(shutil.copy2(source, target))
+
+    @classmethod
+    def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
+        """Copy this owner's file cut and name the source files included. A file no writer
+        locks is copied as it is: locking it would create a lock inode beside it."""
+        cls.copy_file(source, target)
+        return frozenset((source,))
+
+    @staticmethod
+    def digest(path: Path) -> str:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    @staticmethod
+    def files(path: Path) -> tuple[Path, ...]:
+        return (path,)
+
+    @staticmethod
+    @cache
+    def load_declarations() -> None:
+        """Import every module of the package once per process, so ``declarations_in`` walks
+        the whole family and not only the owners some caller happened to import."""
+        package = import_module(__package__)
+        for module in walk_packages(package.__path__, f"{package.__name__}."):
+            if not module.name.startswith(f"{package.__name__}.skills"):
+                import_module(module.name)
+
+    @classmethod
+    def declarations_in(cls, root: Path) -> Iterator[tuple[type[Self], Path]]:
+        """Each declaring owner and its directory, once across composed capabilities."""
+        RootFile.load_declarations()
+        pending: list[type[Self]] = [cls]
+        visited: set[type[Self]] = set()
+        while pending:
+            family = pending.pop()
+            if family in visited:
+                continue
+            visited.add(family)
+            pending.extend(family.__subclasses__())
+            if "filename" in vars(family):
+                yield family, family.directory_in(root)
+
+    @classmethod
+    def existing_in(cls, root: Path) -> dict[Path, type[Self]]:
+        """Every existing file a declared owner names, with that owner, never a probe of
+        listed files: an undeclared file (a native writer's transient claim, a lock) has no
+        owner, so nothing that walks a bus by its declarations meets it."""
+        return {path: owner for owner, directory in cls.declarations_in(root)
+                for path in owner.matching_in(directory)}
+
+    @classmethod
+    def archived_roots(cls, directory: Path) -> tuple[Path, ...]:
+        """Whole bus roots this declaration keeps as immutable copies under ``directory``."""
+        return ()
+
+    @classmethod
+    def primaries_in(cls, root: Path) -> dict[Path, type[Self]]:
+        """Existing declared files under ``root`` and every root archived in it, each with
+        its own owner, so an archived store's companions stay with that store."""
+        primaries = cls.existing_in(root)
+        for owner, directory in RootFile.declarations_in(root):
+            for archived in owner.archived_roots(directory):
+                primaries.update(cls.primaries_in(archived))
+        return primaries
+
+    @classmethod
+    def owned_files(
+        cls, root: Path, paths: Collection[Path],
+    ) -> dict[DeclaredFile | UndeclaredFile, type[RootFile]]:
+        """Resolve primaries once; companions belong to their primary's declaration.
+
+        Missing selected files still identify an absent resource to restore. An
+        undeclared existing file acquires content behavior without inventing a
+        store declaration for it.
+        """
+        primaries = cls.primaries_in(root)
+        declarations = {member: owner for owner, directory in cls.declarations_in(root)
+                        for member in owner.files_in(directory)}
+        declarations.update(primaries)
+        selected = frozenset(paths)
+        owners: dict[Path, type[RootFile]] = {
+            path: owner for path, owner in primaries.items() if path in selected
+        }
+        companions = {member for path, owner in owners.items()
+                      for member in (*owner.files(path), *owner.transient_paths(path))
+                      if member != path}
+        owners.update((path, RootFile)
+                      for path in selected - owners.keys() - companions)
+        companions.update(member for path, owner in owners.items()
+                          for member in (*owner.files(path), *owner.transient_paths(path))
+                          if member != path)
+        # A lock is never content, even after a carry deletes the store it locked.
+        companions.update(path for path in selected if is_store_lock(path))
+        return {
+            (DeclaredFile(declarations[path], path.relative_to(root)) if path in declarations
+             else UndeclaredFile(path.relative_to(root))): owner
+            for path, owner in owners.items() if path not in companions
+        }
+
+    @classmethod
+    def paths_in(cls, root: Path) -> frozenset[Path]:
+        return frozenset(
+            path for owner, directory in cls.declarations_in(root)
+            for path in owner.files_in(directory)
+        )
+
+
+class JsonDocument(RootFile, ABC, Generic[T]):
     """Declared JSON codec and atomic file I/O; LockedStore owns transactions."""
 
     path: Path
@@ -68,7 +237,7 @@ class JsonDocument(ABC, Generic[T]):
     def _read_unlocked(self) -> T:
         return self._read_using(self._decode)
 
-    def _read_using(self, decode: Callable[[object], T]) -> T:
+    def _read_using(self, decode: Callable[[JsonValue], T]) -> T:
         try:
             return decode(FieldCodec.parse(self.path.read_bytes()))
         except FileNotFoundError:
@@ -80,11 +249,11 @@ class JsonDocument(ABC, Generic[T]):
         """Strict by default; optional owners may declare a fail-closed value."""
         raise error
 
-    def _decode(self, data: Any) -> T:
+    def _decode(self, data: JsonValue) -> T:
         """Decode the current declaration at the storage boundary."""
         return FieldCodec.decode_document(self.record_type, data)
 
-    def _encode(self, value: T) -> Any:
+    def _encode(self, value: T) -> JsonValue:
         """Owners with an established external shape may project that encoding."""
         return FieldCodec.encode_document(value, self.record_type)
 
@@ -135,154 +304,6 @@ class JsonDocument(ABC, Generic[T]):
 
 
 
-class RootFile:
-    """A declared bus-file location, independent of its value or I/O constructor."""
-
-    __slots__ = ()
-    filename: ClassVar[str]
-    root_directory: ClassVar[str] = "."
-
-    @classmethod
-    def path_in(cls, root: Path | str, **parts: str) -> Path:
-        return Path(root) / cls.filename.format(**parts)
-
-    @classmethod
-    def directory_in(cls, root: Path | str) -> Path:
-        """The directory this declaration's files live in under the bus root ``root``;
-        ``bus_root`` is its inverse."""
-        return Path(root) / cls.root_directory
-
-    @classmethod
-    def bus_root(cls, path: Path) -> Path:
-        """The bus root a file of this declaration at ``path`` lives under: one parent per
-        directory its declared location names, the filename's own directories included."""
-        return path.parents[len((Path(cls.root_directory) / cls.filename).parts) - 1]
-
-    @classmethod
-    def member_paths(cls, path: Path) -> frozenset[Path]:
-        """The resources composed onto one declared primary file."""
-        return frozenset((path, store_lock_path(path)))
-
-    @classmethod
-    def transient_paths(cls, path: Path) -> frozenset[Path]:
-        return frozenset((store_lock_path(path),))
-
-    @classmethod
-    def snapshot_members(
-        cls, path: Path, observed: Mapping[Path, os.stat_result],
-    ) -> frozenset[Path]:
-        """Content changes count; lock and coordination files are not content."""
-        return frozenset((path,))
-
-    @classmethod
-    def files_in(cls, root: Path) -> frozenset[Path]:
-        return cls.member_paths(cls.path_in(root))
-
-    @classmethod
-    def matching_in(cls, root: Path) -> frozenset[Path]:
-        """The declared files themselves that exist, without their locks."""
-        path = cls.path_in(root)
-        return frozenset((path,)) if path.is_file() else frozenset()
-
-    @staticmethod
-    def content_owner(path: Path) -> type[RootFile]:
-        """The file behavior for an arbitrary resource, including undeclared files."""
-        return SQLiteFile if SQLiteFile.is_database(path) else RootFile
-
-    @staticmethod
-    def copy_file(source: str | Path, target: str | Path) -> Path:
-        return Path(shutil.copy2(source, target))
-
-    @classmethod
-    def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
-        """Copy this owner's consistent file cut and name the source files included."""
-        with _store_lock(source, mode=SharedLock()):
-            cls.copy_file(source, target)
-        return frozenset((source,))
-
-    @staticmethod
-    def digest(path: Path) -> str:
-        return hashlib.sha256(path.read_bytes()).hexdigest()
-
-    @staticmethod
-    def files(path: Path) -> tuple[Path, ...]:
-        return (path,)
-
-    @staticmethod
-    @cache
-    def load_declarations() -> None:
-        """Import every module of the package once per process, so ``declarations_in`` walks
-        the whole family and not only the owners some caller happened to import."""
-        package = import_module(__package__)
-        for module in walk_packages(package.__path__, f"{package.__name__}."):
-            if not module.name.startswith(f"{package.__name__}.skills"):
-                import_module(module.name)
-
-    @classmethod
-    def declarations_in(cls, root: Path) -> Iterator[tuple[type[Self], Path]]:
-        """Each declaring owner and its directory, once across composed capabilities."""
-        RootFile.load_declarations()
-        pending: list[type[Self]] = [cls]
-        visited: set[type[Self]] = set()
-        while pending:
-            family = pending.pop()
-            if family in visited:
-                continue
-            visited.add(family)
-            pending.extend(family.__subclasses__())
-            if "filename" in vars(family):
-                yield family, family.directory_in(root)
-
-    @classmethod
-    def existing_in(cls, root: Path) -> dict[Path, type[Self]]:
-        """Every existing file a declared owner names, with that owner, never a probe of
-        listed files: an undeclared file (a native writer's transient claim, a lock) has no
-        owner, so nothing that walks a bus by its declarations meets it."""
-        return {path: owner for owner, directory in cls.declarations_in(root)
-                for path in owner.matching_in(directory)}
-
-    @classmethod
-    def owned_files(
-        cls, root: Path, paths: Collection[Path],
-    ) -> dict[DeclaredFile | UndeclaredFile, type[RootFile]]:
-        """Resolve primaries once; companions belong to their primary's declaration.
-
-        Missing selected files still identify an absent resource to restore. An
-        undeclared existing file acquires content behavior without inventing a
-        store declaration for it.
-        """
-        primaries = cls.existing_in(root)
-        declarations = {member: owner for path, owner in primaries.items()
-                        for member in owner.member_paths(path)}
-        declarations.update(primaries)
-        selected = frozenset(paths)
-        owners: dict[Path, type[RootFile]] = {
-            path: owner for path, owner in primaries.items() if path in selected
-        }
-        companions = {member for path, owner in owners.items()
-                      for member in (*owner.files(path), *owner.transient_paths(path))
-                      if member != path}
-        owners.update((path, cls.content_owner(path) if path.exists() else RootFile)
-                      for path in selected - owners.keys() - companions)
-        companions.update(member for path, owner in owners.items()
-                          for member in (*owner.files(path), *owner.transient_paths(path))
-                          if member != path)
-        # A lock is never content, even after a carry deletes the store it locked.
-        companions.update(path for path in selected if is_store_lock(path))
-        return {
-            (DeclaredFile(declarations[path], path.relative_to(root)) if path in declarations
-             else UndeclaredFile(path.relative_to(root))): owner
-            for path, owner in owners.items() if path not in companions
-        }
-
-    @classmethod
-    def paths_in(cls, root: Path) -> frozenset[Path]:
-        return frozenset(
-            path for owner, directory in cls.declarations_in(root)
-            for path in owner.files_in(directory)
-        )
-
-
 @dataclass(frozen=True)
 class DeclaredFile(RootFile):
     """A declared store and one retained file path identify a resource."""
@@ -296,6 +317,17 @@ class UndeclaredFile(RootFile):
     """A physical file without a stored declaration, still identified by its path."""
 
     path: Path
+
+
+class LockedFile(RootFile, StoreLockOwner, declared_name=None):
+    """A declared file whose writers hold its store lock, so its copy shares that lock."""
+
+    __slots__ = ()
+
+    @classmethod
+    def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
+        with _store_lock(source, mode=SharedLock()):
+            return super().copy_group(source, target)
 
 
 class FileStore(RootFile, ABC):
@@ -334,6 +366,12 @@ class PatternFile(RootFile):
 
 class DurableFile(RootFile):
     """Bus state retained across installations, with conversion owned by its store."""
+
+    __slots__ = ()
+
+
+class RuntimeFile(RootFile):
+    """A bus file no carry writes: running owners rewrite it at any time, maintenance included."""
 
     __slots__ = ()
 
@@ -388,7 +426,7 @@ class RegistryFile(DurableFile, WireWakeFile):
         return copied
 
 
-class RetiredCommanderFile(RootFile):
+class RetiredCommanderFile(DurableFile):
     """The retired commander file that tools/cutover/carry_commander_project.py consumes.
     The practice copy holds declared files only, so an undeclared input made the practice
     carry find nothing while the live carry deleted it. Deleted with that carry."""
@@ -526,20 +564,6 @@ class SQLiteFile(RootFile):
                 )
                 raise
 
-    @classmethod
-    def is_database(cls, path: Path) -> bool:
-        if path.stat().st_size == 0:
-            return False
-        # Even a header-only plain open/read/close can cancel locks owned by
-        # another SQLite connection in this process. Let SQLite own the fd.
-        with CoordinationReadUnavailable.checking():
-            try:
-                with closing(cls.read_snapshot(path, StoreBusy())):
-                    return True
-            except sqlite3.DatabaseError as error:
-                if error.sqlite_errorcode & 0xFF == sqlite3.SQLITE_NOTADB:
-                    return False
-                raise
 
     @classmethod
     def copy_file(cls, source: str | Path, target: str | Path) -> Path:
@@ -658,14 +682,8 @@ class PublishedSQLiteFile(SQLiteFile):
             ) from error
 
 
-class RuntimeFile(RootFile):
-    """A bus file no carry writes: running owners rewrite it at any time, maintenance included."""
-
-    __slots__ = ()
-
-
 @dataclass(frozen=True, slots=True)
-class LockedStore(FileStore, StoreLockOwner, JsonDocument[T], declared_name=None):
+class LockedStore(FileStore, LockedFile, JsonDocument[T], declared_name=None):
     """Ordered document transactions; callbacks never mutate or reenter."""
 
     path: Path

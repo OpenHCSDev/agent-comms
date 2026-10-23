@@ -19,11 +19,11 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from pydantic import ConfigDict
 from pydantic.alias_generators import to_camel
 
-from .cli_protocol import WireModel
 from .declared_family import DeclaredFamily
 from .field_codec import PathText, projected
-from .repo import Repo
+from .repo import GitCommandError, Repo
 from .repository_name import RepositoryName
+from .wire_models import WireModel
 
 if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
@@ -119,8 +119,11 @@ class ForgePullRequest(ForgeAnswer):
     @property
     def branch_links(self) -> tuple[tuple[str, PullRequestBranchLink], ...]:
         # A fork's identically spelled branch is not this origin's branch.
-        return () if self.is_cross_repository else (
-            (self.head_ref_name, PullRequestBranchLink(self.number)),)
+        return (
+            ()
+            if self.is_cross_repository
+            else ((self.head_ref_name, PullRequestBranchLink(self.number)),)
+        )
 
 
 class ForgeRefName(ForgeAnswer):
@@ -180,7 +183,10 @@ class WorkBranches:
 
     checkout: Path
     _remote_heads: dict[tuple[str, str], tuple[str, ...]] = field(
-        default_factory=dict, init=False, repr=False, compare=False,
+        default_factory=dict,
+        init=False,
+        repr=False,
+        compare=False,
     )
     main: ClassVar[str] = "main"
     timeout: ClassVar[float] = 60.0
@@ -204,26 +210,27 @@ query($owner: String!, $name: String!, $after: String) {
   }
 }"""
 
-    def _run(self, *command: str, input: str = "") -> str:
+    def _gh(self, *arguments: str) -> str:
         result = subprocess.run(
-            command,
+            ("gh", *arguments),
             cwd=self.checkout,
             capture_output=True,
-            input=input.encode(),
             timeout=self.timeout,
         )
         if result.returncode != 0:
-            detail = result.stderr.decode(errors="replace").strip() or f"{command[0]} failed"
-            raise WorkBranchError(f"{' '.join(command[:3])} in {self.checkout}: {detail}")
+            detail = result.stderr.decode(errors="replace").strip() or "gh failed"
+            raise WorkBranchError(f"gh {' '.join(arguments[:2])} in {self.checkout}: {detail}")
         return result.stdout.decode()
+
+    def _git(self, *arguments: str, input: str = "") -> str:
+        return Repo.git(self.checkout, *arguments, timeout=self.timeout, input=input)
 
     def read_checkout(self) -> CheckoutRead:
         """Whether git can open this checkout at all; the one probe every reader asks first."""
-        probe = subprocess.run(("git", "--no-optional-locks", "rev-parse", "--git-dir"),
-                               cwd=self.checkout, capture_output=True, timeout=self.timeout)
-        if probe.returncode:
-            detail = probe.stderr.decode(errors="replace").strip() or "git rev-parse failed"
-            return UnreadableCheckoutRead(self.checkout, detail)
+        try:
+            self._git("--no-optional-locks", "rev-parse", "--git-dir")
+        except GitCommandError as error:
+            return UnreadableCheckoutRead(self.checkout, error.stderr.strip())
         return ReadableCheckoutRead(self)
 
     def uncommitted(self) -> tuple[Path, ...]:
@@ -233,10 +240,17 @@ query($owner: String!, $name: String!, $after: String) {
         one checkout with a broken submodule link must not fail every reader of every unit.
         """
         listed = (
-            *self._run("git", "--no-optional-locks", "diff", "--name-only", "-z",
-                       "--ignore-submodules=all", "HEAD").split("\0"),
-            *self._run("git", "--no-optional-locks", "ls-files", "--others",
-                       "--exclude-standard", "-z").split("\0"),
+            *self._git(
+                "--no-optional-locks",
+                "diff",
+                "--name-only",
+                "-z",
+                "--ignore-submodules=all",
+                "HEAD",
+            ).split("\0"),
+            *self._git(
+                "--no-optional-locks", "ls-files", "--others", "--exclude-standard", "-z"
+            ).split("\0"),
         )
         return tuple(self.checkout / name for name in listed if name)
 
@@ -244,60 +258,85 @@ query($owner: String!, $name: String!, $after: String) {
     def local_work(self) -> bool:
         """Uncommitted files or HEAD commits absent from every published remote ref."""
         return bool(self.uncommitted()) or bool(
-            self._run("git", "rev-list", "--max-count=1", "HEAD", "--not", "--remotes")
+            self._git("rev-list", "--max-count=1", "HEAD", "--not", "--remotes")
         )
 
     def require_commits(self, remote: str, *commits: str) -> None:
         """Fetch only comparison objects this checkout does not already hold."""
-        listed = self._run("git", "cat-file", "--batch-check",
-                           input="".join(f"{commit}\n" for commit in commits))
-        missing = tuple(line.removesuffix(" missing") for line in listed.splitlines()
-                        if line.endswith(" missing"))
+        listed = self._git(
+            "cat-file", "--batch-check", input="".join(f"{commit}\n" for commit in commits)
+        )
+        missing = tuple(
+            line.removesuffix(" missing")
+            for line in listed.splitlines()
+            if line.endswith(" missing")
+        )
         if missing:
-            self._run("git", "fetch", "--quiet", "--no-tags", "--", remote, *missing)
+            self._git("fetch", "--quiet", "--no-tags", "--", remote, *missing)
 
     def remote_heads(self, remote: str, reference: str) -> tuple[str, ...]:
         key = remote, reference
         if key not in self._remote_heads:
-            self._remote_heads[key] = tuple(line.split()[0] for line in self._run(
-                "git", "ls-remote", "--refs", remote, reference,
-            ).splitlines())
+            self._remote_heads[key] = tuple(
+                line.split()[0]
+                for line in self._git(
+                    "ls-remote",
+                    "--refs",
+                    remote,
+                    reference,
+                ).splitlines()
+            )
         return self._remote_heads[key]
 
     def pull_request_diff(self, base: str, head: str) -> BranchComparison:
         published = self.remote_heads("origin", f"refs/heads/{base}")
         if not published:
             raise WorkBranchError(f"Origin has no pull request base {base!r} in {self.checkout}")
-        base_head, = published
+        (base_head,) = published
         self.require_commits("origin", base_head, head)
-        paths = tuple(Path(name) for name in self._run(
-            "git", "diff", "--name-only", "-z", f"{base_head}...{head}", "--",
-        ).split("\0") if name)
+        paths = tuple(
+            Path(name)
+            for name in self._git(
+                "diff",
+                "--name-only",
+                "-z",
+                f"{base_head}...{head}",
+                "--",
+            ).split("\0")
+            if name
+        )
         return BranchComparison(base_head, head, paths)
 
     def unpushed(self, difference: BranchDifference) -> tuple[UnpushedHead, ...]:
         """Compare this HEAD with its actual upstream, without trusting a stale tracking ref."""
         head = difference.head
         reference = f"refs/heads/{difference.branch}"
-        upstream = self._run("git", "for-each-ref", "--format=%(upstream)", reference).strip()
+        upstream = self._git("for-each-ref", "--format=%(upstream)", reference).strip()
         if upstream:
-            remote, remote_ref = self._run(
-                "git", "for-each-ref", "--format=%(upstream:remotename) %(upstream:remoteref)",
+            remote, remote_ref = self._git(
+                "for-each-ref",
+                "--format=%(upstream:remotename) %(upstream:remoteref)",
                 reference,
             ).split()
             # Git spells a local-branch upstream as remote "."; that is not publication.
             published = self.remote_heads(remote, remote_ref) if remote != "." else ()
             if published:
-                remote_head, = published
+                (remote_head,) = published
                 self.require_commits(remote, remote_head)
-                count = int(self._run("git", "rev-list", "--count", f"{remote_head}..{head}"))
+                count = int(self._git("rev-list", "--count", f"{remote_head}..{head}"))
                 return (UnpushedHead(head, count, upstream),) if count else ()
         # Without a published upstream, count work absent from the other known remotes.
         # A deleted upstream's stale tracking ref cannot count as publication.
-        remotes = tuple(ref for ref in self._run(
-            "git", "for-each-ref", "--format=%(refname)", "refs/remotes/",
-        ).splitlines() if ref != upstream)
-        count = int(self._run("git", "rev-list", "--count", head, "--not", *remotes))
+        remotes = tuple(
+            ref
+            for ref in self._git(
+                "for-each-ref",
+                "--format=%(refname)",
+                "refs/remotes/",
+            ).splitlines()
+            if ref != upstream
+        )
+        count = int(self._git("rev-list", "--count", head, "--not", *remotes))
         return (UnpushedHead(head, count, upstream),) if count else ()
 
     @cached_property
@@ -307,36 +346,51 @@ query($owner: String!, $name: String!, $after: String) {
 
     @cached_property
     def origin_main(self) -> str:
-        return self._run("git", "rev-parse", f"refs/remotes/origin/{self.main}").strip()
+        return self._git("rev-parse", f"refs/remotes/origin/{self.main}").strip()
 
     def difference(self, main: str) -> BranchDifference:
         """Git owns ancestry and changed paths; pin both commits before comparing."""
-        movement = self._run(
-            "git", "reflog", "show", "-1", "--date=unix", "--format=%H%x00%gD", "HEAD",
+        movement = self._git(
+            "reflog",
+            "show",
+            "-1",
+            "--date=unix",
+            "--format=%H%x00%gD",
+            "HEAD",
         ).strip()
         try:
             head, selector = movement.split("\0")
             moved_at = float(selector.rsplit("@{", 1)[1].removesuffix("}"))
         except (ValueError, IndexError) as unread:
-            raise WorkBranchError(f"HEAD reflog in {self.checkout} has no readable movement time") from unread
-        branch = self._run("git", "rev-parse", "--abbrev-ref", "HEAD").strip()
-        base = self._run("git", "merge-base", main, head).strip()
-        behind = int(self._run("git", "rev-list", "--count", f"{base}..{main}"))
-        files = frozenset(path for path in self._run(
-            "git", "diff", "--name-only", "-z", "--no-renames", base, head,
-        ).split("\0") if path)
-        return BranchDifference(RepositoryName(*self.repository), branch, head, moved_at,
-                                main, behind, files)
+            raise WorkBranchError(
+                f"HEAD reflog in {self.checkout} has no readable movement time"
+            ) from unread
+        branch = self._git("rev-parse", "--abbrev-ref", "HEAD").strip()
+        base = self._git("merge-base", main, head).strip()
+        behind = int(self._git("rev-list", "--count", f"{base}..{main}"))
+        files = frozenset(
+            path
+            for path in self._git(
+                "diff",
+                "--name-only",
+                "-z",
+                "--no-renames",
+                base,
+                head,
+            ).split("\0")
+            if path
+        )
+        return BranchDifference(
+            RepositoryName(*self.repository), branch, head, moved_at, main, behind, files
+        )
 
     def _pages(self, query: str, answer: type[ForgeQuery], **variables: str):
         pages: list[tuple[str, ...]] = [()]
         for after in pages:
-            arguments = ["gh", "api", "graphql", "-f", f"query={query}"]
+            arguments = ["api", "graphql", "-f", f"query={query}"]
             for key, value in {**variables, **dict(zip(("after",), after, strict=False))}.items():
                 arguments += ["-F", f"{key}={value}"]
-            connection = answer.model_validate_json(
-                self._run(*arguments)
-            ).data.repository.connection
+            connection = answer.model_validate_json(self._gh(*arguments)).data.repository.connection
             yield from connection.nodes
             pages.extend(connection.page_info.following)
 
@@ -344,7 +398,7 @@ query($owner: String!, $name: String!, $after: String) {
         """Branch name -> worktree paths that have it checked out."""
         checked: dict[str, list[str]] = {}
         path = None
-        for line in self._run("git", "worktree", "list", "--porcelain").splitlines():
+        for line in self._git("worktree", "list", "--porcelain").splitlines():
             if line.startswith("worktree "):
                 path = line.removeprefix("worktree ")
             elif line.startswith("branch refs/heads/") and path is not None:
@@ -371,28 +425,25 @@ query($owner: String!, $name: String!, $after: String) {
         refs = {
             ref.removeprefix("refs/heads/"): oid
             for oid, ref in (
-                line.split()
-                for line in self._run("git", "ls-remote", "--heads", "origin").splitlines()
+                line.split() for line in self._git("ls-remote", "--heads", "origin").splitlines()
             )
         }
         main = refs[self.main]
         # Git already owns commit ancestry. Ask it once for all locally named
         # commits, rather than asking GitHub to compare every branch separately.
-        objects = self._run(
-            "git",
+        objects = self._git(
             "cat-file",
             "--batch-check=%(objectname) %(objecttype)",
             input="\n".join(set(refs.values())) + "\n",
         )
         missing = [line.split()[0] for line in objects.splitlines() if line.endswith(" missing")]
         if missing:
-            self._run("git", "fetch", "--no-tags", "origin", *missing)
+            self._git("fetch", "--no-tags", "origin", *missing)
         commits = {
             oid: (int(ahead), date)
             for oid, date, ahead, _behind in (
                 line.split()
-                for line in self._run(
-                    "git",
+                for line in self._git(
                     "for-each-ref",
                     f"--format=%(objectname) %(committerdate:iso-strict) %(ahead-behind:{main})",
                     "refs/heads",
@@ -416,8 +467,8 @@ query($owner: String!, $name: String!, $after: String) {
                 # A branch published since the last local fetch has no local
                 # ref yet. Compare its captured object, never an older ref.
                 commits[oid] = (
-                    int(self._run("git", "rev-list", "--count", f"{main}..{oid}")),
-                    self._run("git", "show", "-s", "--format=%cI", oid).strip(),
+                    int(self._git("rev-list", "--count", f"{main}..{oid}")),
+                    self._git("show", "-s", "--format=%cI", oid).strip(),
                 )
             ahead, date = commits[oid]
             if branch != self.main and ahead:
@@ -425,8 +476,10 @@ query($owner: String!, $name: String!, $after: String) {
                     WorkBranch(
                         branch,
                         ahead,
-                        datetime.fromisoformat(date).astimezone(UTC).isoformat().replace(
-                            "+00:00", "Z"),
+                        datetime.fromisoformat(date)
+                        .astimezone(UTC)
+                        .isoformat()
+                        .replace("+00:00", "Z"),
                         tuple(links.get(branch, ())),
                         tuple(self._checkout(snapshot, path) for path in worktrees.get(branch, ())),
                     )

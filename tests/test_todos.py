@@ -30,7 +30,8 @@ from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import OrderCheck
-from agent_comms.installer.practice import practice_copy
+from agent_comms.installer.practice import PracticeCopy
+from agent_comms.locked_store import RootFile
 from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.plan_phases import PlanPhase
@@ -269,7 +270,7 @@ def test_merged_order_keeps_its_checked_fields(tmp_path: Path, source_repository
 
 
 @pytest.fixture
-def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, configured_repository):
+def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, durable_home):
     """One cited source, its real bare remote and installed history; only GitHub is synthetic."""
     graph = next(graph for graph in proof_build_checkouts
                  if graph.repository.github == CorePackage.repository)
@@ -310,7 +311,9 @@ def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, configured_reposi
     rule = StorageRule(checkout_base=source.checkout.parent)
     (tmp_path / "storage.json").write_text(json.dumps(FieldCodec.encode(rule)))
     Registration(tmp_path / "registry.json").register(lead)
-    configured_repository(wire(tmp_path), source)
+    # The source carries the copied plans; a second checkout of its repository would
+    # be compared against the source's installed commit, which it never holds.
+    Commander.on_root('lead', (source,), tmp_path)
     bus = wire(tmp_path)
     bus.goals.todos.add_request(lead.incarnation, "Repair the copied order workflow")
     return Commander.read_root(tmp_path)
@@ -422,46 +425,48 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
         )[0].merge
         source.git(source.checkout, "worktree", "add", "-q", "-b", "released-work", str(checkout), merged)
         copied_path = ctx.root.parent / f"{ctx.root.name}-watchers"
-        with practice_copy(ctx.root, copied_path) as (root, _measurement):
-            (root / 'storage.json').write_text(json.dumps(FieldCodec.encode(c.registry.storage_rule)))
-            copied = wire(root)
-            with LaunchRoot.from_path(root).selected():
-                with copied.bus.bus.writer_connection():
-                    pass  # Create the writer lock through its owner before the child probes it.
-                lock = shlex.quote(str(store_lock_path(copied.bus.bus.path)))
-                calls = ctx.root / "watcher-children.txt"
-                calls.write_text("")
-                binaries = ctx.root / "watcher-bin"
-                binaries.mkdir()
-                for name in ("gh", "git"):
-                    executable = shutil.which(name)
-                    assert executable
-                    shim = binaries / name
-                    shim.write_text(
-                        "#!/bin/sh\n"
-                        f"exec 9<{lock}\n"
-                        "if flock -n 9; then state=free; flock -u 9; else state=held; fi\n"
-                        f"printf '{name} %s %s\\n' \"$state\" \"$*\" >> {shlex.quote(str(calls))}\n"
-                        "exec 9<&-\n"
-                        f"exec {shlex.quote(executable)} \"$@\"\n")
-                    shim.chmod(0o755)
-                monkeypatch.setenv("PATH", os.pathsep.join((str(binaries), os.environ["PATH"])))
-                observed = []
-                # Run the standalone watcher while the released checkout is still pending.
-                for watch in (UnownedOrderWatch(), CommanderHeartbeat()):
-                    start = calls.stat().st_size
-                    watch.watch_pass(lambda: nullcontext(copied))
-                    readings = calls.read_text()[start:].splitlines()
-                    assert readings, type(watch).__name__
-                    print(type(watch).__name__, *readings, sep="\n")
-                    observed.extend(readings)
-                application = copied.goals.todos.get(original.id)
-                assert application.order.sha == merged and not application.order.accepted
-                assert copied.goals.todos.get(released.id).holder is None
-                assert any(line.startswith("gh ") for line in observed)
-                assert any(line.startswith("git ") for line in observed)
-                held = [line for line in observed if line.split()[1] != "free"]
-                assert not held, "Watcher children ran under the wire lock:\n" + "\n".join(held)
+        practice = PracticeCopy(ctx.root, copied_path)
+        practice.include(tuple(RootFile.existing_in(practice.root)))
+        (root, _measurement) = practice.path, practice.measurement
+        (root / 'storage.json').write_text(json.dumps(FieldCodec.encode(c.registry.storage_rule)))
+        copied = wire(root)
+        with LaunchRoot.from_path(root).selected():
+            with copied.bus.bus.writer_connection():
+                pass  # Create the writer lock through its owner before the child probes it.
+            lock = shlex.quote(str(store_lock_path(copied.bus.bus.path)))
+            calls = ctx.root / "watcher-children.txt"
+            calls.write_text("")
+            binaries = ctx.root / "watcher-bin"
+            binaries.mkdir()
+            for name in ("gh", "git"):
+                executable = shutil.which(name)
+                assert executable
+                shim = binaries / name
+                shim.write_text(
+                    "#!/bin/sh\n"
+                    f"exec 9<{lock}\n"
+                    "if flock -n 9; then state=free; flock -u 9; else state=held; fi\n"
+                    f"printf '{name} %s %s\\n' \"$state\" \"$*\" >> {shlex.quote(str(calls))}\n"
+                    "exec 9<&-\n"
+                    f"exec {shlex.quote(executable)} \"$@\"\n")
+                shim.chmod(0o755)
+            monkeypatch.setenv("PATH", os.pathsep.join((str(binaries), os.environ["PATH"])))
+            observed = []
+            # Run the standalone watcher while the released checkout is still pending.
+            for watch in (UnownedOrderWatch(), CommanderHeartbeat()):
+                start = calls.stat().st_size
+                watch.watch_pass(lambda: nullcontext(copied))
+                readings = calls.read_text()[start:].splitlines()
+                assert readings, type(watch).__name__
+                print(type(watch).__name__, *readings, sep="\n")
+                observed.extend(readings)
+            application = copied.goals.todos.get(original.id)
+            assert application.order.sha == merged and not application.order.accepted
+            assert copied.goals.todos.get(released.id).holder is None
+            assert any(line.startswith("gh ") for line in observed)
+            assert any(line.startswith("git ") for line in observed)
+            held = [line for line in observed if line.split()[1] != "free"]
+            assert not held, "Watcher children ran under the wire lock:\n" + "\n".join(held)
         assert c.goals.todos.get(original.id) == original
 
 
@@ -511,47 +516,49 @@ def test_installed_merge_closes_only_the_run_that_has_been_proven(pr_commander):
                           pull_requests=(link,)))
         for index, run in enumerate((MechanicalOrderRun(), ApplicationOrderRun(planned)), 1))
     copied_path = ctx.root.parent / f"{ctx.root.name}-copied"
-    with practice_copy(ctx.root, copied_path) as (copied, measurement):
-        checked = Commander.read_root(copied)
-        store = checked.comms.goals.todos
-        store.record_merges(store.merged_orders(checked.incarnation, checked.comms.registry))
-        mechanical, application = tuple(store.get(todo.id) for todo in originals)
-        assert mechanical.state is DoneTodoState
-        assert mechanical.assignment is None
-        assert source.contains(mechanical.order.sha)
-        assert application.state is originals[1].state
-        assert application.assignment == originals[1].assignment
-        assert application.holder == worker.name
-        assert application.order.sha == mechanical.order.sha
-        assert not application.order.accepted
-        assert application.order.line == application.order.checked().run.merged_line
-        board = "\n".join(checked.call(CommsHudTool()).frame)
-        assert application.order.line in board
-        assert worker.name in board
-        store.record_merges(store.merged_orders(checked.incarnation, checked.comms.registry))
-        assert store.get(application.id) == application
-        assert FieldCodec.decode(Todo, FieldCodec.encode(application)) == application
-        with pytest.raises(ToolRefusedError):
-            store.apply(application.id, ChangeTodoState(
-                application.revision, DoneTodoState, checked.incarnation, "merge-run"))
-        artifact = copied / "run.txt"
-        artifact.write_text(board)
-        with pytest.raises(ToolRefusedError):
-            checked.close(application.id,
-                          "The source grep passed and the merge commit exists in main.",
-                          str(artifact))
-        assert store.get(application.id) == application
-        works = f"{planned}; the copied store and board both retained {worker.name}."
-        checked.close(application.id, works, str(artifact))
-        installed = store.get(application.id)
-        assert installed.state is DoneTodoState
-        assert installed.assignment is None
-        assert installed.order.accepted
-        assert installed.order.works == works
-        assert installed.order.artifact == str(artifact)
-        assert installed.order.installed(works, str(artifact)) is installed.order
-        assert FieldCodec.decode(Todo, FieldCodec.encode(installed)) == installed
-        assert tuple(ctx.comms.goals.todos.get(todo.id) for todo in originals) == originals
+    practice = PracticeCopy(ctx.root, copied_path)
+    practice.include(tuple(RootFile.existing_in(practice.root)))
+    (copied, measurement) = practice.path, practice.measurement
+    checked = Commander.read_root(copied)
+    store = checked.comms.goals.todos
+    store.record_merges(store.merged_orders(checked.incarnation, checked.comms.registry))
+    mechanical, application = tuple(store.get(todo.id) for todo in originals)
+    assert mechanical.state is DoneTodoState
+    assert mechanical.assignment is None
+    assert source.contains(mechanical.order.sha)
+    assert application.state is originals[1].state
+    assert application.assignment == originals[1].assignment
+    assert application.holder == worker.name
+    assert application.order.sha == mechanical.order.sha
+    assert not application.order.accepted
+    assert application.order.line == application.order.checked().run.merged_line
+    board = "\n".join(checked.call(CommsHudTool()).frame)
+    assert application.order.line in board
+    assert worker.name in board
+    store.record_merges(store.merged_orders(checked.incarnation, checked.comms.registry))
+    assert store.get(application.id) == application
+    assert FieldCodec.decode(Todo, FieldCodec.encode(application)) == application
+    with pytest.raises(ToolRefusedError):
+        store.apply(application.id, ChangeTodoState(
+            application.revision, DoneTodoState, checked.incarnation, "merge-run"))
+    artifact = copied / "run.txt"
+    artifact.write_text(board)
+    with pytest.raises(ToolRefusedError):
+        checked.close(application.id,
+                      "The source grep passed and the merge commit exists in main.",
+                      str(artifact))
+    assert store.get(application.id) == application
+    works = f"{planned}; the copied store and board both retained {worker.name}."
+    checked.close(application.id, works, str(artifact))
+    installed = store.get(application.id)
+    assert installed.state is DoneTodoState
+    assert installed.assignment is None
+    assert installed.order.accepted
+    assert installed.order.works == works
+    assert installed.order.artifact == str(artifact)
+    assert installed.order.installed(works, str(artifact)) is installed.order
+    assert FieldCodec.decode(Todo, FieldCodec.encode(installed)) == installed
+    assert tuple(ctx.comms.goals.todos.get(todo.id) for todo in originals) == originals
 
 
 @pytest.mark.parametrize("number", (0, -1))

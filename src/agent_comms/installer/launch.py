@@ -30,6 +30,7 @@ from agent_comms.installer.reporting import (
     FinishedInstall, InstallOutcome, RootWriter, UnfinishedInstall, UnpostedWriter,
 )
 from agent_comms.installer.harness_probe import HarnessesProbe
+from agent_comms.installer.interpreter_operation import InstalledProgram
 from agent_comms.installer.upgrade import (
     RehearsedUpgrade,
     Stack,
@@ -124,10 +125,10 @@ class InstallRun:
     @classmethod
     def start(cls, command: InstallCliCommand, root: Path) -> InstallRun:
         checkout = command.checkout
-        commands = InstallCommands()
-        commands.run("git", "-C", checkout, "fetch", "-q", "origin")
-        target = commands.run("git", "-C", checkout, "rev-parse", "--verify",
-                     f"{command.to}^{{commit}}").strip()
+        with InstallCommands() as commands:
+            commands.git(checkout, "fetch", "-q", "origin")
+            target = commands.git(checkout, "rev-parse", "--verify",
+                                  f"{command.to}^{{commit}}").strip()
         parent = command.installer.scratch(StorageRule.load(root))
         parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         scratch = Path(tempfile.mkdtemp(dir=parent, prefix="install-"))
@@ -163,4 +164,6 @@ class InstallRun:
                        self.harnesses, InstallReport())
 
     def harnesses(self, stack: Stack) -> InstallResult:
-        return stack.probe(HarnessesProbe(self.root, self.command))
+        # The target runtime is published by now, and only its installed package
+        # declares harness registration beside the operation family.
+        return stack.probe(HarnessesProbe(self.root, self.command), program=InstalledProgram())

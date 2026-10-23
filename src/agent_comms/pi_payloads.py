@@ -6,6 +6,8 @@ records retain no raw wire mirror. FieldCodec is the sole primitive validator.
 
 from __future__ import annotations
 
+from asyncio import Future
+
 import re
 import typing
 from abc import abstractmethod
@@ -34,6 +36,7 @@ from .field_codec import (
     MalformedRecord,
     NullMember,
     PresentMember,
+    RecordProblems,
     SingleFieldValue,
     SingleExternalMember,
     TextRepresentation,
@@ -69,7 +72,8 @@ if TYPE_CHECKING:
     from .agent_events import AgentEvent, ProviderUsage
     from .backend import TurnSession
     from .pending_requests import PendingRequests
-    from .pi_events import AutoRetryEnd
+    from .pi_commands import PiCommand
+    from .pi_events import AutoRetryEnd, Response
     from .turn_goal_permission import TurnGoalPermission
     from .turn_phase import TurnPhase
     from .turn_usage import UsageAccount
@@ -148,13 +152,17 @@ class RequestId(PiReported[str]):
 
     value: str
 
-    def track_in(self, pending: PendingRequests, owner: type, command: object) -> object:
+    def track_in(
+        self, pending: PendingRequests, owner: type[PiCommand], command: PiCommand,
+    ) -> Future[Response]:
         return pending.add(owner, self.value, request=command)
 
-    def release_from(self, pending: PendingRequests, owner: type) -> None:
+    def release_from(self, pending: PendingRequests, owner: type[PiCommand]) -> None:
         pending.discard(owner, self.value)
 
-    def take_from(self, pending: PendingRequests, owner: type, response: object) -> object:
+    def take_from(
+        self, pending: PendingRequests, owner: type[PiCommand], response: Response,
+    ) -> PiCommand | None:
         return pending.take(owner, self.value, response)
 
 
@@ -162,13 +170,17 @@ class RequestId(PiReported[str]):
 class AnonymousRequest(PiOmitted):
     """The record carried no id; its response is matched by command family alone."""
 
-    def track_in(self, pending: PendingRequests, owner: type, command: object) -> object:
+    def track_in(
+        self, pending: PendingRequests, owner: type[PiCommand], command: PiCommand,
+    ) -> Future[Response]:
         return pending.add(owner, uuid4().hex, request=command)
 
-    def release_from(self, pending: PendingRequests, owner: type) -> None:
+    def release_from(self, pending: PendingRequests, owner: type[PiCommand]) -> None:
         """The anonymous entry is keyed by a private token nobody else holds."""
 
-    def take_from(self, pending: PendingRequests, owner: type, response: object) -> object:
+    def take_from(
+        self, pending: PendingRequests, owner: type[PiCommand], response: Response,
+    ) -> PiCommand | None:
         return pending.take_anonymous(owner, response)
 
     def require(self) -> str:
@@ -198,16 +210,19 @@ class PiPayload(ExternalField):
         cls, value: dict[str, JsonValue], decoded: dict[str, object],
     ) -> dict[str, object]:
         hints = FieldCodec._types(cls)
+        problems: dict[str, str] = {}
         for f, key in FieldCodec.record_fields(cls):
             if f.name in decoded:
                 decoded[f.name] = FieldCodec.decode_resolved(hints[f.name], decoded[f.name])
-            else:
-                plan = FieldCodec.field_plan(cls, f.name)
+                continue
+            plan = FieldCodec.field_plan(cls, f.name)
+            with plan.locating(problems):
                 captured = plan.decoded_external(value)
-                if f.name in captured:
-                    decoded.update(captured)
-                elif plan.constructor_required or plan.required:
+                if f.name not in captured and (plan.constructor_required or plan.required):
                     raise MalformedRecord(f"Missing required field {key}")
+                decoded.update(captured)
+        if problems:
+            raise RecordProblems(problems)
         return decoded
 
     @classmethod

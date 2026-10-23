@@ -6,22 +6,28 @@ import asyncio
 import os
 from functools import partial
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 from acp import RequestError
 from acp.schema import (
+    AcpMcpServer,
     AgentCapabilities,
     CloseSessionResponse,
+    ClientCapabilities,
+    HttpMcpServer,
     Implementation,
     InitializeResponse,
     LoadSessionResponse,
     NewSessionResponse,
+    McpServerStdio,
     PromptCapabilities,
     SessionInfoUpdate,
     SessionCapabilities,
     SessionCloseCapabilities,
     TerminalAuthMethod,
+    SseMcpServer,
 )
+from pydantic import JsonValue
 
 from .field_codec import FieldCodec, MalformedRecord, boundary_decoder
 from . import agent_events as events
@@ -49,6 +55,9 @@ from .transcript_updates import TranscriptReplay
 from .owner_protocol import IncompatibleOwner, IncompatibleOwnerError
 from .session_load import SessionLoadPlan, ExistingSessionLoadPlan, FailedSessionLoadPlan
 from .runtime_requests import FreshSubscribeRuntimeRequest, SubscribeRuntimeRequest
+
+
+type SessionMcpServer = HttpMcpServer | SseMcpServer | AcpMcpServer | McpServerStdio
 
 
 class SessionLifecycle:
@@ -80,20 +89,15 @@ class SessionLifecycle:
     async def initialize(
         self,
         protocol_version: int,
-        client_capabilities: Any = None,
-        client_info: Any = None,
+        client_capabilities: ClientCapabilities | None = None,
+        client_info: Implementation | None = None,
     ) -> InitializeResponse:
-        capabilities = (
-            client_capabilities
-            if isinstance(client_capabilities, dict)
-            else (
-                client_capabilities.model_dump(by_alias=True, exclude_none=True)
-                if client_capabilities is not None
-                else {}
-            )
-        )
-        methods: list[Any] = []
-        if (capabilities.get("auth") or {}).get("terminal"):
+        methods: list[TerminalAuthMethod] = []
+        if (
+            client_capabilities is not None
+            and client_capabilities.auth is not None
+            and client_capabilities.auth.terminal
+        ):
             methods = [
                 TerminalAuthMethod(
                     type="terminal",
@@ -140,7 +144,7 @@ class SessionLifecycle:
         })
 
     @staticmethod
-    def reject_foreign_mcp(mcp_servers: list[Any] | None) -> None:
+    def reject_foreign_mcp(mcp_servers: list[SessionMcpServer] | None) -> None:
         if mcp_servers is not None and (type(mcp_servers) is not list or mcp_servers):
             raise RequestError.invalid_params(
                 {
@@ -187,7 +191,7 @@ class SessionLifecycle:
             await self.runtime.start()
 
     async def new_session(
-        self, cwd: str, mcp_servers: list[Any] | None = None, **kwargs: Any
+        self, cwd: str, mcp_servers: list[SessionMcpServer] | None = None, **kwargs: JsonValue
     ) -> NewSessionResponse:
         self.reject_foreign_mcp(mcp_servers)
         await Coordination.run_worker(self.comms.owners.require_private_launch)
@@ -202,7 +206,7 @@ class SessionLifecycle:
         return response
 
     async def load_session(
-        self, cwd: str, session_id: str, mcp_servers: list[Any] | None = None, **kwargs: Any
+        self, cwd: str, session_id: str, mcp_servers: list[SessionMcpServer] | None = None, **kwargs: JsonValue
     ) -> LoadSessionResponse:
         self.reject_foreign_mcp(mcp_servers)
         thread = await self._acquire_loaded(cwd, session_id)
@@ -344,7 +348,7 @@ class SessionLifecycle:
         snapshot = GoalChangedUpdate.from_snapshot(self.comms.goals.goal_snapshot(thread_name))
         return self.comms.configuration.answer(thread_name), snapshot
 
-    async def metadata(self, thread_name: str, *, session_id: str | None = None) -> dict[str, Any]:
+    async def metadata(self, thread_name: str, *, session_id: str | None = None) -> dict[str, JsonValue]:
         configuration = await Coordination.run_worker(partial(
             self.configuration_updates, thread_name,
         ))
@@ -423,7 +427,7 @@ class AttachedSessionLifecycle(SessionLifecycle):
         return thread
 
     async def new_session(
-        self, cwd: str, mcp_servers: list[Any] | None = None, **kwargs: Any
+        self, cwd: str, mcp_servers: list[SessionMcpServer] | None = None, **kwargs: JsonValue
     ) -> NewSessionResponse:
         self.reject_foreign_mcp(mcp_servers)
         thread = await Coordination.run_worker(partial(self.declare_thread, cwd))
@@ -436,7 +440,7 @@ class AttachedSessionLifecycle(SessionLifecycle):
         )
 
     async def load_session(
-        self, cwd: str, session_id: str, mcp_servers: list[Any] | None = None, **kwargs: Any
+        self, cwd: str, session_id: str, mcp_servers: list[SessionMcpServer] | None = None, **kwargs: JsonValue
     ) -> LoadSessionResponse:
         self.reject_foreign_mcp(mcp_servers)
         thread = await Coordination.run_worker(partial(self.validated_thread, cwd, session_id))

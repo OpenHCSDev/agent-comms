@@ -13,7 +13,6 @@ import json
 import os
 import re
 import sqlite3
-import sys
 import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
@@ -63,8 +62,9 @@ from .locked_store import (
     StoreBusy,
     StoreCommittedError,
 )
-from .maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier
+from .maintenance_barrier import MaintenanceBarrier, MaintenanceHolder
 from .package_stamp import STAMP
+from .projection_source import ProjectionSource
 from .store_files import _store_lock
 
 if TYPE_CHECKING:
@@ -764,7 +764,7 @@ class HeldBusFile(SchemaChange):
         # Only the holder clears a hold, so a nonce this process holds cannot go stale while
         # it reads; the witness alone answers without the wire lock.
         barrier.current_unlocked().require_held_by(
-            os.environ.get(HOLDER_NONCE, ""), f"Changing the schema of {self.path}")
+            MaintenanceHolder.current().nonce, f"Changing the schema of {self.path}")
 
 
 class WriterOwnedFile(SchemaChange):
@@ -829,6 +829,12 @@ class TableSchema(ABC):
     @classmethod
     def schema_differs(cls, db: sqlite3.Connection) -> bool:
         return bool(SQLiteSchemaObject.differences(cls.stored_schema(db), cls.declared_schema()))
+
+    @classmethod
+    def reconcile_writes(cls, db: sqlite3.Connection) -> bool:
+        """Whether ``reconcile_schema`` would write this file: the installer plans with
+        this answer, so it names every file the reconcile then rewrites."""
+        return cls.schema_differs(db)
 
     @classmethod
     def require_schema(cls, db: sqlite3.Connection) -> None:
@@ -1383,6 +1389,11 @@ class DerivedTables(TableSchema):
                 or not ProjectionProducer.matches(db, cls.projection_rows()))
 
     @classmethod
+    def reconcile_writes(cls, db: sqlite3.Connection) -> bool:
+        return (super().reconcile_writes(db)
+                or bool(ProjectionProducer.unstamped(db, cls.projection_rows())))
+
+    @classmethod
     def reconcile_schema(cls, db: sqlite3.Connection, change: SchemaChange) -> bool:
         changed = super().reconcile_schema(db, change)
         refreshed = ProjectionProducer.verify_build(db, cls.projection_rows(), change)
@@ -1425,12 +1436,12 @@ class ProjectionProducerTables(SharedFileTables, DerivedTables):
 
 
 class ProducedRow(ABC):
-    """Rows rebuilt when their declared producing modules change."""
+    """Rows rebuilt when the source of a class producing them changes."""
 
     @classmethod
     @abstractmethod
-    def producer_classes(cls) -> tuple[type[DeclaredFamily], ...]:
-        """The record family's declarations that implement this projection's production."""
+    def producer_package(cls) -> types.ModuleType:
+        """The package whose ProjectionSource classes produce these rows."""
 
     @classmethod
     @abstractmethod
@@ -1961,27 +1972,40 @@ class TypedTable(
 
 
 class ProducedTable(ProducedRow, TypedTable, declared_name=None):
-    """A named table whose producing family owns one source commitment."""
+    """A named table whose producing family owns one source commitment.
+
+    The first install after this change rebuilds bus projections once because the digest
+    format changed.
+    """
 
     @classmethod
     def producer_digest(cls) -> str:
         for family in cls.__mro__:
-            if issubclass(family, ProducedTable) and "producer_classes" in vars(family):
+            if issubclass(family, ProducedTable) and "producer_package" in vars(family):
                 return family._producer_digest()
         raise TypeError(f"{cls.__name__} has no producing family declaration")
 
     @classmethod
     @cache
     def _producer_digest(cls) -> str:
-        producers = cls.producer_classes()
-        modules = {
-            cls.__module__,
-            *(row.__module__ for row in cls.members_with(cls)),
-            *(owner.__module__ for producer in producers
-              for owner in producer.__mro__ if owner is not object),
-        }
-        source = "\0".join(getsource(sys.modules[name]) for name in sorted(modules))
+        source = "\0".join(
+            f"{owner.__module__}.{owner.__qualname__}\0{getsource(owner)}"
+            for owner in cls.producer_owners()
+        )
         return hashlib.sha256(source.encode()).hexdigest()
+
+    @classmethod
+    def producer_owners(cls) -> tuple[type, ...]:
+        """Every class whose source the produced rows depend on, in a stable order."""
+        DeclaredFamily.discover_package(cls.producer_package())
+        owners: set[type] = {
+            owner
+            for row in (cls, *cls.members_with(cls))
+            for owner in row.__mro__
+            if issubclass(owner, cls)
+        }
+        owners.update(ProjectionSource.sources())
+        return tuple(sorted(owners, key=lambda owner: (owner.__module__, owner.__qualname__)))
 
 
 @dataclass(frozen=True)
@@ -2013,19 +2037,26 @@ class ProjectionProducer(TypedTable, ProjectionProducerTables):
     def verify_build(cls, db: sqlite3.Connection, rows: tuple[type[ProducedTable], ...],
                      change: SchemaChange) -> bool:
         """After schema verification, record the current build without rebuilding its rows."""
-        if not rows:
-            return False
-        commit = STAMP.commit()
-        names = {row.declared_name for row in rows}
-        stale = tuple(record for record in cls.select(db)
-                      if record.projection in names and record.commit != commit)
+        stale = cls.unstamped(db, rows)
         if not stale:
             return False
         change.require()
+        commit = STAMP.commit()
         with SQLiteFile.write_transaction(db):
             for record in stale:
                 replace(record, commit=commit).upsert(db)
         return True
+
+    @classmethod
+    def unstamped(cls, db: sqlite3.Connection, rows: tuple[type[ProducedTable], ...]
+                  ) -> tuple[Self, ...]:
+        """The records ``verify_build`` restamps with this build, as the plan reads them."""
+        if not rows:
+            return ()
+        commit = STAMP.commit()
+        names = {row.declared_name for row in rows}
+        return tuple(record for record in cls.select(db)
+                     if record.projection in names and record.commit != commit)
 
 
 class StoreWriter(PublishedSQLiteFile, FileStore):
@@ -2139,6 +2170,26 @@ class WalStore(StoreWriter):
             yield connection
 
     @contextmanager
+    def committed_or_empty(
+        self,
+        schema: type[TableSchema],
+        opening: Callable[[], AbstractContextManager[sqlite3.Connection]],
+    ) -> Iterator[sqlite3.Connection]:
+        """Read the committed file, or its declared empty schema before its first write.
+
+        An absent file is established absence: a reader sees every declared table empty
+        and creates no storage."""
+        if self.path.exists():
+            with self._attached(opening) as connection:
+                yield connection
+            return
+        with closing(self.writer(":memory:", isolation_level=None)) as connection:
+            schema.create_schema(connection)
+            self._configure_reader(connection)
+            self.begin_snapshot(connection)
+            yield connection
+
+    @contextmanager
     def _open_writer(self, *, check_same_thread: bool = True) -> Iterator[sqlite3.Connection]:
         """Open one private writer and apply the file's declared WAL policy."""
         # Never open/close an extra descriptor for an existing SQLite inode:
@@ -2230,16 +2281,9 @@ class TypedStore(WalStore, TableSchema):
     @contextmanager
     def snapshot(self) -> Iterator[sqlite3.Connection]:
         """Read a committed store, or its declared empty schema before its first write."""
-        with ExitStack() as lifetime:
-            if self.path.exists():
-                connection = lifetime.enter_context(self._attached(
-                    lambda: self.observing(self.path, StoreBusy())))
-            else:
-                connection = lifetime.enter_context(closing(
-                    self.writer(":memory:", isolation_level=None)))
-                self.create_schema(connection)
-                self._configure_reader(connection)
-                self.begin_snapshot(connection)
+        with self.committed_or_empty(
+            type(self), lambda: self.observing(self.path, StoreBusy())
+        ) as connection:
             self.require_schema(connection)
             yield connection
 

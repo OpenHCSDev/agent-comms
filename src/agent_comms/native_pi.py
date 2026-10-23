@@ -15,7 +15,9 @@ from collections.abc import Iterator
 from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Literal
+
+from pydantic import JsonValue
 
 from agent_comms.participant_identity import ParticipantIdentity
 
@@ -35,7 +37,7 @@ from .native_arguments import NativeArguments, SelectedModel
 from .native_failures import NativePiUnavailable, NativeRequestFailure
 from .native_input_record import NativeInputCommit, NativeInputLocation
 from .native_package import MANIFEST, UNIT_INSTRUCTIONS, VerifiedNativePackage
-from .native_session_files import NativeSessionFiles
+from .native_session_files import NativeAgentSettings, NativeSessionFiles
 from .native_tool_call import NativeToolMode
 from .pi_vocabulary import NoThinkingOverride, PendingStopReason, ThinkingChoice
 from .private_path import (
@@ -231,7 +233,7 @@ class NativeContextJournal(
     indexes = (Index(("request_generation",)), Index(("session_id",)))
 
     @classmethod
-    def native_contract(cls) -> dict[str, Any]:
+    def native_contract(cls) -> dict[str, JsonValue]:
         """Generate the native writer's SQLite contract from this declaration."""
         table = cls.declared_name
         return {
@@ -460,7 +462,7 @@ class NativePiRpcLaunch:
         """
         from .active_route import resolve_comms_route
 
-        package = resolve_comms_route(root).launch().package_for(command)
+        package = resolve_comms_route(root).launch().launched_package()
         cls._command_selection(command, runtime, package)
         return package
 
@@ -589,8 +591,7 @@ class NativePiRpcLaunch:
             raise NativePiUnavailable("Native Pi worktree is unavailable")
         # Native SettingsManager and AgentSession own tracked retry/compaction
         # policy. This directory isolates writable resources, not policy copies.
-        agent_dir = session_dir / ".native-pi-agent"
-        NativeSessionFiles.prepare_private_directory(agent_dir)
+        agent_dir = NativeAgentSettings.prepare_directory(session_dir)
         tool_arguments = selected_tool_mode.launch_arguments(package.path)
         arguments = [
             "--mode",

@@ -12,6 +12,7 @@ from agent_comms.coordination_database import (
 )
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.coordination_tables.refusals import SendRefusal
+from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.locked_store import SQLiteFile, StoreBusy
 
 
@@ -49,7 +50,7 @@ def _external_writer_acquires(path):
     return acquired
 
 
-@pytest.mark.parametrize("inspect_file", (CoordinationStore.observed, StoreBackup.digest),
+@pytest.mark.parametrize("inspect_file", (CoordinationStore.observed, CoordinationStore.digest),
                          ids=("coordinator", "backup"))
 def test_inspection_preserves_another_connections_process_locks(tmp_path, inspect_file):
     path = tmp_path / "locked.sqlite3"
@@ -104,7 +105,7 @@ def test_observation_classifies_missing_foreign_and_busy_files_without_inventing
 def test_tree_copy_keeps_committed_wal_rows(tmp_path):
     root = tmp_path / 'source'
     root.mkdir()
-    store = root / 'transcripts.sqlite3'
+    store = ExternalTranscript.path_in(root)
     with sqlite3.connect(store) as writer:
         writer.execute('PRAGMA journal_mode=WAL')
         writer.execute('CREATE TABLE events (body TEXT)')
@@ -127,8 +128,9 @@ def test_tree_copy_keeps_committed_wal_rows(tmp_path):
 def test_store_backup_restores_wal_rows_and_removes_new_files(tmp_path):
     root = tmp_path / 'wire'
     root.mkdir()
-    store = root / 'transcripts.sqlite3'
+    store = ExternalTranscript.path_in(root)
     route = tmp_path / 'route.json'
+    route.touch(mode=0o600)  # The route's owner writes it private.
     route.write_text('original route')
     created = root / 'created.json'
     with sqlite3.connect(store) as writer:
@@ -149,6 +151,7 @@ def test_store_backup_restores_wal_rows_and_removes_new_files(tmp_path):
     assert not backup.original()
     backup.restore()
     assert backup.stores_original()
+    assert not backup.restoring.exists()
     assert not created.exists()
     assert route.read_text() == 'changed route'
     with sqlite3.connect(store) as reader:
@@ -222,6 +225,7 @@ def test_route_only_backup_preserves_a_concurrent_change(tmp_path, had_route):
     root.mkdir()
     route = tmp_path / 'route.json'
     if had_route:
+        route.touch(mode=0o600)  # The route's owner writes it private.
         route.write_text('original route')
     spill_dir = tmp_path / 'spill'
     backup = StoreBackup.take(root, route, (), spill_dir)

@@ -13,22 +13,27 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.active_route import active_route_path
 from agent_comms.install_choices import RehearsalMode, UnnamedInstaller
-from agent_comms.installer.backup import StoreBackup, UpgradeRefused
+from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.carry import Carried, Carry
 from agent_comms.installer.launch import InstallReport
 from agent_comms.installer.upgrade import upgrade
+from agent_comms.locked_store import RegistryFile
+from agent_comms.repo import GitCommandError
 from agent_comms.registry_store import RegistryStore
+from agent_comms.thread_text import GivenThreadText
 from bus_record_fixture import prepare_native_comms
 
 
 class RegistryTitleCarry(Carry):
+    opened_files = (RegistryFile,)
     def carry(self, *, apply):
         registry = RegistryStore.at(self.root)
         if apply:
             with registry.editing() as edit:
                 thread = edit.document.require("worker")
-                edit.document.threads[thread.name] = replace(thread, title="Carried title")
-        return Carried(1, rewritten=tuple(str(path.relative_to(self.root)) for path in registry.written))
+                edit.document.threads[thread.name] = replace(thread, title=GivenThreadText("Carried title"))
+                edit.commit()
+        return Carried(1, rewritten=tuple(path.relative_to(self.root) for path in registry.written))
 
 
 KILLED_RESTORE = """
@@ -56,9 +61,9 @@ raise AssertionError("The selected registry publication was never restored")
 
 @pytest.mark.skipif(os.name != "posix", reason="SIGKILL and private registry require POSIX")
 @pytest.mark.parametrize("publication", (0, 1), ids=("after-registry", "after-guard"))
-def test_next_install_completes_a_killed_registry_restore(tmp_path, monkeypatch, publication):
-    # HOME selects only this test's route. Neither process can replace the developer's route.
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+def test_next_install_completes_a_killed_registry_restore(tmp_path, installed_runtime, publication):
+    # The temporary installation's HOME selects only this test's route and runtime.
+    # Neither process can replace the developer's route.
     comms = prepare_native_comms(wire(tmp_path / "wire"))
     comms.registry.declare(comms.registry.new_thread("worker", frozenset(), str(tmp_path)))
     registry = RegistryStore.at(comms.root)
@@ -68,7 +73,7 @@ def test_next_install_completes_a_killed_registry_restore(tmp_path, monkeypatch,
     # Put the guard first, as the interrupted historical backup did. Restore ordering
     # must come from the registry declaration, not from this manifest's ordering.
     backup = StoreBackup.take(comms.root, route, tuple(reversed(registry.written)), spill)
-    expected = {path: StoreBackup.digest(path) for path in registry.written}
+    expected = {path: RegistryStore.digest(path) for path in registry.written}
     RegistryTitleCarry(comms.root, comms.root, spill).carry(apply=True)
     killed = subprocess.run(
         [sys.executable, "-c", KILLED_RESTORE, str(comms.root), str(route), str(backup.path), str(publication)],
@@ -77,10 +82,34 @@ def test_next_install_completes_a_killed_registry_restore(tmp_path, monkeypatch,
     assert killed.returncode == -signal.SIGKILL, killed.stdout + killed.stderr
     # Enter the real installer. Its next Git command deliberately fails: rollback
     # recovery must finish even before the checkout can be inspected or a stack built.
-    with pytest.raises(UpgradeRefused, match="git failed"):
+    with pytest.raises(GitCommandError):
         upgrade(
             tmp_path / "missing-checkout", comms.root, "HEAD", UnnamedInstaller(), RehearsalMode(),
             False, spill, tmp_path / "install-scratch", lambda: None, InstallReport(),
         )
-    assert {path: StoreBackup.digest(path) for path in registry.written} == expected
-    assert comms.registry.require("worker").title != "Carried title"
+    assert {path: RegistryStore.digest(path) for path in registry.written} == expected
+    assert comms.registry.require("worker").title != GivenThreadText("Carried title")
+
+
+def test_next_install_leaves_a_completed_installs_backup_alone(tmp_path, installed_runtime):
+    # Install 24: every completed install leaves a backup that differs from the live root
+    # it carried. Differing is not a restore that began, so the next install must neither
+    # roll the bus back to it nor take the maintenance hold.
+    comms = prepare_native_comms(wire(tmp_path / "wire"))
+    comms.registry.declare(comms.registry.new_thread("worker", frozenset(), str(tmp_path)))
+    registry = RegistryStore.at(comms.root)
+    route = active_route_path()
+    route.parent.mkdir(mode=0o700, parents=True)
+    spill = tmp_path / "backups"
+    backup = StoreBackup.take(comms.root, route, registry.written, spill)
+    RegistryTitleCarry(comms.root, comms.root, spill).carry(apply=True)
+    carried = {path: RegistryStore.digest(path) for path in registry.written}
+    assert not backup.original()
+    with pytest.raises(GitCommandError):
+        upgrade(
+            tmp_path / "missing-checkout", comms.root, "HEAD", UnnamedInstaller(), RehearsalMode(),
+            False, spill, tmp_path / "install-scratch", lambda: None, InstallReport(),
+        )
+    assert {path: RegistryStore.digest(path) for path in registry.written} == carried
+    assert comms.registry.require("worker").title == GivenThreadText("Carried title")
+    assert backup.path.exists()

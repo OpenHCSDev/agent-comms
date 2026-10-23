@@ -18,7 +18,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.pi_payloads import PiOmitted
 
@@ -50,6 +50,7 @@ if TYPE_CHECKING:
     from .native_session_reopen import NativeSessionIdentity
     from .pi_payloads import StateData
     from .threads import Thread
+    from .turn_runner import TurnRunner
 
 
 # The event kinds Pi 0.85.1 writes to RPC stdout, as built for Core. Sources,
@@ -202,7 +203,7 @@ class PiNativeBackend(
         self.observe = observe
 
     @classmethod
-    def for_worker(cls, runner: Any, session_id: str) -> Self:
+    def for_worker(cls, runner: TurnRunner, session_id: str) -> Self:
         return cls(
             runner.agent_bin, runner.agent_args, runner.comms,
             partial(runner.observe_selected_preparation, session_id),
@@ -242,7 +243,7 @@ class PiNativeBackend(
             owner=thread.incarnation.require_recorded(),
             session_directory=thread.native_session_directory(self.comms.root),
             environment=environment,
-            session_file=thread.runtime.read_key,
+            session_file=thread.writable_runtime.read_key,
             observe=partial(self.observe, thread),
         )
 
@@ -268,7 +269,7 @@ class PiNativeBackend(
             delivery.environment,
             **images,
             context_contributions=content.contributions,
-            **thread.runtime.arguments(),
+            **thread.writable_runtime.arguments(),
             steering_queue=delivery.inbox,
             finish_event=delivery.finish_event,
             send_boundary=delivery.send_boundary,
@@ -285,7 +286,7 @@ class PiNativeBackend(
         ):
             yield event
 
-    async def abort(self, owner: asyncio.Task[Any]) -> None:
+    async def abort[Result](self, owner: asyncio.Task[Result]) -> None:
         from . import backend
 
         await backend.terminate_task_process(owner)

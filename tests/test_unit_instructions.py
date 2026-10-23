@@ -6,7 +6,7 @@ from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import CommanderAudience, FleetAudience, RuleFile
 from agent_comms.field_codec import MalformedRecord
 from agent_comms.native_package import OWNER_INSTRUCTIONS
-from agent_comms.todos import Slop
+from agent_comms.slop import Slop
 from agent_comms.unit_instructions import UnitInstructions
 
 

@@ -10,6 +10,8 @@ from importlib.metadata import EntryPoint
 from pathlib import Path
 from typing import Self
 
+from agent_comms.launch_runtime import LaunchRuntime
+
 
 @dataclass(frozen=True)
 class SourcePrograms:
@@ -21,6 +23,11 @@ class SourcePrograms:
         """Let real Python workers import this checkout from their own cwd."""
         for package in self.packages:
             (directory / package.name).symlink_to(package, target_is_directory=True)
+
+    @property
+    def runtime(self) -> LaunchRuntime:
+        """The runtime these programs report: the interpreter this prefix declares."""
+        return LaunchRuntime(self.prefix / 'bin' / 'python')
 
     def script(self, function: Callable[..., object]) -> Path:
         target = f'{function.__module__}:{function.__name__}'

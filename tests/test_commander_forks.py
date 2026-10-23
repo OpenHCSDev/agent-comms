@@ -35,9 +35,10 @@ from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.tools import CommsCommanderLoadTool, CommsHudTool, CommsTodoListTool
 from agent_comms.thread_model import DeclaredModel
+from agent_comms.slop import DeclarationDerivation, Slop
 from agent_comms.todos import (
-    DeclarationDerivation, PendingProblemOrder, ProblemAllocation, ReleaseTodo,
-    Slop, StrikeReason, SupersededVerdict, Todo, TodoError,
+    PendingProblemOrder, ProblemAllocation, ReleaseTodo,
+    StrikeReason, SupersededVerdict, Todo, TodoError,
 )
 
 
@@ -51,9 +52,13 @@ def fork_bus(tmp_path):
     comms = wire(tmp_path / 'saved-bus')
     Bus.install(Bus.path_in(comms.root))
     comms.channels.create_tag('comms')
-    for name in ('lead', 'worker', 'other', 'retained'):
+    # Two order holders never share one worktree, so each unit has its own checkout.
+    units = tuple((name, tmp_path / f'{name}-checkout') for name in ('worker', 'other', 'retained'))
+    for name, worktree in units:
+        source.git(source.checkout, 'worktree', 'add', '-q', '-b', f'{name}-work', str(worktree))
+    for name, worktree in (('lead', source.checkout), *units):
         comms.registry.declare(comms.registry.new_thread(
-            name, frozenset({'comms'}), str(source.checkout),
+            name, frozenset({'comms'}), str(worktree),
             model=DeclaredModel('anthropic/claude-opus-4-6'), execution=ExternalThreadExecution))
     comms.goals.update_goal('lead', SetGoalAction(
         text='Repair the commander workflow', goal_id='request'))

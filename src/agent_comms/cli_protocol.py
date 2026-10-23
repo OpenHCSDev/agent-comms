@@ -1,6 +1,7 @@
 """Declared JSON boundaries shared by Core's CLI and external CLI adapters."""
 from __future__ import annotations
 
+import argparse
 import asyncio
 import builtins
 from abc import ABC, abstractmethod
@@ -9,17 +10,27 @@ from graphlib import TopologicalSorter
 from itertools import groupby
 from typing import TYPE_CHECKING, Annotated, AsyncIterator, ClassVar, NoReturn, Self, Union
 
-from pydantic import BaseModel, ConfigDict, Discriminator, InstanceOf, PlainSerializer, PlainValidator, Tag, TypeAdapter, computed_field, field_validator, model_validator
+from pydantic import (
+    Discriminator,
+    InstanceOf,
+    PlainSerializer,
+    PlainValidator,
+    Tag,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 from typing_extensions import TypeForm
 
 from .coordination_errors import CoordinationReadUnavailable
-from .declared_family import DeclaredFamily, DeclaredWireFamily, UnknownFamilyMember
+from .declared_family import DeclaredFamily, UnknownFamilyMember
+from .external_transcript import RequestedEarlierPage
+from .field_codec import TimestampText
 from .maintenance_barrier import MaintenanceHeldError
 from .messages import Message
-from .field_codec import TimestampText
 from .recorded_time import UnrecordedTimeError
-from .external_transcript import RequestedEarlierPage
 from .turn_item import TurnItem
+from .wire_models import DeclaredWireFamily, WireModel
 
 if TYPE_CHECKING:
     from .child_process import AttachedChild
@@ -32,9 +43,8 @@ async def raise_child_exit(child: AttachedChild, reason: str) -> NoReturn:
     raise ChildProcessError(f'Core watch ended, exit {child.returncode}\n{reason}\n{tail}')
 
 
-class WireModel(BaseModel):
-    """Strict fields at an external protocol boundary."""
-    model_config = ConfigDict(strict=True)
+class CliArguments(argparse.Namespace):
+    command: str
 
 
 class TimestampedWire(WireModel):
@@ -61,7 +71,6 @@ class WireHeader(WireModel):
 
 class TextWire:
     """The text tag shared by external CLI content families."""
-
 
 
 class TaggedWire(DeclaredWireFamily, WireModel, ABC, affix="", declared_name=None):
@@ -223,4 +232,4 @@ class EarlierItems(WatchLine, TurnItem, declared_name='earlier-items'):
         await bridge.earlier(self)
 
 
-WATCH_LINE = TypeAdapter(WatchLine.declared_union())
+WATCH_LINE = WireModel.adapter(WatchLine.declared_union())

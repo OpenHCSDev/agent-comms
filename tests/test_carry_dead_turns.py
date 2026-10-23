@@ -20,6 +20,6 @@ def test_deleted_turn_files_are_named_and_the_current_one_kept(tmp_path):
     step = DeadTurns(comms.root, comms.root, tmp_path / "spill")
     assert step.carry(apply=False).rewritten == ()
     carried = step.carry(apply=True)
-    assert carried.rewritten == (str(dead.relative_to(comms.root)),)
+    assert carried.rewritten == (dead.relative_to(comms.root),)
     assert current.exists() and not dead.exists()
     assert step.carry(apply=False).changed == 0

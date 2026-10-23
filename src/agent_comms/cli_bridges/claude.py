@@ -10,15 +10,16 @@ from pathlib import Path
 from typing import AsyncIterator, BinaryIO, Self
 
 from agent_comms.bus import Bus
-from agent_comms.cli_protocol import WireModel
 from agent_comms.private_path import FileRevision
-from agent_comms.watched import FileSource
-from agent_comms_hooks.session import SessionHook
-from .claude_protocol import CLAUDE_RECORD, ClaudeRecord, ClaudeSession, ClaudeMonitorFrame
-from .history import ClaudeHistory, HarnessAddress, JsonLinesFile, OfflineHistory, OnlineHistory
-from .shared import Binding, Enrol, LineMonitorBridge, Options, run_bridge
 from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts
 from agent_comms.thread_text import NoThreadText, ThreadText
+from agent_comms.watched import FileSource
+from agent_comms_hooks.session import SessionHook
+
+from ..wire_models import WireModel
+from .claude_protocol import CLAUDE_RECORD, ClaudeMonitorFrame, ClaudeRecord, ClaudeSession
+from .history import ClaudeHistory, HarnessAddress, JsonLinesFile, OfflineHistory, OnlineHistory
+from .shared import Binding, Enrol, LineMonitorBridge, Options, run_bridge
 
 
 class SubagentMeta(WireModel):

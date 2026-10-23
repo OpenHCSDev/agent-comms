@@ -20,6 +20,7 @@ from agent_comms.maintenance_barrier import (
     DrainingPhase,
     InstallingPhase,
     MaintenanceBarrier,
+    MaintenanceHolder,
     MaintenanceOperator,
     MaintenancePhase,
     PausedPhase,
@@ -41,7 +42,7 @@ def test_nested_holds_restore_the_previous_authority_on_failure(tmp_path, monkey
                 gates[1].read().require_held_by(os.environ[HOLDER_NONCE], "inner change")
                 raise RuntimeError("failed install")
         gates[0].read().require_held_by(os.environ[HOLDER_NONCE], "recovery")
-    assert HOLDER_NONCE not in os.environ
+    assert MaintenanceHolder.current() == MaintenanceHolder("")
 
 
 @pytest.mark.parametrize('text', [None, '', 'x' * 129, 42])

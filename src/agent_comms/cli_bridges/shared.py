@@ -1,7 +1,6 @@
 """Shared Core inbox delivery and process lifetime for external CLI adapters."""
 from __future__ import annotations
 
-
 import argparse
 import asyncio
 import builtins
@@ -15,7 +14,7 @@ import sys
 import time
 import traceback
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager, suppress
 from dataclasses import dataclass, field, replace
 from datetime import datetime
@@ -24,15 +23,20 @@ from pathlib import Path
 from typing import Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar
 
 from acp.schema import SessionConfigSelectOption
-from pydantic import Field, TypeAdapter, model_validator
+from pydantic import Field, model_validator
 
 from agent_comms import field_codec, messages
 from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesTranscript
 from agent_comms.change_report import NoChangeReport, ReportEvidence
 from agent_comms.child_process import (
-    AttachedChild, OutlivesLauncherLifetime, ProcessIdentity, SpawnedProcess, StreamingChildStdio,
+    AttachedChild,
+    OutlivesLauncherLifetime,
+    ProcessIdentity,
+    SpawnedProcess,
+    StreamingChildStdio,
 )
 from agent_comms.cli_protocol import (
+    CliArguments,
     DeliveredOutcome,
     EmittedOutcome,
     FilteredOutcome,
@@ -46,6 +50,7 @@ from agent_comms.comms import Comms, wire
 from agent_comms.config_options import CatalogConfigOption, CatalogSelection, ConfigOptions
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.declared_verb import DeclaredOptions
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.message_reference import AfterMessageStart, FirstUnreadStart, InboxStart
@@ -53,8 +58,13 @@ from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
 from agent_comms.typed_table import (
-    Column, DurableTables, ExpressionIndex, WriterOwnedFile, TypedTable,
+    Column,
+    DurableTables,
+    ExpressionIndex,
+    TypedTable,
+    WriterOwnedFile,
 )
+from agent_comms.wire_models import WireModel
 from agent_comms_hooks.watch import HeldClaim, WatchClaim, WatchRecord
 
 from ..locked_store import RegistryFile, SQLiteFile
@@ -72,44 +82,6 @@ from .monitor import (
     VerifySession,
     read_monitor,
 )
-
-
-class DeclaredOptions:
-    """The CLI adapter consumes FieldCodec's existing field plans."""
-    help: ClassVar[str]
-
-    @classmethod
-    def add_parser[P: argparse.ArgumentParser](
-            cls, subparsers: argparse._SubParsersAction[P]) -> None:
-        cls.add_arguments(subparsers.add_parser(FieldCodec.encode(cls), help=cls.help))
-
-    @classmethod
-    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
-        FieldCodec.add_arguments(cls, parser)
-
-    @classmethod
-    def from_arguments(cls, args: argparse.Namespace) -> Self:
-        return FieldCodec.decode_arguments(cls, args)
-
-
-class DeclaredVerb(DeclaredOptions, DeclaredFamily, affix="Verb"):
-    """A command family parses the options declared by its members."""
-
-    @classmethod
-    def tool(cls) -> str:
-        return cls.__module__.rpartition('.')[2].replace('_', '-')
-
-    @classmethod
-    def parse(cls, argv: Sequence[str]) -> Self:
-        parser = argparse.ArgumentParser(
-            prog=cls.tool(), description=sys.modules[cls.__module__].__doc__,
-            formatter_class=argparse.RawDescriptionHelpFormatter,
-        )
-        verbs = parser.add_subparsers(dest="command", required=True)
-        for member in cls.members_with(cls):
-            member.add_parser(verbs)
-        args = parser.parse_args(argv)
-        return cls.member_named(args.command).from_arguments(args)
 
 
 class BridgeStateTable(DurableTables):
@@ -197,7 +169,7 @@ class Options:
             command = commands.add_parser(operation.__name__.lower(), parents=[common])
             operation.add_arguments(command)
             command.set_defaults(operation=operation)
-        arguments = parser.parse_args(namespace=SendArguments())
+        arguments = parser.parse_args(namespace=CliArguments())
         arguments.operation = arguments.operation.from_arguments(arguments)
         arguments.binding = arguments.operation.binding(arguments)
         return cls(**{declared.name: vars(arguments)[key]
@@ -428,10 +400,6 @@ class CatalogTargetField(ChoiceTargetField):
     def value_schema(self) -> dict[str, object]:
         return {**FieldCodec.value_schema(self.annotation),
                 'configuration': FieldCodec.encode(self.catalog)}
-
-
-class SendArguments(argparse.Namespace):
-    command: str
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -988,7 +956,7 @@ class ForeignMonitorFrame(MonitorFrame, declared_name='foreign'):
         """Another monitor's output is not comms delivery evidence."""
 
 
-MONITOR_FRAME = TypeAdapter(MonitorFrame.declared_union())
+MONITOR_FRAME = WireModel.adapter(MonitorFrame.declared_union())
 
 
 @dataclass(frozen=True)

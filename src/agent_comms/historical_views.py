@@ -13,12 +13,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .bus import Bus
-from .channel_targets import CommandTarget, NamedTarget, ThreadTarget
+from .channel_targets import NamedTarget, ThreadTarget
 from .channels import Channel
 from .coordination_errors import HistoricalSourceChanged
 from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec
-from .locked_store import DurableFile, RegistryFile, RootFile
+from .locked_store import DurableFile, LockedFile, RegistryFile, RootFile
 from .message_page import (
     NEWEST_PAGE,
     ConversationMessagePageRequest,
@@ -47,7 +47,7 @@ from .recorded_bus import RecordedBusIdentity
 from .registration import Registration
 from .registry_provenance import RegistryProvenance
 from .revision_views import BusSourceView
-from .store_files import AtomicFile, _store_lock
+from .store_files import AtomicFile
 from .thread_identity import UnrecordedThreadIncarnation
 from .threads import ThreadProvenance
 
@@ -194,11 +194,11 @@ class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
 @dataclass(frozen=True, slots=True)
 class DMHistory(HistoryView):
     first: str
-    second: str | ThreadTarget
+    second: ThreadTarget
 
     def capture(self, snapshot: RegistryProvenance) -> DMDisplayScope:
         return DMDisplayScope.capture(
-            self.first, CommandTarget.named(self.second).selected_name(snapshot), snapshot)
+            self.first, self.second.selected_name(snapshot), snapshot)
 
 
 @dataclass(frozen=True, slots=True)
@@ -231,10 +231,8 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
         from .read_basis import DMDisplayBasis
 
         bus = presentation.bus
-        target = CommandTarget.named(self.second)
-        target.require_dm_peer()
         with presentation.registry.store.reading_snapshot() as snapshot:
-            peer = target.selected_name(snapshot)
+            peer = self.second.selected_name(snapshot)
             missing = peer not in snapshot.threads
         if missing and bus.history.threads(peer):
             return MessagePage((), False, False, NoDisplaySelection())
@@ -260,6 +258,10 @@ class HistorySource:
     snapshot_bus_revision: int
     snapshot_registry_revision: FileObservation
     provenance: RegistryProvenance
+
+    def __post_init__(self) -> None:
+        # Archived transcripts stay with the original root; the snapshot copies no sessions.
+        object.__setattr__(self, "provenance", self.provenance.bound_to(Path(self.original_root)))
 
     @property
     def key(self) -> str:
@@ -396,7 +398,7 @@ class HistoricalThread:
     thread: ThreadProvenance
 
 
-class HistoryArchive(DurableFile):
+class HistoryArchive(DurableFile, LockedFile):
     """Ordered immutable source snapshots; never a delivery/launch authority."""
 
     filename = "history_sources.json"
@@ -407,12 +409,23 @@ class HistoryArchive(DurableFile):
 
     @classmethod
     def files_in(cls, root: Path) -> frozenset[Path]:
+        """Archived roots are found by where attach puts them, never by decoding the
+        catalogue: a copy of a root in an older shape must copy before any carry reads it."""
         declared = super().files_in(root)
-        for source in cls(Bus.path_in(root)).sources():
-            archived = Path(source.root)
-            if archived.is_relative_to(root):
-                declared |= RootFile.paths_in(archived)
+        for archived in cls.archived_roots(root):
+            declared |= RootFile.paths_in(archived)
         return declared
+
+    @staticmethod
+    def archive_directory(root: Path) -> Path:
+        return root / "history"
+
+    @classmethod
+    def archived_roots(cls, directory: Path) -> tuple[Path, ...]:
+        archives = cls.archive_directory(directory)
+        if not archives.is_dir():
+            return ()
+        return tuple(sorted(path for path in archives.iterdir() if path.is_dir()))
 
     def sources(self) -> tuple[HistorySource, ...]:
         with self.read_sources() as sources:
@@ -456,12 +469,12 @@ class HistoryArchive(DurableFile):
         source_root = source_root.resolve()
         if source_root == self.bus_path.parent.resolve():
             raise ValueError("The live bus cannot be its own history source")
-        with _store_lock(self.path):
+        with self.locked():
             sources = self.sources()
             existing = next((s for s in sources if s.original_root == str(source_root)), None)
             if existing is not None:
                 return existing
-            parent = self.bus_path.parent / "history"
+            parent = self.archive_directory(self.bus_path.parent)
             parent.mkdir(mode=0o700, exist_ok=True)
             stage = Path(tempfile.mkdtemp(prefix="source-", dir=parent))
             try:

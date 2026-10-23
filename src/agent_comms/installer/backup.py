@@ -26,6 +26,7 @@ from agent_comms.coordination_errors import CoordinationError
 from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText
 from agent_comms.installer.interpreter_operation import RouteSelection
 from agent_comms.locked_store import DeclaredFile, LockedStore, RootFile, RuntimeFile, UndeclaredFile
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.private_path import FileObservation, FileRevision, MissingFile
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import AtomicFile
@@ -197,7 +198,29 @@ class StoreBackup(ResourceBackup):
                 root, (path.name for path in spill_dir.iterdir() if path.is_dir())
             ), reverse=True)
         )
-        return tuple(backup for backup in backups if not backup.original())
+        return tuple(backup for backup in backups if backup.restoring.exists())
+
+    @classmethod
+    def complete_interrupted(cls, root: Path, spill_dir: Path) -> tuple[Path, ...]:
+        """Finish every restore a killed install left unfinished, before anything reads
+        the bus: take its abandoned maintenance hold, restore, release, then retire the
+        backup so the next install never meets it again."""
+        retired = []
+        for backup in cls.interrupted(root, spill_dir):
+            maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
+            hold = maintenance.begin(MaintenanceOperator.current())
+            with hold.holding():
+                backup.restore()
+            maintenance.clear(hold)
+            retired.append(backup.retire())
+        return tuple(retired)
+
+    @property
+    def restoring(self) -> Path:
+        """Present from a restore's first write until it verifies: the only record that a
+        restore began and did not finish. A backup that differs from the live root was never
+        necessarily restored; every completed install leaves one behind."""
+        return self.path / 'restoring'
 
     def retire(self) -> Path:
         archived = self.path.with_name(f'{self.path.name}.restored-{time.time_ns()}')
@@ -265,8 +288,9 @@ class StoreBackup(ResourceBackup):
             files = tuple(dict.fromkeys((*files, *registry)))
         path = spill_dir / BackupName.now(root).value
         backup = cls(root, route, path)
-        selected = tuple(sorted(resource.path for resource in RootFile.owned_files(root, files)))
-        files = tuple(root / path for path in selected)
+        owners = {root / resource.path: owner
+                  for resource, owner in RootFile.owned_files(root, files).items()}
+        selected = tuple(sorted(path.relative_to(root) for path in owners))
         if path.exists():
             if backup.selected_files() != selected:
                 raise UpgradeRefused('Existing backup belongs to different resources')
@@ -279,7 +303,7 @@ class StoreBackup(ResourceBackup):
         path.mkdir(mode=0o700, parents=True)
         AtomicFile(path / 'selected.json').write_text(json.dumps(FieldCodec.encode(
             selected, tuple[Annotated[Path, PathText], ...])))
-        contents = backup.capture(files)
+        contents = backup.capture(owners)
         with route_directory(route):
             if route.exists():
                 shutil.copy2(route, path / RouteFile.filename)
@@ -309,61 +333,64 @@ class StoreBackup(ResourceBackup):
     def data_root(self) -> Path:
         return self.path / 'stores'
 
-    @staticmethod
-    def digest(path: Path) -> str:
-        return RootFile.content_owner(path).digest(path)
-
-    @staticmethod
-    def copy_file(source: str | Path, target: str | Path) -> Path:
-        """Copy one store through its SQLite snapshot, never through live WAL bytes."""
-        source, target = Path(source), Path(target)
-        owner = RootFile.content_owner(source)
-        owner.copy_file(source, target)
-        return target
-
     @classmethod
     def copy_tree(
         cls, source: Path, target: Path, *, excluded: Collection[Path] = ()
     ) -> None:
         """Copy committed files; their owners declare transient names before any stat."""
 
+        paths = tuple(path for path in source.rglob("*")
+                      if path.is_file() and not path.is_symlink())
+        owners = {source / resource.path: owner
+                  for resource, owner in RootFile.owned_files(source, paths).items()}
+        omitted = set(paths) - owners.keys() | set(excluded)
+        omitted.update(member for path, owner in owners.items()
+                       for member in owner.files(path) if member != path)
+
+        def passes(path: Path) -> bool:
+            """Directories and links pass through; a file passes only with its owner, so one
+            written after the owners were read, or a socket, is never copied."""
+            listed = path in owners or stat.S_ISDIR(path.lstat().st_mode) or path.is_symlink()
+            return listed and path not in omitted
+
         def transient(directory: str, names: list[str]) -> set[str]:
-            omitted: set[Path] = set()
-            for path in sorted(Path(directory) / name for name in names):
-                if path in omitted or path in excluded or LockedStore.is_staging(path):
-                    omitted.add(path)
-                    continue
-                if stat.S_ISSOCK(path.lstat().st_mode):
-                    omitted.add(path)
-                elif path.is_file() and not path.is_symlink():
-                    owner = RootFile.content_owner(path)
-                    omitted.update(set(owner.files(path)) - {path})
-            return {path.name for path in omitted}
+            return {path.name for path in (Path(directory) / name for name in names)
+                    if LockedStore.is_staging(path) or not passes(path)}
 
-        shutil.copytree(
-            source, target, symlinks=True, ignore=transient, copy_function=cls.copy_file
-        )
+        def copy_file(original: str, destination: str) -> Path:
+            return owners[Path(original)].copy_file(original, destination)
 
-    def capture(self, files: tuple[Path, ...]) -> dict[Path, str]:
+        shutil.copytree(source, target, symlinks=True, ignore=transient, copy_function=copy_file)
+
+    def capture(self, owners: dict[Path, type[RootFile]]) -> dict[Path, str]:
         contents: dict[Path, str] = {}
-        for source in files:
+        for source, owner in owners.items():
             if not source.exists():
                 continue
             name = source.relative_to(self.root)
             target = self.data_root / name
             target.parent.mkdir(parents=True, exist_ok=True)
-            self.copy_file(source, target)
+            owner.copy_file(source, target)
             Platform.current().sync_file(target)
-            contents[name] = self.digest(target)
+            contents[name] = owner.digest(target)
             Platform.current().sync_directory(target.parent)
         return contents
 
-    def file_original(self, name: Path, saved: dict[Path, str]) -> bool:
+    def resource_owners(self, selected: tuple[Path, ...], saved: Iterable[Path]
+                        ) -> dict[Path, type[RootFile]]:
+        """Resolve the live declarations and the retained originals once per operation."""
+        owners = {resource.path: owner for resource, owner in RootFile.owned_files(
+            self.root, tuple(self.root / name for name in selected)).items()}
+        owners.update((resource.path, owner) for resource, owner in RootFile.owned_files(
+            self.data_root, tuple(self.data_root / name for name in saved)).items())
+        return owners
+
+    def file_original(self, name: Path, saved: dict[Path, str], owner: type[RootFile]) -> bool:
         """An unchanged selected file keeps its identity as well as its contents."""
         target = self.root / name
         if name not in saved:
             return not target.exists()
-        return target.exists() and self.digest(target) == saved[name]
+        return target.exists() and owner.digest(target) == saved[name]
 
     def original(self) -> bool:
         return self.route_original() and self.stores_original()
@@ -372,12 +399,14 @@ class StoreBackup(ResourceBackup):
         if not (self.path / 'files.json').exists():
             return False
         saved = self.files()
-        return all(self.file_original(name, saved)
-                   for name in self.selected_files())
+        selected = self.selected_files()
+        owners = self.resource_owners(selected, saved)
+        return all(self.file_original(name, saved, owners[name]) for name in selected)
 
     def restore(self) -> None:
         saved = self.files()
         selected = self.selected_files()
+        owners = self.resource_owners(selected, saved)
         registry = tuple(path.relative_to(self.root) for path in RegistryStore.at(self.root).written)
         # The registry owns this ordering: restore its snapshot before publishing
         # the matching guard, after every unrelated selected file.
@@ -385,12 +414,12 @@ class StoreBackup(ResourceBackup):
             *(name for name in selected if name not in registry),
             *(name for name in registry if name in selected),
         )
+        AtomicFile(self.restoring).write_text('')
         for name in ordered:
-            if self.file_original(name, saved):
+            if self.file_original(name, saved, owners[name]):
                 continue
             target = self.root / name
-            observed = self.data_root / name if name in saved else target
-            owner = RootFile.content_owner(observed) if observed.exists() else RootFile
+            owner = owners[name]
             if name in saved:
                 descriptor, temporary = tempfile.mkstemp(prefix='.restore-', dir=target.parent)
                 os.close(descriptor)
@@ -408,3 +437,5 @@ class StoreBackup(ResourceBackup):
         self.restore_route()
         if not self.stores_original():
             raise UpgradeRefused('Selected stores differ after backup restoration')
+        self.restoring.unlink()
+        Platform.current().sync_directory(self.path)

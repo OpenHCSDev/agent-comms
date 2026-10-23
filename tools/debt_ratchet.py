@@ -27,6 +27,7 @@ import tokenize
 import tomllib
 import types
 import typing
+import typing_extensions
 from typing import Annotated
 from abc import abstractmethod
 from collections import Counter
@@ -418,9 +419,10 @@ class StringFieldMetadata(PerFileOccurrenceMeasure):
 
     @staticmethod
     def occurrences(node: ast.AST) -> int:
-        metadata = typing.cast(
-            types.MemberDescriptorType, typing.cast(typing.Any, dataclasses.Field).metadata
-        ).__name__
+        descriptor: types.MemberDescriptorType = inspect.getattr_static(
+            dataclasses.Field, "metadata"
+        )
+        metadata = descriptor.__name__
         return sum(
             typing.cast(int, MetadataKeys().visit(keyword.value))
             for keyword in typing.cast(ast.Call, node).keywords
@@ -1766,6 +1768,10 @@ class TypingImports(MroDispatch):
     bindings conservatively disqualify a name rather than inferring its flow.
     """
 
+    typing_modules: typing.ClassVar[dict[str, types.ModuleType]] = {
+        module.__name__: module for module in (typing, typing_extensions)
+    }
+
     def __init__(self, declarations: set[ast.AST]) -> None:
         self.declarations = declarations
         self.values: dict[str, object] = {}
@@ -1780,14 +1786,15 @@ class TypingImports(MroDispatch):
     def modules(self, node: ast.Import) -> None:
         for item in node.names:
             self.bind(node, item.asname or item.name.split(".")[0],
-                      typing if item.name == typing.__name__ else None)
+                      self.typing_modules.get(item.name))
 
     @handles(ast.ImportFrom)
     def members(self, node: ast.ImportFrom) -> None:
         for item in node.names:
             declaration = None
-            if node.level == 0 and node.module == typing.__name__:
-                declaration = vars(typing).get(item.name)
+            module = self.typing_modules.get(node.module) if node.level == 0 else None
+            if module is not None:
+                declaration = vars(module).get(item.name)
             self.bind(node, item.asname or item.name, declaration)
 
     @handles(ast.Name)
@@ -1852,6 +1859,10 @@ class TypingReference(MroDispatch):
         self.imports = imports
         self.value: object = None
 
+    @property
+    def is_any(self) -> bool:
+        return self.value is typing.Any
+
     @handles(ast.Name)
     def name(self, node: ast.Name) -> None:
         self.value = self.imports.get(node.id)
@@ -1860,8 +1871,9 @@ class TypingReference(MroDispatch):
     def member(self, node: ast.Attribute) -> None:
         parent = TypingReference(self.imports)
         parent.dispatch_sync(node.value)
-        if parent.value is typing:
-            self.value = vars(typing).get(node.attr)
+        for module in TypingImports.typing_modules.values():
+            if parent.value is module:
+                self.value = vars(module).get(node.attr)
 
     def raw_access_count(self) -> int:
         """Typing declarations contribute no raw-record operation; unknowns do."""
@@ -1901,7 +1913,11 @@ class AnyInTypeExpression(MroDispatch):
     def __init__(self, imports: dict[str, object], quoted: bool) -> None:
         self.imports = imports
         self.quoted = quoted
-        self.found = 0
+        self.references: list[ast.expr] = []
+
+    @property
+    def found(self) -> int:
+        return len(self.references)
 
     def resolved(self, node: ast.AST) -> object:
         reference = TypingReference(self.imports)
@@ -1910,7 +1926,10 @@ class AnyInTypeExpression(MroDispatch):
 
     @handles(ast.Name, ast.Attribute)
     def reference(self, node: ast.expr) -> None:
-        self.found += int(self.resolved(node) is typing.Any)
+        reference = TypingReference(self.imports)
+        reference.dispatch_sync(node)
+        if reference.is_any:
+            self.references.append(node)
 
     @handles(ast.Subscript)
     def parameterised(self, node: ast.Subscript) -> None:
@@ -1946,7 +1965,7 @@ class AnyInTypeExpression(MroDispatch):
 
 @dataclass(frozen=True)
 class AnyUse:
-    """One written ``typing.Any`` where a file declares a type."""
+    """One written ``typing.Any`` and the declaration or reference owning it."""
 
     line: int
     site: str
@@ -1954,11 +1973,12 @@ class AnyUse:
 
 
 class DeclaredTypeSites(MroDispatch):
-    """Every place a file declares a type; each handler names one kind of place."""
+    """Written Any references, with declaration-owned quoted type parsing."""
 
     def __init__(self, imports: dict[str, object]) -> None:
         self.imports = imports
         self.uses: list[AnyUse] = []
+        self.counted: set[ast.AST] = set()
 
     def read(self, tree: ast.Module) -> None:
         pending: list[tuple[ast.AST, tuple[ast.AST, ...]]] = [(tree, ())]
@@ -1976,7 +1996,19 @@ class DeclaredTypeSites(MroDispatch):
         counted = AnyInTypeExpression(self.imports, quoted)
         counted.dispatch_sync(expression)
         owner = ".".join(enclosing.name for enclosing in scope)
+        self.counted.update(counted.references)
         self.uses.extend([AnyUse(expression.lineno, site, owner)] * counted.found)
+
+    @handles(ast.Name, ast.Attribute)
+    def reference(self, node: ast.Name | ast.Attribute, scope: tuple[ast.AST, ...]) -> None:
+        if not isinstance(node.ctx, ast.Load) or node in self.counted:
+            return
+        reference = TypingReference(self.imports)
+        reference.dispatch_sync(node)
+        if reference.is_any:
+            self.counted.add(node)
+            owner = ".".join(enclosing.name for enclosing in scope)
+            self.uses.append(AnyUse(node.lineno, "reference", owner))
 
     @staticmethod
     def record_class(scope: tuple[ast.AST, ...]) -> bool:
@@ -2022,14 +2054,8 @@ class DeclaredTypeSites(MroDispatch):
             self.declare("alias", node.value, scope)
 
 
-class AnyAnnotation(PerFileMeasure):
-    """``typing.Any`` written where a type is declared.
-
-    A declared type is what a consumer turns into a form control, a parameter
-    description or an array conversion; ``Any`` is the answer that is missing.
-    Counted: parameters, returns, annotated assignments and type aliases,
-    including nested (``dict[str, Any]``) and quoted uses.
-    """
+class AnyName(PerFileMeasure):
+    """Every written Any, including quoted declarations and loaded runtime references."""
 
     @classmethod
     def uses(cls, source: bytes, filename: str) -> tuple[AnyUse, ...]:
@@ -2042,6 +2068,22 @@ class AnyAnnotation(PerFileMeasure):
     def count(cls, source: bytes, filename: str) -> int:
         return len(cls.uses(source, filename))
 
+
+class UnannotatedParameter(PerFileOccurrenceMeasure):
+    """Every function parameter declares its type; self and cls name their owner."""
+
+    @staticmethod
+    def occurrences(node: ast.AST) -> int:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return 0
+        arguments = node.args
+        return sum(
+            argument.annotation is None and argument.arg not in ("self", "cls")
+            for argument in (
+                *arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs,
+                *filter(None, (arguments.vararg, arguments.kwarg)),
+            )
+        )
 
 
 class UncarriedRecordFormat(ChangeMeasure):

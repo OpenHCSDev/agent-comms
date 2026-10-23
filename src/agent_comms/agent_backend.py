@@ -22,7 +22,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from .declared_family import DeclaredFamily
 from .pi_counts import PiCount
@@ -35,10 +35,12 @@ if TYPE_CHECKING:
     from .image_inputs import ImageInput
     from .launch_runtime import LaunchRuntime
     from .native_tool_call import NativeToolMode
+    from .pi_events import DialogUiRequest, ExtensionUiChoice
     from .thread_model import ThreadModel
     from .threads import Thread
     from .transcript_sources import TranscriptSource
     from .turn_context import InputContributionCoordinates
+    from .turn_runner import TurnRunner
 
 
 class BackendDeclarationError(TypeError):
@@ -308,7 +310,7 @@ class TurnDelivery:
     interrupt_boundary: SendBoundary
     input_started: Callable[..., bool]
     request_progress: Callable[..., None]
-    ui_request: Callable[..., Awaitable[Any]]
+    ui_request: Callable[[DialogUiRequest], Awaitable[ExtensionUiChoice]]
     tool_mode: NativeToolMode
 
 
@@ -325,7 +327,7 @@ class RunsTurns(ABC):
         """Run ``content`` as ``thread``'s next input and yield its events."""
 
     @abstractmethod
-    async def abort(self, owner: asyncio.Task[Any]) -> None:
+    async def abort[Result](self, owner: asyncio.Task[Result]) -> None:
         """Stop the runtime work owned by this turn task."""
 
     @abstractmethod
@@ -381,7 +383,7 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
     async def context_for_input(self, thread, context):
         return context
 
-    def __init_subclass__(cls, **options: Any) -> None:
+    def __init_subclass__(cls, **options: str | None) -> None:
         if AgentBackend._sealed:
             raise BackendDeclarationError(
                 f"{cls.__name__}: the AgentBackend registry is sealed; declare backends "
@@ -391,7 +393,7 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
 
     @classmethod
     @abstractmethod
-    def for_worker(cls, runner: Any, session_id: str) -> Self:
+    def for_worker(cls, runner: TurnRunner, session_id: str) -> Self:
         """An instance holding this runtime for one thread session in this worker."""
 
     @classmethod

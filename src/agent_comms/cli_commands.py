@@ -13,7 +13,6 @@ import json
 import os
 import re
 import shlex
-import subprocess
 import time
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping
@@ -24,9 +23,10 @@ from inspect import iscoroutinefunction, signature
 from itertools import dropwhile, takewhile
 from pathlib import Path
 from types import get_original_bases
-from typing import Annotated, Any, ClassVar, Literal, Self, TextIO, cast, get_args, get_origin
+from typing import Annotated, ClassVar, Literal, Self, TextIO, cast, get_args, get_origin
 
 from acp.exceptions import RequestError
+from pydantic import JsonValue
 
 from agent_comms.errors import ToolRefusedError
 from agent_comms.launch_root import LaunchRoot
@@ -66,7 +66,7 @@ from .cli_bridges.history import (
     OfflineHistory,
     OnlineHistory,
 )
-from .cli_bridges.shared import ChoiceTargetField, DeclaredOptions, SendRequest, TargetField
+from .cli_bridges.shared import ChoiceTargetField, SendRequest, TargetField
 from .cli_protocol import ArrivedMessage, EarlierItems
 from .cli_result import CliResult
 from .command import Command
@@ -85,7 +85,7 @@ from .config_options import (
 from .context_store import LATEST_CONTEXT, ContextManifestCursor
 from .coordination_database import CoordinationStore
 from .declared_family import DeclaredFamily
-from .errors import RelationViolationError
+from .declared_verb import DeclaredCommand
 from .exporting import (
     EverythingScope,
     FullLimit,
@@ -143,6 +143,7 @@ from .read_basis import (
 from .recorded_bus import RecordedBusIdentity
 from .registry_document import CommanderProject, RegistrySnapshot
 from .registry_store import RegistryStore
+from .repo import GitCommandError, Repo
 from .restart_scope import AllOwners, OneOwner, RestartTarget
 from .runtime import RuntimeConnection, socket_path
 from .schema_report import StoreSchemaReport, StoreSchemaReports
@@ -453,7 +454,7 @@ class AppliedTogether:
 
 
 @dataclass(frozen=True)
-class TargetEdit(Command):
+class TargetEdit(Command[Comms, CliResult]):
     """Accepted editor values use the declared field and current bound command."""
     declaration: type[CliCommand]
     target: TargetSelection
@@ -744,7 +745,7 @@ class NativeContextInspection(CliResult):
     native_source_spans: tuple[NativeSourceSpans, ...]
 
 
-class CliExecution(Command):
+class CliExecution[Answer: CliResult = CliResult](Command[Comms, Answer]):
     """The dispatcher contract, including methods selected through multiple inheritance."""
 
     @abstractmethod
@@ -797,9 +798,8 @@ class WorktreeArgument:
 
 @dataclass(frozen=True, kw_only=True)
 class CliCommand[Answer: CliResult = CliResult](
-    DeclaredFamily,
-    DeclaredOptions,
-    CliExecution,
+    DeclaredCommand,
+    CliExecution[Answer],
     affix="CliCommand",
     discovery_package="agent_comms.tools",
 ):
@@ -927,14 +927,7 @@ class CliCommand[Answer: CliResult = CliResult](
 
     def run(self, ctx: Comms, output: TextIO) -> int:
         """Run this command and write its declared result."""
-        return self.written(self.apply(ctx), output)
-
-    @staticmethod
-    def written(result: CliResult, output: TextIO) -> int:
-        """Write one declared result to the caller's stream; its exit code."""
-        json.dump(result.to_wire(), output, indent=2)
-        output.write("\n")
-        return result.exit_code()
+        return self.apply(ctx).write(output)
 
     @classmethod
     def published_launch(cls) -> LaunchRoot:
@@ -1388,8 +1381,41 @@ class InboxCliCommand(ThreadArgument, CliCommand):
         return InboxResult(tuple(ctx.bus.inbox(self.thread)))
 
 
+@dataclass(frozen=True)
+class WatchStream(CliResult):
+    """Unread and arriving messages, written as JSON lines for as long as the watch lasts."""
+
+    comms: Comms
+    watch: WatchCliCommand
+
+    def messages(self) -> AsyncIterator[Message]:
+        return self.comms.bus.watch(self.watch.thread, acknowledgment=self.watch.acknowledgment,
+                                    after=self.watch.after)
+
+    def write(self, output: TextIO) -> int:
+        emit = self.watch.acknowledgment.line_output(output)
+        async def stream() -> None:
+            async with aclosing(self.messages()) as messages:
+                async for message in messages:
+                    emit(ArrivedMessage(message=message).model_dump_json())
+
+        async def watch() -> None:
+            thread = self.comms.registry.require(self.watch.thread)
+            source = thread.runtime.history_source(self.comms.root, thread.incarnation)
+            async with asyncio.TaskGroup() as tasks:
+                tasks.create_task(stream())
+                tasks.create_task(source.watch_requests(
+                    lambda row: emit(EarlierItems.from_row(row).model_dump_json())))
+
+        try:
+            asyncio.run(watch())
+        except* MaintenanceHeldError as held:  # the bridge reads it as its one held line
+            raise held.exceptions[0] from None
+        return self.exit_code()
+
+
 @dataclass(frozen=True, kw_only=True)
-class WatchCliCommand(ThreadArgument, CliCommand, declared_name="watch"):
+class WatchCliCommand(ThreadArgument, CliCommand[WatchStream], declared_name="watch"):
     help = "Stream unread and arriving messages as JSON lines"
     after: Annotated[
         InboxStart,
@@ -1407,29 +1433,8 @@ class WatchCliCommand(ThreadArgument, CliCommand, declared_name="watch"):
         Argument(flags=("--acknowledgment",)),
     ] = OnReadWatchAcknowledgment
 
-    def apply(self, ctx: Comms) -> AsyncIterator[Message]:
-        return ctx.bus.watch(self.thread, acknowledgment=self.acknowledgment, after=self.after)
-
-    def run(self, ctx: Comms, output: TextIO) -> int:
-        emit = self.acknowledgment.line_output(output)
-        async def stream() -> None:
-            async with aclosing(self.apply(ctx)) as messages:
-                async for message in messages:
-                    emit(ArrivedMessage(message=message).model_dump_json())
-
-        async def watch() -> None:
-            thread = ctx.registry.require(self.thread)
-            source = thread.runtime.history_source(ctx.root, thread.incarnation)
-            async with asyncio.TaskGroup() as tasks:
-                tasks.create_task(stream())
-                tasks.create_task(source.watch_requests(
-                    lambda row: emit(EarlierItems.from_row(row).model_dump_json())))
-
-        try:
-            asyncio.run(watch())
-        except* MaintenanceHeldError as held:  # the bridge reads it as its one held line
-            raise held.exceptions[0] from None
-        return 0
+    def apply(self, ctx: Comms) -> WatchStream:
+        return WatchStream(ctx, self)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1811,7 +1816,7 @@ class ReadBackCliCommand(CliCommand[BusReadBack], declared_name="read-back"):
 
     def execute(self, route: CommsRoute, output: TextIO) -> int:
         """Before its carries, the installer reads only the existing registry."""
-        return self.written(self.answer(route.root), output)
+        return self.answer(route.root).write(output)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1835,7 +1840,7 @@ class StoreReconcileCliCommand(CliCommand[ReconciledStoresResult]):
 
     def execute(self, route: CommsRoute, output: TextIO) -> int:
         """Reconciliation reads its declared files before opening runtime consumers."""
-        return self.written(self.answer(route.root), output)
+        return self.answer(route.root).write(output)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1857,7 +1862,7 @@ class PlannedReconcileCliCommand(StoreReconcileCliCommand, declared_name="planne
     def changes(owner: type[ReconciledFile], path: Path) -> bool:
         schema = owner.schema_at(path)
         with closing(owner.read_snapshot(path)) as db:
-            return schema.schema_differs(db)
+            return schema.reconcile_writes(db)
 
 @dataclass(frozen=True, kw_only=True)
 class CheckpointCliCommand(NameArgument, CliCommand, declared_name="checkpoint"):
@@ -1866,34 +1871,33 @@ class CheckpointCliCommand(NameArgument, CliCommand, declared_name="checkpoint")
     def apply(self, ctx: Comms) -> CliResult:
         worktree = Path(ctx.registry.require(self.name).worktree).resolve()
         branch = f"checkpoint/{self.name}"
-        # Git requires an absolute ceiling. Stop before entering the declared
-        # worktree's parent, never checkpoint an ancestor repository.
-        environment = {**os.environ, "GIT_CEILING_DIRECTORIES": str(worktree.parent)}
-
-        def git(*arguments: str, timeout: int = 60):
-            done = subprocess.run(["git", "-C", str(worktree), *arguments],
-                                  capture_output=True, text=True, timeout=timeout,
-                                  env=environment)
-            return done.returncode, done.stdout, done.stderr
-
-        code, out, _ = git("rev-parse", "--is-inside-work-tree")
-        if code != 0 or out.strip() != "true":
-            return RefusedCheckpoint(
-                self.name, branch, "the thread declaration's worktree is not a git worktree")
-        if not git("status", "--porcelain")[1].strip():
+        # Only the declared worktree's own repository; never checkpoint an ancestor's.
+        refused = RefusedCheckpoint(
+            self.name, branch, "the thread declaration's worktree is not a git worktree")
+        try:
+            top = Path(Repo.git(worktree, "rev-parse", "--show-toplevel").strip()).resolve()
+        except GitCommandError:
+            return refused
+        if top != worktree:
+            return refused
+        if not Repo.git(worktree, "status", "--porcelain").strip():
             return CleanCheckpoint(self.name, branch)
-        git("add", "-A")
-        code, out, err = git("commit", "-m", f"Checkpoint {self.name} before compaction")
-        if code != 0 and "nothing to commit" in (out + err):
-            return CleanCheckpoint(self.name, branch)
-        if code != 0:
-            return FailedCheckpoint(self.name, branch, (err.strip() or out.strip())[:400])
+        try:
+            Repo.git(worktree, "add", "-A")
+            if Repo.answers(worktree, "diff", "--cached", "--quiet"):
+                return CleanCheckpoint(self.name, branch)
+            Repo.git(worktree, "commit", "-m", f"Checkpoint {self.name} before compaction")
+        except GitCommandError as error:
+            return FailedCheckpoint(self.name, branch, str(error)[:400])
         # The transport can fail mid-flight; the named state is what survives,
         # never a silent skip and never a block on compaction.
-        code, out, err = git("push", "--force", "origin", f"HEAD:refs/heads/{branch}", timeout=120)
-        if code != 0:
-            return PushUnknownCheckpoint(self.name, branch, (err.strip() or out.strip())[:400])
-        return PushedCheckpoint(self.name, branch, git("rev-parse", "--short", "HEAD")[1].strip())
+        try:
+            Repo.git(worktree, "push", "--force", "origin", f"HEAD:refs/heads/{branch}",
+                     timeout=120)
+        except GitCommandError as error:
+            return PushUnknownCheckpoint(self.name, branch, str(error)[:400])
+        return PushedCheckpoint(self.name, branch,
+                                Repo.git(worktree, "rev-parse", "--short", "HEAD").strip())
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -2292,7 +2296,7 @@ class TargetActionCliCommand(TargetArguments, declared_name="target-action"):
     help = "Execute a declared operation against its current target"
     operation: Annotated[str, Argument(flags=("--operation",))]
     arguments: Annotated[
-        dict[str, Any],
+        dict[str, JsonValue],
         Argument(
             flags=("--arguments",)
         ),
@@ -2567,4 +2571,4 @@ class ReplaceRouteCliCommand(CliCommand[RouteReplacedResult],
     def execute(self, route: CommsRoute, output: TextIO) -> int:
         """Every client borrows the published route, and a route that selects no bus refuses
         each borrower, so the repair of that route borrows none."""
-        return self.written(self.answer(route.root), output)
+        return self.answer(route.root).write(output)

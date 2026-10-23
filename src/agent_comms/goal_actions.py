@@ -113,7 +113,9 @@ class GoalActionContext:
 
 
 @dataclass(frozen=True, kw_only=True)
-class GoalAction[Result: GoalDeclaration](DeclaredFamily, Command, affix="GoalAction"):
+class GoalAction[Result: GoalDeclaration](
+    DeclaredFamily, Command[GoalActionContext, Result], affix="GoalAction"
+):
     expect: GoalPrecondition = GoalPrecondition()
     preserve_wait: ClassVar[bool] = False
     schedules_goal: ClassVar[bool] = False

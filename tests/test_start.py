@@ -5,7 +5,7 @@ import sys
 
 import pytest
 
-from agent_comms.session_file import SavedSessionFile
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.tools import invoke_tool
 from agent_comms.comms import wire
 from agent_comms.tool_caller import NoThreadCaller
@@ -21,7 +21,7 @@ async def test_real_stopped_owner_starts_through_shared_agent_tool(tmp_path, mon
     source.touch()
     comms = wire(tmp_path / "wire")
     Bus.install(Bus.path_in(comms.root))
-    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=SavedSessionFile(str(source))))
+    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
     comms.registry.unregister("worker")
     try:
         result = await asyncio.to_thread(invoke_tool, comms, "comms_start", {"name": "worker"}, caller=NoThreadCaller())

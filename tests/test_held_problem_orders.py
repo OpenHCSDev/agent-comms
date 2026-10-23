@@ -4,19 +4,18 @@ from dataclasses import replace
 import json
 import shlex
 import time
-from pathlib import Path
 
 import pytest
 
-from test_todos import order, pr_commander, thread
+from test_todos import order, thread
 
 from agent_comms.commander.order import OrderFile, main
 from agent_comms.commander.request import RequestAddVerb
 from agent_comms.field_codec import FieldCodec
-from agent_comms.installer.practice import practice_copy
+from agent_comms.installer.practice import PracticeCopy
+from agent_comms.locked_store import RootFile
 from agent_comms.goals import OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repo import Repo
 from agent_comms.todos import DeliveredProblemOrder, OrderMessage
 from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.tool_caller import ThreadCaller
@@ -27,7 +26,15 @@ pytest_plugins = ("test_todos",)
 
 
 @pytest.fixture
-def held_commander(pr_commander):
+def cited_source(pr_commander, proof_build_checkouts):
+    """The source the proof fixture built. The commander declares its repos as plain Repo,
+    and the practice copy decodes them as such, so the source is selected by GitHub name."""
+    return next(graph.repository for graph in proof_build_checkouts
+                if graph.repository.github == pr_commander.repos[0].github)
+
+
+@pytest.fixture
+def held_commander(pr_commander, cited_source):
     source = pr_commander
     worker = thread("worker", source.root, 2.0)
     source.comms.registry.register(worker)
@@ -37,28 +44,27 @@ def held_commander(pr_commander):
         "P1", source.repos[0].github, "Repair the held workflow", creator=lead, assigner=lead.incarnation,
         owner=worker, generation="initial-order",
         request=NewestOpenRequest().for_order(source.comms.goals.todos, lead.incarnation),
-        review_at=RecordedEventTime(time.time() + 1000), order=order(source.repos[0]),
+        review_at=RecordedEventTime(time.time() + 1000), order=order(cited_source),
     )
     published = source.comms.messaging.send(source.commander, worker.name, "Repair the held workflow through its existing declaration.")
     source.comms.goals.todos.apply(todo.id, OrderMessage(todo.revision, lead.incarnation, published.message.message_id))
     original = source.comms.goals.todos.get(todo.id)
-    with practice_copy(source.root, source.root.parent / f"{source.root.name}-copied") as (root, _):
-        ctx = source.model_copy(update={
-            "root": root, "state": root / "state",
-            "repos": (*source.repos, Repo.of(Path(__file__).resolve().parents[1])),
-        })
-        yield ctx
+    practice = PracticeCopy(source.root, source.root.parent / f"{source.root.name}-copied")
+    practice.include(tuple(RootFile.existing_in(practice.root)))
+    (root, _) = practice.path, practice.measurement
+    ctx = source.model_copy(update={"root": root, "state": root / "state"})
+    yield ctx
     assert source.comms.goals.todos.get(todo.id) == original
 
 
-def test_clean_resend_derives_the_existing_order_and_leaves_no_strike(held_commander):
+def test_clean_resend_derives_the_existing_order_and_leaves_no_strike(held_commander, cited_source):
     ctx = held_commander
     original = ctx.comms.goals.todos.get("P1")
     marker = ctx.root / "unfinished"
     marker.touch()
     now = time.time()
     replacement = replace(
-        order(ctx.repos[0]), id="replacement-order",
+        order(cited_source), id="replacement-order",
         check=OrderCheck(str(ctx.repos[0].checkout), f"test ! -e {shlex.quote(str(marker))}"),
         at=RecordedEventTime(now), first_call_deadline=RecordedEventTime(now + 120),
     )
@@ -80,13 +86,13 @@ def test_clean_resend_derives_the_existing_order_and_leaves_no_strike(held_comma
     ThreadCaller("worker").invoke(CommsChannelsTool(), ctx.comms)
 
 
-def test_second_unplanned_order_is_refused_without_recording(held_commander):
+def test_second_unplanned_order_is_refused_without_recording(held_commander, cited_source):
     ctx = held_commander
     original = ctx.comms.goals.todos.get("P1")
     marker = ctx.root / "unfinished"
     marker.touch()
     document = OrderFile(
-        replace(order(ctx.repos[0]), id="second-order",
+        replace(order(cited_source), id="second-order",
                 check=OrderCheck(str(ctx.repos[0].checkout), f"test ! -e {shlex.quote(str(marker))}")),
         "The copied workflow still contains an unfinished decision that prevents completion",
         "This is stupid because assigning another order hides the already unfinished work",

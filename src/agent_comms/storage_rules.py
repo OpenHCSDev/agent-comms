@@ -6,11 +6,10 @@ import json
 import math
 import re
 import shutil
-import subprocess
 import time
 from abc import abstractmethod
 from collections.abc import Iterable, Iterator, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from functools import cached_property
 from pathlib import Path
@@ -84,9 +83,11 @@ class StorageRule(RoomAllocation, DurableFile):
     shown: ClassVar[int] = 5  # holders named in each list
     scratch_cap_gib: float = 3.0  # one unit's scratch together with its checkouts
     max_checkouts: int = 2
-    volume: StoragePath = Path.home()
-    scratch_base: StoragePath = Path.home() / '.cache' / 'agent-scratch'
-    checkout_base: StoragePath = Path.home() / 'wt'
+    # Home paths are read when the rule is built, never frozen at import.
+    volume: StoragePath = field(default_factory=Path.home)
+    scratch_base: StoragePath = field(
+        default_factory=lambda: Path.home() / '.cache' / 'agent-scratch')
+    checkout_base: StoragePath = field(default_factory=lambda: Path.home() / 'wt')
 
     def __post_init__(self):
         limits = (self.floor_gib, self.cleanup_gib, self.scratch_cap_gib)
@@ -174,10 +175,7 @@ class StorageRule(RoomAllocation, DurableFile):
         for repository in candidates:
             if repository in listed or not (repository / '.git').exists():
                 continue
-            output = subprocess.run(
-                ('git', '-C', str(repository), 'worktree', 'list', '--porcelain', '-z'),
-                capture_output=True, text=True, check=True, timeout=10,
-            ).stdout
+            output = Repo.git(repository, 'worktree', 'list', '--porcelain', '-z', timeout=10)
             entries = tuple(Path(field.removeprefix('worktree ')).resolve()
                             for field in output.split('\0') if field.startswith('worktree '))
             listed.update(entries)
@@ -347,9 +345,10 @@ class StorageViolation(UndatedStandingRule, declared_name=None):
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState]) -> tuple[Self, ...]:
+        # Storage reads the filesystem, not the git source an unreadable card failed on:
+        # a unit whose declared home is gone is that card and a missing home.
         held = StandingRule.holders(comms, commander)
-        return cls.for_units(comms, (unit for state in observed
-                                    for unit in state.readable_units() if unit in held))
+        return cls.for_units(comms, (state.unit for state in observed if state.unit in held))
 
     @classmethod
     def for_units(cls, comms: Comms, units: Iterable[ThreadIncarnation]) -> tuple[Self, ...]:

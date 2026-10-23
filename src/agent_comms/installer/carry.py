@@ -13,19 +13,18 @@ every bus has run it.
 from __future__ import annotations
 
 import inspect
-import json
-import subprocess
 from abc import abstractmethod
-from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import Annotated, ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec, PathText
+from agent_comms.field_codec import PathText
 from agent_comms.installer.interpreter_operation import InterpreterOperation
+from agent_comms.locked_store import RootFile
+from agent_comms.repo import Repo
 
 STEPS = Path("tools/cutover")
 
@@ -52,13 +51,21 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
     precedes: ClassVar[tuple[type[Carry], ...]] = ()
     """Steps whose decoders require this step's output, regardless of addition date."""
 
+    opened_files: ClassVar[tuple[type[RootFile], ...]]
+
+    def input_files(self) -> tuple[Path, ...]:
+        """Enumerate declared inputs without opening any store with the staged runtime."""
+        paths: set[Path] = set()
+        for owner, directory in RootFile.declarations_in(self.root):
+            if issubclass(owner, self.opened_files):
+                paths.update(owner.matching_in(directory))
+        for path in paths:
+            self.require_confined(self.root, path)
+        return tuple(sorted(paths))
+
     @classmethod
     def module(cls) -> Path:
         return Path(inspect.getfile(cls)).resolve()
-
-    @abstractmethod
-    def backup_files(self) -> tuple[Annotated[Path, PathText], ...]:
-        """The existing files this step rewrites or deletes, backed up before it applies."""
 
     @abstractmethod
     def carry(self, *, apply: bool) -> Carried:
@@ -74,37 +81,55 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
         if not path.is_relative_to(root) or path.resolve() != path:
             raise RelationViolationError(f"Carry refuses an unconfined path: {path}")
 
-class CarryOperation[Answer](InterpreterOperation[Answer, Carry], DeclaredFamily, affix="Operation"):
-    """One step invocation, including its arguments and its declared answer type."""
+
+class ArchivedInputs:
+    """Apply one carry input declaration to its retained snapshot roots as well."""
 
     @abstractmethod
-    def run(self, step: Carry) -> Answer: ...
+    def roots(self) -> tuple[Path, ...]: ...
 
-    def encode_answers(self, answers: tuple[Answer, ...]) -> str:
-        """One pass's answers, in step order, under this operation's declared answer type."""
-        return json.dumps(FieldCodec.encode(answers, tuple[self.answer_type(), ...]))
+    def input_files(self) -> tuple[Path, ...]:
+        paths: set[Path] = set()
+        for root in self.roots():
+            paths.update(super(ArchivedInputs, replace(self, root=root)).input_files())
+        for path in paths:
+            Carry.require_confined(self.root, path)
+        return tuple(sorted(paths))
 
-    def decode_answers(self, answers: str) -> tuple[Answer, ...]:
-        return FieldCodec.decode(tuple[self.answer_type(), ...], FieldCodec.parse(answers))
 
-@dataclass(frozen=True)
-class BackupFilesOperation(CarryOperation[tuple[Annotated[Path, PathText], ...]]):
-    def run(self, step: Carry) -> tuple[Annotated[Path, PathText], ...]:
-        return step.backup_files()
+class CarryOperation[Answer](
+    InterpreterOperation[tuple[Answer, ...], tuple[Carry, ...]],
+    DeclaredFamily, affix="Operation",
+):
+    """One worker pass, with its answer type declared by the operation's run method."""
 
+    @abstractmethod
+    def run(self, steps: tuple[Carry, ...]) -> tuple[Answer, ...]: ...
 
 @dataclass(frozen=True)
 class MigrateOperation(CarryOperation[Carried]):
     apply: bool
 
-    def run(self, step: Carry) -> Carried:
-        return step.carry(apply=self.apply)
+    def run(self, steps: tuple[Carry, ...]) -> tuple[Carried, ...]:
+        return tuple(step.carry(apply=self.apply) for step in steps)
+
+
+@dataclass(frozen=True)
+class FirstPendingOperation(CarryOperation[int]):
+    """One position: stop before asking a step that needs a pending predecessor."""
+
+    def run(self, steps: tuple[Carry, ...]) -> tuple[int, ...]:
+        for position, step in enumerate(steps):
+            changed_count = step.carry(apply=False).changed
+            if changed_count:
+                return (position,)
+        return (len(steps),)
 
 
 @dataclass(frozen=True)
 class RetireInputsOperation(CarryOperation[Carried]):
-    def run(self, step: Carry) -> Carried:
-        return step.after_acceptance()
+    def run(self, steps: tuple[Carry, ...]) -> tuple[Carried, ...]:
+        return tuple(step.after_acceptance() for step in steps)
 
 
 @dataclass(frozen=True)
@@ -115,7 +140,7 @@ class CarryRequest:
     steps: tuple[Carry, ...]
 
     def run(self) -> str:
-        return self.operation.encode_answers(tuple(self.operation.run(step) for step in self.steps))
+        return self.operation.encode_answer(self.operation.run(self.steps))
 
 
 @dataclass(frozen=True)
@@ -131,10 +156,8 @@ class CarryChain:
         tree = tree.resolve()
         directory = tree / STEPS
         steps = [step for step in Carry.members_with(Carry) if step.module().parent == directory]
-        log = subprocess.check_output(
-            ["git", "-C", str(tree), "log", "-m", "--first-parent", "--no-renames",
-             "--diff-filter=A", "--reverse", "--name-only", "--format=", "HEAD", "--",
-             str(STEPS)]).decode().split()
+        log = Repo.git(tree, "log", "-m", "--first-parent", "--no-renames", "--diff-filter=A",
+                       "--reverse", "--name-only", "--format=", "HEAD", "--", str(STEPS)).split()
         added = {Path(path): position for position, path in reversed(list(enumerate(log)))}
         unordered = sorted(step.declared_name for step in steps
                            if step.module().relative_to(tree) not in added)
@@ -157,12 +180,3 @@ class CarryChain:
             emitted.append(step)
             sorter.done(step)
         return cls(tuple(emitted))
-
-    def pending(self, dry_run: Callable[[type[Carry]], Carried]) -> tuple[type[Carry], ...]:
-        """Every step from the first whose dry run reports a change. A later step's dry run
-        reads what the earlier ones leave, so it is not asked before they have run; it runs
-        after them and reports no change if it has none."""
-        for position, step in enumerate(self.steps):
-            if dry_run(step).changed:
-                return self.steps[position:]
-        return ()

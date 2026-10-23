@@ -1,7 +1,7 @@
 """No-provider bounded human DM read evidence; never use global inbox ACK."""
 
 from __future__ import annotations
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.registration import Registration
 
 import os
@@ -29,7 +29,7 @@ def test_dm_page_marks_covered_range_preserving_omitted_older_unread(tmp_path: P
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     for index in range(50):
         comms.messaging.send("peer", viewer, f"old {index}").message.message_id
-    page = comms.views.dm_display_page("peer", worktree=str(tmp_path), bounds=PageBounds(limit=5))
+    page = comms.views.dm_display_page(ThreadTarget("peer"), worktree=str(tmp_path), bounds=PageBounds(limit=5))
     assert len(page.messages) == 5 and page.has_older
     assert isinstance(page.selection, DMSelection)
     comms.views.mark_page_read(page, worktree=str(tmp_path))
@@ -50,7 +50,7 @@ def test_peer_delete_same_name_rebind_rejects_stale_page_without_read_ack(tmp_pa
     comms.messaging.send("other", "#all", "OTHER_CHANNEL_4").message.message_id
     comms.messaging.send("peer", viewer, "PEER_PAINTED_5").message.message_id
     comms.messaging.send("other", viewer, "OTHER_UNPAINTED_6").message.message_id
-    page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
+    page = comms.views.dm_display_page(ThreadTarget("peer"), worktree=str(tmp_path))
     assert [message.body for message in page.messages] == ["PEER_PAINTED_2", "PEER_PAINTED_5"]
     assert page.newest_seq == 5 and isinstance(page.selection, DMSelection)
     comms.registry.unregister("peer")
@@ -74,7 +74,7 @@ def test_foreign_root_wrong_peer_and_unbounded_or_bool_through_rejected(tmp_path
             comms.registry.declare(_thread(comms.root, name))
         viewer = comms.messaging.user_identity(str(comms.root)).name
         comms.messaging.send("peer", viewer, "painted").message.message_id
-    page = first.views.dm_display_page("peer", worktree=str(first.root))
+    page = first.views.dm_display_page(ThreadTarget("peer"), worktree=str(first.root))
     assert isinstance(page.selection, DMSelection) and page.newest_seq is not None
     for comms, target, through, error in (
         (second, "peer", page.newest_seq, DMScopeChanged),
@@ -96,7 +96,7 @@ def test_painted_bound_uses_existing_transcript_refresh_error(tmp_path: Path):
     comms.registry.declare(_thread(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", viewer, "painted").message.message_id
-    page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
+    page = comms.views.dm_display_page(ThreadTarget("peer"), worktree=str(tmp_path))
     with pytest.raises(TranscriptChanged):
         page.selection.basis.acknowledge(
             comms.bus, comms.registry, comms.root, "peer",
@@ -110,7 +110,7 @@ def test_root_replaced_after_fetch_rejects_mark_without_reading_new_root(tmp_pat
     comms.registry.declare(_thread(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", viewer, "painted in original root").message.message_id
-    page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
+    page = comms.views.dm_display_page(ThreadTarget("peer"), worktree=str(tmp_path))
     previous = tmp_path.with_name(tmp_path.name + "-previous")
     tmp_path.rename(previous)
     shutil.copytree(previous, tmp_path, symlinks=True)
@@ -124,7 +124,7 @@ def test_independent_read_is_idempotent_and_never_retargets_page(tmp_path: Path)
     comms.registry.declare(_thread(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", viewer, "painted").message.message_id
-    page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
+    page = comms.views.dm_display_page(ThreadTarget("peer"), worktree=str(tmp_path))
     comms.views.mark_user_view_read("peer", worktree=str(tmp_path))
     comms.messaging.send("peer", viewer, "unpainted after explicit mark").message.message_id
     comms.views.mark_page_read(page, worktree=str(tmp_path))
@@ -134,7 +134,7 @@ def test_independent_read_is_idempotent_and_never_retargets_page(tmp_path: Path)
 def test_empty_dm_basis_is_no_op_without_creating_read_ledger(tmp_path: Path):
     comms = installed_comms(tmp_path)
     comms.registry.declare(_thread(tmp_path, "peer"))
-    page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
+    page = comms.views.dm_display_page(ThreadTarget("peer"), worktree=str(tmp_path))
     assert page.selection.basis.displayed.tail == EmptyTail()
     page.selection.basis.acknowledge(
         comms.bus, comms.registry, comms.root, "peer", worktree=str(tmp_path), through=0,

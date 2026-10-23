@@ -65,7 +65,7 @@ def test_carry_keeps_existing_attempts_inputs_and_bindings(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     root = generated / "wire"
     step = ThreadNameOwners(root, root, tmp_path / "spill")
-    before = {path: path.read_bytes() for path in step.backup_files()}
+    before = {path: path.read_bytes() for path in step.input_files()}
     pending = step.carry(apply=False)
     assert pending.changed > 0
     for table in (AttemptRecord, NativeRuntimeInput, PromptBinding):
