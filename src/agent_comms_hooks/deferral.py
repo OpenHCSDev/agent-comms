@@ -1,10 +1,10 @@
-"""Send the commander back when it ends a turn deferring work while a unit holds no order.
+"""Send the commander back when its final reply parks work or its own attention.
 
 Claude Code runs this when the model stops. A final reply that parks work for "next",
 "later" or a future order, while Core counts a unit idle, is work the commander could
-hand out this tick. The hook blocks the stop, naming the phrase and the idle units. Like
-every hook it imports only the standard library, so the idle units come from Core's own
-`agent-comms-commander order idle`.
+hand out this tick. Waiting parks the commander's attention regardless of idle units:
+every wait is prep. The hook imports only the standard library and reads idle units from
+Core's own `agent-comms-commander order idle` only for shapes that need that answer.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ import subprocess
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
+from functools import cached_property
 from typing import ClassVar, Self
 
 from agent_comms_hooks import ClaudeHookProgram, ClaudeTranscriptHook, HookRecord
@@ -109,7 +110,7 @@ class OtherRecord(TranscriptRecord, Untagged):
 
 
 class Deferral(ABC):
-    """A shape of reply that parks work the commander could hand out now."""
+    """A shape of reply owns when its deferred work or attention blocks a stop."""
 
     phrases: ClassVar[tuple[str, ...]]
 
@@ -121,9 +122,9 @@ class Deferral(ABC):
     def found(cls, reply: str) -> Iterator[str]:
         return (match.group(0) for match in cls.pattern().finditer(reply))
 
-    @staticmethod
-    def phrases_in(reply: str) -> tuple[str, ...]:
-        return tuple(phrase for shape in Deferral.__subclasses__() for phrase in shape.found(reply))
+    @classmethod
+    def reasons(cls, deferred: tuple[str, ...], stop: StopHook) -> Iterator[str]:
+        yield from stop.idle.reasons(deferred)
 
 
 class NextTick(Deferral):
@@ -142,6 +143,21 @@ class FutureOrder(Deferral):
         r"to be ordered",
         r"(?:has|have) no owner",
     )
+
+
+class Waiting(Deferral):
+    phrases = (
+        r"waiting\s+on",
+        r"still\s+waiting",
+        r"once\s+[^\n.!?;:]+?\s+reports?",
+        r"when\s+the\s+forks\s+report",
+        r"next:\s*[^\n]*?\bas\s+[^\n.!?;:]+?\s+reports?",
+    )
+
+    @classmethod
+    def reasons(cls, deferred: tuple[str, ...], stop: StopHook) -> Iterator[str]:
+        yield (f"You ended on {quoted(deferred)}; every wait is prep: read the next unit's "
+               "trajectory or hunt a hot path now")
 
 
 class IdleRead(ABC):
@@ -191,6 +207,10 @@ def quoted(phrases: tuple[str, ...]) -> str:
 class StopHook(ClaudeTranscriptHook):
     stop_hook_active: bool
 
+    @cached_property
+    def idle(self) -> IdleRead:
+        return IdleRead.read()
+
     def reply(self) -> str:
         """The text of the reply that ends the turn: what the model said after its last act."""
         said: list[str] = []
@@ -205,10 +225,15 @@ class StopHook(ClaudeTranscriptHook):
         """A stop this hook already sent back is let through, so it never loops."""
         if self.stop_hook_active or not self.parts.exists():
             return
-        deferred = Deferral.phrases_in(self.reply())
-        if deferred:
-            for reason in IdleRead.read().reasons(deferred):
-                print(json.dumps({"decision": "block", "reason": reason}))
+        reply = self.reply()
+        reasons = tuple(
+            reason
+            for shape in Deferral.__subclasses__()
+            if (deferred := tuple(shape.found(reply)))
+            for reason in shape.reasons(deferred, self)
+        )
+        if reasons:
+            print(json.dumps({"decision": "block", "reason": "\n".join(reasons)}))
 
 
 class DeferralGuard(ClaudeHookProgram):

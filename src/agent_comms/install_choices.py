@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from agent_comms.cli_commands import InstallResult
     from agent_comms.installer.launch import InstallReport
     from agent_comms.installer.reporting import RootWriter
-    from agent_comms.installer.upgrade import Install, Rehearsal, RehearsedUpgrade
+    from agent_comms.installer.upgrade import Install, Rehearsal, RehearsedUpgrade, Stack
 
 
 class InstallerChoice(SubclassUnion, TextChoice, affix="Installer"):
@@ -50,7 +50,7 @@ class RunMode(SubclassUnion, affix="Mode"):
 
     @abstractmethod
     def finish[Rehearsed: Rehearsal](self, install: Install[Rehearsed], rehearsal: Rehearsed,
-               bridges: SessionBridgeResumes, harnesses: Callable[[], InstallResult],
+               bridges: SessionBridgeResumes, harnesses: Callable[[Stack], InstallResult],
                report: InstallReport) -> RehearsedUpgrade: ...
 
 
@@ -63,7 +63,7 @@ class RehearsalMode(SingleFieldValue, RunMode):
         return UnpostedWriter()
 
     def finish[Rehearsed: Rehearsal](self, install: Install[Rehearsed], rehearsal: Rehearsed,
-               bridges: SessionBridgeResumes, harnesses: Callable[[], InstallResult],
+               bridges: SessionBridgeResumes, harnesses: Callable[[Stack], InstallResult],
                report: InstallReport) -> RehearsedUpgrade:
         return install.reported(rehearsal)
 
@@ -76,6 +76,6 @@ class LiveMode(SingleFieldValue, RunMode):
         return live
 
     def finish[Rehearsed: Rehearsal](self, install: Install[Rehearsed], rehearsal: Rehearsed,
-               bridges: SessionBridgeResumes, harnesses: Callable[[], InstallResult],
+               bridges: SessionBridgeResumes, harnesses: Callable[[Stack], InstallResult],
                report: InstallReport) -> RehearsedUpgrade:
         return install.finished(rehearsal, bridges, harnesses, report)

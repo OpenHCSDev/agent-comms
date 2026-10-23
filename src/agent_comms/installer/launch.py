@@ -23,15 +23,16 @@ from typing import Annotated, TextIO
 import agent_comms.installer
 from agent_comms.cli_bridges.shared import SessionBridgeResumes
 from agent_comms.cli_commands import InstallCliCommand, InstallResult
-from agent_comms.comms import client_wire
 from agent_comms.field_codec import FieldCodec, Id128Text, PathText
 from agent_comms.installer.backup import StoreBackup, UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.reporting import (
     FinishedInstall, InstallOutcome, RootWriter, UnfinishedInstall, UnpostedWriter,
 )
+from agent_comms.installer.harness_probe import HarnessesProbe
 from agent_comms.installer.upgrade import (
     RehearsedUpgrade,
+    Stack,
     TargetTree,
     Upgrade,
     upgrade,
@@ -162,6 +163,5 @@ class InstallRun:
                        command.mode, command.retire, command.spill_dir, self.scratch,
                        self.harnesses, InstallReport())
 
-    def harnesses(self) -> InstallResult:
-        with client_wire(self.root) as comms:
-            return self.command.apply(comms)
+    def harnesses(self, stack: Stack) -> InstallResult:
+        return stack.probe(HarnessesProbe(self.root, self.command))
