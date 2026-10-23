@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from abc import abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -63,7 +64,7 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
     def in_view(self, visibility: RosterVisibility) -> bool:
         """Whether this lifecycle belongs in the requested executable roster."""
 
-    def registered(self, thread: Thread) -> ThreadStatus:
+    def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
         return self
 
     def declaration(self) -> ThreadStatus:
@@ -129,7 +130,7 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
 
     def after_heartbeat(self, name: str) -> ThreadStatus:
         self.require_mutable(name)
-        return RunningThreadStatus()
+        return ProcessThreadStatus()
 
     def for_deletion(self) -> ThreadStatus:
         return DeletingThreadStatus()
@@ -162,6 +163,12 @@ class ActiveThreadPresence(AlwaysListed, Visible, ThreadStatus, declared_name=No
     """Shared semantics of running and idle owners; not a second state family."""
 
     receiving = True
+
+    def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
+        return self.process_seen(thread.process_identity)
+
+    def process_seen(self, process: ProcessState) -> ThreadStatus:
+        return self if process.alive() else StoppedThreadStatus()
 
     def require_inactive(self, message: str) -> None:
         raise RelationViolationError(message)
@@ -233,8 +240,40 @@ class ActiveThreadPresence(AlwaysListed, Visible, ThreadStatus, declared_name=No
         return activity.readiness.presentation(ordinary)
 
 
+class ProcessThreadStatus(ActiveThreadPresence):
+    """A process-backed registration, not a saved liveness observation."""
+
+    def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
+        return thread.process_identity.thread_status(self, last_seen)
+
+    def process_seen(self, process: ProcessState) -> ThreadStatus:
+        return RunningThreadStatus().process_seen(process)
+
+    def heartbeat_seen(self, last_seen: float) -> ThreadStatus:
+        return HeartbeatThreadStatus().when_seen(last_seen)
+
+
 class RunningThreadStatus(SelfRenaming, ActiveThreadPresence):
     running = True
+
+    def declaration(self) -> ThreadStatus:
+        return ProcessThreadStatus()
+
+    def require_running(self) -> None:
+        pass
+
+
+class HeartbeatThreadStatus(SelfRenaming, ActiveThreadPresence):
+    """A processless participant whose presence expires without another heartbeat."""
+
+    running = True
+    max_age: ClassVar[float] = 120.0
+
+    def when_seen(self, last_seen: float) -> ThreadStatus:
+        return self if time.time() - last_seen <= self.max_age else StoppedThreadStatus()
+
+    def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
+        return self.when_seen(last_seen)
 
     def require_running(self) -> None:
         pass
@@ -257,7 +296,7 @@ class StoppedThreadStatus(Visible, ThreadStatus):
 class CliInboxPresence(AlwaysListed):
     """The declared inbox resolves its bridge process at every read."""
 
-    def registered(self, thread: Thread) -> ThreadStatus:
+    def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
         return (ConnectedThreadStatus() if thread.process_identity.alive()
                 else NoBridgeThreadStatus())
 
