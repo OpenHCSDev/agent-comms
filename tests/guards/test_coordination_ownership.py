@@ -1,14 +1,14 @@
 """Coordinator declarations cannot return to an aggregate or acquire a second registry."""
 
 import ast
-from typing import Annotated
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Annotated
 
 import pytest
 
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.coordination_schema import CoordinatorTable
+from agent_comms.coordination_schema import CoordinatorRow, CoordinatorTable
 from agent_comms.coordination_tables.executions import ExecutionReference
 from agent_comms.coordination_tables.recovery import RecoveryAudit
 from agent_comms.typed_table import Column, TypedTable
@@ -46,7 +46,7 @@ def test_deleted_coordinator_aggregate_has_no_callers():
 
 def test_new_declared_table_is_installed_without_schema_roster_edit(tmp_path):
     @dataclass(frozen=True)
-    class ProofRow(CoordinatorTable, TypedTable, declared_name="coordinator_extension_probe"):
+    class ProofRow(CoordinatorRow, declared_name="coordinator_extension_probe"):
         identity: Annotated[str, Column(primary_key=True)]
         value: int
 
