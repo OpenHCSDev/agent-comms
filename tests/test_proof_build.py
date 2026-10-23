@@ -48,6 +48,7 @@ from agent_comms.todos import (
 )
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsOrderDoneTool, CommsProblemCloseTool, CommsTodoCreateTool
+from fixture_git import IDENTITY
 from order_scope_fixture import FIX_SCOPE
 from source_revision_fixture import SourceRepository
 
@@ -78,12 +79,7 @@ def proof_build_checkouts(
             subprocess.run(
                 (
                     "git",
-                    "-c",
-                    "user.name=Proof Build",
-                    "-c",
-                    "user.email=proof@example.invalid",
-                    "-c",
-                    "commit.gpgsign=false",
+                    *IDENTITY,
                     "commit",
                     "--allow-empty",
                     "-m",
