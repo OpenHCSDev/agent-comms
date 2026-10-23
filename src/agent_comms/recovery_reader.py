@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from agent_comms.assignment_store import AssignmentStore
 from agent_comms.coordination_errors import (
     IdentityConflict,
@@ -28,7 +26,6 @@ from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.participant_store import ParticipantStore
 
 
-@dataclass(eq=False, repr=False)
 class RecoveryReader:
     session: CoordinationSession
     participants: ParticipantStore
