@@ -369,13 +369,16 @@ def test_codex_items_codex_does_not_declare_are_foreign() -> None:
 
 
 def test_codex_import_uses_requested_name_not_rollout_filename(tmp_path: Path, comms: Comms) -> None:
+    home = tmp_path / "rollout-home"
+    home.mkdir()
     source = codex_lines(tmp_path / "rollout-2026-10-16T15-00-00-codex-id.jsonl", [
-        codex_meta("codex-id", tmp_path), codex_message("user", "Continue editing the paper")])
+        codex_meta("codex-id", home), codex_message("user", "Continue editing the paper")])
     original = source.read_bytes()
     acknowledgement = comms.threads.import_thread(
         OfflineHistory.of(CodexHarness, source, AnySession()), name="paper4_jair", tags=frozenset({"papers"}))
     thread = comms.registry.require("paper4_jair")
     assert thread.name == thread.display_title == "paper4_jair"
+    assert thread.project_path == home.resolve()
     assert thread.tags == frozenset({"papers"})
     assert comms.registry.status(thread.name) == StoppedThreadStatus()
     assert acknowledgement.source_id == "codex-id"

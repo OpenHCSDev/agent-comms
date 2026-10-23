@@ -98,11 +98,11 @@ async def test_parts_require_complete_exact_body_then_reopen(bridge, emitted_del
         for number in (0, 4):
             for update in record_factory(lines[number], record_id=f'record-{number}').updates(ClaudeSession()):
                 await update.observed(reopened)
-        assert reopened.comms.bus.inbox(binding.bus).page.messages == []
+        assert reopened.comms.bus.inbox(binding.bus).page.messages == ()
         for line in lines:
             for update in record_factory(line, record_id='later-overlap').updates(ClaudeSession()):
                 await update.observed(reopened)
-        assert reopened.comms.bus.inbox(binding.bus).page.messages == []
+        assert reopened.comms.bus.inbox(binding.bus).page.messages == ()
         # Confirmation can beat the final socket-drain emission report.
         confirmed, = DeliveryRow.select(db, id=message.message_id)
         await confirmed.finish(reopened, EmittedOutcome)
