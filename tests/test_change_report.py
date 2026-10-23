@@ -13,6 +13,7 @@ from agent_comms.messages import (
     AckKind, AlertKind, ChangeReportKind, HandoffKind, InfoKind, Message,
     MessageKind, QuestionKind,
 )
+from agent_comms.threads import Thread
 
 
 def git(worktree, *arguments):
@@ -42,7 +43,7 @@ def reporter_repo(tmp_path):
 
 @pytest.fixture
 def reporter(wired, reporter_repo):
-    wired.registry.declare(wired.registry.new_thread(name='reporter', tags=frozenset(), worktree=str(reporter_repo)))
+    wired.registry.declare(Thread(name='reporter', tags=frozenset(), worktree=str(reporter_repo)))
     return wired
 
 

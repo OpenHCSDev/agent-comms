@@ -37,6 +37,7 @@ from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.locked_store import StoreCommittedError
 from agent_comms.typed_table import TypedTable
 from bus_record_fixture import publication_processes, record_from
+from agent_comms.threads import Thread
 
 
 @dataclass(frozen=True)
@@ -90,7 +91,7 @@ def claims(tmp_path: Path) -> ClaimBus:
     root = tmp_path / "bus"
     registry = Registration(RegistryFile.path_in(root))
     for name in ("alice", "bob"):
-        registry.declare(registry.new_thread(
+        registry.declare(Thread(
             name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()),
         ), RunningThreadStatus())
     bus = Bus.install(Bus.path_in(root))

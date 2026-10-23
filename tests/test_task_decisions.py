@@ -26,6 +26,7 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.turn_lease import NoTurnLease
 from functools import partial
 from bus_history import read_history
+from agent_comms.threads import Thread
 
 # These source declarations belong to alpha unless a case explicitly supplies beta.
 invoke_tool = partial(invoke_tool, caller=ThreadCaller("alpha"))
@@ -43,7 +44,7 @@ def saved_source(path):
 
 
 def admit(comms, name):
-    comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.declare(Thread(name, frozenset({'team'}), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid())))
     owner, claim_scope = comms.registry.live_owner_with_claim(name)
     owner, _ = comms.registry.lease_live_turn_with_claim(
         owner, name + "-turn", expected_generation=claim_scope
@@ -59,8 +60,8 @@ def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms
     )
 
     Bus.install(Bus.path_in(comms.root))
-    owner = comms.registry.declare(comms.registry.new_thread('recipient', frozenset({'team'}), str(comms.root)))
-    comms.registry.declare(comms.registry.new_thread('unaddressed', frozenset(), str(comms.root)))
+    owner = comms.registry.declare(Thread('recipient', frozenset({'team'}), str(comms.root)))
+    comms.registry.declare(Thread('unaddressed', frozenset(), str(comms.root)))
     exact = "Never replay UNKNOWN.\nUse original λ /artifacts/source; no substitute."
     subject = comms.messaging.send_user_message(CommandTarget.named('recipient'), exact, worktree=owner.worktree)
     original_rows = read_history(comms)
@@ -85,7 +86,7 @@ def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms
     with pytest.raises(RelationViolationError):
         comms.messaging.pin_user_constraint(owner.name, subject.reference, worktree=owner.worktree,
             scope=ExplicitTaskScopeSelection(TurnTaskScope(project=owner.worktree)))
-    comms.registry.declare(comms.registry.new_thread('peer', frozenset(), str(comms.root)))
+    comms.registry.declare(Thread('peer', frozenset(), str(comms.root)))
     with pytest.raises(RelationViolationError):
         comms.messaging.send("peer", owner.name, "claim human source", task=pin.task).message
     assert read_history(comms) == before
@@ -119,7 +120,7 @@ def test_user_pin_goal_scope_replacement_and_original_subject_fences(comms):
     from agent_comms.task_sources import CorrectionTaskChange, GoalTaskScope
 
     Bus.install(Bus.path_in(comms.root))
-    owner = comms.registry.declare(comms.registry.new_thread('recipient', frozenset(), str(comms.root), goal=Goal('Original goal', 'goal-one', published_seq=0)))
+    owner = comms.registry.declare(Thread('recipient', frozenset(), str(comms.root), goal=Goal('Original goal', 'goal-one', published_seq=0)))
     subject = comms.messaging.send_user_message(CommandTarget.named(owner.name), "Use the original coordinates.",
                                                 worktree=owner.worktree)
     pin = comms.messaging.pin_user_constraint(owner.name, subject.reference, worktree=owner.worktree)

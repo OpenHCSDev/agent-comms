@@ -16,11 +16,12 @@ from agent_comms.pi_payloads import PiUsage
 from agent_comms.thread_identity import TurnId
 from agent_comms.turn_goal_account import TurnGoalAccount
 from agent_comms.turn_terminal import EndedWithoutResult, OperatorStopped
+from agent_comms.threads import Thread
 
 
 @contextmanager
 def goal_turn(comms, original_goal):
-    comms.registry.declare(comms.registry.new_thread(
+    comms.registry.declare(Thread(
         "worker", frozenset(), str(comms.root.parent),
         process_identity=ProcessIdentity.capture(os.getpid()),
     ))

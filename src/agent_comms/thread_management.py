@@ -150,7 +150,7 @@ class NewThreadSpec:
         return cls(task=TaskLaunchInput(task) if task else LaunchInput(), **values)
 
     def declaration(self, project: str, registry: Registration) -> Thread:
-        return registry.new_thread(name=self.name, task=self.task.thread_text(), tags=self.tags.for_new(),
+        return Thread(name=self.name, task=self.task.thread_text(), tags=self.tags.for_new(),
                       worktree=project, model=self.model, thinking_level=self.thinking_level)
 
     @contextmanager
@@ -244,7 +244,7 @@ class ThreadManagement:
         if not project.is_dir():
             raise ValueError("The imported project does not exist locally; supply --worktree.")
         session_path = ImportedSessionWriter.path_in(self.root, session_id=uuid4().hex)
-        thread = model.configured(self.registry.new_thread(
+        thread = model.configured(Thread(
             name,
             tags,
             str(project),
@@ -316,7 +316,7 @@ class ThreadManagement:
         role: type[ThreadRole] = AgentThreadRole,
     ) -> Thread:
         """Atomically register a unique thread; its inbox starts at its creation."""
-        thread = self.registry.new_thread(
+        thread = Thread(
             name=RegistryNames.thread_slug(wanted),
             tags=tags,
             worktree=worktree,

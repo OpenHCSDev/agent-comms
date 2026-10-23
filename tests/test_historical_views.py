@@ -29,6 +29,7 @@ from agent_comms.read_basis import (
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.session_file import RegistrySessionLocation
+from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize('exists', [False, True])
@@ -50,8 +51,8 @@ def test_missing_catalogue_is_empty_without_creating_it(tmp_path):
 
 def setup(root, count=5):
     comms = wire(root)
-    comms.registry.declare(comms.registry.new_thread('alice', frozenset({'team'}), str(root), created_at=10.0))
-    comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team'}), str(root), created_at=11.0))
+    comms.registry.declare(Thread('alice', frozenset({'team'}), str(root), created_at=10.0))
+    comms.registry.declare(Thread('bob', frozenset({'team'}), str(root), created_at=11.0))
     Bus.install(Bus.path_in(comms.root))
     viewer = comms.messaging.user_identity(str(root)).name
     for i in range(count):
