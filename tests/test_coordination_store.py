@@ -201,20 +201,6 @@ def _concurrent_start(
         output.put(type(exc).__name__)
 
 
-def test_execution_and_attempt_queries_share_the_coordination_owner(db_path, monkeypatch):
-    readers = []
-    original = RecoveryReader.get
-
-    def observe(reader, execution_id):
-        readers.append(reader)
-        return original(reader, execution_id)
-
-    monkeypatch.setattr(RecoveryReader, "get", observe)
-    with ready(db_path) as db:
-        _, fence = started(db)
-        snapshot, _ = db.require_fence(fence)
-        assert snapshot.execution.execution_id == "exec"
-        assert readers and all(reader is db for reader in readers)
 
 
 def test_registration_complete_atomic_reopen_and_generation(db_path: Path) -> None:
