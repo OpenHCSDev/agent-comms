@@ -108,7 +108,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                             assert len(pending) == 1
                             original = pending[0]
                             user = next(entry for entry in NativeTranscript(
-                                Path(original.runtime.read_key)
+                                Path(original.session_file)
                             ).tail() if entry.input_boundary).require_tracked_user()
                             assert user.input_id == original.input_id
                             is_triage = original.stage is TriageNativeExecution
