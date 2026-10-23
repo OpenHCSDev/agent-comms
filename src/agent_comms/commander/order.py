@@ -53,7 +53,7 @@ from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.goals import OrderCheck
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
-from agent_comms.native_tool_call import SelectedToolDenied
+from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
 from agent_comms.phase_evidence import MainTree, PlanReading
 from agent_comms.plan_phases import OrderPhase, PlanPhase

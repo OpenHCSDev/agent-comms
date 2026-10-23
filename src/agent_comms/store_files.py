@@ -82,7 +82,7 @@ class StoreLockContention:
     @classmethod
     def for_blocking(cls, blocking: bool) -> StoreLockContention:
         """An unbounded wait, or no wait at all."""
-        return cls(math.inf if blocking else 0)
+        return UNBOUNDED_CONTENTION if blocking else cls(0)
 
     def waits(self, descriptor: int, platform: Platform, *, mode: LockMode) -> Iterator[float]:
         """One physical acquisition algorithm; drivers own sync/async waiting."""
@@ -109,6 +109,19 @@ class StoreLockContention:
     async def acquire_async(self, descriptor: int, platform: Platform, *, mode: LockMode) -> None:
         for delay in self.waits(descriptor, platform, mode=mode):
             await asyncio.sleep(delay)
+
+
+class UnboundedContention(StoreLockContention):
+    """The budget that never runs out: spending from it leaves it unbounded, so one
+    declared instance serves every caller that waits as long as the lock is held."""
+
+    __slots__ = ()
+
+    def __init__(self) -> None:
+        super().__init__(math.inf)
+
+
+UNBOUNDED_CONTENTION = UnboundedContention()
 
 
 @dataclass
@@ -144,11 +157,14 @@ class StoreLock:
 
     @classmethod
     @contextmanager
-    def ordered(cls, requests: Mapping[StoreLockOwner, LockMode], *, blocking=True, contention=None):
+    def ordered(
+        cls, requests: Mapping[StoreLockOwner, LockMode], *,
+        contention: StoreLockContention = UNBOUNDED_CONTENTION,
+    ):
         """Acquire store owners by their declared rank, never their filenames."""
         with ExitStack() as resources:
             yield {owner: resources.enter_context(owner.locked(
-                mode=requests[owner], blocking=blocking, contention=contention))
+                mode=requests[owner], contention=contention))
                 for owner in sorted(requests, key=lambda owner: (
                     StoreLockOwner.lock_ranks()[type(owner)], str(owner.path)))}
 
@@ -264,9 +280,10 @@ class StoreLockOwner(StoreOwner, declared_name=None):
             raise TypeError(f"Store owners missing from the lock order: {names}")
         return {owner: rank for rank, owner in enumerate(owners)}
 
-    def locked(self, *, blocking: bool = True, read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
-               mode: LockMode = ExclusiveLock(), contention: StoreLockContention | None = None):
-        return _store_lock(self.path, blocking=blocking, read_budget=read_budget,
+    def locked(self, *, read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
+               mode: LockMode = ExclusiveLock(),
+               contention: StoreLockContention = UNBOUNDED_CONTENTION):
+        return _store_lock(self.path, read_budget=read_budget,
                            mode=mode, contention=contention, lock_type=self.lock_type)
 
     def locked_async(self) -> AbstractAsyncContextManager[StoreLock]:
@@ -318,7 +335,7 @@ class UnacquiredStoreLock:
     @contextmanager
     def locked(
         self, store_path: Path, read_budget: StoreReadBudget, mode: LockMode,
-        contention: StoreLockContention, lock_type: type[StoreLock], blocking: bool,
+        contention: StoreLockContention, lock_type: type[StoreLock],
     ) -> Iterator[StoreLock]:
         platform = Platform.current()
         with _store_lock_file(store_path) as lock_file:
@@ -331,7 +348,7 @@ class UnacquiredStoreLock:
     @asynccontextmanager
     async def locked_async(
         self, store_path: Path, read_budget: StoreReadBudget, mode: LockMode,
-        contention: StoreLockContention, lock_type: type[StoreLock], blocking: bool,
+        contention: StoreLockContention, lock_type: type[StoreLock],
     ) -> AsyncIterator[StoreLock]:
         platform = Platform.current()
         with _store_lock_file(store_path) as lock_file:
@@ -381,14 +398,14 @@ class StoreLockAcquisition:
 
     def locked(
         self, store_path: Path, read_budget: StoreReadBudget, mode: LockMode,
-        contention: StoreLockContention, lock_type: type[StoreLock], blocking: bool,
+        contention: StoreLockContention, lock_type: type[StoreLock],
     ) -> AbstractContextManager[StoreLock]:
         return self.source(store_path, read_budget, lock_type)
 
     @asynccontextmanager
     async def locked_async(
         self, store_path: Path, read_budget: StoreReadBudget, mode: LockMode,
-        contention: StoreLockContention, lock_type: type[StoreLock], blocking: bool,
+        contention: StoreLockContention, lock_type: type[StoreLock],
     ) -> AsyncIterator[StoreLock]:
         with self.source(store_path, read_budget, lock_type) as lock:
             yield lock
@@ -423,30 +440,26 @@ class StoreLockAcquisition:
 def _store_lock(
     store_path: Path,
     *,
-    blocking: bool = True,
     read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
     mode: LockMode = ExclusiveLock(),
-    contention: StoreLockContention | None = None,
+    contention: StoreLockContention = UNBOUNDED_CONTENTION,
     lock_type: type[StoreLock] = StoreLock,
 ) -> AbstractContextManager[StoreLock]:
-    wait = contention or StoreLockContention.for_blocking(blocking)
     return StoreLockAcquisition.current(store_path, mode).locked(
-        store_path, read_budget, mode, wait, lock_type, blocking,
+        store_path, read_budget, mode, contention, lock_type,
     )
 
 
 def _async_store_lock(
     store_path: Path,
     *,
-    blocking: bool = True,
     read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
     mode: LockMode = ExclusiveLock(),
-    contention: StoreLockContention | None = None,
+    contention: StoreLockContention = UNBOUNDED_CONTENTION,
     lock_type: type[StoreLock] = StoreLock,
 ) -> AbstractAsyncContextManager[StoreLock]:
-    wait = contention or StoreLockContention.for_blocking(blocking)
     return StoreLockAcquisition.current(store_path, mode).locked_async(
-        store_path, read_budget, mode, wait, lock_type, blocking,
+        store_path, read_budget, mode, contention, lock_type,
     )
 
 

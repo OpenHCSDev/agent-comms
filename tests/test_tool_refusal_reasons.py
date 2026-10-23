@@ -11,7 +11,8 @@ from agent_comms.native_tool_call import CodingCall
 from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import ClaimTransitionError
-from agent_comms.native_tool_call import CoordinationBusy, SelectedToolDenied
+from agent_comms.native_tool_call import CoordinationBusy
+from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.selected_tool_broker import verify_sent_full_input
 
 
