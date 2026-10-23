@@ -6,6 +6,8 @@ records retain no raw wire mirror. FieldCodec is the sole primitive validator.
 
 from __future__ import annotations
 
+from asyncio import Future
+
 import re
 import typing
 from abc import abstractmethod
@@ -69,7 +71,8 @@ if TYPE_CHECKING:
     from .agent_events import AgentEvent, ProviderUsage
     from .backend import TurnSession
     from .pending_requests import PendingRequests
-    from .pi_events import AutoRetryEnd
+    from .pi_commands import PiCommand
+    from .pi_events import AutoRetryEnd, Response
     from .turn_goal_permission import TurnGoalPermission
     from .turn_phase import TurnPhase
     from .turn_usage import UsageAccount
@@ -148,13 +151,17 @@ class RequestId(PiReported[str]):
 
     value: str
 
-    def track_in(self, pending: PendingRequests, owner: type, command: object) -> object:
+    def track_in(
+        self, pending: PendingRequests, owner: type[PiCommand], command: PiCommand,
+    ) -> Future[Response]:
         return pending.add(owner, self.value, request=command)
 
-    def release_from(self, pending: PendingRequests, owner: type) -> None:
+    def release_from(self, pending: PendingRequests, owner: type[PiCommand]) -> None:
         pending.discard(owner, self.value)
 
-    def take_from(self, pending: PendingRequests, owner: type, response: object) -> object:
+    def take_from(
+        self, pending: PendingRequests, owner: type[PiCommand], response: Response,
+    ) -> PiCommand | None:
         return pending.take(owner, self.value, response)
 
 
@@ -162,13 +169,17 @@ class RequestId(PiReported[str]):
 class AnonymousRequest(PiOmitted):
     """The record carried no id; its response is matched by command family alone."""
 
-    def track_in(self, pending: PendingRequests, owner: type, command: object) -> object:
+    def track_in(
+        self, pending: PendingRequests, owner: type[PiCommand], command: PiCommand,
+    ) -> Future[Response]:
         return pending.add(owner, uuid4().hex, request=command)
 
-    def release_from(self, pending: PendingRequests, owner: type) -> None:
+    def release_from(self, pending: PendingRequests, owner: type[PiCommand]) -> None:
         """The anonymous entry is keyed by a private token nobody else holds."""
 
-    def take_from(self, pending: PendingRequests, owner: type, response: object) -> object:
+    def take_from(
+        self, pending: PendingRequests, owner: type[PiCommand], response: Response,
+    ) -> PiCommand | None:
         return pending.take_anonymous(owner, response)
 
     def require(self) -> str:
