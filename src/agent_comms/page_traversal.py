@@ -5,9 +5,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING
 
-from .field_codec import FieldCodec, NullMember, RecordMember, SubclassUnion
+from .field_codec import NullMember, RecordMember, SingleFieldValue, SubclassUnion
 
 if TYPE_CHECKING:
     from .bus import BusReader
@@ -72,17 +72,8 @@ class SequenceCursor(PageCursor, declared_name=None):
 
 
 @dataclass(frozen=True)
-class LiveCursor(SequenceCursor):
-    def to_wire(self) -> int:
-        return self.sequence
-
-    @classmethod
-    def from_wire(cls, data: object) -> Self:
-        return cls(FieldCodec.decode(int, data))
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        return FieldCodec.value_schema(int)
+class LiveCursor(SingleFieldValue, SequenceCursor):
+    """Its sequence is its whole wire value."""
 
 
 @dataclass(frozen=True)

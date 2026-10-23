@@ -137,7 +137,7 @@ class FailedTurnObservation:
         # construction error is a defect and raises.
         evidence = FailedTurnEvidence(
             reservation.attempt_id, reservation.goal_id, reservation.generation,
-            owner.name, owner.created_at, owner.worktree, claim_scope,
+            owner.name, owner.incarnation.wire_birth, owner.worktree, claim_scope,
             lease.identity.generation, goal.revision, turn_id, failure,
         )
         if owner.goal != goal or reservation.goal_id != goal.id:

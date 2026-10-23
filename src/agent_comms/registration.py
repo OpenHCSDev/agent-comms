@@ -236,7 +236,7 @@ class Registration:
         intent = None
         if before != change.thread.goal:
             history = GoalHistoryStore(self.store.path)
-            intent = history.begin(change.thread.created_at, before, change.thread.goal)
+            intent = history.begin(change.thread.incarnation.wire_birth, before, change.thread.goal)
         change.apply(edit.document)
         edit.commit()
         if history is not None and intent:
@@ -372,7 +372,7 @@ class Registration:
             document = self.store._read_unlocked()
             thread = document.require(name)
             return GoalHistoryStore(self.store.path).history(
-                thread.created_at, thread.goal, goal_id=goal_id
+                thread.incarnation.wire_birth, thread.goal, goal_id=goal_id
             )
 
     def session_thread(

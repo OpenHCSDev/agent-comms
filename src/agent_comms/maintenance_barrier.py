@@ -344,6 +344,24 @@ class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
             raise ValueError('Only an acquired draining phase can be cleared')
 
 
+@dataclass(frozen=True, kw_only=True)
+class HoldTarget(DurableFile):
+    """The runtime a hold admits, kept beside the witness. Only runtimes that know targets
+    read this file, so the witness keeps the shape every runtime that may still observe,
+    restore or recover this root reads. It applies only to the witness write that stamped it:
+    an interrupted write leaves no target, the closed side."""
+
+    filename = ".maintenance-target"
+    generation: int
+    nonce: str
+    target: MaintenanceTarget
+
+    def applied_to(self, state: MaintenanceState) -> MaintenanceState:
+        if (self.generation, self.nonce) != (state.generation, state.nonce):
+            return state
+        return replace(state, target=self.target)
+
+
 class MaintenanceIngress(ABC):
     @abstractmethod
     def ingress_async(self) -> AbstractAsyncContextManager[MaintenanceStatus]: ...
@@ -370,10 +388,11 @@ class MaintenanceBarrier(MaintenanceIngress):
         self.registry_path = Path(registry_path)
         self.marker_path = MaintenanceMarker.path_in(self.registry_path.parent)
         self.state_path = MaintenanceState.path_in(self.registry_path.parent)
+        self.target_path = HoldTarget.path_in(self.registry_path.parent)
 
     @property
-    def witness_paths(self) -> tuple[Path, Path]:
-        return self.marker_path, self.state_path
+    def witness_paths(self) -> tuple[Path, ...]:
+        return self.marker_path, self.state_path, self.target_path
 
     @staticmethod
     def _read(path: Path, declaration):
@@ -414,7 +433,9 @@ class MaintenanceBarrier(MaintenanceIngress):
             return MaintenanceStatus()  # Never-enabled roots have the same READY phase.
         if marker is None or state is None:
             raise RelationViolationError("Maintenance witness incomplete; new turns held")
-        return state.require_marker(marker, self.registry_path.parent)
+        state = state.require_marker(marker, self.registry_path.parent)
+        target = self._read(self.target_path, HoldTarget)
+        return state if target is None else target.applied_to(state)
 
     def current_unlocked(self) -> MaintenanceStatus:
         return self._current_unlocked().observed(self)
@@ -452,8 +473,15 @@ class MaintenanceBarrier(MaintenanceIngress):
                                    generation=hold.generation)
         hold.require_marker(marker, self.registry_path.parent)
         marker_text = json.dumps(FieldCodec.encode(marker), sort_keys=True)
-        state_text = json.dumps(FieldCodec.encode(hold), sort_keys=True)
-        # The marker leads so an interrupted replacement still holds new turns.
+        # The witness never carries the target: a rollback restores the outgoing runtime,
+        # which reads the witness strictly and has no target field.
+        state_text = json.dumps(FieldCodec.encode(replace(hold, target=NoMaintenanceTarget())),
+                                sort_keys=True)
+        target_text = json.dumps(FieldCodec.encode(HoldTarget(
+            generation=hold.generation, nonce=hold.nonce, target=hold.target)), sort_keys=True)
+        # The target leads, stamped for this write; the marker leads the state so an
+        # interrupted replacement still holds new turns.
+        AtomicFile(self.target_path).write_text(target_text)
         AtomicFile(self.marker_path).write_text(marker_text)
         AtomicFile(self.state_path).write_text(state_text)
 
@@ -526,7 +554,7 @@ class MaintenanceBarrier(MaintenanceIngress):
             yield self._current_unlocked()
 
 
-class CarriedDocument[T](DurableFile, LockedStore[T]):
+class CarriedDocument[T](DurableFile, LockedStore[T], declared_name=None):
     """A JSON document every installation carries: while maintenance runs, only its holder
     replaces it, so the install's carry check never charges another writer's change."""
 

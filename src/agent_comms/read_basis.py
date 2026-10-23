@@ -7,6 +7,7 @@ uses ThreadIncarnation; process and turn generations do not alter provenance.
 
 from __future__ import annotations
 
+from .activity_clocks import ActivityClocks, ChannelActivity
 import asyncio
 import json
 from abc import ABC, abstractmethod
@@ -19,7 +20,6 @@ from itertools import product
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, TextIO
 
-from .bus_activity_index import ActivityClocks
 from .channel_targets import CommandTarget, ThreadTarget
 from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged, HistoricalSourceChanged
 from .declared_family import DeclaredFamily
@@ -832,7 +832,7 @@ class MessageDisplayScope(DeclaredFamily, ABC, affix="DisplayScope"):
         for row in source.latest_conversations(predicate, parameters, through):
             conversation = self.read_key(row.sender, row.target, snapshot)
             prefixes[conversation] = max(prefixes.get(conversation, 0), row.seq)
-        return DisplayBasis(viewer, snapshot.require(viewer).created_at,
+        return DisplayBasis(viewer, snapshot.require(viewer).incarnation.wire_birth,
             tuple(DisplayedConversation(conversation, (), sequence)
                   for conversation, sequence in prefixes.items()), RecordedBus(source.identity))
 
@@ -1022,7 +1022,7 @@ class AllChannelDisplayScope(AllTargetsDisplayScope):
 
     def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
                     source: BusSnapshot, *, document, through: int) -> DisplayBasis:
-        return DisplayBasis(viewer, snapshot.require(viewer).created_at,
+        return DisplayBasis(viewer, snapshot.require(viewer).incarnation.wire_birth,
             (DisplayedConversation(AllConversation(), (), through),),
             RecordedBus(source.identity))
 
@@ -1066,7 +1066,6 @@ class MemberActivityDisplayScope(AllTargetsDisplayScope):
         return self._includes(row.sender, row.target, row.mentions)
 
     def activity(self, source: BusReader):
-        from .bus_activity_index import ChannelActivity
 
         return ChannelActivity.combine((
             ChannelDisplayScope(self.channel, self.targets).activity(source),

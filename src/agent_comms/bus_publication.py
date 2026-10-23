@@ -9,13 +9,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.audience_manifest import FrozenAudience
-from agent_comms.bus_tables import BusRow
+from agent_comms.messages import BusRow, BusRecord, Message
 from agent_comms.errors import (
     CommittedMessageError,
     HumanSendRefusedError,
     RelationViolationError,
 )
-from agent_comms.messages import BusRecord, Message
 from agent_comms.response_acknowledgement import (
     KeyedResponseAcknowledgement,
 )
@@ -187,7 +186,7 @@ class HumanOrigin(OwnerVoiceOrigin):
 
     @classmethod
     def of(cls, user: Thread) -> HumanOrigin:
-        return cls(user.name, user.created_at, user.worktree)
+        return cls(user.name, user.incarnation.wire_birth, user.worktree)
 
     def require_sender(
         self, message: Message, sender_thread: Thread, snapshot: RegistrySnapshot

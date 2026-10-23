@@ -19,9 +19,11 @@ from string import Formatter
 from typing import Annotated, ClassVar, Iterator, Self
 
 from agent_comms.child_process import Platform
-from agent_comms.active_route import ActiveRoute, RouteFile, _route_directory, active_route_path, route_directory
+from agent_comms.active_route import (
+    ActiveRoute, RouteFile, _route_directory, active_route_path, read_active_route, route_directory,
+)
 from agent_comms.coordination_errors import CoordinationError
-from agent_comms.field_codec import FieldCodec, PathText
+from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText
 from agent_comms.installer.interpreter_operation import RouteSelection
 from agent_comms.locked_store import DeclaredFile, LockedStore, RootFile, RuntimeFile, UndeclaredFile
 from agent_comms.private_path import FileObservation, FileRevision, MissingFile
@@ -213,7 +215,7 @@ class StoreBackup(ResourceBackup):
                 return
             saved = self.path / RouteFile.filename
             if saved.exists():
-                AtomicFile(self.route).write_text(saved.read_text())
+                AtomicFile(self.route).write_bytes(self.restored_route())
             else:
                 os.unlink(self.route.name, dir_fd=directory)
                 os.fsync(directory)
@@ -235,6 +237,17 @@ class StoreBackup(ResourceBackup):
                 # including a replacement whose durability acknowledgement failed.
                 self.route_revision = FileRevision.capture(path)
 
+    def restored_route(self) -> bytes:
+        """The saved route, naming the bus its root holds now: restoring the stores copies
+        the bus back under a new file identity, and the route names its bus by identity.
+        An unreadable saved route selected no bus, and comes back as it was."""
+        saved = self.path / RouteFile.filename
+        try:
+            route = read_active_route(saved)
+        except MalformedRecord:
+            return saved.read_bytes()
+        return route.rebound().encoded()
+
     def route_original(self) -> bool:
         saved = self.path / RouteFile.filename
         if not saved.exists():
@@ -243,7 +256,7 @@ class StoreBackup(ResourceBackup):
             return False
         current, original = self.route.stat(), saved.stat()
         return (current.st_mode == original.st_mode and current.st_nlink == original.st_nlink
-                and self.route.read_bytes() == saved.read_bytes())
+                and self.route.read_bytes() == self.restored_route())
 
     @classmethod
     def take(cls, root: Path, route: Path, files: tuple[Path, ...], spill_dir: Path) -> StoreBackup:

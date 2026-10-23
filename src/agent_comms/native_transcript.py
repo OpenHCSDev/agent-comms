@@ -239,9 +239,7 @@ class NativeTranscript(TranscriptSource):
         """
         revision = FileRevision.from_stat(self.path.stat())
         with self.path.open("rb") as stream:
-            header = NativeEntry.read(stream.readline())
-            if not isinstance(header, SessionEntry):
-                raise ValueError("Imported source has no original native session header")
+            header = SessionEntry.read(stream.readline())
             header.require_header()
             sources = []
             for raw in stream:
@@ -299,8 +297,11 @@ class NativeTranscript(TranscriptSource):
     @property
     def session_id(self):
         with self.path.open("rb") as stream:
-            entry = NativeEntry.read(stream.readline())
-        return entry.id if isinstance(entry, SessionEntry) else None
+            try:
+                entry = SessionEntry.read(stream.readline())
+            except MalformedRecord:
+                return None
+        return entry.id
 
     def annotation_ids(self, after: int, through: int) -> tuple[str, ...]:
         return tuple(identity for record in self.forward(after, through)
@@ -320,9 +321,7 @@ class NativeTranscript(TranscriptSource):
 
         files.require_private_directory(self.path.parent)
         with self.path.open("rb") as stream:
-            header = NativeEntry.read(stream.readline())
-        if not isinstance(header, SessionEntry):
-            raise MalformedRecord("Native publication has no original session header")
+            header = SessionEntry.read(stream.readline())
         header.require_header()
         with NativeContextJournal.open_evidence(files) as db:
             proof = NativeContextJournal.for_input(db, user.input_id)

@@ -6,6 +6,7 @@ and checks the declared start rules before recovering any unused READY grant.
 
 from __future__ import annotations
 
+from .errors import GoalAttemptError
 import asyncio
 import os
 from dataclasses import dataclass, field
@@ -25,7 +26,6 @@ from .goal_actions import (
     RetryGoalAction,
     SetGoalAction,
 )
-from .goal_attempts import GoalAttemptError
 from .goal_presentation import GoalPublicationSnapshot, UnpublishedGoalSnapshot
 from .goals import Goal, GoalDeclaration, GoalRevision
 from .reservation_rules import ReservationViolationError

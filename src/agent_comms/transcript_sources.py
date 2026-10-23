@@ -30,11 +30,9 @@ from .routing import TurnRouting
 from .sent_message import PublishedSentMessage
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .transcript_events import (
-    AssistantTranscript,
     IncomingTranscript,
     SentTranscript,
     TurnDigest,
-    UserTranscript,
 )
 from .typed_table import StoreWriter
 
@@ -527,21 +525,8 @@ class AssignedTranscriptSource(TranscriptSource):
             for refs in (routing.publications if routing is not None else (), references)
         )
 
-        result = []
-        for event in events:
-            if published and isinstance(event, AssistantTranscript):
-                continue
-            # An assigned request has one original wire record in this source.
-            # Its native prompt is a consumer of that record, not another input.
-            if isinstance(event, UserTranscript) and event.routed:
-                requests = event.routing.requests
-                originals = self.assignments(requests)
-                remaining = tuple(reference for reference in requests if reference not in originals)
-                if not remaining:
-                    continue
-                event = replace(event, routing=TurnRouting(remaining, event.routing.reply))
-            result.append(event)
-        return tuple(result)
+        return tuple(retained for event in events
+                     for retained in event.for_assigned_source(self, published))
 
     def events(self, original):
         message = original.envelope

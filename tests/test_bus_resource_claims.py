@@ -11,13 +11,17 @@ import pytest
 
 from agent_comms.bus import Bus, ClaimRecord, KeyedPrivateRecord, PublicRecord, RecordBuilder
 from agent_comms.bus_publication import HumanOrigin
-from agent_comms.bus_tables import (
+from agent_comms.messages import (
     BusProjectionTables,
     BusRow,
     BusTables,
     ClaimOperations,
     HeldResources,
     ReplayedHolders,
+    Claimed,
+    ClaimNoticeKind,
+    InfoKind,
+    Message,
 )
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.coordination_errors import IdentityConflict
@@ -27,7 +31,6 @@ from agent_comms.envelope_claim_transitions import (
 )
 from agent_comms.errors import CommittedMessageError
 from agent_comms.locked_store import RegistryFile
-from agent_comms.messages import Claimed, ClaimNoticeKind, InfoKind, Message
 from agent_comms.registration import Registration
 from agent_comms.store_files import store_lock_path
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus

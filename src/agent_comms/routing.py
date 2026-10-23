@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from . import turn_origin
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from typing import Annotated, TYPE_CHECKING
@@ -22,31 +22,7 @@ if TYPE_CHECKING:
     from .threads import Thread
 
 
-class TurnOrigin(ABC):
-    """The source of a scheduled turn owns batching and delivery identity."""
-
-    __slots__ = ()
-
-    @property
-    @abstractmethod
-    def separate_turn(self) -> bool: ...
-
-    @property
-    @abstractmethod
-    def batch_target(self) -> object: ...
-
-    @property
-    @abstractmethod
-    def autonomous(self) -> bool: ...
-
-    @abstractmethod
-    def messages(self) -> tuple[Message, ...]: ...
-
-    @abstractmethod
-    def bus_keys(self, dispositions: InputDispositions, owner: Thread) -> tuple[str, ...]: ...
-
-
-class NoTurnOrigin(NullMember, TurnOrigin):
+class NoTurnOrigin(NullMember, turn_origin.TurnOrigin):
     """An autonomous turn has no message, delivery key or reply destination."""
 
     separate_turn = False
@@ -135,7 +111,7 @@ class TurnRouting:
 @dataclass(frozen=True, slots=True)
 class ScheduledTurn:
     prompt: str
-    origin: TurnOrigin = NO_TURN_ORIGIN
+    origin: turn_origin.TurnOrigin = NO_TURN_ORIGIN
     goal_id: str | None = None
     goal_wait_id: str | None = None
 
@@ -263,7 +239,7 @@ class DeliveryScope(MessageDisplayScope):
         incarnation = source.incarnation
         if sender_lookup not in self.sender_lookups(incarnation, incarnation.require_recorded):
             return None
-        return max(source.created_at, snapshot.threads[self.actor].created_at)
+        return max(source.incarnation.wire_birth, snapshot.threads[self.actor].incarnation.wire_birth)
 
     def unread(
         self, delivery: DeliveryMessage, snapshot: RegistryProvenance, seen: ReadCursor

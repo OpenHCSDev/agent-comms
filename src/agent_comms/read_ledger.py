@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 from .bus import Bus, BusReader
 from .channel_targets import CommandTarget
 from .coordination_errors import DMScopeChanged
-from .field_codec import FieldCodec, NullMember, SubclassUnion
+from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from .locked_store import DocumentChange
 from .maintenance_barrier import CarriedDocument
 from .private_path import ObservedPath
@@ -65,19 +65,8 @@ class NoReadNotice(NullMember, ReadNotice):
 
 
 @dataclass(frozen=True)
-class PendingReadNotice(ReadNotice):
+class PendingReadNotice(SingleFieldValue, ReadNotice):
     text: str
-
-    @classmethod
-    def from_wire(cls, data: object) -> PendingReadNotice:
-        return cls(FieldCodec.decode(str, data))
-
-    def to_wire(self) -> str:
-        return self.text
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        return FieldCodec.value_schema(str)
 
     def take(self, ledger: ReadLedger) -> ReadNotice:
         def clear(document: ReadDocument) -> DocumentChange[ReadDocument, ReadNotice]:
@@ -152,7 +141,7 @@ class ReadLedger(Sealed, ThreadOwnedState, CarriedDocument[ReadDocument]):
             grouped.setdefault(conversation, set()).add(message.seq)
         with source.reading() as captured:
             return DisplayBasis(
-                viewer, snapshot.threads[viewer].created_at,
+                viewer, snapshot.threads[viewer].incarnation.wire_birth,
                 tuple(DisplayedConversation(
                     conversation, sequences := tuple(sorted(members)),
                     self._proved_read_prefix(

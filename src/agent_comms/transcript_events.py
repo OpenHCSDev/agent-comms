@@ -14,7 +14,7 @@ from pydantic import JsonValue
 
 from . import tool_declaration
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, WireBind, WireOmitDefault
+from .field_codec import FieldCodec, NullMember, PresentMember, WireBind, WireOmitDefault
 from .message_reference import MessageReference
 from .messages import Message
 from .recorded_time import EventTime, UnrecordedEventTime
@@ -40,6 +40,12 @@ TRUNCATED = "\n[Import excerpt truncated]"
 
 
 @dataclass(frozen=True, slots=True)
+class NoRetainedRequest(NullMember):
+    def matches(self, latest_request: str) -> bool:
+        return False
+
+
+@dataclass(frozen=True, slots=True)
 class ImportedMessage(ABC):
     """One transcript event as portable text in the imported Pi session."""
 
@@ -59,6 +65,9 @@ class ImportedMessage(ABC):
     def remember(self, buffer: ImportBuffer) -> None:
         """Only a request is the source session's latest request."""
 
+    def retained_request(self) -> ImportedRequest | NoRetainedRequest:
+        return NoRetainedRequest()
+
     @abstractmethod
     def pi_message(self, timestamp: int) -> dict[str, object]: ...
 
@@ -70,11 +79,19 @@ class ImportedInput(ImportedMessage):
         return {"role": "user", "content": [{"type": "text", "text": self.body}], "timestamp": timestamp}
 
 
-class ImportedRequest(ImportedInput):
+class ImportedRequest(PresentMember, ImportedInput):
     """A person's or a commanding agent's prompt."""
 
     def remember(self, buffer: ImportBuffer) -> None:
         buffer.latest_request = self.body[: buffer.limits.per_message]
+
+    def retained_request(self) -> ImportedRequest:
+        return self
+
+    def matches(self, latest_request: str) -> bool:
+        return self.body == latest_request or (
+            self.truncated and latest_request.startswith(self.body.removesuffix(TRUNCATED))
+        )
 
 
 class ImportedReply(ImportedMessage):
@@ -94,6 +111,15 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     timestamp: float
     routing = None
     source = None
+
+    def append_to(self, events: list[TranscriptEvent]) -> None:
+        events.append(self)
+
+    def followed_by_assistant(self, text: AssistantTranscript) -> TranscriptEvent | None:
+        return None
+
+    def for_assigned_source(self, source, published: bool) -> tuple[TranscriptEvent, ...]:
+        return (self,)
 
     def as_context(self) -> TranscriptEvent:
         """Non-text native evidence retains its own presentation declaration."""
@@ -267,8 +293,30 @@ class UserTranscript(NativeTextTranscript):
     def import_to(self, accept: Callable[[ImportedMessage], None]) -> None:
         ImportedRequest(self.text).import_to(accept)
 
+    def for_assigned_source(self, source, published: bool) -> tuple[TranscriptEvent, ...]:
+        if not self.routed:
+            return (self,)
+        requests = self.routing.requests
+        originals = source.assignments(requests)
+        remaining = tuple(reference for reference in requests if reference not in originals)
+        if not remaining:
+            return ()
+        return (replace(self, routing=TurnRouting(remaining, self.routing.reply)),)
+
 
 class AssistantTranscript(AgentTextTranscript):
+    def append_to(self, events: list[TranscriptEvent]) -> None:
+        if events and (merged := events[-1].followed_by_assistant(self)) is not None:
+            events[-1] = merged
+        else:
+            super().append_to(events)
+
+    def followed_by_assistant(self, text: AssistantTranscript) -> TranscriptEvent:
+        return replace(self, text=self.text + text.text)
+
+    def for_assigned_source(self, source, published: bool) -> tuple[TranscriptEvent, ...]:
+        return () if published else (self,)
+
     @property
     def category(self) -> type[MessageCategory]:
         return OutboundCategory if self.routed else AgentCategory

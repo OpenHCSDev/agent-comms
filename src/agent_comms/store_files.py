@@ -23,6 +23,7 @@ from contextlib import (
 from contextvars import Context, ContextVar
 from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
+from functools import cache
 from pathlib import Path
 from typing import BinaryIO, ClassVar
 
@@ -148,7 +149,8 @@ class StoreLock:
         with ExitStack() as resources:
             yield {owner: resources.enter_context(owner.locked(
                 mode=requests[owner], blocking=blocking, contention=contention))
-                for owner in sorted(requests, key=lambda owner: (owner.lock_rank, str(owner.path)))}
+                for owner in sorted(requests, key=lambda owner: (
+                    StoreLockOwner.lock_ranks()[type(owner)], str(owner.path)))}
 
     @classmethod
     def current_release(cls) -> StoreLockRelease:
@@ -245,19 +247,22 @@ class StoreOwner(DeclaredFamily):
 class StoreLockOwner(StoreOwner, declared_name=None):
     __slots__ = ()
     path: Path
-    lock_rank: ClassVar[int]
     lock_type: ClassVar[type[StoreLock]] = StoreLock
 
     @classmethod
-    def declare_lock_order(cls, owners: tuple[type[StoreLockOwner], ...]) -> None:
+    @cache
+    def lock_ranks(cls) -> Mapping[type[StoreLockOwner], int]:
+        """The declared acquisition order, read at the first ordered lock, never at import."""
+        from .store_order import STORE_LOCK_ORDER
+
+        owners = STORE_LOCK_ORDER
         if len(set(owners)) != len(owners):
             raise TypeError("A store owner occurs twice in the lock order")
         missing = set(cls.members_with(cls)) - set(owners)
         if missing:
             names = ", ".join(sorted(owner.__name__ for owner in missing))
             raise TypeError(f"Store owners missing from the lock order: {names}")
-        for rank, owner in enumerate(owners):
-            owner.lock_rank = rank
+        return {owner: rank for rank, owner in enumerate(owners)}
 
     def locked(self, *, blocking: bool = True, read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
                mode: LockMode = ExclusiveLock(), contention: StoreLockContention | None = None):

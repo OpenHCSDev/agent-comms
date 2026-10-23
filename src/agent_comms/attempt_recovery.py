@@ -432,7 +432,7 @@ class RecoveryMonitorCapability:
         reconstructed, no cursor advances, and UNKNOWN effects remain unsafe
         to replay. An unfinished journal or unresolved publication is refused.
         """
-        from agent_comms.native_entries import MessageEntry, NativeEntry
+        from agent_comms.native_entries import NativeEntry
         from agent_comms.native_pi import NativeContextProof
         from agent_comms.native_prompt_binding import (
             expected_prompt_bindings,
@@ -471,8 +471,6 @@ class RecoveryMonitorCapability:
                 if len(following) != 1:
                     raise RecoveryBlocked("native failure has unfinished or additional session work")
                 terminal = following[0]
-                if not isinstance(terminal, MessageEntry):
-                    raise RecoveryBlocked("native recovery requires an unambiguous failed terminal")
                 try:
                     terminal.require_failed_terminal(proof.session_entry_id)
                 except ValueError as error:

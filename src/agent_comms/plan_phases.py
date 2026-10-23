@@ -258,9 +258,7 @@ class BusWriterPhase(VirtualBusPhase):
 
 
 class BusDeliveryReadersPhase(VirtualBusPhase):
-    """B1: delivery, wake, cursor and notification readers on ``seq``.
-
-    ``store_order`` keeps ``WireLog`` until C deletes the class, so it is not read here."""
+    """B1: delivery, wake, cursor and notification readers on ``seq``."""
 
     after = (BusWriterPhase,)
     evidence = PatternAbsent(
@@ -707,3 +705,71 @@ class RecordsPhase(RemainingSlopPhase):
             ),
         )
     )
+
+
+class FleetAwarenessPhase(CommanderNativePhase, declared_name=None):
+    """Phase 10: fleet awareness (after the four plans)."""
+
+    after = (SkillPhase, BusDeletionPhase, InheritanceCleanupPhase, TransitionScaffoldingPhase)
+
+
+class OneHolderPerWorktreePhase(FleetAwarenessPhase):
+    """One holder per worktree, refused at order time."""
+
+    evidence = PatternPresent(r"class SharedWorktreeRefusal\(", ("src/agent_comms",))
+
+
+class DriftOverlapRulesPhase(FleetAwarenessPhase):
+    """Drift and overlap as standing rules."""
+
+    evidence = AllEvidence(
+        (
+            PatternPresent(r"class BranchBehindMain\(", ("src/agent_comms",)),
+            PatternPresent(r"class SharedFileBranches\(", ("src/agent_comms",)),
+        )
+    )
+
+
+class SpinningUnitPhase(FleetAwarenessPhase):
+    """Spinning as a UnitState member."""
+
+    evidence = PatternPresent(r"class SpinningUnit\(", ("src/agent_comms",))
+
+
+class UnpushedWorkPhase(FleetAwarenessPhase):
+    """Unpushed work as a standing rule."""
+
+    evidence = PatternPresent(r"class UnpushedBranch\(", ("src/agent_comms",))
+
+
+class EmptyPullRequestPhase(FleetAwarenessPhase):
+    """Empty PRs as a standing rule."""
+
+    evidence = PatternPresent(r"class EmptyPullRequest\(", ("src/agent_comms",))
+
+
+class DeliveryReviewPhase(FleetAwarenessPhase):
+    """Review is triggered by delivery."""
+
+    evidence = PatternPresent(r"class DeliveredHeadReview\(", ("src/agent_comms",))
+
+
+class LostToolsPhase(FleetAwarenessPhase):
+    """Lost tools are a bus fact."""
+
+    evidence = PatternPresent(r"class LostTools\(", ("src/agent_comms",))
+
+
+class FleetReplayPhase(FleetAwarenessPhase):
+    """Replaying the copied fleet state raises each incident from Core alone, once each, with no script."""
+
+    after = (
+        OneHolderPerWorktreePhase,
+        DriftOverlapRulesPhase,
+        SpinningUnitPhase,
+        UnpushedWorkPhase,
+        EmptyPullRequestPhase,
+        DeliveryReviewPhase,
+        LostToolsPhase,
+    )
+    evidence = PatternPresent(r"def test_replay_raises_each_incident_once\b", ("tests",))

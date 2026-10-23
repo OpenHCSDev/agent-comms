@@ -235,7 +235,9 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
         return type(self), self.todo.id
 
     def __eq__(self, other: object) -> bool:
-        return isinstance(other, UnownedWheelSpin) and self._identity() == other._identity()
+        if not isinstance(other, UnownedWheelSpin):
+            return NotImplemented
+        return self._identity() == other._identity()
 
     def __hash__(self) -> int:
         return hash(self._identity())

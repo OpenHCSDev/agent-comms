@@ -14,11 +14,12 @@ from agent_comms.thread_model import DeclaredModel
 from agent_comms.turn_lease import NoTurnLease
 
 
-def test_unchanged_registration_retains_generated_creation_marker(*, thread_registration):
+def test_unchanged_registration_retains_creation_allocation(*, thread_registration):
     incoming = thread_registration.new_thread('fresh', frozenset(), '/wt')
-    assert incoming._generated_created_at
     assert incoming.for_registration("fresh", None) is incoming
-    assert incoming._generated_created_at
+    renamed = incoming.for_claim("allocated")
+    assert renamed.created_at is incoming.created_at
+    assert renamed.created_at.distinct_from({incoming.created_at}) > incoming.created_at
 
 
 def test_declared_new_inheritance_case_needs_no_registration_consumer_edit(thread_registration):
