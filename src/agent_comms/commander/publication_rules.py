@@ -29,6 +29,7 @@ class UnpushedBranch(UndatedStandingRule):
         return tuple(cls(todo.id, todo.order.checked().id, unit,
                          state.source.thread.project_path, unpublished)
                      for state in observed for unit in state.readable_units()
+                     if state.source.todos
                      for unpublished in WorkBranches(state.source.thread.project_path).unpushed()
                      for todo in state.source.todos)
 
