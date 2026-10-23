@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Generic, TypeVar
 
 from .child_process import join_retirement
+from .coordination_database import CoordinationStore
 from .field_codec import FieldCodec, MalformedRecord, Token256Text
 from .lifecycle_capability import Complete
 from .native_tool_call import (
@@ -30,6 +31,7 @@ from .pi_payloads import PiContent
 from .private_path import PrivateDirectoryRole, PrivateSocketRole
 
 if TYPE_CHECKING:
+    from .backend import TurnSession
     from .pi_events import ToolExecutionEnd, ToolExecutionStart
 
 _LOG = logging.getLogger(__name__)
@@ -262,13 +264,14 @@ class ToolTransport(Generic[Call]):
     """A child-bound request policy. An instance always has its authenticated PID."""
 
     max_request = 1024 * 1024
+    turn: TurnSession
 
     @property
     def retainable(self) -> bool:
         return True
 
     @classmethod
-    async def open(cls, turn, ownership, *policy) -> UnboundToolTransport:
+    async def open(cls, turn: TurnSession, ownership, *policy) -> UnboundToolTransport:
         listener = ToolListener(turn.launch.session.directory, os.urandom(32).hex())
         ownership.push_async_callback(listener.close)
 
@@ -320,7 +323,7 @@ class ToolTransport(Generic[Call]):
         call.finish(
             FieldCodec.encode(event.tool_name),
             FieldCodec.encode(event.is_error),
-            self.listener.session_directory,
+            CoordinationStore.path_in(self.turn.launch.root),
             input_id,
             identity.round_number,
         )

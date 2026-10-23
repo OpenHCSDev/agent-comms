@@ -7,22 +7,22 @@ from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from acp.schema import AgentMessageChunk, TextContentBlock
 
 from .acp_extension import (
     TurnChangedUpdate,
-    TranscriptSnapshotUpdate,
     encode_updates,
 )
-from .comms import Comms
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .turn_lease import TurnState
 from .ui_model.observation import ObservationProcess, ReadTranscript, SubscribeTranscript
 
 if TYPE_CHECKING:
+    from .acp_extension import TranscriptSnapshotUpdate
+    from .comms import Comms
     from .runtime import RuntimeServer, SocketClient
 
 

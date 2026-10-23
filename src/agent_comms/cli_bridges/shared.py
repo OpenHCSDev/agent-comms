@@ -1,7 +1,6 @@
 """Shared Core inbox delivery and process lifetime for external CLI adapters."""
 from __future__ import annotations
 
-
 import argparse
 import asyncio
 import builtins
@@ -24,15 +23,20 @@ from pathlib import Path
 from typing import Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar
 
 from acp.schema import SessionConfigSelectOption
-from pydantic import Field, TypeAdapter, model_validator
+from pydantic import Field, model_validator
 
 from agent_comms import field_codec, messages
 from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesTranscript
 from agent_comms.change_report import NoChangeReport, ReportEvidence
 from agent_comms.child_process import (
-    AttachedChild, OutlivesLauncherLifetime, ProcessIdentity, SpawnedProcess, StreamingChildStdio,
+    AttachedChild,
+    OutlivesLauncherLifetime,
+    ProcessIdentity,
+    SpawnedProcess,
+    StreamingChildStdio,
 )
 from agent_comms.cli_protocol import (
+    CliArguments,
     DeliveredOutcome,
     EmittedOutcome,
     FilteredOutcome,
@@ -53,8 +57,13 @@ from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
 from agent_comms.typed_table import (
-    Column, DurableTables, ExpressionIndex, WriterOwnedFile, TypedTable,
+    Column,
+    DurableTables,
+    ExpressionIndex,
+    TypedTable,
+    WriterOwnedFile,
 )
+from agent_comms.wire_models import WireModel
 from agent_comms_hooks.watch import HeldClaim, WatchClaim, WatchRecord
 
 from ..locked_store import RegistryFile, SQLiteFile
@@ -197,7 +206,7 @@ class Options:
             command = commands.add_parser(operation.__name__.lower(), parents=[common])
             operation.add_arguments(command)
             command.set_defaults(operation=operation)
-        arguments = parser.parse_args(namespace=SendArguments())
+        arguments = parser.parse_args(namespace=CliArguments())
         arguments.operation = arguments.operation.from_arguments(arguments)
         arguments.binding = arguments.operation.binding(arguments)
         return cls(**{declared.name: vars(arguments)[key]
@@ -428,10 +437,6 @@ class CatalogTargetField(ChoiceTargetField):
     def value_schema(self) -> dict[str, object]:
         return {**FieldCodec.value_schema(self.annotation),
                 'configuration': FieldCodec.encode(self.catalog)}
-
-
-class SendArguments(argparse.Namespace):
-    command: str
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -988,7 +993,7 @@ class ForeignMonitorFrame(MonitorFrame, declared_name='foreign'):
         """Another monitor's output is not comms delivery evidence."""
 
 
-MONITOR_FRAME = TypeAdapter(MonitorFrame.declared_union())
+MONITOR_FRAME = WireModel.adapter(MonitorFrame.declared_union())
 
 
 @dataclass(frozen=True)

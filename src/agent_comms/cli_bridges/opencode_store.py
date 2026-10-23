@@ -12,11 +12,11 @@ from dataclasses import dataclass
 
 from pydantic import Field
 
-from agent_comms.cli_protocol import WireModel
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.runtime_updates import RuntimeUpdate
 from agent_comms.typed_table import SQLiteSchemaObject, TypedRow
 
+from ..wire_models import WireModel
 from .history import OfflineHistory, OpenCodeHistory
 from .opencode_parts import SavedMessage
 from .opencode_protocol import Revert, Session
