@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections import deque
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from .field_codec import NullMember, RecordMember, SingleFieldValue, SubclassUnion
@@ -113,6 +114,14 @@ class PageTraversal(ABC):
 
     cursor: PageCursor
 
+    def source_page(self, live: MessagePage, historical: Callable[[], MessagePage]) -> MessagePage:
+        return live if live.messages else historical()
+
+    def after_exhausted_history(
+        self, view: Callable[[PageTraversal], MessagePage], result: MessagePage,
+    ) -> MessagePage:
+        return result
+
     @property
     def source(self) -> str | None:
         return self.cursor.history_source
@@ -182,6 +191,17 @@ class OlderTraversal(PageTraversal):
 @dataclass(frozen=True, slots=True)
 class NewerTraversal(PageTraversal):
     cursor: PageCursor = NewestCursor()
+
+    def source_page(self, live: MessagePage, historical: Callable[[], MessagePage]) -> MessagePage:
+        return live
+
+    def after_exhausted_history(
+        self, view: Callable[[PageTraversal], MessagePage], result: MessagePage,
+    ) -> MessagePage:
+        live = view(NewerTraversal())
+        return replace(live, selection=replace(
+            live.selection, history_revision=result.selection.history_revision,
+        ))
 
     def source_indexes(self, start: int, count: int) -> range:
         return range(start, count)

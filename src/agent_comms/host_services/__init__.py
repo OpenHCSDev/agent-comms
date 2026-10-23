@@ -70,34 +70,59 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
         """Stop this instance and start it again from its own launcher."""
 
     @abstractmethod
+    def stop(self) -> None:
+        """Stop this instance; its launcher stays installed."""
+
+    @abstractmethod
+    def start(self) -> None:
+        """Start this stopped instance from its own launcher."""
+
+    @abstractmethod
     def runtime(self) -> Path:
         """The interpreter this instance runs."""
 
     @abstractmethod
     def serves(self) -> None:
-        """Prove the service answers; raise ServiceNotServingError naming a failure."""
+        """Prove the service answers; raise ServiceNotServingError naming a failure.
+
+        The proof reads the root, which admits only the root's owning runtime, so it runs
+        in that runtime (``ServingProbe``), never in an installer of another version."""
 
     @abstractmethod
     def described(self) -> str:
         """This instance in the words an install's report and its failures use."""
 
     @classmethod
+    def instances(cls) -> tuple[HostService, ...]:
+        return tuple(instance for member in cls.members_with(cls) for instance in member.running())
+
+    @classmethod
     def restart_running(cls, installed: Path) -> tuple[RestartedService, ...]:
         """Restart every declared service running on this host onto ``installed``."""
-        return tuple(
-            instance.restart_onto(installed)
-            for member in cls.members_with(cls)
-            for instance in member.running()
-        )
+        return tuple(instance.restart_onto(installed) for instance in cls.instances())
+
+    @classmethod
+    def stop_running(cls) -> tuple[HostService, ...]:
+        """Stop every running service, so nothing writes the root while it is restored."""
+        stopped = cls.instances()
+        for instance in stopped:
+            instance.stop()
+        return stopped
 
     def restart_onto(self, installed: Path) -> RestartedService:
         self.restart()
-        failure = f"{self.described()} did not serve again within {self.patience}s"
+        return self.running_on(installed)
+
+    def start_onto(self, installed: Path) -> RestartedService:
+        self.start()
+        return self.running_on(installed)
+
+    def running_on(self, installed: Path) -> RestartedService:
+        failure = f"{self.described()} did not run again within {self.patience}s"
         for _ in range(self.patience):
             for instance in type(self).running():
                 runtime = instance.runtime()
                 if runtime == installed:
-                    instance.serves()
                     return RestartedService(instance.described(), installed)
                 failure = f"{instance.described()} runs {runtime}, not the installed {installed}"
             time.sleep(1)
@@ -183,3 +208,9 @@ class SystemdUserService(HostService, declared_name=None):
 
     def restart(self) -> None:
         subprocess.run(("systemctl", "--user", "restart", self.unit), check=True)
+
+    def stop(self) -> None:
+        subprocess.run(("systemctl", "--user", "stop", self.unit), check=True)
+
+    def start(self) -> None:
+        subprocess.run(("systemctl", "--user", "start", self.unit), check=True)

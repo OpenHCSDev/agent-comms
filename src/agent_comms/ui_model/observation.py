@@ -889,6 +889,9 @@ class ViewReading(Observation[ObserveViews]):
 class ServiceResult(ABC):
     """What the service sends; each declares how the UI side receives it."""
 
+    def retire_request(self, pending, request) -> None:
+        pending.pop(request.request_id)
+
     @abstractmethod
     def received(self, process: ObservationProcess, observed: list[Observed]) -> None: ...
 
@@ -921,6 +924,9 @@ class ReadBusy(ServiceResult):
     """Source busy: the original read remains pending, not a failed input."""
 
     request_id: int
+
+    def retire_request(self, pending, request) -> None:
+        pass
 
     @property
     def title(self) -> str:
@@ -1017,6 +1023,9 @@ class SidebarUnreadable(SidebarResult):
 class ThreadReadResult(PublishState, ABC):
     """One thread's last read, including how to compare and display its answer."""
 
+    def same_as_presented(self, presented: ThreadPresented) -> bool:
+        return False
+
     @abstractmethod
     def status_row(self, name: str, owner: OpenThreadStatus) -> ThreadStatusModel: ...
 
@@ -1031,9 +1040,12 @@ class ThreadReadResult(PublishState, ABC):
 class ThreadPresented(ThreadReadResult):
     presentation: ThreadPresentation
 
-    def same_observation(self, previous: object) -> bool:
-        return isinstance(previous, ThreadPresented) and (
-            self.presentation is previous.presentation or self.presentation.same_observation(previous.presentation))
+    def same_observation(self, previous: ThreadReadResult) -> bool:
+        return previous.same_as_presented(self)
+
+    def same_as_presented(self, presented: ThreadPresented) -> bool:
+        return (presented.presentation is self.presentation
+                or presented.presentation.same_observation(self.presentation))
 
     def status_row(self, name: str, owner: OpenThreadStatus) -> ThreadStatusModel:
         return ThreadStatusModel.known(name, self.presentation)
@@ -1225,8 +1237,7 @@ class ObservationService:
             attempted.add(request_id)
             answer = request.answer(self.comms)
             self.send(answer)
-            if not isinstance(answer, ReadBusy):
-                self.pending.pop(request_id)
+            answer.retire_request(self.pending, request)
             await asyncio.sleep(0)
 
     async def observe(self, attempted: set[int]) -> None:

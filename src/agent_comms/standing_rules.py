@@ -13,12 +13,16 @@ from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from itertools import combinations
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.goals import GoalChangedError
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repo import Repo
+from agent_comms.repository_name import RepositoryName
+from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.work_branches import BranchDifference
 from agent_comms.service_passes import ServicePassStore
 
 if TYPE_CHECKING:
@@ -28,9 +32,42 @@ if TYPE_CHECKING:
     from agent_comms.messages import Message
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.storage_rules import MemoryUse, StorageRule
-    from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.todos import OwnerRequest, Todo
     from agent_comms.ui_model.unit_state import UnitState
+
+
+@dataclass(frozen=True)
+class Sign:
+    """One occurrence of a degraded signal. Its key is what makes it new: a message, a stalled
+    phase at its age doubling, a load round. The same occurrence never stops the commander twice;
+    its line is how it reads now."""
+
+    signal: type[Degradation]
+    key: tuple[object, ...]
+    line: str = field(compare=False)
+
+    @property
+    def mark(self) -> str:
+        return self.signal.mark(self.key)
+
+
+class Degradation(DeclaredFamily, affix="Degradation"):
+    """One signal that the fleet is getting away from its commander."""
+
+    @classmethod
+    @abstractmethod
+    def found(cls, comms: Comms, commander: str) -> tuple[Sign, ...]:
+        """How the signal shows now, one sign per occurrence; empty while it does not."""
+
+    @classmethod
+    def mark(cls, key: tuple[object, ...]) -> str:
+        """One occurrence as text, the same however often it is read."""
+        return " ".join((cls.declared_name, *map(str, key)))
+
+
+class BlocksRelease:
+    """A degraded signal the commander clears this turn, so a chokehold holds its units until
+    the signal is gone: a quote is the answer, never the relief."""
 
 
 class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agent_comms.commander"):
@@ -146,6 +183,96 @@ class UndatedStandingRule(StandingRule, declared_name=None):
         return True
 
 
+@dataclass(frozen=True)
+class HeldBranch:
+    """One open order joined to the holder's current recorded checkout."""
+
+    problem: str
+    holder: ThreadIncarnation
+    difference: BranchDifference
+
+
+class HeldBranchRule(UndatedStandingRule, declared_name=None):
+    """Branch rules share the heartbeat's existing progress frame and one scan."""
+
+    @classmethod
+    def scan_owner(cls) -> type[StandingRule]:
+        return HeldBranchRule
+
+    @classmethod
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState]) -> tuple[Self, ...]:
+        branches = tuple(
+            HeldBranch(todo.id, unit, state.source.pulls.branch_difference(
+                state.source.thread.project_path))
+            for state in observed for unit in state.readable_units() for todo in state.source.todos
+        )
+        ordered = tuple(sorted(branches, key=lambda held: (
+            held.difference.repository.to_wire(), held.difference.branch,
+            held.holder.require_recorded().lookup, held.problem,
+        )))
+        return tuple(rule for member in cls.members_with(cls) for rule in member.derive(ordered))
+
+    @classmethod
+    @abstractmethod
+    def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]: ...
+
+
+@dataclass(frozen=True)
+class BranchBehindMain(HeldBranchRule):
+    """A held branch needs a new base after too much main work passed it."""
+
+    problem: str
+    holder: ThreadIncarnation
+    repository: RepositoryName
+    branch: str
+    behind: int = field(compare=False)
+    limit: ClassVar[int] = 30
+
+    @classmethod
+    def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
+        return tuple(cls(held.problem, held.holder, held.difference.repository,
+                         held.difference.branch, held.difference.behind)
+                     for held in branches if held.difference.behind > cls.limit)
+
+    def line(self) -> str:
+        return (f"BRANCH BEHIND MAIN: {self.problem} {self.holder.name} "
+                f"{self.repository.to_wire()}:{self.branch} is {self.behind} commits behind "
+                f"origin/main (limit {self.limit}) -> update its base")
+
+
+@dataclass(frozen=True)
+class SharedFileBranches(HeldBranchRule):
+    """Different held branches touch the same repository-relative file."""
+
+    problem: str
+    holder: ThreadIncarnation
+    branch: str
+    other_problem: str
+    other_holder: ThreadIncarnation
+    other_branch: str
+    repository: RepositoryName
+    path: str
+
+    @classmethod
+    def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
+        found = []
+        for first, second in combinations(branches, 2):
+            left, right = first.difference, second.difference
+            if (first.holder == second.holder or left.repository != right.repository
+                    or left.branch == right.branch):
+                continue
+            found.extend(cls(first.problem, first.holder, left.branch,
+                             second.problem, second.holder, right.branch, left.repository, path)
+                         for path in sorted(left.files & right.files))
+        return tuple(found)
+
+    def line(self) -> str:
+        return (f"SHARED FILE BRANCHES: {self.problem} {self.holder.name} ({self.branch}) "
+                f"and {self.other_problem} {self.other_holder.name} ({self.other_branch}) "
+                f"touch {self.repository.to_wire()}:{self.path} -> coordinate their merge")
+
+
 class DatedStandingRule(StandingRule, declared_name=None):
     """A rule that says when its condition began: it is broken on the reads after that."""
 
@@ -163,6 +290,9 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
     be held: one that must wait is sent now as "waiting on X, owner Y"."""
 
     message: Message
+
+    def degradation_signs(self) -> tuple[Sign, ...]:
+        return (Sign(AnswersOwedDegradation, (self.cited,), self.line()),)
 
     @property
     def cited(self) -> str:
@@ -198,6 +328,15 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         """Whether an action naming these open messages answers this one."""
         return any(message.message_id == self.message.message_id for message in named)
+
+
+class AnswersOwedDegradation(Degradation, BlocksRelease):
+    """Messages to the commander are waiting past their window; each message is one sign."""
+
+    @classmethod
+    def found(cls, comms: Comms, commander: str) -> tuple[Sign, ...]:
+        return tuple(sign for rule in OwedAnswer.violations(comms, commander)
+                     for sign in rule.degradation_signs())
 
 
 @dataclass(frozen=True)

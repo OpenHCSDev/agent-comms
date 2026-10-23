@@ -10,7 +10,7 @@ from pathlib import Path
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.carry import Carried, Carry
-from agent_comms.locked_store import RegistryFile
+from agent_comms.locked_store import RegistryFile, RetiredCommanderFile
 from agent_comms.registry_document import NoCommanderProject, RegisteredCommanderProject
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Repo
@@ -20,7 +20,7 @@ from agent_comms.typed_table import HeldBusFile
 class CommanderProjectCarry(Carry):
     @property
     def configuration(self) -> Path:
-        return self.root / "commander.json"
+        return RetiredCommanderFile.path_in(self.root)
 
     def backup_files(self) -> tuple[Path, ...]:
         paths = (self.configuration, *RegistryStore.at(self.root).written)

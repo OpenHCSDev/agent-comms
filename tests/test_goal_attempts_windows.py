@@ -4,11 +4,8 @@ import os
 
 import pytest
 
-from agent_comms.goal_attempts import (
-    GoalAttemptStore,
-    ReservationConflictError,
-    UnresolvedAttemptError,
-)
+from agent_comms.goal_attempts import GoalAttemptStore, ReservationConflictError
+from agent_comms.errors import UnresolvedAttemptError
 from agent_comms.goal_generation import CompletedGeneration, ReservedGeneration
 
 

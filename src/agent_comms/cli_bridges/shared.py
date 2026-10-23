@@ -60,7 +60,6 @@ from agent_comms_hooks.watch import HeldClaim, WatchClaim, WatchRecord
 
 from ..locked_store import RegistryFile, SQLiteFile
 from .monitor import (
-    REPLIES,
     BridgeExit,
     InspectSession,
     MonitorAttachment,
@@ -689,10 +688,10 @@ class SessionBridge:
                 self.observed.process.signal(signal.SIGTERM)
             return OwnerExitedBridge(self.claim.thread)
         self.observed.owner.require_alive()
-        peer = resources.enter_context(PauseSession(
-            owner=self.observed.owner, process=self.observed.process).connection(self.claim.socket_path))
+        request = PauseSession(owner=self.observed.owner, process=self.observed.process)
+        peer = resources.enter_context(request.connection(self.claim.socket_path))
         stream = resources.enter_context(peer.makefile('rb'))
-        REPLIES.validate_json(stream.readline(4096)).require()
+        request.decode_reply(stream.readline(4096))
         return PausedSessionBridge(self, peer)
 
 

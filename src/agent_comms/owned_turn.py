@@ -27,7 +27,7 @@ from .native_input_owner import RegistryOwner
 from .native_failures import NativeRequestFailure
 from .coordinator import Coordination
 from .routing import MessageRoute, ScheduledTurn, TurnRouting
-from .runtime import UNBOUND_CONTROLLER
+from .controller import UNBOUND_CONTROLLER
 from .thread_identity import TurnId
 from .turn_goal_account import TurnGoalAccount
 from .turn_goal_permission import (

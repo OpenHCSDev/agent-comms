@@ -24,7 +24,7 @@ async def test_resource_release_failure_retains_exact_native_child(tmp_path, nat
                 await owner.persistent.close_idle()
             assert stopped.value is failure
             retirement = child._close_job
-            assert retirement.done() and retirement.result() is failure
+            assert retirement.done() and retirement.result().release_failure is failure
             assert child.proc.retired and resource.closed
             await child.proc.stderr_tail()
             assert not child.retired
@@ -71,7 +71,7 @@ async def test_failed_owned_shutdown_preserves_original_outcome_without_retry(
                 assert isinstance(caught.value, ChildRetirementError)
                 assert not isinstance(caught.value, Exception)
             operation = child._close_job
-            assert operation.done() and operation.result() is original_error
+            assert operation.done() and operation.result().release_failure is original_error
             assert not child.retired and child.proc.retired
             await child.proc.stderr_tail()
             assert isinstance(owner.persistent.child_state, RetiringNative)

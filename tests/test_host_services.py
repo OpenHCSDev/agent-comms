@@ -134,6 +134,7 @@ def connector_service(comms, tmp_path, monkeypatch):
 def test_restart_proves_a_healthy_connector_on_its_installed_runtime(connector_service, capsys):
     service = connector_service
     result = service.restart_onto(Path(sys.executable))
+    service.serves()  # ServingProbe's proof, run here by the root's own runtime.
     assert result.runtime == Path(sys.executable)
     assert result.line() == (f"Connector on port {service.port} for {service.launch.path} "
                              f"restarted onto {sys.executable}")
@@ -168,5 +169,6 @@ def test_restart_refuses_a_connector_with_an_undecodable_store(connector_service
     service.store.path.write_text('{"not_a_grant": true}')
     with pytest.raises(ServiceNotServingError, match="RecordProblems"):
         service.restart_onto(Path(sys.executable))
+        service.serves()
     with socket.socket() as refused:
         assert refused.connect_ex(("127.0.0.1", service.port)) != 0

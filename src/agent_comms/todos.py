@@ -118,7 +118,7 @@ from agent_comms.typed_table import (
     TextStorage,
     TypedTable,
 )
-from agent_comms.work_branches import WorkBranchError, WorkBranches
+from agent_comms.work_branches import BranchDifference, WorkBranchError, WorkBranches
 
 if TYPE_CHECKING:
     from agent_comms.commander.order import (
@@ -869,9 +869,14 @@ class PresentCheckout(ProgressCheckout):
         return tuple(pushes)
 
     @cached_property
+    def branches(self) -> WorkBranches:
+        """One Git branch reader for this checkout during the progress frame."""
+        return WorkBranches(self.path)
+
+    @cached_property
     def checked_out(self) -> dict[str, tuple[str, ...]]:
         """Branch name -> the worktree paths that have it checked out."""
-        return WorkBranches(self.path).worktrees()
+        return self.branches.worktrees()
 
     @cached_property
     def check_notes(self) -> dict[str, tuple[CheckedCommit, ...]]:
@@ -912,7 +917,7 @@ class PresentCheckout(ProgressCheckout):
     def edits(self) -> tuple[float, ...]:
         """When each uncommitted change in this checkout was last written; a deletion has none."""
         return tuple(path.stat().st_mtime
-                     for path in WorkBranches(self.path).read_checkout().uncommitted()
+                     for path in self.branches.read_checkout().uncommitted()
                      if path.exists())
 
     def readings(self, source: ProgressSource) -> DistanceReadings:
@@ -950,10 +955,24 @@ class CheckoutReads:
 
     def __init__(self) -> None:
         self._checkouts: dict[Path, PresentCheckout] = {}
+        self._branch_mains: dict[RepositoryName, str] = {}
+        self._branch_facts: dict[Path, BranchDifference] = {}
 
     def checkout(self, path: Path) -> PresentCheckout:
         """This read's one reader of the checkout at path."""
         return self._checkouts.setdefault(path, PresentCheckout(path))
+
+
+    def branch_difference(self, path: Path) -> BranchDifference:
+        """All consumers share each branch read and one main commit per repository."""
+        path = path.resolve()
+        if path not in self._branch_facts:
+            reader = self.checkout(path).branches
+            repository = RepositoryName(*reader.repository)
+            if repository not in self._branch_mains:
+                self._branch_mains[repository] = reader.origin_main
+            self._branch_facts[path] = reader.difference(self._branch_mains[repository])
+        return self._branch_facts[path]
 
 
 class ProgressRead(PullRequests, CheckoutReads):
@@ -2894,6 +2913,10 @@ class VerdictAudience:
 @dataclass(frozen=True)
 class OrderVerdict(TodoCommand, StoryEvent, declared_name=None):
     """The commander's verdict on one tool call the holder made for its order, kept on the order."""
+
+    def send_back_times(self) -> tuple[float, ...]:
+        return ()
+
     audience: ClassVar[type[VerdictAudience]] = VerdictAudience
     actor: ThreadIncarnation
     previous: Assignment
@@ -3101,6 +3124,9 @@ class DroppedVerdict(ToolCallVerdict):
 class SendBackVerdict(ToolCallVerdict, CitedStrike, FleetEvent):
     """The tool call goes back; the same write strikes the holder and revises the order Goal."""
     reason: StrikeReason
+
+    def send_back_times(self) -> tuple[float, ...]:
+        return (self.at.recorded_at("A send-back"),)
 
     @property
     def line(self) -> str:

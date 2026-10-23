@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, ClassVar
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 
 from .declared_family import DeclaredFamily
+from .errors import UnresolvedAttemptError
 from .goal_attempt_phase import (
     FailedAttempt,
     GoalAttemptPhase,
@@ -67,11 +68,12 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
             raise ValueError("This generation requires an attempt identity.")
 
     def require_ready(self) -> None:
-        from .goal_attempts import UnresolvedAttemptError
-
         raise UnresolvedAttemptError(UnresolvedAttemptError.diagnostic_text)
 
-    def permits_retirement(self, phase: GoalAttemptPhase | None) -> bool:
+    def permits_retirement_without_attempt(self) -> bool:
+        return False
+
+    def permits_retirement(self, phase: GoalAttemptPhase) -> bool:
         return False
 
     def allows_resume(self, active_turn: bool) -> bool:
@@ -113,8 +115,11 @@ class ReadyGeneration(GenerationState):
         if attempt_id is not None:
             raise ValueError("READY cannot carry an attempt identity.")
 
-    def permits_retirement(self, phase: GoalAttemptPhase | None) -> bool:
-        return phase is None
+    def permits_retirement_without_attempt(self) -> bool:
+        return True
+
+    def permits_retirement(self, phase: GoalAttemptPhase) -> bool:
+        return False
 
     @classmethod
     def successors(cls) -> tuple[type[GenerationState], ...]:
@@ -136,8 +141,8 @@ class ReservedGeneration(GenerationState):
     def stopped_permit(self, store: GoalAttemptStore, generation: Generation) -> GoalTurnPermit:
         return store.read_attempt(generation.attempt_identity.attempt_id).stopped_permit()
 
-    def permits_retirement(self, phase: GoalAttemptPhase | None) -> bool:
-        return phase is not None and phase.may_become(FailedAttempt())
+    def permits_retirement(self, phase: GoalAttemptPhase) -> bool:
+        return phase.may_become(FailedAttempt())
 
     @classmethod
     def successors(cls) -> tuple[type[GenerationState], ...]:
@@ -168,8 +173,8 @@ class BlockedGeneration(Failed, GenerationState):
         store.authorize_current_retry(generation.goal_id, witness)
 
 
-    def permits_retirement(self, phase: GoalAttemptPhase | None) -> bool:
-        return isinstance(phase, FailedAttempt)
+    def permits_retirement(self, phase: GoalAttemptPhase) -> bool:
+        return phase.permits_retirement
 
     @classmethod
     def successors(cls) -> tuple[type[GenerationState], ...]:

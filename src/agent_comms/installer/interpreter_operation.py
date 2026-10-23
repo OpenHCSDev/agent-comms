@@ -191,6 +191,17 @@ class InstallReportProbe(RuntimeProbe[None], ServiceSender):
             comms.messaging.send(self.sender, CommsTag.channel(), self.body)
 
 
+class ServingProbe(RuntimeProbe[None]):
+    """Every running host service serves the root, proven by the runtime that owns it."""
+
+    def run(self) -> None:
+        from agent_comms.host_services import HostService
+
+        for member in HostService.members_with(HostService):
+            for instance in member.running():
+                instance.serves()
+
+
 class DistributionVersionsProbe(RuntimeProbe[dict[str, str]]):
     def run(self) -> dict[str, str]:
         from importlib.metadata import distributions

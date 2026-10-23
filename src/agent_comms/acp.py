@@ -27,7 +27,10 @@ from contextlib import AsyncExitStack
 from functools import partial
 from typing import TYPE_CHECKING, Any
 
-from acp import RequestError, run_agent
+from acp import RequestError
+from acp.connection import StreamEvent
+from acp.core import DEFAULT_STDIO_BUFFER_LIMIT_BYTES
+from acp.stdio import stdio_streams
 from acp.schema import (
     AgentMessageChunk,
     InitializeResponse,
@@ -49,6 +52,7 @@ from .acp_failure import NativeTurnError
 from .channel_targets import NamedTarget
 from .cohort_foreground import _accept_visible_deliveries
 from .comms import Comms, wire
+from .controller import AcpController, Controller, UNBOUND_CONTROLLER
 from .coordination_cohort import next_sealed_assignment
 from .coordination_database import CoordinationStore
 from .cursor_owner import CursorOwner
@@ -62,7 +66,6 @@ from .message_bus import MessageBus
 from .publisher import ResponseWrites
 from .queued_input import DeliveredInput
 from .runtime import (
-    UNBOUND_CONTROLLER,
     RuntimeProxy,
     RuntimeServer,
     socket_path,
@@ -134,7 +137,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         self.turns.bind(self.sessions, self.inputs)
         # A preplanned write is valid only while its original ACP controller
         # remains attached. Never restore this binding after a process crash.
-        self._selected_write_controllers: dict[tuple[str, int], tuple[str, object]] = {}
+        self._selected_write_controllers: dict[tuple[str, int], tuple[str, Controller]] = {}
 
     def _create_runtime_proxy(self, thread: Thread, session_id: str) -> RuntimeProxy:
         return RuntimeProxy(
@@ -144,7 +147,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
     # Private attachment ABI consumed by runtime/compaction. State exists only
     # on its component; in-process consumers use that owner directly.
 
-    def on_connect(self, client: Any) -> None:
+    def on_connect(self, client: AcpController) -> None:
         """Called by AgentSideConnection with the client-facing connection."""
         self.sessions.client = client
 
@@ -213,9 +216,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
         owner = self.sessions.require(session_id)
         controller = self._runtime.controller.get()
-        if controller is None or (
-            controller is UNBOUND_CONTROLLER and self.sessions.client is None
-        ):
+        attached = self.sessions.client if controller is UNBOUND_CONTROLLER else controller
+        if attached is None:
             raise RequestError.invalid_params(
                 {"reason": "Selected write requires attached ACP controller"}
             )
@@ -229,7 +231,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             resource=request.resource,
             contents=request.contents,
         ))
-        attached = self.sessions.client if controller is UNBOUND_CONTROLLER else controller
         self._selected_write_controllers[(owner, request.source_seq)] = (
             acknowledgement.operation_id,
             attached,
@@ -487,19 +488,24 @@ def main() -> int:
                 use_unstable_protocol=True,
             )
 
-            def observe(event: Any) -> None:
+            def observe(event: StreamEvent) -> None:
                 agent._debug_log(
                     f"{event.direction.value}: {json.dumps(event.message)[:200]}"
-                    if hasattr(event, "message")
-                    else f"{event.direction.value}"
                 )
 
-            conn_kwargs: dict[str, Any] = {}
-            if os.environ.get("AGENT_COMMS_DEBUG_LOG"):
-                conn_kwargs["observers"] = [observe]
             try:
-                await run_agent(agent, use_unstable_protocol=agent.use_unstable_protocol,
-                                **conn_kwargs)  # type: ignore[arg-type]
+                output_stream, input_stream = await stdio_streams(
+                    limit=DEFAULT_STDIO_BUFFER_LIMIT_BYTES
+                )
+                connection = AcpController(
+                    agent, input_stream, output_stream, listening=False,
+                    use_unstable_protocol=agent.use_unstable_protocol,
+                    observers=[observe] if os.environ.get("AGENT_COMMS_DEBUG_LOG") else None,
+                )
+                try:
+                    await connection.listen()
+                finally:
+                    await asyncio.shield(connection.close())
             finally:
                 await agent.shutdown()
 
