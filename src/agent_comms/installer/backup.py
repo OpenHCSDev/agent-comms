@@ -13,18 +13,21 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Collection, Iterable
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from functools import cache
 from pathlib import Path
 from string import Formatter
 from typing import ClassVar, Iterator, Self
 
+from agent_comms.active_route import ActiveRoute, RouteFile, _route_directory, route_directory
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.interpreter_operation import HoldTranscriptsProbe
 from agent_comms.locked_store import LockedStore, RootFile, RuntimeFile, SQLiteFile
+from agent_comms.private_path import FileObservation, FileRevision, MissingFile
+from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.store_files import _atomic_write_text
 
 
@@ -191,6 +194,7 @@ class StoreBackup(ResourceBackup):
     route: Path
     path: Path
     kept: ClassVar[int] = 2
+    route_revision: FileObservation = field(default_factory=MissingFile, init=False)
 
     def spill_directory(self, configured: Path) -> Path:
         return self.path
@@ -211,17 +215,50 @@ class StoreBackup(ResourceBackup):
         return archived
 
     def restore_route(self) -> None:
-        saved = self.path / 'active-route.json'
-        if saved.exists():
-            _atomic_write_text(self.route, saved.read_text(), fsync_parent=True)
-        else:
-            self.route.unlink(missing_ok=True)
+        with route_directory(self.route) as directory:
+            if FileRevision.capture(self.route) != self.route_revision:
+                print(f'Keeping concurrently changed route: {self.route}', file=sys.stderr)
+                return
+            if self.route_original():
+                return
+            saved = self.path / 'active-route.json'
+            if saved.exists():
+                _atomic_write_text(self.route, saved.read_text(), fsync_parent=True)
+            else:
+                os.unlink(self.route.name, dir_fd=directory)
+                os.fsync(directory)
+            self.route_revision = FileRevision.capture(self.route)
+            if not self.route_original():
+                raise UpgradeRefused('Active route differs after backup restoration')
+
+    def require_route_revision(self) -> None:
+        if FileRevision.capture(self.route) != self.route_revision:
+            raise UpgradeRefused('Active route changed after its backup')
+
+    def rebind_route(self, selected: Path | None) -> str:
+        from agent_comms.bus import Bus
+
+        route = ActiveRoute(self.root.absolute(), RecordedBusIdentity.capture(Bus.path_in(self.root)))
+        with _route_directory(route, self.route) as (path, directory):
+            self.require_route_revision()
+            if selected is not None and selected.resolve() != self.root.resolve():
+                return f'kept {self.route}: it selects {selected}'
+            try:
+                return RouteFile.read(path).route_new_bus(route, path, directory)
+            finally:
+                # Observe our mutation while EX still excludes another publisher,
+                # including a replacement whose durability acknowledgement failed.
+                self.route_revision = FileRevision.capture(path)
 
     def route_original(self) -> bool:
         saved = self.path / 'active-route.json'
         if not saved.exists():
             return not self.route.exists()
-        return self.route.exists() and self.route.read_bytes() == saved.read_bytes()
+        if not self.route.exists():
+            return False
+        current, original = self.route.stat(), saved.stat()
+        return (current.st_mode == original.st_mode and current.st_nlink == original.st_nlink
+                and self.route.read_bytes() == saved.read_bytes())
 
     @classmethod
     def take(cls, root: Path, route: Path, files: tuple[Path, ...], spill_dir: Path) -> StoreBackup:
@@ -232,12 +269,18 @@ class StoreBackup(ResourceBackup):
             if tuple(json.loads((path / 'selected.json').read_text())) != selected:
                 raise UpgradeRefused('Existing backup belongs to different resources')
             backup.files()  # An interrupted snapshot is never treated as complete.
+            with route_directory(route):
+                if not backup.route_original():
+                    raise UpgradeRefused('Existing backup belongs to a different route')
+                backup.route_revision = FileRevision.capture(route)
             return backup
         path.mkdir(mode=0o700, parents=True)
         _atomic_write_text(path / 'selected.json', json.dumps(selected), fsync_parent=True)
         contents = backup.capture(files)
-        if route.exists():
-            shutil.copy2(route, path / 'active-route.json')
+        with route_directory(route):
+            if route.exists():
+                shutil.copy2(route, path / 'active-route.json')
+            backup.route_revision = FileRevision.capture(route)
         _atomic_write_text(path / 'files.json', json.dumps(FieldCodec.encode(contents), indent=1),
                            fsync_parent=True)
         return backup
@@ -326,10 +369,13 @@ class StoreBackup(ResourceBackup):
         return target.exists() and self.digest(target) == saved[name]
 
     def original(self) -> bool:
+        return self.route_original() and self.stores_original()
+
+    def stores_original(self) -> bool:
         if not (self.path / 'files.json').exists():
             return False
         saved = self.files()
-        return self.route_original() and all(self.file_original(name, saved)
+        return all(self.file_original(name, saved)
                    for name in json.loads((self.path / 'selected.json').read_text()))
 
     def restore(self) -> None:
@@ -359,5 +405,5 @@ class StoreBackup(ResourceBackup):
         finally:
             os.close(directory)
         self.restore_route()
-        if not self.original():
+        if not self.stores_original():
             raise UpgradeRefused('Selected stores differ after backup restoration')

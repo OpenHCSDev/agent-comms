@@ -148,9 +148,9 @@ def test_store_backup_restores_wal_rows_and_removes_new_files(tmp_path):
     route.write_text('changed route')
     assert not backup.original()
     backup.restore()
-    assert backup.original()
+    assert backup.stores_original()
     assert not created.exists()
-    assert route.read_text() == 'original route'
+    assert route.read_text() == 'changed route'
     with sqlite3.connect(store) as reader:
         assert reader.execute('SELECT body FROM events').fetchall() == [('retained',)]
     archived = backup.retire()
@@ -217,7 +217,7 @@ def test_backup_retention_preserves_restored_archives(tmp_path):
 
 
 @pytest.mark.parametrize('had_route', (False, True))
-def test_route_only_backup_restores_contents_or_absence(tmp_path, had_route):
+def test_route_only_backup_preserves_a_concurrent_change(tmp_path, had_route):
     root = tmp_path / 'wire'
     root.mkdir()
     route = tmp_path / 'route.json'
@@ -230,8 +230,7 @@ def test_route_only_backup_restores_contents_or_absence(tmp_path, had_route):
     route.write_text('changed route')
     assert not backup.original()
     backup.restore()
-    assert backup.original()
-    assert route.exists() == had_route
-    if had_route:
-        assert route.read_text() == 'original route'
+    assert backup.stores_original()
+    assert not backup.original()
+    assert route.read_text() == 'changed route'
 

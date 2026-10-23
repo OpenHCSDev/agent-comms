@@ -29,7 +29,7 @@ import sys
 import tempfile
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, field, fields, replace
@@ -39,7 +39,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 from pydantic import TypeAdapter
 
 from agent_comms import cli
-from agent_comms.active_route import ActiveRoute, active_route_path, route_new_bus
+from agent_comms.active_route import active_route_path, route_directory
 from agent_comms.bus import Bus
 from agent_comms.cli_bridges.shared import Serve, SessionBridgeResumes
 from agent_comms.cli_commands import (
@@ -64,7 +64,6 @@ from agent_comms.installer import publication, step_worker
 from agent_comms.installer.backup import (
     BackupReport,
     RestoreSpace,
-    ResourceBackup,
     SavedFile,
     StoreBackup,
     UpgradeRefused,
@@ -81,17 +80,11 @@ from agent_comms.installer.carry import (
     MigrateOperation,
     RetireInputsOperation,
 )
-from agent_comms.installer.practice import (
-    PracticeMeasurement,
-    RehearsalHome,
-    RuntimeHome,
-    practice_copy,
-)
 from agent_comms.installer.commands import InstallCommands, TimedCommand
 from agent_comms.installer.interpreter_operation import (
     ClientImportsProbe,
-    InstallReportProbe,
     InstalledProgram,
+    InstallReportProbe,
     PackageRootProbe,
     PinnedLocationProbe,
     PrepareNativeProbe,
@@ -99,17 +92,27 @@ from agent_comms.installer.interpreter_operation import (
     RetainedProgram,
     RunningOwnersProbe,
     RuntimeProbe,
+    SelectedRouteProbe,
     SourceProgram,
 )
-from agent_comms.installer.runtime_resolution import RuntimeResolution
+from agent_comms.installer.practice import (
+    PracticeMeasurement,
+    RehearsalHome,
+    RuntimeHome,
+    practice_copy,
+)
 from agent_comms.installer.reporting import RootWriter, RuntimeWriter, UnpostedWriter
+from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
-from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator, MaintenanceState
 from agent_comms.locked_store import BusFile, RootFile
+from agent_comms.maintenance_barrier import (
+    MaintenanceBarrier,
+    MaintenanceOperator,
+    MaintenanceState,
+)
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout, ScratchCheckout
 from agent_comms.storage_rules import StorageRule
-from agent_comms.recorded_bus import RecordedBusIdentity
 
 if TYPE_CHECKING:
     from agent_comms.installer.launch import InstallReport
@@ -719,6 +722,19 @@ class Install[Rehearsed: Rehearsal](ABC):
     def initial_writer(root: Path, installed: Stack) -> RootWriter:
         return RuntimeWriter(root, installed, RetainedProgram.of(InstallReportProbe))
 
+    def backed_up(self, files: tuple[Path, ...]) -> tuple[StoreBackup, Path | None]:
+        backup = StoreBackup.take(self.root, active_route_path(), files, self.spill_dir)
+        with route_directory(backup.route):
+            backup.require_route_revision()
+            selected = self.installed.probe(SelectedRouteProbe())
+        return backup, selected
+
+    def publish(self, backup: StoreBackup, selected: Path | None) -> str:
+        """The converted bus's route is ready before new runtime entrypoints open it."""
+        route = backup.rebind_route(selected)
+        self.staged.publish()
+        return route
+
     @staticmethod
     def member(root: Path, retire: bool) -> type[Install]:
         """What exists at ``root`` decides how much of an install it needs."""
@@ -853,7 +869,7 @@ class PreparedMigration(Extendable):
 class BackedUpMigration(PreparedMigration):
     """A live migration carries the recovery data its failure path needs."""
 
-    backup: ResourceBackup
+    backup: StoreBackup
 
     def restore(self) -> None:
         if not self.backup.original():
@@ -913,8 +929,8 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                     raise UpgradeRefused(
                         f"Reconcile would rewrite files the rehearsal did not: {unrehearsed}")
                 with PreparedMigration.capture(held, self.installed) as original:
-                    migration = original.extended(BackedUpMigration, backup=StoreBackup.take(
-                        self.root, active_route_path(), selected, self.spill_dir))
+                    backup, selected_route = self.backed_up(selected)
+                    migration = original.extended(BackedUpMigration, backup=backup)
             except BaseException as error:
                 holder.close()
                 maintenance.clear(held)
@@ -928,7 +944,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                 self.staged.prepare_native()
                 passed = migration.carry(self.pending, self.staged, self.tree)
                 passed.files.require_rehearsal(rehearsal.files)
-                self.staged.publish()
+                self.publish(migration.backup, selected_route)
                 holder.close()
                 maintenance.clear(held)
                 services = HostService.restart_running(self.staged.python)
@@ -1021,12 +1037,17 @@ class FreshInstall(Install[FreshRehearsal]):
         self.staged.prepare_native()
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         Comms(self.root).registry.prepare_native_root()
-        bus = Bus.install(Bus.path_in(self.root))
+        Bus.install(Bus.path_in(self.root))
         report.writer = RuntimeWriter(self.root, self.staged, InstalledProgram())
-        self.staged.publish()
-        route = route_new_bus(ActiveRoute(
-            self.root.absolute(), RecordedBusIdentity.capture(bus.path)), active_route_path())
-        services = HostService.restart_running(self.staged.python)
+        backup, selected_route = self.backed_up(())
+        try:
+            route = self.publish(backup, selected_route)
+            services = HostService.restart_running(self.staged.python)
+        except BaseException:
+            backup.restore_route()
+            self.installed.publish()
+            raise
+        backup.retain(self.spill_dir)
         return CreatedRun(services, route)
 
 

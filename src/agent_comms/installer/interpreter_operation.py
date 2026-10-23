@@ -113,6 +113,16 @@ class PackageRootProbe(RuntimeProbe[Path]):
         return Path(agent_comms.__file__).parent
 
 
+class SelectedRouteProbe(RuntimeProbe[Path | None]):
+    """The outgoing reader validates its own published route before source changes."""
+
+    def run(self) -> Annotated[Path, PathText] | None:
+        from agent_comms.active_route import read_active_route
+
+        route = read_active_route()
+        return None if route is None else route.observe_root()
+
+
 class PrepareNativeProbe(RuntimeProbe[None]):
     def run(self) -> None:
         from agent_comms.native_package import VerifiedNativePackage, pinned_native_package

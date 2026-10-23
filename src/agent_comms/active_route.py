@@ -390,7 +390,8 @@ class RouteFile(ABC):
         return LocalRoute.default().root
 
     def replace(self, route: ActiveRoute, path: Path, directory: int) -> Path:
-        backup = path.with_name(f"active-route.{time.strftime('%Y%m%dT%H%M%S')}.bak.json")
+        backup = path.with_name(
+            f"active-route.{time.strftime('%Y%m%dT%H%M%S')}-{uuid.uuid4().hex}.bak.json")
         _publish_active_route_locked(route, path, directory, backup=backup)
         return backup
 
@@ -436,11 +437,24 @@ def _route_directory(route: ActiveRoute, path: Path | None) -> Iterator[tuple[Pa
         raise ValueError("active comms route requires its absolute route path")
     FieldCodec.encode(route)
     route.launch().validate()
+    with route_directory(path) as directory:
+        yield path, directory
+
+
+@contextmanager
+def route_directory(path: Path) -> Iterator[int]:
+    """Hold the existing publication lock for one route snapshot or mutation."""
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         acquire_exclusive_route_lock(directory)
-        yield path, directory
+        info = os.fstat(directory)
+        parent = path.parent.lstat()
+        if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid()
+                or (parent.st_dev, parent.st_ino) != (info.st_dev, info.st_ino)):
+            raise ValueError("active comms route directory changed or is not owned")
+        os.fchmod(directory, 0o700)
+        yield directory
     finally:
         os.close(directory)
 
