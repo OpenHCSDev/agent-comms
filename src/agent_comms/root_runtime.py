@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
+from .bus import Bus
 from .errors import RelationViolationError
 from .field_codec import PathText
 from .launch_runtime import LaunchRuntime
@@ -59,8 +60,12 @@ class RootRuntimeStore(LockedStore[RootRuntime], DurableFile, DependentStateTier
             return self.adopt(creator)
 
     def adopt(self, runtime: LaunchRuntime) -> RootRuntime:
-        """A root without a runtime record belongs to ``runtime``; a recorded owner stays."""
+        """A root without a runtime record belongs to ``runtime``; a recorded owner stays.
+
+        Adoption is where a directory becomes a root, so its bus is created here, empty:
+        from then on an absent bus file means a deleted bus, never one not yet written."""
         with self.locked():
             if not self.path.exists():
+                Bus.install(Bus.path_in(self.path.parent))
                 self._publish_unlocked(RootRuntime(runtime.prefix))
             return self._read_unlocked()
