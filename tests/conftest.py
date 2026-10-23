@@ -1,4 +1,6 @@
 """Shared fixtures: an isolated Comms wire per test."""
+
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.native_package import pinned_location, pinned_native_package
 
 import asyncio
@@ -131,7 +133,7 @@ def publish_initial(comms, sender, target, body, type=InfoKind, *, role=Conversa
     type.require_sendable()
     return comms.bus.publisher.publish_ordinary(
         Message(sender=sender, target=target, body=body, type=type, role=role),
-        origin=AgentOrigin(),
+        destination=CommandTarget.named(target), origin=AgentOrigin(),
     )
 
 def pytest_sessionstart(session):

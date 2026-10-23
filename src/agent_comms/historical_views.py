@@ -13,8 +13,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .bus import Bus
-from .channels import Channel
 from .channel_targets import CommandTarget, NamedTarget, ThreadTarget
+from .channels import Channel
 from .coordination_errors import HistoricalSourceChanged
 from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec
@@ -121,7 +121,8 @@ class ConversationHistoryView:
         return page.selection.identity == earlier.selection.identity
 
     @classmethod
-    def revision(cls, views: HistoryViews, target: str | NamedTarget, earlier: ConversationObservation,
+    def revision(cls, views: HistoryViews, target: str | NamedTarget,
+                 earlier: ConversationObservation,
                  *, worktree: str) -> ConversationRevision:
         return earlier.capture(
             views.revision(), partial(cls._read_revision, views, target, worktree))

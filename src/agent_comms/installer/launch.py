@@ -19,7 +19,7 @@ from typing import Annotated, ClassVar, TextIO
 
 import agent_comms.installer
 from agent_comms.bus_publication import AgentOrigin
-from agent_comms.channel_targets import CommsTag
+from agent_comms.channel_targets import CommandTarget, CommsTag
 from agent_comms.cli_commands import InstallCliCommand, InstallResult
 from agent_comms.comms import client_wire
 from agent_comms.field_codec import FieldCodec, Id128Text, PathText
@@ -49,7 +49,8 @@ class InstallReport(ServiceSender):
             return comms.bus.publisher.publish_ordinary(
                 Message(sender=self.sender, target=CommsTag.channel(),
                         body="\n".join(lines),
-                        type=InfoKind), origin=AgentOrigin())
+                        type=InfoKind),
+                destination=CommandTarget.named(CommsTag.channel()), origin=AgentOrigin())
 
     def starting(self, upgrade: Upgrade) -> Message:
         return self.post(("Install starting", *upgrade.lines()))

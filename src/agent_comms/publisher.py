@@ -190,7 +190,7 @@ class InitialWrites(Publisher):
     """Publish an initial message and its frozen delivery decisions together."""
 
     def publish_ordinary(self, message: Message, *, origin: InitialOrigin,
-                         destination: NamedTarget | None = None) -> Message:
+                         destination: NamedTarget) -> Message:
         """Hold the registry/catalog cut; check source conditions in the append transaction."""
         with (
             self.opened_activity() as activity,
@@ -200,7 +200,7 @@ class InitialWrites(Publisher):
             snapshot = self.registry.snapshot()
             sender, target, require_channel = self._validate_publish_request(
                 message, registry_snapshot=snapshot, catalog=catalog, activity=activity,
-                destination=destination if destination is not None else CommandTarget.named(message.target))
+                destination=destination)
             sender_thread = snapshot.require(sender)
             snapshot.status(sender).require_visible()
             # The kind owns its own validation; one publication check, before

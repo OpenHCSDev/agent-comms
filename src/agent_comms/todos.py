@@ -2731,7 +2731,7 @@ class FailedCheckStrike(StrikeTodo):
         goals.bus.publisher.publish_ordinary(
             Message(sender=changed.creator, target=CommsTag.channel(), body=line,
                     type=InfoKind),
-            origin=AgentOrigin())
+            destination=CommandTarget.named(CommsTag.channel()), origin=AgentOrigin())
 
 
 @dataclass(frozen=True)
@@ -3118,7 +3118,9 @@ class ClaimOrder(TodoCommand):
         return replace(current, order=order, revision=current.revision + 1)
 
     def after_record(self, goals: Goals, changed: Todo) -> None:
-        goals.bus.publisher.publish_ordinary(self.claim.message, origin=AgentOrigin())
+        goals.bus.publisher.publish_ordinary(
+            self.claim.message, destination=CommandTarget.named(self.claim.message.target),
+            origin=AgentOrigin())
 
 
 @dataclass(frozen=True)

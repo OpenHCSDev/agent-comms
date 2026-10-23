@@ -12,7 +12,9 @@ from .change_report import NoChangeReport, ReportEvidence
 from .channel_targets import CommandTarget, IncarnationThreadTarget, NamedTarget
 from .coordination_session import NativeBoundary
 from .errors import (
-    CommittedMessageError, MessageAcknowledgmentError, RelationViolationError,
+    CommittedMessageError,
+    MessageAcknowledgmentError,
+    RelationViolationError,
     UnregisteredThreadError,
 )
 from .input_disposition import InputDispositions
@@ -174,7 +176,8 @@ class Messaging:
                                source_user=user.incarnation, recipient=owner.incarnation,
                                change=change, **declaration_options)
             return self._publish_user(
-                user, IncarnationThreadTarget(owner.incarnation), "Pinned constraint from its original source",
+                user, IncarnationThreadTarget(owner.incarnation),
+                "Pinned constraint from its original source",
                 task, role=NoticeRole())
 
     def _publish_user(self, user, target, body, task, *, role=ConversationRole()):

@@ -23,9 +23,9 @@ if TYPE_CHECKING:
     from .messages import Message
     from .read_basis import ChannelConversation, Conversation, DisplayViewer, DMConversation
     from .registry_provenance import RegistryProvenance
+    from .thread_identity import ThreadIncarnation
     from .thread_status import ThreadStatus
     from .threads import Thread
-    from .thread_identity import ThreadIncarnation
 
 
 class ChannelSelection(ABC):
@@ -193,7 +193,7 @@ class NamedTarget(CommandTarget):
     @abstractmethod
     def mark_view_read(self, views: HistoryViews, worktree: str) -> None: ...
 
-    def canonical_name(self, canonical):
+    def canonical_name(self, canonical: Callable[[str], str]) -> str:
         return self.name
 
     def selected_name(self, snapshot: RegistryProvenance) -> str:
@@ -249,7 +249,7 @@ class ThreadTarget(NamedTarget):
     def direct_names(self):
         return self.names
 
-    def canonical_name(self, canonical):
+    def canonical_name(self, canonical: Callable[[str], str]) -> str:
         return canonical(self.name)
 
     def require_dm_peer(self):
@@ -317,7 +317,8 @@ class ThreadTarget(NamedTarget):
         return ThreadTarget(target), message, names
 
     def display_scope(self, viewer, snapshot, require_channel, direct_scope):
-        return direct_scope.capture(viewer, snapshot.require(self.selected_name(snapshot)).name, snapshot)
+        return direct_scope.capture(
+            viewer, snapshot.require(self.selected_name(snapshot)).name, snapshot)
 
     def conversation_key(self, sender, snapshot, channel, direct):
         names = sorted({snapshot.canonical_name(sender), self.selected_name(snapshot)})
@@ -350,7 +351,8 @@ class IncarnationThreadTarget(ThreadTarget):
                 f"Original DM peer {self.name!r} is no longer registered.")
         return super().selected_name(snapshot)
 
-    def require_publication(self, message, snapshot, require_channel):
+    def require_publication(self, message: Message, snapshot: RegistryProvenance,
+                            require_channel: Callable[[str], Channel]) -> None:
         try:
             super().require_publication(message, snapshot, require_channel)
         except UnregisteredThreadError as error:
