@@ -4,7 +4,7 @@ import asyncio
 from abc import abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from acp import RequestError
 
@@ -13,7 +13,7 @@ from .declared_family import DeclaredFamily
 from .drain_failures import drain_failures
 from .activity import FailedWakeDiagnostic
 from .errors import RelationViolationError
-from .maintenance_barrier import MaintenanceState
+from .maintenance_barrier import MaintenanceStatus
 from .reservation_rules import ReservationRule, RuleCheck, ReservationViolationError
 from .routing import ScheduledTurn
 
@@ -34,7 +34,7 @@ class WakeOutcome(DeclaredFamily):
 
 @dataclass(frozen=True)
 class WakeHeld(WakeOutcome):
-    hold: MaintenanceState
+    hold: MaintenanceStatus
 
     def settle(self, observer: Callable[[str], None], session_id: str) -> None:
         """Maintenance reopening supplies the next wake."""
@@ -106,7 +106,7 @@ class WakeScheduleCheck(SessionScheduleCheck):
                 # turn or consume it until this root's typed phase is READY.
                 hold = await Coordination.run_worker(inputs.comms.owners.maintenance.read)
                 if hold.turn_pending:
-                    return WakeHeld(cast(MaintenanceState, hold))
+                    return WakeHeld(hold)
                 snapshot = await Coordination.run_worker(inputs.comms.registry.snapshot)
                 owner = snapshot.require(inputs.sessions.require(session_id))
                 try:
@@ -175,7 +175,7 @@ class SelectedWakeCheck(SessionScheduleCheck):
         # A deferred selection is not a successful drain or diagnostic recovery.
         hold = await Coordination.run_worker(inputs.comms.owners.maintenance.read)
         if hold.turn_pending:
-            return WakeHeld(cast(MaintenanceState, hold))
+            return WakeHeld(hold)
         async with drain_failures(inputs.comms, self.thread, self.owner, FailedWakeDiagnostic):
             before = await inputs._observe_private_revision(session_id, root_id)
             result = await effects.turns.run_selected(session_id, self.execution)

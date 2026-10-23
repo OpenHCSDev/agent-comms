@@ -20,7 +20,7 @@ from contextlib import ExitStack, suppress
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from acp.exceptions import RequestError
 from acp.schema import (
@@ -52,6 +52,10 @@ from .coordination_errors import CoordinationError, IdentityConflict
 from .native_failures import NativeRequestFailure
 from .private_path import PrivateSocketRole
 
+if TYPE_CHECKING:
+    from .selected_write_authority import AcpSelectedWriteAuthority
+    from .turn_runner import TurnRunner
+
 
 def socket_path(root: Path, pid: int) -> Path:
     return root / "runtime" / f"{pid}.sock"
@@ -78,12 +82,12 @@ class SocketClient(Controller):
         self.token = secrets.token_hex(32)
         self.pending: dict[str, asyncio.Future[RequestPermissionResponse]] = {}
 
-    def require_current(self, authority, session_id: str) -> None:
+    def require_current(self, authority: AcpSelectedWriteAuthority, session_id: str) -> None:
         if not authority.agent._runtime.is_controller(session_id, self):
             raise IdentityConflict("Selected write controller disconnected")
 
     async def request_ui_permission(
-        self, runner, session_id: str,
+        self, runner: TurnRunner, session_id: str,
         request: tuple[ToolCallUpdate, list[PermissionOption]],
     ) -> dict[str, object] | None:
         tool_call, options = request
@@ -97,7 +101,7 @@ class SocketClient(Controller):
             return None
         return reply.outcome.model_dump(by_alias=True, exclude_none=True)
 
-    def departed(self, runtime, session_id: str) -> bool:
+    def departed(self, runtime: RuntimeServer, session_id: str) -> bool:
         return not runtime.is_controller(session_id, self)
 
     async def send(self, line: OwnerLine) -> None:
