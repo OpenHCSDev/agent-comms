@@ -160,7 +160,8 @@ class NewThreadSpec:
         threads.registry.require_declaration_available(thread)
         location = thread.runtime.new_location(threads.root, project)
         with threads.registry.store.locked():
-            yield replace(thread, session_file=RegistrySessionLocation.from_path(location.read_key, threads.root))
+            saved = RegistrySessionLocation.from_path(location.read_key, threads.root)
+            yield replace(thread, session_file=saved)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -176,9 +177,10 @@ class ForkSpec(NewThreadSpec):
         return parent
 
     def child(self, parent: Thread, runtime: RuntimeLocation, threads: ThreadManagement) -> Thread:
-        return replace(self.declaration(self.project, threads.registry), parent=ForkedParent(parent.name),
-                       tags=self.tags.for_child(parent.tags),
-                       backend=parent.backend, session_file=RegistrySessionLocation.from_path(runtime.read_key, threads.root))
+        saved = RegistrySessionLocation.from_path(runtime.read_key, threads.root)
+        return replace(self.declaration(self.project, threads.registry),
+                       parent=ForkedParent(parent.name), tags=self.tags.for_child(parent.tags),
+                       backend=parent.backend, session_file=saved)
 
     @contextmanager
     def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:

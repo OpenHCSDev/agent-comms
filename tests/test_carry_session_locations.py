@@ -33,7 +33,9 @@ def old_registry(tmp_path):
     return comms, bus, external
 
 
-def test_carry_splits_bus_and_external_transcripts_once(tmp_path):
+def test_carry_splits_bus_and_external_transcripts_once(tmp_path, monkeypatch):
+    # The published route is this machine's; the copy is never it.
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
     comms, bus, external = old_registry(tmp_path)
     step = SessionLocations(comms.root, comms.root, tmp_path / "spill")
     with maintenance_held(comms.root):

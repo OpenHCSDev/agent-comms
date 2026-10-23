@@ -85,7 +85,10 @@ class WorkDispatch:
         )
         location = candidate.runtime.new_location(comms.root, checkout)
         child = comms.registry.declare(
-            replace(candidate, session_file=RegistrySessionLocation.from_path(location.read_key, comms.root)),
+            replace(
+                candidate,
+                session_file=RegistrySessionLocation.from_path(location.read_key, comms.root),
+            ),
             StoppedThreadStatus(),
         )
         # A failed publication leaves a stopped unit and its checkout, not an

@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
 from .active_route import CommsRoute
 from .errors import RelationViolationError
@@ -75,7 +75,7 @@ class RegistrySessionLocation(RecordMember, SessionFile, declared_name=None):
 
 
 @dataclass(frozen=True, eq=False)
-class BoundSessionLocation:
+class BoundSessionLocation(RegistrySessionLocation, declared_name=None):
     """A wire location bound to the root whose registry decoded it."""
 
     root: Annotated[Path, WireTransient()] = field(repr=False)
@@ -87,21 +87,25 @@ class BoundSessionLocation:
         return RegistrySessionLocation.from_path(self.resolve(self.root), root)
 
     def location(self, backend: type[AgentBackend]) -> RuntimeLocation:
-        return backend.location_type(str(self.resolve(self.root)))
+        return self.located(backend, self.resolve(self.root))
 
     def writable_location(self, backend: type[AgentBackend]) -> RuntimeLocation:
-        return backend.location_type(str(self.writable(self.root)))
+        return self.located(backend, self.writable(self.root))
+
+    @staticmethod
+    def located(backend: type[AgentBackend], path: Path) -> RuntimeLocation:
+        return backend.location_type(str(path))
 
 
 @dataclass(frozen=True, slots=True, eq=False)
 class BusSessionLocation(RegistrySessionLocation):
     """A transcript stored under the bus root; a copied root reads its own copy."""
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.path.is_absolute() or ".." in self.path.parts:
             raise ValueError(f"Bus session must be relative to its root: {self.path}")
 
-    def bound_to(self, root: Path) -> BoundBusSession:
+    def bound_to(self, root: Path) -> BoundSessionLocation:
         return BoundBusSession(self.path, root.resolve())
 
     def resolve(self, root: Path) -> Path:
@@ -116,11 +120,11 @@ class BusSessionLocation(RegistrySessionLocation):
 class ExternalSessionLocation(RegistrySessionLocation):
     """A harness transcript outside every bus root; only the published root writes it."""
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not self.path.is_absolute():
             raise ValueError(f"External session must be absolute: {self.path}")
 
-    def bound_to(self, root: Path) -> BoundExternalSession:
+    def bound_to(self, root: Path) -> BoundSessionLocation:
         return BoundExternalSession(self.path, root.resolve())
 
     def resolve(self, root: Path) -> Path:
@@ -129,7 +133,8 @@ class ExternalSessionLocation(RegistrySessionLocation):
     def writable(self, root: Path) -> Path:
         if root.resolve() != CommsRoute.current().observe_root():
             raise RelationViolationError(
-                f"Copied bus {root} cannot write external session {self.path}")
+                f"Copied bus {root} cannot write external session {self.path}"
+            )
         return self.resolve(root)
 
 
