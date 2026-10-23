@@ -13,7 +13,6 @@ from pathlib import Path
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, compile_decoder
-from agent_comms.goal_failure_observation import FailedTurnEvidence
 from agent_comms.historical_views import HistoryArchive
 from agent_comms.installer.carry import Carried, Carry
 from agent_comms.locked_store import JsonDocument, RegistryFile, RootFile, SQLiteFile
@@ -44,7 +43,7 @@ class ClaimFields(RetiredClaimFields, Carry):
         documents = {path: owner.record_type for path, owner in files.items()
                      if issubclass(owner, JsonDocument) and not issubclass(owner, RegistryStore)}
         documents.update((path, SelectedWriteIntent) for path in SelectedWritePlans.matching_in(
-            root / SelectedWritePlans.root_directory))
+            SelectedWritePlans.directory_in(root)))
         documents.update((path, QueuedRestart) for path in (root / DIRECTORY).rglob("*.json"))
         return documents
 
@@ -67,7 +66,7 @@ class ClaimFields(RetiredClaimFields, Carry):
     def carry(self, *, apply: bool) -> Carried:
         if apply:
             HeldBusFile(RegistryFile, RegistryFile.path_in(self.root)).require()
-        rewritten = []
+        rewritten: list[Path] = []
         changed = 0
         with _store_lock(HistoryArchive.path_in(self.root)):
             sources = CarryCatalogSource.read(self.root, self.original_root)
@@ -82,7 +81,7 @@ class ClaimFields(RetiredClaimFields, Carry):
                             changed += 1
                             if apply:
                                 registry._write_unlocked(json.dumps(current, indent=2))
-                                rewritten.extend(str(path.relative_to(self.root))
+                                rewritten.extend(path.relative_to(self.root)
                                                  for path in registry.written)
                 files = RootFile.existing_in(root)
                 for path, owner in files.items():
@@ -91,7 +90,7 @@ class ClaimFields(RetiredClaimFields, Carry):
                         count = self.database(path, apply=apply)
                         changed += count
                         if count and apply:
-                            rewritten.append(str(path.relative_to(self.root)))
+                            rewritten.append(path.relative_to(self.root))
                 for path, declared in self.documents(root, files).items():
                     self.require_confined(self.root, path)
                     plan = compile_decoder(declared)
@@ -105,14 +104,14 @@ class ClaimFields(RetiredClaimFields, Carry):
                             AtomicFile(path).write_text(json.dumps(current))
                     changed += count
                     if count and apply:
-                        rewritten.append(str(path.relative_to(self.root)))
+                        rewritten.append(path.relative_to(self.root))
             if apply and rewritten:
                 rebound = tuple(source.carried_registry(source.mapped_root(self.root, self.original_root))
                                 for source in sources)
                 if rebound:
                     AtomicFile(HistoryArchive.path_in(self.root)).write_text(
                         json.dumps(FieldCodec.encode(rebound)))
-                    rewritten.append(HistoryArchive.filename)
+                    rewritten.append(Path(HistoryArchive.filename))
         return Carried(changed, rewritten=tuple(rewritten))
 
     @classmethod
@@ -127,10 +126,7 @@ class ClaimFields(RetiredClaimFields, Carry):
                            if row.stored_columns(db))
             for row in tables:
                 stored = row.stored_columns(db)
-                renamed = {field.name: _identifier(old)
-                           for field in row._fields()
-                           if field.column.record_key
-                           and (old := cls.retired_fields(row).get(field.name)) in stored}
+                renamed = cls.retired_columns(row, stored)
                 if any(field.wire_name in stored for field in row._fields()
                        if field.name in renamed):
                     raise RelationViolationError(f"{row.__name__} contains old and new claim columns")

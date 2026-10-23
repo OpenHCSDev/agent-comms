@@ -23,6 +23,7 @@ from agent_comms.registry_document import RegistryDocument
 from agent_comms.selected_write_plan import SelectedWriteBinding, SelectedWriteIntent
 from agent_comms.thread_identity import ClaimedIdentity, TurnFence
 from agent_comms.turn_lease import ActiveTurn
+from agent_comms.typed_table import TypedTable, _identifier
 
 
 @dataclass(frozen=True)
@@ -66,6 +67,13 @@ class RetiredClaimFields:
         return bool(cls.retired_fields(record))
 
     @classmethod
+    def retired_columns(cls, record: type[TypedTable], stored: tuple[str, ...]) -> dict[str, str]:
+        return {field.name: _identifier(old)
+                for field in record._fields()
+                if field.column.record_key
+                and (old := cls.retired_fields(record).get(field.name)) in stored}
+
+    @classmethod
     def rename_record(cls, record: type, raw: dict[str, object]) -> dict[str, object]:
         result = raw
         for entry in FieldCodec.field_plans(record):
@@ -81,4 +89,3 @@ class RetiredClaimFields:
     @classmethod
     def convert(cls, declared: object, raw: object) -> object:
         return compile_decoder(declared).rewrite_records(raw, cls.rename_record, cls.selects_record)
-

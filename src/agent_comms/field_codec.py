@@ -1784,7 +1784,6 @@ class ValueDecoder[T](ABC):
     def selects_record(self, select: WireRecordFilter) -> bool:
         return False
 
-    @cache
     def contains_records(
         self, select: WireRecordFilter, seen: frozenset[object] = frozenset(),
     ) -> bool:
@@ -1989,7 +1988,6 @@ class _RepresentedDecoder(ValueDecoder[Any]):
     structural: ValueDecoder[object]
 
     @property
-    @cache
     def wire_structure(self) -> ValueDecoder[object]:
         return self.representation.wire_structure(self.structural)
 
