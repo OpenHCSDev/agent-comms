@@ -12,6 +12,10 @@ maintenance hold, then selects the runtime the restored root names through the i
 own ``Stack.publish``: the rollback path's "original runtime selected again". The backup
 directory is the only complete copy and is never retired or renamed here. Run it once on
 the live root, then delete it.
+
+Run it with an installed runtime's interpreter: the backup's digests are SQLite dumps
+taken with the runtimes' SQLite 3.50.4, and a dev environment's newer SQLite dumps the
+same bus differently, so the restore would refuse its own result.
 """
 
 from __future__ import annotations
