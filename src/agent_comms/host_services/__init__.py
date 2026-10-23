@@ -17,6 +17,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
+from aiohttp.web import TCPSite
+
 from ..declared_family import DeclaredFamily
 from ..field_codec import PathText
 from ..launch_runtime import LaunchRuntime
@@ -24,6 +26,20 @@ from ..launch_runtime import LaunchRuntime
 
 class ServiceNotServingError(RuntimeError):
     """A restarted service did not serve its installed runtime's contract."""
+
+
+class SystemdSite(TCPSite):
+    """The listening site notifies its supervisor only after binding succeeds."""
+
+    notify_variable: ClassVar[str] = "NOTIFY_SOCKET"  # systemd's supervisor socket
+
+    async def start(self) -> None:
+        await super().start()
+        address = os.environ[self.notify_variable]
+        target = "\0" + address[1:] if address.startswith("@") else address
+        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as notify:
+            notify.connect(target)
+            notify.sendall(b"READY=1")
 
 
 @dataclass(frozen=True)
@@ -99,21 +115,6 @@ class SystemdUserService(HostService, declared_name=None):
 
     program: ClassVar[str]
     unit: ClassVar[str]
-    notify_variable: ClassVar[str] = "NOTIFY_SOCKET"  # systemd's spelling of the supervisor socket
-
-    @classmethod
-    def ready(cls) -> None:
-        """Tell the supervisor this process serves.
-
-        Every launch has one: systemd for the installed unit, ``tests/connector_readiness.py``
-        for a test. A launch without NOTIFY_SOCKET has nobody to tell and fails here, loudly.
-        """
-        address = os.environ[cls.notify_variable]
-        target = "\0" + address[1:] if address.startswith("@") else address
-        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as notify:
-            notify.connect(target)
-            notify.sendall(b"READY=1")
-
     @classmethod
     def unit_file(cls) -> Path:
         return Path.home() / ".config/systemd/user" / cls.unit

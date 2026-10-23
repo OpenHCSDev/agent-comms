@@ -218,6 +218,7 @@ class RepoChoice(SubclassUnion, affix="Repos"):
     def without_commander(self) -> None:
         """Refuse repositories given to a bus that records no commander to hold them."""
 
+
 @dataclass(frozen=True, slots=True)
 class GivenRepos(RepoChoice):
     """Checkouts spelled as comma-separated paths on the command line."""
@@ -243,6 +244,7 @@ class GivenRepos(RepoChoice):
         raise UpgradeRefused("--repos names a commander's repositories; this bus records no "
                              "commander, so name one with --commander")
 
+
 @dataclass(frozen=True, slots=True)
 class KeptRepos(NullMember, RepoChoice):
     def applied(self, recorded: tuple[Repo, ...]) -> tuple[Repo, ...]:
@@ -254,6 +256,7 @@ class KeptRepos(NullMember, RepoChoice):
 
     def without_commander(self) -> None:
         pass
+
 
 class CommanderConfigFile(SubclassUnion, affix="ConfigFile"):
     """What an install left for commander tools: the config it wrote, or none."""
