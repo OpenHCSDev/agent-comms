@@ -59,7 +59,6 @@ class TextWire:
     """The text tag shared by external CLI content families."""
 
 
-
 class TaggedWire(wire_models.DeclaredWireFamily, wire_models.WireModel, ABC, affix="", declared_name=None):
     """A JSON type tag supplied by its declared class, not caller policy."""
     header: ClassVar[builtins.type[WireHeader]] = WireHeader

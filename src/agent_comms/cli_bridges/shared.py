@@ -1,7 +1,6 @@
 """Shared Core inbox delivery and process lifetime for external CLI adapters."""
 from __future__ import annotations
 
-
 import argparse
 import asyncio
 import builtins

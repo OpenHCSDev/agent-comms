@@ -5,7 +5,6 @@ decoders produce the same transcript updates.
 """
 from __future__ import annotations
 
-
 import hashlib
 import json
 from abc import ABC
@@ -13,7 +12,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import BinaryIO, ClassVar
 
-from pydantic import Field, JsonValue, field_validator, model_validator
+from pydantic import Field, JsonValue, TypeAdapter, field_validator, model_validator
 
 from agent_comms.wire_models import WireAdapter, WireModel
 from agent_comms.cli_protocol import OpenWire, TimestampedWire, WireHeader
@@ -115,7 +114,7 @@ class FunctionCallItem(RolloutItem, declared_name='function_call'):
 
     @property
     def raw_input(self) -> dict[str, JsonValue]:
-        return WireAdapter(dict[str, JsonValue]).validate_json(self.arguments)
+        return TypeAdapter(dict[str, JsonValue]).validate_json(self.arguments)
 
     def updates(self, state: RolloutState, position: int, timestamp: float) -> tuple[RuntimeUpdate, ...]:
         state.tools[self.call_id] = self.name

@@ -1,14 +1,19 @@
 """Claude's completed JSONL blocks own transcript items and activity."""
 from __future__ import annotations
 
-
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import ClassVar, Literal, Self
 from xml.etree import ElementTree
 
-from pydantic import Field, JsonValue, ModelWrapValidatorHandler, field_validator, model_validator
+from pydantic import (
+    Field,
+    JsonValue,
+    ModelWrapValidatorHandler,
+    field_validator,
+    model_validator,
+)
 
 from agent_comms.wire_models import WireAdapter, WireModel
 from agent_comms.cli_protocol import TaggedWire, TextWire, TimestampedWire, WireHeader
