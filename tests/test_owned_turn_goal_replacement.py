@@ -28,6 +28,7 @@ from compaction_loopback import LoopbackProvider
 from native_backend_fixture import native_backend_fixture, wait_for
 from test_todos import order
 from source_revision_fixture import SourceRepository
+from agent_comms.threads import Thread
 
 
 class FollowingReadProvider(LoopbackProvider):
@@ -50,7 +51,7 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
         async with saved.open_owner(native_options=()) as (agent, session_id):
             comms = agent._comms
             worker = agent.sessions.require(session_id)
-            comms.registry.declare(comms.registry.new_thread(
+            comms.registry.declare(Thread(
                 'lead', frozenset(), str(saved.project),
                 process_identity=ProcessIdentity.capture(os.getpid()),
             ))
@@ -116,7 +117,7 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
     source = SourceRepository.create(tmp_path / 'source')
     comms = installed_comms(tmp_path)
     for name in ('lead', 'worker'):
-        comms.registry.declare(comms.registry.new_thread(
+        comms.registry.declare(Thread(
             name, frozenset(), str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
         ))
@@ -180,7 +181,7 @@ async def test_order_reactivating_a_blocked_goal_keeps_the_running_turn(tmp_path
     source = SourceRepository.create(tmp_path / 'source')
     comms = installed_comms(tmp_path)
     for name in ('lead', 'worker'):
-        comms.registry.declare(comms.registry.new_thread(
+        comms.registry.declare(Thread(
             name, frozenset(), str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid()),
         ))

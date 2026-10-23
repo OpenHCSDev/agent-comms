@@ -11,6 +11,7 @@ import re
 import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import MISSING, Field, dataclass, field, fields, is_dataclass
 from datetime import datetime
 from enum import Enum
@@ -35,6 +36,7 @@ from typing import (
     overload,
 )
 from uuid import uuid4
+from weakref import WeakKeyDictionary
 
 from pydantic import JsonValue
 from typing_extensions import TypeAliasType, TypeForm
@@ -86,24 +88,14 @@ class MalformedRecord(ValueError):  # noqa: N818 - names the refused data
                 raise self.error_cls(f"{self.subject}: {exc}") from exc
             return False
 
-    class _Located:
+    @staticmethod
+    @contextmanager
+    def gathering(problems: dict[str, str], name: str, fix: str) -> Iterator[None]:
         """Record a refused field under its key so sibling refusals are reported together."""
-
-        __slots__ = ("fix", "name", "problems")
-
-        def __init__(self, problems: dict[str, str], name: str, fix: str) -> None:
-            self.problems = problems
-            self.name = name
-            self.fix = fix
-
-        def __enter__(self) -> None:
-            return None
-
-        def __exit__(self, _exc_type: object, exc: object, _traceback: object) -> bool:
-            if isinstance(exc, MalformedRecord):
-                self.problems.update(exc.located(self.name, self.fix))
-                return True
-            return False
+        try:
+            yield
+        except MalformedRecord as refused:
+            problems.update(refused.located(name, fix))
 
     @classmethod
     def refusing(cls, subject: str) -> MalformedRecord._Refusal:
@@ -135,15 +127,14 @@ class FieldDirective:
 
     @staticmethod
     @cache
-    def _index(annotation: object) -> Mapping[type[FieldDirective], tuple[FieldDirective, ...]]:
-        """Compile a declaration's directives once, indexed by their capabilities."""
-        found: dict[type[FieldDirective], list[FieldDirective]] = {}
+    def _index(annotation: object) -> Mapping[type, tuple[object, ...]]:
+        """Compile a declaration's metadata once, indexed by every class of each item's MRO:
+        looking up a directive class finds exactly its instances."""
+        found: dict[type, list[object]] = {}
         if get_origin(annotation) is Annotated:
-            for directive in get_args(annotation)[1:]:
-                if isinstance(directive, FieldDirective):
-                    for capability in type(directive).__mro__:
-                        if issubclass(capability, FieldDirective):
-                            found.setdefault(capability, []).append(directive)
+            for item in get_args(annotation)[1:]:
+                for capability in type(item).__mro__:
+                    found.setdefault(capability, []).append(item)
         return types.MappingProxyType({kind: tuple(items) for kind, items in found.items()})
 
     @classmethod
@@ -486,9 +477,9 @@ class FieldPlan:
     def key(self) -> str:
         return WireName.read(self.annotation, self.name)
 
-    def locating(self, problems: dict[str, str]) -> MalformedRecord._Located:
+    def locating(self, problems: dict[str, str]) -> AbstractContextManager[None]:
         """A refused value joins its record's problems under this field's key."""
-        return MalformedRecord._Located(problems, self.key, f"supply {self.annotation}")
+        return MalformedRecord.gathering(problems, self.key, f"supply {self.annotation}")
 
     @cached_property
     def required(self) -> bool:
@@ -772,7 +763,7 @@ class InlineFieldPlan(DeclaredFieldPlan):
 
     def contribute(self, fields):
         fields.extend(self.record.fields)
-        return self.record.init_required_keys
+        return self.record.required_keys
 
     @cached_property
     def wire_keys(self) -> tuple[str, ...]:
@@ -1444,10 +1435,22 @@ class GitCommitText(SpelledText):
 class Projected(property):
     """A computed field declared by its owner for a named read-only view."""
 
+    _declared: ClassVar[WeakKeyDictionary[type, dict[str, Projected]]] = WeakKeyDictionary()
+
     def __init__(self, getter, *, view: str, name: str | None = None):
         super().__init__(getter)
         self.view = view
         self.wire_name = name or getter.__name__
+
+    def __set_name__(self, owner: type, name: str) -> None:
+        """Every class body declaring this field records it, a slots rebuild included."""
+        Projected._declared.setdefault(owner, {})[name] = self
+
+    @staticmethod
+    def of(declaration: type) -> Iterator[tuple[str, Projected]]:
+        """Each projected field visible on ``declaration``, base declarations first."""
+        for base in reversed(declaration.__mro__):
+            yield from Projected._declared.get(base, {}).items()
 
 
 def projected(*, view: str, name: str | None = None):
@@ -1817,12 +1820,13 @@ class FieldCodec(MroDispatch, Sealed):
         fields: tuple[FieldPlan, ...]
         bindings: tuple[FieldPlan, ...]
         required_keys: tuple[str, ...]
-        init_required_keys: tuple[str, ...]
+        """The keys every stored row carries, in wire order: one list the decoder enforces
+        and the schema publishes."""
         accepted_keys: frozenset[str]
 
         @cached_property
         def required_wire_keys(self) -> frozenset[str]:
-            return frozenset((*self.required_keys, *self.init_required_keys))
+            return frozenset(self.required_keys)
 
         @cached_property
         def record_fields(self) -> tuple[tuple[Field[object], str], ...]:
@@ -1846,7 +1850,7 @@ class FieldCodec(MroDispatch, Sealed):
         def schema_fields(self, properties, required):
             for entry in self.fields:
                 properties.update(entry.schema_fields())
-            required.extend(self.init_required_keys)
+            required.extend(self.required_keys)
             return properties
 
     @classmethod
@@ -1869,13 +1873,11 @@ class FieldCodec(MroDispatch, Sealed):
             )
         )
         computed = {member.wire_name for member in cls._projections(record, "wire").values()}
-        wire_fields, required_keys, init_required_keys = [], [], []
+        wire_fields, required_keys = [], []
         for entry in entries:
             keys = entry.contribute(wire_fields)
-            if entry.required:
+            if entry.required or entry.constructor_required:
                 required_keys.extend(keys)
-            if entry.constructor_required:
-                init_required_keys.extend(keys)
         wire_keys = [key for entry in entries for key in entry.wire_keys]
         if len(set(wire_keys)) != len(wire_keys) or (
             issubclass(record, DeclaredFamily) and record.family_discriminator in wire_keys
@@ -1886,7 +1888,6 @@ class FieldCodec(MroDispatch, Sealed):
             fields=tuple(wire_fields),
             bindings=entries,
             required_keys=tuple(required_keys),
-            init_required_keys=tuple(init_required_keys),
             accepted_keys=frozenset(wire_keys) | computed,
         )
 
@@ -1904,10 +1905,7 @@ class FieldCodec(MroDispatch, Sealed):
         # Cache immutable declarations only. Each consumer still invokes the
         # original property on the current record; projected values are never cached.
         return types.MappingProxyType({
-            name: member
-            for base in reversed(declaration.__mro__)
-            for name, member in vars(base).items()
-            if isinstance(member, Projected) and member.view == view
+            name: member for name, member in Projected.of(declaration) if member.view == view
         })
 
 

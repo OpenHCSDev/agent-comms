@@ -24,6 +24,7 @@ from agent_comms.view_unread import (
     NativeReplyPreparation, ReplyIndex, ReplyIndexUpdate, ReplyRead, ReplyReading,
     TranscriptReadState,
 )
+from agent_comms.threads import Thread
 
 
 @pytest.fixture
@@ -31,7 +32,7 @@ def watched_bus(tmp_path):
     Bus.install(Bus.path_in(tmp_path / "bus"))
     comms = wire(tmp_path / "bus")
     for name in ("owner", "peer"):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     return Bus.at(comms.root), comms
 
 

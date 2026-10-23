@@ -22,7 +22,6 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
@@ -31,6 +30,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import InfoKind, Message
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.selected_source_batch import SelectedSource, SelectedSourceBatch
+from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="private cohort claim_scope requires real /var/tmp"
@@ -45,7 +45,7 @@ def alice_batch(*sent: tuple[str, str]):
         root.mkdir(mode=0o700)
         comms = prepare_native_comms(wire(root))
         for name, created in (("sender", 17021.0), ("Alice", 17022.0)):
-            comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), dirname, process_identity=ProcessIdentity.capture(os.getpid()), created_at=created))
+            comms.registry.declare(Thread(name, frozenset({'team'}), dirname, process_identity=ProcessIdentity.capture(os.getpid()), created_at=created))
         root_id = comms.registry.prepare_native_root().namespace
         messages = [publish_initial(comms, "sender", target, text) for target, text in sent]
         with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -57,7 +57,7 @@ def alice_batch(*sent: tuple[str, str]):
                 )
             for message in messages:
                 accept_delivery_cohort(comms.bus, root_id, message.seq, store)
-            lookup = RecordedThreadIncarnation("fixture", comms.registry.require("Alice").created_at).lookup
+            lookup = comms.registry.require("Alice").incarnation.lookup
             assignments = sealed_cohort_assignments(store, lookup)
             yield SelectedSourceBatch.first_route(tuple(
                 SelectedSource(assignment.assignment_id, store.assignments, delivery)

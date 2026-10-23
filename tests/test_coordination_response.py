@@ -38,6 +38,7 @@ from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.registration import Registration
 from agent_comms.selected_source_batch import SelectedSource
 from agent_comms.coordination_tables.executions import NoPointedExecution
+from agent_comms.threads import Thread
 
 # Private bus publication requires POSIX owner/mode ancestry; Windows stat
 # emulation cannot attest this boundary or exercise its durability contract.
@@ -65,7 +66,7 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
     comms = prepare_native_comms(wire(tmp_path / "wire"))
     for name in ("sender", "owner"):
         comms.registry.declare(
-            comms.registry.new_thread(name, frozenset({'team'}), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+            Thread(name, frozenset({'team'}), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
     root_id = comms.registry.prepare_native_root().namespace
     target = "owner" if direct else "#team"

@@ -31,6 +31,7 @@ from agent_comms.todos import PendingProblemOrder, PresentCheckout, ProgressRead
 from agent_comms.ui_model.unit_state import UnitState
 from order_scope_fixture import FIX_SCOPE
 from agent_comms.order_runs import MechanicalOrderRun
+from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize(
@@ -93,9 +94,9 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
         json.dumps(FieldCodec.encode(StorageRule(checkout_base=base)))
     )
     comms = wire(root)
-    lead = comms.registry.declare(comms.registry.new_thread("lead", frozenset(), str(repository)))
+    lead = comms.registry.declare(Thread("lead", frozenset(), str(repository)))
     worker = comms.registry.declare(
-        comms.registry.new_thread("worker", frozenset(), str(home))
+        Thread("worker", frozenset(), str(home))
     )
     comms.goals.todos.create(
         "P1",

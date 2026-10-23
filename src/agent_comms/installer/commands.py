@@ -14,15 +14,13 @@ from pathlib import Path
 from threading import Lock
 from typing import BinaryIO
 
-from agent_comms.child_process import SpawnedProcess
+from agent_comms.child_process import ChildOutcome, SpawnedProcess
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.backup import UpgradeRefused
 from agent_comms.installer.interpreter_operation import (
     ProbeProgram,
-    ProbeReply,
     ProbeRequest,
     RuntimeProbe,
-    RuntimeProbeFailed,
     SourceProgram,
 )
 from agent_comms.launch_runtime import RestoredRuntime
@@ -47,6 +45,16 @@ class InterpreterWorkerKey:
     program: tuple[str, ...]
     cwd: Path
     environment: tuple[tuple[str, str], ...]
+
+
+class InterpreterWorkerDied(UpgradeRefused):
+    """A worker ends only when an operation raised in it; its exit and its stderr, which
+    holds that traceback, are the failure."""
+
+    def __init__(self, outcome: ChildOutcome, errors: str) -> None:
+        super().__init__(f"Interpreter worker {outcome.summary} without an answer: {errors}")
+        self.outcome = outcome
+        self.errors = errors
 
 
 @dataclass
@@ -84,15 +92,14 @@ class InterpreterWorker:
         self.diagnostics.seek(0)
         return self.diagnostics.read().decode(errors="replace").strip()
 
-    def exchange(self, encoded: str) -> ProbeReply:
+    def exchange(self, encoded: str) -> str:
         with self.exchange_lock:
             self.requests.write((encoded + "\n").encode())
             self.requests.flush()
             answer = self.answers.readline()
             if not answer:
-                raise UpgradeRefused(
-                    f"Interpreter worker closed without an answer: {self.errors()}")
-            return FieldCodec.decode(ProbeReply, FieldCodec.parse(answer.decode()))
+                raise InterpreterWorkerDied(self.child.reap(), self.errors())
+            return answer.decode()
 
     def close(self) -> None:
         """Closing its requests ends the worker's loop; it is then reaped and its streams closed."""
@@ -185,10 +192,11 @@ class InstallCommands:
                     # thread until all workers close, including calls from short-lived pools.
                     self.workers[key] = self.launcher.submit(InterpreterWorker.start, key).result()
                 worker = self.workers[key]
-            reply = worker.exchange(FieldCodec.compact(FieldCodec.encode(
-                ProbeRequest(probe, MaintenanceHolder.current().nonce))))
-        try:
-            return probe.decode_answer(reply.answer())
-        except RuntimeProbeFailed as error:
-            raise UpgradeRefused(str(error)) from error
+            try:
+                answer = worker.exchange(FieldCodec.compact(FieldCodec.encode(
+                    ProbeRequest(probe, MaintenanceHolder.current().nonce))))
+            except InterpreterWorkerDied:
+                self.close_workers((key,))
+                raise
+        return probe.decode_answer(answer)
 

@@ -7,7 +7,6 @@ from functools import partial
 
 import pytest
 
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.assignment_states import DeferredAssignment, FullPendingAssignment
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.coordination_cohort import pending_sealed_assignments
@@ -30,7 +29,7 @@ async def test_interrupted_following_delivery_recovers_only_before_native_send(
     owner = comms.registry.require("beta")
     message = publish_initial(comms, "sender", "beta", "must survive selection")
     store_path = comms.root / "coordination.sqlite3"
-    lookup = RecordedThreadIncarnation("fixture", owner.created_at).lookup
+    lookup = owner.incarnation.lookup
     await _accept_visible_deliveries(
         comms.bus, root_id, store_path, lookup, 0, owner_name=owner.name,
     )
@@ -112,7 +111,7 @@ async def test_recovery_without_paused_assignments_is_read_only(tmp_path, monkey
     owner = comms.registry.require("beta")
     publish_initial(comms, "sender", "beta", "unbound recovery source")
     store_path = comms.root / "coordination.sqlite3"
-    lookup = RecordedThreadIncarnation("fixture", owner.created_at).lookup
+    lookup = owner.incarnation.lookup
     await _accept_visible_deliveries(comms.bus, root_id, store_path, lookup, 0, owner_name="beta")
     with Coordination(str(store_path)) as store:
         assignments = pending_sealed_assignments(store, lookup)

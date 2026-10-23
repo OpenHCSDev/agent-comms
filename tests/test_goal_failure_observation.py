@@ -17,6 +17,7 @@ from agent_comms.goal_generation import BlockedGeneration
 from agent_comms.goals import Goal
 from agent_comms.thread_identity import RecordedThreadIncarnation, TurnIdentity
 from agent_comms.turn_lease import FinishedTurn, StoredTurnRecord, TurnLeaseFence
+from agent_comms.threads import Thread
 
 
 @pytest.fixture
@@ -25,7 +26,7 @@ def bound(tmp_path, *, thread_registration):
     root.mkdir(mode=0o700)
     store = GoalAttemptStore.initialize(root)
     goal = Goal("private goal prose", "goal", published_seq=0, revision=2)
-    owner = thread_registration.new_thread(
+    owner = Thread(
         'owner', frozenset(), '/private-worktree',
         process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0,
         goal=goal, turn_generation=7, turn_record=FinishedTurn('a' * 32),

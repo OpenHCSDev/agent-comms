@@ -1651,7 +1651,7 @@ class RegisterCliCommand(NameArgument, CliCommand):
 
     def apply(self, ctx: Comms) -> CliResult:
 
-        thread = ctx.registry.new_thread(
+        thread = Thread(
             name=self.name,
             tags=self.tags,
             worktree=self.worktree,
@@ -1740,8 +1740,17 @@ class InstallCliCommand(CliCommand):
         project = self.commander.configured(snapshot.commander_project, self.repos, snapshot)
         ctx.registry.set_commander_project(project)
         return InstallResult(project, {
-            type(harness).declared_name: harness.register(ctx, self.project)
+            type(harness).declared_name: self.declare_bus_threads(ctx, harness)
             for harness in Harness.present(home)})
+
+    def declare_bus_threads(self, ctx: Comms, harness: Harness) -> tuple[str, ...]:
+        """Declare the bus threads this harness needs and the registry does not hold yet."""
+        names = ctx.registry.snapshot()
+        registered = tuple(name for name in harness.bus_threads if not names.taken(name))
+        for name in registered:
+            ctx.registry.declare(Thread(name=name, tags=frozenset(), worktree=str(self.project),
+                                        execution=ExternalThreadExecution))
+        return registered
 
 
 @dataclass(frozen=True, kw_only=True)

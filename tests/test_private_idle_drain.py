@@ -11,7 +11,6 @@ from contextlib import AsyncExitStack
 import pytest
 
 import agent_comms.agent_events as events
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.coordinator import Coordination
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.owned_turn import OwnedTurn
@@ -20,6 +19,7 @@ from agent_comms.private_path import FileRevision
 from agent_comms.store_files import _store_lock
 from test_acp_private_nk_delivery import _session
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
+from agent_comms.threads import Thread
 
 
 @pytest.mark.asyncio
@@ -119,11 +119,11 @@ async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path
 
 def _covered_session(tmp_path):
     comms, agent, root_id = _session(tmp_path)
-    other = comms.registry.new_thread('alpha', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+    other = Thread('alpha', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(other)
     with Coordination(comms.root / "coordination.sqlite3") as store:
         store.participants.register(
-            RecordedThreadIncarnation("fixture", other.created_at).lookup, committed=True,
+            other.incarnation.lookup, committed=True,
         )
     publish_initial(comms, "sender", other.name, "another recipient's original source")
     return comms, agent, root_id

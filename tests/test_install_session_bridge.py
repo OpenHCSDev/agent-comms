@@ -28,6 +28,7 @@ from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms_hooks.session import started
 from agent_comms_hooks.watch import LapsedWatch, LiveWatch, WatchClaim, WatchRecord
 from source_programs import SourcePrograms
+from agent_comms.threads import Thread
 
 SERVE_FROM_SOURCE = (sys.executable, '-c', 'from agent_comms.cli_bridges.claude import main; main()')
 
@@ -39,7 +40,7 @@ def session_bridge(tmp_path, home, program=SERVE_FROM_SOURCE, *, state_directory
     comms = wire(tmp_path / 'bus')
     Bus.install(Bus.path_in(comms.root))
     RootRuntime.publish(comms.root, runtime)
-    comms.registry.declare(comms.registry.new_thread(
+    comms.registry.declare(Thread(
         'bridge-copy', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
     transcript = tmp_path / 'copied-session.jsonl'
     transcript.write_text('')

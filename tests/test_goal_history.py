@@ -24,11 +24,12 @@ from agent_comms.goals import NoGoal
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.tools import ToolRequest
 from agent_comms.tool_caller import ThreadCaller
+from agent_comms.threads import Thread
 
 
 def _wire(tmp_path) -> Comms:
     comms = installed_comms(tmp_path / "wire")
-    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('worker', frozenset(), str(tmp_path)))
     return comms
 
 

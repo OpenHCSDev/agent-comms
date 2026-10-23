@@ -608,9 +608,8 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
                 previous_status=self.status(thread.name),
             )
             return change.restarted() if new_owner else change
-        if any(existing.created_at == thread.created_at for existing in self.threads.values()):
-            used = {existing.created_at for existing in self.threads.values()}
-            thread = replace(thread, created_at=thread.created_at.distinct_from(used))
+        used = {existing.created_at for existing in self.threads.values()}
+        thread = replace(thread, created_at=thread.created_at.distinct_from(used))
 
         change = InitialRegistration(thread=thread, status=status)
         return change.restarted() if new_owner else change

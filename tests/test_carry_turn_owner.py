@@ -9,11 +9,12 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
 from cutover.carry_turn_owner import TurnOwner
 from goal_owner_fixture import canonical_goal_wire
+from agent_comms.threads import Thread
 
 
 def predecessor_turn(tmp_path, pid):
     comms = canonical_goal_wire(tmp_path)
-    comms.registry.declare(comms.registry.new_thread(
+    comms.registry.declare(Thread(
         "carol", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     comms.agents.begin_turn("carol", "carol-turn")
     path = comms.registry.require("carol").require_turn_lease().record.path

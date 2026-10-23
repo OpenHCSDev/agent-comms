@@ -16,6 +16,7 @@ from agent_comms.registry_store import RegistryStore
 from agent_comms.session_file import BusSessionLocation, ExternalSessionLocation, RegistrySessionLocation
 from conftest import maintenance_held
 from cutover.carry_session_locations import SessionLocations
+from agent_comms.threads import Thread
 
 
 def old_registry(tmp_path):
@@ -23,7 +24,7 @@ def old_registry(tmp_path):
     bus = comms.root / "native-sessions" / "bus.jsonl"
     external = tmp_path / "harness" / "external.jsonl"
     for name, path in (("bus", bus), ("harness", external)):
-        comms.registry.declare(comms.registry.new_thread(
+        comms.registry.declare(Thread(
             name, frozenset(), str(tmp_path),
             session_file=RegistrySessionLocation.from_path(path, comms.root)))
     raw = json.loads(comms.registry.store.path.read_text())
@@ -76,7 +77,7 @@ def test_publishing_into_another_root_keeps_the_named_transcript(tmp_path):
 def test_a_private_root_writes_the_harness_transcript_it_published(tmp_path):
     comms = wire(tmp_path / "private")
     harness = tmp_path / "harness" / "external.jsonl"
-    comms.registry.declare(comms.registry.new_thread(
+    comms.registry.declare(Thread(
         "owner", frozenset(), str(tmp_path),
         session_file=RegistrySessionLocation.from_path(harness, comms.root)))
     assert comms.registry.require("owner").writable_runtime.path == str(harness.resolve())
@@ -85,7 +86,7 @@ def test_a_private_root_writes_the_harness_transcript_it_published(tmp_path):
 def test_carry_converts_the_archived_catalogue_before_reading_its_roots(tmp_path):
     old = wire(tmp_path / "old")
     session = old.root / "native-sessions" / "bus.jsonl"
-    old.registry.declare(old.registry.new_thread(
+    old.registry.declare(Thread(
         "bus", frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(session, old.root)))
     Bus.install(Bus.path_in(old.root))
     live = wire(tmp_path / "live")
