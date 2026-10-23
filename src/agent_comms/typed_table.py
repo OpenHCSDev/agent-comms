@@ -1977,7 +1977,7 @@ class ProducedTable(ProducedRow, TypedTable, declared_name=None):
     @cache
     def _producer_digest(cls) -> str:
         producers = cls.producer_classes()
-        owners = {
+        owners: set[type[DeclaredFamily]] = {
             owner
             for row in (cls, *cls.members_with(cls))
             for owner in row.__mro__

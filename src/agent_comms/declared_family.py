@@ -42,7 +42,7 @@ class _FamilyMeta(AutoRegisterMeta, ABCMeta):
         roots = {
             base._family_root
             for base in bases
-            if isinstance(base, _FamilyMeta) and base._family_root is not None
+            if isinstance(base, _FamilyMeta) and base is not DeclaredFamily
         }
         if len(roots) > 1:
             raise TypeError("A declaration cannot belong to two families.")
@@ -87,7 +87,10 @@ class _FamilyMeta(AutoRegisterMeta, ABCMeta):
         cls: type[DeclaredFamily] = super().__new__(
             mcs, name, bases, namespace, registry_config=config, **class_options
         )
-        cls._family_root = cls if is_root else root
+        if is_root:
+            cls._family_root = cls
+        elif root is not None:
+            cls._family_root = root
         return cast(_FamilyMeta, cls)
 
     @staticmethod
@@ -130,7 +133,7 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
 
     declared_name: ClassVar[str]
     family_discriminator: ClassVar[str] = "kind"
-    _family_root: ClassVar[type[DeclaredFamily] | None] = None
+    _family_root: ClassVar[type[DeclaredFamily]]
     _family_affix: ClassVar[str]
     __registry__: ClassVar[dict[str, type[DeclaredFamily]]]
 
@@ -237,10 +240,7 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
     @classmethod
     def family_root(cls) -> type[DeclaredFamily]:
         """The nominal root recorded when this declaration was constructed."""
-        root = cls._family_root
-        if root is None:
-            raise TypeError(f"{cls.__name__} has no declared family root")
-        return root
+        return cls._family_root
 
     @classmethod
     def declared_position(cls) -> int:
@@ -257,7 +257,7 @@ class DeclaredWireFamily(DeclaredFamily, BaseModel, metaclass=_WireFamilyMeta):
 
     declared_name: ClassVar[str]
     family_discriminator: ClassVar[str]
-    _family_root: ClassVar[type[DeclaredFamily] | None]
+    _family_root: ClassVar[type[DeclaredFamily]]
     _family_affix: ClassVar[str]
     __registry__: ClassVar[dict[str, type[DeclaredFamily]]]
 
