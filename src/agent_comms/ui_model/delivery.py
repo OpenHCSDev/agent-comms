@@ -121,9 +121,7 @@ class ReadDeliveryView(DeliveryView):
 
     @property
     def shown(self) -> bool:
-        return bool(
-            self.current or self.overview.historical_count or self.overview.dismissed_historical_count
-        )
+        return bool(self.current or self.notices)
 
     @property
     def summary(self) -> str:
