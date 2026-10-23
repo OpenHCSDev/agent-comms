@@ -403,7 +403,6 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
     with LaunchRoot.from_path(ctx.root).selected():
         c = ctx.comms
         Bus.install(Bus.path_in(c.root))
-        ctx.write(ctx.root / "config-home")
         c.goals.update_goal(ctx.commander, SetGoalAction(
             text="Keep the commander request active for both watcher passes",
             goal_id="pr-work"))
@@ -426,7 +425,6 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
             (root / 'storage.json').write_text(json.dumps(FieldCodec.encode(c.registry.storage_rule)))
             copied = Comms(root)
             with LaunchRoot.from_path(root).selected():
-                ctx.model_copy(update={'root': root, 'state': root / 'state'}).write(root / 'config-home')
                 with copied.bus.bus.writer_connection():
                     pass  # Create the writer lock through its owner before the child probes it.
                 lock = shlex.quote(str(store_lock_path(copied.bus.bus.path)))
@@ -513,7 +511,7 @@ def test_installed_merge_closes_only_the_run_that_has_been_proven(pr_commander):
         for index, run in enumerate((MechanicalOrderRun(), ApplicationOrderRun(planned)), 1))
     copied_path = ctx.root.parent / f"{ctx.root.name}-copied"
     with practice_copy(ctx.root, copied_path) as (copied, measurement):
-        checked = ctx.model_copy(update={"root": copied, "state": copied / "state"})
+        checked = Commander.read_root(copied)
         store = checked.comms.goals.todos
         store.record_merges(store.merged_orders(checked.incarnation, checked.comms.registry))
         mechanical, application = tuple(store.get(todo.id) for todo in originals)
