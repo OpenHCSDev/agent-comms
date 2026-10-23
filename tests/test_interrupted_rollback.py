@@ -16,11 +16,13 @@ from agent_comms.installer.backup import StoreBackup, UpgradeRefused
 from agent_comms.installer.carry import Carried, Carry
 from agent_comms.installer.launch import InstallReport
 from agent_comms.installer.upgrade import upgrade
+from agent_comms.locked_store import RegistryFile
 from agent_comms.registry_store import RegistryStore
 from bus_record_fixture import prepare_native_comms
 
 
 class RegistryTitleCarry(Carry):
+    opened_files = (RegistryFile,)
     def carry(self, *, apply):
         registry = RegistryStore.at(self.root)
         if apply:
