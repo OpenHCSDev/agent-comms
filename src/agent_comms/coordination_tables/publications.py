@@ -14,8 +14,6 @@ from agent_comms.coordination_contracts import (
 )
 from agent_comms.coordination_errors import CoordinationError, IntegrityViolationError
 from agent_comms.coordination_schema import CoordinatorRow
-from agent_comms.coordination_tables.executions import ExecutionRecord
-from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, MalformedRecord, WireName
 from agent_comms.message_reference import MessageReference
@@ -135,6 +133,9 @@ class PublicationIntents(
 
     @classmethod
     def references(cls):
+        from agent_comms.coordination_tables.executions import ExecutionRecord
+        from agent_comms.coordination_tables.responses import ResponseObligation
+
         return (
             ForeignKey(columns=("execution_id",), target=ExecutionRecord, target_columns=("execution_id",), on_delete="RESTRICT"),
             ForeignKey(
@@ -213,6 +214,8 @@ class PublicationEvidence(
 
     @classmethod
     def references(cls):
+        from agent_comms.coordination_tables.responses import ResponseObligation
+
         return (
             ForeignKey(
                 columns=("execution_id", "exact_target"),

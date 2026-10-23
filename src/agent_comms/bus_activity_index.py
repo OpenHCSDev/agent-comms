@@ -3,14 +3,11 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Annotated
+from typing import Annotated
 
 from . import activity_clocks
 from .messages import BusProjectionTables
 from .typed_table import Column
-
-if TYPE_CHECKING:
-    pass
 
 
 class ActivityMaximum(BusProjectionTables, declared_name=None):

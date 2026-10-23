@@ -17,7 +17,7 @@ import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
-from dataclasses import dataclass, field, is_dataclass, replace
+from dataclasses import dataclass, field, replace
 from enum import Enum, IntEnum, IntFlag
 from functools import cache
 from inspect import getsource
@@ -264,6 +264,8 @@ class JsonStorage(SqlStorage):
 
     @classmethod
     def accepts(cls, annotation: object) -> bool:
+        from dataclasses import is_dataclass
+
         return (
             is_dataclass(annotation)
             or get_origin(annotation) in (list, tuple, dict, frozenset, Union, types.UnionType)
