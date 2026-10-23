@@ -29,7 +29,6 @@ from agent_comms.threads import Thread
 
 def prepared(tmp_path):
     comms = wire(tmp_path)
-    Bus.install(Bus.path_in(comms.root))
     return comms
 
 

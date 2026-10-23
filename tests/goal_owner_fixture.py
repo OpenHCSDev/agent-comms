@@ -5,14 +5,12 @@ import shutil
 
 import pytest
 
-from agent_comms.bus import Bus
 from agent_comms.comms import wire
 
 
 def canonical_goal_wire(root):
     """Create an empty real checked source for goal/wait fixture operations."""
     comms = wire(root)
-    Bus.install(Bus.path_in(comms.root))
     return comms
 
 

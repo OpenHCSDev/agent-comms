@@ -25,7 +25,6 @@ from agent_comms.acp_extension import (
     decode_updates,
 )
 from agent_comms.activity import ActivityState
-from agent_comms.bus import Bus
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.channels import AnyChannel
 from agent_comms.child_process import ProcessIdentity
@@ -302,7 +301,6 @@ class TestWireProtocol:
         (tmp_path / "proj").mkdir()
         root = tmp_path / "wire"
         comms = wire(root)
-        Bus.install(Bus.path_in(comms.root))
         env = dict(
             __import__("os").environ,
             AGENT_COMMS_ROOT=str(root),
