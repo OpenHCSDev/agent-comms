@@ -123,12 +123,8 @@ class Deferral(ABC):
         return (match.group(0) for match in cls.pattern().finditer(reply))
 
     @classmethod
-    def reasons(cls, deferred: tuple[str, ...], idle: IdleRead) -> Iterator[str]:
-        yield from idle.reasons(deferred)
-
-    @staticmethod
-    def phrases_in(reply: str) -> tuple[str, ...]:
-        return tuple(phrase for shape in Deferral.__subclasses__() for phrase in shape.found(reply))
+    def reasons(cls, deferred: tuple[str, ...], stop: StopHook) -> Iterator[str]:
+        yield from stop.idle.reasons(deferred)
 
 
 class NextTick(Deferral):
@@ -159,7 +155,7 @@ class Waiting(Deferral):
     )
 
     @classmethod
-    def reasons(cls, deferred: tuple[str, ...], idle: IdleRead) -> Iterator[str]:
+    def reasons(cls, deferred: tuple[str, ...], stop: StopHook) -> Iterator[str]:
         yield (f"You ended on {quoted(deferred)}; every wait is prep: read the next unit's "
                "trajectory or hunt a hot path now")
 
@@ -182,17 +178,6 @@ class IdleRead(ABC):
         if run.returncode:
             return FailedIdleRead(run.stderr.strip()[-300:] or f"exit status {run.returncode}")
         return ReadIdle(tuple(run.stdout.split()))
-
-
-class UnreadIdleRead(IdleRead):
-    """One stop's idle answer, acquired only when a matched shape asks for it."""
-
-    @cached_property
-    def answer(self) -> IdleRead:
-        return self.read()
-
-    def reasons(self, deferred: tuple[str, ...]) -> Iterator[str]:
-        yield from self.answer.reasons(deferred)
 
 
 @dataclass(frozen=True)
@@ -222,6 +207,10 @@ def quoted(phrases: tuple[str, ...]) -> str:
 class StopHook(ClaudeTranscriptHook):
     stop_hook_active: bool
 
+    @cached_property
+    def idle(self) -> IdleRead:
+        return IdleRead.read()
+
     def reply(self) -> str:
         """The text of the reply that ends the turn: what the model said after its last act."""
         said: list[str] = []
@@ -236,13 +225,12 @@ class StopHook(ClaudeTranscriptHook):
         """A stop this hook already sent back is let through, so it never loops."""
         if self.stop_hook_active or not self.parts.exists():
             return
-        reply, idle = self.reply(), UnreadIdleRead()
+        reply = self.reply()
         reasons = tuple(
             reason
             for shape in Deferral.__subclasses__()
-            for deferred in (tuple(shape.found(reply)),)
-            if deferred
-            for reason in shape.reasons(deferred, idle)
+            if (deferred := tuple(shape.found(reply)))
+            for reason in shape.reasons(deferred, self)
         )
         if reasons:
             print(json.dumps({"decision": "block", "reason": "\n".join(reasons)}))
