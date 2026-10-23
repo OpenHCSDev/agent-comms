@@ -2973,7 +2973,8 @@ class _PydanticDecoder(ValueDecoder[object]):
 
     @boundary_decoder
     def decode(self, data: object) -> BaseModel:
-        return self.target.model_validate(data)
+        with MalformedRecord.refusing(f"Invalid {self.target.__name__}"):
+            return self.target.model_validate(data)
 
     def encode(self, value: object) -> object:
         if not isinstance(value, self.target):
