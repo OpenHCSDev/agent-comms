@@ -23,18 +23,18 @@ def test_release_survives_metadata_changes_and_reads_only_its_row(tmp_path):
     # An invalid unrelated row must not even be decoded by this lookup.
     with releases.writing() as db:
         OwnerReleaseEvidence.update(db, where='name=?', parameters=('other',), after=0)
-    record = releases.get('worker')
+    record = releases.read_many(('worker',))['worker']
     assert record.current(comms.registry.snapshot(), originals[0], generation)
     assert record.incarnation() == originals[0].incarnation
     assert record.process_identity == originals[0].process_identity
     releases.remove_threads((originals[0],))
-    assert isinstance(releases.get('worker'), NoRelease)
+    assert isinstance(releases.read_many(('worker',))['worker'], NoRelease)
 
 
 def test_empty_release_store_is_not_proof(tmp_path):
     comms = wire(tmp_path)
     thread = comms.registry.declare(Thread('worker', frozenset(), str(tmp_path)))
-    record = comms.owners.releases.get(thread.name)
+    record = comms.owners.releases.read_many((thread.name,))[thread.name]
     assert isinstance(record, NoRelease)
     assert not record.current(comms.registry.snapshot(), thread, 1)
     assert not record.matches(thread)

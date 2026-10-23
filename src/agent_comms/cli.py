@@ -16,8 +16,7 @@ from typing import TextIO
 
 from agent_comms.active_route import resolve_comms_route
 from agent_comms.cli_commands import CliCommand
-from agent_comms.cli_protocol import CliArguments, CoreError
-from agent_comms.coordination_errors import CoordinationError
+from agent_comms.cli_protocol import CLI_FAILURES, CliArguments, CoreError
 from agent_comms.launch_root import LaunchRoot
 
 
@@ -72,7 +71,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return execute(arguments, sys.stdout)
     except KeyboardInterrupt:
         return 130
-    except (ValueError, OSError, CoordinationError) as exc:
+    except CLI_FAILURES as exc:
         return _fail(exc)
     return 0
 
