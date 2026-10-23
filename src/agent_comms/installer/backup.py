@@ -65,21 +65,12 @@ def bus_files(root: Path) -> dict[DeclaredFile | UndeclaredFile, dict[Path, Save
         info = path.lstat()
         if stat.S_ISREG(info.st_mode):
             observed[path] = info
-    declared = RootFile.existing_in(root)
-    owners = {path: owner for path, owner in declared.items() if path in observed}
-    companions = {member for path, owner in owners.items()
-                  for member in owner.member_paths(path) if member != path}
-    owners.update((path, RootFile.content_owner(path))
-                  for path in observed.keys() - owners.keys() - companions)
-    companions.update(member for path, owner in owners.items()
-                      for member in owner.member_paths(path) if member != path)
     return {
-        (DeclaredFile(declared[path], path.relative_to(root)) if path in declared
-         else UndeclaredFile(path.relative_to(root))): {
+        resource: {
             member.relative_to(root): SavedFile(
                 observed[member].st_size, observed[member].st_mtime_ns, observed[member].st_ino,
-            ) for member in owner.snapshot_members(path, observed)
-        } for path, owner in owners.items() if path not in companions
+            ) for member in owner.snapshot_members(root / resource.path, observed)
+        } for resource, owner in RootFile.owned_files(root, observed).items()
     }
 
 
@@ -244,7 +235,8 @@ class StoreBackup(ResourceBackup):
     def take(cls, root: Path, route: Path, files: tuple[Path, ...], spill_dir: Path) -> StoreBackup:
         path = spill_dir / BackupName.now(root).value
         backup = cls(root, route, path)
-        selected = tuple(file.relative_to(root) for file in files)
+        selected = tuple(sorted(resource.path for resource in RootFile.owned_files(root, files)))
+        files = tuple(root / path for path in selected)
         if path.exists():
             if backup.selected_files() != selected:
                 raise UpgradeRefused('Existing backup belongs to different resources')

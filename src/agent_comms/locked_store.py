@@ -10,7 +10,7 @@ import sqlite3
 import stat
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Collection, Iterator, Mapping
 from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from functools import cache
@@ -164,7 +164,7 @@ class RootFile:
 
     @classmethod
     def snapshot_members(
-        cls, path: Path, observed: dict[Path, os.stat_result],
+        cls, path: Path, observed: Mapping[Path, os.stat_result],
     ) -> frozenset[Path]:
         """Content changes count; lock and coordination files are not content."""
         return frozenset((path,))
@@ -235,6 +235,33 @@ class RootFile:
         owner, so nothing that walks a bus by its declarations meets it."""
         return {path: owner for owner, directory in cls.declarations_in(root)
                 for path in owner.matching_in(directory)}
+
+    @classmethod
+    def owned_files(
+        cls, root: Path, paths: Collection[Path],
+    ) -> dict[DeclaredFile | UndeclaredFile, type[RootFile]]:
+        """Resolve primaries once; companions belong to their primary's declaration.
+
+        Missing selected files still identify an absent resource to restore. An
+        undeclared existing file acquires content behavior without inventing a
+        store declaration for it.
+        """
+        declarations = cls.existing_in(root)
+        selected = frozenset(paths)
+        owners: dict[Path, type[RootFile]] = {
+            path: owner for path, owner in declarations.items() if path in selected
+        }
+        companions = {member for path, owner in owners.items()
+                      for member in owner.member_paths(path) if member != path}
+        owners.update((path, cls.content_owner(path) if path.exists() else RootFile)
+                      for path in selected - owners.keys() - companions)
+        companions.update(member for path, owner in owners.items()
+                          for member in owner.member_paths(path) if member != path)
+        return {
+            (DeclaredFile(declarations[path], path.relative_to(root)) if path in declarations
+             else UndeclaredFile(path.relative_to(root))): owner
+            for path, owner in owners.items() if path not in companions
+        }
 
     @classmethod
     def paths_in(cls, root: Path) -> frozenset[Path]:
@@ -529,7 +556,7 @@ class SQLiteFile(RootFile):
 
     @classmethod
     def snapshot_members(
-        cls, path: Path, observed: dict[Path, os.stat_result],
+        cls, path: Path, observed: Mapping[Path, os.stat_result],
     ) -> frozenset[Path]:
         wal = cls.wal_path(path)
         # A read can create an empty WAL; only a nonempty WAL holds content.
