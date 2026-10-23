@@ -108,11 +108,10 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
     def running_on(self, installed: Path) -> RestartedService:
         failure = f"{self.described()} did not run again within {self.patience}s"
         for _ in range(self.patience):
-            for instance in type(self).running():
-                runtime = instance.runtime()
-                if runtime == installed:
-                    return RestartedService(instance.described(), installed)
-                failure = f"{instance.described()} runs {runtime}, not the installed {installed}"
+            runtime = self.runtime()
+            if runtime == installed:
+                return RestartedService(self.described(), installed)
+            failure = f"{self.described()} runs {runtime}, not the installed {installed}"
             time.sleep(1)
         raise ServiceNotServingError(failure)
 
@@ -131,6 +130,9 @@ class SystemdUserService(HostService, declared_name=None):
     @classmethod
     def unit_file(cls) -> Path:
         return Path.home() / ".config/systemd/user" / cls.unit
+
+    def unit_name(self) -> str:
+        return self.unit
 
     def unit_text(self, arguments: tuple[str, ...]) -> str:
         executable = LaunchRuntime.current_pointer() / "bin" / self.program
@@ -153,7 +155,7 @@ class SystemdUserService(HostService, declared_name=None):
         subprocess.run(("systemctl", "--user", "enable", self.unit), check=True)
 
     @classmethod
-    def pid(cls) -> int:
+    def _pid_for(cls, name: str) -> int:
         """Only the unit loaded from this home's owned definition belongs to it.
 
         The user manager belongs to the UID, not HOME; a private install must not
@@ -163,25 +165,18 @@ class SystemdUserService(HostService, declared_name=None):
         if not unit.is_file():
             return 0
         loaded = subprocess.check_output(
-            ("systemctl", "--user", "show", "-p", "FragmentPath", "--value", cls.unit),
+            ("systemctl", "--user", "show", "-p", "FragmentPath", "--value", name),
             text=True,
         ).strip()
         if Path(loaded).resolve() != unit.resolve():
             return 0
         return int(subprocess.check_output(
-            ("systemctl", "--user", "show", "-p", "MainPID", "--value", cls.unit),
+            ("systemctl", "--user", "show", "-p", "MainPID", "--value", name),
             text=True,
         ))
 
-    @classmethod
-    @abstractmethod
-    def from_process(cls, pid: int) -> Self:
-        """Read this instance's declared configuration from its running process."""
-
-    @classmethod
-    def running(cls) -> tuple[Self, ...]:
-        pid = cls.pid()
-        return () if pid == 0 else (cls.from_process(pid),)
+    def pid(self) -> int:
+        return self._pid_for(self.unit_name())
 
     @classmethod
     def running_arguments(cls, pid: int) -> tuple[str, ...]:
@@ -194,7 +189,7 @@ class SystemdUserService(HostService, declared_name=None):
         return Path(self.running_arguments(self.pid())[0])
 
     def stop(self) -> None:
-        subprocess.run(("systemctl", "--user", "stop", self.unit), check=True)
+        subprocess.run(("systemctl", "--user", "stop", self.unit_name()), check=True)
 
     def start(self) -> None:
-        subprocess.run(("systemctl", "--user", "start", self.unit), check=True)
+        subprocess.run(("systemctl", "--user", "start", self.unit_name()), check=True)

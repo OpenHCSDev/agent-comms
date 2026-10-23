@@ -14,7 +14,10 @@ from aiohttp import ClientSession, web
 from connector_readiness import ConnectorReadiness
 from agent_comms.connector import ConnectorVerb
 from agent_comms.connector_store import ConnectorStore
-from agent_comms.host_services import HostService, ServiceNotServingError, SystemdSite
+from agent_comms.host_services import (
+    HostService, ServiceNotServingError, SystemdSite, SystemdUserService,
+)
+from agent_comms.host_services.codex_inbox import CodexInboxService
 from agent_comms.host_services.connector import InstallServiceVerb, SystemdConnectorService
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.launch_root import LaunchRoot
@@ -76,6 +79,74 @@ def test_a_private_home_does_not_discover_the_real_user_service(tmp_path, monkey
     assert SystemdConnectorService.running() == ()
 
 
+def test_codex_inbox_instances_restart_their_own_units(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    template = CodexInboxService.unit_file()
+    template.parent.mkdir(parents=True)
+    template.write_text("[Service]\n")
+    sessions = ("first-session", "second-session")
+    units = tuple(CodexInboxService(session).unit_name() for session in sessions)
+    foreign = CodexInboxService("another-home").unit_name()
+    pids = {units[0]: 101, units[1]: 102, foreign: 103}
+    active = set(pids)
+    installed = tmp_path / "runtime/bin/python"
+    runtimes = {pid: installed for pid in pids.values()}
+    actions: list[tuple[str, str]] = []
+
+    def output(command, *, text):
+        if command[2] == "list-units":
+            assert tuple(command[3:]) == (
+                "codex-comms-inbox@*", "--state=active", "--plain", "--no-legend")
+            return "".join(f"{unit} loaded active running Codex inbox\n"
+                           for unit in pids if unit in active)
+        assert command[2] == "show"
+        unit = command[-1]
+        if command[4] == "FragmentPath":
+            return str(tmp_path / "another-home/template.service" if unit == foreign
+                       else template) + "\n"
+        assert command[4] == "MainPID"
+        return str(pids[unit] if unit in active else 0) + "\n"
+
+    def run(command, **options):
+        action, unit = command[2:]
+        if action == "is-active":
+            return subprocess.CompletedProcess(
+                command, 0 if unit in active else 3,
+                stdout="active\n" if unit in active else "inactive\n")
+        actions.append((action, unit))
+        if action == "stop":
+            active.remove(unit)
+        else:
+            assert action == "start"
+            active.add(unit)
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(subprocess, "check_output", output)
+    monkeypatch.setattr(subprocess, "run", run)
+    monkeypatch.setattr(SystemdUserService, "running_arguments", classmethod(
+        lambda cls, pid: (str(runtimes[pid]), "agent-comms-codex-bridge", "watch")))
+    monkeypatch.setattr(LaunchRuntime, "installed", classmethod(lambda cls: cls(installed)))
+
+    discovered = HostService.instances()
+    assert discovered == tuple(CodexInboxService(session) for session in sessions)
+    stopped = HostService.stop_running()
+    assert stopped == discovered
+    assert actions == [("stop", unit) for unit in units]
+    restarted = tuple(service.start_onto(installed) for service in stopped)
+    assert actions == [("stop", unit) for unit in units] + [("start", unit) for unit in units]
+    assert tuple(report.service for report in restarted) == (
+        "Codex inbox for first-session", "Codex inbox for second-session")
+    for service in discovered:
+        service.serves()
+    active.remove(units[1])
+    with pytest.raises(ServiceNotServingError, match="second-session.*not active"):
+        discovered[1].serves()
+    active.add(units[1])
+    runtimes[pids[units[1]]] = tmp_path / "old-runtime/bin/python"
+    with pytest.raises(ServiceNotServingError, match="second-session.*not the installed"):
+        discovered[1].serves()
+
+
 @pytest.fixture
 def connector_service(comms, tmp_path, monkeypatch):
     """A real supervisor on a copied bus; only systemd's process control is replaced."""
@@ -110,7 +181,7 @@ def connector_service(comms, tmp_path, monkeypatch):
 
     class ManagedConnector(SystemdConnectorService, declared_name=None):
         @classmethod
-        def pid(cls) -> int:
+        def _pid_for(cls, name: str) -> int:
             return next((process.pid for process in children if process.poll() is None), 0)
 
         def stop(self) -> None:

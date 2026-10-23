@@ -79,6 +79,11 @@ class SystemdConnectorService(ConnectorService, SystemdUserService):
     unit = f"{program}.service"
 
     @classmethod
+    def running(cls) -> tuple[Self, ...]:
+        pid = cls._pid_for(cls.unit)
+        return () if pid == 0 else (cls.from_process(pid),)
+
+    @classmethod
     def from_process(cls, pid: int) -> Self:
         # Our installed console script's argv is interpreter, script, verb, options.
         endpoint = ServeVerb.parse(cls.running_arguments(pid)[2:])
