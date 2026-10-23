@@ -2,8 +2,6 @@
 
 Decision (Tristan, 2026-10-20): the bus stops being a physical file. It keeps every semantic a bus has (one ordered sequence per root, append-only history, addressed messages, claims, keyed publication, pages, live delivery), and each of those semantics is declared once, as a capability class, over SQLite tables. This replaces the earlier plan to copy `bus.jsonl` into a table: that plan kept a file-shaped log with a JSON blob beside extracted columns, which is two copies of every addressed field. Audited against `origin/main` at `53f74dba4` (2026-10-20, 19:30 EDT).
 
-## Why
-
 ## Current checkpoint — 2026-10-23
 
 Core `69c5b0e4e` and paired Toad `dab0047a4` are merged. The live install failed

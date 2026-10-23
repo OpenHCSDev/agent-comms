@@ -4,6 +4,7 @@ import errno
 import json
 import os
 import subprocess
+import tarfile
 
 import pytest
 
@@ -15,6 +16,7 @@ from agent_comms.active_route import (
 )
 from agent_comms.bus import Bus
 from agent_comms.comms import Comms
+from agent_comms.core_stamp import WheelStamp
 from agent_comms.installer.backup import StoreBackup, UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import (
@@ -25,7 +27,7 @@ from agent_comms.installer.interpreter_operation import (
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.recorded_bus import RecordedBusIdentity
 from bus_record_fixture import prepare_native_comms
-from test_carry_bus_history import predecessor_history
+from test_carry_bus_history import REPOSITORY, predecessor_history
 
 
 @pytest.fixture
@@ -148,9 +150,33 @@ def test_selected_route_probe_uses_the_actual_outgoing_v2_reader(tmp_path):
     home = tmp_path / "outgoing-home"
     generated = predecessor_history(tmp_path)
     root = generated / "destination"
+    # Use the actual outgoing v2 source, not the older publisher snapshot's
+    # broken comparison between a DeclaredRoot object and its string value.
+    revision = "d9ce9cd95954a9846bc703129d55a4327f55674d"
+    archive = tmp_path / "outgoing-v2.tar"
+    with archive.open("wb") as output:
+        subprocess.run(["git", "-C", REPOSITORY, "archive", revision, "src"],
+                       stdout=output, check=True)
+    outgoing = tmp_path / "outgoing-v2"
+    outgoing.mkdir()
+    with tarfile.open(archive) as tree:
+        tree.extractall(outgoing, filter="data")
+    archive.unlink()
+    audit_path = "src/agent_comms/skills/refactor-audit"
+    pin = subprocess.check_output(
+        ["git", "-C", REPOSITORY, "ls-tree", revision, audit_path], text=True).split()[2]
+    with archive.open("wb") as output:
+        subprocess.run(["git", "-C", REPOSITORY / audit_path, "archive", pin],
+                       stdout=output, check=True)
+    destination = outgoing / audit_path
+    destination.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(archive) as tree:
+        tree.extractall(destination, filter="data")
+    archive.unlink()
+    WheelStamp(revision).write(outgoing / "src/agent_comms/package_stamp.py")
     environment = {
         **runtime.environment(os.environ), "HOME": str(home),
-        "PYTHONPATH": str(tmp_path / "publisher" / "src"),
+        "PYTHONPATH": str(outgoing / "src"),
     }
     # The outgoing declaration writes its own record; the incoming probe never
     # imports or implements the retired route schema.
@@ -176,7 +202,34 @@ path.chmod(0o600)
         SelectedRouteProbe(), runtime.interpreter, env=environment, cwd=tmp_path,
     )
     assert selected == PublishedRouteSelection(root)
+    root.rename(root.with_name("retired"))
+    assert InstallCommands().probe(
+        SelectedRouteProbe(), runtime.interpreter, env=environment, cwd=tmp_path,
+    ) == NoRouteSelection()
     path.unlink()
     assert InstallCommands().probe(
         SelectedRouteProbe(), runtime.interpreter, env=environment, cwd=tmp_path,
     ) == NoRouteSelection()
+
+
+def test_failure_after_backup_link_restores_a_single_private_route(tmp_path, route_bus, monkeypatch):
+    path = tmp_path / "state" / "active-route.json"
+    original = old_route(path, route_bus)
+    backup = StoreBackup.take(route_bus.root, path, (), tmp_path / "spill")
+    replace = os.replace
+
+    def fail_route_replace(source, destination, **directories):
+        if destination == path.name:
+            raise OSError(errno.EIO, "replace failed after retaining the old route")
+        return replace(source, destination, **directories)
+
+    monkeypatch.setattr(os, "replace", fail_route_replace)
+    with pytest.raises(RoutePublicationUnknownError):
+        backup.rebind_route(route_bus, PublishedRouteSelection(route_bus.root))
+    assert path.read_bytes() == original
+    assert path.stat().st_nlink == 2
+    assert not backup.original()
+    backup.restore()
+    assert backup.original()
+    assert path.read_bytes() == original
+    assert path.stat().st_nlink == 1
