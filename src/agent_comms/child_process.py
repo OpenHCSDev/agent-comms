@@ -247,6 +247,12 @@ class ProcessIdentity(RecordMember, ProcessState):
     def alive(self) -> bool:
         return Platform.current().matches(self)
 
+    def arguments(self) -> tuple[str, ...]:
+        return Platform.current().arguments(self)
+
+    def environment(self) -> dict[str, str]:
+        return Platform.current().environment(self)
+
     def require_alive(self) -> ProcessIdentity:
         """Validate this recorded PID and start time against the live process."""
         return Platform.current().require(self)
@@ -345,6 +351,7 @@ class PidfdHandles:
 class Platform(DeclaredFamily, affix="Platform"):
     store_lock_interval = 0.025
     sync_open_flags: ClassVar[int] = os.O_RDONLY
+    serves_local_socket: ClassVar[bool] = True
 
     @classmethod
     def current(cls) -> Platform:
@@ -362,6 +369,12 @@ class Platform(DeclaredFamily, affix="Platform"):
 
     @abstractmethod
     def require_pinned_paths(self, refusal: Exception) -> None: ...
+
+    @abstractmethod
+    def require_posix(self, refusal: Exception) -> None: ...
+
+    @abstractmethod
+    def require_watched_procfs(self, refusal: Exception) -> None: ...
 
     @abstractmethod
     def is_private(self, info: os.stat_result, permissions: int) -> bool: ...
@@ -414,6 +427,12 @@ class Platform(DeclaredFamily, affix="Platform"):
         """This recorded process's birth on the monotonic clock."""
         raise NotImplementedError("This platform does not expose process elapsed time")
 
+    @abstractmethod
+    def arguments(self, process: ProcessIdentity) -> tuple[str, ...]: ...
+
+    @abstractmethod
+    def environment(self, process: ProcessIdentity) -> dict[str, str]: ...
+
     def parent_identity(self, pid: int) -> ProcessIdentity:
         raise NotImplementedError('This platform does not expose exact parent identities')
 
@@ -461,6 +480,9 @@ class Platform(DeclaredFamily, affix="Platform"):
 
 
 class PosixPlatform(Platform):
+    def require_posix(self, refusal: Exception) -> None:
+        return None
+
     def require_pinned_paths(self, refusal: Exception) -> None:
         return None
 
@@ -529,6 +551,9 @@ class LinuxProcessRecord:
 
 
 class LinuxPlatform(PidfdHandles, PosixPlatform):
+    def require_watched_procfs(self, refusal: Exception) -> None:
+        return None
+
     @contextmanager
     def socket_address(self, path: Path, descriptor: int) -> Generator[Path, None, None]:
         yield Path(f"/proc/{os.getpid()}/fd/{descriptor}") / path.name
@@ -558,6 +583,23 @@ class LinuxPlatform(PidfdHandles, PosixPlatform):
         started = identity.start_time / os.sysconf("SC_CLK_TCK")
         age = time.clock_gettime(time.CLOCK_BOOTTIME) - started
         return time.monotonic() - age
+
+    def arguments(self, process: ProcessIdentity) -> tuple[str, ...]:
+        try:
+            raw = Path(f"/proc/{process.pid}/cmdline").read_bytes()
+        except FileNotFoundError:
+            raise ProcessLookupError(process.pid) from None
+        if not raw:
+            raise ProcessLookupError(process.pid)
+        return tuple(os.fsdecode(word) for word in raw.split(b"\0")[:-1])
+
+    def environment(self, process: ProcessIdentity) -> dict[str, str]:
+        try:
+            raw = Path(f"/proc/{process.pid}/environ").read_bytes()
+        except FileNotFoundError:
+            raise ProcessLookupError(process.pid) from None
+        values = (item.split(b"=", 1) for item in raw.split(b"\0") if b"=" in item)
+        return {os.fsdecode(key): os.fsdecode(value) for key, value in values}
 
     def parent_identity(self, pid: int) -> ProcessIdentity:
         return self.identity(self._stat(pid).parent)
@@ -629,6 +671,9 @@ class LinuxPlatform(PidfdHandles, PosixPlatform):
 class DarwinPlatform(PosixPlatform):
     """libproc exposes microsecond birth times, unlike formatted ps output."""
 
+    def require_watched_procfs(self, refusal: Exception) -> None:
+        raise refusal
+
     class ProcessInfo(ctypes.Structure):
         # External Darwin proc_bsdinfo ABI, from xnu/bsd/sys/proc_info.h.
         _fields_ = [
@@ -695,6 +740,12 @@ class DarwinPlatform(PosixPlatform):
     def started_at(self, identity: ProcessIdentity) -> float:
         return time.monotonic() - (time.time() - identity.start_time / 1_000_000)
 
+    def arguments(self, process: ProcessIdentity) -> tuple[str, ...]:
+        raise NotImplementedError(f"{type(self).__name__} does not read process arguments")
+
+    def environment(self, process: ProcessIdentity) -> dict[str, str]:
+        raise NotImplementedError(f"{type(self).__name__} does not read process environment")
+
     def members_of_group(self, pgid: int) -> tuple[ProcessIdentity, ...]:
         # proc_listpids returns bytes. Grow until one query fits; never mistake
         # a full buffer for a complete process-group observation.
@@ -747,6 +798,14 @@ class DarwinPlatform(PosixPlatform):
 
 class Win32Platform(Platform):
     """Kernel creation times and named job objects bind the complete child tree."""
+
+    serves_local_socket: ClassVar[bool] = False
+
+    def require_posix(self, refusal: Exception) -> None:
+        raise refusal
+
+    def require_watched_procfs(self, refusal: Exception) -> None:
+        raise refusal
 
     def require_pinned_paths(self, refusal: Exception) -> None:
         raise refusal
@@ -892,6 +951,12 @@ class Win32Platform(Platform):
         current = ctypes.c_uint64()
         self.kernel.GetSystemTimeAsFileTime(ctypes.byref(current))
         return time.monotonic() - (current.value - identity.start_time) / 10_000_000
+
+    def arguments(self, process: ProcessIdentity) -> tuple[str, ...]:
+        raise NotImplementedError(f"{type(self).__name__} does not read process arguments")
+
+    def environment(self, process: ProcessIdentity) -> dict[str, str]:
+        raise NotImplementedError(f"{type(self).__name__} does not read process environment")
 
     def wait_any_exited(
         self, identities: tuple[ProcessIdentity, ...], timeout: float,
