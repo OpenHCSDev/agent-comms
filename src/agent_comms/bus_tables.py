@@ -194,13 +194,13 @@ class AnsweredSource(messages.BusProjectionTables):
             f'WHERE reply.sender IN ({replying}) AND '
             + content._sql('reply_message.{timestamp} >= ? AND EXISTS (')
             + f'SELECT 1 FROM "{cls.declared_name}" AS answered '
-            f'JOIN "{identity}" AS asked ON '
-            + cls._sql('answered.{original}=asked.seq ')
-            + f'JOIN "{content.declared_name}" AS question ON question.seq=asked.seq '
-            f'WHERE answered.seq=reply.seq AND asked.seq<reply.seq '
-            f'AND asked.sender IN ({asking}) AND '
+            f'WHERE answered.seq=reply.seq AND answered.original<reply.seq AND EXISTS ('
+            f'SELECT 1 FROM "{identity}" AS asked '
+            f'JOIN "{content.declared_name}" AS question ON question.seq=asked.seq '
+            + cls._sql('WHERE asked.seq=answered.{original} ')
+            + f'AND asked.sender IN ({asking}) AND '
             + content._sql('question.{timestamp} >= ? ')
-            + f'AND ({eligible}))) ' + selection
+            + f'AND ({eligible})))) ' + selection
         )
         return db.execute(query, (*responders, since, *requesters, since, *eligibility))
 
