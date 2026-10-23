@@ -145,9 +145,9 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
         text=second.body,
     )
     assert store.bind(
-        second_key, claim_scope=claim_scope, turn_id="native-turn", native_id="a" * 32, text=second.body
+        second_key, claim_scope=claim_scope, turn_id=TurnId('d139335a14223f343b5786bbd9e20434'), native_id="a" * 32, text=second.body
     )
-    assert store.started(second_key, turn_id="native-turn", native_id="a" * 32, text=second.body)
+    assert store.started(second_key, turn_id=TurnId('d139335a14223f343b5786bbd9e20434'), native_id="a" * 32, text=second.body)
     comms.goals.update_goal("owner", action)
     wait = comms.goals.goal_wait("owner")
     assert wait.owner == comms.registry.require("owner").incarnation

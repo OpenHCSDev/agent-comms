@@ -106,7 +106,7 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
     inputs = InputDispositions(comms.root)
     inputs.record("unresolved-input", seq=None, owner="worker", claim_scope=1,
                   target="worker", text="Do not replay this input")
-    assert inputs.bind("unresolved-input", claim_scope=1, turn_id="old-turn",
+    assert inputs.bind("unresolved-input", claim_scope=1, turn_id=TurnId('310c74d7ac243239a928d4021c709acb'),
                        native_id=uuid4().hex, text="Do not replay this input")
     configured_repository(comms)
     copied = tmp_path / "copied-bus"

@@ -187,7 +187,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 (replace(claim_scope, recipient_lookup=bob_lookup), "Bob"),
                 (replace(claim_scope, wake_revision=engaged.revision + 1), "Alice"),
                 (replace(claim_scope, owner_claimed_generation=claimed_generation + 1), "Alice"),
-                (replace(claim_scope, turn_id="old-turn"), "Alice"),
+                (replace(claim_scope, turn_id=TurnId('310c74d7ac243239a928d4021c709acb')), "Alice"),
             ):
                 with pytest.raises(IdentityConflict):
                     verify_selected_wake(comms, store, candidate, name)

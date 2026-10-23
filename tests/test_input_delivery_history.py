@@ -1,4 +1,5 @@
 """Current owner queues scope notices without altering durable input evidence."""
+from agent_comms.field_codec import TurnId
 
 from dataclasses import replace
 
@@ -17,7 +18,7 @@ def seed(comms, name):
     ledger = InputDispositions(comms.root)
     for key, seq in [("bus:1", 1), ("bus:2", 2), ("bus:7", 7), ("bus:8", 8), ("acp:ui", None)]:
         ledger.record(key, seq=seq, owner=name, claim_scope=1, target=name, text=f"Text {key}")
-    ledger.bind("bus:2", claim_scope=1, turn_id="t", native_id="a" * 32, text="Text bus:2")
+    ledger.bind("bus:2", claim_scope=1, turn_id=TurnId('e3b98a4da31a127d4bde6e43033f66ba'), native_id="a" * 32, text="Text bus:2")
     ledger.review_for_goal(("bus:1",), owners=owners, goal_id="goal", goal_revision=1, turn_id="t")
     return ledger
 
@@ -63,7 +64,7 @@ def test_history_clear_is_notice_only_and_survives_rename_and_reopen(tmp_path):
         ).historical_inputs
     )
     assert reopened.goals.dismiss_historical_inputs("renamed", scope=scope) == result
-    assert ledger.bind("bus:7", claim_scope=1, turn_id="t2", native_id="b" * 32, text="Text bus:7")
+    assert ledger.bind("bus:7", claim_scope=1, turn_id=TurnId('c44474038d459e40e4714afefa7bf8da'), native_id="b" * 32, text="Text bus:7")
     assert "bus:7" not in [
         r.input_id
         for r in reopened.goals.input_delivery("renamed", scope=scope).inputs
