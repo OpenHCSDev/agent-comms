@@ -11,7 +11,6 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import AsyncIterator, Self
-from uuid import uuid4
 
 import aiohttp
 from pydantic import JsonValue
@@ -26,8 +25,8 @@ from agent_comms.runtime_updates import (
 )
 from agent_comms.thread_identity import UnreportedTools
 from .codex_protocol import (
-    Capabilities, ClientInfo, DisplayOutput, Initialize, InitializeResponse, Initialized, MessageInput,
-    Request, RPC_RESPONSE, RpcReply, RpcNotification, TextInput,
+    Capabilities, ClientInfo, DisplayOutput, Initialize, InitializeResponse, Initialized,
+    Request, RPC_RESPONSE, RpcReply, RpcNotification,
     ToolOutput, RequestParams, ResumeThread, ResumedThread, ItemsList, ItemsPage, ItemStream, BusInput,
 )
 
@@ -180,15 +179,10 @@ class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions], declared_name=
 
     async def show_sent(self, result: SendResult) -> None:
         async with CodexConnection.open(self.socket) as codex:
+            await codex.call(ResumeThread(threadId=self.thread))
             await codex.call(DisplayOutput(
                 threadId=self.thread, clientUserMessageId=f'comms-out:{result.message.message_id}',
                 toolOutput=ToolOutput(output=self.sent_text(result))))
-
-    async def report_failure(self, text: str) -> None:
-        async with CodexConnection.open(self.socket) as codex:
-            await codex.call(MessageInput(
-                threadId=self.thread, clientUserMessageId=f'bridge-error:{uuid4()}',
-                input=(TextInput(text=text),)))
 
 
 def main() -> None:
