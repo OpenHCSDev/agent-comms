@@ -34,6 +34,9 @@ class NativeArgument(DeclaredFamily, affix="Argument"):
     def validate_rpc(self) -> None:
         pass
 
+    def apply_thinking(self, current: type[ThinkingChoice]) -> type[ThinkingChoice]:
+        return current
+
 
 @dataclass(frozen=True)
 class ExternalArgument(NativeArgument):
@@ -163,6 +166,9 @@ class SelectedModel:
 @dataclass(frozen=True)
 class ThinkingArgument(NamedOption, ValueOption):
     level: type[ThinkingLevel]
+
+    def apply_thinking(self, current: type[ThinkingChoice]) -> type[ThinkingChoice]:
+        return self.level
 
     @classmethod
     def from_text(cls, value: str) -> ThinkingArgument:
@@ -309,8 +315,10 @@ class NativeArguments:
 
     @property
     def thinking(self) -> type[ThinkingChoice]:
-        return next((entry.level for entry in reversed(self.entries)
-                     if isinstance(entry, ThinkingArgument)), NoThinkingOverride)
+        selected: type[ThinkingChoice] = NoThinkingOverride
+        for entry in self.entries:
+            selected = entry.apply_thinking(selected)
+        return selected
 
     def replace(self, member: type[NativeArgument], *entries: NativeArgument) -> NativeArguments:
         return NativeArguments(
