@@ -145,18 +145,16 @@ def test_unknown_publication_is_still_owned_by_rollback(tmp_path, route_bus, had
         assert not path.exists()
 
 
-def test_selected_route_probe_uses_the_actual_outgoing_v2_reader(tmp_path):
+def test_staged_probe_reads_the_published_route(tmp_path):
     runtime = LaunchRuntime.running()
     home = tmp_path / "outgoing-home"
     generated = predecessor_history(tmp_path, revision=OUTGOING_V2)
     root = generated / "destination"
     outgoing = tmp_path / "publisher"
     environment = {
-        **runtime.environment(os.environ), "HOME": str(home),
-        "PYTHONPATH": str(outgoing / "src"),
+        **runtime.child_environment(runtime.environment(os.environ)), "HOME": str(home),
     }
-    # The outgoing declaration writes its own record; the incoming probe never
-    # imports or implements the retired route schema.
+    # The outgoing tree only writes its old record; the staged reader refuses it.
     writer = """from pathlib import Path
 import json,sys
 from agent_comms.active_route import ActiveRoute, active_route_path
@@ -169,7 +167,8 @@ path.write_text(json.dumps(route.to_record()))
 path.chmod(0o600)
 """
     written = subprocess.run(
-        (runtime.interpreter, "-P", "-c", writer, root), env=environment,
+        (runtime.interpreter, "-P", "-c", writer, root),
+        env={**environment, "PYTHONPATH": str(outgoing / "src")},
         cwd=tmp_path, capture_output=True, text=True, timeout=60,
     )
     assert written.returncode == 0, written.stdout + written.stderr
@@ -179,7 +178,12 @@ path.chmod(0o600)
         selected = commands.probe(
             SelectedRouteProbe(), runtime.interpreter, env=environment, cwd=tmp_path,
         )
-        assert selected == PublishedRouteSelection(root)
+        assert selected == NoRouteSelection()
+        current = ActiveRoute(root, RecordedBusIdentity.capture(Bus.path_in(root)))
+        path.write_text(json.dumps(current.to_record()))
+        assert commands.probe(
+            SelectedRouteProbe(), runtime.interpreter, env=environment, cwd=tmp_path,
+        ) == PublishedRouteSelection(root)
         root.rename(root.with_name("retired"))
         assert commands.probe(
             SelectedRouteProbe(), runtime.interpreter, env=environment, cwd=tmp_path,

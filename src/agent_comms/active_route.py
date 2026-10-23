@@ -377,7 +377,7 @@ def route_new_bus(route: ActiveRoute, path: Path) -> str:
         return RouteFile.read(path).route_new_bus(route, path, directory)
 
 
-class RouteSelection(DeclaredFamily, affix="Selection", declared_name=None):
+class RouteFileSelection(DeclaredFamily, affix="Selection", declared_name=None):
     """The outgoing reader's validated choice owns whether this bus may be published."""
 
     def publish(self, route: ActiveRoute, path: Path, directory: int) -> str:
@@ -385,12 +385,12 @@ class RouteSelection(DeclaredFamily, affix="Selection", declared_name=None):
 
 
 @dataclass(frozen=True)
-class NoRouteSelection(RouteSelection):
+class NoRouteSelection(RouteFileSelection):
     """No route selects an existing bus; the installer may publish this one."""
 
 
 @dataclass(frozen=True)
-class PublishedRouteSelection(RouteSelection):
+class PublishedRouteSelection(RouteFileSelection):
     root: Annotated[Path, PathText]
 
     def publish(self, route: ActiveRoute, path: Path, directory: int) -> str:
@@ -419,7 +419,7 @@ class RouteFile(ABC):
                 return ReplaceableRoute()
         return AbsentRoute()
 
-    def selection(self) -> RouteSelection:
+    def selection(self) -> RouteFileSelection:
         return NoRouteSelection()
 
     def launch_root(self) -> Path:
@@ -463,7 +463,7 @@ class SelectingRoute(RouteFile):
 
     current: ActiveRoute
 
-    def selection(self) -> RouteSelection:
+    def selection(self) -> RouteFileSelection:
         return PublishedRouteSelection(self.current.observe_root())
 
     def launch_root(self) -> Path:
