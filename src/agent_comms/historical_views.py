@@ -18,7 +18,7 @@ from .channels import Channel
 from .coordination_errors import HistoricalSourceChanged
 from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec
-from .locked_store import DurableFile, RegistryFile, RootFile
+from .locked_store import DurableFile, LockedFile, RegistryFile, RootFile
 from .message_page import (
     NEWEST_PAGE,
     ConversationMessagePageRequest,
@@ -398,7 +398,7 @@ class HistoricalThread:
     thread: ThreadProvenance
 
 
-class HistoryArchive(DurableFile):
+class HistoryArchive(DurableFile, LockedFile):
     """Ordered immutable source snapshots; never a delivery/launch authority."""
 
     filename = "history_sources.json"
