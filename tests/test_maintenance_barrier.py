@@ -1,4 +1,5 @@
 """Provider-free disposable checks of the default-off maintenance claim seam."""
+from agent_comms.field_codec import TurnId
 
 
 import asyncio
@@ -113,7 +114,7 @@ def _claim_other_process(registry_path: str, ready: mp.Event, result: mp.Queue) 
         result.put(("timeout", ""))
         return
     try:
-        Registration(Path(registry_path)).lease_local_turn("owner", "other-process")
+        Registration(Path(registry_path)).lease_local_turn("owner", TurnId('da7607de21a76790f4facdb9960c47db'))
     except RelationViolationError as error:
         result.put(("denied", str(error)))
     else:
@@ -127,18 +128,18 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
     comms.registry.declare(
         Thread(name='owner', tags=frozenset(), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
-    assert comms.agents.begin_turn("owner", "before")
+    assert comms.agents.begin_turn("owner", TurnId('6db7d803e74f1ffa7d8f5adc0bf95b3e'))
     comms.agents.finish_turn(comms.registry.require("owner").turn_lease)
     control = gate
     first = control.begin(MaintenanceOperator.current())
     assert first.phase == MaintenancePhase.member_named("draining") and first.generation == 1
     assert MaintenanceBarrier(comms.registry.store.path).read() == first
     with pytest.raises(RelationViolationError):
-        comms.agents.begin_turn("owner", "after")
+        comms.agents.begin_turn("owner", TurnId('f39592393ef0859cb196a52693d2cea0'))
     with pytest.raises(RelationViolationError):
         comms.registry.lease_live_turn_with_claim(
             comms.registry.require("owner"),
-            "direct",
+            TurnId('d15690f08a575024650b01ffac892cfd'),
             expected_generation=comms.registry.snapshot().claim_generation("owner"),
         )
     with pytest.raises(RelationViolationError):
@@ -150,7 +151,7 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
     with pytest.raises(ValueError):
         control.advance(second, MaintenancePhase.member_named("ready"))
     with pytest.raises(RelationViolationError):
-        Registration(comms.registry.store.path).lease_local_turn("owner", "cold")
+        Registration(comms.registry.store.path).lease_local_turn("owner", TurnId('e272deecde720ffc773d7a6a81adabbc'))
     assert control.advance(
         second, MaintenancePhase.member_named("installing")
     ).phase == MaintenancePhase.member_named("installing")
@@ -265,7 +266,7 @@ def test_cross_process_claim_races_pause_at_registry_lock(tmp_path: Path) -> Non
     assert bool(current.turn_state.active.items_with(Executing, current.turn_state.active)) == (result == "claimed")
     assert comms.owners.maintenance.read() == hold
     with pytest.raises(RelationViolationError):
-        comms.registry.lease_local_turn("owner", "never-after-pause")
+        comms.registry.lease_local_turn("owner", TurnId('799f93502fa088f2e1f1ce3acc633320'))
 
 
 async def test_native_ingress_waits_without_blocking_exclusive_owner(tmp_path: Path) -> None:

@@ -1,4 +1,5 @@
 """New status text is bounded by activity; saved text is never repaired on read."""
+from agent_comms.field_codec import TurnId
 
 from agent_comms.pi_payloads import ReportedText
 import os
@@ -61,7 +62,7 @@ def test_projection_preserves_source_identity_and_strict_record_validation(activ
 def test_native_status_reads_long_preparation_first_and_parallel_tools(comms):
     thread = comms.registry.declare(Thread('worker', frozenset(), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid())))
     detail = "preparing_" + "p" * Activity.detail_limit
-    lease = comms.agents.begin_turn(thread.name, "long-status", detail).turn_lease
+    lease = comms.agents.begin_turn(thread.name, TurnId('a9f5f927d05a07e19a018da42f972ef5'), detail).turn_lease
     try:
         assert comms.registry.require(thread.name).turn_state.active.phase.detail == detail
         assert comms.agents.activity_of(thread.name, snapshot=comms.registry.snapshot()).detail.endswith("…")
@@ -81,7 +82,7 @@ def test_native_status_reads_long_preparation_first_and_parallel_tools(comms):
 
 def test_a_provider_failure_shows_its_phase_and_leaves_the_turn_to_its_owner(comms):
     thread = comms.registry.declare(Thread('provider-failure', frozenset(), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid())))
-    lease = comms.agents.begin_turn(thread.name, "provider-failure").turn_lease
+    lease = comms.agents.begin_turn(thread.name, TurnId('dcd2bcad2e6989f2c586e96751d5379d')).turn_lease
     try:
         failed = FailedPhase(error=CodelessProviderDiagnosticError("WebSocket error"))
         comms.agents.observe_native_phase(lease, failed)
@@ -109,7 +110,7 @@ def test_native_and_cli_activity_publish_member_order_and_ignore_unchanged_phase
         return result.derived[0]["#clock"].members
 
     output.enter(ToolRunningPhase("unchanged"))
-    lease = comms.agents.begin_turn(native.name, "clock-order").turn_lease
+    lease = comms.agents.begin_turn(native.name, TurnId('aa9a56b081b3220f2cdf16fe278c351d')).turn_lease
     try:
         started = observed()
         assert members(started) == (native.name, cli.name)

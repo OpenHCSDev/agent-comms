@@ -1,3 +1,4 @@
+from agent_comms.field_codec import TurnId
 import os
 import time
 from agent_comms.activity import (
@@ -20,7 +21,7 @@ def test_running_native_activity_is_derived_from_current_turn_phase(tmp_path):
     comms.registry.declare(
         Thread('worker', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
-    first = comms.agents.begin_turn("worker", "first", "Long-running work").turn_lease
+    first = comms.agents.begin_turn("worker", TurnId('a7937b64b8caa58f03721bb6bacf5c78'), "Long-running work").turn_lease
     before = comms.registry.snapshot()
     comms.registry.declare(Thread('worker', frozenset(), str(tmp_path)))
     after = comms.registry.snapshot()
@@ -55,8 +56,8 @@ def test_running_native_activity_is_derived_from_current_turn_phase(tmp_path):
     comms.agents.finish_turn(first)
     assert comms.agents.activity_of("worker", snapshot=comms.registry.snapshot()).presentation("Worker").summary == "Ready"
     assert not comms.views.thread_views()[0].presentation.status.working
-    comms.agents.begin_turn("worker", "second")
+    comms.agents.begin_turn("worker", TurnId('16367aacb67a4a017c8da8ab95682ccb'))
     comms.agents.finish_turn(first)
-    assert comms.registry.require("worker").turn_record.read().require_active().id == "second"
+    assert comms.registry.require("worker").turn_record.read().require_active().id == '16367aacb67a4a017c8da8ab95682ccb'
     comms.owners.stop("worker")
     assert not comms.registry.require('worker').executing

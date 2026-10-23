@@ -3,6 +3,7 @@
 Exercises the agent the way real clients (Toad, Zed) do: through
 Core's ACP connection over real stdio pipes, plus direct handler-level tests.
 """
+from agent_comms.field_codec import TurnId
 from agent_comms.controller import SessionUpdateSink
 
 import asyncio
@@ -433,7 +434,7 @@ class TestActivityLayer:
             "activity-owner", frozenset(), str(wired.root),
             process_identity=ProcessIdentity.capture(os.getpid()),
         ))
-        owner = wired.agents.begin_turn("activity-owner", "activity-test")
+        owner = wired.agents.begin_turn("activity-owner", TurnId('fb5e210a764598099d8e8d358c83aadc'))
         try:
             before = WireRevision.capture(wired.views, expiry_tick=0)
             wired.agents.transition_turn(owner.thread.turn_lease, ToolRunningPhase(detail="bash: echo hi"))

@@ -1,4 +1,5 @@
 """Actual persisted claim boundaries distinguish declaration from claim_scope drift."""
+from agent_comms.field_codec import TurnId
 
 import os
 from dataclasses import replace
@@ -26,7 +27,7 @@ def registered(root):
 def test_claim_claim_tolerates_metadata_and_finished_captured_turn(tmp_path, capture_idle):
     registry = registered(tmp_path)
     initial, claim_scope = registry.live_owner_with_claim('owner')
-    leased, _ = registry.lease_local_turn('owner', 'first')
+    leased, _ = registry.lease_local_turn('owner', TurnId('a7937b64b8caa58f03721bb6bacf5c78'))
     captured = initial if capture_idle else leased
     generation = registry.snapshot().owner_generations['owner']
     assert registry.release_turn(leased.turn_lease)[0]
@@ -35,14 +36,14 @@ def test_claim_claim_tolerates_metadata_and_finished_captured_turn(tmp_path, cap
         RelationViolationError,
     ):
         registry.lease_live_turn_with_generation(
-            captured, 'second', expected_owner_generation=generation,
+            captured, TurnId('16367aacb67a4a017c8da8ab95682ccb'), expected_owner_generation=generation,
         )
     claimed, current_claim = registry.lease_live_turn_with_claim(
-        captured, 'second', expected_generation=claim_scope,
+        captured, TurnId('16367aacb67a4a017c8da8ab95682ccb'), expected_generation=claim_scope,
     )
     assert current_claim == claim_scope
     assert claimed.title == GivenThreadText('metadata')
-    assert claimed.turn_record.read().id == 'second'
+    assert claimed.turn_record.read().id == '16367aacb67a4a017c8da8ab95682ccb'
     assert registry.release_turn(claimed.turn_lease)[0]
 
 
@@ -59,7 +60,7 @@ def test_raw_registry_writer_cannot_cross_captured_claim_identity(tmp_path, muta
         edit.commit()
     before = registry.store.path.read_bytes()
     with pytest.raises(RelationViolationError):
-        registry.lease_live_turn_with_claim(captured, 'denied', expected_generation=claim_scope)
+        registry.lease_live_turn_with_claim(captured, TurnId('62d6c2330036f64bcf71b95791743d6c'), expected_generation=claim_scope)
     assert registry.store.path.read_bytes() == before
 
 
@@ -72,7 +73,7 @@ def test_a_live_owner_cannot_be_declared_human(tmp_path):
 
 def test_live_owner_read_rejects_raw_stale_turn_witness(tmp_path):
     registry = registered(tmp_path)
-    leased, _ = registry.lease_local_turn('owner', 'turn')
+    leased, _ = registry.lease_local_turn('owner', TurnId('9b473845f684444f80a26586ae298d2b'))
     with registry.store.editing() as edit:
         record = edit.document.threads['owner'].turn_record
         record._publish_unlocked(replace(record.read(), claimed_generation=RecordedGeneration(99)))
@@ -84,11 +85,11 @@ def test_live_owner_read_rejects_raw_stale_turn_witness(tmp_path):
 def test_a_superseded_generation_is_deleted_and_its_late_transition_changes_nothing(tmp_path):
     registry = registered(tmp_path)
     registry.live_owner_with_claim('owner')
-    first, _ = registry.lease_local_turn('owner', 'first')
+    first, _ = registry.lease_local_turn('owner', TurnId('a7937b64b8caa58f03721bb6bacf5c78'))
     stale = first.turn_lease
     assert registry.release_turn(stale)[0]
-    second, _ = registry.lease_local_turn('owner', 'second')
+    second, _ = registry.lease_local_turn('owner', TurnId('16367aacb67a4a017c8da8ab95682ccb'))
     assert not stale.record.path.exists() and second.turn_record.path.exists()
     assert stale.record.transition(stale, PreparingPhase()) == ()
     assert stale.record.observe_native_phase(stale, PreparingPhase()) == ()
-    assert second.turn_record.read().id == 'second'
+    assert second.turn_record.read().id == '16367aacb67a4a017c8da8ab95682ccb'

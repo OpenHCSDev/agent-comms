@@ -7,6 +7,7 @@ the owner's event loop with the wire, bus and registry locks held.
 """
 
 from __future__ import annotations
+from agent_comms.field_codec import TurnId
 
 from agent_comms.context_store import UNREAD_CONTEXT
 
@@ -66,7 +67,7 @@ def record_context(comms: Comms, name: str, generation: int) -> None:
     )
     comms.contexts.record_after(UNREAD_CONTEXT, ContextManifest(
         owner.incarnation,
-        RecordedContextTurn(RegisteredTurn(f"turn-{generation}"), TurnIdentity(owner.incarnation, generation)),
+        RecordedContextTurn(RegisteredTurn(TurnId(f"{generation:032x}")), TurnIdentity(owner.incarnation, generation)),
         (segment,),
         "pi.estimateTokens",
     ))
@@ -98,7 +99,7 @@ def selected_turn(private_comms, private_directory):
         assignment = sealed_cohort_assignments(store, lookup)[0]
         owner, generation = comms.registry.live_owner_with_claim("Alice")
         owner, generation = comms.registry.lease_live_turn_with_claim(
-            owner, "selected-turn", expected_generation=generation
+            owner, TurnId('088fbdccfa8d303a5026987cf37e23b8'), expected_generation=generation
         )
         person = store.participants.get(lookup)
         store.create(

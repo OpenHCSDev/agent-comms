@@ -1,4 +1,5 @@
 """Inbox pages drain oldest first without changing uncertain inputs."""
+from agent_comms.field_codec import TurnId
 
 import asyncio
 import json
@@ -27,7 +28,7 @@ def seed_unknown(comms, count, text):
     rows = {
         f"bus:{index}": FieldCodec.encode(BoundUnknownInput(
             key=f"bus:{index}", sequence=index, owner="b", claim_generation=index,
-            target="b", source_text=f"{index}: {text}", turn_id="private-turn",
+            target="b", source_text=f"{index}: {text}", turn_id=TurnId('9f73871819f6ae95a1bbcac63e1880f4'),
             native_id="f" * 32, sent_digest=TextDigest.of("private-native-prompt"),
         ))
         for index in range(1, count + 1)
@@ -168,7 +169,7 @@ def test_large_standby_review_returns_complete_messages_without_files(
     comms.registry.register(
         replace(comms.registry.require("a"), process_identity=ProcessIdentity.capture(os.getpid()))
     )
-    comms.agents.begin_turn("a", "next-a-result-in-flight")
+    comms.agents.begin_turn("a", TurnId('4daf63889e45125a5366649d6a99e6f1'))
     invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": full_review["reviewed_inputs"]}, caller=ThreadCaller("b"))
     assert isinstance(comms.goals.goal_wait("b"), RecordedGoalWait)
     assert all(
@@ -189,7 +190,7 @@ def test_dependency_review_and_ack_survive_large_excluded_history(
     comms.registry.declare(
         replace(comms.registry.require("a"), process_identity=ProcessIdentity.capture(os.getpid()))
     )
-    comms.agents.begin_turn("a", "a-review-in-flight")
+    comms.agents.begin_turn("a", TurnId('90b11de4e45af4329532e30ce2beb544'))
     goal = comms.goals.update_goal("b", SetGoalAction(text="Review a and wait for its next reply"))
     dispositions = InputDispositions(comms.root)
     for index in range(930):

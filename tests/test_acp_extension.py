@@ -1,3 +1,4 @@
+from agent_comms.field_codec import TurnId
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.acp_failure import ACPFailure
 
@@ -96,7 +97,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
         McpClientAcknowledgementUpdate(
             "turn", McpLiveAcknowledgement(1, "pi-mcp-client", "a" * 32, "running", "turn", ())
         ),
-        TurnChangedUpdate(TurnState(ActiveTurn("turn", ProcessIdentity(123, 1), started_at=1.0))),
+        TurnChangedUpdate(TurnState(ActiveTurn(TurnId('9b473845f684444f80a26586ae298d2b'), ProcessIdentity(123, 1), started_at=1.0))),
         TurnChangedUpdate(TurnState(finished_turn_id="turn")),
         TextRouteUpdate(None),
         TranscriptChangedUpdate(NativeTranscriptCursor("session.jsonl", 42)),

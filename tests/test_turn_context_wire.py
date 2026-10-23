@@ -1,4 +1,5 @@
 """Original sealed messaging survives silent context rows through every projection."""
+from agent_comms.field_codec import TurnId
 import hashlib
 import json
 
@@ -23,7 +24,7 @@ from conftest import publish_initial
 def manifest(owner, generation=1):
     source=OwnerProvenance(owner.incarnation, 'original-input-source')
     segment=SegmentManifest(TranscriptSegment,(source,),hashlib.sha256(b'PRIVATE INPUT').hexdigest(),13,4)
-    return ContextManifest(owner.incarnation,RecordedContextTurn(RegisteredTurn('original-turn'),TurnIdentity(owner.incarnation,generation)),(segment,),'pi.estimateTokens')
+    return ContextManifest(owner.incarnation,RecordedContextTurn(RegisteredTurn(TurnId('ab87f599dc0a50a56b7c65de71c39426')),TurnIdentity(owner.incarnation,generation)),(segment,),'pi.estimateTokens')
 
 
 def corrupt_context_kind(comms, name, kind):

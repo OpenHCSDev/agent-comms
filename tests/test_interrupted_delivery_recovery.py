@@ -1,6 +1,7 @@
 """A following message interrupted before native send returns to selected work."""
 
 from __future__ import annotations
+from agent_comms.field_codec import TurnId
 
 from conftest import publish_initial
 from functools import partial
@@ -59,7 +60,7 @@ async def test_interrupted_following_delivery_recovers_only_before_native_send(
     row = stored_inputs(agent.inputs.dispositions.root).lookup(item.key)
     assert not row.has_native_binding
     if native_bound:
-        leased = comms.agents.begin_turn(owner.name, "interrupted-turn")
+        leased = comms.agents.begin_turn(owner.name, TurnId('9c4c7984ba66b4cb4fc11ce230b963d3'))
         assert agent.inputs.dispositions.bind(
             item.key,
             claim_scope=row.claim_generation,

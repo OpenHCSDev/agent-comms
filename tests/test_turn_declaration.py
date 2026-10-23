@@ -1,4 +1,5 @@
 """Idle and active turns keep the registry's null-or-record format."""
+from agent_comms.field_codec import TurnId
 
 import pytest
 
@@ -10,7 +11,7 @@ from agent_comms.turn_lease import ActiveTurn, NoTurn, TurnDeclaration
 from agent_comms.turn_phase import ToolRunningPhase
 
 
-@pytest.mark.parametrize('turn', [NoTurn(), ActiveTurn('turn', ProcessIdentity(123, 1), started_at=1.0)])
+@pytest.mark.parametrize('turn', [NoTurn(), ActiveTurn(TurnId('9b473845f684444f80a26586ae298d2b'), ProcessIdentity(123, 1), started_at=1.0)])
 def test_turn_family_round_trip_keeps_its_original_wire_form(turn):
     encoded = FieldCodec.encode(turn, TurnDeclaration)
     assert FieldCodec.decode(TurnDeclaration, encoded) == turn
@@ -22,7 +23,7 @@ def test_idle_turn_answers_without_an_active_record():
     assert FieldCodec.encode(idle) is None
     idle.require_idle()
     assert idle.report_turn == ''
-    assert not idle.matches(RegisteredTurn('turn'))
+    assert not idle.matches(RegisteredTurn(TurnId('9b473845f684444f80a26586ae298d2b')))
     assert not idle.started_by(10000)
     assert idle.observed_id('finished') == 'finished'
     assert idle.without_claim() is idle
@@ -33,6 +34,6 @@ def test_idle_turn_answers_without_an_active_record():
     with pytest.raises(RelationViolationError):
         idle.require_active()
     with pytest.raises(RelationViolationError):
-        idle.require_turn(RegisteredTurn('turn'))
+        idle.require_turn(RegisteredTurn(TurnId('9b473845f684444f80a26586ae298d2b')))
 
 

@@ -1,3 +1,4 @@
+from agent_comms.field_codec import TurnId
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.pi_vocabulary import HighThinkingLevel
 import os
@@ -505,7 +506,7 @@ def test_membership_notices_follow_exact_membership_and_do_not_wake(tmp_path):
     assert [message.role.change.declared_name for message in history] == ["joined", "left"]
     assert all(not message.role.response_policy(message).starts_turn for message in history)
     assert not comms.views.viewer_snapshot(str(tmp_path)).participants("#api")
-    comms.agents.begin_turn("peer", "active-turn")
+    comms.agents.begin_turn("peer", TurnId('e99af36cdfcffbc191cce98c5d771afb'))
     assert [
         person.thread.name for person in comms.views.viewer_snapshot(str(tmp_path)).participants("#api")
     ] == ["peer"]

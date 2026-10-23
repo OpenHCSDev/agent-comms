@@ -29,6 +29,7 @@ from .field_codec import (
     ExternalJsonShape,
     FieldCodec,
     Id128Text,
+    InputId,
     MalformedRecord,
     WireValue,
     WireName,
@@ -672,7 +673,7 @@ class CommsRequest(DeclaredFamily, affix="Request"):
 class PromptRequest(CommsRequest):
     user_text: str | None = None
     defer_display: bool = False
-    input_id: Annotated[str, Id128Text] = field(default_factory=Id128Text.mint)
+    input_id: Annotated[str, Id128Text] = field(default_factory=InputId.mint)
     origin: Annotated[InputOrigin, WireOmitDefault()] = field(
         default_factory=UnattributedInputOrigin, kw_only=True
     )

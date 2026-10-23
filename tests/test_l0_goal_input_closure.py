@@ -1,4 +1,5 @@
 """Current goal/input boundaries through durable stores and the real owner socket."""
+from agent_comms.field_codec import TurnId
 
 import os
 import sqlite3
@@ -112,7 +113,7 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
     comms = canonical_goal_wire(tmp_path)
     register(comms, "owner")
     register(comms, "peer")
-    comms.agents.begin_turn("peer", "peer-turn")
+    comms.agents.begin_turn("peer", TurnId('6f8eb8c4b59c9b52ce7c7d823f5d7b84'))
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Wait for the peer"))
     message = comms.messaging.send("peer", "owner", "Review this uncertain reply").message
     store = InputDispositions(tmp_path)

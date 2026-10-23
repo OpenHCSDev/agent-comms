@@ -1,4 +1,5 @@
 """Failure evidence is passive; only its fenced attempt owns terminal writes."""
+from agent_comms.field_codec import TurnId
 
 from agent_comms.errors import StaleAttemptError
 import json
@@ -35,7 +36,7 @@ def bound(tmp_path, *, thread_registration):
     permit = store.claim_launch(store.reserve(goal.id, 1))
     identity = TurnIdentity(owner.incarnation, 7)
     lease = TurnLeaseFence(
-        identity, "a" * 32, 3,
+        identity, TurnId('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'), 3,
         record=StoredTurnRecord.for_identity(thread_registration.store.path, identity),
     )
     observation = FailedTurnObservation.from_terminal(

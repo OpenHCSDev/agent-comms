@@ -1,4 +1,5 @@
 """Read evidence follows displayed messages across projections and restarts."""
+from agent_comms.field_codec import TurnId
 
 
 import random
@@ -190,7 +191,7 @@ def test_turn_lease_and_unrelated_registry_changes_do_not_invalidate_dm(tmp_path
     comms.messaging.send("alice", viewer, "painted").message.message_id
     page = comms.views.dm_display_page(ThreadTarget("alice"), worktree=str(tmp_path))
     assert page.selection.basis.peer_identity == peer.incarnation
-    comms.registry.lease_local_turn("alice", "ordinary-turn")
+    comms.registry.lease_local_turn("alice", TurnId('0b225c32b06b9107d59b5d92d13b83a3'))
     fresh = comms.views.dm_display_page(ThreadTarget("alice"), worktree=str(tmp_path))
     assert fresh.selection.basis.peer_identity == page.selection.basis.peer_identity
     comms.registry.register(Thread('unrelated', frozenset(), str(tmp_path)))

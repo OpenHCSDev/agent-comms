@@ -1,4 +1,5 @@
 """ClaimTransition owns atomic application; durability belongs to its checkpoint."""
+from agent_comms.field_codec import TurnId
 
 import os
 from dataclasses import replace
@@ -42,7 +43,7 @@ def test_same_name_can_take_a_previous_birth_only_with_current_registry_evidence
                                    process_identity=ProcessIdentity.capture(os.getpid())), RunningThreadStatus())
     registry = comms.registry.snapshot()
     scope = NativeClaim(owner_claimed_generation=1, operation_id="c" * 32,
-                        turn_id="turn-owner", input_id="input-owner")
+                        turn_id=TurnId('5d1970910e79a04eb98c8e9533701156'), input_id="input-owner")
     held = WakeClaims("owner", "1.0", 1, "msg-1", claims=(resource,),
                       generation=G1, resource_scope=scope).project(ClaimProjection())
     original = held[resource]
@@ -72,7 +73,7 @@ def test_selected_wake_binding_survives_claim_projection(tmp_path):
         wire_root_id="c" * 32, source_seq=7, source_message_id="source-7",
         wake_assignment_id="cohort-v1:" + "d" * 64, wake_revision=3,
         recipient_lookup="e" * 32, execution_id="execution-7", operation_id="f" * 32,
-        owner_claimed_generation=2, turn_id="turn-7", participant_generation=1,
+        owner_claimed_generation=2, turn_id=TurnId('c8196fb128b89f486c374c42dba8df8e'), participant_generation=1,
         attempt_ordinal=1,
     )
     claimed = WakeClaims("owner", "epoch-1", 8, "msg-8", claims=(resource,),

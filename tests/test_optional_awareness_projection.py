@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.field_codec import TurnId
+
 
 from bus_record_fixture import prepare_native_comms
 from agent_comms.lifecycle_capability import Executing
@@ -74,7 +76,7 @@ def _accepted(
 def _owner(comms: Comms, name: str) -> Thread:
     original, claimed_generation = comms.registry.live_owner_with_claim(name)
     owner, _ = comms.registry.lease_live_turn_with_claim(
-        original, f"selected-{name}", expected_generation=claimed_generation
+        original, TurnId.mint(), expected_generation=claimed_generation
     )
     return owner
 

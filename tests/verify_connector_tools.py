@@ -6,6 +6,7 @@ Retains request/response/timing/trace files under the supplied owned output path
 """
 
 from __future__ import annotations
+from agent_comms.field_codec import TurnId
 
 
 from agent_comms.repository_name import RepositoryName
@@ -138,7 +139,7 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
             replace(thread, process_identity=ProcessIdentity.capture(os.getpid()))
         )
         owner, claim = comms.registry.live_owner_with_claim("claude-ai")
-        comms.registry.lease_live_turn_with_claim(owner, "probe-turn", expected_generation=claim)
+        comms.registry.lease_live_turn_with_claim(owner, TurnId('5e1f1a1948276272eb5c186e77e8285b'), expected_generation=claim)
     cases = {
         "comms_pin_channel": {"name": "#probe", "pinned": True},
         "comms_pin_thread": {"channel": "#probe", "name": "worker", "pinned": True},

@@ -1,6 +1,7 @@
 """Actual fsynced bus + SQLite response boundaries, default OFF outside opted-in roots."""
 
 from __future__ import annotations
+from agent_comms.field_codec import TurnId
 
 
 from bus_record_fixture import prepare_native_comms
@@ -128,7 +129,7 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
     ).value.fence
     owner, claim_scope = comms.registry.live_owner_with_claim("owner")
     owner, claim_scope = comms.registry.lease_live_turn_with_claim(
-        owner, "fixture-response-turn", expected_generation=claim_scope
+        owner, TurnId('005ef9d6f4a78b0d26efd11059aa75c2'), expected_generation=claim_scope
     )
     witness = LiveResponseOwner(thread=owner, claimed_generation=claim_scope)
     return Fixture(

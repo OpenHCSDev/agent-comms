@@ -1,4 +1,5 @@
 """A new history declaration crosses real current and retained-source boundaries."""
+from agent_comms.field_codec import TurnId
 
 from agent_comms.historical_views import HistoryView
 from agent_comms.message_page import PageBounds
@@ -49,7 +50,7 @@ def test_viewer_snapshot_exposes_actual_active_channel_participant(tmp_path):
     from test_coordinated_runtime import _root
 
     _path, _root_id, comms, _initial, _people = _root(tmp_path)
-    lease = comms.agents.begin_turn("beta", "ordinary-snapshot-active-participant").turn_lease
+    lease = comms.agents.begin_turn("beta", TurnId('2863939642c6213365179d5204d162ce')).turn_lease
     try:
         snapshot = comms.views.viewer_snapshot(str(comms.root))
         assert [person.thread.name for person in snapshot.participants("#team")] == ["beta"]

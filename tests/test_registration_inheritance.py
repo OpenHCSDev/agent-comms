@@ -1,4 +1,5 @@
 """Current registration declarations, incarnation and saved relationship ownership."""
+from agent_comms.field_codec import TurnId
 
 from typing import Annotated
 from dataclasses import dataclass, replace
@@ -105,7 +106,7 @@ def test_project_change_retains_executing_source_but_refuses_another_input(tmp_p
     new.mkdir()
     comms = wire(tmp_path / 'wire')
     comms.registry.declare(Thread('owner', frozenset(), str(old), process_identity=ProcessIdentity.capture(os.getpid())))
-    original = comms.agents.begin_turn('owner', 'original-turn')
+    original = comms.agents.begin_turn('owner', TurnId('ab87f599dc0a50a56b7c65de71c39426'))
     try:
         comms.threads.set_project('owner', str(new))
         with pytest.raises(StaleFence):
@@ -140,7 +141,7 @@ def test_source_publication_refuses_unrecorded_project_replacement(tmp_path):
 
     comms = wire(tmp_path)
     comms.registry.declare(Thread('owner', frozenset(), str(tmp_path / 'old'), process_identity=ProcessIdentity.capture(os.getpid())))
-    original = comms.agents.begin_turn('owner', 'original-turn')
+    original = comms.agents.begin_turn('owner', TurnId('ab87f599dc0a50a56b7c65de71c39426'))
     current = comms.registry.require('owner')
     comms.registry.register(replace(current, worktree=str(tmp_path / 'other')))
     before = comms.registry.store.path.read_bytes()

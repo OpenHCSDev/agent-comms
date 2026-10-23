@@ -1,4 +1,5 @@
 """Goal settlement reuses the real SQLite grants and nominal state hierarchy."""
+from agent_comms.field_codec import TurnId
 
 from agent_comms.lifecycle_capability import Terminal
 
@@ -21,7 +22,7 @@ def test_goal_settlement_and_new_state_subclass_use_same_durable_owner(tmp_path)
 
     (tmp_path / "attempts").mkdir(mode=0o700)
     store = GoalAttemptStore.initialize(tmp_path / "attempts")
-    turn = RegisteredTurn("turn")
+    turn = RegisteredTurn(TurnId('9b473845f684444f80a26586ae298d2b'))
     for settlement in (VerifiedGoalSettlement, OriginGoalSettlement):
         for state in (ActiveGoal(), PausedGoal(), CompletedGoal(), SpecializedPausedGoal()):
             goal = Goal(

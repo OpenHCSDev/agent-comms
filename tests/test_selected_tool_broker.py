@@ -1,6 +1,7 @@
 """Provider-free selected-tool contract tests; no native Pi/provider launch."""
 
 from __future__ import annotations
+from agent_comms.field_codec import TurnId
 
 
 import asyncio
@@ -108,7 +109,7 @@ def test_owner_mode_denies_unreserved_input_before_consuming_ledger(private_comm
         execution_id="execution",
         operation_id="d" * 32,
         owner_claimed_generation=1,
-        turn_id="turn",
+        turn_id=TurnId('9b473845f684444f80a26586ae298d2b'),
         participant_generation=1,
         attempt_ordinal=1,
     )

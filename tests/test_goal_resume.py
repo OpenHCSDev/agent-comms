@@ -1,4 +1,5 @@
 """Same-ID, explicitly requested goal resume through the public tool boundary."""
+from agent_comms.field_codec import TurnId
 
 
 import os
@@ -61,7 +62,7 @@ def test_second_goal_report_in_one_turn_is_rejected(comms, monkeypatch, tmp_path
         Thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     goal = invoke_tool(comms, "comms_set_goal", {"text": "finish this"})["goal"]
-    comms.agents.begin_turn("owner", "same-assistant-turn")
+    comms.agents.begin_turn("owner", TurnId('d7f9429f60abc2787fc3e9717054ea41'))
 
     first = invoke_tool(
         comms,
@@ -84,7 +85,7 @@ def test_replacing_or_clearing_goal_cannot_reset_turn_report_guard(comms, monkey
         Thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     first = invoke_tool(comms, "comms_set_goal", {"text": "first"})["goal"]
-    comms.agents.begin_turn("owner", "same-assistant-turn")
+    comms.agents.begin_turn("owner", TurnId('d7f9429f60abc2787fc3e9717054ea41'))
     invoke_tool(
         comms,
         "comms_goal",

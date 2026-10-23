@@ -1,4 +1,5 @@
 """Original authored ingress and neutral historical evidence share one input store."""
+from agent_comms.field_codec import TurnId
 from agent_comms.controller import Controller, SessionUpdateSink
 
 from agent_comms.channel_targets import CommandTarget
@@ -84,7 +85,7 @@ async def test_queue_observation_owns_capture_and_rejects_malformed_available_sc
 async def test_original_human_followup_survives_forwarding_reservation_and_native_disposition(live_owner):
     comms, agent = live_owner
     agent.on_connect(Client())
-    comms.agents.begin_turn("beta", "held-native", "Existing original")
+    comms.agents.begin_turn("beta", TurnId('f6651da6017ff80246152c3c01c5507c'), "Existing original")
     agent.inputs.state('beta').open_inbox()
     origin = capture(comms)
     before = comms.bus.bus.revision()
@@ -106,8 +107,8 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
     assert row.context_provenance() in contribution.provenance
     native_id = "b" * 32
     sent = "User follow-up:\n" + command.user_text
-    assert inputs.bind(key, claim_scope=row.claim_generation, turn_id="held-native", native_id=native_id, text=sent)
-    assert inputs.started(key, turn_id="held-native", native_id=native_id, text=sent)
+    assert inputs.bind(key, claim_scope=row.claim_generation, turn_id=TurnId('f6651da6017ff80246152c3c01c5507c'), native_id=native_id, text=sent)
+    assert inputs.started(key, turn_id=TurnId('f6651da6017ff80246152c3c01c5507c'), native_id=native_id, text=sent)
     # Existing terminal settlement never rewrites a started original as
     # unsent or grants a replay; the native completion owns that.
     assert inputs.settle_unbound((key,)).lookup(key).has_started

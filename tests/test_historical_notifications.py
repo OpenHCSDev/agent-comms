@@ -1,4 +1,5 @@
 """Authored archived deliveries use recorded owners, not live availability."""
+from agent_comms.field_codec import TurnId
 
 
 from agent_comms.bus import Bus
@@ -274,7 +275,7 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
     )
     owner, generation = old.registry.live_owner_with_claim("agent")
     owner, _ = old.registry.lease_live_turn_with_claim(
-        owner, "reply-turn", expected_generation=generation
+        owner, TurnId('9ec9723c1d103dd9122ca0797881e236'), expected_generation=generation
     )
     lease = owner.require_turn_lease()
     inputs = InputDispositions(old.root)

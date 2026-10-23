@@ -1,8 +1,8 @@
 """Goal absence is dispatched before work; a clear never revives a turn's goal."""
+from agent_comms.field_codec import TurnId
 
 import os
 from contextlib import ExitStack, contextmanager
-from uuid import uuid4
 
 import pytest
 
@@ -27,7 +27,7 @@ def goal_turn(comms, original_goal):
     ))
     if original_goal:
         goal = comms.goals.update_goal("worker", SetGoalAction(text="Original work"))
-    turn = RegisteredTurn(uuid4().hex)
+    turn = RegisteredTurn(TurnId.mint())
     owner = comms.agents.begin_turn("worker", turn.value)
     lease = owner.thread.require_turn_lease()
     try:

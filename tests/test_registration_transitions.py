@@ -1,4 +1,5 @@
 """Transition-family consequences on the actual canonical registry and locks."""
+from agent_comms.field_codec import TurnId
 
 import os
 from dataclasses import replace
@@ -21,7 +22,7 @@ def test_registration_transition_preserves_or_revokes_exact_lease(tmp_path, tran
     registry = Registration(tmp_path / 'registry.json')
     thread = Thread('owner', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     registry.register(thread)
-    leased, _ = registry.lease_local_turn('owner', 'turn')
+    leased, _ = registry.lease_local_turn('owner', TurnId('9b473845f684444f80a26586ae298d2b'))
     lease = leased.require_turn_lease()
     before = registry.snapshot()
     updated = leased
@@ -40,7 +41,7 @@ def test_registration_transition_preserves_or_revokes_exact_lease(tmp_path, tran
         advances_owner = True
     elif transition == 'new-turn':
         assert registry.release_turn(lease)[0]
-        updated, _ = registry.lease_local_turn('owner', 'imported')
+        updated, _ = registry.lease_local_turn('owner', TurnId('5f54227b74fbba7743c47cd286b4873f'))
         preserves_record = False
     registry.register(updated, **kwargs)
     after = registry.snapshot()
@@ -85,12 +86,12 @@ def test_rename_preserves_exact_turn_release_but_not_reused_identity(tmp_path):
     registry = Registration(tmp_path / 'registry.json')
     thread = Thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     registry.register(thread)
-    leased, _ = registry.lease_local_turn('owner', 'same-id')
+    leased, _ = registry.lease_local_turn('owner', TurnId('058be655fae2a4c37a21d2c091ba7661'))
     lease = leased.require_turn_lease()
     registry.rename('owner', 'renamed')
     released, finished = registry.release_turn(lease)
     assert released and finished.identity.incarnation.name == 'renamed'
-    next_turn, _ = registry.lease_local_turn('renamed', 'same-id')
+    next_turn, _ = registry.lease_local_turn('renamed', TurnId('058be655fae2a4c37a21d2c091ba7661'))
     assert registry.release_turn(lease) == (False, NoFinishedTurn())
     assert registry.require('renamed').turn_lease == next_turn.turn_lease
 
@@ -119,7 +120,7 @@ def test_batch_idle_fence_refuses_busy_second_without_partial_commit(tmp_path):
         registry.register(Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     before = registry.snapshot()
     selected = tuple((before.threads[name], before.claim_generation(name)) for name in ("first", "second"))
-    registry.lease_local_turn('second', 'busy')
+    registry.lease_local_turn('second', TurnId('c9bc072f4fa8189466c2a8f2c36a56a4'))
     protected = registry.snapshot()
     with pytest.raises(RelationViolationError):
         registry.fence_idle_owners(selected)

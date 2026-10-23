@@ -1,4 +1,5 @@
 """Held-order recovery and unanswered DMs on an independently copied bus."""
+from agent_comms.field_codec import TurnId
 
 
 from agent_comms.channel_targets import CommandTarget
@@ -340,7 +341,7 @@ def test_a_running_turn_is_not_a_stalled_holder(held_bus):
     blocked_holder(held_bus)
     thread = held_bus.registry.require("worker")
     held_bus.registry.register(replace(thread, process_identity=ProcessIdentity.capture(os.getpid())))
-    owner = held_bus.agents.begin_turn("worker", "current-direct-task")
+    owner = held_bus.agents.begin_turn("worker", TurnId('3e748b426825aaaad5def94520fa5858'))
     lease = owner.thread.turn_lease
     assert lease is not None
     try:

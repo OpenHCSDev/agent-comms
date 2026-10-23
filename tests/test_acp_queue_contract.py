@@ -1,6 +1,7 @@
 """Provider-free exact-ID ACP queue projection; no Pi consumption inference."""
 
 from __future__ import annotations
+from agent_comms.field_codec import TurnId
 
 import os
 from pathlib import Path
@@ -44,7 +45,7 @@ def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, RecordedThreadIncarnation
 
 async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp_path):
     comms, agent, _, _ = _owner(tmp_path)
-    comms.agents.begin_turn("beta", "active", "Held native fixture")
+    comms.agents.begin_turn("beta", TurnId('96879611650f80a81392a52e0db9b023'), "Held native fixture")
     inbox = agent.inputs.state('beta').open_inbox()
     response = await agent.prompt(
         "beta",
@@ -69,7 +70,7 @@ async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp
 
 async def test_request_identity_tracks_equal_queue_and_immediate_inputs_without_replay(tmp_path):
     comms, agent, _, _ = _owner(tmp_path)
-    comms.agents.begin_turn("beta", "active", "Held native fixture")
+    comms.agents.begin_turn("beta", TurnId('96879611650f80a81392a52e0db9b023'), "Held native fixture")
     inbox = agent.inputs.state('beta').open_inbox()
     requests = [QueuePromptRequest("same"), SteerPromptRequest("same")]
     for request in requests:
@@ -108,7 +109,7 @@ async def test_request_identity_tracks_equal_queue_and_immediate_inputs_without_
 @pytest.mark.parametrize("user_text", [["list"], [], {"text": "dict"}, 7, False])
 async def test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue(tmp_path, user_text):
     comms, agent, _, _ = _owner(tmp_path)
-    comms.agents.begin_turn("beta", "active", "Held native fixture")
+    comms.agents.begin_turn("beta", TurnId('96879611650f80a81392a52e0db9b023'), "Held native fixture")
     inbox = agent.inputs.state('beta').open_inbox()
     metadata = encode_request(QueuePromptRequest("valid", True))
     metadata["agentComms"]["request"]["user_text"] = user_text
