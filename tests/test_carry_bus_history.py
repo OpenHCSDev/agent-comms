@@ -12,7 +12,6 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from agent_comms.threads import Thread
 
 # This fixture needs the removed writer, not a copy of its implementation.
 # The commit is an ancestor of this migration and is retired with the carry test.
@@ -49,7 +48,7 @@ def publish_predecessor_history(directory: Path) -> None:
     resource.write_text("original source\n")
     comms = wire(directory / "wire")
     for name in ("sender", "owner"):
-        comms.registry.declare(Thread(
+        comms.registry.declare(comms.registry.new_thread(
             name, frozenset({"team"}), worktree=str(project),
             process_identity=ProcessIdentity.capture(os.getpid()),
         ))

@@ -40,7 +40,7 @@ async def test_pager_requests_two_older_pages_through_the_bridges_real_socket(tm
             if method == 'initialized':
                 continue
             if method == 'initialize':
-                result = {}
+                result = {'userAgent': 'codex/0.0.0'}
             elif method == 'thread/resume':
                 result = {'thread': {'id': 'thread', 'status': {'type': 'idle'}}}
             else:

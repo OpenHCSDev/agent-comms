@@ -12,7 +12,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.storage_rules import (
     CheckoutStorageEffect, RemoveCheckoutStorageEffect, StorageRoots, StorageRule,
-    StorageDenied, StorageProjection, UnitStorage, shell_storage_effects,
+    StorageDenied, StorageProjection, UnassignedThreadStorage, UnitStorage, shell_storage_effects,
 )
 from agent_comms.threads import Thread
 
@@ -47,7 +47,7 @@ def test_storage_paths_round_trip_inside_collections(tmp_path):
         FieldCodec.decode(StorageRoots, {**encoded, 'checkouts': []})
 
 
-def test_registry_rule_supplies_new_thread_roots(tmp_path):
+def test_registry_assigns_a_new_thread_its_roots_at_declaration(tmp_path):
     import json
     (tmp_path / 'storage.json').write_text(json.dumps({
         'scratch_base': str(tmp_path / 'scratch'), 'floor_gib': 47,
@@ -55,9 +55,11 @@ def test_registry_rule_supplies_new_thread_roots(tmp_path):
     comms = wire(tmp_path)
     rule = comms.registry.storage_rule
     thread = Thread('worker', frozenset(), str(tmp_path / 'home'))
-    assert thread.storage_roots.scratch == tmp_path / 'scratch' / 'worker'
+    assert thread.storage_roots == UnassignedThreadStorage()
     assert rule.floor_gib == 47
-    assert comms.registry.declare(thread).storage_roots == thread.storage_roots
+    declared = comms.registry.declare(thread)
+    assert declared.storage_roots == StorageRoots(tmp_path / 'scratch' / 'worker')
+    assert comms.registry.require('worker').storage_roots == declared.storage_roots
 
 
 def test_removed_worktree_frees_quota_and_another_home_cannot_claim_its_parent(tmp_path):

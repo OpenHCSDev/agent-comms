@@ -36,6 +36,7 @@ from agent_comms.native_session_files import NativeSessionFiles
 from .native_package import VerifiedNativePackage
 from .selected_result import CoordinatedTurn
 from .thread_text import GivenThreadText
+from .threads import Thread
 
 _MAX_GO_WAIT_SECONDS = 120
 _GO = re.compile(r"GO (0|[1-9][0-9]{0,17})\Z")
@@ -85,7 +86,6 @@ def reserve_foreground_owner(
     Never attach to/replace an existing owner; even a stopped owner may retain
     an uncertain model input. This only works on an initialized private root.
     """
-    from .threads import Thread
     root = Path(root).absolute()
     if (
         type(opt_in) is not bool

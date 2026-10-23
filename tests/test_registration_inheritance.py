@@ -53,7 +53,7 @@ def test_registry_redeclaration_inherits_metadata_but_respects_explicit_values(t
         title=GivenThreadText("retained"),
     )
     initial = replace(initial, worktree=str(tmp_path))
-    comms.registry.declare(initial)
+    initial = comms.registry.declare(initial)
     comms.registry.declare(Thread('owner', frozenset(), str(tmp_path)))
     restored = comms.registry.require("owner")
     assert restored == initial
