@@ -219,10 +219,10 @@ class TurnProgress(events.AgentEventConsumer):
     async def input_started(self, event: events.InputStarted) -> None:
         await event.captured(self.inputs, self.session_id).started(
             self.inputs, self.session_id,
-            LiveQueueScope(self.session_id, ClaimedIdentity(
+            LiveQueueScope(session_id=self.session_id, claimed_identity=ClaimedIdentity(
                 self.turn_lease.identity.incarnation,
                 self.turn_lease.claimed_generation,
-            ), self.thread.require_process()),
+            ), owner=self.thread.require_process()),
         )
 
     async def before_native_metadata(self, event: events.NativeMetadataObservation) -> None:

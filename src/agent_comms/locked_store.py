@@ -30,6 +30,7 @@ from .store_files import (
     StoreLockOwner,
     StoreOwner,
     _store_lock,
+    is_store_lock,
     store_lock_path,
 )
 
@@ -266,6 +267,8 @@ class RootFile:
         companions.update(member for path, owner in owners.items()
                           for member in (*owner.files(path), *owner.transient_paths(path))
                           if member != path)
+        # A lock is never content, even after a carry deletes the store it locked.
+        companions.update(path for path in selected if is_store_lock(path))
         return {
             (DeclaredFile(declarations[path], path.relative_to(root)) if path in declarations
              else UndeclaredFile(path.relative_to(root))): owner

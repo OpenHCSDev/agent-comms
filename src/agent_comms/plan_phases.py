@@ -193,9 +193,6 @@ class ControlPlanePhase(CommanderNativePhase):
     )
 
 
-OUTSIDE_PARITY = ("src", ":!src/agent_comms/commander_parity")
-
-
 class StoryPhase(CommanderNativePhase):
     """A view of the native records, not a prerequisite for their cutover: both story tools
     exist and the separate roast step is deleted."""
@@ -216,8 +213,8 @@ class CommanderPagePhase(CommanderNativePhase):
     after = (RecordPlanePhase, ControlPlanePhase)
     evidence = AllEvidence(
         (
-            PatternPresent(r"^class CommanderHud\b", OUTSIDE_PARITY),
-            PatternPresent(r"\bcomms_hud\b", OUTSIDE_PARITY),
+            PatternPresent(r"^class CommanderHud\b", ("src",)),
+            PatternPresent(r"\bcomms_hud\b", ("src",)),
         )
     )
 
@@ -485,13 +482,7 @@ class TransitionScaffoldingPhase(RemainingSlopPhase):
     """0.4."""
 
     after = (CutoverPhase,)
-    evidence = PathsAbsent(
-        (
-            "src/agent_comms/commander_parity",
-            "tools/carry_rts_orders.py",
-            "tools/cutover/rts-launchers.patch",
-        )
-    )
+    evidence = CommitMerged("995be3b3f")
 
 
 class AbsencePhase(RemainingSlopPhase):

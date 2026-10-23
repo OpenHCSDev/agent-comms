@@ -135,7 +135,17 @@ class CarryChain:
             for later in step.precedes:
                 if later in dependencies:
                     dependencies[later].add(step)
-        return cls(tuple(TopologicalSorter(dependencies).static_order()))
+        sorter = TopologicalSorter(dependencies)
+        sorter.prepare()
+        emitted = []
+        ready = set()
+        while sorter.is_active():
+            ready.update(sorter.get_ready())
+            step = next(step for step in ordered if step in ready)
+            ready.remove(step)
+            emitted.append(step)
+            sorter.done(step)
+        return cls(tuple(emitted))
 
     def pending(self, dry_run: Callable[[type[Carry]], Carried]) -> tuple[type[Carry], ...]:
         """Every step from the first whose dry run reports a change. A later step's dry run
