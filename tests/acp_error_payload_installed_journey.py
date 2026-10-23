@@ -7,7 +7,6 @@ journey. The isolated root is retained on failure, including uncertain inputs.
 from __future__ import annotations
 
 
-from agent_comms.bus import Bus
 
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.pi_vocabulary import OffThinkingLevel
@@ -32,7 +31,6 @@ from agent_comms.acp_failure import RequestFailure, ProviderQuotaFailure
 from agent_comms.comms import wire
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.field_codec import FieldCodec
-from agent_comms.input_disposition import InputDispositions
 from agent_comms.threads import Thread
 
 from native_context_budget_installed_journey import ReceiptSubscriber
@@ -126,7 +124,6 @@ async def journey(package: Path, evidence: Path, installed: Path, *, repeat_load
         "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}},
     }))
     comms = wire(root)
-    Bus.install(Bus.path_in(comms.root))
     fresh = create_fresh_private_session(evidence / "sessions", worktree=project)
     comms.registry.declare(Thread('error-native', frozenset(), str(project), session_file=RegistrySessionLocation.from_path(str(fresh.path), comms.root), model=DeclaredModel('error-local/error-fixture'), thinking_level=OffThinkingLevel))
     environment = {key: value for key, value in os.environ.items()

@@ -1,6 +1,5 @@
 """Owner pause remains attributable and cannot be undone by a model tool."""
 
-from agent_comms.bus import Bus
 
 import pytest
 
@@ -20,7 +19,6 @@ from agent_comms.threads import Thread
 
 def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, monkeypatch):
     comms = wire(tmp_path)
-    Bus.install(Bus.path_in(comms.root))
     comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Read fifty files"))
     comms.goals.update_goal(
@@ -55,7 +53,6 @@ def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, m
 
 def test_model_cannot_pause(tmp_path, monkeypatch):
     comms = wire(tmp_path)
-    Bus.install(Bus.path_in(comms.root))
     comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Read fifty files"))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")

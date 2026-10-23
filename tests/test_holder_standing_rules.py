@@ -16,7 +16,6 @@ import pytest
 from agent_comms.store_files import StoreLockContention
 
 from agent_comms import agent_events as events
-from agent_comms.bus import Bus
 from agent_comms.bus_publication import AgentOrigin, HumanOrigin
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander.order import Commander, OrderFile, SayVerb, SendVerb
@@ -36,7 +35,6 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
     CreateProblemGoalAction,
     ReissuedOrderGoalAction,
-    SetGoalAction,
 )
 from agent_comms.goal_presentation import RunnableExecution
 from agent_comms.goal_states import ActiveGoal
@@ -79,7 +77,6 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
     """One setup owner: real declarations, checked orders, UNKNOWN row, then a copy."""
     source = source_repository
     scope = source.scope()
-    Bus.install(Bus.path_in(comms.root))
     # Two order holders never share one worktree, so the outsider has its own checkout.
     outsider = tmp_path / 'outsider-checkout'
     source.git(source.checkout, 'worktree', 'add', '-q', '-b', 'outsider-work', str(outsider))

@@ -1,6 +1,5 @@
 """A manual /compact runs Pi's own engine in the retained child, which keeps serving."""
 
-from agent_comms.queued_input import InitialInput
 import asyncio
 import json
 import os
@@ -11,6 +10,7 @@ from tempfile import TemporaryDirectory
 from uuid import uuid4
 
 import pytest
+from acp.schema import TextContentBlock
 
 from agent_comms.acp import CommsClient
 from agent_comms.acp_extension import (
@@ -23,10 +23,11 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.agent_events import CompactionEnd
 from agent_comms.comms import wire
-from agent_comms.pi_vocabulary import ManualCompactionReason
 from agent_comms.launch_runtime import RestartEnvironment
-from agent_comms.runtime import socket_path
 from agent_comms.native_arguments import GivenArguments, GivenBinary
+from agent_comms.pi_vocabulary import ManualCompactionReason
+from agent_comms.queued_input import InitialInput
+from agent_comms.runtime import socket_path
 from delivery_owner_fixture import canonical_agent
 
 
@@ -239,7 +240,9 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
             attached_facts.clear()
             compact_task = asyncio.create_task(
                 attachment.prompt(
-                    "worker", [{"type": "text", "text": ""}], _meta=encode_request(CompactRequest())
+                    "worker",
+                    [TextContentBlock(type="text", text="")],
+                    _meta=encode_request(CompactRequest()),
                 )
             )
             entered = await asyncio.to_thread(summary_entered.wait, 15)

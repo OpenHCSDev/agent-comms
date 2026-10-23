@@ -6,7 +6,7 @@ from multiprocessing.context import ForkServerContext
 from pathlib import Path
 
 from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
-from agent_comms.bus import Bus, PrivateRecord
+from agent_comms.bus import PrivateRecord
 from agent_comms.comms import Comms, wire
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.bus_publication import Delivered, KeyedPublication
@@ -26,7 +26,6 @@ publication_processes.set_forkserver_preload([ClaimMessage.__module__.partition(
 def prepare_native_comms(comms: Comms) -> Comms:
     """Validate native-root authority before installing data or opening a coordinator."""
     comms.registry.prepare_native_root()
-    Bus.install(Bus.path_in(comms.root))
     return comms
 
 

@@ -1,7 +1,6 @@
 """Selected check history is small, non-executable and scoped to the command."""
 
 
-from agent_comms.bus import Bus
 import json
 from pathlib import Path
 import sys
@@ -22,7 +21,6 @@ from agent_comms.threads import Thread
 def source(scratch_root, durable_home):
     root = scratch_root / "source"
     c = wire(root)
-    Bus.install(Bus.path_in(c.root))
     for name in ("A", "B", "other"):
         c.registry.declare(Thread(name, frozenset({"comms"}), str(scratch_root)),
                            StoppedThreadStatus())
