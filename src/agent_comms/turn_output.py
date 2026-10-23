@@ -67,12 +67,21 @@ class TurnOutput:
         if failure.supersedes(self.failure):
             self.failure = failure.with_text(self.redact(failure.text))
 
+    def _end_request_failure(self) -> None:
+        """The refused request's failure no longer decides the turn."""
+        if self.failure is not None and self.failure.ends_with_request_retry:
+            self.failure = None
+
     def request_retried(self) -> None:
         """Pi re-sends the refused request; that refusal no longer decides the turn."""
         self._failed_message_source = UnrecordedFailureSource()
-        if self.failure is not None and self.failure.ends_with_request_retry:
-            self.failure = None
+        self._end_request_failure()
         self.error_message = None
+
+    def request_exhausted(self, failure: failures.TurnFailure) -> None:
+        """Pi's recovery ended the request; its final error replaces the interim refusal."""
+        self._end_request_failure()
+        self.record_failure(failure)
 
     def raise_if_failed(self, proof, model: SelectedModel) -> None:
         if self.failure is not None:
