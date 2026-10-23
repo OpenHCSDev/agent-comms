@@ -10,8 +10,6 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms.lifecycle_capability import Unresolved
-
 from .agent_activity import AgentActivity
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError, UnregisteredThreadError
@@ -221,24 +219,17 @@ class Goals:
                 if not page:
                     break
                 after_seq = page[-1].seq
-        document = dispositions.read(tuple(replies))
-        for key, message in replies.items():
-            row = document.lookup(key)
-            if not row.exists:
-                # Read-only inspection of a canonical input. Only an
-                # explicit successful review persists this observation.
-                row = ReservedInput(
-                    key,
-                    message.seq,
-                    thread.name,
-                    snapshot.claim_generation(thread.name),
-                    message.target,
-                    message.body,
-                )
-            for pending in row.items_with(Unresolved, row):
-                if pending.owner in owners:
-                    unknown[key] = pending
-                    eligible.add(key)
+        # Pure document inspection; only explicit successful review persists it.
+        document = dispositions.read(tuple(replies)).record(*(
+            ReservedInput(
+                key, message.seq, thread.name, snapshot.claim_generation(thread.name),
+                message.target, message.body,
+            )
+            for key, message in replies.items()
+        ))
+        for pending in document.unknown(owners):
+            unknown[pending.key] = pending
+            eligible.add(pending.key)
         return GoalInputReview(
             captured.snapshot,
             thread,
