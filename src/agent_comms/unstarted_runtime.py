@@ -48,8 +48,8 @@ class UnstartedRuntime(RuntimeLocation):
         return self.history_source(root, incarnation)
 
     def select_session(self, directory, execution, source_reads, *, participant):
-        participant.owner = participant.comms.registry.claim_fresh_session(participant.owner)
-        return participant.owner.thread.writable_runtime.select_session(
+        location = participant.comms.registry.claim_fresh_session(participant)
+        return location.select_session(
             directory, execution, source_reads, participant=participant,
         )
 

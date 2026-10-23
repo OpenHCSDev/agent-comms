@@ -33,6 +33,8 @@ from .threads import Thread
 
 if TYPE_CHECKING:
     from .goal_management import Goals
+    from .selected_participant import SelectedParticipant
+    from .agent_backend import RuntimeLocation
 
 _RUNNING_STATUS = RunningThreadStatus()
 
@@ -170,7 +172,7 @@ class Registration:
         with self.store.editing() as edit:
             return self._attach_native_session(edit, original, session_file)
 
-    def claim_fresh_session(self, original: RegistryOwner) -> RegistryOwner:
+    def claim_fresh_session(self, participant: SelectedParticipant) -> RuntimeLocation:
         """Create and record the first session while the registry owns its selection.
 
         An execution captured before the first claim joins the recorded session;
@@ -178,6 +180,7 @@ class Registration:
         RuntimeLocation.new_location already retains saved locations and creates
         only for UnstartedRuntime, so selection has no second absence test here.
         """
+        original = participant.owner
         with self.store.editing() as edit:
             current = edit.document.require(original.thread.name)
             joined = replace(original, thread=replace(
@@ -185,7 +188,8 @@ class Registration:
             current = joined.require_source_snapshot(edit.original.snapshot)
             location = current.writable_runtime.new_location(
                 self.store.path.parent, original.thread.worktree)
-            return self._attach_native_session(edit, joined, location.path)
+            participant.owner = self._attach_native_session(edit, joined, location.path)
+            return participant.owner.thread.writable_runtime
 
     def _attach_native_session(
         self, edit: RegistryEdit, original: RegistryOwner, session_file: str,

@@ -157,9 +157,7 @@ async def stream_agent_events(
             yield events.Error(text=str(error), reason_code=failures.NativeLaunchInvalid.declared_name)
             yield events.Done(ok=False, failure=failures.NativeLaunchInvalid(str(error)), text=str(error))
             return
-        from .session_fence import session_writer_fence
-
-        async with session_writer_fence(launch.session.session_file):
+        async with launch.session.files(root).accept_input():
             async with aclosing(
                 TurnSession(
                     launch,
