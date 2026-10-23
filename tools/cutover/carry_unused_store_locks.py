@@ -1,8 +1,8 @@
 """Delete copy-created locks whose sibling has no locking owner.
 
 The old RootFile.copy_group locked byte files as well as stores. The current
-owner class answers whether a sibling takes that lock; absent siblings cannot
-use it. Delete this carry after it has run on the live root.
+declaring owner answers whether a sibling takes that lock, even before a lazy
+store creates its data file. Delete this carry after it has run on the live root.
 """
 
 from pathlib import Path
@@ -10,7 +10,7 @@ from typing import ClassVar
 
 from agent_comms.installer.carry import Carried, Carry
 from agent_comms.locked_store import RootFile
-from agent_comms.store_files import StoreLockOwner, is_store_lock, locked_store_path
+from agent_comms.store_files import is_store_lock, locked_store_path
 
 
 class UnusedStoreLocks(Carry):
@@ -30,8 +30,8 @@ class UnusedStoreLocks(Carry):
         siblings = tuple(locked_store_path(path) for path in locks)
         locking = {
             self.root / resource.path
-            for resource, owner in RootFile.owned_files(self.root, siblings).items()
-            if issubclass(owner, StoreLockOwner)
+            for resource in RootFile.owned_files(self.root, siblings)
+            if resource.takes_store_lock()
         }
         unused = tuple(
             lock for lock, sibling in zip(locks, siblings, strict=True) if sibling not in locking
