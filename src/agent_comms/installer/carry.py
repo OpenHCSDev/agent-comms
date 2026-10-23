@@ -18,7 +18,6 @@ from abc import abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from graphlib import TopologicalSorter
-from importlib import import_module
 from pathlib import Path
 from typing import Annotated, ClassVar
 
@@ -112,8 +111,6 @@ class CarryChain:
         first-parent commit that added each file."""
         tree = tree.resolve()
         directory = tree / STEPS
-        for path in sorted(directory.glob("*.py")):
-            import_module(f"{directory.name}.{path.stem}")
         steps = [step for step in Carry.members_with(Carry) if step.module().parent == directory]
         log = subprocess.check_output(
             ["git", "-C", str(tree), "log", "-m", "--first-parent", "--no-renames",
