@@ -262,7 +262,7 @@ class InputObservation(ABC):
                 wire_root_id=root_id, generation=participant.owner_identity.generation,
             ).state(store.session._connection)
             pending = next_sealed_assignment(
-                store, participant.lookup, owner.thread.name, after_seq=cursor.covered_seq,
+                store, participant.lookup, after_seq=cursor.covered_seq,
             )
             original = store.session.path.stat()
         observation = PrivateObservation

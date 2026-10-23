@@ -137,7 +137,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
     with Coordination(str(current.root / "coordination.sqlite3")) as store:
         PrivateCoordinatorTable.install(store)
         live_before = store.participants.register(
-            RecordedThreadIncarnation("fixture", live.created_at).lookup, live.name, live.name, committed=True
+            RecordedThreadIncarnation("fixture", live.created_at).lookup, committed=True
         ).value
         if repair_existing:
             current.registry.restore_stopped(source, (missing.name,))

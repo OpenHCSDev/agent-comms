@@ -169,7 +169,7 @@ async def test_joined_worker_retains_original_evidence_and_owns_sqlite_until_can
     path = tmp_path / 'coordination.sqlite3'
     with Coordination(str(path), clock_ms=lambda: 1234) as original:
         PrivateCoordinatorTable.install(original)
-        original.participants.register('original', 'owner', 'owner', committed=True)
+        original.participants.register('original', committed=True)
         original_connection = original.session._connection
         entered, release = threading.Event(), threading.Event()
         worker_connections = []
@@ -179,7 +179,7 @@ async def test_joined_worker_retains_original_evidence_and_owns_sqlite_until_can
                 assert store.session.now() == original.session.now()
                 worker_connections.append(store.session._connection)
                 with store.session.read():
-                    assert store.participants.get('original').owner_identity.owner_thread == 'owner'
+                    assert store.participants.get('original').owner_identity.owner_lookup == 'original'
                     NativeContextProof.read_evidence(files, INPUT_ID, evidence=evidence,
                                                      session_entry_start=input_record.start)
                     entered.set()
@@ -204,7 +204,7 @@ async def test_joined_worker_retains_original_evidence_and_owns_sqlite_until_can
                 with pytest.raises(sqlite3.ProgrammingError):
                     _ = worker_connections[0].in_transaction
                 with original.session.read():
-                    assert original.participants.get('original').owner_identity.owner_thread == 'owner'
+                    assert original.participants.get('original').owner_identity.owner_lookup == 'original'
             finally:
                 release.set()
                 if not pending.done():
@@ -212,5 +212,3 @@ async def test_joined_worker_retains_original_evidence_and_owns_sqlite_until_can
                 await asyncio.gather(pending, return_exceptions=True)
     assert evidence.source.stream.closed
     assert (session.read_bytes(), files.input_proof.read_bytes()) == before
-
-

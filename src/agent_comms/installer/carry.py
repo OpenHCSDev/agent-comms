@@ -1,6 +1,6 @@
 """The steps a retained bus is carried through when its durable format changes.
 
-A step is one module in ``tools/cutover``, ``carry_<what>.py``, holding one ``Carry``
+A step is one module in ``tools/cutover`` holding one ``Carry``
 subclass. Only ``agent-comms install`` runs it, with the target revision's ``src`` and
 ``tools``, so every step runs against the source it is installed with. A step is
 idempotent: data it already carried reports no change, so a step's own dry run is the
@@ -123,7 +123,7 @@ class CarryChain:
         """Import the tree's steps (its ``tools`` is on the path) and order them by the
         first-parent commit that added each file."""
         directory = (tree / STEPS).resolve()
-        for path in sorted(directory.glob("carry_*.py")):
+        for path in sorted(directory.glob("*.py")):
             import_module(f"{directory.name}.{path.stem}")
         steps = [step for step in Carry.declared.values() if step.module().parent == directory]
         log = subprocess.check_output(
@@ -150,4 +150,3 @@ class CarryChain:
             if dry_run(step).changed:
                 return self.steps[position:]
         return ()
-

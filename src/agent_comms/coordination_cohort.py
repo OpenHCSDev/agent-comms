@@ -245,7 +245,6 @@ def accept_delivery_cohort(
 def next_sealed_assignment(
     store: Coordination,
     recipient_lookup: str,
-    owner_name: str,
     *,
     after_seq: int = 0,
 ) -> WakeAssignment | None:
@@ -254,12 +253,12 @@ def next_sealed_assignment(
     Skip completed pages to find later work. Displaying work does not start a
     turn; executing it still requires checking the process and stored message.
     """
-    pending = pending_sealed_assignments(store, recipient_lookup, owner_name, after_seq=after_seq)
+    pending = pending_sealed_assignments(store, recipient_lookup, after_seq=after_seq)
     return next(iter(pending), None)
 
 
 def pending_sealed_assignments(
-    store: Coordination, recipient_lookup: str, owner_name: str, *, after_seq: int = 0,
+    store: Coordination, recipient_lookup: str, *, after_seq: int = 0,
 ) -> tuple[WakeAssignment, ...]:
     """Read acknowledged pending work once, excluding messages arriving afterward.
 
@@ -275,8 +274,7 @@ def pending_sealed_assignments(
                 store, recipient_lookup, after_seq=cursor, limit=100,
                 state_capability=PendingNotification,
             )
-            pending.extend(assignment for assignment in selected
-                           if assignment.recipient == owner_name)
+            pending.extend(selected)
             if len(selected) < 100:
                 return tuple(pending)
             cursor = selected[-1].wire_seq

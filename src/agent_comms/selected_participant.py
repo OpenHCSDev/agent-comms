@@ -244,7 +244,7 @@ class SelectedParticipant(MroDispatch):
             identity = ParticipantOwner(thread, participant.owner_identity.generation)
             identity.require(store, lookup)
             pending = pending_sealed_assignments(
-                store, lookup, thread.name, after_seq=after_seq
+                store, lookup, after_seq=after_seq
             )
             sent_read = NotificationAssignment.capture(
                 store.session._connection, sent_sources, privacy,

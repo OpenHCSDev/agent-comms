@@ -52,8 +52,7 @@ def alice_batch(*sent: tuple[str, str]):
             deliveries = [comms.bus.bus.delivery(m.seq) for m in messages]
             for recipient in deliveries[0].audience.recipients:
                 store.participants.register(
-                    recipient.recipient_lookup, recipient.canonical_thread,
-                    recipient.canonical_thread, committed=True,
+                    recipient.recipient_lookup, committed=True,
                 )
             for message in messages:
                 accept_delivery_cohort(comms.bus, root_id, message.seq, store)
@@ -107,5 +106,3 @@ def test_one_selected_turn_answers_one_reply_route() -> None:
         assert all(source.delivery.message.target == "Alice" for source in batch.sources)
         reply = batch.response_message("One answer for everyone.", "Alice")
         assert (reply.target, reply.body) == ("sender", "One answer for everyone.")
-
-

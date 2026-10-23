@@ -239,14 +239,14 @@ async def configured_pure_channel(arguments):
                         if service.registry.require(name).executing)
                     observed = {'elapsed_seconds':time.perf_counter()-begun,
                             'active_owners':active,
-                            'dispatched_unproven_inputs':[{'owner':row.owner_thread,
+                            'dispatched_unproven_inputs':[{'owner':service.registry.snapshot().by_lookup[row.owner_lookup].name,
                                 'stage':row.reference_stage.declared_name,'input_id':row.input_id}
                                 for row in dispatched],
                             'claims':[{'owner':row.recipient,'revision':row.revision,
                                 'disposition':row.lifecycle.declared_name} for row in claims]}
                     if not timeline or observed['dispatched_unproven_inputs'] != timeline[-1]['dispatched_unproven_inputs'] or observed['claims'] != timeline[-1]['claims']:
                         timeline.append(observed)
-                    overlap |= len({row.owner_thread for row in dispatched}) == len(names)
+                    overlap |= len({service.registry.snapshot().by_lookup[row.owner_lookup].name for row in dispatched}) == len(names)
                     triage = [row for row in inputs if row.reference_stage is TriageNativeExecution]
                     full = [row for row in inputs if row.reference_stage is FullNativeExecution]
                     if len(claims) == len(names)*len(originals) and all(bool(row.lifecycle.items_with(Complete, True)) for row in claims) and not active:
@@ -256,7 +256,7 @@ async def configured_pure_channel(arguments):
                         assert all(len({row.accepted_at_ms for row in claims if row.wire_seq == original.seq}) == 1
                                    for original in originals)
                         for native in inputs:
-                            expected = tuple(row.assignment_id for row in claims if row.recipient == native.owner_thread)
+                            expected = tuple(row.assignment_id for row in claims if row.recipient_lookup == native.owner_lookup)
                             assert membership[native.input_id] == expected, "Native input did not capture the complete ordered wave"
                             with NativeEntry.open_evidence(Path(native.session_file)) as evidence:
                                 evidence.observe()
@@ -296,14 +296,14 @@ async def configured_pure_channel(arguments):
                                 if (isinstance(fact, CursorAdvancedUpdate)
                                         and isinstance(fact.envelope.observation, VerifiedCursorObservation)):
                                     cursor = fact.envelope.observation.cursor
-                                    if cursor.owner_thread in names and cursor.covered_seq >= originals[-1].seq:
+                                    if cursor.recipient_lookup in {service.registry.require(name).incarnation.lookup for name in names} and cursor.covered_seq >= originals[-1].seq:
                                         native = recorded_inputs[cursor.input_id]
                                         assert cursor.owner_identity == native.owner_identity
                                         assert cursor.reference == native.reference
                                         assert native.sent_owner_claimed_generation.matches(cursor.owner_claimed_generation)
                                         assert cursor.injected_seq >= originals[-1].seq
-                                        assert fact.envelope.scope.owner == service.registry.require(native.owner_thread).require_process()
-                                        published_coverage[native.owner_thread] = fact.envelope
+                                        assert fact.envelope.scope.owner == service.registry.snapshot().by_lookup[native.owner_lookup].require_process()
+                                        published_coverage[service.registry.snapshot().by_lookup[native.owner_lookup].name] = fact.envelope
                         # Original completion and informational ACP publication
                         # are separate asynchronous boundaries. Await the actual
                         # installed publisher within the existing journey budget;
@@ -969,8 +969,7 @@ async def run(arguments):
             initial = service.bus.bus.delivery(cutover.originals[0].seq)
             with Coordination(str(service.root/'coordination.sqlite3')) as store:
                 for audience in initial.audience.recipients:
-                    store.participants.register(audience.recipient_lookup,
-                        audience.canonical_thread, audience.canonical_thread, committed=True)
+                    store.participants.register(audience.recipient_lookup, committed=True)
                 accept_delivery_cohort(service.bus, root_id, cutover.originals[0].seq, store)
         else:
             result = await asyncio.to_thread(service.owners.restart_owners,names,cutover=cutover)

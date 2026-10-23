@@ -65,8 +65,6 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             for recipient in initial.audience.recipients:
                 store.participants.register(
                     recipient.recipient_lookup,
-                    recipient.canonical_thread,
-                    recipient.canonical_thread,
                     committed=True,
                 )
             accept_delivery_cohort(comms.bus, root_id, message.seq, store)
@@ -85,7 +83,6 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 execution_id,
                 ExecutionOrigin.WIRE,
                 alice_lookup,
-                owner.name,
                 1,
                 sources=(SelectedSource(assignment.assignment_id, store.assignments, initial),),
             )
@@ -96,7 +93,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             started = store.start(AttemptStart(
                 execution_id,
                 1,
-                owner.name,
+                alice_lookup,
                 person.owner_identity.generation,
                 prepare_fence_token(),
                 expected_execution_revision=snapshot.execution.revision,

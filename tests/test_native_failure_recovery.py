@@ -131,7 +131,7 @@ async def release_native_input(directory: Path, history: type[NativeSendHistory]
                 assert participant is not None
                 created = store.create(
                     participant.batch.execution_id, ExecutionOrigin.WIRE,
-                    participant.lookup, participant.owner.thread.name, 1,
+                    participant.lookup, 1,
                     sources=participant.batch.sources,
                 ).value
                 attempt = await SelectedAttempt.engage(participant, created)

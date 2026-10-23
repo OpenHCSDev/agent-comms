@@ -84,9 +84,9 @@ class ResponseConversation:
             if not any(member.recipient_lookup == self.responder.recipient_lookup for member in audience.recipients):
                 raise IdentityConflict("Responder was not in original frozen audience")
             for member in participants:
-                previous = members.setdefault(member.recipient_lookup, member)
-                if previous != member:
-                    raise IdentityConflict("Conversation participant identity changed")
+                # Names belong to these original envelopes. A participant can
+                # have been renamed between sources without changing identity.
+                members.setdefault(member.recipient_lookup, member)
         members.pop(self.responder.recipient_lookup, None)
         recipients = CommandTarget.named(self.obligation.exact_target).response_recipients(tuple(members.values()))
         revision = hashlib.sha256(

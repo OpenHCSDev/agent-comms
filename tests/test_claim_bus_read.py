@@ -92,8 +92,7 @@ def selected_turn(private_comms, private_directory):
         PrivateCoordinatorTable.install(store)
         for recipient in initial.audience.recipients:
             store.participants.register(
-                recipient.recipient_lookup, recipient.canonical_thread,
-                recipient.canonical_thread, committed=True,
+                recipient.recipient_lookup, committed=True,
             )
         accept_delivery_cohort(comms.bus, root_id, message.seq, store)
         lookup = RecordedThreadIncarnation("fixture", comms.registry.require("Alice").created_at).lookup
@@ -104,7 +103,7 @@ def selected_turn(private_comms, private_directory):
         )
         person = store.participants.get(lookup)
         store.create(
-            "execution", ExecutionOrigin.WIRE, lookup, owner.name, 1,
+            "execution", ExecutionOrigin.WIRE, lookup, 1,
             sources=(SelectedSource(assignment.assignment_id, store.assignments, initial),),
         )
         snapshot = store.get("execution")
@@ -112,7 +111,7 @@ def selected_turn(private_comms, private_directory):
             "execution", expected_revision=snapshot.execution.revision
         ).value
         store.start(AttemptStart(
-            "execution", 1, owner.name, person.owner_identity.generation, prepare_fence_token(),
+            "execution", 1, lookup, person.owner_identity.generation, prepare_fence_token(),
             expected_execution_revision=snapshot.execution.revision,
             expected_pointer_revision=snapshot.pointer_revision,
         ))
@@ -232,5 +231,3 @@ def test_claim_operation_is_refused_after_its_claim_was_released(selected_turn) 
     )
     assert again.generation != claimed.generation
     assert dict(comms.bus.bus.claim_projection()) == {str(resource): again}
-
-

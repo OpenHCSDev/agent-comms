@@ -14,7 +14,6 @@ from agent_comms.comms import Comms
 from agent_comms.coordination_session import NativeBoundary
 from agent_comms.envelope_claim_transitions import ExistingFileClaim, NativeClaim
 from agent_comms.locked_store import DurableFile, RootFile, RuntimeFile, SQLiteFile
-from agent_comms.private_registry_guard import PrivateOwnerRenameIntent
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.todos import TodoStore
@@ -55,7 +54,6 @@ def test_every_bus_file_is_a_declared_root_file(tmp_path: Path, source_repositor
     )
     assert todo.id == "P1"
     declared = RootFile.paths_in(comms.root)
-    assert PrivateOwnerRenameIntent.path_in(comms.root) in declared
     # Directory traversal observes the outcome; it is not the production inventory.
     actual = {path for path in comms.root.rglob("*") if path.is_file()}
     assert actual <= declared, sorted(str(path.relative_to(comms.root)) for path in actual - declared)
