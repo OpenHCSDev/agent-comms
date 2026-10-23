@@ -7,7 +7,6 @@ MRO, and convert it to its Pi command at the owning send boundary.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -88,18 +87,13 @@ class InputForwarding(MroDispatch):
         while True:
             self.current = await self.queue.get()
             try:
-                if not await self.dispatch(self.current, session):
+                # An inbox item performs one operation. PreparedSession must not
+                # also run its UnwrittenPrompt ancestor and send a prompt.
+                handler = next(self.handlers_for(self.current))
+                if not await handler(self.current, session):
                     return
             finally:
                 self.current = None
-
-    async def consume_handlers(
-        self, item: TurnInboxItem,
-        handlers: Iterable[Callable[..., Awaitable[bool]]], session: NativeSession,
-    ) -> bool:
-        # One inbox item performs one operation. PreparedSession must not also
-        # execute its UnwrittenPrompt ancestor and accidentally send a prompt.
-        return await next(iter(handlers))(item, session)
 
     @handles(TurnInboxItem)
     async def unhandled(self, item: TurnInboxItem, session: NativeSession) -> bool:
@@ -110,7 +104,8 @@ class InputForwarding(MroDispatch):
         def write():
             session.grant_prompt()
             session.native.send(session.command)
-        async with MaintenanceBarrier(RegistryFile.path_in(session.startup.root)).ingress_async() as status:
+        barrier = MaintenanceBarrier(RegistryFile.path_in(session.startup.root))
+        async with barrier.ingress_async() as status:
             with status.phase.send_new(
                 session.send_boundary, None, session.command.input_id, session.command.message,
             ) as outcome:
