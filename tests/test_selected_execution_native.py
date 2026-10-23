@@ -23,6 +23,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
 from agent_comms.native_pi import CommittedInput, read_tracked_input_commitment
+from agent_comms.native_package import VerifiedNativePackage
 
 from agent_comms.messages import Message, InfoKind
 from agent_comms.cursor_owner import CursorOwner
@@ -198,7 +199,7 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
         root=root,
         wire_root_id=root_id,
         owner_name="beta",
-        native_package=Path(package),
+        native_package=VerifiedNativePackage.acquire(Path(package)),
         selected_tool_intent=SelectedToolIntent() if selected_write else None,
         cursor_delivery=cursor_delivery,
     )
