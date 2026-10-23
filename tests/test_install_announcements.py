@@ -183,31 +183,32 @@ def test_terminal_report_follows_real_tree_cleanup_and_keeps_original_error(
     # This source test selects its source interpreter explicitly. The installed journey
     # separately qualifies artifact-only imports and the predecessor runtime.
     monkeypatch.setenv("PYTHONPATH", str(Path(__file__).resolve().parents[1] / "src"))
-    stack = Stack(tree.path, InstallCommands(),
-                  runtime=RestoredRuntime(Path(sys.executable)))
-    writer = RuntimeWriter(comms.root, stack, RetainedProgram.of(InstallReportProbe))
-    report = InstallReport()
-    refusal = UpgradeRefused("operation refused before its result")
-    installed = InstalledUpgrade(
-        "a" * 40, target, comms.root, (), FreshRehearsal(), UnchangedRun(),
-        InstallResult(NoCommanderProject(), {}), commands=(),
-    )
-    observed = None
-    try:
-        with report.running(tree):
-            report.starting(writer, target)
-            if failure == "work":
-                raise refusal
-            if failure == "cleanup":
-                source.git(source.checkout, "worktree", "lock", str(tree.path))
-            report.writer = RuntimeWriter(comms.root, stack, InstalledProgram())
-            report.complete(installed)
-    except (UpgradeRefused, subprocess.CalledProcessError) as error:
-        observed = error
-    finally:
-        if tree.path.exists():
-            source.git(source.checkout, "worktree", "unlock", str(tree.path))
-            tree.__exit__()
+    with InstallCommands() as commands:
+        stack = Stack(tree.path, commands,
+                      runtime=RestoredRuntime(Path(sys.executable)))
+        writer = RuntimeWriter(comms.root, stack, RetainedProgram.current())
+        report = InstallReport()
+        refusal = UpgradeRefused("operation refused before its result")
+        installed = InstalledUpgrade(
+            "a" * 40, target, comms.root, (), FreshRehearsal(), UnchangedRun(),
+            InstallResult(NoCommanderProject(), {}), commands=(),
+        )
+        observed = None
+        try:
+            with report.running(tree):
+                report.starting(writer, target)
+                if failure == "work":
+                    raise refusal
+                if failure == "cleanup":
+                    source.git(source.checkout, "worktree", "lock", str(tree.path))
+                report.writer = RuntimeWriter(comms.root, stack, InstalledProgram())
+                report.complete(installed)
+        except (UpgradeRefused, subprocess.CalledProcessError) as error:
+            observed = error
+        finally:
+            if tree.path.exists():
+                source.git(source.checkout, "worktree", "unlock", str(tree.path))
+                tree.__exit__()
     messages = tuple(reversed(HistoryCliCommand(target=CommsTag.channel()).apply(comms).messages))
     assert len(messages) == 2 and messages[0].body.startswith("Install starting")
     assert not tree.scratch.exists()

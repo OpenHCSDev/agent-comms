@@ -25,5 +25,3 @@ class HarnessesProbe(RuntimeProbe[InstallResult]):
 
         with client_wire(self.root) as comms:
             return self.install.apply(comms)
-
-

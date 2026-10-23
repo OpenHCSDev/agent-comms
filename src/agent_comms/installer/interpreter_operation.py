@@ -53,7 +53,7 @@ class SourceProgram(ProbeProgram):
     """The target's file can run against a predecessor that does not declare it yet."""
 
     def entry(self) -> tuple[str, str]:
-        return RetainedProgram.of(RuntimeProbe).entry()
+        return RetainedProgram.current().entry()
 
 
 class InstalledProgram(ProbeProgram):
@@ -67,28 +67,21 @@ class InstalledProgram(ProbeProgram):
 class RetainedProgram(ProbeProgram):
     """A source operation that must finish after its owning checkout closes."""
 
-    path: Path
     source: str
 
     @classmethod
-    def of(cls, declaration: type[RuntimeProbe]) -> RetainedProgram:
-        path = Path(inspect.getfile(RuntimeProbe))
-        worker = path.with_name("command_worker.py")
-        source = (
-            "import importlib.util, sys\n"
-            f"spec = importlib.util.spec_from_loader({RuntimeProbe.__module__!r}, loader=None)\n"
-            "operation = importlib.util.module_from_spec(spec)\n"
-            f"operation.__file__ = {str(path)!r}\n"
-            "sys.modules[spec.name] = operation\n"
-            f"exec(compile({path.read_text()!r}, operation.__file__, 'exec'), operation.__dict__)\n"
-            f"spec = importlib.util.spec_from_loader('agent_comms.installer.command_worker', loader=None)\n"
-            "worker = importlib.util.module_from_spec(spec)\n"
-            f"worker.__file__ = {str(worker)!r}\n"
-            "sys.modules[spec.name] = worker\n"
-            f"exec(compile({worker.read_text()!r}, worker.__file__, 'exec'), worker.__dict__)\n"
-            "worker.main()\n"
-        )
-        return cls(path, source)
+    def current(cls) -> RetainedProgram:
+        """The operation family and its worker loop, as this checkout holds them now."""
+        family = Path(inspect.getfile(RuntimeProbe))
+        modules = ((RuntimeProbe.__module__, family),
+                   (f"{__package__}.command_worker", family.with_name("command_worker.py")))
+        return cls("import importlib.util, sys\n" + "".join(
+            f"spec = importlib.util.spec_from_loader({name!r}, loader=None)\n"
+            "module = importlib.util.module_from_spec(spec)\n"
+            f"module.__file__ = {str(path)!r}\n"
+            "sys.modules[spec.name] = module\n"
+            f"exec(compile({path.read_text()!r}, module.__file__, 'exec'), module.__dict__)\n"
+            for name, path in modules) + "module.main()\n")
 
     def entry(self) -> tuple[str, str]:
         return "-c", self.source
@@ -345,5 +338,3 @@ class InstalledPackagesProbe(RuntimeProbe[dict[str, PackageRecord]]):
             )
             for dist in distributions()
         }
-
-

@@ -85,7 +85,6 @@ from agent_comms.installer.command_worker import CliCommandProbe
 from agent_comms.installer.interpreter_operation import (
     ClientImportsProbe,
     InstalledProgram,
-    InstallReportProbe,
     PackageRootProbe,
     PinnedLocationProbe,
     PrepareNativeProbe,
@@ -813,7 +812,7 @@ class Install[Rehearsed: Rehearsal](ABC):
     def initial_writer(root: Path, installed: Stack, staged: Stack) -> RootWriter:
         """The outgoing runtime is asked nothing before the target's runtime has routed to
         this bus, which only the target's source can do."""
-        return OutgoingWriter(root, installed, RetainedProgram.of(InstallReportProbe), staged)
+        return OutgoingWriter(root, installed, RetainedProgram.current(), staged)
 
     def backed_up(self, files: tuple[Path, ...]) -> tuple[StoreBackup, RouteSelection]:
         backup = StoreBackup.take(self.root, active_route_path(), files, self.spill_dir)

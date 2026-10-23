@@ -102,21 +102,18 @@ class InstallCommands:
     def __enter__(self) -> InstallCommands:
         return self
 
+    def close_workers(self, keys: tuple[InterpreterWorkerKey, ...]) -> None:
+        """Every selected worker closes, even when another one's close raises."""
+        with self.worker_lock, ExitStack() as exits:
+            for key in keys:
+                exits.callback(self.workers.pop(key).close)
+
     def close_runtime(self, python: Path) -> None:
-        with self.worker_lock:
-            for key in tuple(self.workers):
-                if key.python == python:
-                    self.workers.pop(key).close()
+        self.close_workers(tuple(key for key in self.workers if key.python == python))
 
     def close(self) -> None:
         try:
-            with self.worker_lock:
-                try:
-                    with ExitStack() as exits:
-                        for worker in self.workers.values():
-                            exits.callback(worker.close)
-                finally:
-                    self.workers.clear()
+            self.close_workers(tuple(self.workers))
         finally:
             self.launcher.shutdown(wait=True)
 
