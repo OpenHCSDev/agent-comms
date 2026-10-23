@@ -415,3 +415,20 @@ def test_new_dependency_turn_during_silence_read_keeps_wait(reviewing):
     assert reviewing.goals.release_waits_after_terminal_turn(fence) == ()
     assert reviewing.bus.bus.changed
     assert reviewing.goals.goal_wait("owner") == wait
+
+
+def test_terminal_callback_reobserves_same_wait_after_waiter_turn_changes(reviewing):
+    reviewing.goals.update_goal("owner", standby(reviewing))
+    wait = reviewing.goals.goal_wait("owner")
+    owner = reviewing.registry.require("owner")
+    fence = reviewing.agents.finish_turn(reviewing.registry.require("child").require_turn_lease())
+
+    def finish_waiter_turn():
+        witness = reviewing.agents.begin_turn("owner", "intervening-owner-turn")
+        reviewing.agents.finish_turn(witness.thread.require_turn_lease())
+        assert reviewing.goals.goal_wait("owner") == wait
+
+    reviewing.bus.bus = AfterReadBus(reviewing.bus.bus.path, finish_waiter_turn)
+    assert reviewing.goals.release_waits_after_terminal_turn(fence) == ("owner",)
+    assert reviewing.registry.require("owner").turn_generation > owner.turn_generation
+    assert reviewing.goals.goal_wait("owner") == NoGoalWait()
