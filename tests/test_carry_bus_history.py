@@ -134,8 +134,9 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
     from agent_comms.errors import RelationViolationError, UnclaimedError
     from agent_comms.field_codec import FieldCodec
     from agent_comms.historical_views import HistoryArchive
-    from agent_comms.installer.backup import StoreBackup
+    from agent_comms.installer.backup import StoreBackup, bus_files
     from agent_comms.installer.carry import Carried, MigrateOperation
+    from agent_comms.installer.upgrade import RehearsalFiles, StepRun, carried
     from agent_comms.messages import BusRecord
     from agent_comms.read_ledger import ReadLedger
     from agent_comms.recorded_bus import RecordedBusIdentity
@@ -162,6 +163,7 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
     assert all(not Bus.path_in(root / relative).exists() for relative in relatives)
     assert not tuple(spill.iterdir())
     operation = MigrateOperation(True)
+    saved = bus_files(root)
     result_path = tmp_path / "carried.json"
     completed = subprocess.run(
         [sys.executable, "-m", "agent_comms.installer.step_worker", request.name(),
@@ -173,6 +175,8 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
     result = operation.decode_answer(result_path.read_text())
+    steps = (StepRun(request.name(), result),)
+    carried(root, saved, steps, RehearsalFiles.declared(steps))
     assert result.changed == 8
     assert {key: result.detail[key] for key in ("rows", "continuous", "round_tripped")} == {
         "rows": 8, "continuous": 8, "round_tripped": 8,

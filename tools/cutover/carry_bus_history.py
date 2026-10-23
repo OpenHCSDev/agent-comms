@@ -110,7 +110,7 @@ class CarryCatalogSource(SubclassUnion, ABC, affix=""):
         root: Path,
         original_root: Path,
         bindings: Mapping[RecordedBusIdentity, RecordedBusIdentity],
-    ) -> HistorySource: ...
+    ) -> tuple[HistorySource, Carried]: ...
 
     @classmethod
     def read(cls, root: Path, original_root: Path) -> tuple[CarryCatalogSource, ...]:
@@ -137,13 +137,16 @@ class CarryCatalogSource(SubclassUnion, ABC, affix=""):
         path = HistoryArchive.path_in(root)
         if not path.exists():
             return Carried(0)
-        converted = tuple(source.converted(root, original_root, bindings) for source in sources)
+        results = tuple(source.converted(root, original_root, bindings) for source in sources)
+        converted = tuple(source for source, _ in results)
+        changed = sum(result.changed for _, result in results)
+        rewritten = tuple(name for _, result in results for name in result.rewritten)
         # BusHistory holds the catalog lock from the old read through this publication.
         payload = json.dumps(FieldCodec.encode(converted))
         if path.read_bytes() == payload.encode():
-            return Carried(0)
+            return Carried(changed, rewritten=rewritten)
         _atomic_write_text(path, payload)
-        return Carried(len(converted), rewritten=(HistoryArchive.filename,))
+        return Carried(changed + len(converted), rewritten=(*rewritten, HistoryArchive.filename))
 
     def mapped_root(self, root: Path, original_root: Path) -> Path:
         original = Path(self.root)
@@ -187,9 +190,10 @@ class HistoryCatalogSource(RecordMember, CarryCatalogSource):
         root: Path,
         original_root: Path,
         bindings: Mapping[RecordedBusIdentity, RecordedBusIdentity],
-    ) -> HistorySource:
+    ) -> tuple[HistorySource, Carried]:
         mapped = self.mapped_root(root, original_root)
-        RegistryStore.at(mapped).mark_historical()
+        registry = RegistryStore.at(mapped)
+        registry.mark_historical()
         bus = Bus(Bus.path_in(mapped))
         source = HistorySource(
             str(mapped),
@@ -201,7 +205,9 @@ class HistoryCatalogSource(RecordMember, CarryCatalogSource):
             self.provenance,
         )
         source.validate()
-        return source
+        return source, Carried(
+            1, rewritten=tuple(str(path.relative_to(root)) for path in registry.written),
+        )
 
 
 @dataclass(frozen=True)
@@ -220,7 +226,7 @@ class ConvertedHistorySource(HistorySource, RecordMember, CarryCatalogSource):
         root: Path,
         original_root: Path,
         bindings: Mapping[RecordedBusIdentity, RecordedBusIdentity],
-    ) -> HistorySource:
+    ) -> tuple[HistorySource, Carried]:
         mapped = self.mapped_root(root, original_root)
         bus = Bus(Bus.path_in(mapped))
         source = replace(
@@ -231,7 +237,7 @@ class ConvertedHistorySource(HistorySource, RecordMember, CarryCatalogSource):
             snapshot_registry_revision=FileRevision.capture(RegistryFile.path_in(mapped)),
         )
         source.validate()
-        return source
+        return source, Carried(0)
 
 
 class HistoryDecision(SubclassUnion, ABC, affix="HistoryDecision"):
@@ -1014,7 +1020,7 @@ class BusHistory(Carry, BusFile):
         return Carried(
             changed,
             detail=dict(rows=count, continuous=count, round_tripped=count),
-            rewritten=(bus.path.name,),
+            rewritten=(bus.path.name, *(path.name for path in bus.source_paths(bus.path.parent))),
         )
 
 
