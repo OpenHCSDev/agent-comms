@@ -258,8 +258,21 @@ with identical stored DDL can silently retain stale projections. No production
 path guarantees the explicit reset that the earlier wording assumed. Planned
 reconciliation checks DDL only; recorded build identity has no projection
 invalidation consumer. Current explicit reset callers are schema carry and
-tests, not an installation step for behavior changes. The schema-repair owner
-retains this defect; complete automatic freshness is not delivered by #2629.
+tests, not an installation step for behavior changes. Combining a producer
+behavior change with an index change exposes a regression: the old composed
+carry rebuilt those projections, while #2629 can skip them. The row counter
+does not establish unchanged producing behavior. That premise is invalidated;
+#2629 remains draft, unaccepted, and outside the current installation.
+
+No actual unchanged-DDL stale-output case was found in the checked batch:
+#2624 to #2629 changes only schema carry, tests and this plan; the installed
+`d9ce9cd95` to integration `883223ed4` transition creates the SQLite bus and its
+projection schemas through the history conversion. Its core projector and
+response-policy methods do not change between the published owner-request
+parent and that integration head. This does not establish generic skip safety.
+The same schema-repair owner is tracing the persisted response-policy answer
+and its live role owner to remove the competing decision. The automatic
+heartbeat/index change remains separate from this rejected optimization route.
 The earlier heartbeat checkpoint remains independently reviewable; installed
 qualification belongs to the integration owner.
 
