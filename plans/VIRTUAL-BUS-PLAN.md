@@ -2,15 +2,6 @@
 
 Decision (Tristan, 2026-10-20): the bus stops being a physical file. It keeps every semantic a bus has (one ordered sequence per root, append-only history, addressed messages, claims, keyed publication, pages, live delivery), and each of those semantics is declared once, as a capability class, over SQLite tables. This replaces the earlier plan to copy `bus.jsonl` into a table: that plan kept a file-shaped log with a JSON blob beside extracted columns, which is two copies of every addressed field. Audited against `origin/main` at `53f74dba4` (2026-10-20, 19:30 EDT).
 
-## Current checkpoint — 2026-10-23
-
-Core `69c5b0e4e` and paired Toad `dab0047a4` are merged. The live install failed
-because it left the version-2 active route behind for the version-3 runtime;
-rollback selected Core `d9ce9cd` and Toad `a5c`. Paired installed qualification
-remains open. Route migration and rollback are owned in PR #2633, including route
-absence, concurrent publishers and publication whose durability result is unknown.
-That PR stays open through the actual install and a fresh message/reply.
-
 ## Why
 
 The bus started on September 19 as an append-only JSONL file. Everything since has been the cost of the file being physical:

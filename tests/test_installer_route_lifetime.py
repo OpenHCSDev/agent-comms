@@ -4,7 +4,6 @@ import errno
 import json
 import os
 import subprocess
-import tarfile
 
 import pytest
 
@@ -16,7 +15,6 @@ from agent_comms.active_route import (
 )
 from agent_comms.bus import Bus
 from agent_comms.comms import Comms
-from agent_comms.core_stamp import WheelStamp
 from agent_comms.installer.backup import StoreBackup, UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import (
@@ -27,7 +25,7 @@ from agent_comms.installer.interpreter_operation import (
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.recorded_bus import RecordedBusIdentity
 from bus_record_fixture import prepare_native_comms
-from test_carry_bus_history import REPOSITORY, predecessor_history
+from test_carry_bus_history import OUTGOING_V2, predecessor_history
 
 
 @pytest.fixture
@@ -148,32 +146,9 @@ def test_unknown_publication_is_still_owned_by_rollback(tmp_path, route_bus, had
 def test_selected_route_probe_uses_the_actual_outgoing_v2_reader(tmp_path):
     runtime = LaunchRuntime.running()
     home = tmp_path / "outgoing-home"
-    generated = predecessor_history(tmp_path)
+    generated = predecessor_history(tmp_path, revision=OUTGOING_V2)
     root = generated / "destination"
-    # Use the actual outgoing v2 source, not the older publisher snapshot's
-    # broken comparison between a DeclaredRoot object and its string value.
-    revision = "d9ce9cd95954a9846bc703129d55a4327f55674d"
-    archive = tmp_path / "outgoing-v2.tar"
-    with archive.open("wb") as output:
-        subprocess.run(["git", "-C", REPOSITORY, "archive", revision, "src"],
-                       stdout=output, check=True)
-    outgoing = tmp_path / "outgoing-v2"
-    outgoing.mkdir()
-    with tarfile.open(archive) as tree:
-        tree.extractall(outgoing, filter="data")
-    archive.unlink()
-    audit_path = "src/agent_comms/skills/refactor-audit"
-    pin = subprocess.check_output(
-        ["git", "-C", REPOSITORY, "ls-tree", revision, audit_path], text=True).split()[2]
-    with archive.open("wb") as output:
-        subprocess.run(["git", "-C", REPOSITORY / audit_path, "archive", pin],
-                       stdout=output, check=True)
-    destination = outgoing / audit_path
-    destination.mkdir(parents=True, exist_ok=True)
-    with tarfile.open(archive) as tree:
-        tree.extractall(destination, filter="data")
-    archive.unlink()
-    WheelStamp(revision).write(outgoing / "src/agent_comms/package_stamp.py")
+    outgoing = tmp_path / "publisher"
     environment = {
         **runtime.environment(os.environ), "HOME": str(home),
         "PYTHONPATH": str(outgoing / "src"),

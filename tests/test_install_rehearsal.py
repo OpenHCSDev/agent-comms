@@ -76,9 +76,10 @@ def installed_home(tmp_path_factory) -> dict[str, str]:
     return environment
 
 
-@pytest.fixture
-def install_checkout(tmp_path) -> Path:
-    checkout = tmp_path / "checkout"
+@pytest.fixture(scope="module")
+def install_checkout(tmp_path_factory) -> Path:
+    """Unchanged targets reuse one built revision; fault cases restore this checkout."""
+    checkout = tmp_path_factory.mktemp("install-checkout") / "checkout"
     subprocess.run(["git", "clone", "--shared", "-q", REPOSITORY, checkout], check=True)
     Checkout(checkout).prepare()
     subprocess.run(["git", "-C", checkout, "-c", "user.name=Installer test",
