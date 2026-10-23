@@ -42,7 +42,7 @@ from agent_comms.typed_table import (
     WriterOwnedFile,
 )
 
-from .carry_bus_history import BusHistory, CarryCatalogSource
+from .carry_bus_history import ArchivedCarry, BusHistory, CarryCatalogSource
 
 
 @dataclass(frozen=True)
@@ -115,37 +115,14 @@ def historical(
     )
 
 
-class OwnerRequests(Carry):
+class OwnerRequests(ArchivedCarry):
     opened_files = (HistoryArchive, RegistryFile, TodoStore, GoalHistoryStore)
     precedes = (BusHistory,)
 
-    def backup_files(self) -> tuple[Path, ...]:
-        sources = CarryCatalogSource.read(self.root, self.original_root)
-        roots = (
-            self.root,
-            *(source.mapped_root(self.root, self.original_root) for source in sources),
-        )
-        paths = (
-            HistoryArchive.path_in(self.root),
-            *(path for root in roots for path in self.root_files(root)),
-        )
-        for path in paths:
-            self.require_confined(self.root, path)
-        return tuple(path for path in paths if path.exists())
-
-    @staticmethod
-    def root_files(root: Path) -> tuple[Path, ...]:
-        registry = RegistryStore.at(root)
-        return (
-            *registry.written,
-            TodoStore.path_in(root),
-            *TodoStore.source_paths(root),
-            GoalHistoryStore.path_in(root),
-        )
 
     def carry(self, *, apply: bool) -> Carried:
         with _store_lock(HistoryArchive.path_in(self.root)):
-            self.backup_files()
+            self.input_files()
             sources = CarryCatalogSource.read(self.root, self.original_root)
             results = [(self.root, self.carry_root(self.root, apply=apply))]
             rebound = []

@@ -54,21 +54,9 @@ class DeclaredFailures(RetiredClaimFields, Carry):
               for source in CarryCatalogSource.read(self.root, self.original_root)),
         )))
 
-    def backup_files(self) -> tuple[Path, ...]:
-        paths = tuple(
-            path for root in self.roots()
-            for path in (
-                *GoalAttemptStore.files(GoalAttemptStore.path_in(GoalAttemptStore.directory_in(root))),
-                *DiagnosticDocument.files_in(root),
-                *GoalAttemptStore.source_paths(GoalAttemptStore.directory_in(root)),
-            ) if path.exists()
-        )
-        for path in paths:
-            self.require_confined(self.root, path)
-        return paths
 
     def carry(self, *, apply: bool) -> Carried:
-        self.backup_files()
+        self.input_files()
         if apply:
             # The installer's root hold also covers its retained, inactive snapshots.
             HeldBusFile(GoalAttemptStore, GoalAttemptStore.path_in(

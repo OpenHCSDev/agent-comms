@@ -15,6 +15,7 @@ from agent_comms.envelope_claim_transitions import AcquiringClaim, RecordedScope
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, compile_decoder
 from agent_comms.goal_failure_observation import FailedTurnEvidence
+from agent_comms.installer.carry import ArchivedInputs
 from agent_comms.input_attempt import StoredInput
 from agent_comms.input_origin import HumanInputOrigin
 from agent_comms.historical_views import HistoryArchive
@@ -60,7 +61,7 @@ RENAMED = (
 )
 
 
-class RetiredClaimFields:
+class RetiredClaimFields(ArchivedInputs):
     opened_files = (SQLiteFile, JsonDocument, RegistryFile, HistoryArchive,
                     SelectedWritePlans, QueuedRestart)
     @classmethod

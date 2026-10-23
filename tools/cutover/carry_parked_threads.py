@@ -29,12 +29,6 @@ class ParkedThreads(Carry):
     def configuration(self) -> Path:
         return self.root / "commander.json"
 
-    def backup_files(self) -> tuple[Path, ...]:
-        """Enumerate bytes to save without decoding the retired commander record."""
-        paths = (self.configuration, *RegistryStore.at(self.root).written)
-        for path in paths:
-            self.require_confined(self.root, path)
-        return tuple(path for path in paths if path.exists())
 
     def carry(self, *, apply: bool) -> Carried:
         self.require_confined(self.root, self.configuration)

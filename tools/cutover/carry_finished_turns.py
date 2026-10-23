@@ -17,7 +17,7 @@ from agent_comms.locked_store import RegistryFile
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import AtomicFile, _store_lock
 
-from .carry_bus_history import BusHistory, CarryCatalogSource
+from .carry_bus_history import ArchivedCarry, BusHistory, CarryCatalogSource
 from .carry_dead_turns import DeadTurns
 from .carry_owner_requests import OwnerRequests
 from .carry_turn_owner import TurnOwner
@@ -25,28 +25,15 @@ from .carry_turn_owner import TurnOwner
 RETIRED = "last_finished_turn_id"
 
 
-class FinishedTurns(Carry):
+class FinishedTurns(ArchivedCarry):
     opened_files = (HistoryArchive, RegistryFile)
     precedes = (BusHistory, DeadTurns, OwnerRequests, TurnOwner)
     """Each decodes the registry, which refuses the retired field."""
 
-    def backup_files(self) -> tuple[Path, ...]:
-        sources = CarryCatalogSource.read(self.root, self.original_root)
-        roots = (
-            self.root,
-            *(source.mapped_root(self.root, self.original_root) for source in sources),
-        )
-        paths = (
-            HistoryArchive.path_in(self.root),
-            *(path for root in roots for path in RegistryStore.at(root).written),
-        )
-        for path in paths:
-            self.require_confined(self.root, path)
-        return tuple(path for path in paths if path.exists())
 
     def carry(self, *, apply: bool) -> Carried:
         with _store_lock(HistoryArchive.path_in(self.root)):
-            self.backup_files()
+            self.input_files()
             sources = CarryCatalogSource.read(self.root, self.original_root)
             results = [(self.root, self.carry_root(self.root, apply=apply))]
             rebound = []

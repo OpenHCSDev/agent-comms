@@ -23,9 +23,6 @@ class ContextRequestKey(Carry):
     def path(self) -> Path:
         return self.root / ContextStore.filename
 
-    def backup_files(self) -> tuple[Path, ...]:
-        self.require_confined(self.root, self.path)
-        return (self.path,) if self.path.exists() else ()
 
     def carry(self, *, apply: bool) -> Carried:
         if not self.path.exists():

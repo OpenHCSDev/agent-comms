@@ -27,12 +27,6 @@ from agent_comms.turn_lease import ActiveTurn, StoredTurnRecord
 
 class TurnOwner(Carry):
     opened_files = (RegistryFile, StoredTurnRecord)
-    def backup_files(self) -> tuple[Path, ...]:
-        """Every turn file, read without decoding: earlier steps carry the registry first."""
-        paths = tuple(sorted(StoredTurnRecord.matching_in(RegistryStore.at(self.root).path.parent)))
-        for path in paths:
-            self.require_confined(self.root, path)
-        return paths
 
     def carry(self, *, apply: bool) -> Carried:
         registry = RegistryStore.at(self.root)

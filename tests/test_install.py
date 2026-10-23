@@ -94,7 +94,7 @@ def test_practice_copy_is_the_declared_files_without_its_maintenance_witnesses(p
                  if issubclass(owner, SQLiteFile)}
     assert databases
 
-    with practice_copy(root, private_directory / "practice/bus") as (copy, measurement):
+    with practice_copy(root, private_directory / "practice/bus", tuple(RootFile.existing_in(root))) as (copy, measurement):
         copied = {str(path.relative_to(copy)) for path in copy.rglob("*") if path.is_file()}
         assert copied == declared - witnesses
         assert measurement.bytes > 0
@@ -130,7 +130,7 @@ def test_a_message_sent_while_the_bus_is_copied_preserves_one_database_cut(
         return result
 
     monkeypatch.setattr(Bus, "copy_file", classmethod(copy_then_write))
-    with practice_copy(root, private_directory / "practice/bus") as (copy, _):
+    with practice_copy(root, private_directory / "practice/bus", tuple(RootFile.existing_in(root))) as (copy, _):
         monkeypatch.undo()
         writer.join(timeout=30)
         assert main(["--root", str(copy), "history", "--limit", "50"]) == 0
@@ -223,7 +223,7 @@ def test_a_practice_copy_of_a_bus_without_messages_reads_its_history_twice(priva
     root.mkdir(mode=0o700)
     Bus.install(Bus.path_in(root))
     (root / "storage.json").write_text(json.dumps({"floor_gib": 0}))
-    with practice_copy(root, private_directory / "practice/bus") as (copy, _):
+    with practice_copy(root, private_directory / "practice/bus", tuple(RootFile.existing_in(root))) as (copy, _):
         for _ in range(2):
             assert main(["--root", str(copy), "history", "--limit", "50"]) == 0
             assert '"failed"' not in capsys.readouterr().out
@@ -240,7 +240,7 @@ def test_practice_copy_takes_turn_files_in_the_registry_cut(private_directory):
     turn = comms.registry.require("owner").turn_record.path
     assert turn in comms.registry.store.cut_paths
 
-    with practice_copy(root, private_directory / "practice/bus") as (copy, _):
+    with practice_copy(root, private_directory / "practice/bus", tuple(RootFile.existing_in(root))) as (copy, _):
         copied = Comms(copy).registry.require("owner")
         assert copied.turn_lease.identity == lease.identity
         assert copied.executing

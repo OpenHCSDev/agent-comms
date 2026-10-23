@@ -47,7 +47,7 @@ from agent_comms.field_codec import (
     WireOrder,
 )
 from agent_comms.historical_views import HistoryArchive, HistorySource
-from agent_comms.installer.carry import Carried, Carry
+from agent_comms.installer.carry import ArchivedInputs, Carried, Carry
 from agent_comms.locked_store import BusFile, RegistryFile, RootFile
 from agent_comms.private_path import FileObservation, FileRevision
 from agent_comms.read_ledger import ReadLedger
@@ -163,6 +163,14 @@ class CarryCatalogSource(SubclassUnion, ABC, affix=""):
         mapped = root / original.relative_to(original_root)
         Carry.require_confined(root, mapped)
         return mapped
+
+
+class ArchivedCarry(ArchivedInputs, Carry):
+    """The catalogue owns how retained roots map into this installation's copy."""
+
+    def roots(self) -> tuple[Path, ...]:
+        return (self.root, *(source.mapped_root(self.root, self.original_root)
+                             for source in CarryCatalogSource.read(self.root, self.original_root)))
 
 
 @dataclass(frozen=True)
@@ -864,28 +872,11 @@ class RetiredBusFile(BusFile):
                 RootFile.copy_file(path, target.with_name(path.name))
         return copied
 
-class BusHistory(Carry, RetiredBusFile):
+class BusHistory(ArchivedCarry, RetiredBusFile):
     """Validate and stream the retired history through the bus's one insert path."""
 
     opened_files = (RetiredBusFile, HistoryMetadata, Bus, RegistryFile, ReadLedger, HistoryArchive)
 
-    def backup_files(self) -> tuple[Path, ...]:
-        root = self.root
-        sources = CarryCatalogSource.read(root, self.original_root)
-        roots = (root, *(source.mapped_root(root, self.original_root) for source in sources))
-        paths = {HistoryArchive.path_in(root)}
-        for directory in roots:
-            paths.update(RegistryStore.at(directory).written)
-            paths.update(
-                (
-                    directory / self.filename,
-                    directory / HistoryMetadata.filename,
-                    ReadLedger.path_in(directory),
-                )
-            )
-        for path in paths:
-            self.require_confined(root, path)
-        return tuple(sorted(paths))
 
     @staticmethod
     def rebind_reads(root: Path, original: RecordedBusIdentity) -> Carried:

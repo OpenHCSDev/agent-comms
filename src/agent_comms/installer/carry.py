@@ -17,7 +17,7 @@ import json
 import subprocess
 from abc import abstractmethod
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import Annotated, ClassVar
@@ -69,9 +69,6 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
     def module(cls) -> Path:
         return Path(inspect.getfile(cls)).resolve()
 
-    @abstractmethod
-    def backup_files(self) -> tuple[Annotated[Path, PathText], ...]:
-        """The existing files this step rewrites or deletes, backed up before it applies."""
 
     @abstractmethod
     def carry(self, *, apply: bool) -> Carried:
@@ -87,6 +84,23 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
         if not path.is_relative_to(root) or path.resolve() != path:
             raise RelationViolationError(f"Carry refuses an unconfined path: {path}")
 
+class ArchivedInputs:
+    """Apply one carry input declaration to its retained snapshot roots as well."""
+
+    root: Path
+
+    @abstractmethod
+    def roots(self) -> tuple[Path, ...]: ...
+
+    def input_files(self) -> tuple[Path, ...]:
+        paths: set[Path] = set()
+        for root in self.roots():
+            paths.update(super(ArchivedInputs, replace(self, root=root)).input_files())
+        for path in paths:
+            Carry.require_confined(self.root, path)
+        return tuple(sorted(paths))
+
+
 class CarryOperation[Answer](InterpreterOperation[Answer, Carry], DeclaredFamily, affix="Operation"):
     """One step invocation, including its arguments and its declared answer type."""
 
@@ -100,16 +114,6 @@ class CarryOperation[Answer](InterpreterOperation[Answer, Carry], DeclaredFamily
     def decode_answers(self, answers: str) -> tuple[Answer, ...]:
         return FieldCodec.decode(tuple[self.answer_type(), ...], FieldCodec.parse(answers))
 
-@dataclass(frozen=True)
-class BackupFilesOperation(CarryOperation[tuple[Annotated[Path, PathText], ...]]):
-    def run(self, step: Carry) -> tuple[Annotated[Path, PathText], ...]:
-        return step.backup_files()
-
-
-@dataclass(frozen=True)
-class InputFilesOperation(CarryOperation[tuple[Annotated[Path, PathText], ...]]):
-    def run(self, step: Carry) -> tuple[Annotated[Path, PathText], ...]:
-        return step.input_files()
 
 
 @dataclass(frozen=True)

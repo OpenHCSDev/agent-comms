@@ -33,14 +33,9 @@ class UnfinishedOwnerRename(RootFile):
 
 class ThreadNameOwners(Carry):
     opened_files = (CoordinationStore, PromptBinding, UnfinishedOwnerRename)
-    def backup_files(self) -> tuple[Path, ...]:
-        paths = (CoordinationStore.path_in(self.root), PromptBinding.path_in(self.root))
-        for path in paths:
-            self.require_confined(self.root, path)
-        return tuple(path for path in paths if path.exists())
 
     def carry(self, *, apply: bool) -> Carried:
-        paths = self.backup_files()
+        paths = self.input_files()
         intent = UnfinishedOwnerRename.path_in(self.root)
         if intent.exists() or intent.is_symlink():
             raise RelationViolationError("Inspect the unfinished old rename before carrying its bus.")
