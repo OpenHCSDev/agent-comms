@@ -367,7 +367,7 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         now = time.time()
-        return tuple(rule for rule in frame.answers if rule.due(now))
+        return tuple(rule for rule in frame.answers if isinstance(rule, cls) and rule.due(now))
 
     @classmethod
     def opened(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
