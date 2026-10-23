@@ -52,6 +52,10 @@ class ProbeProgram(ABC):
     @abstractmethod
     def entry(self) -> tuple[str | Path, ...]: ...
 
+    def import_roots(self) -> tuple[Path, ...]:
+        """Directories the interpreter imports from beside its own packages."""
+        return ()
+
 
 class SourceProgram(ProbeProgram):
     """The target's file can run against a predecessor that does not declare it yet."""
@@ -65,6 +69,17 @@ class InstalledProgram(ProbeProgram):
 
     def entry(self) -> tuple[str, str]:
         return "-c", f"from {__name__} import serve; serve()"
+
+
+@dataclass(frozen=True)
+class TargetProgram(InstalledProgram):
+    """The runtime built from the target tree declares every operation, carry passes
+    included; their steps ship in no runtime, so the tree's ``steps`` supply them."""
+
+    steps: Path
+
+    def import_roots(self) -> tuple[Path]:
+        return (self.steps,)
 
 
 @dataclass(frozen=True)
@@ -234,6 +249,16 @@ class ServingProbe(RuntimeProbe[None]):
         for member in HostService.members_with(HostService):
             for instance in member.running():
                 instance.serves()
+
+
+class PublicationProbe(RuntimeProbe[None]):
+    """The selected interpreter publishes itself: console launchers and harness links move
+    to it, then ``current`` does."""
+
+    def run(self) -> None:
+        from agent_comms.installer.publication import RuntimePublication
+
+        RuntimePublication.installed().publish_links()
 
 
 class DistributionVersionsProbe(RuntimeProbe[dict[str, str]]):
