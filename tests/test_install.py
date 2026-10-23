@@ -8,6 +8,7 @@ from contextlib import closing
 from pathlib import Path
 
 import pytest
+from agent_comms.threads import ParkedThreadWorkState
 
 from agent_comms.active_route import ActiveRoute, read_active_route, route_new_bus
 from agent_comms.child_process import ProcessIdentity
@@ -197,8 +198,6 @@ def test_an_install_without_flags_keeps_the_recorded_commander_and_rehomes_its_p
     comms = Comms(root)
     comms.registry.declare(comms.registry.new_thread("lead", frozenset(), str(private_directory)))
     old_home = private_directory / "old-home"
-    from agent_comms.threads import ParkedThreadWorkState
-
     comms.registry.declare(comms.registry.new_thread(
         "parked-unit", frozenset(), str(private_directory)))
     comms.registry.set_work_state("parked-unit", ParkedThreadWorkState())
