@@ -32,6 +32,7 @@ from .typed_table import (
     NoDelete,
     SharedFileTables,
     TypedTable,
+    WithoutRowid,
 )
 
 if TYPE_CHECKING:
@@ -75,7 +76,7 @@ class ClaimBatchAcknowledgements(
     GuardedColumns,
     NoDelete,
     CohortTable,
-    TypedTable,
+    WithoutRowid,
     declared_name="claim_batch_receipts",
 ):
     transition_column = "sealed"
@@ -135,7 +136,6 @@ class ClaimBatchAcknowledgements(
     policy_version: Annotated[str, FrozenColumn(check="length(policy_version) BETWEEN 1 AND 256")]
     accepted_at_ms: Annotated[int, FrozenColumn(check="accepted_at_ms >= 0")]
     sealed: bool = False
-    without_rowid = True
 
     @classmethod
     def decision_hash(cls, delivery: Delivered) -> str:
@@ -177,7 +177,7 @@ class ClaimBatchAcknowledgements(
             raise ProjectionUnavailableError("selected source acknowledgement is unsealed or changed")
 
 @dataclass(frozen=True, kw_only=True)
-class ClaimBatchMembers(GuardedInserts, ImmutableRows, CohortTable, TypedTable):
+class ClaimBatchMembers(GuardedInserts, ImmutableRows, CohortTable, WithoutRowid):
 
     insert_condition = """((SELECT sealed FROM claim_batch_receipts r
         WHERE r.wire_root_id = NEW.wire_root_id AND r.wire_seq = NEW.wire_seq) != 0)
@@ -198,7 +198,6 @@ class ClaimBatchMembers(GuardedInserts, ImmutableRows, CohortTable, TypedTable):
         ("claim_id",),
         ("wire_root_id", "wire_seq", "recipient_lookup"),
     )
-    without_rowid = True
 
     @classmethod
     def references(cls):
@@ -216,7 +215,7 @@ class CohortDeliveries(
     GuardedInserts,
     ImmutableRows,
     CohortTable,
-    TypedTable,
+    WithoutRowid,
     declared_name="cohort_delivery_receipts",
 ):
     """Sealed deliveries, including observers that receive no execution claim."""
@@ -255,7 +254,6 @@ class CohortDeliveries(
         ("wire_root_id", "wire_seq", "claim_id"),
     )
     indexes = (Index(("recipient_lookup", "wire_seq")),)
-    without_rowid = True
 
     @classmethod
     def sealed_sequences_after(

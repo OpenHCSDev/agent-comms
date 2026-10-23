@@ -2156,3 +2156,9 @@ class DerivedStore(TypedStore, DerivedTables, RuntimeWriter):
         cls.filename = (
             f"{declared_words(cls.__name__)}.{hashlib.sha256(schema).hexdigest()[:12]}.sqlite3"
         )
+
+
+class WithoutRowid(TypedTable, declared_name=None):
+    """The table is stored directly by its declared primary key."""
+
+    without_rowid = True

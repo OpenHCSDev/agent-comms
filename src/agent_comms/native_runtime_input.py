@@ -52,7 +52,7 @@ from .typed_table import (
     StableReferenceColumns,
     TextStorage,
     TypedRow,
-    TypedTable,
+    WithoutRowid,
     WriteOnceColumns,
     sql_literal,
 )
@@ -86,7 +86,7 @@ class NativeRuntimeInput(
     NativeInputRecord,
     NativeInputContext,
     NativeRuntimeTable,
-    TypedTable,
+    WithoutRowid,
 ):
     @classmethod
     def notification_context_sql(cls) -> str:
@@ -288,7 +288,6 @@ class NativeRuntimeInput(
         Column(check=RecordedTriageText.sql_constraint("verdict"), storage=TextStorage, nullable=True),
     ] = AbsentTriageDecisionRecord()
 
-    without_rowid = True
     unique = (("execution_id", "attempt_ordinal"),)
     checks = (
         "(stage='triage' AND execution_id IS NULL AND attempt_ordinal IS NULL) OR "
@@ -342,7 +341,7 @@ class CurrentNativeCursor(
     NoDelete,
     NativeInputContext,
     NativeRuntimeTable,
-    TypedTable,
+    WithoutRowid,
 ):
     column_orders = (NonDecreasing(("covered_seq", "injected_seq")),)
     reference_column = 'injected_seq'
@@ -395,7 +394,6 @@ class CurrentNativeCursor(
     session_id: Annotated[NativeColumn, NativeContext(str), Column(storage=TextStorage, nullable=True)]
     request_generation: Annotated[NativeColumn, NativeContext(int), Column(storage=IntegerStorage, nullable=True)]
 
-    without_rowid = True
     checks = (
         "(injected_seq=0 AND input_id IS NULL AND stage IS NULL "
         "AND session_id IS NULL AND request_generation IS NULL) OR "

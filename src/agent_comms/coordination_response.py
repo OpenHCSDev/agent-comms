@@ -53,7 +53,7 @@ from agent_comms.typed_table import (
     ImmutableRows,
     SqlValue,
     TypedRow,
-    TypedTable,
+    WithoutRowid,
 )
 
 from .locked_store import RegistryFile
@@ -65,7 +65,7 @@ class ResponseTable(ImmutableRows, PrivateCoordinatorTable):
     schema_error = PublicationActivationBlocked
 
 @dataclass(frozen=True)
-class PublicationAppendDispatches(ResponseTable, TypedTable):
+class PublicationAppendDispatches(ResponseTable, WithoutRowid):
     execution_id: Annotated[str, Column(primary_key=True)]
     exact_target: Annotated[
         str, Column(primary_key=True, check="length(exact_target) BETWEEN 1 AND 256")
@@ -76,7 +76,6 @@ class PublicationAppendDispatches(ResponseTable, TypedTable):
     owner_generation: Annotated[int, Column(check="owner_generation>0")]
     attempt_ordinal: Annotated[int, Column(check="attempt_ordinal>0")]
     dispatched_at_ms: Annotated[int, Column(check="dispatched_at_ms>=0")]
-    without_rowid = True
 
     @classmethod
     def references(cls):
