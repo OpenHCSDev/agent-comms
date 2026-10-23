@@ -2059,7 +2059,7 @@ class WalStore(StoreWriter):
     def _retire_committed(self, lifetime: ExitStack) -> None:
         try:
             lifetime.close()
-        except Exception as error:
+        except (sqlite3.Error, OSError) as error:
             raise StoreCommittedError(
                 f"Committed {self.path}, but connection retirement failed: {error}"
             ) from error
