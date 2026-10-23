@@ -3,7 +3,6 @@
 from agent_comms.channel_targets import CommandTarget
 
 
-from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from bus_record_fixture import prepare_native_comms
 from conftest import installed_comms
 
@@ -139,7 +138,6 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
     root_id = current.registry.prepare_native_root().namespace
     source = old.registry.snapshot()
     with Coordination(str(current.root / "coordination.sqlite3")) as store:
-        PrivateCoordinatorTable.install(store)
         live_before = store.participants.register(
             live.incarnation.lookup, committed=True
         ).value
