@@ -24,7 +24,7 @@ from .coordination_session import ReadNativeCoordinationSession
 from .coordination_tables.participants import OwnerGenerations
 from .coordinator import Coordination
 from .envelope_claim_transitions import ExistingFileClaim, WakeClaim
-from .field_codec import FieldCodec, Id128Text, MalformedRecord
+from .field_codec import FieldCodec, MalformedRecord
 from .native_input_record import FullNativeExecution, NativeInputIdentity
 from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable, SelectedToolSlot
 from .native_tool_call import (
@@ -171,10 +171,6 @@ def selected_extension(package: Path) -> Path:
 
 def consume_selected_slot(store: Coordination, input_id: str, call_id: str) -> None:
     """Commit consumption BEFORE any action; a failed commit is UNKNOWN, never retried."""
-    try:
-        Id128Text.decode(input_id)
-    except MalformedRecord as error:
-        raise SelectedToolDenied("Selected input identity is invalid") from error
     if type(call_id) is not str or not _CALL_ID.fullmatch(call_id):
         raise SelectedToolDenied("Selected tool call identity is invalid")
     try:
@@ -206,7 +202,6 @@ def selected_tool_mode_for_owner(
     tracked input. Never derive this mode from user/model/wake-injected text.
     """
     try:
-        Id128Text.decode(input_id)
         FieldCodec.decode(str, owner_name)
     except MalformedRecord as error:
         raise SelectedToolDenied("Selected mode has no typed owner attempt") from error
@@ -271,10 +266,6 @@ def _require_sent_full_input(
 
 def verify_selected_terminal(coordination_path: Path, input_id: str, call_id: str) -> None:
     """Corroborate a live owner result; a persisted acknowledgement alone grants nothing."""
-    try:
-        Id128Text.decode(input_id)
-    except MalformedRecord as error:
-        raise SelectedToolDenied("Selected input identity is invalid") from error
     with Coordination(str(coordination_path), session_type=ReadNativeCoordinationSession) as store, store.session.read():
         SelectedToolSlot.require(store.session._connection, input_id=input_id).verify(call_id)
 
