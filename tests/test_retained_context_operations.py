@@ -1,5 +1,8 @@
 """One original human-source workflow through the public CLI and file effects."""
 
+from agent_comms.channel_targets import CommandTarget
+
+
 from agent_comms.bus import Bus
 from bus_history import read_history
 from agent_comms.lifecycle_capability import Unresolved
@@ -33,7 +36,7 @@ def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
     goal = Goal("Original task goal, not an exported human constraint", "original-goal", published_seq=0, revision=7)
     owner = comms.registry.declare(comms.registry.new_thread('reader', frozenset(), str(tmp_path), session_file=SavedSessionFile(str(saved)), goal=goal))
     wording = "Original human constraint λ; preserve UNKNOWN and its source."
-    original = comms.messaging.send_user_message(owner.name, wording, worktree=owner.worktree)
+    original = comms.messaging.send_user_message(CommandTarget.named(owner.name), wording, worktree=owner.worktree)
     comms.messaging.pin_user_constraint(owner.name, original.reference, worktree=owner.worktree)
     inputs = InputDispositions(comms.root)
     inputs.record("acp:original-unknown", seq=None, owner=owner.name, claim_scope=1,
@@ -61,7 +64,7 @@ def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
     owner = comms.registry.declare(comms.registry.new_thread('recipient', frozenset(), str(comms.root)))
     other = comms.registry.declare(comms.registry.new_thread('unaddressed', frozenset(), str(comms.root)))
     wording = "Never replay UNKNOWN.\nPreserve exact λ /source/owned bytes."
-    original = comms.messaging.send_user_message(owner.name, wording, worktree=owner.worktree)
+    original = comms.messaging.send_user_message(CommandTarget.named(owner.name), wording, worktree=owner.worktree)
     original_prefix = read_history(comms)
 
     def command(*args):
@@ -119,9 +122,9 @@ def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
     assert comms.registry.require(owner.name).turn_lease == NoTurnLease()
 
     # No semantic sidecar is needed for a new Comms instance to read the result.
-    from agent_comms.comms import Comms
+    from agent_comms.comms import wire
 
-    reopened = Comms(comms.root)
+    reopened = wire(comms.root)
     restored = reopened.views.retained_context(owner.name)
     assert restored.text() == comms.views.retained_context(owner.name).text()
 
@@ -225,8 +228,8 @@ async def original_input_consumer_journey(tmp_path, command):
     assert wording not in destination.read_text() and replacement in destination.read_text()
     assert snapshot.retained.original_text_source(snapshot.retained.current_authored_sources(
         comms.registry.require("renamed-beta"), comms.registry.snapshot())[0].reference) == originals[0]
-    from agent_comms.comms import Comms
-    reopened = Comms(comms.root)
+    from agent_comms.comms import wire
+    reopened = wire(comms.root)
     assert reopened.views.retained_context("renamed-beta").text() == (
         comms.views.retained_context("renamed-beta").text())
     assert all(stored_inputs(inputs.root).lookup(row.key) == row and bool(row.items_with(Unresolved, True)) for row in originals)

@@ -54,7 +54,7 @@ from agent_comms.cli_commands import (
 )
 from agent_comms.cli_protocol import CoreError
 from agent_comms.cli_result import CliResult
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText
@@ -597,7 +597,7 @@ class Stack:
             with self.commands.timing(verb):
                 completed = subprocess.run(
                     [str(self.python), "-m", cli.__name__, "--root", str(root), *invocation],
-                    cwd=self.checkout, env=self.environment(), capture_output=True, text=True)
+                    cwd=self.home, env=self.environment(), capture_output=True, text=True)
             try:
                 if not completed.returncode:
                     return FieldCodec.decode(command.result_type(),
@@ -1121,7 +1121,7 @@ class FreshInstall(Install[FreshRehearsal]):
                                  self.target)
         Checkout(self.checkout).prepare()
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
-        Comms(self.root).registry.prepare_native_root()
+        wire(self.root).registry.prepare_native_root()
         Bus.install(Bus.path_in(self.root))
         report.writer = RuntimeWriter(self.root, self.staged, InstalledProgram())
         backup, selected_route = self.backed_up(())

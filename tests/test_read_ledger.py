@@ -1,5 +1,6 @@
 """Read evidence follows displayed messages across projections and restarts."""
 
+
 import random
 from dataclasses import replace
 
@@ -8,7 +9,7 @@ import pytest
 from agent_comms.bus import Bus
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import Comms, wire
+from agent_comms.comms import wire
 from agent_comms.coordination_errors import DMPaintedBoundChanged, StaleRevision
 from agent_comms.field_codec import FieldCodec
 from agent_comms.message_page import MessagePageRequest, PageBounds
@@ -113,7 +114,7 @@ def test_typed_read_keys_round_trip_through_the_store_codec():
 
 
 def test_sidebar_presents_pending_read_reset_notice_once(tmp_path):
-    comms = Comms(tmp_path)
+    comms = wire(tmp_path)
     Bus.install(Bus.path_in(comms.root))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     notice = PendingReadNotice("Read positions were reset; reopen conversations to review them.")
@@ -125,7 +126,7 @@ def test_sidebar_presents_pending_read_reset_notice_once(tmp_path):
     assert first.read_marker_notice == notice
     assert comms.bus.reads.read().notice == NoReadNotice()
 
-    second = Comms(tmp_path).views.presentation.roster(viewer)
+    second = wire(tmp_path).views.presentation.roster(viewer)
     assert second.read_marker_notice == NoReadNotice()
 
 

@@ -1,5 +1,6 @@
 """Provider-free disposable checks of the default-off maintenance claim seam."""
 
+
 import asyncio
 import json
 import multiprocessing as mp
@@ -11,7 +12,7 @@ from agent_comms.lifecycle_capability import Executing
 
 from agent_comms.send_outcome import GrantedSend, HeldSend
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.maintenance_barrier import (
@@ -64,7 +65,7 @@ def test_draining_lends_existing_turn_but_holds_new_prompt(tmp_path: Path) -> No
 
 
 def test_phase_owner_is_default_off_and_clear_is_exact(tmp_path: Path) -> None:
-    gate = Comms(tmp_path / 'fresh').owners.maintenance
+    gate = wire(tmp_path / 'fresh').owners.maintenance
     assert gate.read().phase is ReadyPhase
     hold = gate.begin(MaintenanceOperator.current())
     assert gate.read() == hold
@@ -86,7 +87,7 @@ def test_only_hold_bound_cutover_may_retire_during_draining(tmp_path: Path) -> N
         def complete(self, stopped):
             raise AssertionError('No process should be stopped by a phase check')
 
-    comms = Comms(tmp_path / 'wire')
+    comms = wire(tmp_path / 'wire')
     hold = comms.owners.maintenance.begin(MaintenanceOperator.current())
     cutover = ScratchCutover()
     cutover.maintenance_hold = hold
@@ -118,7 +119,7 @@ def _claim_other_process(registry_path: str, ready: mp.Event, result: mp.Queue) 
 
 
 def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -> None:
-    comms = Comms(tmp_path / "wire")
+    comms = wire(tmp_path / "wire")
     gate = comms.owners.maintenance
     assert gate.read().phase is ReadyPhase
     comms.registry.declare(
@@ -204,7 +205,7 @@ def test_enabled_witness_damage_never_restores_default_off(tmp_path: Path, fault
 
 async def test_direct_claim_and_bind_denied_after_phase_ack_in_other_process(tmp_path: Path) -> None:
     root = tmp_path / "wire"
-    comms = Comms(root)
+    comms = wire(root)
     q: mp.Queue = mp.Queue()
     ready = mp.Event()
     proc = mp.Process(target=_claim_other_process, args=(str(comms.registry.store.path), ready, q))
@@ -226,7 +227,7 @@ async def test_direct_claim_and_bind_denied_after_phase_ack_in_other_process(tmp
 
 
 def test_rename_and_stopped_same_pid_cannot_reactivate_under_gate(tmp_path: Path) -> None:
-    comms = Comms(tmp_path / "wire")
+    comms = wire(tmp_path / "wire")
     owner = comms.registry.new_thread(name='owner', tags=frozenset(), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(owner)
     comms.registry.rename("owner", "renamed")
@@ -241,7 +242,7 @@ def test_rename_and_stopped_same_pid_cannot_reactivate_under_gate(tmp_path: Path
 
 def test_cross_process_claim_races_pause_at_registry_lock(tmp_path: Path) -> None:
     root = tmp_path / "wire"
-    comms = Comms(root)
+    comms = wire(root)
     q: mp.Queue = mp.Queue()
     ready = mp.Event()
     child = mp.Process(target=_claim_other_process, args=(str(comms.registry.store.path), ready, q))
@@ -358,7 +359,7 @@ async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> N
     from agent_comms.recorded_time import RecordedEventTime
     from agent_comms.transcript_events import AssistantTranscript
 
-    comms = Comms(tmp_path)
+    comms = wire(tmp_path)
     comms.registry.declare(comms.registry.new_thread('cli', frozenset(), str(tmp_path)))
     output = ThreadOutput(comms.transcripts.external('cli'), comms.agents)
     updates = [StartedItem('turn', 'item', ModelWaitPhase('Replying'),
@@ -385,7 +386,7 @@ def test_a_registry_write_is_refused_to_all_but_the_maintenance_holder(tmp_path:
     registry itself refuses their writes during a hold, and the holder's own writes still land."""
     from agent_comms.maintenance_barrier import HOLDER_NONCE
 
-    comms = Comms(tmp_path)
+    comms = wire(tmp_path)
     comms.registry.declare(comms.registry.new_thread(name='a', tags=frozenset(), worktree='/wt'))
     before = comms.registry.store.path.read_bytes()
     gate = MaintenanceBarrier(comms.registry.store.path)
@@ -410,7 +411,7 @@ def test_a_carried_store_write_is_refused_to_all_but_the_maintenance_holder(tmp_
 
     assert issubclass(DurableStore, CarriedWriter) and issubclass(ExternalTranscript, CarriedWriter)
     assert issubclass(DerivedStore, RuntimeWriter)
-    comms = Comms(tmp_path)
+    comms = wire(tmp_path)
     todos = comms.goals.todos
     todos.allocate_problem()
     before = todos.path.read_bytes()

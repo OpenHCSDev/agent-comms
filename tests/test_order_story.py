@@ -1,5 +1,6 @@
 """Native stories use one copied Todo record, including a resent send-back."""
 
+
 from agent_comms.bus import Bus
 from agent_comms.repository_name import RepositoryName
 
@@ -7,7 +8,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.order_story import FleetStory, OrderStory
@@ -75,7 +76,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
         assert current.latest_message.message_id == message_id
     copied_root = tmp_path / "copy"
     StoreBackup.copy_tree(comms.root, copied_root)
-    copied = Comms(copied_root)
+    copied = wire(copied_root)
     saved = copied.goals.todos.get("P1")
     stored_at = copied.goals.todos.path.stat().st_mtime_ns
     result = CommsOrderStoryTool.invoke(copied, {"order_id": "resent-order"}, caller=NoThreadCaller())

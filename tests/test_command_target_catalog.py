@@ -3,13 +3,14 @@
 import pytest
 
 from agent_comms.cli_commands import OneTarget, TargetBatch
+from agent_comms.channel_targets import CommandTarget
 
 
 @pytest.mark.parametrize("selection,target,resolvable", [
-    (OneTarget, "first", True),
-    (OneTarget, "ghost", False),
-    (TargetBatch, ("first",), True),
-    (TargetBatch, ("ghost",), False),
+    (OneTarget, CommandTarget.named("first"), True),
+    (OneTarget, CommandTarget.named("ghost"), False),
+    (TargetBatch, (CommandTarget.named("first"),), True),
+    (TargetBatch, (CommandTarget.named("ghost"),), False),
 ])
 def test_each_selection_returns_its_own_result(comms, tmp_path, selection, target, resolvable):
     from agent_comms.cli_commands import StopCliCommand, TargetBatchResult, TargetFailed
@@ -39,15 +40,15 @@ def test_batch_capability_owns_selection_catalog_and_execution(comms, tmp_path):
     for name in names:
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)),
                                StoppedThreadStatus())
-    selected = CliCommand.selected_targets(names)
+    selected = CliCommand.selected_targets(tuple(CommandTarget.named(name) for name in names))
     catalog = CliCommand.target_catalog(comms, selected, project=str(tmp_path))
     assert any(action.declaration is ArchiveCliCommand for action in catalog)
     assert all(action.declaration is not RestartCliCommand for action in catalog)
     with pytest.raises(ValueError, match="single target"):
-        RestartCliCommand.execute_target(comms, RestartCliCommand.selected_targets(names), {})
+        RestartCliCommand.execute_target(comms, RestartCliCommand.selected_targets(tuple(CommandTarget.named(name) for name in names)), {})
     assert all(comms.registry.status(name) == StoppedThreadStatus() for name in names)
     result = ArchiveCliCommand.execute_target(
-        comms, ArchiveCliCommand.selected_targets(names), {}, confirmed=True)
+        comms, ArchiveCliCommand.selected_targets(tuple(CommandTarget.named(name) for name in names)), {}, confirmed=True)
     assert len(result.outcomes) == 2 and result.exit_code() == 0
     assert tuple(outcome.target for outcome in result.outcomes) == names
     assert all(comms.registry.status(name) == ArchivedThreadStatus() for name in names)

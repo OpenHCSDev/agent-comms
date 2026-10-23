@@ -1,5 +1,6 @@
 """Bus history uses sequence keys; Pi session cursors remain byte positions."""
 
+
 import json
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
@@ -12,7 +13,7 @@ from agent_comms.bus import Bus, BusSnapshot, PublicRecord
 from agent_comms.bus_publication import AgentOrigin, HumanOrigin
 from agent_comms.bus_tables import MessageIdentitySource
 from agent_comms.messages import BusRow, InfoKind, Message
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.errors import HumanSendRefusedError
 from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.historical_views import HistoryArchive
@@ -131,7 +132,7 @@ def test_origins_check_message_identity_inside_actual_writer_transaction(tmp_pat
 def test_user_identity_is_created_once_under_the_registry_owner(tmp_path):
     messages = channel_bus(tmp_path / "source")
     root = messages.bus.path.parent
-    clients = tuple(Comms(root).messaging for _ in range(2))
+    clients = tuple(wire(root).messaging for _ in range(2))
     with ThreadPoolExecutor(max_workers=2) as executor:
         users = tuple(executor.map(lambda client: client.user_identity(str(root)), clients))
     assert users[0].incarnation == users[1].incarnation
