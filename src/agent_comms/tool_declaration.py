@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import json
+from abc import ABC
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Annotated, ClassVar, Self
-
-from acp.schema import ToolKind
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, MalformedRecord, NullMember, WireName
@@ -17,7 +16,7 @@ from .tool_results import NoToolDiff
 
 
 def one_line(text: str, limit: int) -> str:
-    return ' '.join(text.split())[:limit]
+    return " ".join(text.split())[:limit]
 
 
 @dataclass(frozen=True)
@@ -36,10 +35,48 @@ class EditCall:
     problem: str
 
 
+class ToolAction(ABC):
+    """A tool capability, composed beside its declaration family."""
+
+    members: ClassVar[set[type[ToolAction]]] = set()
+
+    def __init_subclass__(cls) -> None:
+        super().__init_subclass__()
+        if ToolAction in cls.__bases__:
+            ToolAction.members.add(cls)
+
+
+class SearchAction(ToolAction):
+    """Find matching information."""
+
+
+class ReadAction(ToolAction):
+    """Read existing content."""
+
+
+class ExecuteAction(ToolAction):
+    """Execute a command."""
+
+
+class EditAction(ToolAction):
+    """Change content."""
+
+
+class OtherAction(ToolAction):
+    """A tool with no more specific action."""
+
+
 class ToolDeclaration(DeclaredFamily, affix="Tool"):
     family_discriminator: ClassVar[str] = "tool"
-    acp_kind: ClassVar[ToolKind] = "other"
     label: ClassVar[str]
+
+    @classmethod
+    def declared_action(cls) -> type[ToolAction]:
+        """The first action capability in the tool's C3 MRO."""
+        return next(
+            (action for base in cls.__mro__ for action in ToolAction.members if base is action),
+            OtherAction,
+        )
 
     @classmethod
     def _member_declarations(cls):
@@ -63,28 +100,32 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
         return FieldCodec.decode_bound(cls, {**selected, **arguments}, call_id=call_id)
 
     @classmethod
-    def record(cls, name: str, arguments: object, *, call_id: str) -> ToolDeclaration | NoToolRecord:
+    def record(
+        cls, name: str, arguments: object, *, call_id: str
+    ) -> ToolDeclaration | NoToolRecord:
         """The call decoded once as Core's tool record, or no record when Core does not decode it."""
         try:
             decoded = FieldCodec.decode(dict[str, object], arguments)
             return cls.for_name(name).parse_arguments(decoded, call_id=call_id)
-        except (MalformedRecord, SelectedToolDenied):
+        except MalformedRecord, SelectedToolDenied:
             return NoToolRecord()
 
     def recorded_call(self, shown):
         """The shown call, carrying this record."""
         return shown.recorded(self)
 
-    def edit_calls(self, call_id: str, at: EventTime, thread: str, problem: str) -> tuple[EditCall, ...]:
+    def edit_calls(
+        self, call_id: str, at: EventTime, thread: str, problem: str
+    ) -> tuple[EditCall, ...]:
         return ()
 
     def reads(self) -> str:
         """What the call names after its label: nothing unless the tool says."""
-        return ''
+        return ""
 
     def digest(self) -> str:
         """What the call does in one line, enough to judge it."""
-        return f'{self.declared_name} {one_line(self.reads(), 260)}'
+        return f"{self.declared_name} {one_line(self.reads(), 260)}"
 
     def call_digest(self, name: str, arguments: object) -> str:
         """A call in one line: its record's digest."""
@@ -94,7 +135,7 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
     def caption(cls, name: str, tool: ToolDeclaration | NoToolRecord) -> str:
         """A call reads as its label, then what its record names; with no record, its label."""
         reads = one_line(text := tool.reads(), len(text))
-        return cls.for_name(name).label + (' ' + reads if reads else '')
+        return cls.for_name(name).label + (" " + reads if reads else "")
 
     @classmethod
     def result_diff(cls, result, ok):
@@ -107,13 +148,15 @@ class NoToolRecord(NullMember):
     """Core did not decode the call into a tool record; its raw arguments stand."""
 
     def reads(self) -> str:
-        return ''
+        return ""
 
-    def edit_calls(self, call_id: str, at: EventTime, thread: str, problem: str) -> tuple[EditCall, ...]:
+    def edit_calls(
+        self, call_id: str, at: EventTime, thread: str, problem: str
+    ) -> tuple[EditCall, ...]:
         return ()
 
     def call_digest(self, name: str, arguments: object) -> str:
-        return f'{name} {one_line(json.dumps(arguments), 260)}'
+        return f"{name} {one_line(json.dumps(arguments), 260)}"
 
     def recorded_call(self, shown):
         return shown
