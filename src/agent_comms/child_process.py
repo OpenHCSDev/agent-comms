@@ -247,6 +247,12 @@ class ProcessIdentity(RecordMember, ProcessState):
     def alive(self) -> bool:
         return Platform.current().matches(self)
 
+    def arguments(self) -> tuple[str, ...]:
+        return Platform.current().arguments(self)
+
+    def environment(self) -> dict[str, str]:
+        return Platform.current().environment(self)
+
     def require_alive(self) -> ProcessIdentity:
         """Validate this recorded PID and start time against the live process."""
         return Platform.current().require(self)
@@ -410,6 +416,12 @@ class Platform(DeclaredFamily, affix="Platform"):
     @abstractmethod
     def identity(self, pid: int) -> ProcessIdentity: ...
 
+    @abstractmethod
+    def arguments(self, process: ProcessIdentity) -> tuple[str, ...]: ...
+
+    @abstractmethod
+    def environment(self, process: ProcessIdentity) -> dict[str, str]: ...
+
     def parent_identity(self, pid: int) -> ProcessIdentity:
         raise NotImplementedError('This platform does not expose exact parent identities')
 
@@ -549,6 +561,21 @@ class LinuxPlatform(PidfdHandles, PosixPlatform):
 
     def identity(self, pid: int) -> ProcessIdentity:
         return self._stat(pid).identity
+
+    def arguments(self, process: ProcessIdentity) -> tuple[str, ...]:
+        try:
+            raw = Path(f"/proc/{process.pid}/cmdline").read_bytes()
+        except FileNotFoundError:
+            raise ProcessLookupError(process.pid) from None
+        return tuple(os.fsdecode(word) for word in raw.split(b"\0")[:-1])
+
+    def environment(self, process: ProcessIdentity) -> dict[str, str]:
+        try:
+            raw = Path(f"/proc/{process.pid}/environ").read_bytes()
+        except FileNotFoundError:
+            raise ProcessLookupError(process.pid) from None
+        values = (item.split(b"=", 1) for item in raw.split(b"\0") if b"=" in item)
+        return {os.fsdecode(key): os.fsdecode(value) for key, value in values}
 
     def parent_identity(self, pid: int) -> ProcessIdentity:
         return self.identity(self._stat(pid).parent)

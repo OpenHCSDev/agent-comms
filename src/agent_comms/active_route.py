@@ -18,7 +18,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from .child_process import Platform
+from .child_process import Platform, ProcessIdentity
 from .coordination_errors import CoordinationError
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -324,8 +324,8 @@ def route_lock_holders(directory: int) -> tuple[RouteLockHolder, ...]:
                 holders.append(UnidentifiedLockHolder())
                 continue
             try:
-                command = Path(f'/proc/{pid}/cmdline').read_bytes().replace(b'\0', b' ').decode('utf-8', 'replace').strip()
-            except FileNotFoundError:
+                command = " ".join(ProcessIdentity.capture(pid).arguments())
+            except ProcessLookupError:
                 holders.append(ExitedLockHolder(pid))
             else:
                 holders.append(RunningLockHolder(pid, command) if command else EmptyCommandLockHolder(pid))

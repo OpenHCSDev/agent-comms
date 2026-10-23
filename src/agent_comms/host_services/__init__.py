@@ -20,6 +20,7 @@ from typing import Annotated, ClassVar, Self
 from aiohttp.web import TCPSite
 
 from ..declared_family import DeclaredFamily
+from ..child_process import ProcessIdentity
 from ..field_codec import PathText
 from ..launch_runtime import LaunchRuntime
 
@@ -195,16 +196,11 @@ class SystemdUserService(HostService, declared_name=None):
         pid = cls.pid()
         return () if pid == 0 else (cls.from_process(pid),)
 
-    @classmethod
-    def process_arguments(cls, pid: int) -> tuple[str, ...]:
-        arguments = tuple(os.fsdecode(word) for word in
-                          Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")[:-1])
-        if not arguments or not arguments[0]:
-            raise ServiceNotServingError(f"{cls.unit} has no running command")
-        return arguments
-
     def runtime(self) -> Path:
-        return Path(self.process_arguments(self.pid())[0])
+        arguments = ProcessIdentity.capture(self.pid()).arguments()
+        if not arguments or not arguments[0]:
+            raise ServiceNotServingError(f"{self.unit} has no running command")
+        return Path(arguments[0])
 
     def restart(self) -> None:
         subprocess.run(("systemctl", "--user", "restart", self.unit), check=True)
