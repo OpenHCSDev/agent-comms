@@ -7,10 +7,12 @@ import pytest
 from agent_comms.head_review import HeadReview
 from agent_comms.phase_evidence import (
     AllEvidence,
+    ClassDeclared,
     ClassFlagsAbsent,
     ClassChecks,
     ClassRostersAbsent,
     CommitMerged,
+    FunctionDeclared,
     MainEvidence,
     MainTree,
     NoAbsenceProbes,
@@ -303,11 +305,49 @@ def test_cleanup_evidence_counts_restated_members_and_class_rosters(tmp_path):
     ]
     assert list(rosters.rosters(reading.main)) == [
         "src/child.py:21 ROSTER", "src/child.py:23 ERRORS", "src/child.py:24 MORE",
-        "src/child.py:27 Phase.rows",
+        "src/child.py:26 Phase.after", "src/child.py:27 Phase.rows",
     ]
-    assert "src/child.py:26 Phase.after" in ClassRostersAbsent().rosters(reading.main)
     assert not reading.holds(restated)
     assert not reading.holds(rosters)
+
+
+def test_roster_relation_is_exempt_only_below_the_family_by_qualified_name(tmp_path):
+    reading = main_of(tmp_path, {
+        "src/agent_comms/plan_phases.py": "class PlanPhase:\n    pass\n",
+        "src/decoy.py": "class PlanPhase:\n    pass\n",
+        "src/phases.py": "from agent_comms.plan_phases import PlanPhase\n"
+                         "from decoy import PlanPhase as Spoofed\n"
+                         "class A:\n    pass\nclass B:\n    pass\n"
+                         "class Real(PlanPhase):\n    after = (A, B)\n"
+                         "class Deeper(Real):\n    after = (A, B)\n"
+                         "class Unrelated:\n    after = (A, B)\n"
+                         "class Spoof(Spoofed):\n    after = (A, B)\n",
+    })
+
+    assert list(ClassRostersAbsent(families=(PlanPhase,)).rosters(reading.main)) == [
+        "src/phases.py:12 Unrelated.after", "src/phases.py:14 Spoof.after",
+    ]
+
+
+def test_declared_evidence_reads_declarations_not_their_spelling(tmp_path):
+    main = main_of(tmp_path, {
+        "src/agent_comms/tools.py": "TEXT = 'class Ghost(Base):'\n"
+                                    "# class Phantom(Base):\n"
+                                    "class Real:\n    def compact(self):\n"
+                                    "        def inner():\n            pass\n",
+        "src/other.py": "class Elsewhere:\n    pass\n",
+        "tests/test_x.py": "def test_it():\n    pass\n",
+    }).main
+
+    assert ClassDeclared("Real", ("src/agent_comms",)).read(main)
+    assert not ClassDeclared("Ghost").read(main)
+    assert not ClassDeclared("Phantom").read(main)
+    assert not ClassDeclared("Elsewhere", ("src/agent_comms",)).read(main)
+    assert ClassDeclared("Elsewhere").read(main)
+    assert FunctionDeclared("compact", ("src/agent_comms/tools.py",)).read(main)
+    assert not FunctionDeclared("inner").read(main)
+    assert not FunctionDeclared("Real").read(main)
+    assert FunctionDeclared("test_it", ("tests",)).read(main)
 
 
 def test_lifecycle_flags_count_class_bodies_not_locals(tmp_path):

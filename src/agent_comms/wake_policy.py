@@ -8,6 +8,7 @@ from enum import StrEnum
 from typing import ClassVar
 
 from .coordination_errors import IntegrityViolationError
+from .coordinator_vocabulary import CoordinatorVocabulary
 from .declared_family import DeclaredFamily
 from .lifecycle_capability import Active, LifecycleCapability
 from .source_proof_requirement import (
@@ -153,8 +154,12 @@ class BoundedTriageEngagement(Engagement):
 
 
 @dataclass(frozen=True)
-class WakePolicy(LifecycleCapability, DeclaredFamily, SourceProofRequirement, affix="Wake"):
+class WakePolicy(LifecycleCapability, CoordinatorVocabulary, SourceProofRequirement, affix="Wake"):
     triage: ClassVar[bool] = False
+
+    @classmethod
+    def sql_vocabulary(cls) -> dict[str, str]:
+        return dict(wake_names=cls.sql_values(cls.names()))
 
     @classmethod
     @abstractmethod

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .coordination_contracts import MAX_IDENTIFIER_CHARS, require_bounded
 from .coordination_errors import IdentityConflict, IntegrityViolationError
-from .declared_family import DeclaredFamily
+from .coordinator_vocabulary import CoordinatorVocabulary
 from .field_codec import NullMember
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Deferred, Failed, Pending, Successful, Terminal
@@ -25,12 +25,29 @@ class Unpublished(NullMember):
 
 
 @dataclass(frozen=True)
-class ResponseState(DeclaredFamily, LifecycleState, affix="Response"):
+class ResponseState(CoordinatorVocabulary, LifecycleState, affix="Response"):
     retryable: ClassVar[bool] = False
     allows_intent: ClassVar[bool] = False
     requires_intent: ClassVar[bool] = False
     published: ClassVar[bool] = False
     publishing: ClassVar[bool] = False
+
+    @classmethod
+    def sql_vocabulary(cls) -> dict[str, str]:
+        members = cls.members_with(cls)
+        return dict(
+            response_names=cls.sql_values(cls.names()),
+            successful_response_names=cls.sql_members(cls.members_with(Successful)),
+            retryable_response_names=cls.sql_members(
+                member for member in members if member.retryable
+            ),
+            intent_response_names=cls.sql_members(
+                member for member in members if member.allows_intent
+            ),
+            required_intent_response_names=cls.sql_members(
+                member for member in members if member.requires_intent
+            ),
+        )
 
     @property
     def published_message_id(self) -> str | Unpublished:

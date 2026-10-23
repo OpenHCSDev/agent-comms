@@ -118,9 +118,6 @@ class ReadyGeneration(GenerationState):
     def permits_retirement_without_attempt(self) -> bool:
         return True
 
-    def permits_retirement(self, phase: GoalAttemptPhase) -> bool:
-        return False
-
     @classmethod
     def successors(cls) -> tuple[type[GenerationState], ...]:
         return ReadyGeneration, ReservedGeneration, CancelledGeneration
