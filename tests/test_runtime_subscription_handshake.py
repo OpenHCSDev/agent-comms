@@ -13,10 +13,10 @@ from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.field_codec import MalformedRecord
 from agent_comms.owner_protocol import OwnerAnnouncement
 from agent_comms.runtime import RuntimeProxy, socket_path
-from agent_comms.ui_model.observation import ObserverDied
 from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
@@ -53,7 +53,7 @@ async def test_subscription_busy_read_retains_original_traceback(tmp_path, caplo
                 holder.execute("ROLLBACK")
         failures = [record for record in caplog.records if record.exc_info]
         assert len(failures) == 1
-        assert isinstance(failures[0].exc_info[1], ObserverDied)
+        assert isinstance(failures[0].exc_info[1], CoordinationReadUnavailable)
         text = logging.Formatter().formatException(failures[0].exc_info)
         assert "runtime_requests.py" in text
         assert "transcript_updates.py" in text
