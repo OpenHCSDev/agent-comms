@@ -26,8 +26,8 @@ from .goal_attempts import Generation, GoalAttemptStore, StaleAttemptError, Unre
 from .goal_history import GoalHistoryEntry
 from .goal_waits import (
     GoalInputReview,
-    GoalWaitReview,
     GoalWait,
+    GoalWaitReview,
     GoalWaits,
     RecordedGoalWait,
     StandbyReview,
@@ -53,7 +53,7 @@ from .goal_presentation import (
     GoalWaitTarget,
     IdleGoalExecution,
 )
-from .goals import Goal, GoalDeclaration
+from .goals import GoalDeclaration
 from .input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
     InputDeliveryScope,
@@ -316,7 +316,9 @@ class Goals:
                     released.extend(self._release_finished_wait(review, fence))
         return tuple(released)
 
-    def _release_finished_wait(self, review: GoalWaitReview, fence: TurnCompletion) -> tuple[str, ...]:
+    def _release_finished_wait(
+        self, review: GoalWaitReview, fence: TurnCompletion,
+    ) -> tuple[str, ...]:
         wait, owner = review.wait, review.owner
         if not any(wait.current_for(goal, owner.incarnation.require_recorded())
                    for goal in owner.goal.active()):

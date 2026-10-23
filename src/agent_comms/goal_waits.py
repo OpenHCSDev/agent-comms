@@ -26,9 +26,9 @@ from .typed_table import Column, DurableStore, ForeignKey, Index, TypedTable
 
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity
+    from .goal_management import Goals
     from .registry_document import RegistrySnapshot
     from .threads import Thread
-    from .goal_management import Goals
 
 
 class GoalWait(ABC):
@@ -266,34 +266,34 @@ class GoalWaitReview:
         with goals.registry.store.locked(mode=SharedLock()):
             snapshot = goals.registry.store.read_snapshot_unlocked()
             owner = snapshot.require(name)
-            return GoalWaitReview(snapshot, owner, goals.waits.resolve(owner.goal), owner.turn_lease)
+            return GoalWaitReview(
+                snapshot, owner, goals.waits.resolve(owner.goal), owner.turn_lease,
+            )
 
     def current_for(self, goals: Goals) -> bool:
         """Caller holds the publication lock; no reply decoding belongs in this check."""
         snapshot = goals.registry.snapshot()
         return any(
-            self._same_thread(snapshot, owner, self.owner)
-            and owner.goal == self.owner.goal
+            owner.goal == self.owner.goal
             and owner.turn_lease == self.turn
             and goals.waits.resolve(owner.goal) == self.wait
             for owner in snapshot.threads_for(self.owner.incarnation.require_recorded())
+            if self._same_thread(snapshot, owner, self.owner)
         )
 
     def _same_thread(self, snapshot: RegistrySnapshot, actual: Thread, expected: Thread) -> bool:
         """Ignore display metadata, but retain the original process and input/turn epochs."""
-        before = self.snapshot
         return (
             actual.same_launch(expected)
-            and actual.turn_generation == expected.turn_generation
-            and actual.turn_record == expected.turn_record
-            and snapshot.owner_identity(actual.name) == before.owner_identity(expected.name)
-            and snapshot.claim_generation(actual.name) == before.claim_generation(expected.name)
-            and snapshot.status(actual.name) == before.status(expected.name)
+            and actual.same_turn(expected)
+            and snapshot.same_authority(actual.name, self.snapshot, expected.name)
         )
 
     def require_current(self, goals: Goals, owner: Thread) -> None:
         if owner.incarnation != self.owner.incarnation or not self.current_for(goals):
-            raise ValueError("Goal, dependency or wait changed during reply review; inspect it again.")
+            raise ValueError(
+                "Goal, dependency or wait changed during reply review; inspect it again."
+            )
 
     @contextmanager
     def publishing_unanswered(self, goals: Goals) -> Iterator[bool]:
@@ -315,7 +315,7 @@ class GoalWaitReview:
                 with closing(goals.bus.bus._received_sequences(
                     owner.lookup, after=through_seq, limit=1,
                 )) as positions:
-                    if next(positions, None) is not None:
+                    if any(positions):
                         continue
                 yield True
                 return
