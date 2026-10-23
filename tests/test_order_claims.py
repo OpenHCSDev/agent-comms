@@ -135,12 +135,12 @@ def claimed_by_worker(ctx) -> Todo:
     return claimed
 
 
-def corrected_order_file(ctx) -> str:
+def corrected_order_file(ctx, source) -> str:
     marker = ctx.root / "duplicated-decision"
     marker.touch()
     now = time.time()
     document = OrderFile(
-        replace(order(ctx.repos[0]), id="corrected-order",
+        replace(order(source), id="corrected-order",
                 check=OrderCheck(str(ctx.repos[0].checkout), f"test ! -e {shlex.quote(str(marker))}"),
                 at=RecordedEventTime(now), first_call_deadline=RecordedEventTime(now + 120)),
         "The claimed change keeps the duplicated decision the order told the unit to delete",
@@ -153,10 +153,10 @@ def corrected_order_file(ctx) -> str:
     return str(path)
 
 
-def test_corrected_order_to_the_claimant_replaces_its_claim(held_commander):
+def test_corrected_order_to_the_claimant_replaces_its_claim(held_commander, cited_source):
     ctx = held_commander
     claimed = claimed_by_worker(ctx)
-    main(["send", "worker", corrected_order_file(ctx), "--clean"], ctx)
+    main(["send", "worker", corrected_order_file(ctx, cited_source), "--clean"], ctx)
     corrected = ctx.comms.goals.todos.get("P1")
     assert isinstance(corrected.order, PendingProblemOrder)
     assert corrected.order.id != claimed.order.id
@@ -165,12 +165,12 @@ def test_corrected_order_to_the_claimant_replaces_its_claim(held_commander):
     assert corrected.strike_count == claimed.strike_count
 
 
-def test_claimed_order_to_another_unit_is_refused_and_writes_nothing(held_commander):
+def test_claimed_order_to_another_unit_is_refused_and_writes_nothing(held_commander, cited_source):
     ctx = held_commander
     ctx.comms.registry.register(thread("other", ctx.root, 3.0))
     claimed = claimed_by_worker(ctx)
     with pytest.raises(TodoError, match="Only an undelivered order can change owner"):
-        main(["send", "other", corrected_order_file(ctx), "--clean", "--reassign",
+        main(["send", "other", corrected_order_file(ctx, cited_source), "--clean", "--reassign",
               "the claimant reported the delivery, so moving it would discard that claim"], ctx)
     assert ctx.comms.goals.todos.get("P1") == claimed
 
