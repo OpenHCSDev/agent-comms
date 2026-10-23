@@ -10,7 +10,7 @@ from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated, Self, cast
 
-from acp import RequestError
+from agent_comms.coordination_errors import RequestRefused
 from acp.schema import DeniedOutcome, RequestPermissionResponse
 from pydantic import BaseModel
 
@@ -143,7 +143,7 @@ class OwnerRpcError(RecordMember, RpcFailure):
     data: object = None
 
     def raised(self, error: str) -> Exception:
-        return RequestError(self.code, self.message, self.data)
+        return RequestRefused(self.code, self.message, self.data)
 
 
 @dataclass(frozen=True, slots=True)
@@ -163,7 +163,7 @@ class OwnerFailure(OwnerLine):
 
     @classmethod
     def of(cls, error: Exception) -> Self:
-        if not isinstance(error, RequestError):
+        if not isinstance(error, RequestRefused):
             return cls(error=str(error) or type(error).__name__)
         data = error.data if isinstance(error.data, dict) else {}
         reason = data.get("details") or data.get("reason")
@@ -246,7 +246,7 @@ class IncompatibleOwner(DeclaredFamily, affix="Owner"):
 
     async def request(self, action: str, **_: object) -> dict:
         """The history-only attachment refuses every owner request with this owner's line."""
-        raise RequestError.invalid_params(self.failure_metadata())
+        raise RequestRefused.invalid_params(self.failure_metadata())
 
     async def close(self) -> None:
         pass

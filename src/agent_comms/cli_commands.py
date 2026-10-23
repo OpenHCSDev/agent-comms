@@ -25,7 +25,7 @@ from pathlib import Path
 from types import get_original_bases
 from typing import Annotated, ClassVar, Literal, Self, TextIO, cast, get_args, get_origin
 
-from acp.exceptions import RequestError
+from agent_comms.coordination_errors import RequestRefused
 from pydantic import JsonValue
 
 from agent_comms.errors import ToolRefusedError
@@ -2194,7 +2194,7 @@ class ContextCliCommand(CliCommand):
                     payload = await connection.request("context")
                     native = FieldCodec.decode(NativeContextData, payload).require_session_file(
                         owner.runtime.path)
-                except RequestError as error:
+                except RequestRefused as error:
                     return context, None, str(error)
                 return context, native, None
             finally:

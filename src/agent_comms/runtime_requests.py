@@ -302,7 +302,7 @@ class PromptRuntimeRequest(ResultRuntimeRequest):
 @dataclass(frozen=True, kw_only=True)
 class CancelRuntimeRequest(ResultRuntimeRequest):
     async def result(self, ctx: RuntimeRequestContext) -> CancelReply:
-        await ctx.server.agent.cancel(ctx.session_id)
+        await ctx.server.agent.turns.cancel(ctx.session_id)
         return CancelReply()
 
 
@@ -312,7 +312,7 @@ class SetConfigOptionRuntimeRequest(ResultRuntimeRequest):
     value: str | bool
 
     async def result(self, ctx: RuntimeRequestContext) -> ConfigOptionReply:
-        result = await ctx.server.agent.set_config_option(
+        result = await ctx.server.agent.sessions.config.set_option(
             self.config_id, ctx.session_id, self.value
         )
         return ConfigOptionReply(result)

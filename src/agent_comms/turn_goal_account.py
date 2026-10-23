@@ -11,7 +11,7 @@ from contextlib import ExitStack
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from acp import RequestError
+from agent_comms.coordination_errors import RequestRefused
 
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
@@ -105,7 +105,7 @@ class TurnGoalAccount:
         except GoalAttemptError as error:
             if autonomous:
                 return NoLaunchPermit()
-            raise RequestError.invalid_params(
+            raise RequestRefused.invalid_params(
                 {
                     "reason": "goal_attempt_unavailable",
                     "details": "The goal has no launchable attempt. Inspect its state and use "
