@@ -1,5 +1,4 @@
 """Typed installer results use the real publisher and retained channel history."""
-import subprocess
 import sys
 from agent_comms.cli_bridges.shared import UnobservedBridge
 from pathlib import Path
@@ -10,6 +9,7 @@ from agent_comms.channel_targets import CommsTag
 from agent_comms.cli import build_parser
 from agent_comms.cli_commands import BusReadBack, CliCommand, HistoryCliCommand, InstallResult
 from agent_comms.registry_document import NoCommanderProject
+from agent_comms.repo import GitCommandError
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.field_codec import FieldCodec
 from agent_comms.host_services import RestartedService
@@ -204,7 +204,7 @@ def test_terminal_report_follows_real_tree_cleanup_and_keeps_original_error(
                     source.git(source.checkout, "worktree", "lock", str(tree.path))
                 report.writer = RuntimeWriter(comms.root, stack, InstalledProgram())
                 report.complete(installed)
-        except (UpgradeRefused, subprocess.CalledProcessError) as error:
+        except (UpgradeRefused, GitCommandError) as error:
             observed = error
         finally:
             if tree.path.exists():
@@ -223,4 +223,4 @@ def test_terminal_report_follows_real_tree_cleanup_and_keeps_original_error(
         if failure == "work":
             assert observed is refusal
         else:
-            assert isinstance(observed, subprocess.CalledProcessError)
+            assert isinstance(observed, GitCommandError)

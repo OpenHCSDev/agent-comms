@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import os
 import sys
 import traceback
 from abc import ABC, abstractmethod
@@ -26,6 +27,7 @@ import agent_comms
 from agent_comms.active_route import ActiveRoute, RouteFile, SelectingRoute, active_route_path
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, PathText, WireValue
+from agent_comms.maintenance_barrier import HOLDER_NONCE
 from agent_comms.service_sender import ServiceSender
 
 
@@ -142,14 +144,30 @@ class CliCommandProbe(RuntimeProbe[CliOutput]):
             return CliOutput(returncode, output.getvalue())
 
 
+@dataclass(frozen=True)
+class ProbeRequest:
+    """One operation and the maintenance hold its caller acts under. A worker outlives holds,
+    so the holder travels with each request and never with the worker's launch."""
+
+    probe: RuntimeProbe
+    holder: str
+
+    def answer(self) -> str:
+        """The worker acts as its caller's holder for this request. Its runtime may predate
+        ``MaintenanceHolder``, so this sets the variable that owner reads; every request
+        sets it, so no earlier request's holder remains."""
+        os.environ[HOLDER_NONCE] = self.holder
+        return self.probe.encode_answer(self.probe.run())
+
+
 def serve() -> None:
     """Answer declared operations from stdin, one encoded request per line, until it closes."""
     for line in sys.stdin:
         reply: ProbeReply
         try:
             with redirect_stdout(sys.stderr):
-                probe = FieldCodec.decode(RuntimeProbe, FieldCodec.parse(line))
-                reply = CompletedProbeReply(probe.encode_answer(probe.run()))
+                request = FieldCodec.decode(ProbeRequest, FieldCodec.parse(line))
+                reply = CompletedProbeReply(request.answer())
         except Exception as error:
             reply = FailedProbeReply("".join(traceback.format_exception(error)))
         print(json.dumps(FieldCodec.encode(reply)), flush=True)
