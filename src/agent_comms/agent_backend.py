@@ -29,6 +29,7 @@ from .pi_counts import PiCount
 from .pi_vocabulary import CompactionReason, ThinkingLevelField
 from .send_outcome import SendBoundary
 from .tool_result import DeclaredReply
+from .turn_outcome import TurnOutcome
 
 if TYPE_CHECKING:
     from .agent_events import AgentEvent
@@ -249,7 +250,7 @@ class ClearQueue(TurnInboxItem):
 
 
 
-class CompactionOutcome(DeclaredFamily, DeclaredReply, affix="Compaction"):
+class CompactionOutcome(DeclaredFamily, DeclaredReply, TurnOutcome, affix="Compaction"):
     """The result of one requested compaction."""
 
     def completion_event[T](self, event: Callable[..., T], reason: type[CompactionReason]) -> T:
