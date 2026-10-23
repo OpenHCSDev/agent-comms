@@ -5,10 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from agent_comms.commander_service import CommanderService
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.message_bus import WatchPass
-from agent_comms.registration import Registration
-from agent_comms.commander_service import CommanderService
 from agent_comms.standing_rules import StandingRule
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.threads import Thread
@@ -17,8 +16,7 @@ from agent_comms.ui_model.unit_state import UnitState
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
-    from agent_comms.goal_management import Goals
-    from agent_comms.todos import OwnerRequest, Todo
+    from agent_comms.todos import Todo
 
 
 @dataclass
