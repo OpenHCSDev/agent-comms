@@ -14,6 +14,7 @@ from abc import ABC, abstractmethod
 from contextlib import redirect_stdout
 from dataclasses import dataclass
 from importlib import import_module
+from importlib.metadata import distributions
 from io import StringIO
 from pathlib import Path
 from typing import Annotated, ClassVar, Self, cast
@@ -157,8 +158,11 @@ def serve() -> None:
     answers = os.fdopen(os.dup(sys.stdout.fileno()), "w")
     os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
     for line in sys.stdin:
-        print(FieldCodec.decode(ProbeRequest, FieldCodec.parse(line)).answer(), file=answers,
-              flush=True)
+        print(
+            FieldCodec.decode(ProbeRequest, FieldCodec.parse(line)).answer(),
+            file=answers,
+            flush=True,
+        )
 
 
 class ClientImportsProbe(RuntimeProbe[None]):
@@ -258,6 +262,7 @@ class PublicationProbe(RuntimeProbe[None]):
     to it, then ``current`` does."""
 
     def run(self) -> None:
+        # Imported here: publication -> runtime_resolution -> interpreter_operation is a cycle.
         from agent_comms.installer.publication import RuntimePublication
 
         RuntimePublication.installed().publish_links()
@@ -265,8 +270,6 @@ class PublicationProbe(RuntimeProbe[None]):
 
 class DistributionVersionsProbe(RuntimeProbe[dict[str, str]]):
     def run(self) -> dict[str, str]:
-        from importlib.metadata import distributions
-
         from packaging.utils import canonicalize_name
 
         return {canonicalize_name(dist.metadata["Name"]): dist.version for dist in distributions()}
@@ -349,8 +352,6 @@ class InstalledPackagesProbe(RuntimeProbe[dict[str, PackageRecord]]):
     core: str
 
     def run(self) -> dict[str, PackageRecord]:
-        from importlib.metadata import distributions
-
         from packaging.utils import canonicalize_name
 
         from agent_comms.package_stamp import STAMP
