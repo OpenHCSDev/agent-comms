@@ -412,11 +412,13 @@ class DuplicatesPhase(MultipleInheritancePhase):
                         "_assert_response_schema",
                         "assert_cohort_schema",
                         "assert_native_runtime_schema",
+                        "require_schema",
                     ),
                     (
                         "cohort_schema.py",
                         "coordinated_runtime_schema.py",
                         "coordination_response.py",
+                        "typed_table.py",
                     ),
                 ),
                 (
