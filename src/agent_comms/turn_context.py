@@ -29,6 +29,7 @@ from .goals import Goal, NoGoal
 from .message_reference import MessageReference
 from .native_session_reopen import NativeSessionIdentity
 from .peer_relevance import AlwaysListed, GoalShown, PeerRelevance
+from .pi_payloads import PiMessage
 from .thread_identity import ThreadIncarnation, TurnId, TurnIdentity
 from .tool_result import DeclaredReply
 
@@ -916,13 +917,9 @@ class NativeMessages:
         return list(self.messages)
 
     def public_text(self) -> str:
-        from .pi_payloads import PiMessage
-
         return "\n".join(PiMessage.from_wire(message).text for message in self.messages)
 
     def source_ranges(self) -> tuple[ContributionCoordinates, ...]:
-        from .pi_payloads import PiMessage
-
         offset = 0
         ranges = []
         parts = self.recorded_parts(self.measured_manifest())
@@ -933,20 +930,21 @@ class NativeMessages:
             offset += len(text.encode("utf-8")) + 1
         return tuple(ranges)
 
-    def disclosure_for(self, span: ContextSpan):
-        from .pi_payloads import PiMessage
+    def render_into(self, prompt_parts, provider):
+        provider.setdefault("messages", []).extend(self.messages)
 
+
+class NativeAnnotations(NativeMessages):
+    """A transcript span keeps the disclosure policy of its original native message."""
+
+    def disclosure_for(self, span: ContextSpan):
         for source, message in zip(self.source_ranges(), self.messages, strict=True):
             if source.contains(span.coordinates):
                 return PiMessage.from_wire(message).disclosure_for(span)
         raise ValueError("Annotation names no original native message")
 
-    def render_into(self, prompt_parts, provider):
-        provider.setdefault("messages", []).extend(self.messages)
-
-
 @dataclass(frozen=True, kw_only=True)
-class TranscriptSegment(NativeMessages, MeasuredNativeSegment):
+class TranscriptSegment(NativeAnnotations, MeasuredNativeSegment):
     keyframe_interval: ClassVar[int] = 32
 
     @classmethod
@@ -975,7 +973,7 @@ class CompactionSummarySegment(PublicInstructionAnnotations, NativeMessages, Mea
 
 
 @dataclass(frozen=True, kw_only=True)
-class InjectionMessageSegment(NativeMessages, MeasuredNativeSegment):
+class InjectionMessageSegment(NativeAnnotations, MeasuredNativeSegment):
     pass
 
 
