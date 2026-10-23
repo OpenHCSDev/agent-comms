@@ -609,6 +609,78 @@ class ResumedServe(Serve):
         return claim.adopted(self.claim, record)
 
 
+class ResumableBridge(ABC):
+    @abstractmethod
+    def resume(self) -> BridgeResume: ...
+
+
+
+@dataclass(frozen=True)
+class BridgeResume(ResumableBridge, DeclaredFamily, affix="Bridge"):
+    name: str
+
+    def resume(self) -> Self:
+        return self
+
+    def failures(self) -> tuple[UnresumedBridge, ...]:
+        """A bridge that came back, or whose owner left, fails nothing."""
+        return ()
+
+    @abstractmethod
+    def lines(self) -> tuple[str, ...]: ...
+
+
+
+class UnresumedBridge(BridgeResume, ValueError):
+    """A bridge that should have come back on the new runtime and did not."""
+
+    def failures(self) -> tuple[UnresumedBridge, ...]:
+        return (self,)
+
+    def __str__(self) -> str:
+        return "\n".join(self.lines())
+
+
+
+@dataclass(frozen=True)
+class ResumedBridge(BridgeResume):
+    from_runtime: LaunchRuntime
+    to_runtime: LaunchRuntime
+
+    def lines(self) -> tuple[str, ...]:
+        return (f"Session bridge {self.name}: {self.from_runtime.prefix} -> "
+                f"{self.to_runtime.prefix}",)
+
+
+
+@dataclass(frozen=True)
+class OwnerExitedBridge(BridgeResume):
+    def lines(self) -> tuple[str, ...]:
+        return (f"Session bridge {self.name}: owner exited; left stopped",)
+
+
+
+@dataclass(frozen=True)
+class ReplacedBridge(UnresumedBridge):
+    observed: ProcessIdentity
+    current: ProcessIdentity
+
+    def lines(self) -> tuple[str, ...]:
+        return (f"Session bridge {self.name}: process or owner changed "
+                f"({self.observed} -> {self.current}); re-arm this bridge",)
+
+
+
+@dataclass(frozen=True)
+class UnobservedBridge(UnresumedBridge):
+    reason: str
+
+    def lines(self) -> tuple[str, ...]:
+        return (f"Session bridge {self.name}: new runtime was not observed "
+                f"({self.reason}); re-arm this bridge",)
+
+
+
 @dataclass(frozen=True)
 class SessionBridge:
     """A live endpoint's own description, captured before install stops anything."""
@@ -616,67 +688,66 @@ class SessionBridge:
     claim: WatchClaim
     observed: SessionInformation
 
-    def pause(self, resources: ExitStack) -> tuple[PausedSessionBridge, ...]:
+    def pause(self, resources: ExitStack) -> ResumableBridge:
         if not self.observed.owner.alive():
             if self.observed.process.alive():
                 self.observed.process.signal(signal.SIGTERM)
-            print(f'Session bridge {self.claim.thread}: owner exited; left stopped', file=sys.stderr)
-            return ()
+            return OwnerExitedBridge(self.claim.thread)
         self.observed.owner.require_alive()
         peer = resources.enter_context(PauseSession(
             owner=self.observed.owner, process=self.observed.process).connection(self.claim.socket_path))
         stream = resources.enter_context(peer.makefile('rb'))
         REPLIES.validate_json(stream.readline(4096)).require()
-        return (PausedSessionBridge(self, peer),)
+        return PausedSessionBridge(self, peer)
 
-
-class SessionBridgeResumeError(ValueError):
-    """A paused session bridge did not come back as the same process on the new runtime."""
 
 
 @dataclass
 class SessionBridgeResumes:
     """Every bridge an install paused. One failed resume cancels neither another resume nor
-    the install steps after it: each failure is reported, then the install exits non-zero."""
+    the install steps after it: each outcome is reported, then the install exits non-zero."""
 
-    paused: list[PausedSessionBridge] = field(default_factory=list)
-    failures: list[SessionBridgeResumeError] = field(default_factory=list)
+    paused: list[ResumableBridge] = field(default_factory=list)
+    outcomes: list[BridgeResume] = field(default_factory=list)
 
     def pause(self, bridge: SessionBridge, resources: ExitStack) -> None:
-        self.paused.extend(bridge.pause(resources))
+        self.paused.append(bridge.pause(resources))
 
     def resume(self) -> None:
-        for paused in self.paused:
-            try:
-                paused.resume()
-            except SessionBridgeResumeError as error:
-                self.failures.append(error)
+        self.outcomes.extend(paused.resume() for paused in self.paused)
+
+    @property
+    def failures(self) -> tuple[UnresumedBridge, ...]:
+        return tuple(error for outcome in self.outcomes for error in outcome.failures())
 
     def lines(self) -> tuple[str, ...]:
-        return tuple(f'Not resumed: {error}' for error in self.failures)
+        return tuple(line for outcome in self.outcomes for line in outcome.lines())
+
+    def failure_lines(self) -> tuple[str, ...]:
+        return tuple(line for outcome in self.failures for line in outcome.lines())
 
     def require_resumed(self) -> None:
-        if self.failures:
-            raise ExceptionGroup('Session bridges not resumed', self.failures)
+        failures = self.failures
+        if failures:
+            raise ExceptionGroup('Session bridges not resumed', failures)
+
 
 
 @dataclass(frozen=True)
-class PausedSessionBridge:
+class PausedSessionBridge(ResumableBridge):
     bridge: SessionBridge
     peer: socket.socket
 
-    def resume(self) -> str:
+    def resume(self) -> BridgeResume:
         runtime = LaunchRuntime.installed()
         observed = self.bridge.observed
         name = self.bridge.claim.thread
         if not observed.owner.alive():
-            print(f'Session bridge {name}: owner exited; left stopped', file=sys.stderr)
-            return f'{name}: owner exited; left stopped'
+            return OwnerExitedBridge(name)
         try:
             self.peer.sendall((json.dumps(FieldCodec.encode(runtime)) + '\n').encode())
         except OSError as error:
-            raise SessionBridgeResumeError(
-                f'Session bridge {name}: resume transport failed: {error}') from error
+            return UnobservedBridge(name, f"{type(error).__name__}: {error}")
         deadline = time.monotonic() + 30
         while observed.process.alive() and time.monotonic() < deadline:
             try:
@@ -684,15 +755,16 @@ class PausedSessionBridge:
             except (FileNotFoundError, ConnectionRefusedError):
                 time.sleep(.05)
                 continue
+            except OSError as error:
+                return UnobservedBridge(name, f"{type(error).__name__}: {error}")
             if current.process != observed.process or current.owner != observed.owner:
-                raise SessionBridgeResumeError(f'Session bridge {name}: process or owner changed')
+                return ReplacedBridge(name, observed.process, current.process)
             if current.runtime.prefix != runtime.prefix:
-                raise SessionBridgeResumeError(
-                    f'Session bridge {name}: wrong runtime {current.runtime.prefix}')
-            print(f'Session bridge {name}: {observed.runtime.prefix} -> {current.runtime.prefix}',
-                  file=sys.stderr)
-            return name
-        raise SessionBridgeResumeError(f'Session bridge {name}: successor runtime was not observed')
+                return UnobservedBridge(
+                    name, f"observed {current.runtime.prefix}, expected {runtime.prefix}")
+            return ResumedBridge(name, observed.runtime, current.runtime)
+        return UnobservedBridge(name, f"process exited or resume deadline expired for {runtime.prefix}")
+
 
 
 class Enrol(Operation):

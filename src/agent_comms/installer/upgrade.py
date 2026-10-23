@@ -820,7 +820,7 @@ class Install[Rehearsed: Rehearsal](ABC):
             rehearsed.source, rehearsed.target, rehearsed.root, rehearsed.pending,
             rehearsed.rehearsal, live_run, harnesses(), commands=tuple(self.staged.commands.ran),
             processes=RuntimeProcesses.observe(self.staged.runtime))
-        return (finished.extended(UnresumedUpgrade, unresumed=bridges.lines())
+        return (finished.extended(UnresumedUpgrade, unresumed=bridges.failure_lines())
                 if bridges.failures else finished)
 
     def install(self, rehearsal: Rehearsed, bridges: SessionBridgeResumes,
