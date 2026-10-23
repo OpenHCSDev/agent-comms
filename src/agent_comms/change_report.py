@@ -26,8 +26,7 @@ from .field_codec import (
     SubclassUnion,
     WireValue,
 )
-from .goals import CheckedCommit
-from .repo import GitCommandFailed, Repo
+from .repo import GitCommandError, Repo
 
 if TYPE_CHECKING:
     from .todos import PullRequestLink
@@ -65,7 +64,7 @@ class SourceRevision(ABC):
         try:
             text = Repo.git(repository, 'show', f'{commit}:{path}')
             return tuple(text.splitlines())
-        except GitCommandFailed as error:
+        except GitCommandError as error:
             if error.source_path_absent(commit, path):
                 raise MissingSourceLine(
                     f'Source file {file} does not exist at {commit}.'

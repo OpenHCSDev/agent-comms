@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from agent_comms.lifecycle_capability import Active
 
-import os
 import re
 import shlex
 import signal
@@ -29,7 +28,7 @@ from .goal_states import ActiveGoal, GoalState
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from .turn_goal_permission import ContinuationGoalPermission, GoalPermission, InactiveGoalPermission
 from .registration_inheritance import RegistrationInheritance
-from .repo import GitCommandFailed, Repo, ScratchCheckout
+from .repo import GitCommandError, Repo, ScratchCheckout
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .text_digest import TextDigest
 from .ui_model.goal import GoalDisplay
@@ -431,7 +430,7 @@ class CheckedCommit:
         """Every check result the commit's note records; a commit no check ran on has none."""
         try:
             Repo.git(repository, *cls.NOTES, "list", sha)
-        except GitCommandFailed as failure:
+        except GitCommandError as failure:
             if failure.no_check_ran_on(sha):
                 return ()  # No check ran on this commit.
             raise

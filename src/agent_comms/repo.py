@@ -32,7 +32,7 @@ class RepositorySelection(ABC):
     def without_commander(self) -> None: ...
 
 
-class GitCommandFailed(RuntimeError):
+class GitCommandError(RuntimeError):
     """A Git operation failure, not malformed order data to aggregate and continue past."""
 
     def __init__(self, repository: str, run: subprocess.CompletedProcess[str]):
@@ -122,7 +122,7 @@ class Repo(BaseModel, WireValue):
             timeout=60,
         )
         if result.returncode not in (0, 1):
-            raise GitCommandFailed(str(self.checkout), result)
+            raise GitCommandError(str(self.checkout), result)
         return result.returncode == 0
 
     def has_commit(self, sha: str) -> bool:
@@ -137,11 +137,11 @@ class Repo(BaseModel, WireValue):
 
     @staticmethod
     def git(checkout: Path | str, *args: str) -> str:
-        """The one Git runner: C-locale output, and every failure a GitCommandFailed."""
+        """The one Git runner: C-locale output, and every failure a GitCommandError."""
         run = subprocess.run(("git", "-C", str(checkout), *args), capture_output=True, text=True,
                              timeout=60, env=os.environ | {"LC_ALL": "C"})
         if run.returncode:
-            raise GitCommandFailed(str(checkout), run)
+            raise GitCommandError(str(checkout), run)
         return run.stdout
 
     @classmethod

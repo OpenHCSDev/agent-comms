@@ -71,7 +71,7 @@ from agent_comms.field_codec import (
     boundary_decoder,
 )
 from agent_comms.goals import CheckedCommit, OrderCheck, ProblemGoalOrder
-from agent_comms.repo import GitCommandFailed
+from agent_comms.repo import GitCommandError
 from agent_comms.head_review import AcceptedHeadReview
 from agent_comms.lifecycle_capability import LifecycleCapability, Pending
 from agent_comms.message_reference import MessageReference
@@ -1027,7 +1027,7 @@ class ProgressSource:
             pulls.checkout(path) if (path / ".git").exists() else MissingCheckout(path))
         try:
             references = checkout.references(storage, owner)
-        except (OSError, GitCommandFailed, WorkBranchError, subprocess.TimeoutExpired) as failure:
+        except (OSError, GitCommandError, WorkBranchError, subprocess.TimeoutExpired) as failure:
             checkout, references = UnreadCheckout(path, str(failure)), ()
         return cls(todo, checkout, pulls, references,
                    tuple(pulls.checkout(path) for path in owned if (path / ".git").exists()))
@@ -1096,7 +1096,7 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
         try:
             return next((progress for member in members
                          for progress in member.observations(source)), NoCommitProgress())
-        except (OSError, GitCommandFailed, WorkBranchError, subprocess.TimeoutExpired) as unread:
+        except (OSError, GitCommandError, WorkBranchError, subprocess.TimeoutExpired) as unread:
             return UnreadProgress(str(unread))
 
     @property
