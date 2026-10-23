@@ -156,6 +156,32 @@ def test_writer_derives_missing_nullable_fields_but_refuses_unclaimed_data():
         assert db.execute(f'SELECT unclaimed FROM "{GoalHistoryEntry.declared_name}"').fetchall() == [('preserve this',)]
 
 
+def test_durable_writer_relaxes_not_null_without_losing_rows():
+    from agent_comms.typed_table import DurableTables, WriterOwnedFile
+
+    @dataclass(frozen=True)
+    class RelaxedValueRow(DurableTables, TypedTable, declared_name="relaxed_values"):
+        key: Annotated[str, Column(primary_key=True)]
+        value: str | None
+
+    rows = [RelaxedValueRow("first", "one"), RelaxedValueRow("second", "two")]
+    with sqlite3.connect(":memory:") as db:
+        db.execute(
+            'CREATE TABLE "relaxed_values" ("key" TEXT NOT NULL, "value" TEXT NOT NULL, '
+            'PRIMARY KEY ("key")) STRICT'
+        )
+        for row in rows:
+            row.insert(db)
+        db.commit()
+
+        RelaxedValueRow.reconcile_schema(db, WriterOwnedFile())
+
+        assert RelaxedValueRow.select(db, order_by=("key",)) == rows
+        RelaxedValueRow("empty", None).insert(db)
+        assert RelaxedValueRow.require(db, key="empty").value is None
+        assert RelaxedValueRow.count(db) == len(rows) + 1
+
+
 def test_atomic_creation_preserves_declared_indexes_triggers_and_strict_creation():
     from agent_comms.native_pi import NativeContextJournal
 
