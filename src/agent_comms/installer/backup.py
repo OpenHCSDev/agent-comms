@@ -20,11 +20,10 @@ from typing import Annotated, ClassVar, Iterator, Self
 
 from agent_comms.child_process import Platform
 from agent_comms.active_route import (
-    ActiveRoute, RouteFile, _route_directory, active_route_path, read_active_route, route_directory,
+    ActiveRoute, RouteFile, RouteFileSelection, _route_directory, active_route_path, read_active_route, route_directory,
 )
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText
-from agent_comms.installer.interpreter_operation import RouteSelection
 from agent_comms.locked_store import DeclaredFile, LockedStore, RootFile, RuntimeFile, UndeclaredFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.private_path import FileObservation, FileRevision, MissingFile
@@ -248,7 +247,7 @@ class StoreBackup(ResourceBackup):
         if FileRevision.capture(self.route) != self.route_revision:
             raise UpgradeRefused('Active route changed after its backup')
 
-    def rebind_route(self, route: ActiveRoute, selected: RouteSelection) -> str:
+    def rebind_route(self, route: ActiveRoute, selected: RouteFileSelection) -> str:
         with _route_directory(route, self.route) as (path, directory):
             self.require_route_revision()
             try:
