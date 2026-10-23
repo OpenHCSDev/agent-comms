@@ -84,6 +84,7 @@ class BranchDifference:
     repository: RepositoryName
     branch: str
     head: str
+    committed_at: float
     main: str
     behind: int
     files: frozenset[str]
@@ -240,14 +241,15 @@ query($owner: String!, $name: String!, $after: String) {
 
     def difference(self, main: str) -> BranchDifference:
         """Git owns ancestry and changed paths; pin both commits before comparing."""
-        head = self._run("git", "rev-parse", "HEAD").strip()
+        head, committed_at = self._run("git", "show", "-s", "--format=%H%x00%ct", "HEAD").strip().split("\0")
         branch = self._run("git", "rev-parse", "--abbrev-ref", "HEAD").strip()
         base = self._run("git", "merge-base", main, head).strip()
         behind = int(self._run("git", "rev-list", "--count", f"{base}..{main}"))
         files = frozenset(path for path in self._run(
             "git", "diff", "--name-only", "-z", "--no-renames", base, head,
         ).split("\0") if path)
-        return BranchDifference(RepositoryName(*self.repository), branch, head, main, behind, files)
+        return BranchDifference(RepositoryName(*self.repository), branch, head, float(committed_at),
+                                main, behind, files)
 
     def _pages(self, query: str, answer: type[ForgeQuery], **variables: str):
         pages: list[tuple[str, ...]] = [()]
