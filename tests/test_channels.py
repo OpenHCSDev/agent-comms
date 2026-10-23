@@ -492,7 +492,7 @@ def test_membership_notices_follow_exact_membership_and_do_not_wake(tmp_path):
     )
     comms.channels.update_tags("moving", add=frozenset({"api"}))
     joined = list(comms.views.history_page(CommandTarget.named("#api")).messages)
-    assert len(joined) == 1 and joined[0].role.change.value == "joined"
+    assert len(joined) == 1 and joined[0].role.change.declared_name == "joined"
     assert joined[0].body == "moving joined #api" and not joined[0].role.response_policy(joined[0]).starts_turn
     with comms.bus.opened_activity() as clocks:
         assert "moving" not in comms.views.last_sent_timestamps(clocks.sent.items(), registry=comms.registry.snapshot())
@@ -501,7 +501,7 @@ def test_membership_notices_follow_exact_membership_and_do_not_wake(tmp_path):
     assert len(list(comms.views.history_page(CommandTarget.named("#api")).messages)) == 2
     comms.channels.update_tags("moving", remove=frozenset({"ui"}))
     history = list(wire(tmp_path).views.history_page(CommandTarget.named("#api")).messages)
-    assert [message.role.change.value for message in history] == ["joined", "left"]
+    assert [message.role.change.declared_name for message in history] == ["joined", "left"]
     assert all(not message.role.response_policy(message).starts_turn for message in history)
     assert not comms.views.viewer_snapshot(str(tmp_path)).participants("#api")
     comms.agents.begin_turn("peer", "active-turn")
