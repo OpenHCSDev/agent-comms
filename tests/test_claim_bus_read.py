@@ -21,7 +21,6 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.reason_codes import NoReasonCode
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.bus import BusReader
 from agent_comms.child_process import ProcessIdentity
@@ -96,7 +95,7 @@ def selected_turn(private_comms, private_directory):
                 recipient.recipient_lookup, committed=True,
             )
         accept_delivery_cohort(comms.bus, root_id, message.seq, store)
-        lookup = RecordedThreadIncarnation("fixture", comms.registry.require("Alice").created_at).lookup
+        lookup = comms.registry.require("Alice").incarnation.lookup
         assignment = sealed_cohort_assignments(store, lookup)[0]
         owner, generation = comms.registry.live_owner_with_claim("Alice")
         owner, generation = comms.registry.lease_live_turn_with_claim(

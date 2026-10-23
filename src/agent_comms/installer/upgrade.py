@@ -24,7 +24,6 @@ import hashlib
 import json
 import os
 import shutil
-import subprocess
 import sys
 import tempfile
 import time
@@ -119,7 +118,7 @@ from agent_comms.maintenance_barrier import (
 )
 from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registry_store import RegistryStore
-from agent_comms.repo import Checkout, ScratchCheckout
+from agent_comms.repo import Checkout, Repo, ScratchCheckout
 from agent_comms.storage_rules import StorageRule
 
 if TYPE_CHECKING:
@@ -774,10 +773,9 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
         StoreBackup.complete_interrupted(root, spill_dir)
         installed = Stack(tree.path, commands)
         current = commands.run("git", "-C", checkout, "rev-parse", "HEAD").strip()
-        ancestry = ["git", "-C", str(checkout), "merge-base", "--is-ancestor", current, target]
-        with commands.timing(" ".join(ancestry)):
-            answer = subprocess.run(ancestry)
-        if answer.returncode:
+        with commands.timing(f"git merge-base --is-ancestor {current} {target}"):
+            follows = Repo.descends(checkout, current, target)
+        if not follows:
             raise UpgradeRefused(f"{target[:12]} does not follow the checkout's {current[:12]}")
         if commands.run("git", "-C", checkout, "status", "--porcelain",
                         "--untracked-files=no").strip():

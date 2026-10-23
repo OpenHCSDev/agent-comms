@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import subprocess
 from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -127,16 +126,7 @@ class RecordedBuildIdentity(BuildIdentity):
     def contains(self, commit: str, directory: Path) -> bool:
         """Prove ancestry against this checkout's installed repository, not its current head."""
         recorded = self.for_repository(Repo.of(directory))
-        result = subprocess.run(
-            ("git", "merge-base", "--is-ancestor", commit, recorded.commit),
-            cwd=directory,
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        if result.returncode not in (0, 1):
-            result.check_returncode()
-        return result.returncode == 0
+        return Repo.descends(directory, commit, recorded.commit)
 
     def installation(self, commits: tuple[str, ...], directory: Path) -> CommitInstallation:
         installed = self.installed()
