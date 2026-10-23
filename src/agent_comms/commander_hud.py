@@ -12,7 +12,7 @@ from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.todos import OrderProgress, ProgressRead, PullRequest, Todo, UnmergedListedPullRequest
+from agent_comms.todos import OrderProgress, ProgressRead, PullRequest, UnmergedListedPullRequest
 from agent_comms.tool_result import ToolResult
 from agent_comms.turn_digests import OrderEditCountRead
 
@@ -96,18 +96,15 @@ class CommanderHud(ToolResult):
         frame = HeartbeatFrame.read(comms, commander, ProgressRead())
         pulls, reading = frame.pulls, frame.plan
         history = reading.todos
-        held = tuple(todo for todo in history if todo.holder)
+        held = frame.todos
         progress = pulls.progress(held, comms.registry)
         timers = store.timers_up_in(held, now, progress)
         edits = {
             read.todo.id: read.read()
             for read in OrderEditCountRead.for_orders(comms.root, snapshot, held)
         }
-        grouped: dict[ThreadIncarnation, list[Todo]] = {}
-        for todo in held:
-            grouped.setdefault(todo.held().owner_identity, []).append(todo)
         units = []
-        for unit, orders in grouped.items():
+        for unit, orders in frame.holders.items():
             requests = {
                 (todo.repo, request.number): request
                 for todo in orders

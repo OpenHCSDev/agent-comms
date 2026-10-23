@@ -38,6 +38,7 @@ from agent_comms.standing_rules import (
     OwedAnswer,
     ReviewTimerUp,
     StandingRule,
+    StandingScan,
     UndatedStandingRule,
 )
 from agent_comms.thread_identity import ThreadIncarnation
@@ -108,6 +109,10 @@ class Escalation:
 
     message: Message
 
+    def clearing_action(self) -> str:
+        return (f"Answer the {self.message.sender} burst by its protocol, naming it with "
+                f"--answers {self.message.message_id}.")
+
     def degradation_signs(self) -> tuple[Sign, ...]:
         return ()
 
@@ -150,9 +155,13 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
 
     @classmethod
     def of(cls, comms: Comms, commander: str, pulls: ProgressRead) -> Self:
+        return cls.from_frame(comms, commander, HeartbeatFrame.read(comms, commander, pulls))
+
+    @classmethod
+    def from_frame(cls, comms: Comms, commander: str, frame: HeartbeatFrame) -> Self:
         return cls.from_orders(
-            StandingRule.todos(comms, commander),
-            len(tuple(ReviewTimerUp.conditions(comms, commander, pulls))),
+            frame.todos,
+            len(tuple(ReviewTimerUp.conditions(comms, frame))),
             OrderEditCountRead.count(comms, commander),
         )
 
@@ -177,7 +186,7 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
 
     @classmethod
     def found(cls, comms: Comms, commander: str, frame: HeartbeatFrame) -> tuple[Sign, ...]:
-        load = cls.of(comms, commander, frame.pulls)
+        load = cls.from_frame(comms, commander, frame)
         if not load.overloaded:
             return ()
         return (Sign(cls, (int(time.time() // cls.round_seconds),),
@@ -274,17 +283,27 @@ class Chokehold(IndependentStandingRule, UndatedStandingRule):
     commander is told, in a burst it cannot skim, what brings them back."""
 
     check: Message
+    units: tuple[ThreadIncarnation, ...] = field(compare=False)
     after: ClassVar[int] = 10 * 60
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        return cls.scan_checks(comms, commander, StandingScan.read(comms, commander))
+
+    @classmethod
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+        return cls.scan_checks(comms, commander, frame)
+
+    @classmethod
+    def scan_checks(cls, comms: Comms, commander: str, scan: StandingScan) -> tuple[Self, ...]:
         snapshot = comms.registry.snapshot()
         with comms.bus.bus.reading() as source:
             ignored = VibeCheckSender.unanswered(source, snapshot, commander, time.time() - cls.after)
-        return tuple(cls(message) for message in ignored[:1])
+        return tuple(cls(message, tuple(scan.holders)) for message in ignored[:1])
 
     def enforce(self, comms: Comms, commander: str) -> None:
-        units = sorted(owner.name for owner in StandingRule.holders(comms, commander))
+        units = sorted(owner.name for owner in self.units)
         for unit in units:
             comms.goals.update_goal(unit, ChokeholdPausedGoalAction())
         ChokeholdSender.burst_once(comms, commander, self.burst(units), self.ignored())

@@ -388,7 +388,7 @@ class BusReader(RouteCounts, ABC):
     def replies(self, references: tuple[MessageReference, ...]) -> tuple[BusRecord, ...]:
         with self.observing() as db:
             sequences = {row.seq for original in references
-                         for row in AnsweredSource.select(db, original=original)}
+                         for row in AnsweredSource.select(db, original=original.seq)}
             headers = (BusRow.require(db, seq=seq) for seq in sorted(sequences))
             return tuple(header.kind.read_from(db, header.seq) for header in headers)
 

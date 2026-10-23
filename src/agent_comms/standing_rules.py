@@ -33,7 +33,7 @@ if TYPE_CHECKING:
     from agent_comms.messages import Message
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.storage_rules import MemoryUse, StorageRule
-    from agent_comms.todos import OrderClaim, OwnerRequest, ProgressRead, PullRequest, Todo
+    from agent_comms.todos import OrderClaim, OwnerRequest, PullRequest, Todo
     from agent_comms.ui_model.unit_state import UnitObservation, UnitState
 
 
@@ -69,6 +69,26 @@ class Degradation(DeclaredFamily, affix="Degradation"):
 class BlocksRelease:
     """A degraded signal the commander clears this turn, so a chokehold holds its units until
     the signal is gone: a quote is the answer, never the relief."""
+
+
+@dataclass(frozen=True)
+class StandingScan:
+    """The held orders captured once for this scan; filtering never reopens the store."""
+
+    todos: tuple[Todo, ...]
+
+    @classmethod
+    def read(cls, comms: Comms, commander: str) -> Self:
+        return cls(comms.goals.todos.held_for_commander(
+            comms.registry.require(commander).incarnation,
+        ))
+
+    @property
+    def holders(self) -> dict[ThreadIncarnation, list[Todo]]:
+        held: dict[ThreadIncarnation, list[Todo]] = {}
+        for todo in self.todos:
+            held.setdefault(todo.held().owner_identity, []).append(todo)
+        return held
 
 
 class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agent_comms.commander"):
@@ -135,22 +155,6 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
             rule = (new or old)[0]
             lines.extend(rule.heartbeat_change(old, new))
         return tuple(lines)
-
-    @staticmethod
-    def todos(comms: Comms, commander: str) -> tuple[Todo, ...]:
-        return comms.goals.todos.held_for_commander(comms.registry.require(commander).incarnation)
-
-    @staticmethod
-    def pending_todos(comms: Comms, commander: str) -> tuple[Todo, ...]:
-        return tuple(todo for todo in StandingRule.todos(comms, commander) if todo.pending)
-
-    @staticmethod
-    def holders(comms: Comms, commander: str) -> dict[ThreadIncarnation, list[Todo]]:
-        """Every unit holding an open order, with its orders."""
-        held: dict[ThreadIncarnation, list[Todo]] = {}
-        for todo in StandingRule.todos(comms, commander):
-            held.setdefault(todo.held().owner_identity, []).append(todo)
-        return held
 
     @classmethod
     def scan_owner(cls) -> type[StandingRule]:
@@ -352,6 +356,10 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
 
     message: Message
 
+    def questions_for(self, unit: ThreadIncarnation) -> tuple[Message, ...]:
+        """Only a unit's question belongs on that unit's observation."""
+        return ()
+
     def degradation_signs(self) -> tuple[Sign, ...]:
         return (Sign(AnswersOwedDegradation, (self.cited,), self.line()),)
 
@@ -367,6 +375,10 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
         """This member's open debts, inside their window or past it, on one bus cut."""
 
+    @abstractmethod
+    def clearing_action(self) -> str:
+        """The action that clears this member's debt, printed by the refusing verb."""
+
     def due(self, now: float) -> bool:
         return True
 
@@ -376,12 +388,25 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
         return tuple(rule for rule in cls.opened(comms, commander) if rule.due(now))
 
     @classmethod
+    def scan_owner(cls) -> type[StandingRule]:
+        return OwedAnswer
+
+    @classmethod
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+        now = time.time()
+        return tuple(rule for rule in frame.answers if isinstance(rule, cls) and rule.due(now))
+
+    @classmethod
     def opened(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        # Orders and request directives name already-committed messages. Capture them
-        # before the bus cut so every recorded reference exists in that cut.
-        held = cls.holders(comms, commander)
+        return cls.read_scan(comms, commander, StandingScan.read(comms, commander))
+
+    @classmethod
+    def read_scan(cls, comms: Comms, commander: str, scan: StandingScan) -> tuple[Self, ...]:
+        # Capture committed order/directive references before the bus cut.
         snapshot = comms.registry.snapshot()
         requests = comms.goals.todos.open_requests(snapshot.require(commander).incarnation)
+        held = scan.holders
         with comms.bus.bus.reading() as source:
             return tuple(rule for member in cls.members_with(cls)
                          for rule in member.read_open(source, snapshot, held, commander, requests))
@@ -401,7 +426,7 @@ class AnswersOwedDegradation(Degradation, BlocksRelease):
 
     @classmethod
     def found(cls, comms: Comms, commander: str, frame: HeartbeatFrame) -> tuple[Sign, ...]:
-        return tuple(sign for rule in OwedAnswer.violations(comms, commander)
+        return tuple(sign for rule in OwedAnswer.scan_observed(comms, commander, (), frame)
                      for sign in rule.degradation_signs())
 
 
@@ -418,14 +443,14 @@ class ReasonedStandingRule(StandingRule, declared_name=None):
 
     @classmethod
     def found(cls, why: str, comms: Comms, commander: str,
-              observed: Sequence[UnitState]) -> Self:
+              observed: Sequence[UnitState], frame: HeartbeatFrame) -> Self:
         return cls(why)
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         why = cls.reason(comms, commander)
-        return (cls.found(why, comms, commander, observed),) if why else ()
+        return (cls.found(why, comms, commander, observed, frame),) if why else ()
 
     def line(self) -> str:
         return self.text.format(why=self.why)
@@ -445,12 +470,13 @@ class HeldOrderDue(DatedStandingRule, declared_name=None):
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         """Conditions read the frame's own progress facts, never a second forge read."""
         return tuple(cls(todo.id, todo.held().owner_identity, todo.order.checked().id, due)
-                     for todo, due in cls.conditions(comms, commander, frame.pulls))
+                     for todo, due in cls.conditions(comms, frame))
 
     @classmethod
     @abstractmethod
-    def conditions(cls, comms: Comms, commander: str,
-                   pulls: ProgressRead) -> Iterable[tuple[Todo, EventTime]]: ...
+    def conditions(
+        cls, comms: Comms, frame: HeartbeatFrame,
+    ) -> Iterable[tuple[Todo, EventTime]]: ...
 
     def began(self) -> float:
         return self.since.recorded_at("An order alarm")
@@ -461,11 +487,10 @@ class ReviewTimerUp(HeldOrderDue):
     the commander once per round; the unit sees no timer and nothing is struck."""
 
     @classmethod
-    def conditions(cls, comms: Comms, commander: str,
-                   pulls: ProgressRead) -> Iterable[tuple[Todo, EventTime]]:
-        todos = comms.goals.todos
-        held = todos.held_for_commander(comms.registry.require(commander).incarnation)
-        return todos.timers_up_in(held, time.time(), pulls.progress(held, comms.registry))
+    def conditions(cls, comms: Comms, frame: HeartbeatFrame) -> Iterable[tuple[Todo, EventTime]]:
+        return comms.goals.todos.timers_up_in(
+            frame.todos, time.time(), frame.pulls.progress(frame.todos, comms.registry),
+        )
 
     def line(self) -> str:
         return (f"TIMER UP: {self.holder.name} {self.problem} at {self.since.clock()}, "
@@ -503,9 +528,8 @@ class DeliveredHeadReview(DatedStandingRule):
         now = time.time()
         return tuple(
             rule
-            for todo, claim, request in comms.goals.todos.claimed_heads_for_commander(
-                comms.registry.require(commander).incarnation, frame.pulls,
-            )
+            for todo in frame.todos
+            for claim, request in frame.pulls.claimed_heads(todo)
             for rule in cls.for_head(
                 todo.id, todo.held().owner_identity, todo.order.checked().id,
                 claim, request, now,
@@ -539,10 +563,10 @@ class HuntDue(ReasonedStandingRule, DatedStandingRule):
 
     @classmethod
     def found(cls, why: str, comms: Comms, commander: str,
-              observed: Sequence[UnitState]) -> HuntDue:
+              observed: Sequence[UnitState], frame: HeartbeatFrame) -> HuntDue:
         since = cls.hunted(comms, commander) + cls.seconds
         readable = {unit for state in observed for unit in state.readable_units()}
-        todos = tuple(todo for todo in cls.todos(comms, commander)
+        todos = tuple(todo for todo in frame.todos
                       if todo.held().owner_identity in readable)
         return next((LocatedHuntDue(why, since, path)
                      for path in cls.next_hunt(comms, commander, todos)), cls(why, since))
@@ -600,6 +624,10 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
             for request in requests
             for directive, original in request.directive_messages(source, snapshot.names_for(commander))
         )
+
+    def clearing_action(self) -> str:
+        return (f"Order the next step of request {self.request.value} with --answers "
+                f"{self.message.message_id}, or mark that request done.")
 
     def due(self, now: float) -> bool:
         return self.directive.deadline < now
@@ -673,10 +701,14 @@ class BoardDisagrees(UndatedStandingRule):
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+        from agent_comms.todos import ProgressSource
+
+        progress = frame.pulls.progress(frame.todos, comms.registry)
         return tuple(
             cls(todo.id, todo.order.checked().id, merged.sha)
-            for todo, merged in comms.goals.todos.board_disagreements(
-                comms.registry.require(commander).incarnation, comms.registry, frame.pulls
+            for todo in frame.todos
+            for merged in progress[todo.id].missing_merges(
+                ProgressSource.of(todo, comms.registry, frame.pulls),
             )
         )
 
