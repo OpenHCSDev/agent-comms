@@ -412,13 +412,6 @@ class SendableMessageKind(MessageKind, declared_name=None):
 class ClaimNoticeKind(MessageKind, declared_name="claim-notice"):
     """A claim-owner record, not a delivery to a reader."""
 
-    @ClassFact
-    def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .bus_route_counts import BusRouteCounts
-        from .bus_tables import AwaitingAnswerSource
-        return (BusRouteCounts, AwaitingAnswerSource)
-
-
     conversation_message = False
 
     @classmethod
@@ -797,6 +790,19 @@ class Message(Addressed, BusCapability, TurnOrigin):
         tuple[MessageReference, ...], WireOmitDefault(), WireOrder(14)
     ] = ()
 
+    def require_answers(self, db: sqlite3.Connection) -> None:
+        """Validate public references once, before appending their sequence-only projection."""
+        from .bus_tables import MessageIdentitySource
+
+        for original in self.answers:
+            if not MessageIdentitySource.exists(
+                db, seq=original.seq, message_id=original.message_id,
+            ):
+                raise RelationViolationError(
+                    f"Answer reference {original.seq}:{original.message_id} does not match "
+                    "a recorded message identity"
+                )
+
     @classmethod
     def from_message(cls, message: Message, **capabilities: object) -> Self:
         return FieldCodec.construct(cls, {
@@ -996,11 +1002,12 @@ class BusRecord(Message, DeclaredFamily, affix="Record"):
         yield from self.type.route_rows(self)
         yield MessageIdentitySource(self.seq, self.message_id, self.sender)
         for original in self.answers:
-            yield AnsweredSource(original, self.seq)
+            yield AnsweredSource(original.seq, self.seq)
 
 
     def append_to(self, db: sqlite3.Connection, seq: int) -> int:
         """The caller's transaction owns the sequence, including preserved history."""
+        self.require_answers(db)
         BusRow.insert_values(db, seq=seq, kind=type(self), at=time.time())
         stored = replace(self, seq=seq)
         for row in stored.rows():

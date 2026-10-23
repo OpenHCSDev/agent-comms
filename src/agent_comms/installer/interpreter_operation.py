@@ -139,7 +139,7 @@ class BackupRetirePhase(InstallPhase):
 
 
 class ServicesPhase(InstallPhase):
-    """Restart or recover host services and prove they serve the new runtime."""
+    """Start stopped host services and prove they serve the selected runtime."""
 
 
 class ProcessScanPhase(InstallPhase):

@@ -27,6 +27,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import (
     BranchBehindMain,
+    BranchGrowth,
     DeliveredHeadReview,
     HeldBranchRule,
     LostTools,
@@ -120,6 +121,7 @@ class Fleet:
         return path
 
     def commit(self, worktree: Path, name: str, text: str, *, at: float | None = None) -> str:
+        (worktree / name).parent.mkdir(parents=True, exist_ok=True)
         (worktree / name).write_text(text)
         self.git(worktree, "add", name, at=at)
         self.git(worktree, "commit", "-q", "-m", f"Change {name}", at=at)
@@ -250,6 +252,24 @@ class SharedFileBranchesSeed(IncidentSeed):
             "shared-right",
             fleet.repository,
             "shared.py",
+        )
+
+
+class BranchGrowthSeed(IncidentSeed):
+    rule = BranchGrowth
+
+    @classmethod
+    def seed(cls, fleet: Fleet) -> StandingRule:
+        worktree = fleet.worktree("growing", base=fleet.main)
+        fleet.commit(
+            worktree, "src/agent_comms/grown.py",
+            "".join(f"v{i} = {i}\n" for i in range(BranchGrowth.limit + 1)),
+        )
+        fleet.push(worktree)
+        todo = fleet.unit("growing", worktree)
+        return BranchGrowth(
+            todo.id, todo.held().owner_identity, fleet.repository,
+            "growing", BranchGrowth.limit + 1,
         )
 
 

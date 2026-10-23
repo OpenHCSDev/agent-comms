@@ -7,13 +7,13 @@ import sys
 import tempfile
 from collections.abc import Iterator, Mapping
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock
 from typing import BinaryIO
 
-from agent_comms.child_process import SpawnedProcess
+from agent_comms.child_process import SpawnedProcess, SynchronousProcess
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.interpreter_operation import (
     CommandPhase,
@@ -41,6 +41,11 @@ class InterpreterWorkerKey:
     cwd: Path
     environment: tuple[tuple[str, str], ...]
 
+    def print_forced(self, summary: str) -> None:
+        print(
+            f"Interpreter worker {self.python} {self.program} required force: {summary}",
+            file=sys.stderr, flush=True,
+        )
 
 
 
@@ -93,13 +98,11 @@ class InterpreterWorker:
         self.requests.close()
 
     def close(self) -> None:
-        """A finished worker is reaped and its streams closed."""
+        """Close a retired worker's streams; the batch owns its process retirement."""
         with ExitStack() as closing:
             closing.callback(self.diagnostics.close)
             closing.callback(self.answers.close)
-            closing.callback(self.child.close)
-            self.finish()
-            self.child.reap()
+            closing.callback(self.child.close_streams)
 
 
 @dataclass
@@ -120,15 +123,21 @@ class InstallCommands:
         return self
 
     def close_workers(self, keys: tuple[InterpreterWorkerKey, ...]) -> None:
-        """Every selected worker closes, even when another one's close raises. All of them
-        finish before the first is reaped, so their interpreters exit together and the
-        close waits for the slowest exit, not the sum of them."""
+        """Finish every worker, retire its children in one batch, then close all streams."""
         with self.worker_lock, ExitStack() as exits:
-            closing = tuple(self.workers.pop(key) for key in keys)
-            for worker in closing:
+            closing = tuple((key, self.workers.pop(key)) for key in keys)
+            for _, worker in closing:
                 exits.callback(worker.close)
-            for worker in closing:
-                worker.finish()
+            try:
+                with ExitStack() as requests:
+                    for _, worker in closing:
+                        requests.callback(worker.finish)
+            finally:
+                outcomes = SynchronousProcess.stop_together(tuple(
+                    (worker.child, nullcontext) for _, worker in closing
+                ))
+                for (key, _), outcome in zip(closing, outcomes, strict=True):
+                    outcome.report_forced(key.print_forced)
 
     def close_runtime(self, python: Path) -> None:
         with WorkerClosePhase(str(python)).running(self.clock):

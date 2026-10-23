@@ -15,7 +15,6 @@ from functools import cached_property
 from subprocess import TimeoutExpired
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.field_codec import MalformedRecord
 from agent_comms.goal_presentation import GoalSnapshot
 from agent_comms.messages import Message
@@ -154,20 +153,19 @@ class UnitState(UndatedStandingRule, declared_name=None):
 
     @classmethod
     def observations(
-        cls, comms: Comms, commander: str, pulls: ProgressRead
+        cls, comms: Comms, commander: str, frame: HeartbeatFrame
     ) -> tuple[UnitObservation, ...]:
         snapshot, now = comms.registry.snapshot(), time.time()
-        held = StandingRule.holders(comms, commander)
-        requests = pulls.register(tuple(todo for todos in held.values() for todo in todos))
-        with comms.bus.bus.reading() as source:
-            questions = UnansweredUnitAsks.for_orders(source, snapshot, commander, held, now)
+        held = frame.holders
+        requests = frame.pulls
         readings = tuple(
             UnitObservation(
                 comms,
                 thread,
                 tuple(held.get(thread.incarnation, ())),
                 requests,
-                questions.get(thread.incarnation, ()),
+                tuple(message for rule in frame.answers
+                      for message in rule.questions_for(thread.incarnation)),
                 now,
                 snapshot.status(thread.name),
                 comms.agents.is_working(thread.incarnation, snapshot),
@@ -189,8 +187,8 @@ class UnitState(UndatedStandingRule, declared_name=None):
         return tuple(reading for reading in readings if reading.thread.incarnation in eligible)
 
     @classmethod
-    def current(cls, comms: Comms, commander: str, pulls: ProgressRead) -> tuple[UnitState, ...]:
-        states = tuple(cls.read(source) for source in cls.observations(comms, commander, pulls))
+    def current(cls, comms: Comms, commander: str, frame: HeartbeatFrame) -> tuple[UnitState, ...]:
+        states = tuple(cls.read(source) for source in cls.observations(comms, commander, frame))
         return tuple(
             state for member in cls.worst_first() for state in states if isinstance(state, member)
         )
