@@ -9,19 +9,23 @@ from __future__ import annotations
 import os
 from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
-from typing import Annotated, TYPE_CHECKING
-
-from agent_comms import field_codec
+from typing import TYPE_CHECKING
 
 from .coordination_errors import CoordinationError
 from .errors import RelationViolationError
 from .launch_runtime import LaunchRuntime, RestartEnvironment, RestoredRuntime
+from .native_arguments import (
+    ConfiguredBinary,
+    GivenArguments,
+    InheritedArguments,
+    LaunchArguments,
+    LaunchBinary,
+)
 from .owner_launch import RetainedOwnerLaunch
 from .owner_lifecycle import OwnerRestartSelection
 from .restart_refusals import OwnerSelectionChangedRefusal
 from .restart_scope import AllOwners, RestartScope
-from .thread_identity import ClaimedIdentity, OwnerIdentity
-from .native_arguments import ConfiguredBinary, GivenArguments, InheritedArguments, LaunchArguments, LaunchBinary
+from .thread_identity import ThreadAuthority
 
 if TYPE_CHECKING:
     from .owner_cutover import OwnerCutover
@@ -58,8 +62,7 @@ class OwnerRestartRequest:
 class RetiredOwnerLaunch:
     """Original stopped registry observation plus acquired launch resources."""
 
-    owner: OwnerIdentity
-    claim_scope: Annotated[ClaimedIdentity, field_codec.WireName("admission")]
+    authority: ThreadAuthority
     launch: RetainedOwnerLaunch
 
     @classmethod
@@ -67,22 +70,19 @@ class RetiredOwnerLaunch:
                         launch: RetainedOwnerLaunch) -> RetiredOwnerLaunch:
         """Capture the original allocations after stopping, without permitting live work."""
         original.require_local_process(launch.process)
-        owner = cls(snapshot.owner_identity(original.name),
-                    snapshot.claimed_identity(original.name), launch)
-        if owner.owner.incarnation != original.incarnation:
+        owner = cls(snapshot.authority(original.name), launch)
+        if owner.authority.owner.incarnation != original.incarnation:
             raise RelationViolationError('Retired owner incarnation changed')
         owner.require_current(snapshot)
         return owner
 
     @property
     def name(self) -> str:
-        return self.owner.incarnation.name
+        return self.authority.owner.incarnation.name
 
     def require_current(self, snapshot: RegistrySnapshot) -> Thread:
-        if snapshot.owner_identity(self.name) != self.owner:
-            raise RelationViolationError('Retired owner incarnation/generation changed')
-        if snapshot.claimed_identity(self.name) != self.claim_scope:
-            raise RelationViolationError('Retired owner claim_scope changed')
+        if snapshot.authority(self.name) != self.authority:
+            raise RelationViolationError('Retired owner authority changed')
         thread = snapshot.threads[self.name]
         thread.require_local_process(self.launch.process)
         thread.turn_record.read().require_idle()

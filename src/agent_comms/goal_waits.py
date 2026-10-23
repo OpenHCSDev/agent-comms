@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Sequence
-from contextlib import closing, contextmanager
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
@@ -13,6 +13,7 @@ from .bus import BusReader
 from .bus_publication import Delivered
 from .bus_tables import DirectReplySource
 from .declared_family import DeclaredFamily
+from .errors import UnregisteredThreadError
 from .field_codec import NullMember
 from .goal_presentation import GoalExecution, GoalExecutionSource, GoalWaitTarget, StandbyExecution
 from .goals import Goal, GoalDeclaration
@@ -262,13 +263,14 @@ class GoalWaitReview:
     turn: TurnLease
 
     @staticmethod
-    def capture(goals: Goals, name: str) -> GoalWaitReview:
+    def capture(goals: Goals, incarnation: RecordedThreadIncarnation) -> GoalWaitReview:
         with goals.registry.store.locked(mode=SharedLock()):
             snapshot = goals.registry.store.read_snapshot_unlocked()
-            owner = snapshot.require(name)
-            return GoalWaitReview(
-                snapshot, owner, goals.waits.resolve(owner.goal), owner.turn_lease,
-            )
+            for owner in snapshot.threads_for(incarnation):
+                return GoalWaitReview(
+                    snapshot, owner, goals.waits.resolve(owner.goal), owner.turn_lease,
+                )
+            raise UnregisteredThreadError("The reviewed thread incarnation was removed.")
 
     def current_for(self, goals: Goals) -> bool:
         """Caller holds the publication lock; no reply decoding belongs in this check."""
@@ -312,11 +314,8 @@ class GoalWaitReview:
                     return
                 # The existing indexed sequence query reads at most one metadata row.
                 # Any new candidate needs another unlocked policy read, not a stale release.
-                with closing(goals.bus.bus._received_sequences(
-                    owner.lookup, after=through_seq, limit=1,
-                )) as positions:
-                    if any(positions):
-                        continue
+                if goals.bus.bus.received_after(owner.lookup, through_seq):
+                    continue
                 yield True
                 return
 

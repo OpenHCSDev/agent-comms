@@ -270,7 +270,7 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
     def prepare(self, goals: Goals, name: str, actor: type) -> GoalAction[Goal]:
         ctx = GoalActionContext(goals, goals.registry.require(name), actor)
         self.expect.check(ctx)
-        review = goals._goal_input_review(name, ctx.thread.goal.require().id, self.wait_for)
+        review = goals._goal_input_review(ctx.thread, ctx.thread.goal.require().id, self.wait_for)
         self.expect.check(GoalActionContext(goals, review.owner, actor))
         return PreparedStandbyGoalAction(
             expect=replace(self.expect, expected_goal=review.owner.goal),

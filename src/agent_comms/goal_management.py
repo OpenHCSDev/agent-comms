@@ -168,13 +168,13 @@ class Goals:
 
     def goal_input_review(self, name: str, goal_id: str, wait_for: Sequence[str]) -> StandbyReview:
         """Project exact review eligibility for one current goal and dependency set."""
-        review = self._goal_input_review(name, goal_id, wait_for)
+        review = self._goal_input_review(self.registry.require(name), goal_id, wait_for)
         return review.standby_review()
 
     def _goal_input_review(
-        self, name: str, goal_id: str, wait_for: Sequence[str]
+        self, thread: Thread, goal_id: str, wait_for: Sequence[str]
     ) -> GoalInputReview:
-        captured = GoalWaitReview.capture(self, name)
+        captured = GoalWaitReview.capture(self, thread.incarnation.require_recorded())
         thread = captured.owner
         snapshot = captured.snapshot
         goal = thread.goal.require().require_id(goal_id).require_active()
@@ -263,7 +263,8 @@ class Goals:
     def recover_closed_goal_wait(self, name: str) -> tuple[str, ...]:
         """Read silence outside the registry, then release only the observed wait."""
         try:
-            review = GoalWaitReview.capture(self, name)
+            incarnation = self.registry.require(name).incarnation.require_recorded()
+            review = GoalWaitReview.capture(self, incarnation)
         except UnregisteredThreadError:
             return ()
         owner = review.owner
@@ -309,7 +310,7 @@ class Goals:
         for wait in self.waits.targeting(source.incarnation.require_recorded()):
             for owner in snapshot.threads_for(wait.owner):
                 try:
-                    review = GoalWaitReview.capture(self, owner.name)
+                    review = GoalWaitReview.capture(self, owner.incarnation.require_recorded())
                 except UnregisteredThreadError:
                     continue
                 if review.wait == wait:
@@ -403,7 +404,7 @@ class Goals:
         """Read the exact completed delivery before checking its original owner fence."""
         with self.registry.store.locked(mode=SharedLock()):
             owner.require_registry(self.registry)
-            review = GoalWaitReview.capture(self, owner.thread.name)
+            review = GoalWaitReview.capture(self, owner.thread.incarnation.require_recorded())
         current = review.owner
         goal = current.continuation_goal(owner.thread)
         if not review.wait.owner_matches(current.incarnation.require_recorded()):

@@ -1,10 +1,10 @@
 """Reply reads leave the registry free, and publication keeps its observed state."""
 
+import fcntl
 import os
-import subprocess
-import sys
 from contextlib import contextmanager
 from dataclasses import replace
+from functools import partial
 
 import pytest
 
@@ -12,6 +12,7 @@ from agent_comms.bus import Bus
 from agent_comms.bus_publication import Delivered
 from agent_comms.bus_tables import ReceivedSource
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.coordination_errors import StaleFence
 from agent_comms.goal_actions import (
     EditGoalAction,
     GoalActionContext,
@@ -22,7 +23,6 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.goal_waits import GoalWaitReview, RecordedGoalWait
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.coordination_errors import StaleFence
 from agent_comms.messages import ConversationRole, NoticeRole
 from agent_comms.store_files import store_lock_path
 from agent_comms.thread_text import GivenThreadText
@@ -32,7 +32,7 @@ from goal_owner_fixture import canonical_goal_wire
 
 
 class RegistryProbeBus(Bus):
-    """A real SQLite read asks another process to take the real registry lock."""
+    """A second open file description tries to take the real registry lock."""
 
     def __init__(self, path, registry_path):
         super().__init__(path)
@@ -44,16 +44,14 @@ class RegistryProbeBus(Bus):
             ReceivedSource.declared_name, Delivered.table.declared_name,
         )):
             return
-        checked = subprocess.run(
-            [sys.executable, "-c", (
-                "import fcntl, sys\n"
-                "with open(sys.argv[1], 'rb') as lock:\n"
-                " try: fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)\n"
-                " except BlockingIOError: sys.exit(11)\n"
-            ), str(self.registry_lock)],
-            capture_output=True, text=True, timeout=5,
-        )
-        self.checks.append(checked.returncode)
+        with self.registry_lock.open("rb") as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                self.checks.append(11)
+            else:
+                self.checks.append(0)
+                fcntl.flock(lock, fcntl.LOCK_UN)
 
     @contextmanager
     def observing(self):
@@ -157,45 +155,61 @@ def test_reply_appended_between_review_and_publication_is_still_eligible(reviewi
     assert review.reviewed_inputs == (f"bus:{reply.seq}",)
 
 
+def change_goal(comms, prepared):
+    comms.goals.update_goal("owner", EditGoalAction(text="A different objective"))
+
+
+def replace_wait(comms, prepared):
+    owner = comms.registry.require("owner")
+    goal = owner.goal.require()
+    target = comms.registry.require("child")
+    comms.goals.waits.record(RecordedGoalWait(
+        goal.id, "newer-wait", goal.revision, prepared.review.through_seq,
+        prepared.review.targets, owner=owner.incarnation.require_recorded(),
+        target_turn_generations=(target.require_turn_lease().identity.generation,),
+        report_turn_id=None, report_turn_generation=None,
+    ))
+
+
+def begin_owner_turn(comms, prepared):
+    comms.agents.begin_turn("owner", "new-owner-turn")
+
+
+def begin_dependency_turn(comms, prepared):
+    comms.agents.finish_turn(comms.registry.require("child").require_turn_lease())
+    comms.agents.begin_turn("child", "new-child-turn")
+
+
+def review_inputs(comms, prepared):
+    goal = comms.registry.require("owner").goal.require()
+    InputDispositions(comms.root).review_for_goal(
+        prepared.reviewed_inputs, observed=prepared.review.unknown,
+        owners=prepared.review.owners, goal_id=goal.id,
+        goal_revision=goal.revision + 1, turn_id="",
+    )
+
+
+def replace_registration(comms, prepared, *, name):
+    original = comms.registry.require(name)
+    comms.registry.unregister(name)
+    comms.registry.remove(name)
+    comms.registry.declare(comms.registry.new_thread(
+        name, frozenset(), original.worktree,
+        process_identity=ProcessIdentity.capture(os.getpid()),
+    ))
+
+
 @pytest.mark.parametrize("change", (
-    "goal", "wait", "turn", "dependency_turn", "dependency", "owner", "input",
+    change_goal, replace_wait, begin_owner_turn, begin_dependency_turn, review_inputs,
+    partial(replace_registration, name="child"),
+    partial(replace_registration, name="owner"),
 ))
 def test_stale_review_never_writes_inputs_or_replaces_newer_wait(reviewing, change):
     reply = reviewing.messaging.send("child", "owner", "Review this reply").message
     prepared = standby(reviewing, (f"bus:{reply.seq}",)).prepare(
         reviewing.goals, "owner", RuntimeInvocable,
     )
-    owner = reviewing.registry.require("owner")
-    goal = owner.goal.require()
-    if change == "goal":
-        reviewing.goals.update_goal("owner", EditGoalAction(text="A different objective"))
-    elif change == "wait":
-        target = reviewing.registry.require("child")
-        reviewing.goals.waits.record(RecordedGoalWait(
-            goal.id, "newer-wait", goal.revision, reply.seq, prepared.review.targets,
-            owner=owner.incarnation.require_recorded(),
-            target_turn_generations=(target.require_turn_lease().identity.generation,),
-            report_turn_id=None, report_turn_generation=None,
-        ))
-    elif change == "turn":
-        reviewing.agents.begin_turn("owner", "new-owner-turn")
-    elif change == "dependency_turn":
-        reviewing.agents.finish_turn(reviewing.registry.require("child").require_turn_lease())
-        reviewing.agents.begin_turn("child", "new-child-turn")
-    elif change == "input":
-        InputDispositions(reviewing.root).review_for_goal(
-            prepared.reviewed_inputs, observed=prepared.review.unknown,
-            owners=prepared.review.owners, goal_id=goal.id,
-            goal_revision=goal.revision + 1, turn_id="",
-        )
-    else:
-        name = "owner" if change == "owner" else "child"
-        reviewing.registry.unregister(name)
-        reviewing.registry.remove(name)
-        reviewing.registry.declare(reviewing.registry.new_thread(
-            name, frozenset(), owner.worktree,
-            process_identity=ProcessIdentity.capture(os.getpid()),
-        ))
+    change(reviewing, prepared)
     inputs = InputDispositions(reviewing.root)
     before = inputs.read(prepared.reviewed_inputs)
     wait_before = reviewing.goals.goal_wait("owner")
@@ -244,29 +258,48 @@ def test_terminal_reply_read_cannot_clear_a_newer_wait(reviewing):
     assert reviewing.registry.require("owner").goal == goal
 
 
-@pytest.mark.parametrize("change", ("wait", "turn"))
-def test_completed_reply_rechecks_its_wait_and_original_turn(reviewing, change):
-    reviewing.goals.update_goal("owner", standby(reviewing))
-    reply = reviewing.messaging.send("child", "owner", "The actual completed reply").message
-    witness = reviewing.agents.begin_turn("owner", "original-handling-turn")
-    wait = reviewing.goals.goal_wait("owner")
+def completed_reply(comms):
+    comms.goals.update_goal("owner", standby(comms))
+    reply = comms.messaging.send("child", "owner", "The actual completed reply").message
+    witness = comms.agents.begin_turn("owner", "original-handling-turn")
+    return witness, reply, comms.goals.goal_wait("owner")
+
+
+def test_completed_reply_rechecks_its_exact_wait(reviewing):
+    witness, reply, wait = completed_reply(reviewing)
     newer = replace(wait, wait_id="newer-wait")
+    reviewing.bus.bus = AfterReadBus(
+        reviewing.bus.bus.path, lambda: reviewing.goals.waits.record(newer),
+    )
+    assert not reviewing.goals.consume_reply_wait(witness, reply.reference)
+    assert reviewing.goals.goal_wait("owner") == newer
 
-    def replace_state():
-        if change == "wait":
-            reviewing.goals.waits.record(newer)
-        else:
-            reviewing.agents.finish_turn(witness.thread.require_turn_lease())
-            reviewing.agents.begin_turn("owner", "a-later-turn")
 
-    reviewing.bus.bus = AfterReadBus(reviewing.bus.bus.path, replace_state)
-    if change == "wait":
-        assert not reviewing.goals.consume_reply_wait(witness, reply.reference)
-        assert reviewing.goals.goal_wait("owner") == newer
-    else:
-        with pytest.raises(StaleFence):
-            reviewing.goals.consume_reply_wait(witness, reply.reference)
-        assert reviewing.goals.goal_wait("owner") == wait
+def test_completed_reply_rechecks_its_original_turn(reviewing):
+    witness, reply, wait = completed_reply(reviewing)
+
+    def advance_turn():
+        reviewing.agents.finish_turn(witness.thread.require_turn_lease())
+        reviewing.agents.begin_turn("owner", "a-later-turn")
+
+    reviewing.bus.bus = AfterReadBus(reviewing.bus.bus.path, advance_turn)
+    with pytest.raises(StaleFence):
+        reviewing.goals.consume_reply_wait(witness, reply.reference)
+    assert reviewing.goals.goal_wait("owner") == wait
+
+
+def test_capture_keeps_incarnation_across_rename(reviewing):
+    original = reviewing.registry.require("owner")
+    reviewing.registry.rename("owner", "renamed-owner")
+    captured = GoalWaitReview.capture(reviewing.goals, original.incarnation.require_recorded())
+    assert captured.owner.name == "renamed-owner"
+    assert captured.owner.incarnation == original.incarnation
+
+
+def test_probe_observes_actual_exclusive_lock(probed):
+    with probed.registry.store.locked():
+        probed.bus.bus.probe(ReceivedSource.declared_name)
+    assert probed.bus.bus.checks == [11]
 
 
 @pytest.mark.parametrize("rename", (False, True))
@@ -288,7 +321,9 @@ def test_display_edit_during_standby_review_is_preserved(reviewing, rename):
 def test_display_edit_during_terminal_review_does_not_strand_wait(reviewing, rename):
     reviewing.goals.update_goal("owner", standby(reviewing))
     fence = reviewing.agents.finish_turn(reviewing.registry.require("child").require_turn_lease())
-    captured = GoalWaitReview.capture(reviewing.goals, "owner")
+    captured = GoalWaitReview.capture(
+        reviewing.goals, reviewing.registry.require("owner").incarnation.require_recorded(),
+    )
     title = GivenThreadText("Keep this concurrent title")
     reviewing.registry.register(replace(reviewing.registry.require("owner"), title=title))
     if rename:

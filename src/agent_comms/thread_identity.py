@@ -417,6 +417,14 @@ class ClaimedIdentity:
 
 
 @dataclass(frozen=True, slots=True)
+class ThreadAuthority:
+    """One registry participant's owner lease and allocated input claim."""
+
+    owner: OwnerIdentity
+    claim: ClaimedIdentity
+
+
+@dataclass(frozen=True, slots=True)
 class TurnIdentity:
     incarnation: ThreadIncarnation
     generation: int

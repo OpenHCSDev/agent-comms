@@ -44,6 +44,7 @@ from .thread_identity import (
     GenerationCounter,
     OwnerIdentity,
     RecordedThreadIncarnation,
+    ThreadAuthority,
     TurnIdentity,
 )
 from .thread_presentation import ThreadOwnerBinding
@@ -881,10 +882,12 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
         Titles, aliases and unrelated rows do not allocate or revoke authority.
         """
         return (
-            self.owner_identity(name) == other.owner_identity(other_name)
-            and self.claimed_identity(name) == other.claimed_identity(other_name)
+            self.authority(name) == other.authority(other_name)
             and self.status(name) == other.status(other_name)
         )
+
+    def authority(self, name: str) -> ThreadAuthority:
+        return ThreadAuthority(self.owner_identity(name), self.claimed_identity(name))
 
     def owner_binding(self, name: str) -> ThreadOwnerBinding:
         canonical = self.canonical_name(name)

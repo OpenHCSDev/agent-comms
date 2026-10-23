@@ -386,6 +386,11 @@ class Bus(BusReader, ReconciledFile, WalStore, CarriedWriter, BusFile, Watched):
     def __init__(self, path: Path):
         super().__init__(path)
 
+    def received_after(self, lookup: str, after: int) -> bool:
+        """Whether this recipient has a newer candidate; read one indexed metadata row."""
+        with closing(self._received_sequences(lookup, after=after, limit=1)) as positions:
+            return any(positions)
+
     @classmethod
     def install(cls, path: Path, *, history: Iterable[Message] = ()) -> Self:
         """Install declared schemas and commit optional display-only history atomically.
