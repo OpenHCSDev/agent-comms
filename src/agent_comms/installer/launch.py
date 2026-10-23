@@ -68,20 +68,23 @@ class InstallReport(MroDispatch):
 
     @contextmanager
     def running(self, tree: TargetTree) -> Iterator[None]:
-        try:
-            with tree:
-                yield
-            lines = self.outcome.lines()
-        except BaseException as error:
-            failure = (*next(self.handlers_for(error))(error), *self.bridges.lines())
+        """The writer can run the target's CLI from ``tree``, so the tree closes after the
+        report is posted."""
+        with tree:
             try:
-                self.writer.post(failure)
-            except BaseException as publication_error:
-                error.add_note(f"Install failure report also failed: {publication_error}")
-                print(f"install: failure report also failed: {publication_error}", file=sys.stderr)
-            raise
-        else:
-            self.writer.post(lines)
+                yield
+                lines = self.outcome.lines()
+            except BaseException as error:
+                failure = (*next(self.handlers_for(error))(error), *self.bridges.lines())
+                try:
+                    self.writer.post(failure)
+                except BaseException as publication_error:
+                    error.add_note(f"Install failure report also failed: {publication_error}")
+                    print(f"install: failure report also failed: {publication_error}",
+                          file=sys.stderr)
+                raise
+            else:
+                self.writer.post(lines)
 
 
 @dataclass(frozen=True)

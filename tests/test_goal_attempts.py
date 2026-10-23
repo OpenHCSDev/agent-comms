@@ -24,7 +24,8 @@ from agent_comms.field_codec import MalformedRecord
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_attempt_phase import ClaimedAttempt, FailedAttempt, SucceededAttempt
 from agent_comms.goal_failure_observation import FailedTurnEvidence
-from agent_comms.goal_attempts import AttemptRecord, Generation, GoalAttemptStore, GoalWorkDecision, ProviderUsageTotal, ReservationConflictError, StorageUncertainError, UnresolvedAttemptError
+from agent_comms.goal_attempts import AttemptRecord, Generation, GoalAttemptStore, GoalWorkDecision, ProviderUsageTotal, ReservationConflictError, StorageUncertainError
+from agent_comms.errors import UnresolvedAttemptError
 from agent_comms.goal_generation import (
     BlockedGeneration,
     CancelledGeneration,
