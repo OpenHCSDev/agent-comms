@@ -144,3 +144,12 @@ durability and Linux orphan deadline at `5f50fe7`, also checked at byte-identica
 `90c4d57`. It does not approve this new provenance slice. Final recovery policy
 must retain the simultaneous watchdog+owner-crash limitation and the fact that
 uninterruptible kernel I/O can delay exit while exclusions remain held.
+
+## Preparation reuse
+
+A scratch cold preparation at 171539b88 took 27.105 s. The successful trace
+measured 7.547 s sharing resources, 5.894 s assembling the import boundary,
+4.344 s installing stock dependencies, and 3.254 s in the stock-copy/patch
+pipeline. Reusing a completed preparation must compare its declared inputs,
+not repeat these operations or hash its output tree. The PR records the full
+trace timings and the cold, reuse and changed-pin measurements.
