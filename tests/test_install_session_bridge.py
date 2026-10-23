@@ -1,7 +1,6 @@
 """Real session endpoint retirement; no live home, provider, or package mutation."""
 
 
-from agent_comms.bus import Bus
 
 import json
 import os
@@ -38,7 +37,6 @@ def session_bridge(tmp_path, home, program=SERVE_FROM_SOURCE, *, state_directory
                    runtime=LaunchRuntime.running()):
     """``runtime`` serves ``program`` and so owns the bus it attaches to."""
     comms = wire(tmp_path / 'bus')
-    Bus.install(Bus.path_in(comms.root))
     RootRuntime.publish(comms.root, runtime)
     comms.registry.declare(Thread(
         'bridge-copy', frozenset(), str(tmp_path), execution=ExternalThreadExecution))

@@ -1,7 +1,6 @@
 """Normal coding policies use existing claims; no provider or user work is touched."""
 
 
-from agent_comms.bus import Bus
 
 from agent_comms.pi_payloads import ReportedFlag, ReportedText
 import json
@@ -43,7 +42,6 @@ def test_create_claim_competes_before_file_exists_and_releases_without_creation(
         for name, created in [("a", 21.0), ("b", 22.0)]:
             thread = Thread(name, frozenset({'team'}), str(work), created_at=created)
             c.registry.declare(replace(thread, process_identity=ProcessIdentity.capture(os.getpid())))
-        Bus.install(Bus.path_in(c.root))
         resource = WritableFileClaim(Path("new/nested/file.py"))
         def acquire(name):
             with NativeBoundary(c.bus) as boundary:
@@ -80,7 +78,6 @@ def test_stopped_holder_reclaimed_in_copied_root(tmp_path, monkeypatch, existing
         original.registry.declare(replace(
             thread, process_identity=ProcessIdentity.capture(os.getpid())
         ))
-    Bus.install(Bus.path_in(original.root))
 
     def acquire(comms, name):
         with NativeBoundary(comms.bus) as boundary:

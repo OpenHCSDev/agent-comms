@@ -8,7 +8,6 @@ Retains request/response/timing/trace files under the supplied owned output path
 from __future__ import annotations
 
 
-from agent_comms.bus import Bus
 from agent_comms.repository_name import RepositoryName
 
 import argparse
@@ -54,7 +53,6 @@ def seed(root: Path, project: Path) -> None:
             Thread(name, frozenset({"probe"}), str(project)),
             status=StoppedThreadStatus(),
         )
-    Bus.install(Bus.path_in(comms.root))
     comms.channels.set_saved_view(
         ParticipantsView('probe-view', ViewPredicate(AnyOfMatch, frozenset({'probe'})))
     )

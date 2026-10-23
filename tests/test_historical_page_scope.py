@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.bus import Bus, PublicRecord
+from agent_comms.bus import PublicRecord
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.comms import wire
 from agent_comms.mentions import ThreadMention
@@ -22,7 +22,6 @@ def history(tmp_path):
     for created, name in enumerate(("bob", "carol"), start=11):
         old.registry.declare(Thread(name, frozenset({'ops'}), str(old.root), created_at=created))
     old.registry.rename("alice-old", "alice")
-    Bus.install(Bus.path_in(old.root))
     rows = []
     for seq in range(1, 241):
         message = Message(
@@ -49,7 +48,6 @@ def history(tmp_path):
         )
         rows.append(Message.from_message(published))
     live = wire(tmp_path / "live")
-    Bus.install(Bus.path_in(live.root))
     # Deliberately different membership: source scope must not use live tags.
     live.registry.declare(Thread('alice', frozenset({'ops'}), str(live.root), created_at=500))
     live.registry.declare(Thread('alice-old', frozenset({'api'}), str(live.root), created_at=501))

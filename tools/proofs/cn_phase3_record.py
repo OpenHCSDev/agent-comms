@@ -7,7 +7,6 @@ session path. All observations below are CLI tool results, not hand-constructed 
 from __future__ import annotations
 
 
-from agent_comms.bus import Bus
 
 import argparse
 import os
@@ -74,7 +73,6 @@ def setup() -> None:
     if ROOT.exists():
         raise RuntimeError(f"Refusing to reuse an existing proof root: {ROOT}")
     comms = wire(ROOT)
-    Bus.install(Bus.path_in(comms.root))
     for name in ("record-lead", "record-worker"):
         comms.registry.declare(
             Thread(name, frozenset(), str(CHECKOUT), created_at=time.time())

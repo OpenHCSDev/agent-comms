@@ -1,12 +1,10 @@
 """Installed snapshot values, original notification evidences and real sidebar rows."""
 
 
-from agent_comms.bus import Bus
 from conftest import publish_initial
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.read_basis import NamedViewer
-from agent_comms.presentation import ReadThrough
 import argparse
 import asyncio
 from importlib.resources import files
@@ -42,7 +40,6 @@ async def main():
     os.environ.update(XDG_CONFIG_HOME=str(root / 'config'), XDG_STATE_HOME=str(root / 'state'),
                       XDG_DATA_HOME=str(root / 'data'), AGENT_COMMS_ROOT=str(root / 'wire'))
     comms = wire(root / 'wire')
-    Bus.install(Bus.path_in(comms.root))
     owner = root.name
     for name in (owner, 'stopped', 'archived'):
         source = root / (name + '.jsonl')
