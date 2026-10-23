@@ -633,7 +633,7 @@ def test_invalid_pins_do_not_mutate_catalog(tmp_path):
 
 
 def test_a_declared_tag_resolves_on_a_fresh_bus_and_is_never_renamed_away_or_into(tmp_path):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     channel = comms.bus.require_channel(CommsTag.channel())
     assert isinstance(channel, TagChannel)
     assert CommsTag.channel() in comms.bus.channel_declarations()

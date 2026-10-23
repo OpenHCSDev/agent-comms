@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, ClassVar, Annotated
 
 from .channel_targets import ChannelTarget, Tag
 from .cli_result import CliResult
-from .declared_family import DeclaredFamily, UnknownFamilyMember
+from .declared_family import DeclaredFamily
 from .display_order import CreatedThreadSort, ThreadSort
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, CatalogExclude
@@ -209,10 +209,7 @@ class BuiltinChannelView(PredicateChannel, MembershipChannel, Channel, declared_
 
     @classmethod
     def addressed(cls, address: str) -> type[BuiltinChannelView]:
-        for member in cls.members_with(cls):
-            if member.address() == address:
-                return member
-        raise UnknownFamilyMember(f"Unknown {cls.__name__} address: {address!r}")
+        return cls.member_named(ChannelTarget.bare_name(address))
 
     @classmethod
     def target(cls) -> ChannelTarget:

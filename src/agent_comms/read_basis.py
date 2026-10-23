@@ -454,7 +454,9 @@ class AllConversation(Conversation):
         return self
 
     def scope(self, snapshot):
-        return AllChannelDisplayScope('#any')
+        from .channels import AnyChannel
+
+        return AllChannelDisplayScope(AnyChannel.address())
 
     def sql_keys(self, snapshot):
         return (('', ''),)
