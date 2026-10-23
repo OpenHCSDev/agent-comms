@@ -740,6 +740,39 @@ class ParentsShared(MainEvidence):
 
 
 @dataclass(frozen=True)
+class QualifiedName:
+    """A module or class as Python imports it, one part per dotted segment."""
+
+    parts: tuple[str, ...]
+
+    @classmethod
+    def of(cls, dotted: str) -> QualifiedName:
+        """An import statement's module text, split once where the AST hands it over."""
+        return cls(tuple(part for part in dotted.split(".") if part))
+
+    def child(self, name: str) -> QualifiedName:
+        return QualifiedName((*self.parts, name))
+
+    def joined(self, other: QualifiedName) -> QualifiedName:
+        return QualifiedName((*self.parts, *other.parts))
+
+    @property
+    def parent(self) -> QualifiedName:
+        return QualifiedName(self.parts[:-1])
+
+    @property
+    def name(self) -> str:
+        return self.parts[-1]
+
+    def ancestors(self) -> tuple[QualifiedName, ...]:
+        """This name and each enclosing one, nearest first, down to the empty root."""
+        return tuple(QualifiedName(self.parts[:end]) for end in range(len(self.parts), -1, -1))
+
+    def __str__(self) -> str:
+        return ".".join(self.parts)
+
+
+@dataclass(frozen=True)
 class DeclaredClass:
     """One class statement on main: the module path that holds it and its node, so two classes
     spelled alike stay two classes."""
@@ -748,114 +781,142 @@ class DeclaredClass:
     node: ast.ClassDef
 
 
+class ClassDeclarations(ast.NodeVisitor):
+    """Each class a body declares, nested ones under their outer class's name. A function body
+    runs later, so nothing in it is declared at import."""
+
+    def __init__(self, scopes: DeclaredScopes, path: str, prefix: QualifiedName) -> None:
+        self.scopes = scopes
+        self.path = path
+        self.prefix = prefix
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        qualified = self.prefix.child(node.name)
+        self.scopes.classes[qualified] = DeclaredClass(self.path, node)
+        ClassDeclarations(self.scopes, self.path, qualified).generic_visit(node)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        """A function's body is not run at import."""
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        """A coroutine's body is not run at import."""
+
+
+class ModuleBindings(ClassDeclarations):
+    """What one module's top level binds, under ``if`` and ``try`` too: its classes, its
+    imports and the values it assigns names."""
+
+    def __init__(self, scopes: DeclaredScopes, path: str, module: QualifiedName,
+                 package: QualifiedName) -> None:
+        super().__init__(scopes, path, module)
+        self.anchors = (QualifiedName(()), *package.ancestors())
+        self.bound: dict[str, QualifiedName] = {}
+        self.assigned: dict[str, list[tuple[int, ast.expr]]] = {}
+        self.assignments: list[ast.Assign | ast.AnnAssign] = []
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self.bound[node.name] = self.prefix.child(node.name)
+        super().visit_ClassDef(node)
+
+    def visit_Import(self, node: ast.Import) -> None:
+        """``import a.b`` binds ``a``; ``import a.b as c`` binds ``c`` to ``a.b``."""
+        for alias in node.names:
+            imported = QualifiedName.of(alias.name)
+            self.bound[alias.asname or imported.parts[0]] = (
+                imported if alias.asname else QualifiedName(imported.parts[:1])
+            )
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        """A relative import climbs from this module's package, one level per dot."""
+        origin = self.anchors[node.level].joined(QualifiedName.of(node.module or ""))
+        for alias in node.names:
+            self.bound[alias.asname or alias.name] = origin.child(alias.name)
+
+    def visit_Assign(self, node: ast.Assign) -> None:
+        self.assignments.append(node)
+        for target in node.targets:
+            self.assigned.setdefault(ast.unparse(target), []).append((node.lineno, node.value))
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+        self.assignments.append(node)
+        match node:
+            case ast.AnnAssign(target=target, value=ast.expr() as value):
+                self.assigned.setdefault(ast.unparse(target), []).append((node.lineno, value))
+
+    def reach(self, local: str) -> Iterator[QualifiedName]:
+        """What this module's top level binds ``local`` to, if it binds it."""
+        if local in self.bound:
+            yield self.bound[local]
+
+    def literal(self, local: str, before: int) -> Iterator[ast.expr]:
+        """The last value this module's top level assigns ``local`` before line ``before``."""
+        yield from [value for line, value in self.assigned.get(local, []) if line < before][-1:]
+
+
 class DeclaredScopes:
     """The modules under ``paths`` on main, each resolving a name only through what its own top
-    level binds: its classes and its imports. A class is found by its qualified name, the way
-    Python imports it, never by its bare spelling in some other module."""
+    level binds. A class is found by its qualified name, the way Python imports it, never by
+    its bare spelling in some other module; a name its module never binds reaches nothing."""
 
     def __init__(self, main: MainTree, paths: tuple[str, ...]) -> None:
-        self.modules = {self.dotted(module.path, paths): module for module in main.modules(paths)}
-        self.module_of = {module.path: name for name, module in self.modules.items()}
-        self.classes: dict[str, DeclaredClass] = {}
-        self.bindings: dict[str, dict[str, str]] = {}
-        for name, module in self.modules.items():
-            bound = self.bindings[name] = {}
-            for statement in self.top_level(module.tree.body):
-                match statement:
-                    case ast.ClassDef(name=local):
-                        bound[local] = self.declare(module.path, f"{name}.{local}", statement)
-                    case ast.Import(names=aliases):
-                        for alias in aliases:
-                            root = alias.name.partition(".")[0]
-                            bound[alias.asname or root] = alias.name if alias.asname else root
-                    case ast.ImportFrom(module=source, names=aliases, level=level):
-                        origin = self.absolute(name, module.path, source, level)
-                        for alias in aliases:
-                            bound[alias.asname or alias.name] = f"{origin}.{alias.name}"
+        self.classes: dict[QualifiedName, DeclaredClass] = {}
+        self.modules: dict[QualifiedName, ModuleBindings] = {}
+        self.module_of: dict[str, QualifiedName] = {}
+        for module in main.modules(paths):
+            name, package = self.dotted(module.path, paths)
+            bindings = self.modules[name] = ModuleBindings(self, module.path, name, package)
+            bindings.visit(module.tree)
+            self.module_of[module.path] = name
 
     @staticmethod
-    def dotted(path: str, roots: tuple[str, ...]) -> str:
-        """The module's import name below the root that holds it; a package is its ``__init__``."""
+    def dotted(path: str, roots: tuple[str, ...]) -> tuple[QualifiedName, QualifiedName]:
+        """The module's import name below the root that holds it, and its package; a package's
+        ``__init__`` is the package itself."""
         root = next(root for root in roots if PurePosixPath(path).is_relative_to(root))
-        parts = PurePosixPath(path).relative_to(root).with_suffix("").parts
-        return ".".join(parts[:-1] if parts[-1] == "__init__" else parts)
+        relative = PurePosixPath(path).relative_to(root)
+        package = QualifiedName(relative.parent.parts)
+        return package.joined(QualifiedName.of(relative.stem.removeprefix("__init__"))), package
 
-    @staticmethod
-    def absolute(name: str, path: str, source: str | None, level: int) -> str:
-        """The module a ``from`` import reads: relative levels climb from the importer's package."""
-        package = name.split(".") if path.endswith("/__init__.py") else name.split(".")[:-1]
-        anchor = package[: len(package) - level + 1] if level else []
-        return ".".join([*anchor, *([source] if source else [])])
-
-    @classmethod
-    def top_level(cls, statements: Iterable[ast.stmt]) -> Iterator[ast.stmt]:
-        """Statements run at import, including under ``if`` and ``try``, never in a body."""
-        for statement in statements:
-            yield statement
-            match statement:
-                case ast.If(body=body, orelse=orelse):
-                    yield from cls.top_level((*body, *orelse))
-                case ast.Try(body=body, handlers=handlers, orelse=orelse, finalbody=final):
-                    caught = (inner for handler in handlers for inner in handler.body)
-                    yield from cls.top_level((*body, *caught, *orelse, *final))
-
-    def declare(self, path: str, qualified: str, node: ast.ClassDef) -> str:
-        self.classes[qualified] = DeclaredClass(path, node)
-        for inner in node.body:
-            if isinstance(inner, ast.ClassDef):
-                self.declare(path, f"{qualified}.{inner.name}", inner)
-        return qualified
-
-    def qualify(self, module: str, expression: ast.expr) -> str | None:
-        """The qualified name an expression reads in ``module``, if its top level binds it."""
+    def qualify(self, module: QualifiedName, expression: ast.expr) -> Iterator[QualifiedName]:
+        """The qualified name an expression reads in ``module``, when its top level binds it."""
         match expression:
             case ast.Name(id=local):
-                return self.bindings[module].get(local)
+                yield from self.modules[module].reach(local)
             case ast.Attribute(value=value, attr=member):
-                owner = self.qualify(module, value)
-                return f"{owner}.{member}" if owner else None
-        return None
+                yield from (owner.child(member) for owner in self.qualify(module, value))
 
-    def declared(self, qualified: str, seen: frozenset[str] = frozenset()) -> DeclaredClass | None:
+    def declared(
+        self, qualified: QualifiedName, seen: frozenset[QualifiedName] = frozenset()
+    ) -> Iterator[DeclaredClass]:
         """The class a qualified name reaches, following a module's re-export of an import."""
         if qualified in self.classes:
-            return self.classes[qualified]
-        owner, _, member = qualified.rpartition(".")
-        target = self.bindings.get(owner, {}).get(member)
-        if target and target not in seen:
-            return self.declared(target, seen | {qualified})
-        return None
+            yield self.classes[qualified]
+        elif qualified.parent in self.modules:
+            for target in self.modules[qualified.parent].reach(qualified.name):
+                if target not in seen:
+                    yield from self.declared(target, seen | {qualified})
 
-    def resolve(self, module: str, expression: ast.expr) -> DeclaredClass | None:
-        qualified = self.qualify(module, expression)
-        return self.declared(qualified) if qualified else None
+    def resolve(self, module: QualifiedName, expression: ast.expr) -> Iterator[DeclaredClass]:
+        for qualified in self.qualify(module, expression):
+            yield from self.declared(qualified)
 
     def parents(self, declared: DeclaredClass) -> Iterator[DeclaredClass]:
         """Each direct base declared under the roots, read through its module's bindings."""
         for base in declared.node.bases:
-            parent = self.resolve(self.module_of[declared.path], base)
-            if parent and parent != declared:
-                yield parent
-
-    def literal(self, module: str, local: str, before: int) -> ast.expr | None:
-        """The last value ``module``'s top level assigns ``local`` before line ``before``."""
-        found = None
-        for statement in self.top_level(self.modules[module].tree.body):
-            match statement:
-                case ast.Assign(targets=[ast.Name(id=name)], value=value) \
-                        | ast.AnnAssign(target=ast.Name(id=name), value=ast.expr() as value) \
-                        if name == local and statement.lineno < before:
-                    found = value
-        return found
+            for parent in self.resolve(self.module_of[declared.path], base):
+                if parent != declared:
+                    yield parent
 
 
 @dataclass(frozen=True)
 class RestatedMembersAbsent(MainEvidence):
     """No class in ``paths`` restates a member its direct base in ``paths`` declares: a method
     or class attribute equal to the base's, or a field equal to the base's when both are
-    dataclasses, so the field is already inherited. Python declares ``__slots__`` per class."""
+    dataclasses, so the field is already inherited."""
 
     paths: tuple[str, ...] = ("src",)
+    per_class: ClassVar[frozenset[str]] = frozenset({"__slots__"})
+    """Names ``type`` reads from each class's own namespace, never through its bases."""
 
     def read(self, main: MainTree) -> bool:
         return not any(self.restatements(main))
@@ -868,10 +929,10 @@ class RestatedMembersAbsent(MainEvidence):
                 inherited = self.answers(parent.node)
                 for name, (line, answer) in self.answers(declared.node).items():
                     if name in inherited and inherited[name][1] == answer:
-                        yield f"{declared.path}:{line} {declared.node.name}.{name}"
+                        member = QualifiedName((declared.node.name, name))
+                        yield f"{declared.path}:{line} {member}"
 
-    @staticmethod
-    def answers(declared: ast.ClassDef) -> dict[str, tuple[int, str]]:
+    def answers(self, declared: ast.ClassDef) -> dict[str, tuple[int, str]]:
         """Each member's line and its whole declaration; fields count only on a dataclass."""
         fields = dataclass.__name__ in NamedClasses.of(
             decorator.func if isinstance(decorator, ast.Call) else decorator
@@ -882,10 +943,10 @@ class RestatedMembersAbsent(MainEvidence):
             match member:
                 case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
                     found[name] = (member.lineno, ast.dump(member))
-                case ast.Assign(targets=[ast.Name(id=name)]) if name != "__slots__":
+                case ast.Assign(targets=[ast.Name(id=name)]) if name not in self.per_class:
                     found[name] = (member.lineno, ast.dump(member))
                 case ast.AnnAssign(target=ast.Name(id=name), value=ast.expr()) \
-                        if fields and name != "__slots__":
+                        if fields and name not in self.per_class:
                     found[name] = (member.lineno, ast.dump(member))
         return found
 
@@ -921,24 +982,24 @@ class ClassRostersAbsent(MainEvidence):
         """Each roster, as ``PATH:LINE NAME``."""
         scopes = DeclaredScopes(main, self.paths)
         relations = self.relations()
-        for name, module in scopes.modules.items():
+        for bindings in scopes.modules.values():
             bodies = (
-                ("", frozenset[str](), tuple(scopes.top_level(module.tree.body))),
+                (QualifiedName(()), frozenset[str](), tuple(bindings.assignments)),
                 *(
-                    (f"{declared.node.name}.", relations, tuple(declared.node.body))
+                    (QualifiedName((declared.node.name,)), relations, tuple(declared.node.body))
                     for declared in scopes.classes.values()
-                    if declared.path == module.path
+                    if declared.path == bindings.path
                 ),
             )
             found = sorted(
-                (statement.lineno, owner + ast.unparse(target))
+                (statement.lineno, str(owner.child(ast.unparse(target))))
                 for owner, related, body in bodies
                 for statement in body
                 for target, value in self.bound(statement)
                 if ast.unparse(target) not in related
-                and self.members(scopes, name, value, statement.lineno) >= 2
+                and self.members(bindings, value, statement.lineno) >= 2
             )
-            yield from (f"{module.path}:{line} {target}" for line, target in found)
+            yield from (f"{bindings.path}:{line} {target}" for line, target in found)
 
     @staticmethod
     def bound(statement: ast.stmt) -> Iterator[tuple[ast.expr, ast.expr]]:
@@ -948,20 +1009,22 @@ class ClassRostersAbsent(MainEvidence):
             ):
                 yield target, value
 
-    def members(self, scopes: DeclaredScopes, module: str, value: ast.expr | None,
-                before: int) -> int:
+    def members(self, bindings: ModuleBindings, value: ast.expr, before: int) -> int:
         """How many declared classes a literal collection names, ``*NAME`` expanded."""
         match value:
             case ast.Call(args=[ast.Tuple() | ast.List() | ast.Set() as listed]) \
                     | (ast.Tuple() | ast.List() | ast.Set() as listed):
-                return sum(self.member(scopes, module, element, before) for element in listed.elts)
+                return sum(self.member(bindings, element, before) for element in listed.elts)
         return 0
 
-    def member(self, scopes: DeclaredScopes, module: str, element: ast.expr, before: int) -> int:
+    def member(self, bindings: ModuleBindings, element: ast.expr, before: int) -> int:
         match element:
             case ast.Starred(value=ast.Name(id=local)):
-                return self.members(scopes, module, scopes.literal(module, local, before), before)
-        return int(scopes.resolve(module, element) is not None)
+                return sum(
+                    self.members(bindings, value, before)
+                    for value in bindings.literal(local, before)
+                )
+        return sum(1 for _ in bindings.scopes.resolve(bindings.prefix, element))
 
     def describe(self) -> str:
         return f"no literal roster of declared classes in {' '.join(self.paths)} on main"
