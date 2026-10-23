@@ -8,6 +8,14 @@ from .declared_family import DeclaredFamily
 from .private_path import FileObservation, MissingFile
 
 
+class StatusSourced:
+    """A view fed by every thread-status source."""
+
+    @classmethod
+    def views(cls) -> tuple[type[RevisionView], ...]:
+        return RevisionView.members_with(cls)
+
+
 class RevisionView(DeclaredFamily, affix="View"):
     """A view derived from the revision sources that declare they feed it."""
 
@@ -19,11 +27,11 @@ class RegistrationsView(RevisionView):
     pass
 
 
-class StoresView(RevisionView):
+class StoresView(StatusSourced, RevisionView):
     """Every observed store; the activity expiry tick is not a store."""
 
 
-class StatusView(RevisionView):
+class StatusView(StatusSourced, RevisionView):
     """Activity, assignments and bus reads supply thread status.
 
     Draft and finished CLI items share one store. Neither changes the
@@ -32,7 +40,7 @@ class StatusView(RevisionView):
     """
 
 
-class SidebarView(RevisionView):
+class SidebarView(StatusSourced, RevisionView):
     """Native unread progress updates counts without rebuilding thread presentations."""
 
 
@@ -51,5 +59,3 @@ class BusSourceView(RevisionView):
             for earlier, now in zip_longest(before, current, fillvalue=MissingFile())
         )
 
-
-STATUS_SOURCE = (StoresView, StatusView, SidebarView)

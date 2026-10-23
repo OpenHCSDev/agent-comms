@@ -7,7 +7,7 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
 from .coordination_errors import IdentityConflict, IntegrityViolationError
-from .declared_family import DeclaredFamily
+from .coordinator_vocabulary import CoordinatorVocabulary
 from .field_codec import FieldCodec
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Active, Complete, Deferred, Failed, Pending, Terminal
@@ -25,7 +25,7 @@ from .typed_table import sql_literal
 from .wake_policy import BoundedTriageWake, Engagement, FullWake, PassiveWake, WakePolicy
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Iterable, Sequence
     from typing import Self
 
     from .agent_activity import RecipientActivity
@@ -61,7 +61,40 @@ class PendingDecision:
 
 
 @dataclass(frozen=True)
-class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
+class AssignmentState(CoordinatorVocabulary, LifecycleState, affix="Assignment"):
+    @classmethod
+    def sql_vocabulary(cls) -> dict[str, str]:
+        members = cls.members_with(cls)
+
+        def case(subject: str, arms: Iterable[tuple[type[AssignmentState], str]]) -> str:
+            return (
+                f"CASE {subject} "
+                + " ".join(
+                    f"WHEN {sql_literal(member.declared_name)} THEN {arm}" for member, arm in arms
+                )
+                + " END"
+            )
+
+        vocabulary = dict(
+            assignment_names=cls.sql_values(cls.names()),
+            assignment_binding=case(
+                "disposition", ((member, f"({member.binding_expression()})") for member in members)
+            ),
+        )
+        for suffix, expression in (
+            ("", "lifecycle"),
+            ("_new", "NEW.lifecycle"),
+            ("_old", "OLD.lifecycle"),
+        ):
+            kind = f"json_extract({expression}, '$.kind')"
+            vocabulary["assignment_mode" + suffix] = case(
+                kind, ((member, member.mode_expression(expression)) for member in members)
+            )
+            vocabulary["assignment_verdict" + suffix] = case(
+                kind, ((member, member.verdict_expression(expression)) for member in members)
+            )
+        return vocabulary
+
     @classmethod
     def selection_predicate(cls, capability: type, alias: str) -> str:
         states = ",".join(

@@ -46,7 +46,6 @@ class CohortTable(PrivateCoordinatorTable):
     """Mandatory sealed N/K acknowledgement declarations."""
 
     __slots__ = ()
-    schema_error = SchemaVersionError
 
 
 class AwarenessTable(SharedFileTables, DurableTables):

@@ -13,12 +13,10 @@ from .assignment_states import (
     EngagedAssignment,
     FailedAssignment,
 )
-from .coordination_errors import IdentityConflict, IntegrityViolationError
-from .declared_family import DeclaredFamily
+from .coordination_errors import IdentityConflict, IntegrityViolationError, ResponseClaimBlocked
+from .coordinator_vocabulary import CoordinatorVocabulary
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Active, Complete, Failed, Successful, Terminal
-from .coordination_errors import ResponseClaimBlocked
-
 
 if TYPE_CHECKING:
     from .coordination_snapshot import RecoverySnapshot
@@ -47,11 +45,24 @@ class AdvancedOrdinal(OrdinalRule):
 
 
 @dataclass(frozen=True)
-class ExecutionState(DeclaredFamily, LifecycleState, affix="Execution"):
-    starts_attempt: ClassVar[bool] = False
+class ExecutionState(CoordinatorVocabulary, LifecycleState, affix="Execution"):
     retry: ClassVar[bool] = False
     queued: ClassVar[bool] = False
     unstarted: ClassVar[bool] = False
+
+    @classmethod
+    def sql_vocabulary(cls) -> dict[str, str]:
+        return dict(
+            execution_names=cls.sql_values(cls.names()),
+            engaged_execution_names=cls.sql_members(cls.members_with(EngagedExecution)),
+            unstarted_execution_names=cls.sql_members(
+                member for member in cls.members_with(cls) if member.unstarted
+            ),
+            required_attempt_execution_names=cls.sql_members(cls.members_with(AttemptExecution)),
+            optional_attempt_execution_names=cls.sql_members(
+                cls.members_with(InterruptedExecution)
+            ),
+        )
 
     @property
     def current_attempt_ordinal(self) -> int | None:
@@ -127,8 +138,6 @@ class QueuedExecution(UnstartedExecution):
 
 
 class StartsAttempt:
-    starts_attempt = True
-
     def require_attempt_start(self) -> None:
         pass
 

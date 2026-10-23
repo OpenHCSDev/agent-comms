@@ -4,12 +4,15 @@ from abc import abstractmethod
 from dataclasses import dataclass
 
 from .coordination_errors import IdentityConflict
-from .declared_family import DeclaredFamily
+from .coordinator_vocabulary import CoordinatorVocabulary
 from .lifecycle_capability import Active, LifecycleCapability, Unresolved
 
 
 @dataclass(frozen=True)
-class RecoveryCondition(LifecycleCapability, DeclaredFamily, affix="Recovery"):
+class RecoveryCondition(LifecycleCapability, CoordinatorVocabulary, affix="Recovery"):
+    @classmethod
+    def sql_vocabulary(cls) -> dict[str, str]:
+        return dict(recovery_names=cls.sql_values(cls.names()))
 
     @classmethod
     @abstractmethod
