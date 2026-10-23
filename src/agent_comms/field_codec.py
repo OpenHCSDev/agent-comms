@@ -1150,6 +1150,24 @@ class RecordMember(WireValue):
         return FieldCodec.encode_record(self)
 
 
+class RepresentedProjection(MroDispatch):
+    """A represented value's view: its wire encoding, unless its declared record is its wire form."""
+
+    @classmethod
+    def of(cls, value: object, view: str, annotation: object) -> JsonValue:
+        return cls.handler_for(type(value))(value, view, annotation)
+
+    @handles(RecordMember)
+    @staticmethod
+    def record(value: RecordMember, view: str, annotation: object) -> JsonValue:
+        return FieldCodec._project_record(value, view)
+
+    @handles(object)
+    @staticmethod
+    def encoded(value: object, view: str, annotation: object) -> JsonValue:
+        return FieldCodec.encode(value, annotation)
+
+
 class InlineRecord(WireValue, ExternalJsonShape):
     """A typed field represented by its declared object's sibling wire fields."""
 
@@ -1787,25 +1805,28 @@ class FieldCodec(MroDispatch, Sealed):
         Projection is deliberately one way. Excluded secrets cannot be rebuilt
         from a read-only view, and a view never serves as a persistence record.
         """
-        representation = cls._value_representation(value, annotation)
-        # A record member's wire form is its declared record, so a view projects it as one.
-        if representation is not None and not isinstance(value, RecordMember):
-            return cls.encode(value, annotation)
+        if cls._value_representation(value, annotation) is not None:
+            return RepresentedProjection.of(value, view, annotation)
         if is_dataclass(value) and not isinstance(value, type):
-            result = cls._tag(value)
-            result.update(cls._record_plan(type(value)).encoded(
-                value, view, lambda entry, current: cls.project(current, view, entry.annotation)
-            ))
-            properties = cls._projections(type(value), view)
-            result.update(
-                (member.wire_name, cls.project(getattr(value, name), view))
-                for name, member in properties.items()
-            )
-            return result
+            return cls._project_record(value, view)
         if isinstance(value, (tuple, list)):
             arguments = get_args(cls._representation(annotation)[0])
             return [cls.project(item, view, arguments[0] if arguments else None) for item in value]
         return cls.encode(value)
+
+    @classmethod
+    def _project_record(cls, value: object, view: str) -> JsonValue:
+        """A record's view: its tag, its view's fields and the properties the view owns."""
+        result = cls._tag(value)
+        result.update(cls._record_plan(type(value)).encoded(
+            value, view, lambda entry, current: cls.project(current, view, entry.annotation)
+        ))
+        properties = cls._projections(type(value), view)
+        result.update(
+            (member.wire_name, cls.project(getattr(value, name), view))
+            for name, member in properties.items()
+        )
+        return result
 
     @dataclass(frozen=True)
     class _RecordPlan:

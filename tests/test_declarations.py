@@ -1,6 +1,5 @@
 
 
-from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from bus_record_fixture import prepare_native_comms
 
 import json
@@ -388,17 +387,12 @@ class TestRegistration:
     def test_private_guard_rejects_disk_downgrade_even_with_cached_revision(
         self, tmp_path: Path, damage: str
     ) -> None:
-        from agent_comms.cohort_schema import CohortTable
-        from agent_comms.coordination_database import CoordinationStore
-        from agent_comms.coordinator import Coordination
 
         root = tmp_path / "guarded"
         comms = wire(root)
         comms.registry.declare(Thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid())))
         prepare_native_comms(comms)
         # A native coordinator is retained evidence of private mode even if its guard vanishes.
-        with Coordination(str(CoordinationStore.path_in(root))) as store:
-            PrivateCoordinatorTable.install(store)
         cold = Registration(root / "registry.json")
         assert cold.require("a").name == "a"
         guard = root / ".registry-owner-guard"
