@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { OwnerToolConnection } from '../owner_tool_socket.mjs';
 import { estimateTokens } from './compaction/compaction.js';
 import { sessionEntryToContextMessages } from './session-manager.js';
+import { VERSION } from '../config.js';
 
 const hash = value => createHash('sha256').update(value).digest('hex');
 const kind = declaration => declaration.name.replace(/Segment$/, '').replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
@@ -234,7 +235,9 @@ class ToolCatalogSegment extends ContextSegment {
 }
 
 export class TurnContext {
-    constructor(identity, segments) { this.identity=identity; this.segments = segments; }
+    constructor(identity, segments, offeredTools) {
+        this.identity=identity; this.segments=segments; this.offeredTools=offeredTools;
+    }
     static async capture(session, context, source,
                          sourceEntries=session.sessionManager.buildContextEntries()) {
         const identity = {sessionId:session.sessionId,sessionFile:session.sessionFile};
@@ -270,7 +273,8 @@ export class TurnContext {
         });
         segments.push(...NativeMessages.capture(provenance,observations));
         segments.push(new ToolCatalogSegment(provenance,context.tools));
-        return new TurnContext(identity,segments);
+        return new TurnContext(identity,segments,{kind:'reported_tools',version:VERSION,
+            names:context.tools.map(tool=>tool.name)});
     }
     static async next(session) {
         return this.capture(session,{systemPrompt:session.systemPrompt,
@@ -336,6 +340,7 @@ export class TurnContext {
             return {manifest:projection.manifest,values:segment.publicationValues(projection)};
         });
         return {counter:'pi.estimateTokens',segments:observed.map(value=>value.manifest),
+            offered_tools:this.offeredTools,
             ...(requestId===undefined ? {} : {requestId}),
             values:observed.flatMap(value=>value.values)};
     }

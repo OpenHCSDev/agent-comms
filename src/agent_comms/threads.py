@@ -289,7 +289,7 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
     channel_scope_generation: int = 0
     turn_generation: int = 0
     offered_tools: Annotated[
-        tuple[OfferedTools, ...], RegistrationPolicy(InheritPrevious), WireOmitDefault()
+        tuple[OfferedTools, ...], WireOmitDefault()
     ] = field(default=(), kw_only=True)
 
     def observing_tools(self, offered: OfferedTools) -> Thread:
@@ -515,7 +515,8 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
             if scope >= (1 << 63) - 1:
                 raise RelationViolationError("Channel scope generation exhausted")
             scope += 1
-        result = replace(self, created_at=previous.created_at, channel_scope_generation=scope)
+        result = replace(self, created_at=previous.created_at, channel_scope_generation=scope,
+                         offered_tools=previous.offered_tools)
         if self.turn_generation != previous.turn_generation:
             result = replace(
                 result, turn_generation=previous.turn_generation, turn_record=previous.turn_record,

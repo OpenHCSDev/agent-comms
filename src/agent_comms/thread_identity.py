@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 T = TypeVar("T")
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, order=True)
 class ToolName(SingleFieldValue):
     """A name supplied by the runtime's offered-tool declaration."""
 

@@ -23,6 +23,7 @@ from agent_comms.runtime_updates import (
     FinishedItem,
     HiddenItem,
     HistoryNotice,
+    OfferedToolsObserved,
     ReadingPhase,
     RuntimeUpdate,
     SessionFacts,
@@ -41,6 +42,7 @@ from agent_comms.transcript_events import (
     UserTranscript,
 )
 from agent_comms.thread_text import ThreadText
+from agent_comms.thread_identity import OfferedTools, ReportedTools, ToolName, UnreportedTools
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 
 from .shared import (
@@ -137,6 +139,11 @@ class ClaudeReaderPhase(ReadingPhase):
 @dataclass
 class CatchUp(ClaudeReaderPhase):
     pending: tuple[StatusUpdate, ...] = ()
+    latest_tools: tuple[OfferedToolsObserved, ...] = ()
+
+    def offered(self, update: OfferedToolsObserved) -> tuple[RuntimeUpdate, ...]:
+        self.latest_tools = (update,)
+        return ()
 
     def status(self, update: StatusUpdate) -> tuple[RuntimeUpdate, ...]:
         self.pending = (update,)
@@ -144,7 +151,7 @@ class CatchUp(ClaudeReaderPhase):
 
     def window_ended(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         session.phase = Live()
-        return self.pending
+        return (*self.latest_tools, *self.pending)
 
     def missing_tool(self, tool_id: str) -> tuple[RuntimeUpdate, ...]:
         return ()
@@ -766,8 +773,27 @@ class ApiRequest(MetadataRecord, declared_name='api-request'):
     """The parameters of one model request the harness sent."""
 
 
+class OfferedClaudeTool(WireModel):
+    name: str
+
+
+class ClaudeRequestShape(WireModel):
+    tools: list[OfferedClaudeTool] | None = None
+
+    def offered(self, version: str) -> OfferedTools:
+        if self.tools is None:
+            return UnreportedTools(version)
+        return ReportedTools(version, frozenset(ToolName(tool.name) for tool in self.tools))
+
+
 class ApiRequestShape(MetadataRecord, declared_name='api-request-shape'):
     """The system prompt and tools a request was sent with, stored once by hash."""
+
+    shape: ClaudeRequestShape
+    version: str = 'unreported'
+
+    def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
+        return (OfferedToolsObserved(self.shape.offered(self.version)),)
 
 
 class ApiRequestBlob(MetadataRecord, declared_name='api-request-blob'):

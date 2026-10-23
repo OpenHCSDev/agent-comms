@@ -9,6 +9,7 @@ from agent_comms import field_codec
 from .native_session_reopen import NativeSessionIdentity
 from .pi_payloads import PiResponseData, StrictFields
 from .tool_result import DeclaredReply
+from .thread_identity import OfferedTools, UnreportedTools
 from .turn_context import (
     ContextManifest,
     ContextSourceText,
@@ -33,6 +34,7 @@ class NativeContextManifestData(StrictFields, PiResponseData):
         DispatchRequest, field_codec.WireName("requestId"), field_codec.WireOmitDefault()
     ] = field(default_factory=UnobservedDispatchRequest)
     values: tuple[MeasuredNativeSegment, ...] = ()
+    offered_tools: OfferedTools = UnreportedTools('unreported')
 
     def for_turn(self, thread, turn):
         if any(not any(segment.contains_value(value) for segment in self.segments)
