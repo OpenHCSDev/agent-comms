@@ -760,6 +760,7 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
     tree = TargetTree(checkout, scratch, target)
     bridges = report.bridges
     with report.running(tree):
+        StoreBackup.complete_interrupted(root, spill_dir)
         installed = Stack(checkout, commands)
         current = commands.run("git", "-C", checkout, "rev-parse", "HEAD").strip()
         ancestry = ["git", "-C", str(checkout), "merge-base", "--is-ancestor", current, target]

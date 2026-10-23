@@ -2415,10 +2415,11 @@ class UnionDecoder[T](_ContextDecoder[T]):
         admits: Callable[[ValueDecoder[T]], bool],
     ) -> T:
         first_error = None
+        # Shapes only rule alternatives out; when they rule out every one, the first
+        # alternative's own decode states the refusal.
+        candidates = tuple(filter(admits, self.alternatives)) or self.alternatives[:1]
         try:
-            for alternative in self.alternatives:
-                if not admits(alternative):
-                    continue
+            for alternative in candidates:
                 try:
                     return decode(alternative)
                 except MalformedRecord as error:

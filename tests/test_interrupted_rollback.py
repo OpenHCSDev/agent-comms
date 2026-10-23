@@ -19,6 +19,7 @@ from agent_comms.installer.launch import InstallReport
 from agent_comms.installer.upgrade import upgrade
 from agent_comms.locked_store import RegistryFile
 from agent_comms.registry_store import RegistryStore
+from agent_comms.thread_text import GivenThreadText
 from bus_record_fixture import prepare_native_comms
 
 
@@ -29,8 +30,9 @@ class RegistryTitleCarry(Carry):
         if apply:
             with registry.editing() as edit:
                 thread = edit.document.require("worker")
-                edit.document.threads[thread.name] = replace(thread, title="Carried title")
-        return Carried(1, rewritten=tuple(str(path.relative_to(self.root)) for path in registry.written))
+                edit.document.threads[thread.name] = replace(thread, title=GivenThreadText("Carried title"))
+                edit.commit()
+        return Carried(1, rewritten=tuple(path.relative_to(self.root) for path in registry.written))
 
 
 KILLED_RESTORE = """
@@ -58,9 +60,9 @@ raise AssertionError("The selected registry publication was never restored")
 
 @pytest.mark.skipif(os.name != "posix", reason="SIGKILL and private registry require POSIX")
 @pytest.mark.parametrize("publication", (0, 1), ids=("after-registry", "after-guard"))
-def test_next_install_completes_a_killed_registry_restore(tmp_path, monkeypatch, publication):
-    # HOME selects only this test's route. Neither process can replace the developer's route.
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+def test_next_install_completes_a_killed_registry_restore(tmp_path, installed_runtime, publication):
+    # The temporary installation's HOME selects only this test's route and runtime.
+    # Neither process can replace the developer's route.
     comms = prepare_native_comms(wire(tmp_path / "wire"))
     comms.registry.declare(comms.registry.new_thread("worker", frozenset(), str(tmp_path)))
     registry = RegistryStore.at(comms.root)
@@ -85,4 +87,4 @@ def test_next_install_completes_a_killed_registry_restore(tmp_path, monkeypatch,
             False, spill, tmp_path / "install-scratch", lambda: None, InstallReport(),
         )
     assert {path: StoreBackup.digest(path) for path in registry.written} == expected
-    assert comms.registry.require("worker").title != "Carried title"
+    assert comms.registry.require("worker").title != GivenThreadText("Carried title")

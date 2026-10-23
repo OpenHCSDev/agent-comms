@@ -59,6 +59,14 @@ class RootFile:
     filename: ClassVar[str]
     root_directory: ClassVar[str] = "."
 
+    def __init_subclass__(cls, **kwargs) -> None:
+        """A declared file is either retained across installations or rewritten by its
+        running owner; a declaration that is neither has no install behaviour at all."""
+        super().__init_subclass__(**kwargs)
+        if "filename" in vars(cls) and not issubclass(cls, (DurableFile, RuntimeFile)):
+            raise TypeError(f"{cls.__qualname__} declares {cls.filename!r} but is neither "
+                            "a DurableFile nor a RuntimeFile")
+
     @classmethod
     def path_in(cls, root: Path | str, **parts: str) -> Path:
         return Path(root) / cls.filename.format(**parts)
@@ -336,6 +344,12 @@ class PatternFile(RootFile):
 
 class DurableFile(RootFile):
     """Bus state retained across installations, with conversion owned by its store."""
+
+    __slots__ = ()
+
+
+class RuntimeFile(RootFile):
+    """A bus file no carry writes: running owners rewrite it at any time, maintenance included."""
 
     __slots__ = ()
 
@@ -658,12 +672,6 @@ class PublishedSQLiteFile(SQLiteFile):
             raise StoreCommittedError(
                 f"Committed {path}, but change notification failed: {error}"
             ) from error
-
-
-class RuntimeFile(RootFile):
-    """A bus file no carry writes: running owners rewrite it at any time, maintenance included."""
-
-    __slots__ = ()
 
 
 @dataclass(frozen=True, slots=True)
