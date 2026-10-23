@@ -1,15 +1,15 @@
 import io
-import json
 import os
 import uuid
 from dataclasses import dataclass
 
+import pytest
+
 from agent_comms.field_codec import FieldCodec
-from agent_comms.installer.commands import InstallCommands
+from agent_comms.installer.commands import InstallCommands, InterpreterWorkerDied
 from agent_comms.installer.interpreter_operation import (
-    CompletedProbeReply,
     DistributionVersionsProbe,
-    ProbeReply,
+    InstalledPackagesProbe,
     ProbeRequest,
     RuntimeProbe,
     serve,
@@ -45,7 +45,20 @@ def test_worker_answers_each_request_as_that_request_s_holder(monkeypatch):
     monkeypatch.setattr("sys.stdout", answers)
     monkeypatch.setenv(HOLDER_NONCE, "the test's own hold")
     serve()
-    replies = [FieldCodec.decode(ProbeReply, json.loads(line))
-               for line in answers.getvalue().splitlines()]
-    assert all(isinstance(reply, CompletedProbeReply) for reply in replies)
-    assert [HolderSeenProbe().decode_answer(reply.answer()) for reply in replies] == list(holders)
+    assert [HolderSeenProbe().decode_answer(line)
+            for line in answers.getvalue().splitlines()] == list(holders)
+
+
+def test_a_raising_probe_ends_its_worker_and_refuses_with_its_traceback():
+    """The test runtime is editable, so the packages probe raises in the worker."""
+    runtime = LaunchRuntime.running()
+    environment = runtime.environment(os.environ)
+    with InstallCommands() as commands:
+        with pytest.raises(InterpreterWorkerDied) as died:
+            commands.probe(InstalledPackagesProbe("agent-comms"), runtime.interpreter,
+                           env=environment)
+        assert not died.value.outcome.successful
+        assert "ValueError: Core is editable, not a built runtime package" in died.value.errors
+        assert not commands.workers
+        commands.probe(DistributionVersionsProbe(), runtime.interpreter, env=environment)
+        assert len(commands.workers) == 1
