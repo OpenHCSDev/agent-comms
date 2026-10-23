@@ -147,7 +147,8 @@ def test_core_commands_share_native_identity_without_changing_external_decode():
         NativeRequestTools,
         NativeToolDeclaration,
     )
-    from agent_comms.tools import CommsSendTool, ToolRequest
+    from agent_comms.tool_request import ToolRequest
+    from agent_comms.tools import CommsSendTool
 
     schemas = NativeRequestTools.catalog()
     assert {schema["name"] for schema in schemas} == {

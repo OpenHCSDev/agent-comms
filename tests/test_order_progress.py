@@ -21,7 +21,7 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import ReviewTimerUp
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import CommsTodoCreateTool
+from agent_comms.order_tools import CommsTodoCreateTool
 from agent_comms.work_branches import WorkBranches
 from agent_comms.todos import EditingProgress, NoCommitProgress, OrderProgress, PresentCheckout
 from agent_comms.threads import Thread

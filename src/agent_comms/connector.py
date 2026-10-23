@@ -73,10 +73,9 @@ from .todos import DirectiveText, ReviewedHeadVerdict
 from .tool_result import ToolResult
 from .task_sources import OwnerRequestAttachment
 from .tool_caller import ThreadCaller, ToolCaller
-from .tools import (
-    CommsSendTool, CommsVerdictTool, MessagePublished, ReadTool, SendTool,
-    TodoChanged, ToolRequest, tool_field,
-)
+from .tools import CommsSendTool, SendTool
+from .order_tools import CommsVerdictTool, MessagePublished, TodoChanged
+from .tool_request import ReadTool, ToolRequest, tool_field
 
 LOOPBACK = "127.0.0.1"
 PORT = 18766

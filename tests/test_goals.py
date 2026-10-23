@@ -22,7 +22,7 @@ from agent_comms.goals import (
 from agent_comms.task_sources import GoalTaskScope, TurnTaskScope
 from agent_comms.threads import ChosenModel, NextTurnConfiguration, Thread
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import ToolRequest
+from agent_comms.tool_request import ToolRequest
 from agent_comms.thread_model import DeclaredModel
 
 

@@ -115,23 +115,34 @@ def test_roster_evidence_keeps_external_abi_and_each_remaining_internal_registry
                             "def local():\n    types = {}\n",
     })
     assert reading.holds(RostersPhase.evidence)
-    for remaining in (
-        "THREAD_CAPABILITIES: tuple[type, ...] = (Steers, Compacts)\n",
-        "class Backend:\n    serves_threads = True\n",
-        "class Backend:\n    serves_new_threads: ClassVar[bool] = True\n",
-        "class Carry:\n    declared: ClassVar[dict] = {}\n",
-        "class RegistryPrivacy:\n    kinds = {}\n",
-        "class BirthlessIncarnation:\n    members = {}\n",
-        "class CliToolArguments:\n    types = {}\n",
-        "class PiEvent:\n    _start_phases = {}\n",
-        "class PiEvent:\n    _end_events = {}\n",
+    for path, remaining in (
+        ("src/remaining.py", "THREAD_CAPABILITIES: tuple[type, ...] = (Steers, Compacts)\n"),
+        ("src/remaining.py", "class Backend:\n    serves_threads = True\n"),
+        ("src/remaining.py", "class Backend:\n    serves_new_threads: ClassVar[bool] = True\n"),
+        ("src/agent_comms/installer/probes/carry.py", "class Carry:\n    declared: ClassVar[dict] = {}\n"),
+        ("src/agent_comms/private_registry_guard.py", "class RegistryPrivacy:\n    kinds = {}\n"),
+        ("src/agent_comms/thread_identity.py", "class BirthlessIncarnation:\n    members = {}\n"),
+        ("src/agent_comms/tool_calls.py", "class CliToolArguments:\n    types = {}\n"),
+        ("src/agent_comms/pi_events.py", "class PiEvent:\n    _start_phases = {}\n"),
+        ("src/agent_comms/pi_events.py", "class PiEvent:\n    _end_events = {}\n"),
     ):
-        (tmp_path / "src/remaining.py").write_text(remaining)
+        remaining_file = tmp_path / path
+        remaining_file.parent.mkdir(parents=True, exist_ok=True)
+        remaining_file.write_text(remaining)
         git(tmp_path, "add", ".")
         git(tmp_path, "commit", "-qm", "registry")
         git(tmp_path, "update-ref", "refs/remotes/origin/main", git(tmp_path, "rev-parse", "HEAD"))
         changed = PlanReading((), MainTree.of(reading.main.repo))
         assert not changed.holds(RostersPhase.evidence), remaining
+        remaining_file.unlink()
+
+    (tmp_path / "src/remaining.py").write_text("class Carry:\n    declared = {}\n")
+    git(tmp_path, "add", ".")
+    git(tmp_path, "commit", "-qm", "unrelated same-named class")
+    git(tmp_path, "update-ref", "refs/remotes/origin/main", git(tmp_path, "rev-parse", "HEAD"))
+    changed = PlanReading((), MainTree.of(reading.main.repo))
+    assert changed.holds(RostersPhase.evidence)
+    (tmp_path / "src/remaining.py").unlink()
 
 
 def test_main_tree_grep_uses_the_same_repository_tree_as_its_module_reader(tmp_path):
