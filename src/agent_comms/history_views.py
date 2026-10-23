@@ -119,7 +119,7 @@ class ThreadViewRead(ConversationPreparation):
         self.through.wire.require_source(AssignedSourceIdentity(str(self.views.root), self.thread.incarnation))
         page = DMDisplayBasis.fetch_page(
             self.views.bus, self.views.registry, self.views.root, self.viewer.name,
-            self.thread.name, worktree=self.viewer.worktree,
+            ThreadTarget(self.thread.name), worktree=self.viewer.worktree,
             bounds=PageBounds(LiveCursor(self.through.wire.sequence + 1).older()),
         )
         if page.messages:
@@ -216,7 +216,7 @@ class HistoryViews:
         return self.bus.history.threads(name)
 
     def dm_display_page(
-        self, peer: str | ThreadTarget, *, worktree: str, bounds: PageBounds = NEWEST_PAGE
+        self, peer: ThreadTarget, *, worktree: str, bounds: PageBounds = NEWEST_PAGE
     ) -> MessagePage:
         viewer = self.messaging.user_identity(worktree).name
         return DMDisplayHistory(viewer, peer, worktree).page(self.presentation, bounds)

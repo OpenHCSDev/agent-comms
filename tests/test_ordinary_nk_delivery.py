@@ -7,6 +7,7 @@ from agent_comms.messages import NoticeRole
 import os
 
 
+from agent_comms.channel_targets import ThreadTarget
 from agent_comms.child_process import ProcessIdentity
 from conftest import installed_comms
 from test_coordinated_runtime import tmp_path as private_root_fixture
@@ -30,4 +31,4 @@ def test_fresh_send_uses_canonical_publication_and_human_delivery_has_no_wake(tm
     assert isinstance(human.message.role, NoticeRole)
     assert human.audience.recipients == ()
     assert human.decisions == ()
-    assert comms.views.dm_display_page("sender", worktree=str(tmp_path)).messages[-1] == reply
+    assert comms.views.dm_display_page(ThreadTarget("sender"), worktree=str(tmp_path)).messages[-1] == reply

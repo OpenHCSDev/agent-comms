@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .bus import Bus
-from .channel_targets import CommandTarget, NamedTarget, ThreadTarget
+from .channel_targets import NamedTarget, ThreadTarget
 from .channels import Channel
 from .coordination_errors import HistoricalSourceChanged
 from .errors import UnregisteredThreadError
@@ -194,11 +194,11 @@ class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
 @dataclass(frozen=True, slots=True)
 class DMHistory(HistoryView):
     first: str
-    second: str | ThreadTarget
+    second: ThreadTarget
 
     def capture(self, snapshot: RegistryProvenance) -> DMDisplayScope:
         return DMDisplayScope.capture(
-            self.first, CommandTarget.named(self.second).selected_name(snapshot), snapshot)
+            self.first, self.second.selected_name(snapshot), snapshot)
 
 
 @dataclass(frozen=True, slots=True)
@@ -231,10 +231,8 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
         from .read_basis import DMDisplayBasis
 
         bus = presentation.bus
-        target = CommandTarget.named(self.second)
-        target.require_dm_peer()
         with presentation.registry.store.reading_snapshot() as snapshot:
-            peer = target.selected_name(snapshot)
+            peer = self.second.selected_name(snapshot)
             missing = peer not in snapshot.threads
         if missing and bus.history.threads(peer):
             return MessagePage((), False, False, NoDisplaySelection())
