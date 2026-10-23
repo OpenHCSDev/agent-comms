@@ -6,7 +6,6 @@ fails closed; it never sends a message to a guessed root.
 
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 import time
@@ -27,7 +26,7 @@ from .launch_root import LaunchRoot
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .private_path import ObservedPath, OwnedDirectoryRole, PrivateDirectoryRole, PrivateFileRole
 from .recorded_bus import RecordedBusIdentity
-from .store_files import UNBOUNDED_CONTENTION, SharedLock, StoreLockContention
+from .store_files import UNBOUNDED_CONTENTION, ExclusiveLock, SharedLock, StoreLockContention
 
 if TYPE_CHECKING:
     from .installer.reporting import RootWriter
@@ -333,13 +332,13 @@ def route_lock_holders(directory: int) -> tuple[RouteLockHolder, ...]:
 
 
 class RouteReadersHold(CoordinationError):
-    """A client still reads the default route; a route change never waits for it."""
+    """In-flight client calls exceeded the route publication's contention budget."""
 
 
 def acquire_exclusive_route_lock(directory: int) -> None:
-    """Take route EX now, or refuse naming every reader the owner must close."""
+    """Wait up to ten seconds for in-flight calls, then name the remaining holders."""
     try:
-        fcntl.flock(directory, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        StoreLockContention(10).acquire(directory, Platform.current(), mode=ExclusiveLock())
     except BlockingIOError as error:
         detail = '; '.join(holder.describe() for holder in route_lock_holders(directory))
         raise RouteReadersHold(

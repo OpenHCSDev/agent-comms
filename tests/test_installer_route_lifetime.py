@@ -2,24 +2,25 @@
 
 
 import errno
-import fcntl
 import json
 import os
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 
 import pytest
 
 from agent_comms.active_route import (
     ActiveRoute,
     RoutePublicationUnknownError,
-    RouteReadersHold,
     NoRouteSelection,
     PublishedRouteSelection,
     read_active_route,
     route_new_bus,
+    route_directory,
 )
 from agent_comms.bus import Bus
-from agent_comms.comms import wire
+from agent_comms.comms import Comms, wire
 from agent_comms.installer.backup import StoreBackup, UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.publication import SelectedRouteProbe
@@ -222,13 +223,37 @@ def test_failure_after_backup_link_restores_a_single_private_route(tmp_path, rou
     assert path.stat().st_nlink == 1
 
 
-def test_route_change_refuses_a_live_reader_instead_of_waiting(tmp_path, route_bus):
+def test_route_publication_waits_for_a_client_call_but_not_an_idle_service(
+    tmp_path, route_bus, monkeypatch,
+):
     path = tmp_path / "state" / "active-route.json"
     route_new_bus(route_bus, path)
-    reader = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
-    try:
-        fcntl.flock(reader, fcntl.LOCK_SH)
-        with pytest.raises(RouteReadersHold, match=f"PID {os.getpid()}: .*close them"):
-            StoreBackup.take(route_bus.root, path, (), tmp_path / "spill")
-    finally:
-        os.close(reader)
+    monkeypatch.setattr("agent_comms.active_route.active_route_path", lambda: path)
+    entered, release, publishing, published = Event(), Event(), Event(), Event()
+
+    def write():
+        with Comms.client(route_bus) as comms:
+            entered.set()
+            assert release.wait(5)
+            comms.messaging.user_identity(str(tmp_path))
+
+    def publish():
+        publishing.set()
+        with route_directory(path):
+            published.set()
+
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        writing = workers.submit(write)
+        assert entered.wait(5)
+        publication = workers.submit(publish)
+        try:
+            assert publishing.wait(5)
+            assert not published.wait(0.1)
+        finally:
+            release.set()
+        writing.result(timeout=5)
+        publication.result(timeout=5)
+
+    idle = Comms(route_bus)
+    with route_directory(path):
+        assert idle.root == route_bus.root

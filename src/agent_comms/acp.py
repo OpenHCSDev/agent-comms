@@ -442,78 +442,77 @@ class CommsClient(CommsAgent):
 
 
 def main() -> int:
-    from .active_route import ActiveRoute, resolve_comms_route
+    from .active_route import ActiveRoute
 
     LaunchRoot.startup(sys.argv, ActiveRoute.published_launch)
-    with resolve_comms_route().hold_client_route():
-        if "--login" in sys.argv[1:]:
-            from .login import run_login
+    if "--login" in sys.argv[1:]:
+        from .login import run_login
 
-            index = sys.argv.index("--login")
-            return run_login(sys.argv[index + 1] if index + 1 < len(sys.argv) else "")
-        debug_path = os.environ.get("AGENT_COMMS_DEBUG_LOG")
-        if debug_path:
-            import logging
+        index = sys.argv.index("--login")
+        return run_login(sys.argv[index + 1] if index + 1 < len(sys.argv) else "")
+    debug_path = os.environ.get("AGENT_COMMS_DEBUG_LOG")
+    if debug_path:
+        import logging
 
-            logging.basicConfig(
-                level=logging.DEBUG,
-                format="%(asctime)s %(name)s %(levelname)s %(message)s",
-                filename=debug_path + ".log",
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format="%(asctime)s %(name)s %(levelname)s %(message)s",
+            filename=debug_path + ".log",
+        )
+    # The stdio ACP client only attaches to a separately owned worker. A
+    # private launch is checked before it can request an owner; the worker
+    # independently repeats the same preflight.
+    comms = wire()
+    comms.owners.require_launch_authority()
+
+    async def run() -> None:
+        if os.environ.get("AGENT_COMMS_DEBUG_LOG"):
+
+            async def watchdog() -> None:
+                while True:
+                    await asyncio.sleep(5)
+                    tasks = [t for t in asyncio.all_tasks() if not t.done()]
+                    with open(os.environ["AGENT_COMMS_DEBUG_LOG"], "a") as debug_log:
+                        debug_log.write(f"=== watchdog: {len(tasks)} tasks ===\n")
+                        for task in tasks:
+                            stack = task.get_stack()
+                            innermost = [
+                                f"{frame.f_code.co_filename.split('/')[-1]}:{frame.f_lineno}"
+                                for frame in stack
+                                if frame
+                            ][-4:]
+                            debug_log.write(f"  {task.get_name()}: {' <- '.join(innermost)}\n")
+
+            asyncio.create_task(watchdog())
+        agent = CommsClient(
+            comms,
+            runtime_enabled=True,
+            use_unstable_protocol=True,
+        )
+
+        def observe(event: StreamEvent) -> None:
+            agent._debug_log(
+                f"{event.direction.value}: {json.dumps(event.message)[:200]}"
             )
-        # The stdio ACP client only attaches to a separately owned worker. A
-        # private launch is checked before it can request an owner; the worker
-        # independently repeats the same preflight.
-        comms = wire()
-        comms.owners.require_launch_authority()
 
-        async def run() -> None:
-            if os.environ.get("AGENT_COMMS_DEBUG_LOG"):
-
-                async def watchdog() -> None:
-                    while True:
-                        await asyncio.sleep(5)
-                        tasks = [t for t in asyncio.all_tasks() if not t.done()]
-                        with open(os.environ["AGENT_COMMS_DEBUG_LOG"], "a") as debug_log:
-                            debug_log.write(f"=== watchdog: {len(tasks)} tasks ===\n")
-                            for task in tasks:
-                                stack = task.get_stack()
-                                innermost = [
-                                    f"{frame.f_code.co_filename.split('/')[-1]}:{frame.f_lineno}"
-                                    for frame in stack
-                                    if frame
-                                ][-4:]
-                                debug_log.write(f"  {task.get_name()}: {' <- '.join(innermost)}\n")
-
-                asyncio.create_task(watchdog())
-            agent = CommsClient(
-                comms,
-                runtime_enabled=True,
-                use_unstable_protocol=True,
+        try:
+            output_stream, input_stream = await stdio_streams(
+                limit=DEFAULT_STDIO_BUFFER_LIMIT_BYTES
             )
-
-            def observe(event: StreamEvent) -> None:
-                agent._debug_log(
-                    f"{event.direction.value}: {json.dumps(event.message)[:200]}"
-                )
-
+            connection = AcpController(
+                agent, input_stream, output_stream, listening=False,
+                use_unstable_protocol=agent.use_unstable_protocol,
+                observers=[observe] if os.environ.get("AGENT_COMMS_DEBUG_LOG") else None,
+            )
             try:
-                output_stream, input_stream = await stdio_streams(
-                    limit=DEFAULT_STDIO_BUFFER_LIMIT_BYTES
-                )
-                connection = AcpController(
-                    agent, input_stream, output_stream, listening=False,
-                    use_unstable_protocol=agent.use_unstable_protocol,
-                    observers=[observe] if os.environ.get("AGENT_COMMS_DEBUG_LOG") else None,
-                )
-                try:
-                    await connection.listen()
-                finally:
-                    await asyncio.shield(connection.close())
+                await connection.listen()
             finally:
-                await agent.shutdown()
+                await asyncio.shield(connection.close())
+        finally:
+            await agent.shutdown()
 
-        asyncio.run(run())
-        return 0
+    asyncio.run(run())
+    return 0
 
 
 if __name__ == "__main__":
