@@ -71,10 +71,11 @@ jobs:
         env:
           BASE: ${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
         run: |
-          mapfile -t touched < <(git diff --name-only --diff-filter=AM "$BASE" HEAD -- 'tests/test_*.py' 'tests/**/test_*.py')
-          if [ ${#touched[@]} -eq 0 ]; then echo "no test file touched"; exit 0; fi
+          changed=$(git diff --name-only --diff-filter=AMR "$BASE" HEAD -- 'tests/test_*.py' 'tests/**/test_*.py')
+          if [ -z "$changed" ]; then echo "no test file touched"; exit 0; fi
+          mapfile -t touched <<<"$changed"
           printf '%s\n' "${touched[@]}"
-          pytest -q -p no:cacheprovider "${touched[@]}"
+          timeout 15m pytest -q -p no:cacheprovider -o faulthandler_timeout=60 "${touched[@]}"
 
   native-scripts:
     name: native-scripts
