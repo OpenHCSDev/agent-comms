@@ -165,8 +165,8 @@ class RootFile:
         store declaration for it.
         """
         primaries = cls.existing_in(root)
-        declarations = {member: owner for path, owner in primaries.items()
-                        for member in owner.member_paths(path)}
+        declarations = {member: owner for owner, directory in cls.declarations_in(root)
+                        for member in owner.files_in(directory)}
         declarations.update(primaries)
         selected = frozenset(paths)
         owners: dict[Path, type[RootFile]] = {
