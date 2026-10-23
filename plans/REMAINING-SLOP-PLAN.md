@@ -158,6 +158,14 @@ run exposed an untyped session-file fixture, a stale caller roster and missing
 local Node dependencies; all three were corrected, without counting that run
 as green. Installed copied-agent DM/reply/tab-return qualification belongs to
 the later paired integration; this branch has not changed the live runtime.
+Review corrected the declaration tests: they now re-execute the actual backend
+declaration module through standard `runpy.run_path` in a fresh namespace,
+declare real nominal subclasses and invoke the actual seal lifecycle. They do
+not monkeypatch production sealing, registry contents or backend locations.
+The abstract-class exclusion/no-rebind, competing-location and zero/two-default
+cases pass (3 cases, 0.11s); fresh-entrypoint import checks also pass. Production
+is unchanged from the 27-case qualification; the class census above describes
+that implementation checkpoint before the test-fixture correction.
 The independent Pi producer/converter event comparison is retained;
 deriving expected producer events from the converters would erase its check.
 This slice does not close `RostersPhase` or edit its evidence declaration.

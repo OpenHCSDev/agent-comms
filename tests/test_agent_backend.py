@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+import runpy
 import sys
 from pathlib import Path
-from types import MappingProxyType
+from types import MappingProxyType, SimpleNamespace
 
 import pytest
 
@@ -67,33 +68,95 @@ def test_runtime_location_round_trip_uses_declared_backend(session_file, locatio
 # -- declaration checks -------------------------------------------------------
 
 
-def test_incomplete_thread_backend_stays_abstract_and_cannot_rebind_a_location(monkeypatch):
+@pytest.fixture
+def backend_declarations():
+    # Re-execute the actual declaration module in a fresh namespace. The canonical
+    # package has already sealed its runtime family; none of that state is changed.
+    scope = SimpleNamespace(**runpy.run_path(ab.__file__, run_name=ab.__name__))
+
+    class Location(scope.RuntimeLocation):
+        def history_source(self, root, incarnation):
+            raise NotImplementedError("Declaration checks do not open history")
+
+        def storage_files(self):
+            return ()
+
+    class RuntimeMethods(scope.AgentBackend, declared_name=None):
+        @classmethod
+        def for_worker(cls, runner, session_id):
+            return cls()
+
+        @classmethod
+        def new_location(cls, root, worktree):
+            return cls.location_type()
+
+        def run_turn(self, thread, content, delivery):
+            raise NotImplementedError("Declaration checks do not run turns")
+
+        async def abort(self, owner):
+            raise NotImplementedError("Declaration checks do not own turns")
+
+        async def close_idle(self):
+            pass
+
+        async def compact(self, thread, instructions):
+            return scope.NothingToCompaction()
+
+    class Native(RuntimeMethods, scope.NewThreadBackend):
+        location_type = Location
+        event_kinds = frozenset()
+
+    scope.RuntimeMethods = RuntimeMethods
+    scope.Native = Native
+    return scope
+
+
+def test_incomplete_thread_backend_stays_abstract_and_cannot_rebind_a_location(backend_declarations):
+    scope = backend_declarations
     original = PiSessionFile("saved-session").backend
-    with monkeypatch.context() as declarations:
-        declarations.setattr(ab.AgentBackend, "_sealed", False)
 
-        class IncompleteNative(PiNativeBackend, declared_name=None):
-            compact = ab.Compacts.compact
+    class IncompleteNative(scope.Native):
+        location_type = PiSessionFile
+        compact = scope.Compacts.compact
 
-        with pytest.raises(TypeError, match="compact"):
-            IncompleteNative()
-        assert IncompleteNative not in ab.AgentBackend.members_with(ab.AgentBackend)
-        assert PiSessionFile("saved-session").backend is original
+    with pytest.raises(TypeError, match="compact"):
+        IncompleteNative()
+    assert IncompleteNative not in scope.AgentBackend.members_with(scope.AgentBackend)
+    assert PiSessionFile("saved-session").backend is original
+    scope.AgentBackend.seal()
+    assert scope.Native.new_location(None, None).backend is scope.Native
+    assert scope.NewThreadBackend.selected() is scope.Native
     with pytest.raises(TypeError, match="run_turn"):
-        ab.ThreadServingBackend()
+        scope.ThreadServingBackend()
 
 
-def test_sealing_rejects_competing_location_owners_before_attaching_any(monkeypatch):
-    monkeypatch.setattr(PiDurableBackend, "location_type", PiSessionFile)
-    with pytest.raises(ab.BackendDeclarationError, match="belongs to several backends"):
-        ab.AgentBackend.seal()
-    assert PiSessionFile("saved-session").backend is PiNativeBackend
+def test_sealing_rejects_competing_location_owners_before_attaching_any(backend_declarations):
+    scope = backend_declarations
+
+    class Rival(scope.RuntimeMethods):
+        location_type = scope.Native.location_type
+        event_kinds = frozenset()
+
+    assert scope.NewThreadBackend.selected() is scope.Native
+    with pytest.raises(scope.BackendDeclarationError, match="belongs to several backends"):
+        scope.AgentBackend.seal()
+    with pytest.raises(AttributeError):
+        scope.Native.new_location(None, None).backend
 
 
-def test_new_thread_selection_requires_one_concrete_nominal_member(monkeypatch):
-    monkeypatch.setattr(ab.AgentBackend, "__registry__", {"pi_durable": PiDurableBackend})
-    with pytest.raises(ab.BackendDeclarationError, match="exactly one backend"):
-        ab.NewThreadBackend.selected()
+def test_new_thread_selection_requires_one_concrete_nominal_member(backend_declarations):
+    empty = SimpleNamespace(**runpy.run_path(ab.__file__, run_name=ab.__name__))
+    with pytest.raises(empty.BackendDeclarationError, match="exactly one backend"):
+        empty.NewThreadBackend.selected()
+    scope = backend_declarations
+
+    class SecondDefault(scope.Native):
+        pass
+
+    with pytest.raises(scope.BackendDeclarationError, match="exactly one backend"):
+        scope.NewThreadBackend.selected()
+    with pytest.raises(scope.BackendDeclarationError, match="exactly one backend"):
+        scope.AgentBackend.seal()
 
 
 class _ProbeEvent(DeclaredFamily):
