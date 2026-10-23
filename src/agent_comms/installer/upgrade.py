@@ -68,7 +68,6 @@ from agent_comms.installer.backup import (
     StoreBackup,
     UpgradeRefused,
     bus_files,
-    transcripts_held,
 )
 from agent_comms.installer.carry import (
     STEPS,
@@ -843,13 +842,10 @@ class PreparedMigration(Extendable):
         return Path(self.hold.root)
 
     @classmethod
-    @contextmanager
-    def capture(cls, hold: MaintenanceState, outgoing: Stack) -> Iterator[PreparedMigration]:
-        """Keep the snapshot stable until its caller has finished taking any backup."""
+    def capture(cls, hold: MaintenanceState, outgoing: Stack) -> PreparedMigration:
+        """The maintenance barrier keeps every carried writer out until the caller's backup ends."""
         root = Path(hold.root)
-        with transcripts_held(root):
-            before = bus_files(root)
-            yield cls(hold, before, outgoing.verify(root))
+        return cls(hold, bus_files(root), outgoing.verify(root))
 
     def carry(self, pending: tuple[Carry, ...], staged: Stack,
               tree: TargetTree) -> CarriedPass:
@@ -898,8 +894,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
         maintenance = MaintenanceBarrier(RegistryStore.at(copied).path)
         hold = maintenance.begin(MaintenanceOperator.current())
         with hold.holding():
-            with PreparedMigration.capture(hold, self.installed) as migration:
-                pass
+            migration = PreparedMigration.capture(hold, self.installed)
             passed = migration.carry(pending, stack, self.tree)
             passed = passed.after_acceptance(pending, stack, self.tree)
         maintenance.clear(hold)
@@ -931,9 +926,9 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                 if unrehearsed:
                     raise UpgradeRefused(
                         f"Reconcile would rewrite files the rehearsal did not: {unrehearsed}")
-                with PreparedMigration.capture(held, self.installed) as original:
-                    backup, selected_route = self.backed_up(selected)
-                    migration = original.extended(BackedUpMigration, backup=backup)
+                original = PreparedMigration.capture(held, self.installed)
+                backup, selected_route = self.backed_up(selected)
+                migration = original.extended(BackedUpMigration, backup=backup)
             except BaseException as error:
                 holder.close()
                 maintenance.clear(held)

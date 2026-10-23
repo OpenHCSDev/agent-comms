@@ -5,7 +5,6 @@ from agent_comms.bus import Bus
 import os
 import sqlite3
 import subprocess
-import sys
 from contextlib import closing
 from dataclasses import replace
 from pathlib import Path
@@ -14,12 +13,10 @@ import pytest
 from tools.debt_ratchet import UncarriedRecordFormat, git
 
 from agent_comms.cli_commands import ArchiveCliCommand
-from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.installer.backup import (
     StoreBackup,
     UpgradeRefused,
     bus_files,
-    transcripts_held,
 )
 from agent_comms.installer.carry import (
     STEPS,
@@ -219,8 +216,8 @@ def test_backed_up_migration_restores_a_real_worker_failure(comms, stack, noisy_
     maintenance = MaintenanceBarrier(RegistryStore.at(comms.root).path)
     hold = maintenance.begin(MaintenanceOperator.current())
     with hold.holding():
-        with PreparedMigration.capture(hold, stack) as original:
-            migration = original.extended(BackedUpMigration, backup=StoreBackup.take(
+        migration = PreparedMigration.capture(hold, stack).extended(
+            BackedUpMigration, backup=StoreBackup.take(
                 comms.root, comms.root / "no-route", (saved,), comms.root.parent / "spill"))
         with pytest.raises(UpgradeRefused, match="failed after changing the saved file"):
             migration.carry((step(comms.root, comms.root, comms.root.parent / "spill"),), stack, tree)
@@ -267,37 +264,4 @@ def test_upgrade_refuses_at_start_without_its_own_uv(stack):
     assert not stack.uv.exists()
     with pytest.raises(UpgradeRefused):
         stack.require_uv()
-
-
-def test_upgrade_transcript_hold_covers_selected_snapshot(comms):
-    """A bridge publishes from its own process, and the upgrade reads the store's files raw
-    for the backup and its digests. The bridge may not write while those are read, nor into
-    the failed bus a restore keeps as evidence."""
-    unit = comms.registry.declare(comms.registry.new_thread(
-        "hold-unit", frozenset({"hold"}), str(comms.root), execution=ExternalThreadExecution))
-    transcript = ExternalTranscript(comms.root, unit.incarnation)
-    with transcript.writing():
-        pass
-
-    def bridge_publishes(bus: Path) -> str:
-        writer = ("import sqlite3, sys\n"
-                  "db = sqlite3.connect(sys.argv[1], timeout=0.2, isolation_level=None)\n"
-                  "db.execute('BEGIN IMMEDIATE'); db.execute('COMMIT'); print('wrote')")
-        result = subprocess.run([sys.executable, "-c", writer, ExternalTranscript.path_in(bus)],
-                                capture_output=True, text=True, timeout=60)
-        return result.stdout.strip() or result.stderr.strip().splitlines()[-1]
-
-    with transcripts_held(comms.root):
-        before = bus_files(comms.root)
-        path = ExternalTranscript.path_in(comms.root)
-        backup = StoreBackup.take(comms.root, comms.root.parent / "no-route.json",
-                                  (path,), comms.root.parent / 'spill')
-        assert isinstance(backup, StoreBackup)
-        assert bridge_publishes(comms.root).endswith("database is locked")
-        assert carried(comms.root, before, [], RehearsalFiles.declared([])) == (
-            RehearsalFiles(len(before), 0, (), 0))
-        assert backup.original()
-    assert bridge_publishes(comms.root) == "wrote"
-    assert tuple(backup.files()) == (str(path.relative_to(comms.root)),)
-
 

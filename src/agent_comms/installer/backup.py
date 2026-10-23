@@ -6,13 +6,11 @@ import os
 import re
 import shutil
 import stat
-import subprocess
 import sys
 import tempfile
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Collection, Iterable
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from functools import cache
@@ -22,9 +20,8 @@ from typing import ClassVar, Iterator, Self
 
 from agent_comms.active_route import ActiveRoute, _route_directory, route_directory
 from agent_comms.coordination_errors import CoordinationError
-from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
-from agent_comms.installer.interpreter_operation import HoldTranscriptsProbe, RouteSelection
+from agent_comms.installer.interpreter_operation import RouteSelection
 from agent_comms.locked_store import LockedStore, RootFile, RuntimeFile, SQLiteFile
 from agent_comms.private_path import FileObservation, FileRevision, MissingFile
 from agent_comms.store_files import _atomic_write_text
@@ -103,30 +100,6 @@ class RestoreSpace:
             raise UpgradeRefused(
                 f"Restore needs {self.needed} bytes on the bus filesystem; "
                 f"only {self.free} bytes are free")
-
-
-@contextmanager
-def transcripts_held(root: Path) -> Iterator[None]:
-    """Hold SQLite's writer lock in another process while backup files are read."""
-    path = ExternalTranscript.path_in(root)
-    if not path.exists():
-        yield
-        return
-    ready, held = os.pipe()
-    with tempfile.TemporaryDirectory() as scratch:
-        holder = subprocess.Popen(
-            HoldTranscriptsProbe(path, held).command(
-                Path(sys.executable), Path(scratch) / "result.json"),
-            stdin=subprocess.PIPE, pass_fds=(held,),
-            env={**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)})
-        os.close(held)
-        try:
-            with open(ready, "rb") as holding:
-                if not holding.read():
-                    raise UpgradeRefused(f"Could not hold the transcript store {path}")
-            yield
-        finally:
-            holder.communicate()
 
 
 @dataclass(frozen=True, order=True)
