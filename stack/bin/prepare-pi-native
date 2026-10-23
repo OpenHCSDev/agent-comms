@@ -45,7 +45,7 @@ if [[ ! -x "$python" ]]; then
 fi
 manifest="$stack_root/pi-native.sha256"
 # Build verification renders the unit prompt, never a unit's first turn.
-build_id=$(sha256sum "$manifest" | cut -c1-16)
+build_id=$(native build_id)
 target="$stack_root/.pi-native-$build_id"
 bedrock=node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
 
@@ -67,7 +67,7 @@ publish() (
     deployment_package="$deployment/node_modules/@earendil-works/pi-coding-agent"
     if [[ -e "$deployment" ]]; then
         native \
-            publish_sources "$deployment_package" "$repo_root"
+            publish_sources "$repo_root" "$deployment_package"
     else
         deployment_stage=$(mktemp -d "$publish_root/.native-current-$build_id.stage.XXXXXXXX")
         trap 'rm -rf -- "$deployment_stage"' EXIT
@@ -75,8 +75,8 @@ publish() (
         cp -a -- "$prepared/node_modules/@earendil-works/pi-coding-agent" \
             "$deployment_stage/node_modules/@earendil-works/pi-coding-agent"
         native \
-            publish_sources \
-            "$deployment_stage/node_modules/@earendil-works/pi-coding-agent" "$repo_root"
+            publish_sources "$repo_root" \
+            "$deployment_stage/node_modules/@earendil-works/pi-coding-agent"
         mv -- "$deployment_stage" "$deployment"
         trap - EXIT
     fi
@@ -84,15 +84,28 @@ publish() (
     printf 'PI_NATIVE_BIN=%s/bin/pi-native\n' "$stack_root"
 )
 
+# This script owns stack/'s builds: once $target is accepted, every other pin's
+# finished build is retired, as the installer retires its prepared copies. A
+# .pi-native.stage.* directory belongs to a run that may still hold it; its own
+# trap removes it.
+accept() (
+    publish "$target"
+    for stale in "$stack_root"/.pi-native-????????????????; do
+        if [[ -d "$stale" && "$stale" != "$target" ]]; then
+            rm -rf -- "$stale"
+        fi
+    done
+)
+
 if [[ "$update_pins" == false && -e "$target" ]]; then
     # Publication qualifies the final copied tree before exposing it. Do not
     # launch a second verifier over the prepared input of that same operation.
     if [[ -n "$publish_root" ]]; then
-        publish "$target"
+        accept
         exit 0
     fi
     if verify "$target"; then
-        publish "$target"
+        accept
         exit 0
     fi
     printf 'Existing native Pi copy differs from the pinned build: %s\n' "$target" >&2
@@ -181,7 +194,7 @@ native share_resources \
     "$stage/node_modules/@earendil-works/pi-coding-agent" "$stack_root"
 if [[ "$update_pins" == true ]]; then
     native write_manifest "$native_package"
-    build_id=$(sha256sum "$manifest" | cut -c1-16)
+    build_id=$(native build_id)
     target="$stack_root/.pi-native-$build_id"
 fi
 if ! verify "$stage"; then
@@ -203,8 +216,8 @@ if [[ -e "$target" ]]; then
     if [[ -z "$publish_root" ]]; then
         verify "$target"
     fi
-    publish "$target"
+    accept
     exit 0
 fi
 mv -- "$stage" "$target"
-publish "$target"
+accept

@@ -3,7 +3,6 @@
 set -euo pipefail
 
 source "${BASH_SOURCE[0]%/*}/native-source"
-manifest="$stack_root/pi-native.sha256"
 # agent_comms and the patch scripts run under the stack environment `uv sync
 # --project stack` installs, never an ambient python3 lacking its dependencies.
 if [[ ! -x "$python" ]]; then
@@ -14,19 +13,15 @@ if [[ ${1:-} == update ]]; then
     printf 'Immutable native deployment: prepare and verify a new release; never self-update this copy.\n' >&2
     exit 1
 fi
-build_id=$(sha256sum "$manifest" | cut -c1-16)
-cli="$stack_root/.pi-native-$build_id/node_modules/@earendil-works/pi-coding-agent/dist/cli.js"
-if [[ ! -f "$cli" ]]; then
-    printf 'Native Pi is unavailable; run %s/bin/prepare-pi-native first.\n' "$stack_root" >&2
-    exit 1
-fi
+# Each launch derives the installed extension sources from the verified
+# declaration; sources whose bytes already match are not written. The same call
+# answers the package the manifest pins; its refusal is the native owner's own.
+package=$(native install_sources "$repo_root")
+cli="$package/dist/cli.js"
 # Drop inherited preloads (including the old external project bootstrap). The
 # managed-project override is now copied inside the verified package instead.
 unset NODE_OPTIONS NODE_PATH NODE_COMPILE_CACHE
 export NODE_DISABLE_COMPILE_CACHE=1
-# Each launch derives the installed extension sources from the verified
-# declaration; sources whose bytes already match are not written.
-native install_sources "${cli%/dist/cli.js}" "$repo_root"
 exec node --no-global-search-paths \
     --import "${cli%/cli.js}/agent-comms-import-fence.mjs" \
     --import "${cli%/cli.js}/agent-comms-project-bootstrap.mjs" "$cli" "$@"

@@ -462,7 +462,7 @@ class NativePiRpcLaunch:
         """
         from .active_route import resolve_comms_route
 
-        package = resolve_comms_route(root).launch().package_for(command)
+        package = resolve_comms_route(root).launch().launched_package()
         cls._command_selection(command, runtime, package)
         return package
 
