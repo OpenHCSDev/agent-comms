@@ -12,6 +12,7 @@ import subprocess
 from abc import abstractmethod
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -22,6 +23,7 @@ from .cli_protocol import WireModel
 from .declared_family import DeclaredFamily
 from .field_codec import projected
 from .repo import Repo
+from .repository_name import RepositoryName
 
 if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
@@ -73,6 +75,18 @@ class WorkBranch:
     @projected(view="wire")
     def linked(self) -> bool:
         return bool(self.links)
+
+
+@dataclass(frozen=True)
+class BranchDifference:
+    """One branch against an immutable origin/main cut, shared by its consumers."""
+
+    repository: RepositoryName
+    branch: str
+    head: str
+    main: str
+    behind: int
+    files: frozenset[str]
 
 
 class ForgeAnswer(WireModel):
@@ -215,10 +229,25 @@ query($owner: String!, $name: String!, $after: String) {
             self._run("git", "rev-list", "--max-count=1", "HEAD", "--not", "--remotes")
         )
 
-    @property
+    @cached_property
     def repository(self) -> tuple[str, str]:
         repository = Repo.of(self.checkout).github
         return repository.owner, repository.name
+
+    @cached_property
+    def origin_main(self) -> str:
+        return self._run("git", "rev-parse", f"refs/remotes/origin/{self.main}").strip()
+
+    def difference(self, main: str) -> BranchDifference:
+        """Git owns ancestry and changed paths; pin both commits before comparing."""
+        head = self._run("git", "rev-parse", "HEAD").strip()
+        branch = self._run("git", "rev-parse", "--abbrev-ref", "HEAD").strip()
+        base = self._run("git", "merge-base", main, head).strip()
+        behind = int(self._run("git", "rev-list", "--count", f"{base}..{main}"))
+        files = frozenset(path for path in self._run(
+            "git", "diff", "--name-only", "-z", "--no-renames", base, head,
+        ).split("\0") if path)
+        return BranchDifference(RepositoryName(*self.repository), branch, head, main, behind, files)
 
     def _pages(self, query: str, answer: type[ForgeQuery], **variables: str):
         pages: list[tuple[str, ...]] = [()]
