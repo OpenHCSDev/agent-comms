@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Annotated, Any, Self
+from dataclasses import dataclass, field, fields
+from typing import TYPE_CHECKING, Annotated, Self
 
 from .bus_tables import BusProjectionTables
+from .field_codec import FieldCodec
 from .typed_table import Column, TypedRow, TypedTable
 
 if TYPE_CHECKING:
@@ -26,12 +27,15 @@ class ChannelActivity(TypedRow):
         )
 
     @classmethod
-    def from_message(cls, message: Message, **key: Any) -> Self:
-        return cls(
-            last_message=message.timestamp,
-            last_user_input=message.sender_role.last_user_input(0.0, message.timestamp),
-            **key,
+    def from_message(cls, message: Message, **key: str) -> Self:
+        clocks = ChannelActivity(
+            message.timestamp,
+            message.sender_role.last_user_input(0.0, message.timestamp),
         )
+        return FieldCodec.construct(cls, {
+            **{item.name: getattr(clocks, item.name) for item in fields(clocks)},
+            **key,
+        })
 
     @classmethod
     def combine(cls, clocks: Iterable[ChannelActivity]) -> ChannelActivity:
