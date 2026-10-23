@@ -6,7 +6,7 @@ import sys
 from contextlib import ExitStack
 from pathlib import Path
 
-from agent_comms.child_process import Platform, ProcessIdentity
+from agent_comms.child_process import Platform, ProcessIdentity, SpawnedProcess
 from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.runtime_processes import (
@@ -36,22 +36,22 @@ def test_runtime_process_family(tmp_path, monkeypatch):
     with ExitStack() as cleanup:
         children = []
         for runtime in (old, target):
-            child = subprocess.Popen([
+            child = SpawnedProcess.launch((
                 str(runtime.interpreter), str(Path(__file__).with_name("runtime_process_sleeper.py")),
-            ])
+            )).process
             cleanup.callback(stop, child)
             children.append(child)
         assert not RuntimeProcesses.observe(target).outcomes
         # Its old-runtime parent is ours; sibling old-runtime applications are not.
-        with subprocess.Popen(
-            [str(old.interpreter), str(Path(__file__).with_name("runtime_process_parent.py")),
-             str(target.interpreter)],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        with SpawnedProcess.launch(
+            (str(old.interpreter), str(Path(__file__).with_name("runtime_process_parent.py")),
+             str(target.interpreter)),
+            output=subprocess.PIPE, stderr=subprocess.PIPE,
             env=LaunchRuntime.running().child_environment(os.environ),
-        ) as observer_parent:
+        ).process as observer_parent:
             observed, errors = observer_parent.communicate(timeout=30)
-            assert observer_parent.returncode == 0, errors
-        snapshot = FieldCodec.decode(RuntimeProcesses, FieldCodec.parse(observed))
+            assert observer_parent.returncode == 0, errors.decode(errors="replace")
+        snapshot = FieldCodec.decode(RuntimeProcesses, FieldCodec.parse(observed.decode()))
         (outcome,) = snapshot.outcomes
         assert isinstance(outcome, UnretiredRuntimeProcess)
         assert outcome.process.pid != observer_parent.pid

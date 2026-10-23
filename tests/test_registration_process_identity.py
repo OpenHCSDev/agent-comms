@@ -5,7 +5,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.child_process import NoProcess, ProcessIdentity
+from agent_comms.child_process import NoProcess, ProcessIdentity, SpawnedProcess
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.registry_document import RegistryDocument
@@ -61,10 +61,10 @@ def test_concurrent_starters_reserve_one_current_owner(tmp_path):
         return registry.reserve_owner(original, process)
 
     with ExitStack() as children, ThreadPoolExecutor(max_workers=2) as workers:
-        processes = tuple(children.enter_context(subprocess.Popen(
+        processes = tuple(children.enter_context(SpawnedProcess.launch(
             (sys.executable, "-c", "import sys; sys.stdin.buffer.read()"),
             stdin=subprocess.PIPE,
-        )) for _ in range(2))
+        ).process) for _ in range(2))
         attempts = tuple(workers.submit(reserve, ProcessIdentity.capture(child.pid))
                          for child in processes)
         accepted, refused = [], []
