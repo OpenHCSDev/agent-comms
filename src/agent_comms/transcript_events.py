@@ -237,6 +237,10 @@ class WireTextTranscript(MarkdownTranscript):
 
 @dataclass(frozen=True, kw_only=True)
 class IncomingTranscript(TextTranscript):
+    @classmethod
+    def of(cls, message: Message, *, reader: str) -> IncomingTranscript:
+        return cls(message=message.envelope, reader=reader)
+
     @property
     def category(self) -> type[MessageCategory]:
         return self.message.role.category

@@ -169,8 +169,7 @@ class TurnDigestRead(TranscriptRead[ThreadTurns]):
         deliveries = (Bus(Bus.path_in(self.root)).deliveries_for_references(references)
                       if references else ())
         # The owner's own sent outcomes share the wake's provenance; their sender tells them apart.
-        incoming = {delivery.envelope.reference: IncomingTranscript(
-                        message=delivery.envelope, reader=self.thread.name)
+        incoming = {delivery.reference: IncomingTranscript.of(delivery, reader=self.thread.name)
                     for delivery in deliveries
                     if delivery.audience.sender_lookup != self.thread.incarnation.lookup}
         return self.from_turns(tuple(

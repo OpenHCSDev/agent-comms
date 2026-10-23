@@ -29,7 +29,7 @@ from agent_comms.ui_model.message_category import (
 def test_role_owns_wire_filter_category(role, category, sender_role):
     message = Message(sender="alice", target="#comms", body="Visible text", type=InfoKind,
                       sender_role=sender_role, role=role)
-    event = IncomingTranscript(message=message, reader="bob")
+    event = IncomingTranscript.of(message, reader="bob")
     selected = all_categories() - {OtherCategory}
     assert event.category is category
     assert (event.category in selected) == (category is InboundCategory)
@@ -59,5 +59,5 @@ def test_incoming_history_carries_the_public_envelope(declaration):
     source = SimpleNamespace(recipient=SimpleNamespace(lookup="b" * 32, name="bob"))
     event, = AssignedTranscriptSource.events(source, original)
     assert Message.from_wire(FieldCodec.encode(event)["message"]) == original.envelope
-    with pytest.raises(TypeError):
-        IncomingTranscript(message=original, reader="bob")
+    assert IncomingTranscript.of(original, reader="bob") == event
+    assert IncomingTranscript.of(message, reader="bob").message is message
