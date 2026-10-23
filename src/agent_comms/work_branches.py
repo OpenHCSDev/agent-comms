@@ -504,6 +504,10 @@ class CheckoutRead(DeclaredFamily, affix="CheckoutRead"):
     @abstractmethod
     def errors(self) -> tuple[str, ...]: ...
 
+    @abstractmethod
+    def worktrees(self) -> tuple[Path, ...]:
+        """Every checkout of this repository, as Git lists it."""
+
 
 @dataclass(frozen=True)
 class ReadableCheckoutRead(CheckoutRead):
@@ -518,6 +522,14 @@ class ReadableCheckoutRead(CheckoutRead):
 
     def errors(self) -> tuple[str, ...]:
         return ()
+
+    def worktrees(self) -> tuple[Path, ...]:
+        listed = self.branches._git("worktree", "list", "--porcelain", "-z")
+        return tuple(
+            Path(field.removeprefix("worktree ")).resolve()
+            for field in listed.split("\0")
+            if field.startswith("worktree ")
+        )
 
 
 @dataclass(frozen=True)
@@ -536,3 +548,7 @@ class UnreadableCheckoutRead(CheckoutRead):
 
     def errors(self) -> tuple[str, ...]:
         return (self.error,)
+
+    def worktrees(self) -> tuple[Path, ...]:
+        """Git cannot list its siblings, so the checkout stands as its own until repaired."""
+        return (self.checkout.resolve(),)
