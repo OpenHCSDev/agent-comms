@@ -22,7 +22,7 @@ from agent_comms.thread_text import GivenThreadText
 
 
 def owner(path, registry):
-    return registry.new_thread("owner", frozenset(), str(path), process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0)
+    return Thread("owner", frozenset(), str(path), process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0)
 
 
 def test_edit_owns_turn_and_document_owns_later_changes(tmp_path, *, thread_registration):
@@ -149,8 +149,8 @@ def capture():
         if turn is not None: turn['started_at'] = '<clock>'
     assert Registration(r.store.path).snapshot() == r.snapshot()
     steps.append(row)
-r.register(r.new_thread('owner', frozenset({'team'}), str(root), process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0));capture()
-r.register(r.new_thread('child', frozenset(), str(root), parent=ForkedParent('owner'), created_at=20.0));capture()
+r.register(Thread('owner', frozenset({'team'}), str(root), process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0));capture()
+r.register(Thread('child', frozenset(), str(root), parent=ForkedParent('owner'), created_at=20.0));capture()
 r.register(replace(r.require('owner'), title=GivenThreadText('metadata')));capture()
 r.lease_local_turn('owner','first');capture()
 r.release_turn(r.require('owner').turn_lease);capture()

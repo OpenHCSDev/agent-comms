@@ -12,6 +12,7 @@ from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.tool_results import NoSentMessage, NoToolDiff, ToolDiff, tool_result_content
 from agent_comms.native_entries import TranscriptProjection
 from conftest import transcript_records
+from agent_comms.threads import Thread
 
 PATCH = "--- src/example.py\n+++ src/example.py\n@@ -40,2 +40,2 @@\n context\n-old = 1\n+new = 2\n"
 
@@ -58,8 +59,8 @@ def test_successful_send_preserves_original_publication_in_live_and_saved_conten
     from agent_comms.transcript_events import SentTranscript
 
     comms = installed_comms(tmp_path / "wire")
-    comms.registry.declare(comms.registry.new_thread('sender', frozenset(), str(tmp_path)))
-    comms.registry.declare(comms.registry.new_thread('recipient', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('sender', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('recipient', frozenset(), str(tmp_path)))
     published = invoke_tool(comms, "comms_send", {
         "from": "sender", "to": "recipient", "body": "Original private publication"}, caller=NoThreadCaller())
     raw = {"content": [{"type": "text", "text": json.dumps(published)}], "details": published}

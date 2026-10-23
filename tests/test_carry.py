@@ -48,6 +48,7 @@ from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
 from cutover.carry_commander_project import CommanderProjectCarry
 from cutover.carry_drop_connectivity import DropConnectivity
 from cutover.carry_parked_threads import ParkedThreads
+from agent_comms.threads import Thread
 from fixture_git import IDENTITY
 
 REPO = Path(__file__).resolve().parents[1]
@@ -262,9 +263,9 @@ def test_restart_selection_uses_receiving_declaration_with_connected_cli_inbox(c
     from agent_comms.child_process import ProcessIdentity
 
     process = ProcessIdentity.capture(os.getpid())
-    native = comms.registry.declare(replace(comms.registry.new_thread(
+    native = comms.registry.declare(replace(Thread(
         'native-copy', frozenset(), str(comms.root)), process_identity=process))
-    external = comms.registry.declare(comms.registry.new_thread(
+    external = comms.registry.declare(Thread(
         'cli-inbox-copy', frozenset(), str(comms.root), execution=ExternalThreadExecution))
     with comms.registry.external_process(external.name, process):
         assert stack.running_owners(comms.root) == [native.name]
@@ -278,7 +279,7 @@ def test_owner_request_failure_joins_the_entire_set_before_propagating(comms, st
     names = ["failed", "other", "last"]
     for name in names[1:]:
         comms.registry.declare(
-            comms.registry.new_thread(name, frozenset(), str(comms.root)), StoppedThreadStatus()
+            Thread(name, frozenset(), str(comms.root)), StoppedThreadStatus()
         )
 
     # The first real CLI request fails; both other children must finish their writes

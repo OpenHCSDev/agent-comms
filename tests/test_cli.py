@@ -18,6 +18,7 @@ from agent_comms.thread_model import UndeclaredModel
 from agent_comms.cli_commands import CommandSelectionChanged
 from agent_comms.lifecycle_capability import Successful
 from conftest import installed_comms
+from agent_comms.threads import Thread
 
 
 @pytest.fixture
@@ -123,7 +124,7 @@ class TestCliSuccess:
         comms.channels.create_tag("comms")
         for name in ("sender", "one", "two"):
             tags = frozenset() if name == "sender" else frozenset({"comms"})
-            comms.registry.declare(comms.registry.new_thread(name, tags, str(comms.root)))
+            comms.registry.declare(Thread(name, tags, str(comms.root)))
         for role, expected in (("notice", PassiveWake()), ("conversation", BoundedTriageWake())):
             code, sent = cli(comms.root, "send", "--from", "sender", "--to", "#comms",
                              "--body", "public record", "--role", role)
@@ -316,7 +317,7 @@ class TestSelectedTargetActions:
 
         comms = installed_comms(root)
         for name, tags in (("alpha", {"team"}), ("beta", {"other"})):
-            comms.registry.declare(comms.registry.new_thread(name, frozenset(tags), str(root)), StoppedThreadStatus())
+            comms.registry.declare(Thread(name, frozenset(tags), str(root)), StoppedThreadStatus())
         return comms
 
     def test_catalog_absent_view_actor_has_no_backend_actions(self, tmp_path):
@@ -329,7 +330,7 @@ class TestSelectedTargetActions:
         assert CliCommand.target_catalog(comms, CliCommand.selected_targets(CommandTarget.named('missing')), project=str(tmp_path)) == ()
         with pytest.raises(UnregisteredThreadError):
             TargetEdit(ArchiveCliCommand, ArchiveCliCommand.selected_targets(CommandTarget.named('project')), {}).apply(comms)
-        comms.registry.declare(comms.registry.new_thread('project', frozenset(), str(tmp_path)), StoppedThreadStatus())
+        comms.registry.declare(Thread('project', frozenset(), str(tmp_path)), StoppedThreadStatus())
         actions = CliCommand.target_catalog(comms, CliCommand.selected_targets(CommandTarget.named('project')), project=str(tmp_path))
         assert any(action.declaration is ArchiveCliCommand for action in actions)
 
@@ -460,7 +461,7 @@ class TestSelectedTargetActions:
         from agent_comms.thread_status import RunningThreadStatus
 
         comms = self.declared(tmp_path)
-        comms.registry.declare(comms.registry.new_thread('active', frozenset({'team'}), str(tmp_path)),
+        comms.registry.declare(Thread('active', frozenset({'team'}), str(tmp_path)),
                                RunningThreadStatus())
         code, result = cli(tmp_path, "target-action", "--targets", "alpha", "active", "#team",
                            "--operation", "archive", "--confirmed")
@@ -513,10 +514,10 @@ class TestSelectedTargetActions:
         from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
 
         comms = self.declared(tmp_path)
-        comms.registry.declare(comms.registry.new_thread('external', frozenset({'team'}), str(tmp_path), execution=ExternalThreadExecution), StoppedThreadStatus())
-        comms.registry.declare(comms.registry.new_thread('archived', frozenset({'team'}), str(tmp_path)),
+        comms.registry.declare(Thread('external', frozenset({'team'}), str(tmp_path), execution=ExternalThreadExecution), StoppedThreadStatus())
+        comms.registry.declare(Thread('archived', frozenset({'team'}), str(tmp_path)),
                                ArchivedThreadStatus())
-        comms.registry.declare(comms.registry.new_thread('human', frozenset({'team'}), str(tmp_path), role=UserThreadRole),
+        comms.registry.declare(Thread('human', frozenset({'team'}), str(tmp_path), role=UserThreadRole),
                                StoppedThreadStatus())
         from agent_comms.channel_targets import ChannelTarget
 
@@ -599,7 +600,7 @@ class TestSelectedTargetActions:
         source.write_text(json.dumps({'type': 'message', 'timestamp': '2026-09-20T00:00:01Z', 'message': {
             'role': 'assistant', 'content': [{'type': 'text', 'text': 'Saved reply'}],
         }}) + '\n')
-        comms.registry.declare(comms.registry.new_thread('alpha', frozenset({'team'}), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
+        comms.registry.declare(Thread('alpha', frozenset({'team'}), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
         comms.channels.update_tags('beta', add=frozenset({'team'}))
         viewer = comms.messaging.user_identity(str(tmp_path)).name
         comms.messaging.send('alpha', 'beta', 'Executor message').message.message_id

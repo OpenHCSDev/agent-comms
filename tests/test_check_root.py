@@ -15,6 +15,7 @@ from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript, UserTranscript
 from agent_comms.native_entries import NativeEntry
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
+from agent_comms.threads import Thread
 
 
 @pytest.fixture
@@ -23,7 +24,7 @@ def source(scratch_root, durable_home):
     c = wire(root)
     Bus.install(Bus.path_in(c.root))
     for name in ("A", "B", "other"):
-        c.registry.declare(c.registry.new_thread(name, frozenset({"comms"}), str(scratch_root)),
+        c.registry.declare(Thread(name, frozenset({"comms"}), str(scratch_root)),
                            StoppedThreadStatus())
     c.messaging.send("A", "B", "old history is not a new input")
     c.registry.register(c.registry.require("other"), RunningThreadStatus())

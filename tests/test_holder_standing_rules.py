@@ -70,6 +70,7 @@ from cli_command import commander
 from conftest import declare_test_bus
 from native_backend_fixture import native_backend_fixture, wait_for
 from test_goal_execution import turn_on
+from agent_comms.threads import Thread
 
 
 @pytest.fixture
@@ -82,7 +83,7 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
     outsider = tmp_path / 'outsider-checkout'
     source.git(source.checkout, 'worktree', 'add', '-q', '-b', 'outsider-work', str(outsider))
     declare_test_bus(comms, channels=('comms',), threads=tuple(
-        comms.registry.new_thread(name=name, tags=frozenset({'comms'}), worktree=str(worktree))
+        Thread(name=name, tags=frozenset({'comms'}), worktree=str(worktree))
         for name, worktree in (('lead', source.checkout), ('worker', source.checkout),
                                ('outsider', outsider))
     ))
@@ -176,7 +177,7 @@ def test_order_claim_publishes_only_to_its_retained_commander_birth(
         comms.registry.unregister("lead")
         comms.registry.remove("lead")
         if change == "recreate":
-            comms.registry.declare(comms.registry.new_thread("lead", frozenset({"comms"}), worktree))
+            comms.registry.declare(Thread("lead", frozenset({"comms"}), worktree))
     before = comms.bus.bus.revision()
     operation = ClaimOrder(todo.revision, worker, todo.held().generation, claim)
     if change in ("rename", "rename_holder"):

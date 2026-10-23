@@ -28,12 +28,13 @@ from agent_comms.todos import (
 )
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsSendTool
+from agent_comms.threads import Thread
 
 
 def test_independent_requests_orders_and_directives(comms: Comms, durable_home, capsys) -> None:
     repository = Repo(checkout=Path.cwd(), github=RepositoryName("OpenHCSDev", "agent-comms"))
     for name in ("claude-ai", "commander", "worker"):
-        thread = comms.registry.new_thread(name, frozenset(), str(repository.checkout))
+        thread = Thread(name, frozenset(), str(repository.checkout))
         comms.registry.declare(thread, StoppedThreadStatus())
     commander = comms.registry.require("commander")
     worker = comms.registry.require("worker")

@@ -12,11 +12,11 @@ from agent_comms.turn_lease import FinishedTurnFence, NoFinishedTurn, NoTurnLeas
 
 def test_old_lease_cannot_clear_same_id_after_delete_rebind(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.declare(Thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     original = comms.agents.begin_turn("owner", "same-id").turn_lease
     comms.registry.unregister("owner")
     comms.registry.remove("owner")
-    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.declare(Thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     successor = comms.agents.begin_turn("owner", "same-id").turn_lease
     assert original.identity.generation == successor.identity.generation
     saved = comms.registry.store.path.read_bytes()
@@ -28,7 +28,7 @@ def test_old_lease_cannot_clear_same_id_after_delete_rebind(tmp_path):
 
 def test_revoked_claim_cleanup_cannot_attest_goal_completion(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.declare(Thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     lease = comms.agents.begin_turn("owner", "turn").turn_lease
     comms.registry.archive("owner")
     assert comms.registry.release_turn(lease) == (True, NoFinishedTurn())
@@ -36,7 +36,7 @@ def test_revoked_claim_cleanup_cannot_attest_goal_completion(tmp_path):
 
 
 def test_unattested_saved_turn_remains_data_without_a_lease(tmp_path, *, thread_registration):
-    owner = thread_registration.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+    owner = Thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     thread_registration.register(owner)
     retained, _ = thread_registration.lease_local_turn('owner', 'retained')
     expected = retained.turn_record.read().without_claim()

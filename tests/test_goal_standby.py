@@ -18,11 +18,12 @@ from agent_comms.goal_presentation import RunnableExecution, StandbyExecution, G
 from agent_comms.goal_waits import GoalWaits
 from goal_owner_fixture import canonical_goal_wire
 from agent_comms.goal_waits import RecordedGoalWait, NoGoalWait
+from agent_comms.threads import Thread
 
 
 def test_edit_preserves_owner_pause_and_standby_requires_declared_targets(tmp_path):
     comms = canonical_goal_wire(tmp_path)
-    comms.registry.declare(comms.registry.new_thread('parent', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('parent', frozenset(), str(tmp_path)))
     goal = comms.goals.update_goal("parent", SetGoalAction(text="Goal with @mention"))
     with pytest.raises(ValueError):
         comms.goals.update_goal(
@@ -37,7 +38,7 @@ def test_standby_rejects_closed_wait_cycle_while_both_turns_are_active(tmp_path)
     comms = canonical_goal_wire(tmp_path)
     for name in ("alice", "bob"):
         comms.registry.declare(
-            comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+            Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
         comms.agents.begin_turn(name, f"{name}-turn")
     alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
@@ -65,7 +66,7 @@ def test_standby_allows_independent_alternative_to_wait_cycle(tmp_path):
     comms = canonical_goal_wire(tmp_path)
     for name in ("alice", "bob", "carol"):
         comms.registry.declare(
-            comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+            Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
         comms.agents.begin_turn(name, f"{name}-turn")
     alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob or Carol"))
@@ -88,7 +89,7 @@ def test_idle_live_alternative_keeps_wait_cycle_open(tmp_path):
     comms = canonical_goal_wire(tmp_path)
     for name in ("alice", "bob", "carol"):
         comms.registry.declare(
-            comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+            Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
     for name in ("alice", "bob"):
         comms.agents.begin_turn(name, f"{name}-turn")
@@ -113,11 +114,11 @@ def test_dead_active_turn_does_not_make_wait_cycle_runnable(tmp_path):
     comms = canonical_goal_wire(tmp_path)
     for name in ("alice", "bob"):
         comms.registry.declare(
-            comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+            Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
         comms.agents.begin_turn(name, f"{name}-turn")
     comms.registry.declare(
-        comms.registry.new_thread('carol', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+        Thread('carol', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     comms.agents.begin_turn("carol", "carol-turn")
     carol_thread = comms.registry.require("carol")
@@ -149,7 +150,7 @@ def test_dead_active_turn_does_not_make_wait_cycle_runnable(tmp_path):
 def test_standby_entry_accepts_idle_live_dependency(tmp_path):
     comms = canonical_goal_wire(tmp_path)
     for name in ("alice", "bob"):
-        comms.registry.declare(comms.registry.new_thread(
+        comms.registry.declare(Thread(
             name, frozenset(), str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid())))
     alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
@@ -165,7 +166,7 @@ def test_standby_entry_accepts_idle_live_dependency(tmp_path):
 def test_idle_live_dependency_keeps_wait_group_open(tmp_path):
     comms = canonical_goal_wire(tmp_path)
     for name in ("alice", "bob"):
-        comms.registry.declare(comms.registry.new_thread(
+        comms.registry.declare(Thread(
             name, frozenset(), str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid())))
         comms.agents.begin_turn(name, f"{name}-turn")
@@ -189,7 +190,7 @@ def test_liveness_check_releases_preexisting_closed_wait_group(tmp_path, pending
     comms = canonical_goal_wire(tmp_path)
     for name in ("alice", "bob"):
         comms.registry.declare(
-            comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+            Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
         comms.agents.begin_turn(name, f"{name}-turn")
     alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
@@ -237,7 +238,7 @@ def test_new_live_dependency_turn_keeps_old_wait_group_open(tmp_path, bound_old_
     comms = canonical_goal_wire(tmp_path)
     for name in ("alice", "bob"):
         comms.registry.declare(
-            comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+            Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
         comms.agents.begin_turn(name, f"{name}-first")
     alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
@@ -277,7 +278,7 @@ def test_new_live_dependency_turn_keeps_old_wait_group_open(tmp_path, bound_old_
 def test_standby_refuses_canonical_reply_that_arrived_before_wait(tmp_path, acknowledged):
     comms = canonical_goal_wire(tmp_path)
     for name in ("parent", "child"):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     goal = comms.goals.update_goal("parent", SetGoalAction(text="Delegate work"))
     message = comms.messaging.send("child", "parent", "Finished immediately").message
     if acknowledged:

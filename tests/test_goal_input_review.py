@@ -26,6 +26,7 @@ from agent_comms.tools import CommsInboxTool, ToolRequest
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.read_basis import NamedViewer
 from stored_inputs import stored_inputs
+from agent_comms.threads import Thread
 
 
 def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path, monkeypatch):
@@ -33,7 +34,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     comms = wire(tmp_path / "wire")
     for name in ("worker", "parent", "other"):
         comms.registry.declare(
-            comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+            Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
     Bus.install(Bus.path_in(comms.root))
     comms.agents.begin_turn("parent", "parent-delegation-in-flight")
@@ -133,13 +134,13 @@ def test_standby_excludes_retained_rebound_history_but_retains_rename(tmp_path, 
     comms = installed_comms(tmp_path)
     for name in ("worker", "parent"):
         comms.registry.declare(
-            comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+            Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
     old = comms.messaging.send("parent", "worker", "Old incarnation").message
     comms.registry.unregister(rebound)
     comms.registry.remove(rebound)
     comms.registry.declare(
-        comms.registry.new_thread(rebound, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+        Thread(rebound, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     comms.agents.begin_turn("parent", "new-turn")
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Current goal"))

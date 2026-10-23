@@ -49,6 +49,7 @@ from agent_comms.turn_context import (
     SegmentManifest,
     TranscriptSegment,
 )
+from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="private cohort claim_scope requires real /var/tmp"
@@ -82,7 +83,7 @@ def selected_turn(private_comms, private_directory):
     resource = worktree / "module.py"
     resource.write_text("value = 1\n")
     for name, created in (("sender", 17021.0), ("Alice", 17022.0)):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(worktree), process_identity=ProcessIdentity.capture(os.getpid()), created_at=created))
+        comms.registry.declare(Thread(name, frozenset({'team'}), str(worktree), process_identity=ProcessIdentity.capture(os.getpid()), created_at=created))
     root_id = comms.registry.prepare_native_root().namespace
     record_context(comms, "Alice", 1)
     message = publish_initial(comms, "sender", "#team", "@Alice investigate")

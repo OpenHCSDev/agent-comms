@@ -21,6 +21,7 @@ from agent_comms.todos import (
     CommitDelivery, DoneTodoState, FixShape, OrderScope,
     PendingProblemOrder, ReportDelivery, ReportedProblemOrder, TriageScope,
 )
+from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize('scope', (TriageScope(), FIX_SCOPE))
@@ -53,7 +54,7 @@ def test_shape_references_are_class_lines_not_names_or_decorators(tmp_path):
 
 def assigned(comms, scope, source, problem='P1'):
     for name in ('lead', 'worker'):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(comms.root)))
+        comms.registry.declare(Thread(name, frozenset(), str(comms.root)))
     return requested(comms, scope, source, problem)
 
 

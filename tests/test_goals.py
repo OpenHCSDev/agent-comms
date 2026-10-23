@@ -47,11 +47,11 @@ def test_reported_turn_states_preserve_existing_wire_values():
 
 def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
     comms = installed_comms(tmp_path)
-    comms.registry.declare(comms.registry.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
+    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Verify the release"))
     comms.threads.set_thread_configuration(
             comms.registry.require('worker'), NextTurnConfiguration(model=ChosenModel(DeclaredModel('test/model'))))
-    comms.registry.declare(comms.registry.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
+    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     comms.threads.rename_self("renamed", caller=ThreadCaller("worker"))
     restored = wire(tmp_path).registry.require("worker")
@@ -82,7 +82,7 @@ def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
 
 def test_no_goal_set_goal_and_cleared_goal_each_answer_from_the_member(tmp_path):
     comms = installed_comms(tmp_path)
-    comms.registry.declare(comms.registry.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
+    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
 
     def stored() -> Thread:
         return wire(tmp_path).registry.require("worker")
@@ -126,7 +126,7 @@ def test_no_goal_set_goal_and_cleared_goal_each_answer_from_the_member(tmp_path)
 
 def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(tmp_path, monkeypatch):
     comms = installed_comms(tmp_path)
-    comms.registry.declare(comms.registry.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
+    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Finish the release"))
     comms.goals.update_goal("worker", PausedGoalAction(progress="Paused after an uncertain turn"))
@@ -157,7 +157,7 @@ def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(tmp_path, mo
 
 def test_agent_can_set_its_own_persistent_goal(tmp_path, monkeypatch):
     comms = installed_comms(tmp_path)
-    comms.registry.declare(comms.registry.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
+    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     tool = next(
         tool

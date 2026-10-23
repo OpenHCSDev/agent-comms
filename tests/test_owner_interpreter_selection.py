@@ -11,6 +11,7 @@ from agent_comms.child_process import SpawnedProcess
 from agent_comms.errors import RelationViolationError
 from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.owner_lifecycle import OwnerRestartSelection
+from agent_comms.threads import Thread
 
 
 def test_mixed_interpreters_are_captured_per_owner_and_changes_refused(tmp_path, thread_registration):
@@ -25,7 +26,7 @@ def test_mixed_interpreters_are_captured_per_owner_and_changes_refused(tmp_path,
             child = SpawnedProcess.launch((str(python), "-c", "import time; time.sleep(60)"),
                                            env=environment)
             children.callback(child.close)
-            thread = thread_registration.new_thread(
+            thread = Thread(
                 name, frozenset(), str(tmp_path), process_identity=child.identity)
             thread_registration.declare(thread)
             threads[name] = thread
