@@ -85,16 +85,17 @@ class Repository:
 
 
 @pytest.mark.parametrize("pending", (False, True))
-def test_pending_uses_one_worker_on_a_real_practice_copy(comms, stack, tmp_path, pending):
+def test_pending_uses_one_worker_on_a_real_practice_copy(
+        comms, stack, private_directory, pending):
     chain = CarryChain((DropConnectivity, ParkedThreads, CommanderProjectCarry))
     # The worker uses this checkout's actual source and carry declarations.
-    tree = TargetTree(REPO, tmp_path, "pending")
+    tree = TargetTree(REPO, private_directory, "pending")
     tree.path.mkdir()
     (tree.path / "src").symlink_to(REPO / "src", target_is_directory=True)
     (tree.path / "tools").symlink_to(REPO / "tools", target_is_directory=True)
-    with practice_copy(comms.root, tmp_path / "practice" / "bus") as (copied, measurement):
-        practice = PracticeBus(tmp_path / "practice", copied, measurement,
-                               comms.root, tmp_path / "spill")
+    with practice_copy(comms.root, private_directory / "practice" / "bus") as (copied, measurement):
+        practice = PracticeBus(private_directory / "practice", copied, measurement,
+                               comms.root, private_directory / "spill")
         if pending:
             # ParkedThreads must run before CommanderProjectCarry can decode this.
             (copied / "commander.json").write_text('{"parked": []}')

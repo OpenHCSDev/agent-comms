@@ -173,4 +173,3 @@ class CarryChain:
             emitted.append(step)
             sorter.done(step)
         return cls(tuple(emitted))
-
