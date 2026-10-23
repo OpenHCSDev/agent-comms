@@ -16,7 +16,7 @@ from agent_comms.thread_model import DeclaredModel
 from agent_comms_hooks.watch import WatchClaim, WatchRecord
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import RuleFile
-from agent_comms.todos import Slop
+from agent_comms.slop import Slop
 from agent_comms_hooks.reread import SliceReminder
 from agent_comms_hooks.skill import CommanderStart
 from agent_comms.threads import Thread

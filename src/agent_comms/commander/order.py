@@ -34,7 +34,7 @@ from pydantic import BaseModel, ConfigDict, Field, InstanceOf, PrivateAttr
 
 from agent_comms.change_report import FileLine, MainRevision, NoSourceReference
 from agent_comms.channel_targets import CommsTag
-from agent_comms.cli_bridges.shared import DeclaredVerb
+from agent_comms.declared_verb import DeclaredVerb
 from agent_comms.commander.standing import UnownedWheelSpin
 from agent_comms.comms import Comms, wire
 from agent_comms.declared_family import DeclaredFamily
@@ -84,7 +84,6 @@ from agent_comms.todos import (
     ProblemFinding,
     PullRequestLink,
     RecordPullRequest,
-    Slop,
     StrikeReason,
     StrikeTodo,
     Successor,
@@ -94,6 +93,7 @@ from agent_comms.todos import (
     VoidStrikeTodo,
     WithdrawTodo,
 )
+from agent_comms.slop import Slop
 from agent_comms.tool_caller import CommanderForkCaller, NoThreadCaller
 from agent_comms.tools import (
     CommsChangeProblemTool,

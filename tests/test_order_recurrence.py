@@ -3,9 +3,7 @@
 import pytest
 
 from agent_comms.change_report import FileLine
-from agent_comms.todos import (
-    DeclarationDerivation, Derivation,
-)
+from agent_comms.slop import DeclarationDerivation, Derivation
 
 
 @pytest.mark.parametrize('mechanism', [
