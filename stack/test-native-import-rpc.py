@@ -51,7 +51,7 @@ def ancestor_probe(
     package: Path, root: Path, env: dict[str, str], deny: Callable[[], None]
 ) -> dict:
     """Admit real PR77, then reach a committed ws entry's optional ancestor require."""
-    assert package.is_relative_to(root), "Owned fixture package required"
+    assert package.resolve().is_relative_to(root.resolve()), "Owned fixture package required"
     ancestor = package.parent.parent / "bufferutil"
     ancestor.mkdir(mode=0o700)  # Exclusive: never replace an existing dependency.
     marker = root / "ancestor-executed"
