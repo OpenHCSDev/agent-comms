@@ -116,9 +116,9 @@ class RootFile:
 
     @classmethod
     def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
-        """Copy this owner's consistent file cut and name the source files included."""
-        with _store_lock(source, mode=SharedLock()):
-            cls.copy_file(source, target)
+        """Copy this owner's file cut and name the source files included. A file no writer
+        locks is copied as it is: locking it would create a lock inode beside it."""
+        cls.copy_file(source, target)
         return frozenset((source,))
 
     @staticmethod
@@ -317,6 +317,17 @@ class UndeclaredFile(RootFile):
     """A physical file without a stored declaration, still identified by its path."""
 
     path: Path
+
+
+class LockedFile(RootFile, StoreLockOwner, declared_name=None):
+    """A declared file whose writers hold its store lock, so its copy shares that lock."""
+
+    __slots__ = ()
+
+    @classmethod
+    def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
+        with _store_lock(source, mode=SharedLock()):
+            return super().copy_group(source, target)
 
 
 class FileStore(RootFile, ABC):
@@ -672,7 +683,7 @@ class PublishedSQLiteFile(SQLiteFile):
 
 
 @dataclass(frozen=True, slots=True)
-class LockedStore(FileStore, StoreLockOwner, JsonDocument[T], declared_name=None):
+class LockedStore(FileStore, LockedFile, JsonDocument[T], declared_name=None):
     """Ordered document transactions; callbacks never mutate or reenter."""
 
     path: Path
