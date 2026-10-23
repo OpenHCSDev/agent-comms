@@ -238,7 +238,7 @@ class PrivateSendClaim(PromptBoundary):
             with self.selected.cursor_delivery.measurements.operation("prompt_binding"):
                 authority.enter_context(self.stage.bound_prompt(
                     store, self.input_id, self.participant, self.wire_root_id,
-                    self.prompt.text, blocking=True,
+                    self.prompt.text,
                 ))
             with self.selected.cursor_delivery.measurements.operation("coordinator_exclusive"):
                 db = authority.enter_context(store.session.writing())
