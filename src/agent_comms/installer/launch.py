@@ -29,10 +29,13 @@ from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.reporting import (
-    FinishedInstall, InstallOutcome, RootWriter, UnfinishedInstall, UnpostedWriter,
+    FailedInstall, FinishedInstall, InstallOutcome, ObservedInstall, RootWriter,
+    UnfinishedInstall, UnpostedWriter,
 )
+from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.installer.probes.harnesses import HarnessesProbe
 from agent_comms.installer.upgrade import (
+    LiveRun,
     RehearsedUpgrade,
     Stack,
     TargetTree,
@@ -40,6 +43,7 @@ from agent_comms.installer.upgrade import (
     upgrade,
 )
 from agent_comms.mro_dispatch import MroDispatch, handles
+from agent_comms.repo import Repo
 from agent_comms.storage_rules import StorageRule
 
 
@@ -50,6 +54,11 @@ class InstallReport(MroDispatch):
     writer: RootWriter = field(default_factory=UnpostedWriter)
     outcome: InstallOutcome = field(default_factory=UnfinishedInstall, init=False)
     bridges: SessionBridgeResumes = field(default_factory=SessionBridgeResumes, init=False)
+    source: Repo = field(init=False, repr=False)
+
+    def record_live(self, result: LiveRun) -> LiveRun:
+        self.outcome = ObservedInstall(result)
+        return result
 
     def complete(self, result: RehearsedUpgrade) -> RehearsedUpgrade:
         self.outcome = FinishedInstall(result)
@@ -65,22 +74,31 @@ class InstallReport(MroDispatch):
 
     @handles(BaseException)
     def crashed(self, error: BaseException) -> tuple[str, ...]:
-        frame = extract_tb(error.__traceback__)[-1]
+        package = Path(agent_comms.__file__).resolve().parent
+        frame = next(
+            frame for frame in reversed(extract_tb(error.__traceback__))
+            if Path(frame.filename).resolve().is_relative_to(package)
+        )
+        module = ".".join(
+            Path(frame.filename).resolve().relative_to(package.parent).with_suffix("").parts
+        )
+        location = self.source.module_file(module)
         return (f"Install failed: {type(error).__name__}: {error}",
-                f"{frame.filename}:{frame.lineno}")
+                f"{location}:{frame.lineno}")
 
     @contextmanager
     def running(self, tree: TargetTree) -> Iterator[None]:
         """Every writer runs installed artifacts from outside ``tree``, so the report follows
         the tree's cleanup and a cleanup failure is the install's failure."""
+        self.source = Repo(checkout=tree.path, github=CorePackage.repository)
         try:
             with tree:
                 yield
             lines = self.outcome.lines()
         except BaseException as error:
-            failure = (*next(self.handlers_for(error))(error), *self.bridges.lines())
+            self.outcome = FailedInstall(self.outcome, next(self.handlers_for(error))(error))
             try:
-                self.writer.post(failure)
+                self.writer.post((*self.outcome.lines(), *self.bridges.lines()))
             except BaseException as publication_error:
                 error.add_note(f"Install failure report also failed: {publication_error}")
                 print(f"install: failure report also failed: {publication_error}", file=sys.stderr)
