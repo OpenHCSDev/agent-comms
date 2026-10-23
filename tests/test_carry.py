@@ -27,8 +27,10 @@ from agent_comms.installer.carry import (
     MigrateOperation,
 )
 from agent_comms.installer.commands import InstallCommands
+from agent_comms.installer.practice import practice_copy
 from agent_comms.installer.upgrade import (
     BackedUpMigration,
+    PracticeBus,
     PreparedMigration,
     RehearsalFiles,
     Stack,
@@ -41,6 +43,9 @@ from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOpera
 from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
+from cutover.carry_commander_project import CommanderProjectCarry
+from cutover.carry_drop_connectivity import DropConnectivity
+from cutover.carry_parked_threads import ParkedThreads
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -79,22 +84,34 @@ class Repository:
         return self.git("rev-parse", "HEAD")
 
 
-def test_pending_is_every_step_from_the_first_whose_dry_run_reports_a_change():
-    """A step's dry run, not a record of its name, says whether the bus needs it, so a step
-    edited after a bus ran it is judged by what it does now. A later step's dry run is
-    not asked before the earlier pending ones have run. The steps are its own: a step that
-    leaves ``carry`` abstract is never registered, and the main line may ship none."""
-    chain = CarryChain(tuple(type(f"Step{number}", (Carry,), {}) for number in range(5)))
-    assert chain.pending(lambda step: Carried(0)) == ()
-    edited = chain.steps[2]
-    asked = []
-
-    def dry_run(step):
-        asked.append(step)
-        return Carried(int(step is edited))
-
-    assert chain.pending(dry_run) == chain.steps[chain.steps.index(edited):]
-    assert asked == list(chain.steps[:chain.steps.index(edited) + 1])
+@pytest.mark.parametrize("pending", (False, True))
+def test_pending_uses_one_worker_on_a_real_practice_copy(comms, stack, tmp_path, pending):
+    chain = CarryChain((DropConnectivity, ParkedThreads, CommanderProjectCarry))
+    # The worker uses this checkout's actual source and carry declarations.
+    tree = TargetTree(REPO, tmp_path, "pending")
+    tree.path.mkdir()
+    (tree.path / "src").symlink_to(REPO / "src", target_is_directory=True)
+    (tree.path / "tools").symlink_to(REPO / "tools", target_is_directory=True)
+    with practice_copy(comms.root, tmp_path / "practice" / "bus") as (copied, measurement):
+        practice = PracticeBus(tmp_path / "practice", copied, measurement,
+                               comms.root, tmp_path / "spill")
+        if pending:
+            # ParkedThreads must run before CommanderProjectCarry can decode this.
+            (copied / "commander.json").write_text('{"parked": []}')
+        position = len(chain.steps)
+        for index, step in enumerate(chain.steps):
+            (answer,) = stack.call_steps(
+                (step(copied, comms.root, practice.spill_dir),), tree, MigrateOperation(False))
+            if answer.changed:
+                position = index
+                break
+        before = len(stack.commands.ran)
+        assert practice.pending(chain, stack, tree) == chain.steps[position:]
+        commands = stack.commands.ran[before:]
+        assert len(commands) == 1
+        assert "-m agent_comms.installer.step_worker " in commands[0].command
+        assert practice.pending(CarryChain(()), stack, tree) == ()
+        assert len(stack.commands.ran) == before + 1
 
 
 def record_source(version: int, fields: str) -> str:
@@ -204,12 +221,12 @@ def test_step_answers_are_separate_from_diagnostics_and_keep_their_types(
     root = tmp_path / "bus"
     root.mkdir()
     request = step(root, root, tmp_path / "spill")
-    assert stack.call_step(request, tree, BackupFilesOperation()) == (root / "saved",)
-    assert stack.call_step(request, tree, MigrateOperation(False)) == (
-        Carried(1, {"applied": False}, (Path("saved"),)))
+    assert stack.call_steps((request,), tree, BackupFilesOperation()) == ((root / "saved",),)
+    assert stack.call_steps((request,), tree, MigrateOperation(False)) == (
+        Carried(1, {"applied": False}, (Path("saved"),)),)
     assert not (root / "saved").exists()
-    assert stack.call_step(request, tree, MigrateOperation(True)) == (
-        Carried(1, {"applied": True}, (Path("saved"),)))
+    assert stack.call_steps((request,), tree, MigrateOperation(True)) == (
+        Carried(1, {"applied": True}, (Path("saved"),)),)
     assert (root / "saved").read_text() == "migrated"
 
 

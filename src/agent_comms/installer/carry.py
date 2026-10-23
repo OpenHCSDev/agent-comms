@@ -16,7 +16,6 @@ import inspect
 import json
 import subprocess
 from abc import abstractmethod
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from graphlib import TopologicalSorter
 from pathlib import Path
@@ -75,10 +74,13 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
             raise RelationViolationError(f"Carry refuses an unconfined path: {path}")
 
 class CarryOperation[Answer](InterpreterOperation[Answer, Carry], DeclaredFamily, affix="Operation"):
-    """One step invocation, including its arguments and its declared answer type."""
+    """Typed step work and the operation's traversal of one worker's pass."""
 
     @abstractmethod
     def run(self, step: Carry) -> Answer: ...
+
+    def run_steps(self, steps: tuple[Carry, ...]) -> tuple[Answer, ...]:
+        return tuple(self.run(step) for step in steps)
 
     def encode_answers(self, answers: tuple[Answer, ...]) -> str:
         """One pass's answers, in step order, under this operation's declared answer type."""
@@ -102,6 +104,20 @@ class MigrateOperation(CarryOperation[Carried]):
 
 
 @dataclass(frozen=True)
+class FirstPendingOperation(CarryOperation[int]):
+    """One position: stop before asking a step that needs a pending predecessor."""
+
+    def run(self, step: Carry) -> int:
+        return step.carry(apply=False).changed
+
+    def run_steps(self, steps: tuple[Carry, ...]) -> tuple[int, ...]:
+        for position, step in enumerate(steps):
+            if self.run(step):
+                return (position,)
+        return (len(steps),)
+
+
+@dataclass(frozen=True)
 class RetireInputsOperation(CarryOperation[Carried]):
     def run(self, step: Carry) -> Carried:
         return step.after_acceptance()
@@ -115,7 +131,7 @@ class CarryRequest:
     steps: tuple[Carry, ...]
 
     def run(self) -> str:
-        return self.operation.encode_answers(tuple(self.operation.run(step) for step in self.steps))
+        return self.operation.encode_answers(self.operation.run_steps(self.steps))
 
 
 @dataclass(frozen=True)
@@ -158,11 +174,3 @@ class CarryChain:
             sorter.done(step)
         return cls(tuple(emitted))
 
-    def pending(self, dry_run: Callable[[type[Carry]], Carried]) -> tuple[type[Carry], ...]:
-        """Every step from the first whose dry run reports a change. A later step's dry run
-        reads what the earlier ones leave, so it is not asked before they have run; it runs
-        after them and reports no change if it has none."""
-        for position, step in enumerate(self.steps):
-            if dry_run(step).changed:
-                return self.steps[position:]
-        return ()

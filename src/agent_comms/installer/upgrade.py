@@ -77,6 +77,7 @@ from agent_comms.installer.carry import (
     CarryChain,
     CarryOperation,
     CarryRequest,
+    FirstPendingOperation,
     MigrateOperation,
     RetireInputsOperation,
 )
@@ -614,7 +615,7 @@ class Stack:
     def call_steps[Answer](self, steps: tuple[Carry, ...], tree: TargetTree,
                            operation: CarryOperation[Answer]) -> tuple[Answer, ...]:
         """Run one pass of steps, in order, in one worker in the target tree with this
-        stack's interpreter; each step's answer in step order."""
+        stack's interpreter; the operation owns traversal and its answer tuple."""
         if not steps:
             return ()
         request = CarryRequest(operation, steps)
@@ -623,11 +624,6 @@ class Stack:
                               request_path, result,
                               cwd=tree.path, env=self.environment(*tree.source_paths()))
             return operation.decode_answers(result.read_text())
-
-    def call_step[Answer](self, step: Carry, tree: TargetTree,
-                          operation: CarryOperation[Answer]) -> Answer:
-        (answer,) = self.call_steps((step,), tree, operation)
-        return answer
 
     def backup_files(self, pending: tuple[Carry, ...],
                      tree: TargetTree) -> tuple[Path, ...]:
@@ -739,10 +735,13 @@ class PracticeBus:
 
     def pending(self, chain: CarryChain, staged: Stack,
                 tree: TargetTree) -> tuple[type[Carry], ...]:
-        """Each step's dry run with the target's staged stack says what is left."""
-        return chain.pending(lambda step: staged.call_step(
-            step(self.copied, self.original_root, self.spill_dir), tree,
-            MigrateOperation(apply=False)))
+        """One worker stops at the first step whose dry run says work remains."""
+        if not chain.steps:
+            return ()
+        steps = tuple(step(self.copied, self.original_root, self.spill_dir)
+                      for step in chain.steps)
+        (position,) = staged.call_steps(steps, tree, FirstPendingOperation())
+        return chain.steps[position:]
 
 
 def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice, mode: RunMode,
