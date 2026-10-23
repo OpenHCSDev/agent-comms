@@ -8,19 +8,17 @@ from __future__ import annotations
 
 import base64
 import inspect
-import json
 import os
 import sys
 import time
+from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import field
-from threading import Lock
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from io import BytesIO
 from pathlib import Path
+from threading import Lock
 from typing import ClassVar, cast
 from zipfile import ZIP_DEFLATED, ZipFile
 
@@ -39,7 +37,11 @@ class InstallPhase(DeclaredFamily, affix="Phase"):
     detail: str = ""
 
     def label(self) -> str:
-        return f"{type(self).__name__}: {self.detail}" if self.detail else type(self).__name__
+        subject = self.subject()
+        return f"{type(self).__name__}: {subject}" if subject else type(self).__name__
+
+    def subject(self) -> str:
+        return self.detail
 
     def started_at(self, now: float) -> float:
         return now
@@ -62,10 +64,6 @@ class InstallPhase(DeclaredFamily, affix="Phase"):
 
 class InstallRunPhase(InstallPhase):
     """The whole installer, including teardown and its final publication."""
-
-
-class InstallerProcessPhase(InstallPhase):
-    """Launch the target interpreter, collect its answer and reap it."""
 
 
 class LauncherPhase(InstallPhase):
@@ -92,8 +90,14 @@ class GitPhase(InstallPhase):
     """A Git operation through the shared repository owner."""
 
 
+@dataclass(frozen=True, kw_only=True)
 class ProbePhase(InstallPhase):
     """A declared operation answered by an interpreter worker."""
+
+    probe: type[RuntimeProbe]
+
+    def subject(self) -> str:
+        return self.probe.declared_name
 
 
 class PracticePhase(InstallPhase):
@@ -102,10 +106,6 @@ class PracticePhase(InstallPhase):
 
 class CopyPhase(InstallPhase):
     """Copy and retain the practice inputs selected by their file owners."""
-
-
-class CarryPhase(InstallPhase):
-    """Run a declared carry operation in its target interpreter."""
 
 
 class VerifyPhase(InstallPhase):
@@ -138,10 +138,6 @@ class BackupRetirePhase(InstallPhase):
 
 class ServicesPhase(InstallPhase):
     """Restart or recover host services and prove they serve the new runtime."""
-
-
-class OwnersPhase(InstallPhase):
-    """One concurrent batch of owner requests, measured by its elapsed wall time."""
 
 
 class ProcessScanPhase(InstallPhase):
@@ -220,6 +216,7 @@ class InterpreterOperation[Answer, *Arguments](ABC):
 
     def answer_type(self) -> TypeForm[Answer]:
         return cast(TypeForm[Answer], inspect.signature(self.run, eval_str=True).return_annotation)
+
 
 class ProbeProgram(ABC):
     """Where an operation's declaration is executable by the selected interpreter."""
@@ -301,7 +298,7 @@ class RuntimeProbe[Answer](
     """A declared operation handled by the install's selected interpreter worker."""
 
     def install_phase(self) -> InstallPhase:
-        return ProbePhase(type(self).__name__)
+        return ProbePhase(probe=type(self))
 
 
 @dataclass(frozen=True)
@@ -340,8 +337,9 @@ def serve() -> None:
     os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
     for line in sys.stdin:
         print(
-            FieldCodec.compact(FieldCodec.encode(
-                FieldCodec.decode(ProbeRequest, FieldCodec.parse(line)).answer())),
+            FieldCodec.compact(
+                FieldCodec.encode(FieldCodec.decode(ProbeRequest, FieldCodec.parse(line)).answer())
+            ),
             file=answers,
             flush=True,
         )

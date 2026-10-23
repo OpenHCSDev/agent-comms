@@ -70,8 +70,8 @@ from agent_comms.installer.probes.carry import CarryProbe
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import (
     BackupPhase, BackupRetirePhase, BridgePhase, FileScanPhase, MaintenancePhase,
-    OwnersPhase, ProcessScanPhase, ServicesPhase,
-    BuildPhase, CopyPhase, GitPhase, InstallClock, InstallRunPhase,
+    ProcessScanPhase, ServicesPhase,
+    BuildPhase, CopyPhase, GitPhase, InstallClock, InstallPhase, InstallRunPhase,
     LivePhase, PhaseTiming, PracticePhase, PreparePhase, PublicationPhase, VerifyPhase,
 )
 from agent_comms.installer.declared_uv import DeclaredUv
@@ -118,6 +118,16 @@ if TYPE_CHECKING:
 
 HOME = Path.home()
 CORE_ERROR = TypeAdapter(CoreError.declared_union())
+
+
+@dataclass(frozen=True, kw_only=True)
+class OwnersPhase(InstallPhase):
+    """One concurrent batch of owner requests, measured by its elapsed wall time."""
+
+    command: type[CliCommand]
+
+    def subject(self) -> str:
+        return self.command.declared_name
 
 
 @dataclass(frozen=True)
@@ -354,6 +364,9 @@ class RehearsedUpgrade(Upgrade):
 
     finished: ClassVar[str] = "Install rehearsed"
 
+    def live_lines(self) -> tuple[str, ...]:
+        return ()
+
     def lines(self) -> tuple[str, ...]:
         slowest = sorted(self.phases, key=lambda timed: timed.seconds, reverse=True)[:5]
         return (*super().lines(),
@@ -374,8 +387,11 @@ class InstalledUpgrade(RehearsedUpgrade, Extendable):
     finished: ClassVar[str] = "Install finished"
     """The headline of the post that reports this upgrade."""
 
+    def live_lines(self) -> tuple[str, ...]:
+        return self.live.lines()
+
     def lines(self) -> tuple[str, ...]:
-        return (*super().lines(), *self.live.lines(), *self.processes.lines(),
+        return (*super().lines(), *self.live_lines(), *self.processes.lines(),
                 *(line for outcome in self.bridge_resumes for line in outcome.lines()))
 
 
@@ -448,7 +464,8 @@ class Stack:
             source.resolve()
             core = commands.git(checkout.path, "rev-parse", "HEAD").strip()
             resolution = hashlib.sha256(source.lock.read_bytes()).hexdigest()[:16]
-            prefix = home / ".local/share/agent-comms/runtimes" / f"core-{core[:9]}-lock-{resolution}"
+            runtimes = home / ".local/share/agent-comms/runtimes"
+            prefix = runtimes / f"core-{core[:9]}-lock-{resolution}"
             built = replace(source, runtime=LaunchRuntime(prefix / "bin/python"),
                             program=TargetProgram(checkout.path / STEPS.parent))
             if prefix.exists():
@@ -460,8 +477,8 @@ class Stack:
             prefix.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             prefix.mkdir(mode=0o700)
             try:
-                commands.run(source.uv, "sync", "--project", "stack", "--locked", "--python", "3.14",
-                              "--no-editable", cwd=checkout.path,
+                commands.run(source.uv, "sync", "--project", "stack", "--locked",
+                             "--python", "3.14", "--no-editable", cwd=checkout.path,
                              env={**built.environment(), "UV_PROJECT_ENVIRONMENT": str(prefix)})
                 built.install_native()
                 RuntimeResolution.capture(built, core).save(prefix)
@@ -579,12 +596,13 @@ class Stack:
         """One target batch owns the signal pass and grace period for every owner."""
         if not names:
             return
-        with OwnersPhase(StopCliCommand.declared_name).running(self.commands.clock):
+        with OwnersPhase(command=StopCliCommand).running(self.commands.clock):
             invocation = TargetActionCliCommand.invocation(
                 "--operation", StopCliCommand.declared_name, "--targets", *names)
             completed = self.probe(CliCommandProbe(("--root", str(root), *invocation)))
             if completed.returncode:
-                raise UpgradeRefused(f"agent-comms {' '.join(invocation)}: {completed.stdout.strip()}")
+                raise UpgradeRefused(
+                    f"agent-comms {' '.join(invocation)}: {completed.stdout.strip()}")
 
     def start_owner(self, root: Path, name: str) -> OwnerStart:
         try:
@@ -595,9 +613,9 @@ class Stack:
 
     def start(self, root: Path, names: list[str]) -> tuple[OwnerStart, ...]:
         """Start the captured owner set together; each owner's outcome is its own."""
-        with OwnersPhase(StartCliCommand.declared_name).running(self.commands.clock):
-            with ThreadPoolExecutor(max_workers=max(1, len(names))) as pool:
-                return tuple(pool.map(lambda name: self.start_owner(root, name), names))
+        with (OwnersPhase(command=StartCliCommand).running(self.commands.clock),
+              ThreadPoolExecutor(max_workers=max(1, len(names))) as pool):
+            return tuple(pool.map(lambda name: self.start_owner(root, name), names))
 
     def restart_services(self) -> tuple[RestartedService, ...]:
         """Every running host service moves onto this runtime, which owns the root and so
@@ -686,7 +704,8 @@ class PracticeBus:
             tempfile.TemporaryDirectory(dir=parent, prefix="practice-") as scratch,
             tempfile.TemporaryDirectory(dir=spill_dir, prefix="practice-carry-") as spill,
         ):
-            yield cls(Path(scratch), PracticeCopy(root, Path(scratch) / "bus"), root, Path(spill), clock)
+            yield cls(Path(scratch), PracticeCopy(root, Path(scratch) / "bus"), root,
+                      Path(spill), clock)
 
     def pending(self, chain: CarryChain, staged: Stack) -> tuple[type[Carry], ...]:
         """Read-only dry runs in one worker stop at the first step that says work remains."""
@@ -844,7 +863,7 @@ class Install[Rehearsed: Rehearsal](ABC):
                 with BridgePhase("discover and pause").running(self.staged.commands.clock):
                     for bridge in Serve.running(self.installed.home):
                         bridges.pause(bridge, resources)
-                return self.live(rehearsal, report)
+                return report.record_live(self.live(rehearsal, report))
             finally:
                 # A later pause may fail; resume captured peers before closing their sockets.
                 with BridgePhase("resume").running(self.staged.commands.clock):

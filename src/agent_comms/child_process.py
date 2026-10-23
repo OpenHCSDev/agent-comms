@@ -555,7 +555,8 @@ class LinuxPlatform(PidfdHandles, PosixPlatform):
         return self._stat(pid).identity
 
     def started_at(self, identity: ProcessIdentity) -> float:
-        age = time.clock_gettime(time.CLOCK_BOOTTIME) - identity.start_time / os.sysconf("SC_CLK_TCK")
+        started = identity.start_time / os.sysconf("SC_CLK_TCK")
+        age = time.clock_gettime(time.CLOCK_BOOTTIME) - started
         return time.monotonic() - age
 
     def parent_identity(self, pid: int) -> ProcessIdentity:

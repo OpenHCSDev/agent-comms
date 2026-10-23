@@ -16,13 +16,18 @@ from typing import BinaryIO
 from agent_comms.child_process import SpawnedProcess
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.interpreter_operation import (
+    CommandPhase,
+    GitPhase,
+    InstallClock,
+    InstallPhase,
+    PhaseTiming,
     ProbeProgram,
-    ProbeRequest,
     ProbeReply,
+    ProbeRequest,
     RuntimeProbe,
     SourceProgram,
+    WorkerClosePhase,
 )
-from agent_comms.installer.interpreter_operation import CommandPhase, GitPhase, InstallClock, InstallPhase, PhaseTiming, WorkerClosePhase
 from agent_comms.installer.refusals import InterpreterWorkerDied, UpgradeRefused
 from agent_comms.launch_runtime import RestoredRuntime
 from agent_comms.maintenance_barrier import MaintenanceHolder
