@@ -920,10 +920,6 @@ class SingleValueEncoding(WireValue):
         entry, = FieldCodec._record_plan(cls).fields
         return entry
 
-    @classmethod
-    def wire_structure(cls, structural: ValueDecoder[object]) -> ValueDecoder[object]:
-        return cls.wire_field().value
-
     def to_wire(self):
         entry = self.wire_field()
         return FieldCodec.encode_document(getattr(self, entry.name), entry.annotation)
@@ -931,6 +927,10 @@ class SingleValueEncoding(WireValue):
 
 class SingleFieldValue(ExternalJsonShape, SingleValueEncoding):
     """One declared field is the whole wire value, not an object envelope."""
+
+    @classmethod
+    def wire_structure(cls, structural: ValueDecoder[object]) -> ValueDecoder[object]:
+        return cls.wire_field().value
 
     @classmethod
     def from_wire(cls, data):
