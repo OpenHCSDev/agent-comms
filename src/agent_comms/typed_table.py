@@ -1890,8 +1890,13 @@ class TypedTable(
         return (self.insertion_statement(),
                 tuple(item.encode(getattr(self, item.name)) for item in writable))
 
+    def insertion(self) -> tuple[str, tuple]:
+        """The statement and values that insert this row; a table whose insert differs
+        overrides this, so one row and a batch of rows insert alike."""
+        return self._insertion()
+
     def insert(self, db: sqlite3.Connection) -> sqlite3.Cursor:
-        return db.execute(*self._insertion())
+        return db.execute(*self.insertion())
 
     def insert_if_absent(self, db: sqlite3.Connection) -> sqlite3.Cursor:
         statement, values = self._insertion()
