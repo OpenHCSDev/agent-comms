@@ -304,8 +304,16 @@ class Checkout:
         common = Path(
             Repo.git(self.path, "rev-parse", "--path-format=absolute", "--git-common-dir").strip()
         )
+        directory = Path(Repo.git(self.path, "rev-parse", "--absolute-git-dir").strip())
+        if directory == common:
+            raise ValueError(f"Cannot retire the primary checkout: {self.path}")
         if self.submodules():
             Repo.git(self.path, "submodule", "deinit", "--all")
+            # Deinit empties the working directory but retains this worktree's
+            # module repositories. Git still refuses removal while they exist.
+            modules = directory / "modules"
+            if modules.exists():
+                shutil.rmtree(modules)
         Repo.git(common.parent, "worktree", "remove", str(self.path))
         Repo.git(common.parent, "worktree", "prune")
 

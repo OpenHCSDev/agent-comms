@@ -18,7 +18,7 @@ from agent_comms.installer.backup import BackupReport, RestoreSpace, UpgradeRefu
 from agent_comms.installer.carry import Carried
 from agent_comms.installer.launch import InstallReport
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.phase import CommandPhase, PhaseTiming
+from agent_comms.installer.interpreter_operation import CommandPhase, PhaseTiming
 from agent_comms.installer.interpreter_operation import (
     InstalledProgram, InstallReportProbe,
 )

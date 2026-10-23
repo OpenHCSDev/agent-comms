@@ -78,7 +78,7 @@ from agent_comms.installer.carry import (
     RetireInputsOperation,
 )
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.phase import (
+from agent_comms.installer.interpreter_operation import (
     BuildPhase, CopyPhase, GitPhase, InstallClock, InstallRunPhase,
     LivePhase, PhaseTiming, PracticePhase, PreparePhase, PublicationPhase, VerifyPhase,
 )

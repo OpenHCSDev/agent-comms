@@ -29,7 +29,7 @@ from agent_comms.installer.carry import (
 )
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.phase import CarryPhase
+from agent_comms.installer.interpreter_operation import CarryPhase
 from agent_comms.installer.interpreter_operation import ProbeRequest, TargetProgram
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.installer.upgrade import (

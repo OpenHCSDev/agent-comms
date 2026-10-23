@@ -26,7 +26,7 @@ from agent_comms.cli_commands import InstallCliCommand, InstallResult
 from agent_comms.field_codec import FieldCodec, Id128Text, PathText
 from agent_comms.installer.backup import StoreBackup, UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.phase import InstallClock, PhaseTiming, PreparePhase, PublicationPhase, TreeClosePhase
+from agent_comms.installer.interpreter_operation import InstallClock, PhaseTiming, PreparePhase, PublicationPhase, TreeClosePhase
 from agent_comms.installer.reporting import (
     FinishedInstall, InstallOutcome, RootWriter, UnfinishedInstall, UnpostedWriter,
 )

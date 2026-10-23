@@ -22,7 +22,7 @@ from agent_comms.installer.interpreter_operation import (
     RuntimeProbe,
     SourceProgram,
 )
-from agent_comms.installer.phase import CommandPhase, GitPhase, InstallClock, InstallPhase, PhaseTiming, WorkerClosePhase
+from agent_comms.installer.interpreter_operation import CommandPhase, GitPhase, InstallClock, InstallPhase, PhaseTiming, WorkerClosePhase
 from agent_comms.launch_runtime import RestoredRuntime
 from agent_comms.maintenance_barrier import MaintenanceHolder
 from agent_comms.repo import Repo

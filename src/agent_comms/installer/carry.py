@@ -24,7 +24,7 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import PathText
 from agent_comms.installer.interpreter_operation import InterpreterOperation, RuntimeProbe
-from agent_comms.installer.phase import CarryPhase, InstallClock, PhaseTiming
+from agent_comms.installer.interpreter_operation import CarryPhase, InstallClock, PhaseTiming
 from agent_comms.locked_store import RootFile
 from agent_comms.repo import Repo
 
