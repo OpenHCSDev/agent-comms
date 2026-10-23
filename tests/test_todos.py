@@ -337,7 +337,9 @@ def adopt_pr(ctx, pid, number):
     PullRequestVerb.add_arguments(parser)
     command = PullRequestVerb.from_arguments(
         parser.parse_args([pid, "--existing", str(number)]))
-    with chdir(ctx.repos[0].checkout):
+    todo = ctx.comms.goals.todos.get(pid)
+    checkout = Path(ctx.comms.registry.require(todo.held().owner).project_path)
+    with chdir(checkout):
         command.apply(ctx)
     return ctx.comms.goals.todos.get(pid)
 
@@ -372,7 +374,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
         lead = c.registry.require(ctx.commander)
         c.registry.register(replace(lead, process_identity=ProcessIdentity.capture(os.getpid())))
         worker_checkout = ctx.root.parent / "worker-checkout"
-        worker_checkout.mkdir()
+        source.git(source.checkout, "worktree", "add", "-q", "--detach", str(worker_checkout))
         worker = Thread("worker", frozenset(), str(worker_checkout), created_at=2.0)
         c.registry.register(worker)
         original = adopt_pr(ctx, pr_order(ctx, "P1", ApplicationOrderRun(

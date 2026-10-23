@@ -55,6 +55,7 @@ class Visible:
 
 @dataclass(frozen=True)
 class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
+    may_be_active: ClassVar[bool] = False
     running: ClassVar[bool] = False
     stopped: ClassVar[bool] = False
     # Whether a message sent now is read now; each status answers, none by default.
@@ -163,6 +164,7 @@ class ActiveThreadPresence(AlwaysListed, Visible, ThreadStatus, declared_name=No
     """Shared semantics of running and idle owners; not a second state family."""
 
     receiving = True
+    may_be_active = True
 
     def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
         return thread.process_identity.thread_status(self, last_seen)
@@ -285,6 +287,8 @@ class StoppedThreadStatus(Visible, ThreadStatus):
 
 class CliInboxPresence(AlwaysListed):
     """The declared inbox resolves its bridge process at every read."""
+
+    may_be_active: ClassVar[bool] = True
 
     def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
         return (ConnectedThreadStatus() if thread.process_identity.alive()

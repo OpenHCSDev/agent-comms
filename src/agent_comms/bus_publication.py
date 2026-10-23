@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .class_fact import ClassFact
+from .projection_source import ProducedRow
 import json
 import sqlite3
 from abc import ABC, abstractmethod
@@ -33,6 +35,12 @@ if TYPE_CHECKING:
 
 
 class Delivered(BusRecord, declared_name=None):
+
+    @ClassFact
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
+        from .bus_tables import SentSource, ReceivedSource, AwaitingAnswerSource
+        return (SentSource, ReceivedSource, AwaitingAnswerSource)
+
     audience: FrozenAudience
     decisions: tuple[RecipientDecision, ...]
     control: str

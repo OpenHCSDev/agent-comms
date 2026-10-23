@@ -1,6 +1,9 @@
 """Select the package's Core stamp using the build target."""
 
+import json
+import os
 import subprocess
+import sys
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 from shutil import copyfile
@@ -17,8 +20,8 @@ class CoreBuildHook(BuildHookInterface):
         root = Path(self.root)
         relative = "src/agent_comms/package_stamp.py"
         source = root / relative
-        # These definitions need no application dependencies in the build env. Loaded under
-        # their package name, so a written stamp imports its type from where it is declared.
+        # Load the stamp under its package name, so the generated value imports its type
+        # from the same place at runtime.
         spec = spec_from_file_location(
             "agent_comms.core_stamp", root / "src/agent_comms/core_stamp.py"
         )
@@ -27,14 +30,14 @@ class CoreBuildHook(BuildHookInterface):
         # Never overwrite a source checkout's stamp while building its wheel.
         path = Path(self.directory) / ".core_stamp.py"
         if (root / ".git").exists():
-            # Repo.git cannot load here, so the build reads its commit directly.
+            # Pin this source revision before stamping its producer digests.
             commit = subprocess.check_output(
                 ("git", "-C", str(root.resolve()), "rev-parse", "HEAD"),
                 text=True,
             ).strip()
-            types.WheelStamp(commit).write(path)
+            types.WheelStamp(commit, self.producer_digests(root)).write(path)
         elif not (commit := "$Format:%H$").startswith("$Format"):
-            types.WheelStamp(commit).write(path)
+            types.WheelStamp(commit, self.producer_digests(root)).write(path)
         else:
             # A source distribution already carries its generated wheel value.
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -42,6 +45,21 @@ class CoreBuildHook(BuildHookInterface):
         destination = relative.removeprefix("src/") if self.target_name == "wheel" else relative
         self.build_config.build_reserved_paths.add(destination)
         build_data["force_include"][str(path)] = destination
+
+    def producer_digests(self, root: Path) -> dict[str, str]:
+        """Import the bus's declared schema once while building its immutable wheel.
+
+        The custom hook requires the project's runtime dependencies in pyproject.toml;
+        hatchling alone cannot import the application in an isolated build.
+        """
+        return json.loads(
+            subprocess.check_output(
+                (sys.executable, "-m", "agent_comms.producer_stamp"),
+                cwd=root,
+                env={**os.environ, "PYTHONPATH": str(root / "src")},
+                text=True,
+            )
+        )
 
     def finalize(self, version, build_data, artifact_path):
         (Path(self.directory) / ".core_stamp.py").unlink(missing_ok=True)

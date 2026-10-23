@@ -431,7 +431,7 @@ class HistoryViews:
     def who(self) -> tuple[ThreadView, ...]:
         """Who is here: live presences, with no unread scan that grows with history."""
         snapshot = self.registry.snapshot()
-        live = tuple(thread.name for thread in snapshot.active_threads(snapshot.threads.values()))
+        live = tuple(thread.name for thread in snapshot.active_threads(snapshot.active_candidates()))
         return tuple(sorted(
             ThreadView.roster(snapshot, self.agents, self.goals, DEFAULT_ROSTER, names=live),
             key=lambda view: view.thread.name))

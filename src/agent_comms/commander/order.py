@@ -43,6 +43,7 @@ from agent_comms.field_codec import (
     Argument,
     FieldCodec,
     MalformedRecord,
+    MessageIdText,
     Normalize,
     NullMember,
     SingleFieldValue,
@@ -791,7 +792,7 @@ class DirectiveVerb(CommanderVerb):
     """An action may answer named directives; unrelated work cannot clear them."""
 
     answers: Annotated[
-        tuple[str, ...],
+        tuple[Annotated[str, MessageIdText], ...],
         Argument(
             flags=("--answers",),
             options={"nargs": "+",

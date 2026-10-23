@@ -236,7 +236,7 @@ def test_dirty_then_unpushed_then_pushed_linked_checkout(checkout_bus: Comms, tm
         assert c.registry.require('idle').goal.require().text
         beat()
     history = core('--root', str(root), 'history',
-                   '--target', '@commander-heartbeat', '--as', 'lead', '--limit', '10')
+                   '@commander-heartbeat', '--as', 'lead', '--limit', '10')
     assert history.returncode == 0, history.stderr
     assert f'WORK HELD: P2 worker retains work in {checkout}' in history.stdout
     assert f'NO LONGER CURRENT: WORK HELD: P2 worker retains work in {checkout}' in history.stdout
