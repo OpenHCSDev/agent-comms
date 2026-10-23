@@ -131,7 +131,9 @@ class BusReader(RouteCounts, ABC):
         with self.observing() as db:
             return BusRow.last_seq(db)
 
-    def activity_clocks(self, contention: StoreLockContention = UNBOUNDED_CONTENTION) -> ActivityClocks:
+    def activity_clocks(
+        self, contention: StoreLockContention = UNBOUNDED_CONTENTION,
+    ) -> ActivityClocks:
         with self.observing(contention) as db:
             return BusActivityIndex.clocks(db)
 
