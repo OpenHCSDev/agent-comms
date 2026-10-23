@@ -30,11 +30,12 @@ from agent_comms.locked_store import SQLiteFile
 from agent_comms.coordination_errors import IdentityConflict
 
 from .field_codec import FieldCodec
+from .child_process import Platform
 
 if TYPE_CHECKING:
     from .agent_backend import StreamingInputPolicy
 
-from .private_path import ObservedPath
+from .private_path import ObservedPath, PrivateFileRole, TrustedAncestorRole
 from .store_files import StoreOwner
 from .typed_table import (
     AllObjectsTables,
@@ -50,22 +51,17 @@ from .typed_table import (
 _MAX_SIDECAR_BYTES = 32 * 1024 * 1024
 
 
+class UnprivateSidecarFile(IdentityConflict):
+    def __init__(self) -> None:
+        super().__init__("Private sidecar file must be regular, owner-only and unaliased.")
+
+
 class SidecarCommitUnknown(IdentityConflict):
     """No successful durability acknowledgement; callers must not send or retry input."""
 
 
 def _identity(info: os.stat_result) -> tuple[int, int]:
     return info.st_dev, info.st_ino
-
-
-def _require_file(info: os.stat_result) -> None:
-    if (
-        not stat.S_ISREG(info.st_mode)
-        or info.st_uid != os.geteuid()
-        or stat.S_IMODE(info.st_mode) != 0o600
-        or info.st_nlink != 1
-    ):
-        raise IdentityConflict("Private sidecar file must be regular, owner-only and unaliased.")
 
 
 @dataclass
@@ -92,7 +88,7 @@ class _PinnedDirectory:
             locked = self.stat(self.lock_name)
             if locked is None or _identity(locked) != self.lock_identity:
                 raise IdentityConflict("Private sidecar lock identity changed.")
-            _require_file(locked)
+            PrivateFileRole.require(locked, UnprivateSidecarFile())
 
     def stat(self, name: str) -> os.stat_result | None:
         try:
@@ -109,7 +105,7 @@ class _PinnedDirectory:
         elif actual is None or _identity(actual) != _identity(expected):
             raise IdentityConflict("Private sidecar inode changed.")
         else:
-            _require_file(actual)
+            PrivateFileRole.require(actual, UnprivateSidecarFile())
             if (actual.st_size, actual.st_mtime_ns, actual.st_ctime_ns) != (
                 expected.st_size,
                 expected.st_mtime_ns,
@@ -120,21 +116,21 @@ class _PinnedDirectory:
 
 @contextmanager
 def _locked_directory(path: Path) -> Iterator[_PinnedDirectory]:
-    if os.name != "posix" or not hasattr(os, "O_NOFOLLOW"):
-        raise IdentityConflict("Private sidecar snapshots require POSIX no-follow descriptors.")
+    Platform.current().require_pinned_paths(IdentityConflict(
+        "Private sidecar snapshots require POSIX no-follow descriptors."))
     import fcntl
 
     path = path.absolute()
     if ".." in path.parts or not path.name:
         raise IdentityConflict("Private sidecar path must be lexical.")
-    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
     with ExitStack() as stack:
-        fd = os.open(path.anchor, flags)
+        refusal = IdentityConflict("Private sidecar snapshots require a trusted directory.")
+        fd = TrustedAncestorRole.read(path.anchor, refusal)
         stack.callback(os.close, fd)
         current = Path(path.anchor)
         ancestors = [(current, _identity(os.fstat(fd)))]
         for part in path.parent.parts[1:]:
-            fd = os.open(part, flags, dir_fd=fd)
+            fd = TrustedAncestorRole.read(part, refusal, dir_fd=fd)
             stack.callback(os.close, fd)
             current /= part
             ancestors.append((current, _identity(os.fstat(fd))))
@@ -148,7 +144,7 @@ def _locked_directory(path: Path) -> Iterator[_PinnedDirectory]:
             dir_fd=fd,
         )
         stack.callback(os.close, lock)
-        _require_file(os.fstat(lock))
+        PrivateFileRole.require(os.fstat(lock), UnprivateSidecarFile())
         fcntl.flock(lock, fcntl.LOCK_EX)
         stack.callback(fcntl.flock, lock, fcntl.LOCK_UN)
         directory.unchanged(lock_name, os.fstat(lock))
@@ -167,12 +163,11 @@ def _locked_directory(path: Path) -> Iterator[_PinnedDirectory]:
 def _read_snapshot(directory: _PinnedDirectory, name: str) -> tuple[bytes, os.stat_result] | None:
     # O_NONBLOCK ensures a FIFO substitution cannot hang before fstat rejects it.
     try:
-        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory.fd)
+        fd = PrivateFileRole.read(name, UnprivateSidecarFile(), dir_fd=directory.fd)
     except FileNotFoundError:
         return None
     try:
         info = os.fstat(fd)
-        _require_file(info)
         if not 100 <= info.st_size <= _MAX_SIDECAR_BYTES:
             raise IdentityConflict("Private sidecar snapshot is empty or oversized.")
         directory.unchanged(name, info)
@@ -268,9 +263,7 @@ def _publish(
     # explicit diagnosis, never replay of a reserved input or a guessed rollback.
     begun = False
     try:
-        marker = os.open(
-            intent, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=directory.fd
-        )
+        marker = PrivateFileRole.create(intent, UnprivateSidecarFile(), dir_fd=directory.fd)
         begun = True
         try:
             _write_all(marker, b"sidecar-snapshot-v1\n")
@@ -278,17 +271,11 @@ def _publish(
         finally:
             os.close(marker)
         os.fsync(directory.fd)
-        fd = os.open(
-            staging,
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-            0o600,
-            dir_fd=directory.fd,
-        )
+        fd = PrivateFileRole.create(staging, UnprivateSidecarFile(), dir_fd=directory.fd)
         try:
             _write_all(fd, raw)
             os.fsync(fd)
             staged = os.fstat(fd)
-            _require_file(staged)
         finally:
             os.close(fd)
         directory.unchanged(name, expected)
@@ -300,7 +287,7 @@ def _publish(
         actual = directory.stat(name)
         if actual is None or _identity(actual) != _identity(staged):
             raise IdentityConflict("Private sidecar replacement identity changed.")
-        _require_file(actual)
+        PrivateFileRole.require(actual, UnprivateSidecarFile())
         os.unlink(intent, dir_fd=directory.fd)
         os.fsync(directory.fd)
     except BaseException as error:
