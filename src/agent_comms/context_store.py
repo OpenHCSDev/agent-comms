@@ -34,7 +34,7 @@ from .turn_context import (
     UnrecordedSegment,
 )
 
-from .typed_table import Column, DurableStore, Generated, Index, SingletonRow, TypedTable
+from .typed_table import StoreRows, Column, DurableStore, Generated, Index, SingletonRow, TypedTable
 
 
 @dataclass(frozen=True)
@@ -89,8 +89,12 @@ class UnrecordedContextSource(ContextSourceState):
         return ContextManifestPage(())
 
 
+class ContextStoreRows(StoreRows):
+    """The tables of ContextStore; each row declares itself one."""
+
+
 @dataclass(frozen=True)
-class ContextStoreInfo(ContextSourceState, SingletonRow):
+class ContextStoreInfo(ContextStoreRows, ContextSourceState, SingletonRow):
     source: ContextStoreIdentity
 
     @classmethod
@@ -150,7 +154,7 @@ class ContextStoreInfo(ContextSourceState, SingletonRow):
 
 
 @dataclass(frozen=True)
-class ContextEntry(TypedTable):
+class ContextEntry(ContextStoreRows, TypedTable):
     session_id: Annotated[str, Column(primary_key=True)]
     session_file: Annotated[str, Column(primary_key=True)]
     entry_id: Annotated[str, Column(primary_key=True)]
@@ -176,7 +180,7 @@ class ContextEntry(TypedTable):
 
 
 @dataclass(frozen=True)
-class ContextSegmentVersion(TypedTable):
+class ContextSegmentVersion(ContextStoreRows, TypedTable):
     id: Annotated[int, Column(primary_key=True, auto_increment=True)]
     digest: str
     segment: RecordedSegmentManifest
@@ -195,7 +199,7 @@ class ContextSegmentVersion(TypedTable):
 
 
 @dataclass(frozen=True)
-class ContextRequest(TypedTable):
+class ContextRequest(ContextStoreRows, TypedTable):
     id: Annotated[int, Column(primary_key=True, auto_increment=True)]
     identity: RecordedContextIdentity
     thread_birth: ClassVar[Generated] = Generated(
@@ -460,7 +464,7 @@ class ContextManifestPage:
 class ContextStore(DurableStore):
     root: Path
     filename: ClassVar[str] = "turn_context.sqlite3"
-    rows = (ContextStoreInfo, ContextEntry, ContextSegmentVersion, ContextRequest)
+    tables = ContextStoreRows
     max_page_rows: ClassVar[int] = 8
     max_page_bytes: ClassVar[int] = 512 * 1024
     schema_error = StoredHistoryUnreadable

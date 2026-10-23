@@ -30,10 +30,10 @@ def test_missing_snapshot_has_declared_read_only_schema_without_creating_root(tm
         assert connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
         assert connection.execute("PRAGMA database_list").fetchone()[2] == ""
         store.require_schema(connection)
-        for row in store.rows:
+        for row in store.schema_rows():
             assert row.select(connection) == []
         with pytest.raises(sqlite3.OperationalError):
-            store.rows[0].delete(connection, where="1")
+            store.schema_rows()[0].delete(connection, where="1")
     assert not root.exists()
     with pytest.raises(sqlite3.ProgrammingError):
         connection.execute("SELECT 1")
