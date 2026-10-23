@@ -131,6 +131,28 @@ def test_projection_digest_ignores_infrastructure_source(
     assert projection_source_digest(projection_source) == before
 
 
+def test_projection_digest_tracks_declared_column_spelling(projection_source: Path) -> None:
+    reference = projection_source / "message_reference.py"
+    reference.write_text(reference.read_text().replace(
+        "from dataclasses import dataclass",
+        "from dataclasses import dataclass\nfrom typing import Annotated",
+    ).replace(
+        "from .field_codec import NullMember,",
+        "from .field_codec import MessageIdText, NullMember,",
+    ).replace("message_id: str", "message_id: Annotated[str, MessageIdText]"))
+    before = json.loads(projection_source_digest(projection_source))["message_identity_source"]
+    codec = projection_source / "field_codec.py"
+    original = codec.read_text()
+    related = "digits: ClassVar[int] = 12"
+    assert original.count(related) == 1
+    codec.write_text(original.replace(related, "digits: ClassVar[int] = 13"))
+    assert json.loads(projection_source_digest(projection_source))["message_identity_source"] != before
+    unrelated = 'spelling = re.compile("[0-9a-f]{7,40}")'
+    assert original.count(unrelated) == 1
+    codec.write_text(original.replace(unrelated, 'spelling = re.compile("[0-9a-f]{8,40}")'))
+    assert json.loads(projection_source_digest(projection_source))["message_identity_source"] == before
+
+
 @pytest.mark.parametrize(
     ("module", "old", "new"),
     (
