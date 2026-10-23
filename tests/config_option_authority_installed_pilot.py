@@ -6,6 +6,7 @@ root, setting, native journal or historical input is changed.
 """
 from __future__ import annotations
 
+
 from agent_comms.bus import Bus
 
 import argparse
@@ -19,7 +20,7 @@ import sys
 
 from acp.exceptions import RequestError
 from agent_comms.acp import CommsAgent
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.pi_vocabulary import OffThinkingLevel, HighThinkingLevel
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.threads import Thread
@@ -106,7 +107,7 @@ async def run(stage, package, models, ui, menu_contention=False):
     stage.mkdir(mode=0o700, parents=True, exist_ok=False)
     project = stage / 'project'
     project.mkdir()
-    service = Comms(stage / 'wire')
+    service = wire(stage / 'wire')
     Bus.install(Bus.path_in(service.root))
     environment = dict(os.environ)
     environment.update(

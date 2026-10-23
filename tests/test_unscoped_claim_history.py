@@ -1,7 +1,8 @@
 """Bus history holds tool acquisitions written before claims recorded a scope."""
+
 import pytest
 
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.envelope_claim_transitions import (
     ClaimProjection, ClaimRelease, ClaimTransition, NativeClaim, ReleasedClaims,
     UnrecordedScope, UnscopedClaims, WakeClaims,
@@ -13,7 +14,7 @@ G1, G2 = "a" * 32, "b" * 32
 
 
 def test_unscoped_history_row_decodes_projects_never_live_and_releases(tmp_path):
-    comms = Comms(tmp_path / "wire")
+    comms = wire(tmp_path / "wire")
     comms.registry.declare(comms.registry.new_thread("owner", frozenset(), str(tmp_path)))
     comms.registry.register(comms.registry.require("owner"), RunningThreadStatus())
     comms.registry.declare(comms.registry.new_thread("peer", frozenset(), str(tmp_path)))

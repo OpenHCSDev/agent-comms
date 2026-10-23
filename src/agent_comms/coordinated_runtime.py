@@ -7,6 +7,7 @@ orders those lifetimes and cannot represent a half-initialized native attempt.
 
 from __future__ import annotations
 
+
 import threading
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
@@ -15,7 +16,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from .agent_events import CompactionEvent
-from .comms import Comms
+from .comms import wire
 from .coordination_database import CoordinationStore
 from .coordination_errors import (
     IdentityConflict,
@@ -98,7 +99,7 @@ class SelectedExecution(NativeExecution):
             raise PublicationActivationBlocked("coordinated runtime requires explicit activation")
         try:
             NativeSessionFiles.require_private_directory(self.root)
-            owner = Comms(self.root).registry.require(self.owner_name)
+            owner = wire(self.root).registry.require(self.owner_name)
             if not Path(owner.worktree).is_dir():
                 raise ValueError("registered participant worktree is unavailable")
             directory = owner.native_session_directory(self.root)
@@ -145,7 +146,7 @@ class SelectedExecution(NativeExecution):
         # This execution must verify its package before selecting work.
         # Wait for the blocking check before claiming any input.
         await Coordination.run_worker(self.validate)
-        comms = Comms(self.root)
+        comms = wire(self.root)
         with Coordination(str(CoordinationStore.path_in(self.root))) as store:
             while True:
                 async with SelectedParticipant.select(

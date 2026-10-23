@@ -222,7 +222,7 @@ async def test_new_tag_disposition_is_declared_in_original_editor_and_tool_catal
     from agent_comms.native_tools import NativeRequestTools
 
     comms = setup_wire(tmp_path)
-    action = next(action for action in CliCommand.target_catalog(comms, CliCommand.selected_targets('#api'), project=str(tmp_path))
+    action = next(action for action in CliCommand.target_catalog(comms, CliCommand.selected_targets(CommandTarget.named('#api')), project=str(tmp_path))
                   if action.declaration.declared_name == 'delete-tag')
     disposition = DeleteExclusiveInactiveThreadsTagDisposition()
     editor_value = compile_decoder(TagDisposition).encode_editor(disposition)
@@ -266,7 +266,7 @@ def test_any_is_non_routable(tmp_path):
     with pytest.raises(ValueError):
         comms.messaging.send("other", "#any", "agent send rejected").message.message_id
     with pytest.raises(ValueError):
-        comms.messaging.send_user_message("#any", "user send rejected", worktree=str(tmp_path))
+        comms.messaging.send_user_message(CommandTarget.named('#any'), "user send rejected", worktree=str(tmp_path))
 
 
 def test_tag_lifecycle_is_transactional_for_metadata_views_and_history(tmp_path):

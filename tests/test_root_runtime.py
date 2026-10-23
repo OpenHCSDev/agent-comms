@@ -1,8 +1,9 @@
 """Root attachment and publication use one persisted runtime owner."""
 
+
 import pytest
 
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.locked_store import RegistryFile
@@ -55,13 +56,13 @@ def test_root_runtime_attachment_family(tmp_path):
 
 
 def test_comms_creates_a_private_root_and_refuses_foreign_stores(tmp_path):
-    created = Comms(tmp_path / "created")
+    created = wire(tmp_path / "created")
     assert RootRuntimeStore.at(created.root).read().prefix == LaunchRuntime.running().prefix
 
     root = tmp_path / "bus"
     other = LaunchRuntime(tmp_path / "other/bin/python")
     RootRuntime.publish(root, other)
     with pytest.raises(ForeignRuntimeError):
-        Comms(root)
+        wire(root)
     assert not RegistryFile.path_in(root).exists()
     assert not Bus.path_in(root).exists()
