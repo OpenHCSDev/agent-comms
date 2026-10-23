@@ -71,7 +71,7 @@ class CodingToolOwner(ABC):
             self.goal_permission.require_current(snapshot.require(self.owner_name).goal)
             self.verify(store, turn, snapshot)
             slot = call.slot(turn.command.input_id, round_number)
-            consume_selected_slot(store, slot, slot, native_input_id=turn.command.input_id)
+            consume_selected_slot(store, slot, slot)
             owner = self.comms.registry.require(self.owner_name)
             resource = call.allowed_claim()
             if resource is not None:

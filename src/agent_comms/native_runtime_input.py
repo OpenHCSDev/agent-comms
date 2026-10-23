@@ -45,7 +45,6 @@ from .typed_table import (
     Column,
     FinalizedColumn,
     FrozenColumn,
-    ForeignKey,
     IntegerStorage,
     MonotoneColumns,
     NoDelete,
@@ -360,23 +359,17 @@ class AcknowledgedSlot(SelectedSlotState):
 
 @dataclass(frozen=True)
 class SelectedToolSlot(NativeRuntimeTable, WithoutRowid):
-    """One durable tool slot, retained and retired with its original native input."""
+    """The consumed slot and its live terminal acknowledgement, in one transaction store."""
 
     input_id: Annotated[str, FrozenColumn(primary_key=True)]
     call_id: Annotated[str, FrozenColumn()]
-    native_input_id: Annotated[str, FrozenColumn(index=True)]
     state: type[SelectedSlotState] = ConsumedSlot
 
     @classmethod
-    def references(cls) -> tuple[ForeignKey, ...]:
-        return (ForeignKey(target=NativeRuntimeInput, target_columns=("input_id",),
-                           columns=("native_input_id",), on_delete="CASCADE"),)
-
-    @classmethod
     def consume(
-        cls, db: sqlite3.Connection, input_id: str, call_id: str, native_input_id: str,
+        cls, db: sqlite3.Connection, input_id: str, call_id: str,
     ) -> None:
-        if cls(input_id, call_id, native_input_id).insert_if_absent(db).rowcount != 1:
+        if cls(input_id, call_id).insert_if_absent(db).rowcount != 1:
             raise SelectedToolDenied("Selected tool input already consumed; outcome may be UNKNOWN")
 
     def require_call(self, call_id: str) -> None:

@@ -72,7 +72,6 @@ class SelectedToolIntent(SelectedAction):
             owner.store,
             owner.resource_scope,
             owner.owner_name,
-            owner.session_dir,
             owner.input_id,
         )
 
@@ -172,9 +171,7 @@ def selected_extension(package: Path) -> Path:
     return source
 
 
-def consume_selected_slot(
-    store: Coordination, input_id: str, call_id: str, *, native_input_id: str,
-) -> None:
+def consume_selected_slot(store: Coordination, input_id: str, call_id: str) -> None:
     """Commit consumption BEFORE any action; a failed commit is UNKNOWN, never retried."""
     try:
         Id128Text.decode(input_id)
@@ -184,7 +181,7 @@ def consume_selected_slot(
         raise SelectedToolDenied("Selected tool call identity is invalid")
     try:
         with store.session.writing() as db:
-            SelectedToolSlot.consume(db, input_id, call_id, native_input_id)
+            SelectedToolSlot.consume(db, input_id, call_id)
     except sqlite3.Error as error:
         raise SelectedToolDenied("Selected tool consumption UNKNOWN; do not retry") from error
 
@@ -203,7 +200,6 @@ def selected_tool_mode_for_owner(
     store: Coordination,
     claim_scope: WakeClaim,
     owner_name: str,
-    session_dir: Path,
     input_id: str,
 ) -> SelectedToolMode:
     """Capture only owner-derived typed fields for this one FULL selected input.
@@ -226,7 +222,7 @@ def selected_tool_mode_for_owner(
         with Coordination(path) as worker_store:
             verify_sent_full_input(worker_store, claim_scope, owner_name, input_id)
             perform_selected_write(
-                comms, worker_store, claim_scope, owner_name, session_dir, input_id, request
+                comms, worker_store, claim_scope, owner_name, input_id, request
             )
 
     return SelectedToolMode(owner_action)
@@ -290,12 +286,11 @@ def perform_selected_write(
     store: Coordination,
     claim_scope: WakeClaim,
     owner_name: str,
-    session_dir: Path,
     input_id: str,
     request: SelectedToolRequest,
 ) -> None:
     """Only the owner calls the existing selected claim and writer boundaries."""
-    consume_selected_slot(store, input_id, request.call_id, native_input_id=input_id)
+    consume_selected_slot(store, input_id, request.call_id)
     # Any exception from here leaves the slot consumed. The caller reports
     # UNKNOWN and never automatically reissues the claim or mutation.
     claimed = publish_selected_resource_claim(
