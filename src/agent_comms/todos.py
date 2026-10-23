@@ -4018,12 +4018,12 @@ class TodoStore(OwnerRequestStore):
 
     def timers_up_for_commander(
         self, commander: ThreadIncarnation, registry: Registration, now: float,
-        pulls: ProgressRead | None = None,
+        pulls: ProgressRead,
     ) -> tuple[tuple[Todo, RecordedEventTime], ...]:
         """Held work whose review timer is up, with its round; merged work waits on install.
-        The heartbeat passes its frame's reader, so one beat asks the forge once."""
+        The caller's frame reader answers, so one frame asks the forge once."""
         held = self.held_for_commander(commander)
-        pulls = ProgressRead(held) if pulls is None else pulls.register(held)
+        pulls = pulls.register(held)
         progress = {todo.id: OrderProgress.read(todo, registry, pulls) for todo in held}
         return self.timers_up_in(held, now, progress)
 
@@ -4039,11 +4039,11 @@ class TodoStore(OwnerRequestStore):
             (commander.name, commander.wire_birth), reader=self._open)
 
     def claimed_heads_for_commander(
-        self, commander: ThreadIncarnation, pulls: PullRequests | None = None,
+        self, commander: ThreadIncarnation, pulls: PullRequests,
     ) -> Iterator[tuple[Todo, OrderClaim, PullRequest]]:
         """Recorded delivery claims survive a missing or stopped unit observation."""
         held = self.held_for_commander(commander)
-        reader = PullRequests(held) if pulls is None else pulls.register(held)
+        reader = pulls.register(held)
         for todo in held:
             for claim, request in reader.claimed_heads(todo):
                 yield todo, claim, request

@@ -221,8 +221,9 @@ def test_order_claim_publishes_only_to_its_retained_commander_birth(
 
 
 def unanswered(comms):
+    pulls = ProgressRead()
     return UnitAskUnanswered.broken(
-        comms, "lead", observed=UnitState.current(comms, "lead", ProgressRead()))
+        comms, "lead", observed=UnitState.current(comms, "lead", pulls), pulls=pulls)
 
 
 def blocked_holder(comms):
@@ -615,9 +616,10 @@ def test_one_state_per_unit_even_when_blocked_and_detached(held_bus, installed_r
     assert detached.unit.name == "worker" and set(detached.orders) == {"P1", "P2"}
     blocked_holder(held_bus)
     blocked, = state_cards(held_bus, Blocked)
-    states = UnitState.current(held_bus, "lead", ProgressRead())
+    pulls = ProgressRead()
+    states = UnitState.current(held_bus, "lead", pulls)
     assert tuple(state for state in states if state.unit == blocked.unit) == (blocked,)
-    assert blocked not in StandingRule.broken(held_bus, "lead", observed=states)
+    assert blocked not in StandingRule.broken(held_bus, "lead", observed=states, pulls=pulls)
 
 
 def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus, installed_runtime):
@@ -685,7 +687,8 @@ def test_first_heartbeat_is_owed_from_the_oldest_open_request_then_survives_rena
     assert isinstance(never, HeartbeatNotStarted)
     assert never.request == request.id and never.since == due
     assert "HEARTBEAT NOT STARTED" in never.line()
-    assert HeartbeatSilent.broken(held_bus, "lead", observed=()) == (never,)
+    assert HeartbeatSilent.broken(
+        held_bus, "lead", observed=(), pulls=ProgressRead()) == (never,)
 
     # A newer request and mere service registration cannot reset older unpaid service.
     held_bus.goals.todos.add_request(commander.incarnation, "A newer independent request")

@@ -74,7 +74,7 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     @classmethod
     @abstractmethod
     def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState]) -> tuple[Self, ...]: ...
+                      observed: Sequence[UnitState], pulls: ProgressRead) -> tuple[Self, ...]: ...
 
     @abstractmethod
     def line(self) -> str: ...
@@ -158,11 +158,12 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
 
     @classmethod
     def broken(cls, comms: Comms, commander: str, after: float = 0.0, *,
-               observed: Sequence[UnitState]) -> tuple[Self, ...]:
-        """Read each owner once against the supplied frame, preserving the requested family."""
+               observed: Sequence[UnitState], pulls: ProgressRead) -> tuple[Self, ...]:
+        """Read each owner once against the supplied frame and its one progress reader,
+        preserving the requested family."""
         owners = dict.fromkeys(rule.scan_owner() for rule in cls.members_with(cls))
         return tuple(rule for owner in owners
-                     for rule in owner.scan_observed(comms, commander, observed)
+                     for rule in owner.scan_observed(comms, commander, observed, pulls)
                      if isinstance(rule, cls) and rule.attention() and rule.broke_after(after))
 
 
@@ -175,7 +176,7 @@ class IndependentStandingRule(StandingRule, declared_name=None):
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState]) -> tuple[Self, ...]:
+                      observed: Sequence[UnitState], pulls: ProgressRead) -> tuple[Self, ...]:
         return cls.violations(comms, commander)
 
 
@@ -193,7 +194,7 @@ class LostTools(UndatedStandingRule):
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState]) -> tuple[Self, ...]:
+                      observed: Sequence[UnitState], pulls: ProgressRead) -> tuple[Self, ...]:
         found = []
         for unit in observed:
             thread = unit.source.thread
@@ -232,9 +233,9 @@ class HeldBranchRule(UndatedStandingRule, declared_name=None):
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState]) -> tuple[Self, ...]:
+                      observed: Sequence[UnitState], pulls: ProgressRead) -> tuple[Self, ...]:
         branches = tuple(
-            HeldBranch(todo, unit, state.source.pulls.branch_difference(
+            HeldBranch(todo, unit, pulls.branch_difference(
                 state.source.thread.project_path), state.source)
             for state in observed for unit in state.readable_units() for todo in state.source.todos
         )
@@ -388,7 +389,7 @@ class ReasonedStandingRule(StandingRule, declared_name=None):
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState]) -> tuple[Self, ...]:
+                      observed: Sequence[UnitState], pulls: ProgressRead) -> tuple[Self, ...]:
         why = cls.reason(comms, commander)
         return (cls.found(why, comms, commander, observed),) if why else ()
 
@@ -407,16 +408,15 @@ class HeldOrderDue(DatedStandingRule, declared_name=None):
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState]) -> tuple[Self, ...]:
+                      observed: Sequence[UnitState], pulls: ProgressRead) -> tuple[Self, ...]:
         """Conditions read the frame's own progress facts, never a second forge read."""
-        pulls = next((state.source.pulls for state in observed), None)
         return tuple(cls(todo.id, todo.held().owner_identity, todo.order.checked().id, due)
                      for todo, due in cls.conditions(comms, commander, pulls))
 
     @classmethod
     @abstractmethod
     def conditions(cls, comms: Comms, commander: str,
-                   pulls: ProgressRead | None) -> Iterable[tuple[Todo, EventTime]]: ...
+                   pulls: ProgressRead) -> Iterable[tuple[Todo, EventTime]]: ...
 
     def began(self) -> float:
         return self.since.recorded_at("An order alarm")
@@ -428,7 +428,7 @@ class ReviewTimerUp(HeldOrderDue):
 
     @classmethod
     def conditions(cls, comms: Comms, commander: str,
-                   pulls: ProgressRead | None) -> Iterable[tuple[Todo, EventTime]]:
+                   pulls: ProgressRead) -> Iterable[tuple[Todo, EventTime]]:
         actor = comms.registry.require(commander).incarnation
         return comms.goals.todos.timers_up_for_commander(
             actor, comms.registry, time.time(), pulls)
@@ -464,9 +464,8 @@ class DeliveredHeadReview(DatedStandingRule):
 
     @classmethod
     def scan_observed(
-        cls, comms: Comms, commander: str, observed: Sequence[UnitState],
+        cls, comms: Comms, commander: str, observed: Sequence[UnitState], pulls: ProgressRead,
     ) -> tuple[Self, ...]:
-        pulls = next((state.source.pulls for state in observed), None)
         now = time.time()
         return tuple(
             rule
