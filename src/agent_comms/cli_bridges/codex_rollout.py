@@ -14,16 +14,25 @@ from typing import BinaryIO, ClassVar
 
 from pydantic import Field, JsonValue, TypeAdapter, field_validator, model_validator
 
-from agent_comms.wire_models import WireAdapter, WireModel
 from agent_comms.cli_protocol import OpenWire, TimestampedWire, WireHeader
+from agent_comms.runtime_updates import (
+    FinishedItem,
+    HistoryNotice,
+    RuntimeUpdate,
+    SessionFacts,
+    Summarized,
+)
 from agent_comms.tool_declaration import ToolDeclaration
-from agent_comms.transcript_events import AssistantTranscript, ToolEndTranscript, ToolStartTranscript, UserTranscript
+from agent_comms.transcript_events import (
+    AssistantTranscript,
+    ToolEndTranscript,
+    ToolStartTranscript,
+    UserTranscript,
+)
 from agent_comms.turn_context import CodexRolloutProvenance
 
+from ..wire_models import WireModel
 from .history import CodexHistory, JsonLinesFile, OfflineHistory
-from agent_comms.runtime_updates import (
-    FinishedItem, HistoryNotice, RuntimeUpdate, SessionFacts, Summarized,
-)
 
 
 @dataclass
@@ -234,7 +243,7 @@ class ResponseItemRecord(RolloutRecord, declared_name='response_item'):
         return (self.payload,)
 
 
-ROLLOUT_RECORD = WireAdapter(RolloutRecord.declared_union())
+ROLLOUT_RECORD = WireModel.adapter(RolloutRecord.declared_union())
 
 
 @dataclass(frozen=True)

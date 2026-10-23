@@ -15,7 +15,6 @@ from pydantic import (
     model_validator,
 )
 
-from agent_comms.wire_models import WireAdapter, WireModel
 from agent_comms.cli_protocol import TaggedWire, TextWire, TimestampedWire, WireHeader
 from agent_comms.recorded_time import EventTime
 from agent_comms.runtime_updates import (
@@ -34,6 +33,8 @@ from agent_comms.runtime_updates import (
     TurnEnded,
     TurnStarted,
 )
+from agent_comms.thread_identity import OfferedTools, ToolName, UnobservedTools
+from agent_comms.thread_text import ThreadText
 from agent_comms.tool_calls import CliToolArguments, ToolCall
 from agent_comms.transcript_events import (
     AssistantTranscript,
@@ -41,10 +42,9 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
-from agent_comms.thread_text import ThreadText
-from agent_comms.thread_identity import OfferedTools, ToolName, UnobservedTools
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 
+from ..wire_models import WireModel
 from .shared import (
     MONITOR_FRAME,
     ForeignMonitorFrame,
@@ -62,7 +62,7 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
     EVENT_CHARS = 500
     BATCH_CHARS = 3000
     HEADER = 'Comms in'
-    JSON_TEXT = WireAdapter(str)
+    JSON_TEXT = WireModel.adapter(str)
 
     @classmethod
     def event_size(cls, text: str) -> int:
@@ -851,4 +851,4 @@ class ContinuedIn(MetadataRecord, declared_name='continued-in'):
         return (HistoryNotice(f'The conversation continued in session {self.continuedInSessionId}.'),)
 
 
-CLAUDE_RECORD = WireAdapter(ClaudeRecord.declared_union())
+CLAUDE_RECORD = WireModel.adapter(ClaudeRecord.declared_union())

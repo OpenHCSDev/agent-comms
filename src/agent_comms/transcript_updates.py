@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from acp.schema import AgentMessageChunk, TextContentBlock
 

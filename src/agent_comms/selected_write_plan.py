@@ -36,7 +36,7 @@ from .envelope_claim_transitions import ExistingFileClaim
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .message_reference import MessageReference
 from .private_path import PrivateDirectoryRole, PrivateFileRole
-from .thread_identity import ClaimScoped, ClaimedIdentity, RecordedThreadIncarnation
+from .thread_identity import ClaimedIdentity, ClaimScoped, RecordedThreadIncarnation
 
 _MAX_BYTES = 1024 * 1024
 

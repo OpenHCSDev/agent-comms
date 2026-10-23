@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, TypeAdapter
 from pydantic._internal._model_construction import ModelMetaclass
 from typing_extensions import TypeForm
 
-from .declared_family import DeclaredFamily
+from .declared_family import DeclaredFamily, FamilyMeta
 
 
 class WireModel(BaseModel):
@@ -16,8 +16,17 @@ class WireModel(BaseModel):
 
     model_config = ConfigDict(strict=True, defer_build=True)
 
+    @staticmethod
+    def adapter[Value](declaration: TypeForm[Value]) -> TypeAdapter[Value]:
+        """Construct a deferred wire adapter in its declaration's namespace."""
+        return TypeAdapter[Value](
+            declaration,
+            config=ConfigDict(defer_build=True),
+            _parent_depth=3,
+        )
 
-class _WireFamilyMeta(type(DeclaredFamily), ModelMetaclass):
+
+class _WireFamilyMeta(FamilyMeta, ModelMetaclass):
     """Compose the family's existing metaclass with Pydantic model construction."""
 
 
@@ -25,15 +34,3 @@ class DeclaredWireFamily(DeclaredFamily, BaseModel, metaclass=_WireFamilyMeta):
     """A validated wire model whose family owns declaration discovery."""
 
     declared_name: ClassVar[str]
-    family_discriminator: ClassVar[str]
-    _family_root: ClassVar[type[DeclaredFamily] | None]
-    _family_affix: ClassVar[str]
-    __registry__: ClassVar[dict[str, type[DeclaredFamily]]]
-
-
-class WireAdapter[Value](TypeAdapter[Value]):
-    """A wire boundary owns its compiled adapter from its first validation onward."""
-
-    def __init__(self, declaration: TypeForm[Value]) -> None:
-        # Account for this constructor when Pydantic captures the declaring namespace.
-        super().__init__(declaration, config=ConfigDict(defer_build=True), _parent_depth=3)

@@ -23,16 +23,16 @@ from acp.schema import (
 
 from .active_route import resolve_comms_route
 from .agent_backend import UseSettings
-from .child_process import join_retirement
 from .bus import Bus
+from .child_process import join_retirement
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .native_arguments import ConfiguredBinary, InheritedArguments
-from .native_pi import NativePiRpcLaunch
 from .native_failures import NativePiUnavailable
+from .native_pi import NativePiRpcLaunch
 from .threads import ChosenModel, NextTurnConfiguration
 from .watched import FileSource
 

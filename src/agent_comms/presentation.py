@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from .activity_clocks import ChannelActivity
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
@@ -14,6 +13,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from . import relationships
 from .activity import Activity, ActivityData, ActivityState, ObservedActivity
+from .activity_clocks import ChannelActivity
 from .audience_manifest import FrozenRecipient
 from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
@@ -84,10 +84,8 @@ from .tool_result import ToolResult
 from .ui_model.unread import ExactUnread, IndexingUnread, UnobservedUnread, UnreadPresentation
 
 if TYPE_CHECKING:
-    from .bus import Bus, BusSnapshot
-    from .pi_counts import PiCount
-    from .threads import ThreadProvenance
     from .agent_activity import AgentActivity, RecipientActivity
+    from .bus import Bus, BusSnapshot
     from .bus_publication import Delivered
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
@@ -97,10 +95,12 @@ if TYPE_CHECKING:
     from .message_bus import MessageBus
     from .messages import Message
     from .notification_assignment import NotificationAssignmentRead
+    from .pi_counts import PiCount
     from .read_ledger import ReadLedger
     from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .registry_provenance import DeletedThread, RegistryProvenance
+    from .threads import ThreadProvenance
     from .ui_model.observation import ThreadsObserved
 
 
