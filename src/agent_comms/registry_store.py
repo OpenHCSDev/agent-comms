@@ -333,8 +333,11 @@ class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument]):
         The guard owns its native namespace. Native runtime tables without
         that guard are incomplete state, never a new namespace to initialize.
         """
+        # The root is keyed by which directory it is, never by its mtime: every entry created or
+        # removed under it, such as a coordinator transaction's journal, moves the mtime, and the
+        # entries this guard reads are keyed by their own revisions below.
         key = (
-            _link_revision(self.path.parent),
+            _link_revision(self.path.parent).file_identity(),
             _link_revision(CoordinationStore.path_in(self.path.parent)),
             _link_revision(self.guard_path),
             _link_revision(self.path),
