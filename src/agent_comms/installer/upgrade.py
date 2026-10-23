@@ -672,6 +672,10 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
     bridges = report.bridges
     with report.running(tree):
         installed = Stack(checkout, commands)
+        try:
+            chain = CarryChain.at(tree.path)
+        except ValueError as error:
+            raise UpgradeRefused(str(error)) from None
         member = Install.member(root, retire)
         report.starting(mode.destination(member.initial_writer(root, installed)), target)
         current = commands.run("git", "-C", checkout, "rev-parse", "HEAD").strip()
@@ -683,10 +687,6 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
         if commands.run("git", "-C", checkout, "status", "--porcelain",
                         "--untracked-files=no").strip():
             raise UpgradeRefused("The checkout has local changes")
-        try:
-            chain = CarryChain.at(tree.path)
-        except ValueError as error:
-            raise UpgradeRefused(str(error)) from None
         installed.require_uv()
         if not installed.python.exists():
             raise UpgradeRefused(f"No installed stack at {installed.python}")
