@@ -171,6 +171,7 @@ async def configured_pure_channel(arguments):
     packets, timeline, compaction_events = [], [], []
     class Observation:
         async def publish_update(self, **kwargs):
+            kwargs = {**kwargs, "update": kwargs["update"].model_dump(mode="json", by_alias=True, exclude_none=True)}
             packets.append(kwargs)
             from agent_comms.acp_extension import CompactionChangedUpdate
             for item in decode_updates(kwargs['update'].get('_meta')):
@@ -498,6 +499,7 @@ async def configured_mixed_routes(arguments):
     packets = []
     class Observation:
         async def publish_update(self, **kwargs):
+            kwargs = {**kwargs, "update": kwargs["update"].model_dump(mode="json", by_alias=True, exclude_none=True)}
             packets.append(kwargs)
             return True
     attachment = CommsClient(service,runtime_enabled=True,
@@ -844,6 +846,7 @@ async def run(arguments):
     packets = []
     class Observation(SessionUpdateSink):
         async def publish_update(self, **kwargs):
+            kwargs = {**kwargs, "update": kwargs["update"].model_dump(mode="json", by_alias=True, exclude_none=True)}
             packets.append(kwargs)
             return True
     attachment = CommsClient(service, runtime_enabled=True,

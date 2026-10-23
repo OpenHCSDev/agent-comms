@@ -77,7 +77,7 @@ async def test_project_changes_reach_all_subscribed_clients(tmp_path):
             self.values = values
 
         async def publish_update(self, session_id, update):
-            self.values.append(update)
+            self.values.append(update.model_dump(mode="json", by_alias=True, exclude_none=True))
             return True
 
     try:

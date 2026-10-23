@@ -31,7 +31,7 @@ async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch):
 
     class Client(SessionUpdateSink):
         async def publish_update(self, session_id, update):
-            updates.append(update)
+            updates.append(update.model_dump(mode="json", by_alias=True, exclude_none=True))
             return True
 
     observer = canonical_agent(comms)

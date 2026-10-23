@@ -214,7 +214,7 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
 
         class AttachedClient(SessionUpdateSink):
             async def publish_update(self, **kwargs):
-                attached_facts.extend(decode_updates(kwargs["update"].get("_meta")))
+                attached_facts.extend(decode_updates(kwargs["update"].field_meta))
                 return True
 
         attachment.on_connect(AttachedClient())

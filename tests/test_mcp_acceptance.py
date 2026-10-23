@@ -436,6 +436,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, request):
                 class Attachment(SessionUpdateSink):
                     async def publish_update(self, session_id, update):
                         nonlocal attachment_turn
+                        update = update.model_dump(mode="json", by_alias=True, exclude_none=True)
                         if observer:
                             await observer.session_update(session_id=session_id, update=update)
                         for fact in decode_updates(update.get("_meta")):
