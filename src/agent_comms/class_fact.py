@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from functools import partial
-from typing import ClassVar
 
 
 class ClassFact[Owner, Value]:
@@ -20,41 +18,8 @@ class ClassFact[Owner, Value]:
     def __set_name__(self, owner: type[Owner], name: str) -> None:
         self.slot = f"_{name.lstrip('_')}_derived"
 
-    def holder(self, owner: type[Owner]) -> type[Owner]:
-        """The class whose namespace holds the value read through ``owner``."""
-        return owner
-
     def __get__(self, instance: object, owner: type[Owner]) -> Value:
-        holder = self.holder(owner)
-        if self.slot not in holder.__dict__:
-            setattr(holder, self.slot, self.derive(owner))
-        value: Value = holder.__dict__[self.slot]
+        if self.slot not in owner.__dict__:
+            setattr(owner, self.slot, self.derive(owner))
+        value: Value = owner.__dict__[self.slot]
         return value
-
-    def forget(self, owner: type[Owner]) -> None:
-        """Drop the value read through ``owner``, so the next read derives it again."""
-        holder = self.holder(owner)
-        if self.slot in holder.__dict__:
-            delattr(holder, self.slot)
-
-
-class FamilyFact[Owner, Value](ClassFact[Owner, Value]):
-    """A fact about the whole family: the class declaring it holds the one value,
-    derived from whichever member reads it first, so no member keeps a copy of its own."""
-
-    declared: ClassVar[dict[type, list[Callable[[], None]]]] = {}
-
-    def __set_name__(self, owner: type[Owner], name: str) -> None:
-        super().__set_name__(owner, name)
-        self.root = owner
-        FamilyFact.declared.setdefault(owner, []).append(partial(self.forget, owner))
-
-    def holder(self, owner: type[Owner]) -> type[Owner]:
-        return self.root
-
-    @staticmethod
-    def forget_inherited(member: type) -> None:
-        """Forget every family fact ``member`` inherits, so the next read counts it."""
-        for root in member.__mro__:
-            for forget in FamilyFact.declared.get(root, ()):
-                forget()
