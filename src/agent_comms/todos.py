@@ -4108,6 +4108,16 @@ class TodoStore(OwnerRequestStore):
         return self._select("creator=? AND creator_created=? AND assignment IS NOT NULL",
             (commander.name, commander.wire_birth), reader=self._open)
 
+    def claimed_heads_for_commander(
+        self, commander: ThreadIncarnation, pulls: PullRequests | None = None,
+    ) -> Iterator[tuple[Todo, OrderClaim, PullRequest]]:
+        """Recorded delivery claims survive a missing or stopped unit observation."""
+        held = self.held_for_commander(commander)
+        reader = PullRequests(held) if pulls is None else pulls.register(held)
+        for todo in held:
+            for claim, request in reader.claimed_heads(todo):
+                yield todo, claim, request
+
     def held_by(self, commander: ThreadIncarnation, unit: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._select('creator=? AND creator_created=?',
             (commander.name, commander.wire_birth), reader=partial(self.held_in, unit=unit))

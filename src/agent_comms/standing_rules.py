@@ -338,14 +338,16 @@ class DeliveredHeadReview(DatedStandingRule):
     def scan_observed(
         cls, comms: Comms, commander: str, observed: Sequence[UnitState],
     ) -> tuple[Self, ...]:
+        pulls = next((state.source.pulls for state in observed), None)
+        now = time.time()
         return tuple(
             rule
-            for state in observed
-            for todo in state.source.todos
-            for claim, request in state.source.pulls.claimed_heads(todo)
+            for todo, claim, request in comms.goals.todos.claimed_heads_for_commander(
+                comms.registry.require(commander).incarnation, pulls,
+            )
             for rule in cls.for_head(
                 todo.id, todo.held().owner, todo.order.checked().id,
-                claim, request, state.source.now,
+                claim, request, now,
             )
         )
 
