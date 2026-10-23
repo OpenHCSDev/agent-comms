@@ -7,7 +7,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
-from .active_route import CommsRoute
 from .errors import RelationViolationError
 from .field_codec import NullMember, PathText, RecordMember, SubclassUnion, WireTransient
 from .unstarted_runtime import UnstartedRuntime
@@ -52,11 +51,15 @@ class RegistrySessionLocation(RecordMember, SessionFile, declared_name=None):
         absolute = Path(path)
         if not absolute.is_absolute():
             raise ValueError(f"Saved session publication requires an absolute path: {path}")
-        absolute = absolute.resolve()
         root = root.resolve()
+        return cls.publish(absolute.resolve(), root, root)
+
+    @staticmethod
+    def publish(absolute: Path, root: Path, publisher: Path) -> BoundSessionLocation:
+        """A path under the root is the bus's own; any other belongs to its publishing root."""
         if absolute.is_relative_to(root):
             return BusSessionLocation(absolute.relative_to(root)).bound_to(root)
-        return ExternalSessionLocation(absolute).bound_to(root)
+        return ExternalSessionLocation(absolute, publisher).bound_to(root)
 
     def location(self, backend: type[AgentBackend]) -> RuntimeLocation:
         raise RelationViolationError(f"Saved session {self.path} must be bound by its registry")
@@ -69,6 +72,10 @@ class RegistrySessionLocation(RecordMember, SessionFile, declared_name=None):
 
     @abstractmethod
     def resolve(self, root: Path) -> Path: ...
+
+    @abstractmethod
+    def publisher(self, root: Path) -> Path:
+        """The root whose registry published this transcript, read under ``root``."""
 
     def writable(self, root: Path) -> Path:
         return self.resolve(root)
@@ -84,7 +91,7 @@ class BoundSessionLocation(RegistrySessionLocation, declared_name=None):
         """Publishing into another root keeps the transcript this location names."""
         if self.root == root or self.root == (root := root.resolve()):
             return self
-        return RegistrySessionLocation.from_path(self.resolve(self.root), root)
+        return self.publish(self.resolve(self.root), root, self.publisher(self.root))
 
     def location(self, backend: type[AgentBackend]) -> RuntimeLocation:
         return self.located(backend, self.resolve(self.root))
@@ -115,25 +122,39 @@ class BusSessionLocation(RegistrySessionLocation):
             raise ValueError(f"Bus session escapes its root: {self.path}")
         return path
 
+    def publisher(self, root: Path) -> Path:
+        return root.resolve()
 
-@dataclass(frozen=True, slots=True, eq=False)
+
+@dataclass(frozen=True, eq=False)
 class ExternalSessionLocation(RegistrySessionLocation):
-    """A harness transcript outside every bus root; only the published root writes it."""
+    """A harness transcript outside every bus root; only the root that published it writes it.
+
+    A copied registry keeps the published root, so the copy reads the transcript and refuses
+    to write it."""
+
+    published: Annotated[Path, PathText]
 
     def __post_init__(self) -> None:
-        if not self.path.is_absolute():
-            raise ValueError(f"External session must be absolute: {self.path}")
+        if not self.path.is_absolute() or not self.published.is_absolute():
+            raise ValueError(
+                f"External session must be absolute: {self.path} from {self.published}"
+            )
 
     def bound_to(self, root: Path) -> BoundSessionLocation:
-        return BoundExternalSession(self.path, root.resolve())
+        return BoundExternalSession(self.path, self.published, root.resolve())
 
     def resolve(self, root: Path) -> Path:
         return self.path
 
+    def publisher(self, root: Path) -> Path:
+        return self.published
+
     def writable(self, root: Path) -> Path:
-        if root.resolve() != CommsRoute.current().observe_root():
+        if root.resolve() != self.published.resolve():
             raise RelationViolationError(
-                f"Copied bus {root} cannot write external session {self.path}"
+                f"Copied bus {root} cannot write external session {self.path} "
+                f"published by {self.published}"
             )
         return self.resolve(root)
 
