@@ -11,10 +11,10 @@ from contextlib import ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock
-from typing import BinaryIO
+from typing import Annotated, BinaryIO
 
 from agent_comms.child_process import ForcedStopOutcome, SpawnedProcess, SynchronousProcess
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.installer.interpreter_operation import (
     CommandPhase,
     GitPhase,
@@ -36,9 +36,9 @@ from agent_comms.repo import Repo
 
 @dataclass(frozen=True)
 class InterpreterWorkerKey:
-    python: Path
+    python: Annotated[Path, PathText]
     program: tuple[str, ...]
-    cwd: Path
+    cwd: Annotated[Path, PathText]
     environment: tuple[tuple[str, str], ...]
 
 
