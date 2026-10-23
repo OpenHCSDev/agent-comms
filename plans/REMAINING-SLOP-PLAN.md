@@ -134,24 +134,37 @@ Three audits, one per catalog rung group, each finding read in the code and chec
 
 **6.4 Rosters and registries beside families (MEMB-1/2/4, about 120).**
 
-Backend capability slice (integration base `acb2ddd0e`, 2026-10-23):
-`THREAD_CAPABILITIES`, the two serving flags and `validate_backends` independently
-state which backend may serve threads. `ThreadServingBackend` will inherit
-`Steers` and `Compacts`; `NewThreadBackend` will own new-thread selection from
-the declared family. Capability bases must precede `AgentBackend`, whose
-concrete refusal method would otherwise hide the abstract turn obligation.
-Location attachment moves to sealing the concrete declarations, retaining one
-backend per location and avoiding mutation by an incomplete declaration.
+Backend capability slice (#2623, integration base `acb2ddd0e`, 2026-10-23):
+deleted `THREAD_CAPABILITIES`, both serving flags, `validate_backends` and the
+old default-selection method. `ThreadServingBackend` inherits `Steers` and
+`Compacts`; both record default factories invoke `NewThreadBackend.selected`.
+Capability bases precede `AgentBackend`, whose concrete refusal method would
+otherwise hide the abstract turn obligation. Sealing attaches only concrete
+locations after validating unique ownership. An incomplete declaration cannot
+rebind a location. `NoSessionFile` constructs the shared `UnstartedRuntime`;
+both copied backend `unstarted_type` declarations are deleted.
 NRA census covers 1,528 Core/hooks/tools/tests and paired Toad modules:
 6,973 original classes, 6,752 projected classes, zero parse omissions; the
 221 unprojected originals remain visible. Source evidence is not a behavior
-proof. The independent Pi producer/converter event comparison is retained;
+proof. Afterward: 1,529 modules, 6,974 original/6,753 projected classes, zero
+parse omissions; Core remains 953 modules/5,341 original classes. The extra
+dependency module/class came from the concurrently edited Toad source tree.
+The before/after receipts remain in the owned backend-capability-rosters
+scratch directory. Focused source checks pass 27 cases (25.69s), including
+fresh CLI/UI imports, typed native/durable locations, ABC refusal without
+location mutation, worker backend reuse and a real durable host reading 260
+saved rows while its SQLite writer stays open. The initial 24-pass/3-failure
+run exposed an untyped session-file fixture, a stale caller roster and missing
+local Node dependencies; all three were corrected, without counting that run
+as green. Installed copied-agent DM/reply/tab-return qualification belongs to
+the later paired integration; this branch has not changed the live runtime.
+The independent Pi producer/converter event comparison is retained;
 deriving expected producer events from the converters would erase its check.
 This slice does not close `RostersPhase` or edit its evidence declaration.
 
 - Five hand-rolled `__init_subclass__` registries: `Carry.declared` (`installer/carry.py:45-54`), `ThreadRename.kinds` (`thread_management.py:557-567`, gone with 4.1), `BirthlessIncarnation.members` (`thread_identity.py:185-192`), `CliToolArguments.types` (`tool_calls.py:89-95`), `_start_phases`/`_end_events` (`pi_events.py:59-93`): `DeclaredFamily` or attributes through the MRO.
 - `PI_0_85_1_EVENT_KINDS`, 36 names re-typed beside `NativePiEvent.known_kinds()` (`pi_native_backend.py:63-81`, check at `agent_backend.py:428`): derive the union; the equality check goes.
-- `THREAD_CAPABILITIES` plus `serves_threads`/`serves_new_threads` flags plus `validate_backends` probing with `getattr` (`agent_backend.py:358-466`): `ThreadServingBackend(AgentBackend, Steers, Compacts)` and `NewThreadBackend`; ABC instantiation enforces the roles.
+- Backend roles: removed by #2623 through `ThreadServingBackend(Steers, Compacts, AgentBackend)` and declaration-derived `NewThreadBackend.selected`; abstract methods enforce thread obligations. `PiDurableBackend` remains a non-thread backend.
 - Display names re-typed from class names in about 40 places (`tools.py` labels, `notification_progress.py:45-157`, `todos.py:1502/2012/2088/2605/2675`, `display_order.py:76-136`, `relationships.py:382/397`, `turn_phase.py:169/218`, `config_options.py:192-194`, `input_attempt.py:400/440/447` `public_status`): derived from the declared name, literal only where the text differs.
 - Sigils `#`/`@` spelled by hand at about 22 sites (`catalog_document.py:61-232`, `channels.py`, `channel_targets.py`, `goal_presentation.py:71-72`, `goal_actions.py:305/318`, …): owned by `Tag.channel` and `ThreadTarget.mention`.
 - Store and file names restated outside their class: `root / "wire"` in about 20 places across 17 modules (the virtual bus plan's done-grep for `_wire_lock_path` misses every `_store_lock(root / "wire")`; its grep gains that pattern), `~/.local/state/agent-comms` six times, bridge inbox dirs, `"registry.json"` at `installer/upgrade.py:566`, `".registry-owner-guard"` at `goal_history.py:208`, `active-route.json` five times, Pi `auth.json` in four modules: `X.path_in(root)` and one state-home owner.
