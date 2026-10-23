@@ -1,4 +1,5 @@
 """Real release-before-exit: retirement keeps checking the exact owner fence."""
+
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.restart_scope import OwnersNamed
 from agent_comms.turn_lease import NoTurnLease
@@ -51,7 +52,7 @@ async def test_installed_idle_worker_retains_state_across_runtime_restart(tmp_pa
     assert len(names) == 1
     name = names.pop()
     async with native_backend_fixture(tmp_path, package=native_runtime_package) as native, AsyncExitStack() as resources:
-        comms = Comms(native.root)
+        comms = wire(native.root)
 
         async def retire_owned_worker():
             selected = comms.registry.snapshot().threads.get(name)
@@ -70,12 +71,12 @@ async def test_installed_idle_worker_retains_state_across_runtime_restart(tmp_pa
         setup = await BoundedRun.run((source_python, '-B', '-c', '''
 import json, os, sys
 from pathlib import Path
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.threads import Thread
 from agent_comms.goal_actions import SetGoalAction, BlockedGoalAction
 from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_runtime import RestartEnvironment
-service = Comms(Path(os.environ['AGENT_COMMS_ROOT']))
+service = wire(Path(os.environ['AGENT_COMMS_ROOT']))
 name, project, session = sys.argv[1:4]
 service.registry.declare(service.registry.new_thread(name, frozenset(), project, session_file=session,
     model='response-local/fixture'))
@@ -135,7 +136,7 @@ print(json.dumps(FieldCodec.encode(result)), flush=True)
             'localhost_posts': native.provider.posts, 'retained_input_keys': list(original_document.rows),
             'journal_settings_input_unchanged': True, 'blocked_goal_preserved': True}), flush=True)
         assert native.provider.posts == 0
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.owner_restart import FencedOwnerBatch, StoppedOwnerFailure
@@ -166,7 +167,7 @@ def releasing_owner(tmp_path):
         "AGENT_COMMS_AGENT_ARGS": shlex.join(arguments),
     }
     child = SpawnedProcess.launch((sys.executable, *arguments), env=env)
-    comms = Comms(root)
+    comms = wire(root)
     try:
         wait_for(root / "ready")
         yield comms, child
@@ -187,7 +188,7 @@ def releasing_owner(tmp_path):
 def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
     from agent_comms.child_process import NoProcess, ProcessIdentity
 
-    comms = Comms(tmp_path / "wire")
+    comms = wire(tmp_path / "wire")
     declared = comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path)))
     generation = comms.registry.snapshot().claim_generation(declared.name)
     comms.owners.stop(declared.name)

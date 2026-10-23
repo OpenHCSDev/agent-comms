@@ -14,6 +14,7 @@ current owner fence, but never creates an absent row or manufactures owner loss.
 
 from __future__ import annotations
 
+
 import time
 from dataclasses import dataclass
 from functools import partial
@@ -285,9 +286,9 @@ class LiveResponseOwner(RegistryOwner):
         # The last canonical snapshot contains every original assignment.
         # Complete required dependency settlement before the acquired worker
         # can close or report cancellation; no input/goal is reconstructed.
-        from .comms import Comms
+        from .comms import wire
 
-        goals = Comms(bus.bus.path.parent).goals
+        goals = wire(bus.bus.path.parent).goals
         for assignment in published.assignments:
             goals.consume_reply_wait(self, assignment.source)
         return published

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import pkgutil
 import re
 from abc import ABC, ABCMeta, abstractmethod
 from collections.abc import Hashable, Iterable, Mapping
+from functools import cache
 from types import ModuleType
 from typing import Any, ClassVar, Self, cast
 
@@ -14,7 +16,7 @@ from metaclass_registry import (
     LazyDiscoveryDict,
     RegistryConfig,
 )
-from metaclass_registry.discovery import discover_registry_classes
+from metaclass_registry.discovery import import_module_preserving_root_logging
 from pydantic import BaseModel
 from pydantic._internal._model_construction import ModelMetaclass
 
@@ -213,8 +215,16 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
     @classmethod
     def discover_members(cls, package: ModuleType, capability: type) -> tuple[type[Self], ...]:
         """Acquire a producer package before deriving its declared capability members."""
-        discover_registry_classes(package.__path__, package.__name__ + ".", capability)
+        DeclaredFamily._discover_package(package)
         return cls.members_with(capability)
+
+    @staticmethod
+    @cache
+    def _discover_package(package: ModuleType) -> None:
+        """Import each module of the package once, so its members register themselves."""
+        for module in pkgutil.iter_modules(package.__path__, package.__name__ + "."):
+            if not module.ispkg:
+                import_module_preserving_root_logging(module.name)
 
     @classmethod
     def members_with(cls, capability: type) -> tuple[type[Self], ...]:

@@ -1,20 +1,21 @@
 """Owner background controller isolation and cancellation before native dispatch."""
 
+
 import asyncio
 import os
 
 from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.routing import ScheduledTurn
-from agent_comms.runtime import UNBOUND_CONTROLLER
+from agent_comms.controller import UNBOUND_CONTROLLER
 from agent_comms.schedule_rules import WakeScheduleCheck
 from agent_comms.threads import Thread
 from stored_inputs import stored_inputs
 
 
 async def test_wake_lock_wait_shutdown_keeps_input_unsent_and_controller_private(tmp_path):
-    comms = Comms(tmp_path)
+    comms = wire(tmp_path)
     comms.registry.declare(
         comms.registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )

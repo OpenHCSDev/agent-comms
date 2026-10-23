@@ -78,8 +78,7 @@ from .commander.config import (
     KeptRepos,
     RepoChoice,
 )
-from .comms import Comms, client_wire
-from .registry_document import CommanderProject
+from .comms import Comms
 from .config_options import (
     ConfigOptions,
     ModelConfigOption,
@@ -121,8 +120,8 @@ from .field_codec import (
 from .harness_install import Harness
 from .history_result import HistoryPageResult
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
-from .input_origin import InputProvenance
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
+from .input_origin import InputProvenance
 from .install_choices import InstallerChoice, LiveMode, RehearsalMode, RunMode, UnnamedInstaller
 from .maintenance_barrier import MaintenanceHeldError
 from .message_page import PageBounds
@@ -143,7 +142,8 @@ from .read_basis import (
     OnReadWatchAcknowledgment,
     WatchAcknowledgment,
 )
-from .registry_document import RegistrySnapshot
+from .recorded_bus import RecordedBusIdentity
+from .registry_document import CommanderProject, RegistrySnapshot
 from .registry_store import RegistryStore
 from .restart_scope import AllOwners, OneOwner, RestartTarget
 from .runtime import RuntimeConnection, socket_path
@@ -185,7 +185,6 @@ from .turn_context import (
     TurnContext,
 )
 from .typed_table import ReconciledFile
-from .recorded_bus import RecordedBusIdentity
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
 
@@ -339,13 +338,13 @@ class TargetSelection(ABC):
     targets: tuple[CommandTarget, ...]
 
     @staticmethod
-    def decode(raw: CommandTarget | str | tuple[CommandTarget | str, ...], *, multiple: bool) -> TargetSelection:
+    def decode(raw: CommandTarget | tuple[CommandTarget, ...], *, multiple: bool) -> TargetSelection:
         if isinstance(raw, tuple):
             if not raw:
                 raise ValueError('Select at least one target')
-            names = tuple(dict.fromkeys(CommandTarget.named(item) for item in raw))
+            names = tuple(dict.fromkeys(raw))
             return (OneTarget if len(names) == 1 and not multiple else TargetBatch)(names)
-        return OneTarget((CommandTarget.named(raw),))
+        return OneTarget((raw,))
 
     def command_members(self, family: type[CliCommand]) -> tuple[type[CliCommand], ...]:
         """Derive menu membership from cardinality and declared capability."""
@@ -361,7 +360,7 @@ class TargetSelection(ABC):
 class OneTarget(TargetSelection):
     """A single target: resolve errors raise and the bound command's own result returns."""
 
-    def run(self, declaration, comms, arguments, *, confirmed, channel: ChannelSelection, project, snapshot, catalog):
+    def run(self, declaration: type[CliCommand], comms: Comms, arguments, *, confirmed: bool, channel: ChannelSelection, project: str, snapshot: RegistrySnapshot, catalog: CatalogDocument | None) -> CliResult:
         name, = self.targets
         resolved = name.resolve(snapshot, comms.bus.require_channel)
         bindings = tuple(bound for context in name.contexts(declaration, channel)
@@ -391,7 +390,7 @@ class TargetBatchSchedule:
 class TargetBatch(TargetSelection):
     """Every other selection: each target's failure is collected and a TargetBatchResult returns."""
 
-    def run(self, declaration, comms, arguments, *, confirmed, channel: ChannelSelection, project, snapshot, catalog):
+    def run(self, declaration: type[CliCommand], comms: Comms, arguments, *, confirmed: bool, channel: ChannelSelection, project: str, snapshot: RegistrySnapshot, catalog: CatalogDocument | None) -> CliResult:
         declaration.require_batch()
         declarations = (tuple(member for member in CliCommand.members_with(CliCommand)
                               if member.catalog_declaration() is declaration)
@@ -437,8 +436,8 @@ class TargetBatch(TargetSelection):
             except ToolRefusedError as error:
                 result = TargetFailed(name.name, type(error).__name__, str(error))
                 outcomes.append((position, result))
-        for declaration, members in together.items():
-            results = declaration.apply_together(comms, tuple(command for _, _, command in members))
+        for together_declaration, members in together.items():
+            results = together_declaration.apply_together(comms, tuple(command for _, _, command in members))
             outcomes.extend((position, TargetCompleted(name.name, command, result))
                             for (position, name, command), result in zip(members, results, strict=True))
         return TargetBatchResult(tuple(outcome for _, outcome in sorted(outcomes, key=lambda item: item[0])))
@@ -772,7 +771,7 @@ class MultipleTargets:
 
     @classmethod
     def selected_targets(
-        cls, raw: CommandTarget | str | tuple[CommandTarget | str, ...]
+        cls, raw: CommandTarget | tuple[CommandTarget, ...]
     ) -> TargetSelection:
         return TargetSelection.decode(raw, multiple=True)
 
@@ -833,7 +832,7 @@ class CliCommand[Answer: CliResult = CliResult](
         return (cls.declared_name, *arguments)
 
     @classmethod
-    def selected_targets(cls, raw: CommandTarget | str | tuple[CommandTarget | str, ...]) -> TargetSelection:
+    def selected_targets(cls, raw: CommandTarget | tuple[CommandTarget, ...]) -> TargetSelection:
         """Decode a CLI or menu target input once, before command execution."""
         return TargetSelection.decode(raw, multiple=False)
 
@@ -856,22 +855,22 @@ class CliCommand[Answer: CliResult = CliResult](
         return channel.channels_for(target)
 
     @classmethod
-    def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None) -> tuple[Self, ...]:
+    def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus, channel: str | None = None, *, catalog: CatalogDocument | None = None) -> tuple[Self, ...]:
         return ()
 
     @classmethod
-    def project_bindings(cls, comms, project: str) -> tuple[Self, ...]:
+    def project_bindings(cls, comms: Comms, project: str) -> tuple[Self, ...]:
         return ()
 
     @classmethod
-    def channel_bindings(cls, comms, resolved: ResolvedChannel, *, snapshot, catalog) -> tuple[Self, ...]:
+    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None) -> tuple[Self, ...]:
         return ()
 
     @classmethod
-    def bindings(cls, comms: Comms, target: CommandTarget | str, channel: str | None = None,
+    def bindings(cls, comms: Comms, target: CommandTarget, channel: str | None = None,
                  *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None,
                  resolved) -> tuple[Self, ...]:
-        return CommandTarget.named(target).bindings(
+        return target.bindings(
             cls, comms, channel, resolved, snapshot=snapshot, catalog=catalog)
 
     @classmethod
@@ -922,8 +921,7 @@ class CliCommand[Answer: CliResult = CliResult](
         catalogs = ConfigOptions.configured()
         return tuple([await item.prepare(catalogs, self) for item in self.editable_fields])
 
-    def describe(self, comms: Comms, target: CommandTarget | str, project: str) -> TargetAction:
-        target = CommandTarget.named(target)
+    def describe(self, comms: Comms, target: CommandTarget, project: str) -> TargetAction:
         bound = self.for_editor(comms, target.name, project)
         channels = next((OneChannel(getattr(bound, item.name))
                          for item in bound.channel_fields()), NoChannel())
@@ -948,7 +946,7 @@ class CliCommand[Answer: CliResult = CliResult](
     def execute(self, route: CommsRoute, output: TextIO) -> int:
         """Open the bus this command reads, then run it; a command that must act before
         the bus opens overrides this."""
-        with client_wire(route) as comms:
+        with Comms.client(route) as comms:
             return self.run(comms, output)
 
     @classmethod
@@ -1185,7 +1183,7 @@ class UserSendCliCommand(WorktreeArgument, PublishingCliCommand, declared_name="
     body: Annotated[str, Argument(flags=("--body",))]
 
     def publish(self, ctx: Comms) -> CliResult:
-        message = ctx.messaging.send_user_message(self.target, self.body, worktree=self.worktree)
+        message = ctx.messaging.send_user_message(CommandTarget.named(self.target), self.body, worktree=self.worktree)
         return UserMessageSentResult(message.reference)
 
 
@@ -1218,7 +1216,7 @@ class PinConstraintCliCommand(WorktreeArgument, CliCommand, declared_name="pin-c
     def original_source(self, ctx: Comms):
         return self.source
 
-    def pin_original(self, ctx: Comms, source):
+    def pin_original(self, ctx: Comms, source: MessageReference) -> Message:
         return ctx.messaging.pin_user_constraint(self.thread, source, worktree=self.worktree)
 
     def apply(self, ctx: Comms) -> CliResult:
@@ -1241,7 +1239,7 @@ class PinInputConstraintCliCommand(PinConstraintCliCommand, declared_name="pin-i
 
         return InputDispositions(ctx.root).lookup(self.source).context_provenance().require_human_input()
 
-    def pin_original(self, ctx: Comms, source):
+    def pin_original(self, ctx: Comms, source: MessageReference) -> Message:
         return ctx.messaging.pin_input_constraint(self.thread, source, worktree=self.worktree)
 
 
@@ -1266,7 +1264,7 @@ class ApproveAnnotationsCliCommand(PinConstraintCliCommand, declared_name="appro
         ),
     ]
 
-    def pin_original(self, ctx: Comms, source):
+    def pin_original(self, ctx: Comms, source: MessageReference) -> Message:
         return ctx.messaging.approve_annotations(self.thread, source, worktree=self.worktree,
                                                 per_hour=self.per_hour, segments=self.segments)
 
@@ -1346,7 +1344,7 @@ class SupersedeConstraintCliCommand(
     def apply(self, ctx: Comms) -> CliResult:
         from .task_sources import CorrectionTaskChange, UserTaskSupersession
 
-        message = ctx.messaging.send_user_message(self.thread, self.body, worktree=self.worktree,
+        message = ctx.messaging.send_user_message(CommandTarget.named(self.thread), self.body, worktree=self.worktree,
             task=UserTaskSupersession(CorrectionTaskChange(self.source)))
         return ConstraintSupersededResult(message.reference)
 
@@ -1364,7 +1362,7 @@ class DropConstraintCliCommand(WorktreeArgument, CliCommand, declared_name="drop
     def apply(self, ctx: Comms) -> CliResult:
         from .task_sources import CorrectionTaskChange, UserTaskDrop
 
-        message = ctx.messaging.send_user_message(self.thread,
+        message = ctx.messaging.send_user_message(CommandTarget.named(self.thread),
             f"Dropped constraint {self.source.seq}:{self.source.message_id}", worktree=self.worktree,
             task=UserTaskDrop(CorrectionTaskChange(self.source)))
         return ConstraintDroppedResult(message.reference)
@@ -1731,8 +1729,9 @@ class InstallCliCommand(CliCommand):
 
         return InstallRun.start(self, route.root).launch(output)
 
-    def apply(self, ctx: Comms) -> CliResult:
-        """The install child's last step, on the bus it carried or created."""
+    def apply(self, ctx: Comms) -> InstallResult:
+        """The install's last step, on the bus it carried or created, run by that bus's
+        runtime (HarnessesProbe)."""
         home = Path.home()
         snapshot = ctx.registry.snapshot()
         project = self.commander.configured(snapshot.commander_project, self.repos, snapshot)
@@ -1943,7 +1942,7 @@ class NamedThreadCliCommand(ThreadBoundCliCommand, NamedCliCommand):
         return ()
 
     @classmethod
-    def channel_bindings(cls, comms, resolved: ResolvedChannel, *, snapshot, catalog) -> tuple[Self, ...]:
+    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None) -> tuple[Self, ...]:
         return tuple(bound for member in cls.channel_members(resolved)
                      for bound in cls.thread_bindings(
                          comms, member.thread, member.status, resolved.channel.name, catalog=catalog))
@@ -2007,7 +2006,7 @@ class RestartCliCommand(CliCommand):
         return ()
 
     @classmethod
-    def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
+    def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus, channel: str | None = None, *, catalog: CatalogDocument | None = None) -> tuple[Self, ...]:
         if thread.executing:
             return ()
         return (cls(name=OneOwner(thread.name)),) if thread.restart_candidates(status) else ()
@@ -2073,7 +2072,7 @@ class NewThreadCliCommand(NameArgument, CliCommand, declared_name="new"):
     ] = NativeThreadDefaults.thinking_level
 
     @classmethod
-    def project_bindings(cls, comms, project):
+    def project_bindings(cls, comms: Comms, project: str) -> tuple[Self, ...]:
         defaults = NativeThreadDefaults()
         return (cls(name='', project=project, model=defaults.model,
                     thinking_level=defaults.thinking_level),)
@@ -2095,11 +2094,11 @@ class ForkCliCommand(NativeOwnerCommand, ThreadBoundCliCommand, NewThreadCliComm
     ]
 
     @classmethod
-    def project_bindings(cls, comms, project):
+    def project_bindings(cls, comms: Comms, project: str) -> tuple[Self, ...]:
         return ()
 
     @classmethod
-    def thread_binding(cls, thread):
+    def thread_binding(cls, thread: Thread) -> Self:
         return cls(name='', parent=thread.name, tags=GivenTags(thread.tags), project=thread.worktree,
                    model=thread.model, thinking_level=thread.thinking_level)
 
@@ -2333,7 +2332,7 @@ class ThreadTagsCliCommand(NamedCliCommand, declared_name="thread-tags"):
     ]
 
     @classmethod
-    def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
+    def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus, channel: str | None = None, *, catalog: CatalogDocument | None = None) -> tuple[Self, ...]:
         return (cls(name=thread.name, tags=thread.tags),)
 
     def apply(self, ctx: Comms) -> ThreadTagsResult:
@@ -2348,7 +2347,7 @@ class ExactTagCliCommand(NamedCliCommand):
         return cls(name=name)
 
     @classmethod
-    def channel_bindings(cls, comms, resolved: ResolvedChannel, *, snapshot, catalog):
+    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None):
         return (cls.for_tag(resolved.channel.name.removeprefix('#')),) if resolved.channel.exact else ()
 
 
@@ -2385,7 +2384,7 @@ class DeleteTagCliCommand(MultipleTargets, ExactTagCliCommand, declared_name="de
     def confirmation(self):
         return self.disposition.confirmation(self.name)
 
-    def selection_confirmation(self, commands):
+    def selection_confirmation(self, commands: tuple[CliCommand, ...]) -> str:
         groups: dict[TagDisposition, list[str]] = {}
         for command in commands:
             groups.setdefault(command.disposition, []).append(command.name)
@@ -2412,7 +2411,7 @@ class ArchiveChannelCliCommand(MultipleTargets, NamedCliCommand, declared_name="
         return ArchiveCliCommand
 
     @classmethod
-    def channel_bindings(cls, comms, resolved: ResolvedChannel, *, snapshot, catalog):
+    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None):
         return (cls(name=resolved.channel.name),) if resolved.channel.can_set_archived(cls.archived) else ()
 
     def confirmation(self):
@@ -2440,7 +2439,7 @@ class DeleteViewCliCommand(NamedCliCommand, declared_name="delete-view"):
     help = "Delete saved view"
 
     @classmethod
-    def channel_bindings(cls, comms, resolved: ResolvedChannel, *, snapshot, catalog):
+    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None):
         return resolved.channel.delete_view_bindings(cls)
 
     def confirmation(self):
@@ -2463,7 +2462,7 @@ class PinChannelCliCommand(MultipleTargets, NamedCliCommand, declared_name="pin-
         return PinThreadCliCommand
 
     @classmethod
-    def channel_bindings(cls, comms, resolved: ResolvedChannel, *, snapshot, catalog):
+    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None):
         return (cls(name=resolved.channel.name, pinned=not resolved.channel.pinned),) if resolved.channel.exact else ()
 
     def apply(self, ctx: Comms) -> Channel:
@@ -2478,7 +2477,7 @@ class ChannelActivityCliCommand(NamedCliCommand, declared_name="channel-activity
     ] = False
 
     @classmethod
-    def channel_bindings(cls, comms, resolved: ResolvedChannel, *, snapshot, catalog):
+    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None):
         return (cls(name=resolved.channel.name, enabled=not resolved.channel.any_mode),) if resolved.channel.exact else ()
 
     def apply(self, ctx: Comms) -> Channel:
@@ -2507,14 +2506,14 @@ class ReadTargetCliCommand(MultipleTargets, CliCommand, declared_name="read-targ
     ] = dataclasses.field(default_factory=os.getcwd)
 
     @classmethod
-    def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
+    def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus, channel: str | None = None, *, catalog: CatalogDocument | None = None) -> tuple[Self, ...]:
         return (cls(target=thread.name),)
 
     @classmethod
-    def channel_bindings(cls, comms, resolved: ResolvedChannel, *, snapshot, catalog):
+    def channel_bindings(cls, comms: Comms, resolved: ResolvedChannel, *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None):
         return (cls(target=resolved.channel.name),)
 
-    def for_editor(self, comms, target, project):
+    def for_editor(self, comms: Comms, target: str, project: str) -> Self:
         return replace(self, worktree=project)
 
     def apply(self, ctx: Comms) -> TargetReadResult:
@@ -2533,7 +2532,7 @@ class PinThreadCliCommand(MultipleTargets, NamedCliCommand, declared_name="pin-t
     ] = False
 
     @classmethod
-    def thread_bindings(cls, comms, thread, status, channel=None, *, catalog: CatalogDocument):
+    def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus, channel: str | None = None, *, catalog: CatalogDocument) -> tuple[Self, ...]:
         if channel is None:
             return ()
         with comms.bus.opened_activity() as activity:

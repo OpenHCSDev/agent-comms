@@ -1858,6 +1858,10 @@ class TypingReference(MroDispatch):
         self.imports = imports
         self.value: object = None
 
+    @property
+    def is_any(self) -> bool:
+        return self.value is typing.Any
+
     @handles(ast.Name)
     def name(self, node: ast.Name) -> None:
         self.value = self.imports.get(node.id)
@@ -1908,7 +1912,11 @@ class AnyInTypeExpression(MroDispatch):
     def __init__(self, imports: dict[str, object], quoted: bool) -> None:
         self.imports = imports
         self.quoted = quoted
-        self.found = 0
+        self.references: list[ast.expr] = []
+
+    @property
+    def found(self) -> int:
+        return len(self.references)
 
     def resolved(self, node: ast.AST) -> object:
         reference = TypingReference(self.imports)
@@ -1917,7 +1925,10 @@ class AnyInTypeExpression(MroDispatch):
 
     @handles(ast.Name, ast.Attribute)
     def reference(self, node: ast.expr) -> None:
-        self.found += int(self.resolved(node) is typing.Any)
+        reference = TypingReference(self.imports)
+        reference.dispatch_sync(node)
+        if reference.is_any:
+            self.references.append(node)
 
     @handles(ast.Subscript)
     def parameterised(self, node: ast.Subscript) -> None:
@@ -1953,7 +1964,7 @@ class AnyInTypeExpression(MroDispatch):
 
 @dataclass(frozen=True)
 class AnyUse:
-    """One written ``typing.Any`` where a file declares a type."""
+    """One written ``typing.Any`` and the declaration or reference owning it."""
 
     line: int
     site: str
@@ -1961,11 +1972,12 @@ class AnyUse:
 
 
 class DeclaredTypeSites(MroDispatch):
-    """Every place a file declares a type; each handler names one kind of place."""
+    """Written Any references, with declaration-owned quoted type parsing."""
 
     def __init__(self, imports: dict[str, object]) -> None:
         self.imports = imports
         self.uses: list[AnyUse] = []
+        self.counted: set[ast.AST] = set()
 
     def read(self, tree: ast.Module) -> None:
         pending: list[tuple[ast.AST, tuple[ast.AST, ...]]] = [(tree, ())]
@@ -1983,7 +1995,19 @@ class DeclaredTypeSites(MroDispatch):
         counted = AnyInTypeExpression(self.imports, quoted)
         counted.dispatch_sync(expression)
         owner = ".".join(enclosing.name for enclosing in scope)
+        self.counted.update(counted.references)
         self.uses.extend([AnyUse(expression.lineno, site, owner)] * counted.found)
+
+    @handles(ast.Name, ast.Attribute)
+    def reference(self, node: ast.Name | ast.Attribute, scope: tuple[ast.AST, ...]) -> None:
+        if not isinstance(node.ctx, ast.Load) or node in self.counted:
+            return
+        reference = TypingReference(self.imports)
+        reference.dispatch_sync(node)
+        if reference.is_any:
+            self.counted.add(node)
+            owner = ".".join(enclosing.name for enclosing in scope)
+            self.uses.append(AnyUse(node.lineno, "reference", owner))
 
     @staticmethod
     def record_class(scope: tuple[ast.AST, ...]) -> bool:
@@ -2030,24 +2054,14 @@ class DeclaredTypeSites(MroDispatch):
 
 
 class AnyName(PerFileMeasure):
-    """Every name or member bound to typing.Any, including runtime uses.
-
-    Import aliases use the same resolver as annotation measures. Import and
-    assignment nodes do not themselves contribute an expression occurrence.
-    """
+    """Every written Any, including quoted declarations and loaded runtime references."""
 
     @classmethod
-    def uses(cls, source: bytes, filename: str) -> tuple[ast.Name | ast.Attribute, ...]:
+    def uses(cls, source: bytes, filename: str) -> tuple[AnyUse, ...]:
         tree = ast.parse(source, filename)
-        imports = TypingImports.at_any_depth(tree)
-        found: list[ast.Name | ast.Attribute] = []
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.Name, ast.Attribute)) and isinstance(node.ctx, ast.Load):
-                reference = TypingReference(imports)
-                reference.dispatch_sync(node)
-                if reference.value is typing.Any:
-                    found.append(node)
-        return tuple(found)
+        sites = DeclaredTypeSites(TypingImports.at_any_depth(tree))
+        sites.read(tree)
+        return tuple(sorted(sites.uses, key=lambda use: (use.line, use.site, use.owner)))
 
     @classmethod
     def count(cls, source: bytes, filename: str) -> int:
@@ -2069,28 +2083,6 @@ class UnannotatedParameter(PerFileOccurrenceMeasure):
                 *filter(None, (arguments.vararg, arguments.kwarg)),
             )
         )
-
-
-class AnyAnnotation(PerFileMeasure):
-    """``typing.Any`` written where a type is declared.
-
-    A declared type is what a consumer turns into a form control, a parameter
-    description or an array conversion; ``Any`` is the answer that is missing.
-    Counted: parameters, returns, annotated assignments and type aliases,
-    including nested (``dict[str, Any]``) and quoted uses.
-    """
-
-    @classmethod
-    def uses(cls, source: bytes, filename: str) -> tuple[AnyUse, ...]:
-        tree = ast.parse(source, filename)
-        sites = DeclaredTypeSites(TypingImports.at_any_depth(tree))
-        sites.read(tree)
-        return tuple(sorted(sites.uses, key=lambda use: (use.line, use.site, use.owner)))
-
-    @classmethod
-    def count(cls, source: bytes, filename: str) -> int:
-        return len(cls.uses(source, filename))
-
 
 
 class UncarriedRecordFormat(ChangeMeasure):

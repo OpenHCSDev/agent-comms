@@ -39,6 +39,7 @@ from .acp_extension import (
 from .comms import Comms
 from .child_process import join_retirement
 from .coordinator import Coordination
+from .controller import AcpController
 from .errors import RelationViolationError
 from .config_options import SessionConfigOptions
 from .native_arguments import NativeArguments
@@ -75,7 +76,7 @@ class SessionLifecycle:
         # A launcher registers this process as the owner before it starts, so
         # this process owns that registration even if it never binds a session.
         self.launched_owners: set[str] = set()
-        self.client: Any = None
+        self.client: AcpController | None = None
         self.titles: dict[str, str] = {}
         self.display_titles: dict[str, ThreadText] = {}
         self.worktrees: dict[str, str] = {}
@@ -88,20 +89,15 @@ class SessionLifecycle:
     async def initialize(
         self,
         protocol_version: int,
-        client_capabilities: ClientCapabilities | dict[str, JsonValue] | None = None,
+        client_capabilities: ClientCapabilities | None = None,
         client_info: Implementation | None = None,
     ) -> InitializeResponse:
-        capabilities = (
-            client_capabilities
-            if isinstance(client_capabilities, dict)
-            else (
-                client_capabilities.model_dump(by_alias=True, exclude_none=True)
-                if client_capabilities is not None
-                else {}
-            )
-        )
         methods: list[TerminalAuthMethod] = []
-        if (capabilities.get("auth") or {}).get("terminal"):
+        if (
+            client_capabilities is not None
+            and client_capabilities.auth is not None
+            and client_capabilities.auth.terminal
+        ):
             methods = [
                 TerminalAuthMethod(
                     type="terminal",

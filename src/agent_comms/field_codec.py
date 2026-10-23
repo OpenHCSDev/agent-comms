@@ -1377,8 +1377,6 @@ class RecordedTimestamp:
 class TimestampText(TextRepresentation[RecordedTimestamp]):
     @classmethod
     def encode(cls, value: object) -> str:
-        if not isinstance(value, RecordedTimestamp):
-            raise MalformedRecord("Expected a recorded timestamp")
         return value.text
 
     @classmethod

@@ -1,5 +1,6 @@
 """Native launcher identity, route and acquired package remain independent."""
 
+
 from agent_comms.bus import Bus
 import shlex
 import sys
@@ -13,12 +14,12 @@ from agent_comms.native_package import VerifiedNativePackage
 
 
 async def test_fork_runs_selected_python_before_copying_saved_history(tmp_path, monkeypatch, pinned_native, *, thread_registration):
-    from agent_comms.comms import Comms
+    from agent_comms.comms import wire
     from agent_comms.fresh_private_session import create_fresh_private_session
     from agent_comms.pi_native_backend import PiNativeBackend
 
     package = VerifiedNativePackage.acquire(pinned_native)
-    comms = Comms(tmp_path / "wire")
+    comms = wire(tmp_path / "wire")
     Bus.install(Bus.path_in(comms.root))
     LaunchRoot.from_path(comms.root).install()
     selected = tmp_path / "selected-core"

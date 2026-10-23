@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, Any
 from acp.exceptions import RequestError
 from acp.schema import (
     PromptResponse,
-    RequestPermissionResponse,
 )
 
 from .image_inputs import ImageInput, prompt_images
@@ -24,6 +23,7 @@ from .channel_targets import NamedTarget
 from .channels import AllChannel
 from .comms import Comms
 from .coordinator import Coordination
+from .controller import Controller
 from .errors import RelationViolationError
 from .goal_actions import (
     GoalPrecondition,
@@ -37,9 +37,7 @@ from .native_arguments import LaunchArguments, LaunchBinary
 from .native_input_owner import RegistryOwner
 from .routing import TurnRouting
 from .runtime import (
-    ACP_PERMISSION_TIMEOUT_SECONDS,
     RuntimeServer,
-    SocketClient,
     SubscriberClosed,
 )
 from .pi_payloads import StateData
@@ -264,7 +262,7 @@ class TurnRunner:
         self,
         session_id: str,
         turn_id: str,
-        controller: Any,
+        controller: Controller | None,
         request: pi.DialogUiRequest,
     ) -> pi.ExtensionUiChoice:
         """Project one bounded Pi UI dialog to exactly the turn's ACP controller.
@@ -279,29 +277,9 @@ class TurnRunner:
         permission = request.permission(turn_id)
         if permission is None:
             return pi.CancelledUiChoice()
-        tool_call, options = permission
         try:
-            if isinstance(controller, SocketClient):
-                reply = await self.runtime.request_permission(
-                    session_id,
-                    controller,
-                    tool_call.model_dump(by_alias=True, exclude_none=True),
-                    [option.model_dump(by_alias=True, exclude_none=True) for option in options],
-                )
-                if reply is None:
-                    return pi.CancelledUiChoice()
-                outcome = reply.outcome.model_dump(by_alias=True, exclude_none=True)
-            elif controller is self.sessions.client:
-                response = await asyncio.wait_for(
-                    controller.request_permission(
-                        session_id=session_id, tool_call=tool_call, options=options
-                    ),
-                    timeout=ACP_PERMISSION_TIMEOUT_SECONDS,
-                )
-                outcome = RequestPermissionResponse.model_validate(response).outcome.model_dump(
-                    by_alias=True, exclude_none=True
-                )
-            else:
+            outcome = await controller.request_ui_permission(self, session_id, permission)
+            if outcome is None:
                 return pi.CancelledUiChoice()
         except (TimeoutError, SubscriberClosed, RequestError):
             # A timed-out, departed or explicitly refusing controller grants no permission.
@@ -309,9 +287,7 @@ class TurnRunner:
             return pi.CancelledUiChoice()
         if not await Coordination.run_worker(partial(self.owns_turn, session_id, turn_id)):
             return pi.CancelledUiChoice()
-        if isinstance(controller, SocketClient) and not self.runtime.is_controller(
-            session_id, controller
-        ):
+        if controller.departed(self.runtime, session_id):
             return pi.CancelledUiChoice()
         selected = outcome.get("optionId")
         if outcome.get("outcome") != "selected" or type(selected) is not str:

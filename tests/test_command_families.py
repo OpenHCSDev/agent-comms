@@ -1,4 +1,5 @@
 
+
 from agent_comms.bus import Bus
 from agent_comms.field_codec import FieldCodec
 
@@ -10,7 +11,7 @@ import pytest
 
 from agent_comms.cli import build_parser, main
 from agent_comms.cli_commands import CliCommand
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.native_arguments import ConfiguredBinary, GivenArguments, GivenBinary, InheritedArguments
 from agent_comms.history_result import (
     ChannelHistoryPageResult,
@@ -141,7 +142,7 @@ def test_invalid_runtime_parameters_use_canonical_decode_and_domain_errors(param
 def test_normal_history_cli_keeps_migrated_content_and_source_identity(
     tmp_path, capsys, monkeypatch, arguments, result_type, per_root
 ):
-    old, live = Comms(tmp_path / "old"), Comms(tmp_path / "live")
+    old, live = wire(tmp_path / "old"), wire(tmp_path / "live")
     for comms in (old, live):
         Bus.install(Bus.path_in(comms.root))
         for name in ("alice", "bob"):

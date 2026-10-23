@@ -1,4 +1,5 @@
 """Scratch is configured; checkout membership is read from Git and the filesystem."""
+
 import shutil
 import subprocess
 from pathlib import Path
@@ -6,7 +7,7 @@ import runpy
 
 import pytest
 
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.storage_rules import (
@@ -51,7 +52,7 @@ def test_registry_rule_supplies_new_thread_roots(tmp_path):
     (tmp_path / 'storage.json').write_text(json.dumps({
         'scratch_base': str(tmp_path / 'scratch'), 'floor_gib': 47,
     }))
-    comms = Comms(tmp_path)
+    comms = wire(tmp_path)
     rule = comms.registry.storage_rule
     thread = comms.registry.new_thread('worker', frozenset(), str(tmp_path / 'home'))
     assert thread.storage_roots.scratch == tmp_path / 'scratch' / 'worker'
@@ -68,7 +69,7 @@ def test_removed_worktree_frees_quota_and_another_home_cannot_claim_its_parent(t
                     'commit', '-q', '--allow-empty', '-m', 'seed'), check=True)
     subprocess.run(('git', '-C', str(home), 'worktree', 'add', '-q', str(old)), check=True)
     rule = StorageRule(checkout_base=base, scratch_base=tmp_path / 'scratch', floor_gib=0, max_checkouts=1)
-    comms = Comms(tmp_path / 'wire')
+    comms = wire(tmp_path / 'wire')
     comms.registry.storage_rule = rule
     thread = comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(home)))
     other = comms.registry.declare(comms.registry.new_thread('other', frozenset(), str(tmp_path)))
@@ -102,7 +103,7 @@ def test_cannot_remove_current_project_but_can_remove_another_checkout(tmp_path)
         subprocess.run(('git', '-C', str(repository), 'worktree', 'add', '-q', str(checkout)), check=True)
     project_link = tmp_path / 'current-project'
     project_link.symlink_to(current, target_is_directory=True)
-    comms = Comms(tmp_path / 'wire')
+    comms = wire(tmp_path / 'wire')
     comms.registry.storage_rule = StorageRule(checkout_base=base, scratch_base=tmp_path / 'scratch')
     thread = comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(project_link)))
     assert thread.project_path == current

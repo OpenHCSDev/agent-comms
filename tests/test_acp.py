@@ -1,7 +1,7 @@
 """ACP server tests against the official agent-client-protocol library.
 
 Exercises the agent the way real clients (Toad, Zed) do: through
-``acp.run_agent`` over real stdio pipes, plus direct handler-level tests.
+Core's ACP connection over real stdio pipes, plus direct handler-level tests.
 """
 
 from agent_comms.bus import Bus
@@ -119,7 +119,7 @@ class TestHandlers:
     @pytest.mark.parametrize("renamed", [False, True])
     async def test_snapshot_capability_replays_one_bounded_update(self, tmp_path, renamed):
         agent = self._agent(tmp_path)
-        await agent.initialize(1, {})
+        await agent.initialize(1)
         await agent.new_session("/wt/proj")
         path = tmp_path / "history.jsonl"
         records = [

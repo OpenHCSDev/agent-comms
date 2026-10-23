@@ -12,7 +12,7 @@ from .typed_table import Column, Index, TypedRow, TypedTable
 
 
 @dataclass(frozen=True)
-class BusRouteCounts(TypedTable, BusProjectionTables):
+class BusRouteCounts(BusProjectionTables):
     seq: Annotated[int, Column(primary_key=True)]
     target: str
     sender: str

@@ -21,8 +21,6 @@ class RecordedEventSeconds(FieldRepresentation):
 
     @classmethod
     def encode(cls, value: object) -> float:
-        if not isinstance(value, RecordedEventTime):
-            raise TypeError("A Unix-seconds field requires a recorded event time")
         return value.to_number(1)
 
     @classmethod
@@ -44,8 +42,6 @@ class NullableEventSeconds(AcceptsNull, FieldRepresentation):
 
     @classmethod
     def encode(cls, value: object) -> object:
-        if not isinstance(value, EventTime):
-            raise TypeError("A source clock requires an event time")
         return value.to_number(cls.units_per_second)
 
     @classmethod

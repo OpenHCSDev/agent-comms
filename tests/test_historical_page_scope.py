@@ -1,11 +1,12 @@
 """Source-owned history predicates and sound sequence-indexed membership."""
+
 from dataclasses import replace
 
 import pytest
 
 from agent_comms.bus import Bus, PublicRecord
 from agent_comms.channel_targets import CommandTarget
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.mentions import ThreadMention
 from agent_comms.message_page import PageBounds
 from agent_comms.messages import InfoKind, Message
@@ -15,7 +16,7 @@ from agent_comms.read_basis import NamedViewer
 
 @pytest.fixture
 def history(tmp_path):
-    old = Comms(tmp_path / "old")
+    old = wire(tmp_path / "old")
     old.registry.declare(old.registry.new_thread('alice-old', frozenset({'api'}), str(old.root), created_at=10))
     for created, name in enumerate(("bob", "carol"), start=11):
         old.registry.declare(old.registry.new_thread(name, frozenset({'ops'}), str(old.root), created_at=created))
@@ -46,7 +47,7 @@ def history(tmp_path):
             lambda seq, db: PublicRecord.from_message(replace(message, seq=seq))
         )
         rows.append(Message.from_message(published))
-    live = Comms(tmp_path / "live")
+    live = wire(tmp_path / "live")
     Bus.install(Bus.path_in(live.root))
     # Deliberately different membership: source scope must not use live tags.
     live.registry.declare(live.registry.new_thread('alice', frozenset({'ops'}), str(live.root), created_at=500))

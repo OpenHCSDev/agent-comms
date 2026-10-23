@@ -889,7 +889,7 @@ class ViewReading(Observation[ObserveViews]):
 class ServiceResult(ABC):
     """What the service sends; each declares how the UI side receives it."""
 
-    def retire_request(self, pending, request) -> None:
+    def retire_request(self, pending: dict[int, ReadRequest], request: ReadRequest) -> None:
         pending.pop(request.request_id)
 
     @abstractmethod
@@ -925,7 +925,7 @@ class ReadBusy(ServiceResult):
 
     request_id: int
 
-    def retire_request(self, pending, request) -> None:
+    def retire_request(self, pending: dict[int, ReadRequest], request: ReadRequest) -> None:
         pass
 
     @property
@@ -1282,11 +1282,11 @@ class ObservationService:
 
 def serve(route: CommsRoute, connection: Connection) -> None:
     """Observe the caller's selected route, including its reviewed native package."""
-    from agent_comms.comms import wire
+    from agent_comms.comms import Comms
 
     try:
         with route.hold_client_route():
-            asyncio.run(ObservationService(wire(route), connection).run())
+            asyncio.run(ObservationService(Comms(route), connection).run())
     except BaseException:
         try:
             connection.send(ObservationFailed(traceback.format_exc()))

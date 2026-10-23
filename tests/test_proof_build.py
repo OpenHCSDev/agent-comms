@@ -1,5 +1,6 @@
 """Build-bound close uses real repositories and a retained-history bus copy."""
 
+
 import subprocess
 import sys
 import time
@@ -18,7 +19,7 @@ from agent_comms.bus import Bus
 from agent_comms.check_root import CheckRoot
 from agent_comms.commander.order import Commander
 from agent_comms.commander.standing import InstallDue
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
@@ -228,7 +229,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
         for graph in proof_build_checkouts
         if graph.repository.github == CorePackage.repository
     )
-    source = Comms(tmp_path / "bus")
+    source = wire(tmp_path / "bus")
     Bus.install(Bus.path_in(source.root))
     for number, name in enumerate(("lead", "worker"), 1):
         source.registry.declare(
@@ -349,7 +350,7 @@ def test_install_due_compares_fetched_main_to_installed_build(
     # Deliberately stale: the rule must fetch rather than trust the existing remote ref.
     Repo.git(checkout, "update-ref", "refs/remotes/origin/main", graph.oldest)
     before = Repo.git(checkout, "rev-parse", "HEAD")
-    bus = Comms(tmp_path / "bus")
+    bus = wire(tmp_path / "bus")
     bus.registry.declare(bus.registry.new_thread("lead", frozenset(), str(checkout)))
     Commander.on_root("lead", (graph.repository,), bus.root)
 
@@ -389,7 +390,7 @@ def test_install_waits_for_merges_to_settle_into_one_batch(
     subprocess.run(("git", "init", "--bare", str(origin)), check=True, capture_output=True)
     Repo.git(checkout, "remote", "set-url", "origin", str(origin))
     Repo.git(checkout, "push", "origin", f"{graph.newer}:refs/heads/main")
-    bus = Comms(tmp_path / "bus")
+    bus = wire(tmp_path / "bus")
     bus.registry.declare(bus.registry.new_thread("lead", frozenset(), str(checkout)))
     Commander.on_root("lead", (graph.repository,), bus.root)
     merged = int(Repo.git(checkout, "log", "-1", "--format=%ct", graph.newer))

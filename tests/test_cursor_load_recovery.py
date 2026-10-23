@@ -1,5 +1,6 @@
 """A contended trusted load must not suppress its later real cursor recovery."""
 
+
 from agent_comms.bus import Bus
 
 from bus_history import read_history
@@ -12,7 +13,7 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import CursorAdvancedUpdate, decode_updates
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
 from agent_comms.owner_protocol import OwnerLine, OwnerUpdate
 from agent_comms.runtime import SocketClient
@@ -20,7 +21,7 @@ from agent_comms.store_files import _store_lock
 
 
 async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
-    comms = Comms(tmp_path / "wire")
+    comms = wire(tmp_path / "wire")
     owner = comms.registry.new_thread('reader', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(owner)
     Bus.install(Bus.path_in(comms.root))
