@@ -12,6 +12,7 @@ from bus_record_fixture import prepare_native_comms
 from agent_comms.native_pi import NativeContextJournal
 from agent_comms.native_session_files import NativeInputProof
 from agent_comms.comms import Comms, wire
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_session import NativeBoundary
 from agent_comms.envelope_claim_transitions import ExistingFileClaim, NativeClaim
 from agent_comms.locked_store import DeclaredFile, DurableFile, RootFile, RuntimeFile, SQLiteFile
@@ -27,6 +28,18 @@ from agent_comms.threads import Thread
 def comms(tmp_path: Path) -> Comms:
     root = tmp_path / "bus"
     return prepare_native_comms(wire(root))
+
+
+def test_published_change_signal_is_not_a_bus_resource(tmp_path: Path) -> None:
+    path = CoordinationStore.path_in(tmp_path)
+    with CoordinationStore(path):
+        pass
+    CoordinationStore.publish_change(path)
+
+    resources = bus_files(tmp_path)
+    paths = {resource.path for resource in resources}
+    assert path.relative_to(tmp_path) in paths
+    assert Path("coordination.changed") not in paths
 
 
 def test_every_bus_file_is_a_declared_root_file(tmp_path: Path, source_repository, comms: Comms) -> None:

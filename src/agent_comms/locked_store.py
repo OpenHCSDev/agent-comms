@@ -692,6 +692,10 @@ class PublishedSQLiteFile(SQLiteFile):
         return super().member_paths(path) | frozenset(cls._source_paths(path))
 
     @classmethod
+    def transient_paths(cls, path: Path) -> frozenset[Path]:
+        return super().transient_paths(path) | frozenset(cls._source_paths(path))
+
+    @classmethod
     @contextmanager
     def publishing_changes(
         cls, connection: sqlite3.Connection, path: Path,
