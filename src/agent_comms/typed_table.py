@@ -1972,13 +1972,8 @@ class ProducedTable(ProducedRow, TypedTable, declared_name=None):
     def producer_digest(cls) -> str:
         for family in cls.__mro__:
             if issubclass(family, ProducedTable) and "producer_package" in vars(family):
-                return family._built_digest()
+                return family._producer_digest()
         raise TypeError(f"{cls.__name__} has no producing family declaration")
-
-    @classmethod
-    @cache
-    def _built_digest(cls) -> str:
-        return BuildProducerDigests.current().digest(cls)
 
     @classmethod
     @cache
@@ -2004,11 +1999,18 @@ class ProducedTable(ProducedRow, TypedTable, declared_name=None):
 
 
 @dataclass(frozen=True)
-class BuildProducerDigests:
-    """The producer digests one build computed, kept in one file beside its interpreter.
+class BuiltDigests:
+    """The producer digest of each projection one build computed, by its declared name."""
 
-    A build's source never changes, so each producing family's source is digested once per
-    build rather than once per process. Which build verified which digest belongs to the
+    digests: dict[str, str]
+
+
+@dataclass(frozen=True)
+class BuildProducerDigests:
+    """The file holding one build's BuiltDigests, beside its interpreter.
+
+    A build's source never changes, so each projection's producer source is digested once
+    per build rather than once per process. Which build verified which digest belongs to the
     build, never to a carried store: the bus keeps only the digest that produced its rows.
     """
 
@@ -2019,19 +2021,21 @@ class BuildProducerDigests:
     def current(cls) -> BuildProducerDigests:
         return cls(Path(sys.prefix) / "agent-comms-producers" / f"{STAMP.commit()}.json")
 
-    def digest(self, family: type[ProducedTable]) -> str:
-        name = f"{family.__module__}.{family.__qualname__}"
-        stored = self.stored()
-        if name not in stored:
-            stored[name] = family._producer_digest()
-            AtomicFile(self.path).write_text(json.dumps(stored, sort_keys=True) + "\n")
-        return stored[name]
+    def digests(self, rows: tuple[type[ProducedTable], ...]) -> dict[str, str]:
+        """Each row's digest, computing and recording every missing one in one write."""
+        built = self.stored()
+        missing = {row.declared_name: row.producer_digest()
+                   for row in rows if row.declared_name not in built.digests}
+        if missing:
+            built = BuiltDigests({**built.digests, **missing})
+            AtomicFile(self.path).write_text(
+                FieldCodec.compact(FieldCodec.encode(built), sort_keys=True) + "\n")
+        return {row.declared_name: built.digests[row.declared_name] for row in rows}
 
-    def stored(self) -> dict[str, str]:
+    def stored(self) -> BuiltDigests:
         if not self.path.is_file():
-            return {}
-        stored: dict[str, str] = json.loads(self.path.read_text(encoding="utf-8"))
-        return stored
+            return BuiltDigests({})
+        return FieldCodec.decode(BuiltDigests, FieldCodec.parse(self.path.read_bytes()))
 
 
 @dataclass(frozen=True)
@@ -2041,10 +2045,8 @@ class ProjectionProducer(TypedTable, ProjectionProducerTables):
 
     @classmethod
     def records_for(cls, rows: tuple[type[ProducedTable], ...]) -> tuple[Self, ...]:
-        return tuple(cls(row.declared_name, row.producer_digest()) for row in rows)
-
-    def verifies(self, row: type[ProducedTable]) -> bool:
-        return self.producer_digest == row.producer_digest()
+        digests = BuildProducerDigests.current().digests(rows)
+        return tuple(cls(name, digest) for name, digest in digests.items())
 
     @classmethod
     def matches(cls, db: sqlite3.Connection, rows: tuple[type[ProducedTable], ...]) -> bool:
@@ -2052,9 +2054,9 @@ class ProjectionProducer(TypedTable, ProjectionProducerTables):
             return True
         if not cls.present(db):
             return False
-        stored = {record.projection: record for record in cls.select(db)}
-        return all(row.declared_name in stored and stored[row.declared_name].verifies(row)
-                   for row in rows)
+        stored = {record.projection: record.producer_digest for record in cls.select(db)}
+        digests = BuildProducerDigests.current().digests(rows)
+        return all(stored.get(name) == digest for name, digest in digests.items())
 
 
 class StoreWriter(PublishedSQLiteFile, FileStore):
