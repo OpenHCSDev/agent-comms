@@ -19,7 +19,6 @@ from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.questions import SenderMessages, UnansweredBurst
 from agent_comms.commander.standing import AnswersTo, PlanStalled
 from agent_comms.comms import Comms
-from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import projected
 from agent_comms.goal_actions import (
     ChokeholdPausedGoalAction,
@@ -31,6 +30,9 @@ from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.service_sender import ServiceSender
 from agent_comms.standing_rules import (
+    BlocksRelease,
+    Degradation,
+    Sign,
     IndependentStandingRule,
     OwedAnswer,
     ReviewTimerUp,
@@ -98,63 +100,20 @@ class ChokeholdSender(EscalationSender):
     sender = "chokehold"
 
 
-@dataclass(frozen=True)
-class Sign:
-    """One occurrence of a degraded signal. Its key is what makes it new: a message, a stalled
-    phase at its age doubling, a load round. The same occurrence never stops the commander twice;
-    its line is how it reads now."""
-
-    signal: type[Degradation]
-    key: tuple[object, ...]
-    line: str = field(compare=False)
-
-    @property
-    def mark(self) -> str:
-        return self.signal.mark(self.key)
-
-
-class Degradation(DeclaredFamily, affix="Degradation"):
-    """One signal that the fleet is getting away from its commander."""
-
-    @classmethod
-    @abstractmethod
-    def found(cls, comms: Comms, commander: str) -> tuple[Sign, ...]:
-        """How the signal shows now, one sign per occurrence; empty while it does not."""
-
-    @classmethod
-    def mark(cls, key: tuple[object, ...]) -> str:
-        """One occurrence as text, the same however often it is read."""
-        return " ".join((cls.declared_name, *map(str, key)))
-
-
 class Escalation:
     """An answer owed to an escalation itself. Ignoring one is the chokehold's signal, never a
     new vibe check, or the check would feed on its own messages."""
 
     message: Message
 
+    def degradation_signs(self) -> tuple[Sign, ...]:
+        return ()
+
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         """An escalation arrives as a burst: an answer naming any line of it covers every line
         its sender sent before the answer, which UnansweredBurst reads once the answer is sent.
         The gate runs just before the answer is sent, so it reads the answer the same way."""
         return any(message.sender == self.message.sender for message in named)
-
-
-class BlocksRelease:
-    """A degraded signal the commander clears this turn, so a chokehold holds its units until
-    the signal is gone: a quote is the answer, never the relief."""
-
-
-class AnswersOwedDegradation(Degradation, BlocksRelease):
-    """Messages to the commander are waiting past their window; each message is one sign."""
-
-    @classmethod
-    def found(cls, comms: Comms, commander: str) -> tuple[Sign, ...]:
-        return tuple(
-            Sign(cls, (rule.cited,), rule.line())
-            for rule in OwedAnswer.violations(comms, commander)
-            if not isinstance(rule, Escalation)
-        )
 
 
 class PlanStalledDegradation(Degradation):
