@@ -9,6 +9,7 @@ import json
 import os
 import shlex
 import threading
+import traceback
 from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -19,18 +20,19 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
-from agent_comms.field_codec import FieldCodec
+from agent_comms.agent_activity import AgentActivity
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
 from agent_comms.native_pi import CommittedInput, read_tracked_input_commitment
 from agent_comms.native_package import VerifiedNativePackage
 
-from agent_comms.messages import Message, InfoKind
+from agent_comms.native_tools import NativeToolDeclaration
 from agent_comms.cursor_owner import CursorOwner
 from agent_comms.selected_tool_broker import SelectedToolIntent
 from test_coordinated_runtime import _root
 from test_coordinated_runtime import tmp_path as private_root_fixture
 from agent_comms.thread_model import DeclaredModel
+from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase
 
 tmp_path = private_root_fixture
 
@@ -50,6 +52,19 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
     requests = []
     failures = []
     phases = []
+    native_phases = []
+    model_wait_after_tools = threading.Event()
+    observe_native_phase = AgentActivity.observe_native_phase
+
+    def record_native_phase(agents, lease, phase):
+        states = observe_native_phase(agents, lease, phase)
+        if agents.registry.store.path.parent == root and states:
+            native_phases.append(type(lease.record.read().require_active().phase))
+            if native_phases[-2:] == [ToolRunningPhase, ModelWaitPhase]:
+                model_wait_after_tools.set()
+        return states
+
+    monkeypatch.setattr(AgentActivity, "observe_native_phase", record_native_phase)
     calls = [
         ("read", {"path": "input.txt"}),
         ("edit", {"path": "input.txt", "edits": [{"oldText": "BEFORE", "newText": "AFTER"}]}),
@@ -74,7 +89,7 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
             'from pathlib import Path; from agent_comms.comms import Comms; from agent_comms.publisher import Publisher; '
             'from agent_comms.turn_phase import ToolRunningPhase; '
             f'c=Comms(Path({str(root)!r}), Publisher); '
-            'assert isinstance(c.registry.require("beta").active_turn.phase, ToolRunningPhase); '
+            'assert isinstance(c.registry.require("beta").turn_record.read().require_active().phase, ToolRunningPhase); '
             'print("CANONICAL_TOOL_RUNNING")'
         )
         python = shlex.quote(str(Path(entrypoint).with_name('python')))
@@ -90,13 +105,13 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
             try:
                 request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
                 requests.append(request)
-                phase = comms.registry.require('beta').active_turn.phase
+                phase = comms.registry.require('beta').turn_record.read().require_active().phase
                 phases.append(phase.declared_name)
                 assert request["model"] == "fixture"
                 assert self.headers["Authorization"] == "Bearer offline-only-fixture"
                 assert len(requests) <= 2 + triage
                 if triage and len(requests) == 1:
-                    assert "bounded triage" in json.dumps(request)
+                    assert "Output ONLY a JSON object with one key" in json.dumps(request)
                     assert not request.get("tools")
                     delta = {"role": "assistant", "content": '{"decision":"FULL"}'}
                     reason = "stop"
@@ -106,9 +121,11 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
                         assert "Selected source decisions through " in context
                         assert "Optional non-authoritative awareness" in context
                         assert initial.message.message_id in context
-                    assert {t["function"]["name"] for t in request["tools"]} == {
-                        name for name, _ in calls
-                    }
+                    declared = ({name for name, _ in calls} if selected_write else {
+                        tool.declared_name
+                        for tool in NativeToolDeclaration.members_with(NativeToolDeclaration)
+                    })
+                    assert {t["function"]["name"] for t in request["tools"]} == declared
                     delta = {
                         "role": "assistant",
                         "tool_calls": [
@@ -131,11 +148,12 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
                     assert not any("Error:" in str(t["content"]) for t in tools)
                     if os.environ.get('AC_HEADLESS_ENTRYPOINT'):
                         assert 'CANONICAL_TOOL_RUNNING' in str(tools[-1]['content'])
-                    assert phase.declared_name == 'model_wait'
+                    # Pi's next HTTP request can outrun Core's observation of
+                    # the tool terminal. Hold this response until the real
+                    # phase owner commits the transition back to model wait.
+                    assert model_wait_after_tools.wait(5), native_phases
                     assert 'participant' not in comms.registry.snapshot().threads
-                    answer = Message("beta", initial.message.exact_reply_target,
-                                     "CODING_TOOLS_OK", InfoKind, timestamp=0)
-                    delta = {"role": "assistant", "content": json.dumps(FieldCodec.encode((answer,)))}
+                    delta = {"role": "assistant", "content": "CODING_TOOLS_OK"}
                     reason = "stop"
                 chunk = {
                     "id": "selected-offline",
@@ -158,8 +176,8 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
-            except Exception as error:
-                failures.append(str(error))
+            except Exception:
+                failures.append(traceback.format_exc())
                 self.send_error(400, "Offline fixture assertion failed")
 
         def log_message(self, *_args):
@@ -205,7 +223,6 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
     )
     try:
         outcome = await asyncio.wait_for(execution.run(), 40)
-        assert not failures
         assert len(requests) == 2 + triage
         assert outcome.publications
         responses = [
@@ -264,3 +281,4 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
+        assert not failures, "\n\n".join(failures)

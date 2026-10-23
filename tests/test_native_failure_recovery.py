@@ -113,6 +113,7 @@ class FailedHistory(ClaimedHistory):
                 NativeRuntimeInput.one(db, input_id=claim.input_id).commit_context(db, context)
         append_input_entry(identity.path, {
             "type": "message", "id": "error-terminal", "parentId": entry_id,
+            "timestamp": "2026-10-01T00:00:00.001Z",
             "message": {"role": "assistant", "stopReason": "error",
                         "errorMessage": "Codex error: The usage limit has been reached",
                         "content": []},
@@ -226,12 +227,19 @@ class DifferentParentDamage(EvidenceDamage):
 
 class AdditionalInputDamage(EvidenceDamage):
     def alter_rows(self, rows):
-        rows.append({"type": "message", "message": {"role": "user", "content": []}})
+        rows.append({
+            "type": "message", "id": "additional-input", "parentId": rows[-1]["id"],
+            "timestamp": "2026-10-01T00:00:00.002Z",
+            "message": {"role": "user", "content": []},
+        })
 
 
 class ToolDamage(EvidenceDamage):
     def alter_rows(self, rows):
-        rows[-1]["message"]["content"] = [{"type": "toolCall", "name": "bash"}]
+        rows[-1]["message"]["content"] = [{
+            "type": "toolCall", "id": "unexpected-tool", "name": "bash",
+            "arguments": {"command": "true"},
+        }]
 
 
 class WrongEpochDamage(EvidenceDamage):
