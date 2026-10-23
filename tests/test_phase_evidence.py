@@ -1,13 +1,11 @@
 import subprocess
 from pathlib import Path
 
-from agent_comms.field_codec import FieldCodec
+import pytest
+
 from agent_comms.head_review import HeadReview
 from agent_comms.phase_evidence import (
     AllEvidence,
-    AlwaysBypass,
-    BranchRule,
-    BypassMode,
     ClassFlagsAbsent,
     CommitMerged,
     MainEvidence,
@@ -22,9 +20,7 @@ from agent_comms.phase_evidence import (
     PatternPresent,
     PhaseEvidence,
     PlanReading,
-    PullRequestBypass,
     RulesetGates,
-    UnlistedBypass,
     UnreadableEvidenceError,
 )
 from agent_comms.pinned_audit import GodFunction
@@ -205,31 +201,26 @@ def test_source_shape_evidence_reads_declarations_on_main(tmp_path):
     assert not reading.holds(ParentsShared(names=("Missing",)))
 
 
-def test_ruleset_gates_only_while_no_actor_skips_the_review(tmp_path):
-    modes = FieldCodec.decode_external(
-        tuple[type[BypassMode], ...], ["pull_request", "always", "exempt"], {})
-    assert modes == (PullRequestBypass, AlwaysBypass, UnlistedBypass)
-    assert [mode.keeps_gate() for mode in modes] == [True, False, False]
-
+@pytest.mark.parametrize(("required", "unskipped", "expected"), (
+    ((HeadReview.context,), True, True),
+    ((HeadReview.context,), False, False),
+    (("review-verdict",), True, False),
+    (("smoke",), True, False),
+))
+def test_ruleset_requires_exact_review_context_without_bypass(
+    tmp_path, required, unskipped, expected,
+):
     main = main_of(tmp_path, {"src/a.py": "x = 1\n"}).main
     rules = [{"ruleset": 7, "required": ["smoke"]},
-             {"ruleset": 8, "required": [HeadReview.queue_check]}]
-    assert [rule.requires(HeadReview.queue_check)
-            for rule in FieldCodec.decode(tuple[BranchRule, ...], rules)] == [False, True]
+             {"ruleset": 8, "required": list(required)}]
+    answers = {"rules/branches/main": rules, "rulesets/8": unskipped}
 
-    def gates(bypass):
-        answers = {"rules/branches/main": rules, "rulesets/8": bypass}
+    class Answered(RulesetGates):
+        @staticmethod
+        def api(main, path, query):
+            return answers[path]
 
-        class Answered(RulesetGates):
-            @staticmethod
-            def api(main, path, query):
-                return answers[path]
-
-        return Answered().holds(PlanReading((), main))
-
-    assert gates(["pull_request"])
-    assert gates([])
-    assert not gates(["pull_request", "always"])
+    assert Answered().holds(PlanReading((), main)) is expected
     assert HeadReview.context in RulesetGates().describe()
 
 
