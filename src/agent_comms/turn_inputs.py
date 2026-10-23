@@ -22,7 +22,6 @@ from .agent_backend import (
     TurnInbox,
     TurnInboxItem,
     UseSettings,
-    WhenBusy,
 )
 from .field_codec import Id128Text
 from .locked_store import RegistryFile
@@ -31,10 +30,6 @@ from .maintenance_barrier import MaintenanceBarrier
 if TYPE_CHECKING:
     from .backend import TurnSession
     from .pi_events import MessageStart, Response
-
-
-# Pi's spelling of each busy policy it supports; Pi has no way to refuse an input.
-_PI_STREAMING_BEHAVIOR = {WhenBusy.STEER: "steer", WhenBusy.FOLLOW_UP: "followUp"}
 
 
 @dataclass
@@ -167,7 +162,7 @@ class InputForwarding:
             images=item.content.images,
             context_contributions=item.content.contributions,
             owner_tools=session.tool_socket.listener.connection,
-            streaming_behavior=_PI_STREAMING_BEHAVIOR[item.when_busy],
+            streaming_behavior=item.when_busy.streaming(),
         )
         def write():
             if command.images:

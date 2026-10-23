@@ -2,18 +2,13 @@
 
 
 
-from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
+from agent_comms.channels import AnyOfMatch, ViewPredicate, ActivityView
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, InfoKind
 
 
 def test_wire_formats_derive_field_names_optional_values_and_sorted_tags():
-    view = SavedView(
-        "work",
-        ViewKind.ACTIVITY,
-        ViewPredicate(AnyOfMatch, frozenset({"z", "a"})),
-        created_at=7.0,
-    )
+    view = ActivityView('work', ViewPredicate(AnyOfMatch, frozenset({'z', 'a'})), created_at=7.0)
     expected = {
         "name": "work",
         "kind": "activity",

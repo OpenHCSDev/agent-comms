@@ -103,16 +103,16 @@ class ResponseConversation:
     def record(self, seq: int, message: Message, intent) -> KeyedPrivateRecord:
         from agent_comms.bus import KeyedPrivateRecord
         from agent_comms.delivery_policy import ResponseDeliveryPolicy
-        from agent_comms.wake import ControlClassification
+        from agent_comms.wake import OrdinaryControl
 
         stored = replace(message, seq=seq)
         audience = self.audience(stored)
         decisions = ResponseDeliveryPolicy.resolve(
-            stored, audience, ControlClassification.ORDINARY,
+            stored, audience, OrdinaryControl,
         )
         return KeyedPrivateRecord.from_message(
             stored, audience=audience, decisions=decisions,
-            control=ControlClassification.ORDINARY.value,
+            control=OrdinaryControl.declared_name,
             acknowledgement=KeyedResponseAcknowledgement(
                 self.privacy.namespace, intent.execution_id, intent.publication_key,
                 public_envelope_digest(stored.to_wire()),

@@ -3,7 +3,7 @@ import pytest
 from agent_comms.native_arguments import SelectedModel
 from agent_comms.native_startup import NativeStartupPolicy
 
-from agent_comms.agent_backend import WhenBusy
+from agent_comms.agent_backend import SteerInputPolicy
 from agent_comms.pi_events import NativeRetryEnd
 from agent_comms.pi_payloads import FailedProviderRetry, PiMessage, SucceededProviderRetry
 from agent_comms.tracked_turn import CompletedTrackedTerminal, PendingTrackedTerminal, TrackedTurnSession
@@ -96,8 +96,8 @@ def following(kind):
 def test_delivered_notice_preserves_original_but_real_steering_can_revise(text):
     notice = following(DeliveredFollowingInput)
     steering = following(AcceptedFollowingInput)
-    assert notice.when_busy is WhenBusy.STEER
-    assert steering.when_busy is WhenBusy.STEER
+    assert notice.when_busy is SteerInputPolicy
+    assert steering.when_busy is SteerInputPolicy
     response = notice.continue_response(CompletedTrackedTerminal("Requested answer"), ["Requested answer"])
     response = response.tool_round().append(text)
     assert response.require_response([text]) == "Requested answer"

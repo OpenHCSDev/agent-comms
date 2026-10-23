@@ -5,7 +5,6 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -108,24 +107,52 @@ class DeleteExclusiveInactiveThreadsTagDisposition(DeleteThreadsTagDisposition):
                      for member in channels.registry.status(thread.name).deletable_threads(thread))
 
 
-class TagAction(Enum):
-    LIST = "list"
-    CREATE = "create"
-    RENAME = "rename"
-    DELETE = "delete"
+@dataclass(frozen=True, kw_only=True)
+class TagEdit(DeclaredFamily, affix="TagEdit"):
+    """A tag operation carries only the arguments that operation uses."""
 
-    def apply(
-        self, channels: ChannelManagement, name: str = "", new_name: str = "", *,
-        disposition: TagDisposition = KeepThreadsTagDisposition(), confirmed: bool = False
-    ) -> frozenset[str]:
-        match self:
-            case self.CREATE:
-                channels.create_tag(name)
-            case self.RENAME:
-                channels.rename_tag(name, new_name)
-            case self.DELETE:
-                channels.delete_tag(name, disposition=disposition, confirmed=confirmed)
+    def apply(self, channels: ChannelManagement) -> frozenset[str]:
+        self.change(channels)
         return channels.catalog.read().tags
+
+    @abstractmethod
+    def change(self, channels: ChannelManagement) -> None: ...
+
+
+class ListTagEdit(TagEdit):
+    label = "List tags"
+    def change(self, channels: ChannelManagement) -> None:
+        pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class NamedTagEdit(TagEdit, declared_name=None):
+    name: str
+
+
+class CreateTagEdit(NamedTagEdit):
+    label = "Create tag"
+    def change(self, channels: ChannelManagement) -> None:
+        channels.create_tag(self.name)
+
+
+@dataclass(frozen=True, kw_only=True)
+class RenameTagEdit(NamedTagEdit):
+    label: ClassVar[str] = "Rename tag"
+    new_name: str
+
+    def change(self, channels: ChannelManagement) -> None:
+        channels.rename_tag(self.name, self.new_name)
+
+
+@dataclass(frozen=True, kw_only=True)
+class DeleteTagEdit(NamedTagEdit):
+    label: ClassVar[str] = "Delete tag"
+    disposition: TagDisposition = KeepThreadsTagDisposition()
+    confirmed: bool = False
+
+    def change(self, channels: ChannelManagement) -> None:
+        channels.delete_tag(self.name, disposition=self.disposition, confirmed=self.confirmed)
 
 
 class ChannelManagement:
@@ -181,7 +208,7 @@ class ChannelManagement:
                         Message(
                             announcer.name,
                             channel.name,
-                            f"{announcer.name} {change.value} {channel.name}",
+                            f"{announcer.name} {change.declared_name} {channel.name}",
                             InfoKind,
                             role=MembershipConversationRole(change),
                         ),

@@ -10,7 +10,7 @@ import pytest
 
 import agent_comms.agent_events as ae
 import agent_comms.backend as backend
-from agent_comms.agent_backend import InputContent, InputId, InputRequest, WhenBusy
+from agent_comms.agent_backend import InputContent, InputId, InputRequest, SteerInputPolicy
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.turn_watchdog import ModelWait
 from pi_session_turn import one_turn_events
@@ -21,7 +21,7 @@ def steer(text: str, input_id: str | None = None) -> InputRequest:
     return InputRequest(
         input_id=InputId(input_id or f"agent-comms-steer-{uuid4().hex}"),
         content=InputContent(text=text),
-        when_busy=WhenBusy.STEER,
+        when_busy=SteerInputPolicy,
     )
 
 

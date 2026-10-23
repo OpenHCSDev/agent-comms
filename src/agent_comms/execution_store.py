@@ -14,7 +14,7 @@ from agent_comms.coordination_results import AlreadyApplied, Applied
 from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
 from agent_comms.coordination_tables.executions import (
-    ExecutionOrigin,
+    ExecutionProvenance,
     ExecutionRecord,
 )
 from agent_comms.coordination_tables.responses import ResponseObligation
@@ -37,7 +37,7 @@ class ExecutionStore(RecoveryReader):
     def create(
         self,
         execution_id: str,
-        origin: ExecutionOrigin,
+        origin: type[ExecutionProvenance],
         owner_lookup: str,
         owner_thread: str,
         max_attempts: int,
@@ -51,7 +51,7 @@ class ExecutionStore(RecoveryReader):
     def create_after_triage(
         self,
         execution_id: str,
-        origin: ExecutionOrigin,
+        origin: type[ExecutionProvenance],
         owner_lookup: str,
         owner_thread: str,
         max_attempts: int,
@@ -69,15 +69,11 @@ class ExecutionStore(RecoveryReader):
     def _create(self, db, execution_id, origin, owner_lookup, owner_thread,
                 max_attempts, sources, assignments):
         """The single creation algorithm, under its caller's owning transaction."""
-        origin = ExecutionOrigin(origin)
         for source in sources:
             if source.store is not self.assignments:
                 raise IdentityConflict("execution source belongs to another assignment store")
         assignment_ids = tuple(source.assignment_id for source in sources)
-        if origin is ExecutionOrigin.WIRE and not sources:
-            raise IdentityConflict("wire execution requires ordered original sources")
-        if origin is not ExecutionOrigin.WIRE and sources:
-            raise IdentityConflict("claimless execution cannot bind claims")
+        origin.require_sources(sources)
         row = ExecutionRecord.one(self.session._connection, execution_id=execution_id)
         if row is not None:
             snapshot = self.get(execution_id)

@@ -74,7 +74,7 @@ def cursor_envelope(metadata):
 def test_private_owner_rename_during_active_attempt_can_complete(tmp_path, managed):
     from agent_comms.attempt_start import AttemptStart
     from agent_comms.attempt_states import SucceededAttempt
-    from agent_comms.coordination_tables.executions import ExecutionOrigin
+    from agent_comms.coordination_tables.executions import ExecutionProvenance, AcpOrigin
     from agent_comms.owner_fence import prepare_fence_token
     from test_coordination_store import final_evidence
 
@@ -82,7 +82,7 @@ def test_private_owner_rename_during_active_attempt_can_complete(tmp_path, manag
     lookup = RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         before = store.participants.get(lookup)
-        store.create("rename-active", ExecutionOrigin.ACP, lookup, "beta", 1)
+        store.create("rename-active", AcpOrigin, lookup, "beta", 1)
         store.mark_pending("rename-active", expected_revision=1)
         fence = store.start(AttemptStart(
             "rename-active", 1, "beta", 1, prepare_fence_token(),

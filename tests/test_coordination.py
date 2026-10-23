@@ -43,7 +43,11 @@ from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayFact
 from agent_comms.coordination_tables.executions import NoReplayAssessment, ReplayAssessments
 from agent_comms.coordination_tables.executions import (
     CurrentExecutions,
-    ExecutionOrigin,
+    ExecutionProvenance,
+    WireOrigin,
+    AcpOrigin,
+    GoalOrigin,
+    SystemOrigin,
     ExecutionRecord,
 )
 from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
@@ -71,7 +75,7 @@ from agent_comms.obligation_states import (
 from agent_comms.wake_policy import FullWake
 
 
-def execution(*, status=PendingExecution, ordinal=None, origin=ExecutionOrigin.ACP):
+def execution(*, status=PendingExecution, ordinal=None, origin=AcpOrigin):
     return ExecutionRecord(
         execution_id="execution-1",
         origin=origin,
@@ -134,7 +138,7 @@ def snapshot(
     *,
     execution_record=None,
     attempt_record=None,
-    origin=ExecutionOrigin.ACP,
+    origin=AcpOrigin,
     current=False,
     response=None,
     replay=None,
@@ -145,7 +149,7 @@ def snapshot(
         attempt=attempt_record,
         links=(
             (ExecutionAssignmentLink(record.execution_id, "claim-1", 0),)
-            if record.origin is ExecutionOrigin.WIRE
+            if record.origin is WireOrigin
             else ()
         ),
         assignments=(
@@ -161,11 +165,11 @@ def snapshot(
                     )
                 ),
             )
-            if record.origin is ExecutionOrigin.WIRE
+            if record.origin is WireOrigin
             else ()
         ),
         replay=replay or ReplayAssessments(record.execution_id, ReplayFact.NONE, True, False, 1),
-        obligations=(response,) if record.origin is ExecutionOrigin.WIRE and response else (),
+        obligations=(response,) if record.origin is WireOrigin and response else (),
         publication_intents=(),
         publication_evidence=(),
         last_recovery=None,
@@ -188,7 +192,7 @@ def sql_execution(
     thread="worker",
 ):
     ExecutionRecord(
-        execution_id=name, origin=ExecutionOrigin(origin),
+        execution_id=name, origin=ExecutionProvenance.member_named(origin),
         lifecycle=ExecutionState.member_named(status).load(ordinal),
         owner_thread=thread, owner_lookup=owner, revision=1,
         max_attempts=max_attempts, reason_code=NoReasonCode(), created_at_ms=0, updated_at_ms=0,
@@ -359,7 +363,7 @@ def test_snapshot_projection_retry_and_inert_secrets():
 
 
 def test_wire_claim_obligation_and_publication_contract():
-    record = execution(origin=ExecutionOrigin.WIRE)
+    record = execution(origin=WireOrigin)
     valid = snapshot(execution_record=record, response=obligation())
     assert FieldCodec.project(valid, "snapshot")["claims"][0]["claim_id"] == "claim-1"
     primitive = FieldCodec.project(valid, "snapshot")

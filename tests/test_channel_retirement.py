@@ -7,7 +7,7 @@ import pytest
 
 from agent_comms.bus import Bus, PublicRecord
 from agent_comms.catalog_store import ChannelCatalog
-from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
+from agent_comms.channels import AnyOfMatch, ViewPredicate, ActivityView, ParticipantsView
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.message_page import PageBounds
@@ -35,13 +35,7 @@ def saved_catalog(root):
             "#ui": ChannelPreferences(created_at=17),
         },
         saved_views={
-            "engineering": SavedView(
-                "engineering",
-                ViewKind.ACTIVITY,
-                ViewPredicate(AnyOfMatch, frozenset({"api", "ui"})),
-                17,
-                frozenset({"#engineering"}),
-            )
+            "engineering": ActivityView('engineering', ViewPredicate(AnyOfMatch, frozenset({'api', 'ui'})), 17, frozenset({'#engineering'}))
         },
         list_order=LastUserInputChannelSort,
     )
@@ -111,7 +105,7 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
 def test_private_initial_rejects_view_but_routes_exact_tags_and_membership(tmp_path):
     comms, _store, _identity, _lookups = _root(tmp_path)
     comms.channels.set_saved_view(
-        SavedView("team-view", ViewKind.ACTIVITY, ViewPredicate(AnyOfMatch, frozenset({"team"})))
+        ActivityView('team-view', ViewPredicate(AnyOfMatch, frozenset({'team'})))
     )
     before = comms.bus.bus.revision()
     with pytest.raises(ValueError):
@@ -133,12 +127,7 @@ def test_restoring_same_named_view_keeps_current_predicate_and_original_target_h
     Bus.install(Bus.path_in(tmp_path / "destination"))
     comms = wire(tmp_path / "destination")
     comms.channels.create_tag("api")
-    current = SavedView(
-        "engineering",
-        ViewKind.PARTICIPANTS,
-        ViewPredicate(AnyOfMatch, frozenset({"api"})),
-        created_at=19,
-    )
+    current = ParticipantsView('engineering', ViewPredicate(AnyOfMatch, frozenset({'api'})), created_at=19)
     comms.channels.set_saved_view(current)
     with comms.bus.opened_activity() as activity, comms.channels.catalog.editing() as document:
         document.restore_missing(source, activity, existing=True)

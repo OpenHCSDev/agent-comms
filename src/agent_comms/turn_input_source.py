@@ -7,7 +7,7 @@ from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
-from .agent_backend import WhenBusy
+from .agent_backend import BusyInputPolicy, SteerInputPolicy
 from .channel_input_batch import InputBatch, SingleInputBatch
 from .messages import Message
 from .started_input import StartedInput
@@ -209,7 +209,7 @@ class ScheduledOriginalInput(DependencyOriginalInput):
 @dataclass(frozen=True, kw_only=True)
 class FollowingTurnInput(TurnInputSource):
     keys: tuple[str, ...]
-    when_busy: ClassVar[WhenBusy] = WhenBusy.STEER
+    when_busy: ClassVar[type[BusyInputPolicy]] = SteerInputPolicy
 
     def continue_response(self, response, parts):
         """An actual following request may revise the turn's automatic answer."""

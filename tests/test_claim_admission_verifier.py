@@ -27,7 +27,7 @@ from agent_comms.selected_claim import (
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
 from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordination_tables.executions import ExecutionOrigin
+from agent_comms.coordination_tables.executions import ExecutionProvenance, WireOrigin
 from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim, WakeClaim
 from agent_comms.errors import RelationViolationError
@@ -83,7 +83,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             execution_id = "verifier-execution"
             store.create(
                 execution_id,
-                ExecutionOrigin.WIRE,
+                WireOrigin,
                 alice_lookup,
                 owner.name,
                 1,

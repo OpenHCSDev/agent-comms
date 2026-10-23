@@ -7,7 +7,6 @@ from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
-from enum import StrEnum
 from typing import TYPE_CHECKING, ClassVar, Annotated
 
 
@@ -18,7 +17,7 @@ from .display_order import CreatedThreadSort, ThreadSort
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, CatalogExclude
 from .history_result import ChannelHistoryPageResult, EverythingHistoryPageResult, HistoryPageResult
-from .messages import MembershipChange
+from .messages import MembershipTransition
 from .read_basis import AllChannelDisplayScope, ChannelDisplayScope, MemberActivityDisplayScope
 from .tool_result import ToolResult
 
@@ -128,7 +127,7 @@ class Channel(DeclaredFamily, CliResult, ToolResult, affix="Channel"):
         return ()
 
     @abstractmethod
-    def membership_changes(self, before: frozenset[str], after: frozenset[str]) -> tuple[MembershipChange, ...]: ...
+    def membership_changes(self, before: frozenset[str], after: frozenset[str]) -> tuple[type[MembershipTransition], ...]: ...
 
     def pending_count(self, counts: dict[str, int]) -> int:
         return sum(self.history_scope().target_values(counts))
@@ -190,11 +189,8 @@ class MembershipChannel:
     def read_only(self) -> bool:
         return False
 
-    def membership_changes(self, before: frozenset[str], after: frozenset[str]) -> tuple[MembershipChange, ...]:
-        previous, current = self.matches(before), self.matches(after)
-        if previous == current:
-            return ()
-        return (MembershipChange.JOINED if current else MembershipChange.LEFT,)
+    def membership_changes(self, before: frozenset[str], after: frozenset[str]) -> tuple[type[MembershipTransition], ...]:
+        return MembershipTransition.between(self.matches(before), self.matches(after))
 
 
 class BuiltinChannelView(PredicateChannel, MembershipChannel, Channel, declared_name=None):
@@ -286,7 +282,7 @@ class ReadOnlyChannel(NonRoutableChannel):
     def read_only(self) -> bool:
         return True
 
-    def membership_changes(self, before: frozenset[str], after: frozenset[str]) -> tuple[MembershipChange, ...]:
+    def membership_changes(self, before: frozenset[str], after: frozenset[str]) -> tuple[type[MembershipTransition], ...]:
         return ()
 
 
@@ -360,11 +356,6 @@ class RetiredTagChannel(ReadOnlyChannel, TagChannelIdentity):
         return False
 
 
-class ViewKind(StrEnum):
-    PARTICIPANTS = "participants"
-    ACTIVITY = "activity"
-
-
 class ViewMatch(DeclaredFamily, affix="Match"):
     """A tag relation, selected once at the external boundary."""
 
@@ -404,11 +395,10 @@ class ViewPredicate:
 
 
 @dataclass(frozen=True, slots=True)
-class SavedView(ToolResult):
+class SavedView(DeclaredFamily, ToolResult, affix="View"):
     """A named non-routable projection over authoritative channels or activity."""
 
     name: Annotated[str, CatalogExclude()]
-    kind: ViewKind
     predicate: ViewPredicate
     created_at: float = field(default_factory=time.time)
     original_targets: frozenset[str] = frozenset()
@@ -422,3 +412,11 @@ class SavedView(ToolResult):
 
     def __post_init__(self) -> None:
         Tag.validate(self.name)
+
+
+class ParticipantsView(SavedView):
+    """A saved participant projection over its declared tag predicate."""
+
+
+class ActivityView(SavedView):
+    """A saved activity projection over its declared tag predicate."""

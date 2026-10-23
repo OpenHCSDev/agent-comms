@@ -20,7 +20,7 @@ from .coordination_errors import IdentityConflict, StaleFence
 from .coordination_response import LiveResponseOwner, ResponseTable
 from .coordination_snapshot import RecoverySnapshot
 from .coordination_tables.assignments import WakeAssignment
-from .coordination_tables.executions import ExecutionOrigin
+from .coordination_tables.executions import ExecutionProvenance, WireOrigin
 from .coordinator import Coordination
 from .cursor_publication import CursorDelivery
 from .errors import RelationViolationError
@@ -89,7 +89,7 @@ class SelectedParticipant(MroDispatch):
         """Settle captured originals when acquisition fails before any native send."""
         await self.require_current()
         snapshot = self.store.create(
-            self.batch.execution_id, ExecutionOrigin.WIRE,
+            self.batch.execution_id, WireOrigin,
             self.lookup, self.owner.thread.name, max_attempts,
             sources=self.batch.sources,
         ).value
