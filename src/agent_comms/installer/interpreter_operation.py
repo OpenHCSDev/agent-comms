@@ -83,14 +83,14 @@ class RetainedProgram(ProbeProgram):
 @dataclass(frozen=True)
 class RuntimeProbe[Answer](InterpreterOperation[Answer], DeclaredFamily, affix="Probe"):
     def command(
-        self, python: Path, result: Path, *, program: ProbeProgram = SourceProgram()
+        self, python: Path, request: Path, result: Path, *, program: ProbeProgram = SourceProgram()
     ) -> tuple[str | Path, ...]:
-        return (python, "-P", *program.entry(self), json.dumps(FieldCodec.encode(self)), result)
+        return (python, "-P", *program.entry(self), request, result)
 
     @classmethod
     def main(cls) -> None:
-        encoded, result = sys.argv[1:]
-        probe = FieldCodec.decode(cls, FieldCodec.parse(encoded))
+        request, result = sys.argv[1:]
+        probe = FieldCodec.decode(cls, FieldCodec.parse(Path(request).read_text()))
         Path(result).write_text(probe.encode_answer(probe.run()))
 
 

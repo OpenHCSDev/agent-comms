@@ -108,6 +108,17 @@ class RetireInputsOperation(CarryOperation[Carried]):
 
 
 @dataclass(frozen=True)
+class CarryRequest:
+    """One operation and its ordered, typed inputs, sent together to the worker."""
+
+    operation: CarryOperation
+    steps: tuple[Carry, ...]
+
+    def run(self) -> str:
+        return self.operation.encode_answers(tuple(self.operation.run(step) for step in self.steps))
+
+
+@dataclass(frozen=True)
 class CarryChain:
     """Every declared step, dependency order first and addition order for independent steps."""
 
