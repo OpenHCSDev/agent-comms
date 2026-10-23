@@ -54,7 +54,7 @@ from .thread_status import (
     ThreadStatus,
 )
 from .thread_text import ForkedParent, NoParent
-from .threads import Thread
+from .threads import Thread, ThreadWorkState
 from .turn_lease import FinishedTurn, FinishedTurnFence, NoFinishedTurn, TurnCompletion, TurnLeaseFence
 
 if TYPE_CHECKING:
@@ -467,6 +467,15 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
             return document
         except MalformedRecord as error:
             raise RelationViolationError(f"Invalid registry document: {error}") from error
+
+    def set_work_state(self, name: str, state: ThreadWorkState) -> Thread:
+        """Change order availability without replacing the thread's owner or presence."""
+        current = self.require(name)
+        if not current.work_state.may_become(state):
+            raise RelationViolationError("Invalid thread work-state transition.")
+        updated = replace(current, work_state=state)
+        self.threads[current.name] = updated
+        return updated
 
     def prepare_declaration(self, thread: Thread, status: ThreadStatus) -> RegistrationChange:
         canonical = self.canonical_name(thread.name)
