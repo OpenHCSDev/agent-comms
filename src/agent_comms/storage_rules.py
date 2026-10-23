@@ -27,7 +27,6 @@ from agent_comms.field_codec import (
     SubclassUnion,
 )
 from agent_comms.locked_store import DurableFile
-from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
@@ -38,6 +37,7 @@ from agent_comms.storage_room import (
     RoomAllocation,
     TestGateRoomWork,
 )
+from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.work_branches import WorkBranches
 from agent_comms_hooks.shell import ShellCommand
 
