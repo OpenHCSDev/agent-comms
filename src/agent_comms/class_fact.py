@@ -17,15 +17,33 @@ class ClassFact[Owner, Value]:
     def __set_name__(self, owner: type[Owner], name: str) -> None:
         self.slot = f"_{name.lstrip('_')}_derived"
 
+    def holder(self, owner: type[Owner]) -> type[Owner]:
+        """The class whose namespace holds the value read through ``owner``."""
+        return owner
+
     def __get__(self, instance: Owner | None, owner: type[Owner]) -> Value:
+        holder = self.holder(owner)
         try:
-            return owner.__dict__[self.slot]
+            return holder.__dict__[self.slot]
         except KeyError:
-            value = self.derive(owner)
-            setattr(owner, self.slot, value)
+            value = self.derive(holder)
+            setattr(holder, self.slot, value)
             return value
 
     def forget(self, owner: type[Owner]) -> None:
-        """Drop ``owner``'s value, so its next read derives it again from current state."""
-        if self.slot in owner.__dict__:
-            delattr(owner, self.slot)
+        """Drop the value read through ``owner``, so the next read derives it again."""
+        holder = self.holder(owner)
+        if self.slot in holder.__dict__:
+            delattr(holder, self.slot)
+
+
+class FamilyFact[Owner, Value](ClassFact[Owner, Value]):
+    """A fact about the whole family: the class declaring it holds the one value,
+    whichever member it is read through, so no member keeps a copy of its own."""
+
+    def __set_name__(self, owner: type[Owner], name: str) -> None:
+        super().__set_name__(owner, name)
+        self.root = owner
+
+    def holder(self, owner: type[Owner]) -> type[Owner]:
+        return self.root

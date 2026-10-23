@@ -378,3 +378,15 @@ def test_normal_writer_replaces_old_guards_without_rewriting_rows(tmp_path):
         assert connection.execute("PRAGMA schema_version").fetchone()[0] == version
         assert connection.total_changes == 0
         assert Participants.select(connection) == before
+
+
+def test_claimed_names_are_one_family_fact_whichever_row_reads_them():
+    assert FrozenRow.claimed_names is TypedTable.claimed_names
+
+    @dataclass(frozen=True)
+    class LateDeclaredRow(TypedTable):
+        value: int
+
+    assert LateDeclaredRow.schema_names <= FrozenRow.claimed_names
+    assert TypedTable.claimed_names is FrozenRow.claimed_names
+    assert "_claimed_names_derived" not in vars(FrozenRow)

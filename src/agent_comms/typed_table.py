@@ -37,7 +37,7 @@ from typing import (
     overload,
 )
 
-from .class_fact import ClassFact
+from .class_fact import ClassFact, FamilyFact
 from .declared_family import DeclaredFamily, declared_words
 from .errors import RelationViolationError
 from .field_codec import (
@@ -1592,16 +1592,15 @@ class TypedTable(
         """Every object this row declares, by name; overrides change only the SQL."""
         return frozenset(cls.schema_objects())
 
-    @ClassFact
+    @FamilyFact
     def claimed_names(cls) -> frozenset[str]:
-        """Every object name any row of the family declares. Read through ``TypedTable``;
+        """Every object name any row of the family declares, held once on ``TypedTable``;
         each new row declaration forgets it, so it always covers the whole registry."""
-        return frozenset(name for row in TypedTable.members_with(TypedTable)
-                         for name in row.schema_names)
+        return frozenset(name for row in cls.members_with(cls) for name in row.schema_names)
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
-        TypedTable.__dict__["claimed_names"].forget(TypedTable)
+        TypedTable.__dict__["claimed_names"].forget(cls)
 
     @classmethod
     def schema_objects(cls, *, if_not_exists: bool = False) -> dict[str, str]:
