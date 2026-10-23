@@ -22,21 +22,21 @@ from .store_files import AtomicFile
 
 if TYPE_CHECKING:
     from .acp_extension import SelectedWriteAcceptedUpdate
+    from .comms import Comms
+    from .coordination_tables.assignments import WakeAssignment
+    from .threads import Thread
 
 from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordinator import Coordination
 
 from .child_process import Platform
-from .comms import Comms
 from .coordination_cohort import sealed_cohort_assignments
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ExistingFileClaim
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .message_reference import MessageReference
 from .private_path import PrivateDirectoryRole, PrivateFileRole
-from .thread_identity import ClaimScoped, ClaimedIdentity, RecordedThreadIncarnation
-from .threads import Thread
+from .thread_identity import ClaimedIdentity, ClaimScoped, RecordedThreadIncarnation
 
 _MAX_BYTES = 1024 * 1024
 

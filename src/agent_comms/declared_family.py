@@ -17,8 +17,6 @@ from metaclass_registry import (
     RegistryConfig,
 )
 from metaclass_registry.discovery import import_module_preserving_root_logging
-from pydantic import BaseModel
-from pydantic._internal._model_construction import ModelMetaclass
 
 
 def declared_words(stem: str) -> str:
@@ -28,7 +26,7 @@ def declared_words(stem: str) -> str:
     ).lower()
 
 
-class _FamilyMeta(AutoRegisterMeta, ABCMeta):
+class FamilyMeta(AutoRegisterMeta, ABCMeta):
     def __new__(
         mcs,
         name: str,
@@ -38,11 +36,11 @@ class _FamilyMeta(AutoRegisterMeta, ABCMeta):
         affix: str | None = None,
         discovery_package: str | None = None,
         **class_options: Any,
-    ) -> _FamilyMeta:
+    ) -> FamilyMeta:
         roots = {
             base._family_root
             for base in bases
-            if isinstance(base, _FamilyMeta) and base is not DeclaredFamily
+            if isinstance(base, FamilyMeta) and base is not DeclaredFamily
         }
         if len(roots) > 1:
             raise TypeError("A declaration cannot belong to two families.")
@@ -52,7 +50,7 @@ class _FamilyMeta(AutoRegisterMeta, ABCMeta):
         # Explicit child roots reuse family behavior; a slots-rebuilt root
         # carries its own registry in the copied class namespace.
         is_root = affix is not None or "__registry__" in namespace or (
-            root is None and any(isinstance(base, _FamilyMeta) for base in bases)
+            not roots and any(isinstance(base, FamilyMeta) for base in bases)
         )
         if is_root:
             # slots dataclasses recreate the root without its class-header keywords.
@@ -91,7 +89,7 @@ class _FamilyMeta(AutoRegisterMeta, ABCMeta):
             cls._family_root = cls
         elif root is not None:
             cls._family_root = root
-        return cast(_FamilyMeta, cls)
+        return cast(FamilyMeta, cls)
 
     @staticmethod
     def _register_class(
@@ -119,7 +117,7 @@ class DeclaredOrder(ABC):
         raise ValueError(f"{member.__name__} has no {cls.__name__} rank base")
 
 
-class DeclaredFamily(ABC, metaclass=_FamilyMeta):
+class DeclaredFamily(ABC, metaclass=FamilyMeta):
     """A family root owns one registry; names and capability views derive from members.
 
     Declare a root with ``affix=\"Scope\"`` (or omit it for unstripped names).
@@ -246,20 +244,6 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
     def declared_position(cls) -> int:
         root = cls.family_root()
         return root.members_with(root).index(cls)
-
-
-class _WireFamilyMeta(_FamilyMeta, ModelMetaclass):
-    """Compose the family registry with Pydantic's model construction."""
-
-
-class DeclaredWireFamily(DeclaredFamily, BaseModel, metaclass=_WireFamilyMeta):
-    """A validated wire model whose family owns declaration discovery."""
-
-    declared_name: ClassVar[str]
-    family_discriminator: ClassVar[str]
-    _family_root: ClassVar[type[DeclaredFamily]]
-    _family_affix: ClassVar[str]
-    __registry__: ClassVar[dict[str, type[DeclaredFamily]]]
 
 
 class UniqueExternalSelector(ABC):

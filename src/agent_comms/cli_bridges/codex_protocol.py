@@ -12,12 +12,11 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, TypeVar
 from pydantic import (
     Field,
     JsonValue,
-    TypeAdapter,
     ValidateAs,
 )
 
-from agent_comms.cli_protocol import TaggedWire, TextWire, WireModel
-from agent_comms.declared_family import DeclaredWireFamily, UnknownFamilyMember
+from agent_comms.cli_protocol import TaggedWire, TextWire
+from agent_comms.declared_family import UnknownFamilyMember
 from agent_comms.external_transcript import EarlierPage, NoEarlierPage
 from agent_comms.native_tools import FilePatchTool
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
@@ -50,6 +49,8 @@ from agent_comms.transcript_events import (
     UserTranscript,
 )
 from agent_comms.turn_phase import CompactionPhase, ModelWaitPhase, ToolRunningPhase, TurnPhase
+
+from ..wire_models import DeclaredWireFamily, WireModel
 
 
 class UserInput(TaggedWire, ABC, affix=""):
@@ -275,7 +276,7 @@ class RpcNotification(RpcReply):
         connection.pending.append(self)
 
 
-RPC_RESPONSE = TypeAdapter(RpcSuccess | RpcFailure | RpcNotification)
+RPC_RESPONSE = WireModel.adapter(RpcSuccess | RpcFailure | RpcNotification)
 
 
 class Item(TaggedWire, ABC, affix=""):
