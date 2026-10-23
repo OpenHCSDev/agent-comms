@@ -40,9 +40,8 @@ class RegistryProbeBus(Bus):
         self.checks = []
 
     def probe(self, statement):
-        if self.checks or not any(table in statement for table in (
-            ReceivedSource.declared_name, Delivered.table.declared_name,
-        )):
+        tables = (*ReceivedSource.members_with(ReceivedSource), Delivered.table)
+        if self.checks or not any(table.declared_name in statement for table in tables):
             return
         with self.registry_lock.open("rb") as lock:
             try:

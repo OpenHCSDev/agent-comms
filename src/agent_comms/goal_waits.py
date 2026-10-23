@@ -450,7 +450,12 @@ class GoalWaits(ThreadOwnedState, DurableStore, WireWakeFile):
             ).rowcount > 0
 
     def resolve(self, goal: GoalDeclaration) -> GoalWait:
-        return self.for_goal(goal, self.read())
+        with self.snapshot() as db:
+            for row in StoredGoalWaitRow.select(
+                db, where="{goal_id} = ?", parameters=(goal.active().reported_id(),),
+            ):
+                return row.wait
+        return NoGoalWait()
 
     @staticmethod
     def for_goal(goal: GoalDeclaration, rows: dict[str, RecordedGoalWait]) -> GoalWait:

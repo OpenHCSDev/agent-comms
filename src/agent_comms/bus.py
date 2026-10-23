@@ -388,8 +388,8 @@ class Bus(BusReader, ReconciledFile, WalStore, CarriedWriter, BusFile, Watched):
 
     def received_after(self, lookup: str, after: int) -> bool:
         """Whether this recipient has a newer candidate; read one indexed metadata row."""
-        with closing(self._received_sequences(lookup, after=after, limit=1)) as positions:
-            return any(positions)
+        with self.observing() as db:
+            return ReceivedSource.exists(db, where="{seq} > ?", parameters=(after,), lookup=lookup)
 
     @classmethod
     def install(cls, path: Path, *, history: Iterable[Message] = ()) -> Self:
