@@ -47,6 +47,7 @@ class Sign:
     def mark(self) -> str:
         return self.signal.mark(self.key)
 
+
 class Degradation(DeclaredFamily, affix="Degradation"):
     """One signal that the fleet is getting away from its commander."""
 
@@ -59,6 +60,7 @@ class Degradation(DeclaredFamily, affix="Degradation"):
     def mark(cls, key: tuple[object, ...]) -> str:
         """One occurrence as text, the same however often it is read."""
         return " ".join((cls.declared_name, *map(str, key)))
+
 
 class BlocksRelease:
     """A degraded signal the commander clears this turn, so a chokehold holds its units until

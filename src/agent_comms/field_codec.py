@@ -1080,17 +1080,17 @@ class RecordTag(MroDispatch):
     """The family owns its tag; an ordinary record has none."""
 
     @classmethod
-    def of(cls, value: object) -> dict[str, object]:
+    def of(cls, value: object) -> dict[str, str]:
         return cls.handler_for(type(value))(value)
 
     @handles(DeclaredFamily)
     @staticmethod
-    def family(value: DeclaredFamily) -> dict[str, object]:
+    def family(value: DeclaredFamily) -> dict[str, str]:
         return value.record_tag()
 
     @handles(object)
     @staticmethod
-    def ordinary(value: object) -> dict[str, object]:
+    def ordinary(value: object) -> dict[str, str]:
         return {}
 
 
@@ -1547,7 +1547,7 @@ class FieldCodec(MroDispatch, Sealed):
         return {**cls._tag(value), **cls.encode_fields(value)}
 
     @staticmethod
-    def _tag(value: object) -> dict[str, object]:
+    def _tag(value: object) -> dict[str, str]:
         return RecordTag.of(value)
 
     @classmethod
