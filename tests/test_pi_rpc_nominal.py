@@ -46,11 +46,6 @@ class AuditPauseEnd(pi.PiEvent, ends=AuditPausePhase):
     pass
 
 
-class AuditFailure(failures.TurnFailure):
-    code = "audit_failure"
-    precedence = 110
-
-
 def test_new_excursion_declares_both_transitions_without_dispatch_edits():
     phase = PiRpcChannel.decode_record(b'{"type":"audit_pause_start"}\n').on(ModelWaitPhase())
     assert isinstance(phase, AuditPausePhase)
@@ -108,7 +103,7 @@ def test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics():
                 failures.InputMissing,
                 failures.FinalStopMissing,
                 failures.QueuedInputMissing,
-                AuditFailure,
+                failures.ModelRequestFailed,
             ],
             2,
         )
@@ -121,7 +116,7 @@ def test_failure_precedence_and_text_have_one_owner(left, right):
     )
     for cls in (left, right, left):
         session.output.record_failure(cls(cls.__name__))
-    expected = max((left, right), key=lambda cls: cls.precedence)
+    expected = min((left, right), key=lambda cls: cls.declared_position())
     assert type(session.output.failure) is expected
     assert session.output.failure_text == expected.__name__
     assert session.output.failure.code == expected.code
