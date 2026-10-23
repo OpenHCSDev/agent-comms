@@ -825,12 +825,17 @@ class Install[Rehearsed: Rehearsal](ABC):
                  harnesses: Callable[[Stack], InstallResult], report: InstallReport) -> InstalledUpgrade:
         with LivePhase().running(self.staged.commands.clock):
             rehearsed = self.reported(rehearsal)
-            live_run = self.install(rehearsal, bridges, report)
-            if self.installed.python != self.staged.python:
-                self.staged.commands.close_runtime(self.installed.python)
-            installed_harnesses = harnesses(self.staged)
-            with ProcessScanPhase().running(self.staged.commands.clock):
-                processes = RuntimeProcesses.observe(self.staged.runtime)
+            try:
+                live_run = self.install(rehearsal, bridges, report)
+                if self.installed.python != self.staged.python:
+                    self.staged.commands.close_runtime(self.installed.python)
+                installed_harnesses = harnesses(self.staged)
+                with ProcessScanPhase().running(self.staged.commands.clock):
+                    processes = RuntimeProcesses.observe(self.staged.runtime)
+            finally:
+                # Includes rollback, a failed pause, and failures after the live run.
+                with BridgePhase("confirm").running(self.staged.commands.clock):
+                    bridges.confirm()
             finished = InstalledUpgrade(
                 rehearsed.source, rehearsed.target, rehearsed.root, rehearsed.pending,
                 rehearsed.rehearsal, live_run, installed_harnesses,
@@ -854,9 +859,9 @@ class Install[Rehearsed: Rehearsal](ABC):
                         bridges.pause(bridge, resources)
                 return report.record_live(self.live(rehearsal, report))
             finally:
-                # A later pause may fail; resume captured peers before closing their sockets.
-                with BridgePhase("resume").running(self.staged.commands.clock):
-                    bridges.resume()
+                # A later pause may fail; release captured peers before closing their sockets.
+                with BridgePhase("release").running(self.staged.commands.clock):
+                    bridges.release()
 
     @abstractmethod
     def live(self, rehearsal: Rehearsed, report: InstallReport) -> LiveRun: ...

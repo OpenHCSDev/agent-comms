@@ -142,8 +142,8 @@ def test_projection_digest_ignores_infrastructure_source(
         ("bus_activity_index.py", '=max("{name}",excluded.', '=min("{name}",excluded.'),
         (
             "messages.py",
-            "for record in BusCapability.history(db):",
-            "for record in reversed(tuple(BusCapability.history(db))):",
+            "for record in BusCapability.history(db, kinds):",
+            "for record in reversed(tuple(BusCapability.history(db, kinds))):",
         ),
         (
             "messages.py",
@@ -152,8 +152,8 @@ def test_projection_digest_ignores_infrastructure_source(
         ),
         (
             "messages.py",
-            "HeldResources.apply(db, self.claim_transition, projected, holders)",
-            "HeldResources.apply(db, self.claim_transition, projected, holders)\n        del projected",
+            "holders.apply(db, self.claim_transition, projected)",
+            "holders.apply(db, self.claim_transition, projected)\n        del projected",
         ),
         (
             "messages.py",
