@@ -144,12 +144,12 @@ class AcpResponseReply(DeclaredReply, WireValue):
     response_type: ClassVar[type[BaseModel]]
     response: BaseModel
 
-    def to_wire(self) -> dict[str, JsonValue]:
-        return self.response.model_dump(by_alias=True, exclude_none=True)
+    def to_wire(self) -> JsonValue:
+        return FieldCodec.encode(self.response)
 
     @classmethod
     def from_wire(cls, data: dict[str, JsonValue]) -> Self:
-        return cls(cls.response_type.model_validate(data))
+        return cls(FieldCodec.decode(cls.response_type, data))
 
 
 class PromptReply(AcpResponseReply):

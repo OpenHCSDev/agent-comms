@@ -51,6 +51,7 @@ from pydantic import BaseModel, JsonValue, ValidationError
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 
+from . import acp_extension
 from .acp_extension import (
     CompactRequest,
     encode_updates,
@@ -170,7 +171,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
     @staticmethod
     def _sdk_request[Request: BaseModel](
-        model: type[Request], **parameters: JsonValue | Sequence[BaseModel]
+        model: type[Request], /, **parameters: JsonValue | Sequence[BaseModel]
     ) -> Request:
         """Reassemble SDK fields and expanded metadata using the SDK declaration."""
         metadata = parameters.pop("_meta", None) or parameters.pop("field_meta", None) or {}
@@ -266,21 +267,25 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             )
         scope = await Coordination.run_worker(partial(self.cursors.scope, owner, session_id))
         plans = SelectedWritePlans(self._comms, scope.require_live().wire_root_id)
-        acknowledgement = await Coordination.run_worker(partial(
-            plans.submit,
-            owner_name=owner,
-            source_seq=request.source_seq,
-            source_message_id=request.source_message_id,
-            resource=request.resource,
-            contents=request.contents,
-        ))
+        acknowledgement = await Coordination.run_worker(
+            partial(
+                plans.submit,
+                owner_name=owner,
+                source_seq=request.source_seq,
+                source_message_id=request.source_message_id,
+                resource=request.resource,
+                contents=request.contents,
+            )
+        )
         self._selected_write_controllers[(owner, request.source_seq)] = (
             acknowledgement.operation_id,
             attached,
         )
         return PromptResponse(stop_reason="end_turn", field_meta=encode_updates(acknowledgement))
 
-    async def _prompt_request(self, request: PromptRequest, command) -> PromptResponse:
+    async def _prompt_request(
+        self, request: PromptRequest, command: acp_extension.PromptRequest
+    ) -> PromptResponse:
         session_id = request.session_id
         text = self._prompt_text(request)
         display_text = command.user_text or text
