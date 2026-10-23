@@ -1554,6 +1554,9 @@ class ChildOutcome(DeclaredFamily, affix="Outcome"):
     def report_shutdown(self, report_timeout: Callable[[], None]) -> None:
         pass
 
+    def report_forced(self, report: Callable[[str], None]) -> None:
+        pass
+
     def fork_failure(self, interrupted_consequence: Callable[[], str]) -> str:
         return ""
 
@@ -1642,6 +1645,9 @@ class GracefulStopOutcome(ChildOutcome):
 @dataclass(frozen=True)
 class ForcedStopOutcome(GracefulStopOutcome):
     """At least one member required the forced stage, even if leader exited."""
+
+    def report_forced(self, report: Callable[[str], None]) -> None:
+        report(self.summary)
 
 
 @dataclass(frozen=True)

@@ -11,10 +11,10 @@ from contextlib import ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock
-from typing import Annotated, BinaryIO
+from typing import BinaryIO
 
-from agent_comms.child_process import ForcedStopOutcome, SpawnedProcess, SynchronousProcess
-from agent_comms.field_codec import FieldCodec, PathText
+from agent_comms.child_process import SpawnedProcess, SynchronousProcess
+from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.interpreter_operation import (
     CommandPhase,
     GitPhase,
@@ -36,11 +36,16 @@ from agent_comms.repo import Repo
 
 @dataclass(frozen=True)
 class InterpreterWorkerKey:
-    python: Annotated[Path, PathText]
+    python: Path
     program: tuple[str, ...]
-    cwd: Annotated[Path, PathText]
+    cwd: Path
     environment: tuple[tuple[str, str], ...]
 
+    def print_forced(self, summary: str) -> None:
+        print(
+            f"Interpreter worker {self.python} {self.program} required force: {summary}",
+            file=sys.stderr, flush=True,
+        )
 
 
 
@@ -132,12 +137,7 @@ class InstallCommands:
                     (worker.child, nullcontext) for _, worker in closing
                 ))
                 for (key, _), outcome in zip(closing, outcomes, strict=True):
-                    if isinstance(outcome, ForcedStopOutcome):
-                        print(
-                            f"Interpreter worker {FieldCodec.digest(key)} ({key.python}) "
-                            f"required force: {outcome.summary}",
-                            file=sys.stderr, flush=True,
-                        )
+                    outcome.report_forced(key.print_forced)
 
     def close_runtime(self, python: Path) -> None:
         with WorkerClosePhase(str(python)).running(self.clock):
