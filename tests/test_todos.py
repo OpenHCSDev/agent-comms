@@ -321,11 +321,12 @@ def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, durable_home):
     return Commander.read_root(tmp_path)
 
 
-def pr_order(ctx, pid, run: OrderRun = MechanicalOrderRun()):
+def pr_order(ctx, pid, run: OrderRun = MechanicalOrderRun(), *, owner: Thread | None = None):
     source = ctx.repos[0]
     lead = ctx.comms.registry.require(ctx.commander)
     return ctx.comms.goals.todos.create(
-        pid, source.github, "Fix the sidebar", creator=lead, assigner=lead.incarnation, owner=lead,
+        pid, source.github, "Fix the sidebar", creator=lead, assigner=lead.incarnation,
+        owner=owner if owner is not None else lead,
         generation="pr-work", request=NewestOpenRequest().for_order(ctx.comms.goals.todos, lead.incarnation),
         review_at=RecordedEventTime(1000),
         order=replace(order(source), id=f"order-{pid}", run=run))
@@ -370,23 +371,25 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
             goal_id="pr-work"))
         lead = c.registry.require(ctx.commander)
         c.registry.register(replace(lead, process_identity=ProcessIdentity.capture(os.getpid())))
+        worker = Thread("worker", frozenset(), str(source.checkout), created_at=2.0)
+        c.registry.register(worker)
         original = adopt_pr(ctx, pr_order(ctx, "P1", ApplicationOrderRun(
             'Read the copied board and confirm the application order remains assigned',
-        )).id, 1)
+        ), owner=worker).id, 1)
         merged = PullRequests((original,)).listed(
             source.github, MergedListedPullRequest, original,
         )[0].merge
-        sent = c.messaging.send(ctx.commander, ctx.commander, original.order.instructions(original)).message
+        sent = c.messaging.send(ctx.commander, worker.name, original.order.instructions(original)).message
         original = c.goals.todos.apply(original.id, OrderMessage(
             original.revision, lead.incarnation, sent.message_id))
         claim = OrderClaim.for_order(
-            original, lead.incarnation, 1, merged, "The repair is ready for review",
+            original, worker.incarnation, 1, merged, "The repair is ready for review",
             sent.reference, store=c.goals.todos,
         )
         claim = replace(claim, message=replace(
             claim.message, timestamp=time.time() - AwaitingCommander.seconds - 1))
         original = ClaimOrder(
-            original.revision, lead.incarnation, original.held().generation, claim,
+            original.revision, worker.incarnation, original.held().generation, claim,
         ).record(c.goals, original.id)
         assert any(rule.message.message_id == claim.message.message_id
                    for rule in OwedAnswer.opened(c, ctx.commander))

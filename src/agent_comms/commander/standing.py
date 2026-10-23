@@ -190,10 +190,8 @@ class UnitAskUnanswered(OwedAnswer, UndatedStandingRule):
 
     unit: str
 
-    @classmethod
-    def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        return tuple(cls(message, state.unit.name) for state in observed for message in state.owed)
+    def questions_for(self, unit: ThreadIncarnation) -> tuple[Message, ...]:
+        return (self.message,) if unit.name == self.unit else ()
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,

@@ -84,10 +84,6 @@ class StandingScan:
         ))
 
     @property
-    def pending_todos(self) -> tuple[Todo, ...]:
-        return tuple(todo for todo in self.todos if todo.pending)
-
-    @property
     def holders(self) -> dict[ThreadIncarnation, list[Todo]]:
         held: dict[ThreadIncarnation, list[Todo]] = {}
         for todo in self.todos:
@@ -332,6 +328,10 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
 
     message: Message
 
+    def questions_for(self, unit: ThreadIncarnation) -> tuple[Message, ...]:
+        """Only a unit's question belongs on that unit's observation."""
+        return ()
+
     def degradation_signs(self) -> tuple[Sign, ...]:
         return (Sign(AnswersOwedDegradation, (self.cited,), self.line()),)
 
@@ -367,7 +367,7 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         now = time.time()
-        return tuple(rule for rule in cls.read_scan(comms, commander, frame) if rule.due(now))
+        return tuple(rule for rule in frame.answers if rule.due(now))
 
     @classmethod
     def opened(cls, comms: Comms, commander: str) -> tuple[Self, ...]:

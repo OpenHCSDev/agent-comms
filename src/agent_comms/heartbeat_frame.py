@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Self
 from agent_comms.phase_evidence import MainTree, PlanReading
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.repo import Repo
-from agent_comms.standing_rules import StandingScan
+from agent_comms.standing_rules import OwedAnswer, StandingScan
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
@@ -22,6 +22,7 @@ class HeartbeatFrame(StandingScan):
 
     pulls: ProgressRead
     plan: PlanReading
+    answers: tuple[OwedAnswer, ...]
 
     @classmethod
     def read(cls, comms: Comms, commander: str, pulls: ProgressRead) -> Self:
@@ -37,4 +38,5 @@ class HeartbeatFrame(StandingScan):
                 comms.goals.todos.history_for_commander(snapshot.require(commander).incarnation),
                 MainTree.of(repository),
             ),
+            OwedAnswer.read_scan(comms, commander, scan),
         )

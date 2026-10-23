@@ -15,7 +15,6 @@ from functools import cached_property
 from subprocess import TimeoutExpired
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.field_codec import MalformedRecord
 from agent_comms.goal_presentation import GoalSnapshot
 from agent_comms.messages import Message
@@ -159,15 +158,14 @@ class UnitState(UndatedStandingRule, declared_name=None):
         snapshot, now = comms.registry.snapshot(), time.time()
         held = frame.holders
         requests = frame.pulls
-        with comms.bus.bus.reading() as source:
-            questions = UnansweredUnitAsks.for_orders(source, snapshot, commander, held, now)
         readings = tuple(
             UnitObservation(
                 comms,
                 thread,
                 tuple(held.get(thread.incarnation, ())),
                 requests,
-                questions.get(thread.incarnation, ()),
+                tuple(message for rule in frame.answers
+                      for message in rule.questions_for(thread.incarnation)),
                 now,
                 snapshot.status(thread.name),
                 comms.agents.is_working(thread.incarnation, snapshot),
