@@ -22,7 +22,6 @@ from agent_comms.child_process import Platform
 from agent_comms.coordinator import Coordination
 
 from .comms import Comms
-from .child_process import Platform
 from agent_comms.native_runtime_input import NativeRuntimeTable
 from .coordination_errors import CoordinationReadUnavailable
 from .coordination_tables.participants import OwnerGenerations

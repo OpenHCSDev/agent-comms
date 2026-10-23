@@ -41,7 +41,6 @@ from .selected_triage import (
 from .typed_table import (
     TableReference,
     Column,
-    DurableTables,
     FinalizedColumn,
     FrozenColumn,
     IntegerStorage,
@@ -49,7 +48,6 @@ from .typed_table import (
     NoDelete,
     NonDecreasing,
     RequiredUpdateColumns,
-    SharedFileTables,
     StableReferenceColumns,
     TextStorage,
     TypedRow,

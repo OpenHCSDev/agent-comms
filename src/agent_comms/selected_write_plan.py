@@ -27,6 +27,7 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordinator import Coordination
 
+from .child_process import Platform
 from .comms import Comms
 from .coordination_cohort import sealed_cohort_assignments
 from .declared_family import DeclaredFamily
