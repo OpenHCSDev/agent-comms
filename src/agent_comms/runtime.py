@@ -186,7 +186,7 @@ class RuntimeServer:
         self.path = socket_path(agent._comms.root, os.getpid())
         self._resources = ExitStack()
 
-    def background(self, work: Coroutine[Any, Any, None]) -> asyncio.Task[None]:
+    def background[T](self, work: Coroutine[Any, Any, T]) -> asyncio.Task[T]:
         """Launch owner work without inheriting an attached human controller.
 
         Nobody awaits most owner work, so its failure is logged here; an
@@ -201,7 +201,7 @@ class RuntimeServer:
         return task
 
     @staticmethod
-    def _report_failure(task: asyncio.Task[None]) -> None:
+    def _report_failure[T](task: asyncio.Task[T]) -> None:
         if not task.cancelled() and (error := task.exception()) is not None:
             _LOG.error("Owner work %s failed", task.get_name(), exc_info=error)
 

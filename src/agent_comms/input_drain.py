@@ -45,7 +45,7 @@ from .input_attempt import (
 from .input_disposition import InputDispositions, InputDocument
 from .input_effects import InputEffects
 from .lifecycle_capability import Executing
-from .maintenance_barrier import MaintenanceBarrier, MaintenanceIngress, MaintenanceStatus
+from .maintenance_barrier import MaintenanceBarrier, MaintenanceIngress
 from .native_input_owner import RegistryOwner
 from .proven_source_coverage import SourcePrefix
 from .queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
@@ -53,7 +53,7 @@ from .registry_document import RegistryEntry
 from .registry_store import RegistryEntryRevision
 from .routing import ScheduledTurn
 from .runtime import UNBOUND_CONTROLLER, RuntimeServer
-from .schedule_rules import ProjectResumeCheck, WakeScheduleCheck
+from .schedule_rules import ProjectResumeCheck, WakeOutcome, WakeScheduleCheck
 from .session_lifecycle import SessionLifecycle
 from .thread_identity import ClaimedIdentity
 from .threads import Thread
@@ -137,11 +137,11 @@ class InputObservation(ABC):
         state.repeat_observation = True
         state.notify_observer()
 
-    def register_wake(self, session_id: str, task: asyncio.Task[None]) -> None:
+    def register_wake(self, session_id: str, task: asyncio.Task[WakeOutcome]) -> None:
         state = self.state(session_id)
         state.wake_task = task
 
-        def finished(completed: asyncio.Task[None]) -> None:
+        def finished(completed: asyncio.Task[WakeOutcome]) -> None:
             if state.wake_task is not completed:
                 return
             state.wake_task = None
@@ -150,9 +150,7 @@ class InputObservation(ABC):
             # again now would spin on the same closed phase.
             if completed.cancelled() or completed.exception() is not None:
                 return
-            if isinstance(completed.result(), MaintenanceStatus):
-                return
-            self.wake_observer(session_id)
+            completed.result().settle(self.wake_observer, session_id)
 
         task.add_done_callback(finished)
 
@@ -407,7 +405,7 @@ class DrainedSession:
 
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     drain_task: asyncio.Task[None] | None = None
-    wake_task: asyncio.Task[None] | None = None
+    wake_task: asyncio.Task[WakeOutcome] | None = None
     observation_watcher: ChangeSignal | None = None
     turn: DrainTurn = field(default_factory=NoDrainTurn)
     queued: dict[str, QueuedInput] = field(default_factory=dict)
