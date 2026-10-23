@@ -1490,6 +1490,7 @@ class Id128Text(NominalSpelling[Id128]):
 
     spelling = re.compile("[0-9a-f]{32}")
 
+
 class MessageId(NominalText):
     @classmethod
     def mint(cls, text: str) -> Self:
@@ -1503,6 +1504,7 @@ class MessageIdText(NominalSpelling[MessageId]):
 
     digits: ClassVar[int] = 12
     spelling = re.compile(f"[0-9a-f]{{{digits}}}")
+
 
 class Hex256Text(SpelledText):
     """256 bits written as 64 lowercase hex digits."""
@@ -2369,6 +2371,8 @@ class _RepresentedDecoder[T](ValueDecoder[T]):
 
 class _NominalTextDecoder[T](_RepresentedDecoder[T]):
     """The field owns the decoded kind; its inherited spelling owns wire text."""
+
+    __slots__ = ()
 
     def decode(self, data: object) -> T:
         return self.structural.target(super().decode(data))

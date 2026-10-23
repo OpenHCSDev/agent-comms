@@ -11,20 +11,28 @@ import pytest
 
 from agent_comms.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.field_codec import (
+    ClaimId,
     DeclaredWireType,
     FieldCodec,
+    GoalId,
+    Id128,
+    Id128Text,
+    InputId,
     InlineRecord,
     JsonShapeFamily,
     JsonShapeMember,
     MalformedRecord,
+    MessageId,
     NullMember,
     PathText,
     RecordMember,
     RecordedTimestamp,
+    RootId,
     SnapshotExclude,
     SubclassUnion,
     TextRepresentation,
     TimestampText,
+    TurnId,
     WireValue,
     FlagDirective,
     WireAbsentNone,
@@ -937,7 +945,6 @@ def test_declaration_bug_passes_through_a_data_boundary_as_type_error() -> None:
 def test_identity_and_digest_text_is_one_rule_at_every_reader(tmp_path: Path) -> None:
     from agent_comms.bus_source_page import AddressedPage
     from agent_comms.errors import RelationViolationError
-    from agent_comms.field_codec import Id128
     from agent_comms.private_registry_guard import PrivateRegistryGuard
     from agent_comms.text_digest import TextDigest
 
@@ -953,6 +960,53 @@ def test_identity_and_digest_text_is_one_rule_at_every_reader(tmp_path: Path) ->
             PrivateRegistryGuard(tmp_path / "registry.json", invalid_text)
     with pytest.raises(MalformedRecord):
         TextDigest("a" * 63)
+
+
+@dataclass(frozen=True)
+class _NominalIdentityRow:
+    nominal: Id128
+    annotated: Annotated[str, Id128Text]
+    plain: str
+    turn: TurnId
+
+
+def test_nominal_ids_roundtrip_preserves_wire_schema_and_refuses_wrong_kind() -> None:
+    value = Id128.mint()
+    row = _NominalIdentityRow(value, value, value, TurnId(value))
+    wire = {"nominal": str(value), "annotated": str(value), "plain": str(value), "turn": str(value)}
+    encoded = FieldCodec.encode(row)
+    assert encoded == wire
+    assert all(type(item) is str for item in encoded.values())
+    assert FieldCodec.compact(encoded) == FieldCodec.compact(wire)
+    decoded = FieldCodec.decode(_NominalIdentityRow, wire)
+    assert decoded == row
+    assert type(decoded.nominal) is Id128
+    assert type(decoded.annotated) is str
+    assert type(decoded.plain) is str
+    assert type(decoded.turn) is TurnId
+
+    spelling = {"type": "string", "pattern": "^(?:[0-9a-f]{32})$"}
+    assert FieldCodec.value_schema(Id128) == FieldCodec.value_schema(Annotated[str, Id128Text]) == spelling
+    assert FieldCodec.record_schema(_NominalIdentityRow)["properties"] == {
+        "nominal": spelling, "annotated": spelling, "plain": {"type": "string"}, "turn": spelling,
+    }
+    for kind in (ClaimId, TurnId, GoalId, RootId, InputId):
+        assert type(kind.mint()) is kind
+        assert type(FieldCodec.decode(kind, str(value))) is kind
+        assert FieldCodec.value_schema(kind) == spelling
+    with pytest.raises(TypeError):
+        FieldCodec.encode(_NominalIdentityRow(value, value, value, InputId(value)))
+
+    # Fixed outputs of MessageIdText.mint at origin/main b966250de, before moving it.
+    for text, expected in (
+        ("", "e3b0c44298fc"),
+        ("sender:target:0:hello", "a83ada163b6a"),
+        ("λ/native input\nmessage:body", "c2fad731397c"),
+    ):
+        message = MessageId.mint(text)
+        assert type(message) is MessageId
+        assert message == expected
+        assert FieldCodec.encode(message, MessageId) == expected
 
 
 @dataclass(frozen=True)

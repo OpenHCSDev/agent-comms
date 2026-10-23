@@ -805,6 +805,11 @@ class NominalIdTypePhase(Id128NominalPhase):
             ClassDeclared("NominalSpelling", ("src/agent_comms/field_codec.py",)),
             ClassDeclared("Id128", ("src/agent_comms/field_codec.py",)),
             ClassDeclared("MessageId", ("src/agent_comms/field_codec.py",)),
+            ClassDeclared("ClaimId", ("src/agent_comms/field_codec.py",)),
+            ClassDeclared("TurnId", ("src/agent_comms/field_codec.py",)),
+            ClassDeclared("GoalId", ("src/agent_comms/field_codec.py",)),
+            ClassDeclared("RootId", ("src/agent_comms/field_codec.py",)),
+            ClassDeclared("InputId", ("src/agent_comms/field_codec.py",)),
             PatternAbsent(
                 r"def mint\(cls(, text: str)?\) -> str:", ("src/agent_comms/field_codec.py",)
             ),
@@ -820,12 +825,12 @@ class PlainStrIdRatchetPhase(Id128NominalPhase):
 
 
 class ClaimIdsPhase(Id128NominalPhase):
-    """3: claim nonces, operation ids and generations are ``Id128``; their checks go."""
+    """3: claim nonces, operation ids and generations are ``ClaimId``; their checks go."""
 
     after = (NominalIdTypePhase,)
     evidence = AllEvidence(
         (
-            PatternAbsent(r"\b(nonce|operation_id|generation): (str\b|Annotated\[str)"),
+            PatternAbsent(r"\b(nonce|operation_id|generation): (str\b|Id128\b|Annotated\[(str|Id128)\b)"),
             PatternAbsent(r"Id128Text\.decode\(self\.(nonce|operation_id)\)"),
         )
     )
@@ -837,21 +842,21 @@ class MessageIdsPhase(Id128NominalPhase):
     after = (ClaimIdsPhase,)
     evidence = AllEvidence(
         (
-            PatternAbsent(r"\b(message_id|source_message_id): (str\b|Annotated\[str)"),
+            PatternAbsent(r"\b(message_id|source_message_id): (str\b|Id128\b|Annotated\[(str|Id128)\b)"),
             PatternAbsent(r"Annotated\[str, *MessageIdText\]"),
         )
     )
 
 
 class TurnIdsPhase(Id128NominalPhase):
-    """5: Core turn ids are ``Id128``; their re-decodes go."""
+    """5: Core turn ids are ``TurnId``; their re-decodes go."""
 
     after = (MessageIdsPhase,)
     evidence = AllEvidence(
         (
             PatternAbsent(
                 r"\b(turn_id|finished_turn_id|report_turn_id|current_turn_id)"
-                r": (str\b|Annotated\[str)"
+                r": (str\b|Id128\b|Annotated\[(str|Id128)\b)"
             ),
             PatternAbsent(r"Id128Text\.(decode|from_text)\((self\.)?turn_id\)"),
         )
@@ -859,20 +864,20 @@ class TurnIdsPhase(Id128NominalPhase):
 
 
 class GoalIdsPhase(Id128NominalPhase):
-    """6: goal ids are ``Id128``, minted by it, never by a hand-written ``uuid4().hex``."""
+    """6: goal ids are ``GoalId``, minted by it, never by a hand-written ``uuid4().hex``."""
 
     after = (TurnIdsPhase,)
-    evidence = PatternAbsent(r"\b(goal_id|original_goal_id): (str\b|Annotated\[str)")
+    evidence = PatternAbsent(r"\b(goal_id|original_goal_id): (str\b|Id128\b|Annotated\[(str|Id128)\b)")
 
 
 class RootIdsPhase(Id128NominalPhase):
-    """7: bus roots and recipient lookups are ``Id128``; their re-decodes go."""
+    """7: bus roots and recipient lookups are ``RootId``; their re-decodes go."""
 
     after = (GoalIdsPhase,)
     evidence = AllEvidence(
         (
             PatternAbsent(
-                r"\b(wire_root_id|root_id|lookup|recipient_lookup): (str\b|Annotated\[str)"
+                r"\b(wire_root_id|root_id|lookup|recipient_lookup): (str\b|Id128\b|Annotated\[(str|Id128)\b)"
             ),
             PatternAbsent(r"Id128Text\.decode\((self\.)?(owner\.)?(wire_root_id|root_id|lookup)\)"),
             PatternAbsent(r"FieldCodec\.decode\(Annotated\[str, *Id128Text\]"),
@@ -881,12 +886,12 @@ class RootIdsPhase(Id128NominalPhase):
 
 
 class InputIdsPhase(Id128NominalPhase):
-    """8: input ids are ``Id128``; their re-decodes and constructor checks go."""
+    """8: input ids are ``InputId``; their re-decodes and constructor checks go."""
 
     after = (RootIdsPhase,)
     evidence = AllEvidence(
         (
-            PatternAbsent(r"\b(input_id|accepted_input_id|native_id): (str\b|Annotated\[str)"),
+            PatternAbsent(r"\b(input_id|accepted_input_id|native_id): (str\b|Id128\b|Annotated\[(str|Id128)\b)"),
             PatternAbsent(r"Id128Text\.(decode|from_text)\((self\.)?(input_id|native_id)\)"),
         )
     )
