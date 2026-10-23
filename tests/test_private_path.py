@@ -63,17 +63,17 @@ def test_private_roles_and_revisions_follow_original_native_nodes(tmp_path: Path
             (PrivateSocketRole, endpoint),
             (TrustedAncestorRole, directory),
         ):
-            role.require(path.lstat())
+            role.require(path.lstat(), ValueError("Private path role failed"))
             path.chmod(path.stat().st_mode | 0o022)
             with pytest.raises(ValueError):
-                role.require(path.lstat())
+                role.require(path.lstat(), ValueError("Private path role failed"))
             path.chmod(0o600 if path != directory else 0o700)
         with pytest.raises(ValueError):
-            PrivateFileRole.require(endpoint.lstat())
+            PrivateFileRole.require(endpoint.lstat(), ValueError("Expected a private file"))
         redirected = directory / "source"
         redirected.symlink_to(file)
         with pytest.raises(ValueError):
-            PrivateFileRole.require(redirected.lstat())
+            PrivateFileRole.require(redirected.lstat(), ValueError("Expected a private file"))
 
     before = FileRevision.from_stat(file.stat())
     with file.open("ab") as stream:

@@ -30,6 +30,7 @@ from .envelope_claim_transitions import (
     WakeClaim,
 )
 from .errors import RelationViolationError
+from .child_process import Platform
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import RegistryPrivacy
 from .registry_document import RegistrySnapshot
@@ -190,8 +191,10 @@ def _opened_selected_file(
     This does not promise hostile same-UID rename exclusion during a write.
     """
     relative = Path(normalized).relative_to(worktree)
-    if not relative.parts or not hasattr(os, "O_DIRECTORY"):
-        raise IdentityConflict("Selected write needs a physical directory chain")
+    refusal = IdentityConflict("Selected write needs a physical directory chain")
+    Platform.current().require_pinned_paths(refusal)
+    if not relative.parts:
+        raise refusal
     directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
     with ExitStack() as opened:
         try:
@@ -257,8 +260,8 @@ def write_selected_claimed_file(
     """
     if len(contents) > 1024 * 1024:
         raise IdentityConflict("Selected write requires bounded bytes")
-    if not hasattr(os, "O_NOFOLLOW"):
-        raise IdentityConflict("Selected write requires no-follow file descriptors")
+    Platform.current().require_pinned_paths(
+        IdentityConflict("Selected write requires no-follow file descriptors"))
     with Coordination(str(store.session.path)) as scoped:
         # Native settlement's existing coordinator -> Bus order also protects the
         # exact resource claim through fsync, without any root or file-bus gate.

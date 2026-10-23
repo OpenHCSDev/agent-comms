@@ -14,7 +14,7 @@ from .native_failures import NativePiUnavailable
 from agent_comms.native_session_files import NativeSessionFiles
 from .native_session_files import PrivateSession, BusTranscriptFile
 from .native_session_reopen import NativeSessionIdentity
-from .private_path import NativeSessionFileRole
+from .private_path import PrivateFileRole
 
 
 def create_fresh_private_session(
@@ -34,10 +34,9 @@ def create_fresh_private_session(
     )
     encoded = FieldCodec.compact(header.to_wire(), allow_nan=False).encode() + b"\n"
     try:
-        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        descriptor = PrivateFileRole.create(
+            path, NativePiUnavailable("Fresh-session creation durability UNKNOWN"))
         try:
-            info = os.fstat(descriptor)
-            NativeSessionFileRole.require(info)
             pending = memoryview(encoded)
             while pending:
                 written = os.write(descriptor, pending)

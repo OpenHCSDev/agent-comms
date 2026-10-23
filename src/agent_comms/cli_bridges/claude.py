@@ -133,12 +133,15 @@ class ClaudeBridge(RunningClaude, LineMonitorBridge, declared_name=None):
 
 
 class Connect(Enrol):
+    help = "Bind this running Claude session to a bus thread and start its bridge now"
+    reported = 'Session bridge running and ready. Run watch under Monitor to receive.'
+
     @classmethod
     def serves(cls, bridge: type) -> bool:
         return issubclass(bridge, ClaudeBridge)
 
-    async def execute(self, bridge: LineMonitorBridge) -> None:
-        await super().execute(bridge)
+    def begin(self, bridge: LineMonitorBridge) -> None:
+        """Serve.launch raises unless the started bridge answers its readiness exchange."""
         SessionHook.current(
             bridge.binding.thread, str(RunningClaude(bridge.binding.thread).source)
         ).start()

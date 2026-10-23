@@ -17,7 +17,7 @@ from .native_session_reopen import NativeSessionIdentity
 from agent_comms.native_pi import _session_location
 from agent_comms.native_failures import NativePiUnavailable
 from .field_codec import boundary_decoder
-from .private_path import NativeSessionFileRole
+from .private_path import PrivateFileRole
 from .launch_runtime import RestartEnvironment, ThreadLaunch
 from .pi_vocabulary import ThinkingChoice
 
@@ -165,12 +165,14 @@ class SavedSelectedSession(SelectedSession):
 
     def verify_start(self, actual: NativeSessionIdentity) -> Path:
         self.identity.require_same_session(actual)
+        refusal = IdentityConflict("native start requires the exact saved session")
         try:
             if self.path.resolve(strict=True) != self.path:
                 raise ValueError("redirected saved session")
-            NativeSessionFileRole.require(self.path.lstat())
+            info = self.path.lstat()
         except (OSError, ValueError) as error:
-            raise IdentityConflict("native start requires the exact saved session") from error
+            raise refusal from error
+        PrivateFileRole.require(info, refusal)
         return self.path
 
     def require_context(self, context) -> None:
