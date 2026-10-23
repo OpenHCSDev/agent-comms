@@ -11,14 +11,12 @@ from agent_comms.commander_parity.lifecycle import (
     StrikeLimitCase,
     verify_order_progress,
 )
-from agent_comms.commander_parity.measurements import StorageComparison
 from agent_comms.commander_parity.story import StoryCase
 from agent_comms.commander_parity.verdicts import VerdictComparison
 from agent_comms.commander_parity.wording import (
     ApplicationRunComparison,
     DecisionAlertsComparison,
     OrderWordingComparison,
-    PlainWordsComparison,
     UnitWordingComparison,
 )
 from agent_comms.plan_phases import (
@@ -112,10 +110,6 @@ class PlainWordsParityRow(ParityRow):
     native = "`PlainText`, `StrikeReason`"
     phases = ()
 
-    @classmethod
-    def verify(cls) -> ParityComparison:
-        return PlainWordsComparison.read()
-
 
 class OrderWordingParityRow(ParityRow):
     number = 10
@@ -198,10 +192,6 @@ class StorageHygieneParityRow(ParityRow):
     current = "`StandingRule.broken` storage delivery (formerly `storage.py`)"
     native = "`StorageViolation.scan_observed`, `DiskLow.violations`; live `StorageRule` thresholds"
     phases = (ControlPlanePhase,)
-
-    @classmethod
-    def verify(cls) -> ParityComparison:
-        return StorageComparison.read()
 
 
 class OrderOnlyContactParityRow(ParityRow):

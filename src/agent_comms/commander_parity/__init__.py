@@ -1,12 +1,12 @@
-"""Parity declarations own matrix generation and the cutover decision.
+"""The historical capability matrix and optional native workflow diagnostics.
 
-Delete this transition package when both machines run the native commander.
+The declared native phases own completion; this transition package never grants cutover.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
@@ -15,7 +15,6 @@ from ..declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
     from ..plan_phases import PlanPhase
-    from ..todos import Todo
 
 
 class ParityComparison(ABC):
@@ -49,10 +48,6 @@ class ParityRow(
     comparison: ClassVar[Callable[[], ParityComparison]] = UnverifiedParity
 
     @classmethod
-    def compare(cls, todos: Iterable[Todo]) -> ParityComparison:
-        return UnverifiedParity()
-
-    @classmethod
     def verify(cls) -> ParityComparison:
         """Run this declared workflow now; a run is not durable cutover authority."""
         return cls.comparison()
@@ -64,11 +59,6 @@ class ParityRow(
         if not numbers or min(numbers) < 1 or len(set(numbers)) != len(numbers):
             raise ValueError("Parity declarations require unique positive row numbers")
         return rows
-
-    @classmethod
-    def done(cls, todos: Iterable[Todo]) -> bool:
-        history = tuple(todos)
-        return all(row.compare(history).passed for row in cls.rows())
 
     @classmethod
     def matrix(cls) -> str:
