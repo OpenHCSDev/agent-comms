@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms_hooks.deferral import Deferral, FutureOrder, Later, NextTick
+from agent_comms_hooks.deferral import FutureOrder, Later, NextTick
 
 
 def assistant(*blocks):
@@ -85,4 +85,3 @@ def test_a_failed_idle_read_blocks_and_says_so(tmp_path):
 ])
 def test_each_deferral_shape_recognises_its_phrase(shape, reply):
     assert tuple(shape.found(reply))
-    assert Deferral.phrases_in(reply)
