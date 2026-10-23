@@ -19,7 +19,7 @@ from .registration_change import RegistrationChange
 from .registry_document import RegistryDocument, RegistrySnapshot
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import TurnRouting
-from .storage_rules import StorageProjection, StorageRule
+from .storage_rules import StorageRule
 from .thread_execution import CommanderForkExecution
 from .thread_identity import GenerationCounter, TurnId
 from .thread_status import (
@@ -246,11 +246,6 @@ class Registration:
         if history is not None and intent:
             history.commit(intent)
         return change
-
-    def decide_storage(self, name, effects):
-        projection = StorageProjection(self.storage_rule, self.require(name))
-        for effect in effects:
-            effect.check(projection)
 
     @staticmethod
     def changing[**P, R](operation: Callable[Concatenate[RegistryDocument, P], R]) -> Callable[

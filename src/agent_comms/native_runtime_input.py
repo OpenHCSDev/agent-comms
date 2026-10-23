@@ -19,7 +19,7 @@ from .coordination_errors import IdentityConflict, PublicationActivationBlocked,
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, MalformedRecord, NativeContext
 from .native_claim_epoch import NativeClaimEpoch, UnrecordedNativeClaim
-from .native_tool_call import SelectedToolDenied
+from .tool_denial import SelectedToolDenied
 from .native_input_record import (
     NativeColumn,
     NativeInputContext,
