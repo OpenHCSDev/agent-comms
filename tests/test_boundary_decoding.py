@@ -13,7 +13,7 @@ from agent_comms.input_attempt import (
 from agent_comms.input_disposition import DeliveryOverview
 from agent_comms.native_package import NativeSourceDeclaration
 from agent_comms.tool_denial import SelectedToolDenied
-from agent_comms.ui_model.delivery import InputDelivery
+from agent_comms.ui_model.delivery import DeliveryView
 
 
 def test_coding_socket_record_keeps_object_arguments_and_strict_fields():
@@ -34,15 +34,16 @@ def test_delivery_uses_declared_overview_and_preserves_typed_rows():
                                  notice_dismissed=True)
     overview = DeliveryOverview((current,), 1, 2, (historical,), OwnerQueueInputDeliveryScope)
     wire = FieldCodec.encode(overview)
-    delivery = InputDelivery.from_wire(wire)
-    assert delivery.inputs == (current,)
-    assert delivery.historical_inputs == (historical,)
-    assert (delivery.historical_count, delivery.dismissed_historical_count) == (1, 2)
-    assert delivery.owner_queue and delivery.pending == 'awaiting start'
-    assert InputDelivery.from_wire(FieldCodec.encode(
+    delivery = DeliveryView.from_wire(wire)
+    assert delivery.overview.inputs == (current,)
+    assert delivery.overview.historical_inputs == (historical,)
+    assert (delivery.overview.historical_count, delivery.overview.dismissed_historical_count) == (1, 2)
+    assert delivery.overview.current_scope is OwnerQueueInputDeliveryScope
+    assert delivery.pending == 'awaiting start'
+    assert DeliveryView.from_wire(FieldCodec.encode(
         replace(overview, current_scope=UnobservedInputDeliveryScope))).pending == 'unconfirmed'
     with pytest.raises(ValueError):
-        InputDelivery.from_wire({**wire, 'unexpected': True})
+        DeliveryView.from_wire({**wire, 'unexpected': True})
 
 
 @pytest.mark.parametrize('payload, expected', (
