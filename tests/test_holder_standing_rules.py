@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from functools import partial
 from uuid import uuid4
@@ -28,7 +29,7 @@ from agent_comms.commander.standing import (
 from agent_comms.comms import Comms
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.coordinator import Coordination
-from agent_comms.errors import RelationViolationError
+from agent_comms.errors import CommittedMessageError, HumanSendRefusedError, RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
     CreateProblemGoalAction,
@@ -140,6 +141,77 @@ def claim_order(held_bus):
 def state_cards(comms, member):
     return tuple(state for state in UnitState.current(comms, "lead", ProgressRead())
                  if isinstance(state, member))
+
+
+@pytest.mark.parametrize("change,notification_fails", [
+    ("rename", False), ("rename_holder", False), ("remove", False), ("recreate", False),
+    ("rename", True),
+])
+def test_order_claim_publishes_only_to_its_retained_commander_birth(
+    held_bus, change, notification_fails,
+):
+    comms = held_bus
+    todo = comms.goals.todos.get("P1")
+    lead = comms.registry.require("lead").incarnation
+    worker = comms.registry.require("worker").incarnation
+    original = comms.messaging.send("lead", "worker", todo.order.instructions(todo)).message
+    todo = comms.goals.todos.apply(
+        todo.id, OrderMessage(todo.revision, lead, original.message_id))
+    claim = OrderClaim.for_order(
+        todo, worker, 1, "a" * 40, "Review this published repair with @outsider", original.reference,
+        store=comms.goals.todos)
+    if change == "rename":
+        comms.registry.rename("lead", "renamed")
+    elif change == "rename_holder":
+        comms.registry.rename("worker", "renamed-worker")
+    else:
+        worktree = comms.registry.require("lead").worktree
+        comms.registry.unregister("lead")
+        comms.registry.remove("lead")
+        if change == "recreate":
+            comms.registry.declare(comms.registry.new_thread("lead", frozenset({"comms"}), worktree))
+    before = comms.bus.bus.revision()
+    operation = ClaimOrder(todo.revision, worker, todo.held().generation, claim)
+    if change in ("rename", "rename_holder"):
+        def registry_cut_held():
+            try:
+                with comms.registry.store.locked(blocking=False):
+                    return False
+            except BlockingIOError:
+                return True
+
+        if notification_fails:
+            marker = comms.bus.bus.path.with_suffix(".changed")
+            marker.unlink()
+            marker.mkdir()
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            with comms.goals.todos.writing():
+                future = pool.submit(operation.record, comms.goals, todo.id)
+                asyncio.run(asyncio.wait_for(wait_for(registry_cut_held), timeout=2))
+                assert not future.done()
+            if notification_fails:
+                with pytest.raises(CommittedMessageError) as failed:
+                    future.result(timeout=5)
+                changed = comms.goals.todos.get(todo.id)
+                assert failed.value.record.seq == before + 1
+            else:
+                changed = future.result(timeout=5)
+        delivery = comms.bus.bus.delivery(before + 1)
+        recipient = "renamed" if change == "rename" else "lead"
+        assert delivery.message.target == recipient
+        assert delivery.message.sender == ("renamed-worker" if change == "rename_holder" else "worker")
+        assert [(row.canonical_thread, row.recipient_lookup) for row in delivery.audience.recipients] == [
+            (recipient, lead.require_recorded().lookup)]
+        assert comms.goals.todos.get(todo.id) == changed
+        with comms.bus.bus.reading() as source:
+            retained = comms.goals.todos.get(todo.id).order.commander_claims()[0]
+            assert retained.original(source) == Message.from_message(delivery.message)
+            assert retained.original(source).mentions
+    else:
+        with pytest.raises(HumanSendRefusedError):
+            operation.record(comms.goals, todo.id)
+        assert comms.bus.bus.revision() == before
+        assert comms.goals.todos.get(todo.id) == todo
 
 
 def unanswered(comms):
