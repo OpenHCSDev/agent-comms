@@ -473,7 +473,7 @@ class ClaimProjection(Mapping[str, ClaimOwner]):
         # every owner on every projection made a rebuild re-validate the whole claim table.
         FieldCodec.require_fields(self, "last_seq")
         if any(
-            not isinstance(value, ClaimOwner) or value.resource != key
+            value.resource != key
             or value.seq > self.last_seq
             for key, value in self._claims.items()
         ):

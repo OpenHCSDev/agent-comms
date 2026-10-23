@@ -237,8 +237,6 @@ class MonitorEvidence:
             for value in (self.subprocess_dead, self.backend_done)
         ):
             raise ValueError("monitor observations must be explicit booleans")
-        if not isinstance(self.outcome, UnsuccessfulTerminal):
-            raise TypeError("monitor outcome must be an unsuccessful terminal attempt")
         if self.observed_at_ms < 0:
             raise ValueError("negative evidence timestamp")
 

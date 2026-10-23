@@ -159,8 +159,6 @@ def freeze_audience(
     Mentions do not filter this set. Neither current tags nor view declarations are
     read here. A sequence assigned in memory is not proof of durable commitment.
     """
-    if not isinstance(prepared_message, Message):
-        raise TypeError("prepared_message must be a Message")
     if not isinstance(externally_captured_recipients, Sequence) or isinstance(
         externally_captured_recipients, (str, bytes)
     ):
