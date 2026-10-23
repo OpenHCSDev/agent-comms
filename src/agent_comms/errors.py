@@ -11,6 +11,12 @@ if TYPE_CHECKING:
     from agent_comms.messages import BusRecord
 
 
+class RejectedEnforcement(ValueError):
+    """A checked standing-rule action was refused before it could apply."""
+
+    reason: ClassVar[str]
+
+
 class ToolRefusedError(ValueError):
     """An intentional refusal safe to return as a tool answer, not a transport failure."""
 
@@ -31,6 +37,10 @@ class RouteChangedError(ValueError):
 
 class RelationViolationError(ValueError, DrainUnavailable):
     """A required relation between declarations cannot be proved."""
+
+
+class OverdueHeadRefusal(RejectedEnforcement, RelationViolationError):
+    reason: ClassVar[str] = "a reviewed head is overdue"
 
 
 class UnclaimedError(RelationViolationError):

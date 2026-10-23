@@ -68,6 +68,7 @@ class CommanderHeartbeat(CommanderService, WatchPass[tuple[CommanderObservation,
                     item.thread.incarnation,
                     tuple(state for state in item.states if state not in rejected),
                     tuple(rule for rule in item.rules if rule not in rejected), previous,
+                    not_applied=tuple(rule.rejected_line(error) for rule, error in rejected.items()),
                 )
                 if update is not None:
                     update.send(comms, previous)

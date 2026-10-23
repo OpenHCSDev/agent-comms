@@ -84,6 +84,7 @@ class UnitPing(Ping):
 class CommanderUpdate(TaskAttachment, declared_name=None):
     commander: ThreadIncarnation
     handled: tuple[Ping, ...]
+    not_applied: tuple[str, ...] = field(default=(), kw_only=True)
     role: ClassVar[MessageRole]
 
     @abstractmethod
@@ -130,7 +131,8 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
     @classmethod
     def derive(cls, commander: ThreadIncarnation, states: tuple[UnitState, ...],
                rules: tuple[StandingRule, ...],
-               previous: CommanderUpdate | None) -> CommanderUpdate | None:
+               previous: CommanderUpdate | None, *,
+               not_applied: tuple[str, ...] = ()) -> CommanderUpdate | None:
         known = {ping.key: ping for ping in previous.handled} if previous else {}
         quiet = tuple(UnitPing.capture(state) for state in states if not state.attention())
         urgent = (*(UnitPing.capture(state) for state in states if state.attention()),
@@ -138,9 +140,10 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
         decisions = tuple(ping for ping in urgent if known.get(ping.key) != ping)[:5]
         handled = (*quiet, *urgent)
         if decisions:
-            return CommanderDecisions(commander, handled, decisions)
-        if previous is None or handled != previous.handled:
-            return CommanderNotice(commander, handled)
+            return CommanderDecisions(commander, handled, decisions, not_applied=not_applied)
+        if (previous is None or handled != previous.handled
+                or not_applied != previous.not_applied):
+            return CommanderNotice(commander, handled, not_applied=not_applied)
         return None
 
     def send(self, comms: Comms, previous: CommanderUpdate | None) -> Message:
@@ -163,6 +166,7 @@ class CommanderNotice(CommanderUpdate):
 
     def body(self, previous: CommanderUpdate | None) -> str:
         return "\n".join(("Commander observations updated; no new decision.",
+                          *self.not_applied,
                           *self.changed_lines(previous)))
 
 
@@ -174,6 +178,7 @@ class CommanderDecisions(CommanderUpdate):
     def body(self, previous: CommanderUpdate | None) -> str:
         also_current = self.changed_pings(previous, self.decisions)
         return "\n".join((*(ping.text for ping in self.decisions),
+                          *self.not_applied,
                           *(("ALSO CURRENT:", *(ping.text for ping in also_current))
                             if also_current else ()),
                           *self.changed_lines(previous, self.handled)))

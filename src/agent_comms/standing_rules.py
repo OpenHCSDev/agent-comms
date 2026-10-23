@@ -6,7 +6,6 @@ files are declared in ``agent_comms.commander.standing`` until those files move 
 
 from __future__ import annotations
 
-import logging
 import time
 from abc import abstractmethod
 from collections import Counter
@@ -18,7 +17,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
-from agent_comms.goals import GoalChangedError
+from agent_comms.errors import RejectedEnforcement
 from agent_comms.text_digest import TextDigest
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repo import Repo
@@ -110,23 +109,22 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     def attention(self) -> bool:
         return True
 
-    def rejected_line(self) -> str:
-        return f"Not applied (goal changed): {self.line()}"
+    def rejected_line(self, error: RejectedEnforcement) -> str:
+        return f"Not applied ({error.reason}): {self.line()}"
 
     def enforce(self, comms: Comms, commander: str) -> None:
         """What Core does itself when this rule breaks; a rule that only reports does nothing."""
 
     @staticmethod
     def enforce_all(comms: Comms, commander: str,
-                    rules: Iterable[StandingRule]) -> frozenset[StandingRule]:
-        rejected: set[StandingRule] = set()
+                    rules: Iterable[StandingRule]) -> Mapping[StandingRule, RejectedEnforcement]:
+        rejected: dict[StandingRule, RejectedEnforcement] = {}
         for rule in rules:
             try:
                 rule.enforce(comms, commander)
-            except GoalChangedError as changed:
-                logging.info("Skipped stale enforcement: %s", changed)
-                rejected.add(rule)
-        return frozenset(rejected)
+            except RejectedEnforcement as error:
+                rejected[rule] = error
+        return rejected
 
     def comparison_values(self) -> tuple[object, ...]:
         """The declaration's equality fields, excluding presentation and live readers."""

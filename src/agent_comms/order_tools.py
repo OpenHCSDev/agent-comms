@@ -288,7 +288,7 @@ class CommsStandingRulesTool(ThreadToolRequest):
         return StandingRulesRead(
             tuple(rule.line() for rule in broken
                   if rule.broke_after(self.after) and rule not in rejected)
-            + tuple(rule.rejected_line() for rule in broken
+            + tuple(rule.rejected_line(rejected[rule]) for rule in broken
                     if rule.broke_after(self.after) and rule in rejected))
 
 

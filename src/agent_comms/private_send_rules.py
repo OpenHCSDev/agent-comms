@@ -172,7 +172,7 @@ class RegistryTurnRule(ReservationRule):
 
 class RegistryGoalRule(ReservationRule):
     check_type = GoalRegistryIdentityCheck
-    explanation = "The captured goal changed."
+    explanation = "The captured goal is no longer current."
 
     def violated(self, check: GoalRegistryIdentityCheck) -> bool:
         return not check.goal_permission.allows(check.actual.goal)

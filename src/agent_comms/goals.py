@@ -19,7 +19,7 @@ from .child_process import (BoundedRun, CheckPrinted, ChildOutcome, ChildResult,
                             ExitedOutcome, SignaledOutcome, TimedOutOutcome)
 from .context_segments.wake_values import NoWakeGoalContext, WakeGoalContext, WakeGoalValue
 from .declared_family import DeclaredFamily
-from .errors import RelationViolationError
+from .errors import RejectedEnforcement, RelationViolationError
 from .field_codec import (
     FieldCodec, JsonShapeFamily, JsonShapeMember, MalformedRecord, NullMember,
     PresenceExclude, RecordMember, SubclassUnion,
@@ -251,8 +251,10 @@ class PresentGoalCheckpoint(GoalCheckpoint, declared_name="present"):
         return f"goal {self.revision.id}@{self.revision.revision}"
 
 
-class GoalChangedError(ValueError):
-    """An observed goal changed before its checked action could run."""
+class GoalChangedError(RejectedEnforcement):
+    """A checked action's observed goal is no longer current."""
+
+    reason: ClassVar[str] = "goal changed"
 
     def __init__(self, thread: Thread, expected: GoalCheckpoint) -> None:
         self.thread = thread
@@ -641,7 +643,7 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
 
     def require_checkpoint(self, checkpoint: GoalRevision) -> Goal:
         if not PresentGoalCheckpoint(checkpoint).matches(self):
-            raise ValueError("The goal changed before this action; the action was not applied.")
+            raise ValueError("The goal no longer matches this action; the action was not applied.")
         return self.require()
 
     def matching(self, goal_id: str) -> GoalDeclaration:
