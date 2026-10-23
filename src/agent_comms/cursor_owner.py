@@ -59,7 +59,7 @@ class CursorOwner(RegistryOwner):
                 person = store.participants.get(
                     captured.thread.incarnation.require_recorded().lookup
                 )
-                if not person.committed or person.owner_identity.owner_thread != owner_name:
+                if not person.committed:
                     raise StaleFence("Current cursor recipient is not committed")
                 owner = cls(thread=captured.thread, claimed_generation=captured.claimed_generation,
                             wire_root_id=root_id, generation=person.owner_identity.generation)

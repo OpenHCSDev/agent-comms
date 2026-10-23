@@ -164,14 +164,13 @@ def _record_optional_owner_generations(
         assert_optional_awareness_schema(db)
         for assignment in assignments:
             current = OwnerGenerations.one(db, owner_lookup=assignment.recipient_lookup)
-            if current is None or current.owner_thread != assignment.recipient:
-                raise IdentityConflict("optional claim generation has no current canonical owner")
+            if current is None:
+                raise IdentityConflict("optional claim generation has no current owner")
             AwarenessClaimGenerations(
                 claim_id=assignment.assignment_id,
                 wire_root_id=wire_root_id,
                 wire_seq=wire_seq,
                 owner_lookup=assignment.recipient_lookup,
-                owner_thread=assignment.recipient,
                 owner_generation=current.generation,
             ).insert(db)
     except (sqlite3.Error, SchemaVersionError, IdentityConflict, MalformedRecord) as error:

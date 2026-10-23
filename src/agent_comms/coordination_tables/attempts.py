@@ -112,7 +112,7 @@ class AttemptRecord(
         AND NEW.attempt_ordinal = 1 + coalesce((SELECT max(a.attempt_ordinal) FROM attempts a
         WHERE a.execution_id = e.execution_id), 0)))
         OR (NOT EXISTS (SELECT 1 FROM owner_generations g WHERE g.owner_lookup = NEW.owner_lookup
-        AND g.owner_thread = NEW.owner_thread AND g.generation = NEW.owner_generation))
+        AND g.generation = NEW.owner_generation))
         OR ((json_extract(NEW.lifecycle, '$.kind')) != 'prompt_starting' OR NEW.revision != 1
         OR (CASE WHEN json_extract(NEW.lifecycle, '$.kind') IN ({terminal_attempt_names})
         THEN 1 ELSE json_extract(NEW.lifecycle, '$.backend_done') END) != 0
@@ -169,7 +169,7 @@ class AttemptRecord(
         return AttemptAuthority(
             self.execution_id,
             self.attempt_ordinal,
-            self.owner_thread,
+            self.owner_lookup,
             self.owner_generation,
             self.owner_token_digest,
         )
@@ -177,7 +177,6 @@ class AttemptRecord(
     execution_id: Annotated[str, SnapshotExclude(), FrozenColumn(primary_key=True)]
     attempt_ordinal: Annotated[int, FrozenColumn(primary_key=True, check="attempt_ordinal > 0")]
     owner_lookup: Annotated[str, FrozenColumn()]
-    owner_thread: Annotated[str, FrozenColumn(check="length(owner_thread) BETWEEN 1 AND 256")]
     owner_generation: Annotated[int, FrozenColumn(check="owner_generation > 0")]
     owner_token_digest: Annotated[
         str,
@@ -215,7 +214,6 @@ class AttemptRecord(
         validate_execution_id(self.execution_id)
         for field, value in (
             ("owner_lookup", self.owner_lookup),
-            ("owner_thread", self.owner_thread),
             ("owner_token_digest", self.owner_token_digest),
         ):
             require_nonempty(value, field)

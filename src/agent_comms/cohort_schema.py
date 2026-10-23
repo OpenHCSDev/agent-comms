@@ -299,23 +299,18 @@ class AwarenessClaimGenerations(
         ON r.wire_root_id=m.wire_root_id AND r.wire_seq=m.wire_seq JOIN owner_generations g
         ON g.owner_lookup=m.recipient_lookup WHERE m.claim_id=NEW.claim_id
         AND m.wire_root_id=NEW.wire_root_id AND m.wire_seq=NEW.wire_seq
-        AND m.recipient_lookup=NEW.recipient_lookup AND c.recipient=NEW.canonical_thread
-        AND c.message_id=r.message_id AND r.sealed=0 AND g.owner_thread=NEW.canonical_thread
+        AND m.recipient_lookup=NEW.recipient_lookup AND c.recipient_lookup=NEW.recipient_lookup
+        AND c.message_id=r.message_id AND r.sealed=0
         AND g.generation=NEW.owner_generation))"""
 
     claim_id: Annotated[str, Column(primary_key=True)]
     wire_root_id: str
     wire_seq: Annotated[int, Column(check="wire_seq > 0")]
     owner_lookup: Annotated[str, WireName("recipient_lookup"), Column(record_key=True)]
-    owner_thread: Annotated[
-        str,
-        WireName("canonical_thread"),
-        Column(record_key=True, check="length(canonical_thread) BETWEEN 1 AND 256"),
-    ]
     owner_generation: Annotated[int, Column(check="owner_generation > 0")]
 
     def current(self, expected: OwnerGenerations) -> bool:
-        """Old generations and pre-rename names are historical, never current context."""
+        """Old owner generations are historical; renaming preserves their identity."""
         from .wake_candidate_index import ProjectionUnavailableError
 
         if self.owner_lookup != expected.owner_lookup or self.owner_generation > expected.generation:
@@ -329,7 +324,7 @@ class AwarenessClaimGenerations(
         expected = type(self)(
             claim_id=assignment.assignment_id, wire_root_id=acknowledgement.wire_root_id,
             wire_seq=assignment.wire_seq, owner_lookup=assignment.recipient_lookup,
-            owner_thread=assignment.recipient, owner_generation=self.owner_generation,
+            owner_generation=self.owner_generation,
         )
         if self != expected:
             raise ProjectionUnavailableError("selected source generation provenance changed")
@@ -342,7 +337,7 @@ class AwarenessClaimGenerations(
         if execution.origin is not ExecutionOrigin.WIRE:
             raise ProjectionUnavailableError("open obligation has no wire origin")
         original_owner = OwnerGenerations(
-            owner_lookup=execution.owner_lookup, owner_thread=execution.owner_thread,
+            owner_lookup=execution.owner_lookup,
             generation=self.owner_generation,
         )
         original_link = type(link)(

@@ -190,7 +190,7 @@ class ParticipantOwner:
 
     def coordinator_identity(self, lookup: str) -> OwnerGenerations:
         return OwnerGenerations(
-            owner_lookup=lookup, owner_thread=self.thread.name, generation=self.generation
+            owner_lookup=lookup, generation=self.generation
         )
 
     def require(self, store: Coordination, lookup: str) -> None:

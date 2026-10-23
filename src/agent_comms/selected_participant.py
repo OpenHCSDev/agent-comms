@@ -34,7 +34,6 @@ from .notification_assignment import NotificationAssignment, NotificationAssignm
 from .participant_store import ParticipantSnapshot
 from .pi_events import TurnContextObserved
 from .presentation import MessageNotification, OwnerOutcomes, SentMessageOutcome
-from .private_registry_guard import _require_no_private_owner_rename
 from .store_files import SharedLock
 from .publisher import ParticipantPublisher
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
@@ -90,7 +89,7 @@ class SelectedParticipant(MroDispatch):
         await self.require_current()
         snapshot = self.store.create(
             self.batch.execution_id, ExecutionOrigin.WIRE,
-            self.lookup, self.owner.thread.name, max_attempts,
+            self.lookup, max_attempts,
             sources=self.batch.sources,
         ).value
         self.store.fail_unstarted(
@@ -103,7 +102,6 @@ class SelectedParticipant(MroDispatch):
         if snapshot.execution.lifecycle.retry:
             participant = self.store.participants.advance_generation(
                 self.lookup,
-                self.owner.thread.name,
                 expected_generation=self.identity.generation,
             ).value
             self.identity = ParticipantOwner(
@@ -221,7 +219,6 @@ class SelectedParticipant(MroDispatch):
     ]:
         """Capture detached registry, participant and optional context in one worker."""
         with comms.registry.store.locked(mode=SharedLock()):
-            _require_no_private_owner_rename(comms.root)
             privacy = comms.registry.store.private_guard_unlocked()
             privacy.require_root(
                 root_id, IdentityConflict("Selected claim namespace changed"))

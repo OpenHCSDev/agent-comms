@@ -52,7 +52,7 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .message_reference import MessageReference
 from .native_input_owner import RegistryOwner
-from .private_registry_guard import RegistryPrivacy, _require_no_private_owner_rename
+from .private_registry_guard import RegistryPrivacy
 from .registration import Registration
 from .store_files import _store_lock
 from .threads import Thread
@@ -65,7 +65,6 @@ from .wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
 class _ParticipantOwner(TypedRow):
     generation: int
     committed: bool
-    owner_thread: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,10 +179,7 @@ class OptionalAwarenessProjection:
         turn = owner.turn_record.read()
         if not turn.has_claim(self.expected_claimed_generation):
             raise ProjectionUnavailableError("selected owner turn changed")
-        if FrozenRecipient(assignment.recipient_lookup, assignment.recipient) != FrozenRecipient(
-            owner.incarnation.lookup,
-            owner.name,
-        ):
+        if assignment.recipient_lookup != owner.incarnation.lookup:
             raise ProjectionUnavailableError("selected recipient changed")
         if (assignment.wire_seq, assignment.message_id) != (
             initial.message.seq,
@@ -192,7 +188,6 @@ class OptionalAwarenessProjection:
             raise ProjectionUnavailableError("selected source changed")
         if not self.after_seq < initial.message.seq <= self.through_seq:
             raise ProjectionUnavailableError("selected source is outside the captured window")
-        _require_no_private_owner_rename(self.index.root)
         # Each selected row must now carry immutable same-transaction owner
         # generation provenance. An incomplete join omits the whole read.
         with _store_lock(self.registry.store.path, blocking=False):
@@ -221,7 +216,6 @@ class OptionalAwarenessProjection:
             obligations = self._open_obligations(db, lookup)
             expected = OwnerGenerations(
                 owner_lookup=lookup,
-                owner_thread=owner.name,
                 generation=self.expected_participant_generation,
             )
             selected = [row for row in decisions if row.generation.current(expected)]
@@ -272,7 +266,6 @@ class OptionalAwarenessProjection:
         return result
 
     def _verify_live_inclusion(self, path: os.PathLike[str], lookup: str, owner: Thread) -> None:
-        _require_no_private_owner_rename(self.index.root)
         registry = self.registry
         with _store_lock(registry.store.path, blocking=False):
             snapshot = registry.store.read_snapshot_unlocked()
@@ -285,15 +278,14 @@ class OptionalAwarenessProjection:
         with CoordinationStore.observing(Path(path), StoreBusy()) as db:
             rows = _ParticipantOwner.read(
                 db.execute(
-                    "SELECT g.generation,p.committed,g.owner_thread FROM owner_generations g "
+                    "SELECT g.generation,p.committed FROM owner_generations g "
                     "JOIN participants p ON p.participant_lookup=g.owner_lookup "
                     "WHERE g.owner_lookup=?",
                     (lookup,),
                 )
             )
-            if rows != [_ParticipantOwner(self.expected_participant_generation, True, owner.name)]:
+            if rows != [_ParticipantOwner(self.expected_participant_generation, True)]:
                 raise ProjectionUnavailableError("current participant generation changed")
-        _require_no_private_owner_rename(self.index.root)
 
     def _verify_schema_and_owner(
         self,
@@ -308,13 +300,13 @@ class OptionalAwarenessProjection:
         assert_optional_awareness_schema(db)
         people = _ParticipantOwner.read(
             db.execute(
-                "SELECT p.committed,g.owner_thread,g.generation FROM participants p "
+                "SELECT p.committed,g.generation FROM participants p "
                 "JOIN owner_generations g ON g.owner_lookup=p.participant_lookup "
                 "WHERE p.participant_lookup=?",
                 (assignment.recipient_lookup,),
             )
         )
-        if people != [_ParticipantOwner(self.expected_participant_generation, True, owner.name)]:
+        if people != [_ParticipantOwner(self.expected_participant_generation, True)]:
             raise ProjectionUnavailableError("selected participant owner changed")
         acknowledgement = _claim_record(db, initial, privacy)
         if not any(current == assignment for current in acknowledgement.assignments):
