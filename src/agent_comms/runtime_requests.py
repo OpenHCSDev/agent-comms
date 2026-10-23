@@ -16,18 +16,17 @@ from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
-from acp.schema import PromptResponse, SetSessionConfigOptionResponse
+from acp.schema import PromptRequest, PromptResponse, SetSessionConfigOptionResponse
 from pydantic import BaseModel, JsonValue
-
 
 from .agent_event_updates import AcpEventConsumer
 from .command import Command
-from .errors import RelationViolationError
 from .context_store import ContextManifestReference
 from .coordination_database import CoordinationStore
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, NullMember, WireValue, WireName
+from .errors import RelationViolationError
+from .field_codec import FieldCodec, NullMember, WireName, WireValue
 from .goal_actions import GoalAction
 from .goal_history import RecordedGoalRevision
 from .goals import Goal
@@ -268,8 +267,7 @@ class NoControllerToken(NullMember):
 
 @dataclass(frozen=True, kw_only=True)
 class PromptRuntimeRequest(ResultRuntimeRequest):
-    prompt: list[dict[str, object]]
-    meta: dict[str, object] | None = None
+    request: PromptRequest
     controller_token: Annotated[str | NoControllerToken, WireName("controllerToken")] = (
         NoControllerToken()
     )
@@ -293,8 +291,8 @@ class PromptRuntimeRequest(ResultRuntimeRequest):
         )
         token = ctx.server.controller.set(controller)
         try:
-            result = await ctx.server.agent.prompt(
-                ctx.session_id, self.prompt, field_meta=self.meta or {}
+            result = await ctx.server.agent.receive_prompt(
+                self.request.model_copy(update={"session_id": ctx.session_id})
             )
         finally:
             ctx.server.controller.reset(token)

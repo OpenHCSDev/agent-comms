@@ -1782,8 +1782,6 @@ class FieldCodec(MroDispatch, Sealed):
             return cls._family_schema(annotation)
         if isinstance(annotation, type) and is_dataclass(annotation):
             return cls.record_schema(annotation)
-        if isinstance(annotation, type) and issubclass(annotation, BaseModel):
-            return annotation.model_json_schema(by_alias=True)
         raise TypeError(f"No declared JSON schema for {annotation}")
 
     @classmethod

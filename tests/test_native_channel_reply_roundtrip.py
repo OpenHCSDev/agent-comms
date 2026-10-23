@@ -1,15 +1,6 @@
 """A published native reply automatically reaches the original channel sender."""
 
 
-from bus_record_fixture import prepare_native_comms
-from bus_history import read_history
-from agent_comms.pi_vocabulary import OffThinkingLevel
-from agent_comms.native_arguments import NativeArguments
-from agent_comms.launch_runtime import RestoredRuntime
-from agent_comms.owner_restart import OwnerRestartRequest
-from agent_comms.owner_cutover import PreserveOwnerRuntime
-from acp.schema import SessionNotification
-
 import asyncio
 import json
 import os
@@ -22,9 +13,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
-from agent_comms.lifecycle_capability import Executing
+from acp.schema import SessionNotification, TextContentBlock
 
-from agent_comms.native_input_record import TriageNativeExecution
 from agent_comms.acp import CommsClient
 from agent_comms.acp_extension import (
     CursorAdvancedUpdate,
@@ -33,9 +23,18 @@ from agent_comms.acp_extension import (
     decode_updates,
 )
 from agent_comms.comms import wire
-from test_coordinated_runtime import tmp_path as private_root_fixture
+from agent_comms.launch_runtime import RestoredRuntime
+from agent_comms.lifecycle_capability import Executing
+from agent_comms.native_arguments import NativeArguments
+from agent_comms.native_input_record import TriageNativeExecution
+from agent_comms.owner_cutover import PreserveOwnerRuntime
+from agent_comms.owner_restart import OwnerRestartRequest
+from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.threads import Thread
+from bus_history import read_history
+from bus_record_fixture import prepare_native_comms
+from test_coordinated_runtime import tmp_path as private_root_fixture
 
 # Reuse the existing isolated native-runtime fixture.
 tmp_path = private_root_fixture
@@ -280,7 +279,9 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                 async with asyncio.timeout(35):
                     seed = await attachment.prompt(
                         session_id=name,
-                        prompt=[{"type": "text", "text": f"RETAINED_NATIVE_HISTORY_{name}"}],
+                        prompt=[
+                            TextContentBlock(type="text", text=f"RETAINED_NATIVE_HISTORY_{name}")
+                        ],
                     )
                 assert seed.stop_reason == "end_turn"
                 assert comms.registry.require(name).session_file
@@ -422,8 +423,8 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
             "Canonical reply and any rejected-result alert published",
         )
         if reject_triage:
-            from agent_comms.coordinator import Coordination
             from agent_comms.assignment_states import FailedAssignment
+            from agent_comms.coordinator import Coordination
             from agent_comms.historical_native_inputs import read_historical_native_inputs
 
             with Coordination(str(comms.root / "coordination.sqlite3")) as store:
@@ -451,7 +452,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
             async with asyncio.timeout(35):
                 answer = await attachment.prompt(
                     session_id="questioner",
-                    prompt=[{"type": "text", "text": "CONTINUITY_HUMAN_INPUT"}],
+                    prompt=[TextContentBlock(type="text", text="CONTINUITY_HUMAN_INPUT")],
                 )
             assert answer.stop_reason == "end_turn" and len(requests) == 4
             assert "CONTINUITY_HUMAN_INPUT" in json.dumps(requests[-1])
@@ -489,7 +490,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
             async with asyncio.timeout(35):
                 answer = await attachment.prompt(
                     session_id="questioner",
-                    prompt=[{"type": "text", "text": "EXPLICIT_POST_RESTART_INPUT"}],
+                    prompt=[TextContentBlock(type="text", text="EXPLICIT_POST_RESTART_INPUT")],
                 )
             assert answer.stop_reason == "end_turn"
             assert len(requests) == seed_count + 3
