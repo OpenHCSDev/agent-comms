@@ -121,7 +121,7 @@ def test_the_installer_replaces_a_uv_its_checkout_does_not_declare(tmp_path, tes
     with InstallCommands() as commands:
         stack = Stack(checkout, commands, tmp_path, runtime=LaunchRuntime.running())
         stack.require_uv()
-        declared = DeclaredUv.of(checkout / "pyproject.toml")
+        declared = DeclaredUv.of(checkout / "pyproject.toml", uv)
         assert declared.accepts(commands.run(uv, "--version"))
         assert not uv.is_symlink() and not uv.read_bytes().startswith(b"#!")
         assert [path.name for path in uv.parent.iterdir()] == ["uv"]

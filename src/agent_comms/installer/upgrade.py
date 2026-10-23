@@ -464,7 +464,7 @@ class Stack:
         declared uv in its own place before any lock is written."""
         if not os.access(self.uv, os.X_OK):
             raise UpgradeRefused(f"No uv executable at {self.uv}; the installer runs only that uv")
-        declared = DeclaredUv.of(self.checkout / "pyproject.toml")
+        declared = DeclaredUv.of(self.checkout / "pyproject.toml", self.uv)
         if declared.accepts(self.commands.run(self.uv, "--version")):
             return
         with tempfile.TemporaryDirectory(dir=self.uv.parent, prefix=".uv-") as staging:

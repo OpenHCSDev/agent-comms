@@ -9,6 +9,7 @@ import sys
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar
 
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
@@ -18,14 +19,18 @@ from packaging.utils import canonicalize_name
 class DeclaredUv:
     requirement: Requirement
 
+    installed: ClassVar[Path] = Path(".local/state/agent-comms/upgrade-bus/uv")
+    """Where in a home the installer keeps the uv it runs."""
+
     @classmethod
-    def of(cls, pyproject: Path) -> DeclaredUv:
+    def of(cls, pyproject: Path, executable: Path) -> DeclaredUv:
+        """The dev extra's requirement for the distribution named like ``executable``."""
         match tomllib.loads(pyproject.read_text()):
             case {"project": {"optional-dependencies": {"dev": list(dev)}}}:
                 (requirement,) = (
                     parsed
                     for parsed in map(Requirement, dev)
-                    if canonicalize_name(parsed.name) == "uv"
+                    if canonicalize_name(parsed.name) == canonicalize_name(executable.name)
                 )
                 return cls(requirement)
         raise ValueError(f"{pyproject} declares no dev extra to pin uv")
@@ -36,4 +41,4 @@ class DeclaredUv:
 
 
 if __name__ == "__main__":
-    print(DeclaredUv.of(Path(sys.argv[1])).requirement)
+    print(DeclaredUv.of(Path(sys.argv[1]), DeclaredUv.installed).requirement)
