@@ -18,7 +18,11 @@ from agent_comms.child_process import SpawnedProcess
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.backup import UpgradeRefused
 from agent_comms.installer.interpreter_operation import (
-    ProbeProgram, ProbeReply, RuntimeProbe, RuntimeProbeFailed, SourceProgram,
+    ProbeProgram,
+    ProbeReply,
+    RuntimeProbe,
+    RuntimeProbeFailed,
+    SourceProgram,
 )
 from agent_comms.launch_runtime import RestoredRuntime
 
@@ -44,23 +48,34 @@ class InterpreterWorkerKey:
 
 @dataclass
 class InterpreterWorker:
+    """One interpreter answering requests on its own pipes; stderr is kept for refusals."""
+
     child: SpawnedProcess
+    requests: BinaryIO
+    answers: BinaryIO
     diagnostics: BinaryIO
     exchange_lock: Lock = field(default_factory=Lock)
 
     @classmethod
     def start(cls, key: InterpreterWorkerKey) -> InterpreterWorker:
-        diagnostics = tempfile.TemporaryFile()
-        try:
-            child = SpawnedProcess.launch(
-                (str(key.python), "-P", *key.program), cwd=key.cwd,
-                env=dict(key.environment), runtime=RestoredRuntime(key.python),
-                stdin=subprocess.PIPE, output=subprocess.PIPE, stderr=diagnostics,
-            )
-        except BaseException:
-            diagnostics.close()
-            raise
-        return cls(child, diagnostics)
+        with ExitStack() as owned:
+            diagnostics = owned.enter_context(tempfile.TemporaryFile())
+            request_read, request_write = os.pipe()
+            answer_read, answer_write = os.pipe()
+            requests = owned.enter_context(os.fdopen(request_write, "wb"))
+            answers = owned.enter_context(os.fdopen(answer_read, "rb"))
+            try:
+                child = SpawnedProcess.launch(
+                    (str(key.python), "-P", *key.program), cwd=key.cwd,
+                    env=dict(key.environment), runtime=RestoredRuntime(key.python),
+                    stdin=request_read, output=answer_write, stderr=diagnostics,
+                )
+            finally:
+                os.close(request_read)
+                os.close(answer_write)
+            worker = cls(child, requests, answers, diagnostics)
+            owned.pop_all()
+        return worker
 
     def errors(self) -> str:
         self.diagnostics.seek(0)
@@ -68,22 +83,22 @@ class InterpreterWorker:
 
     def exchange(self, encoded: str) -> ProbeReply:
         with self.exchange_lock:
-            self.child.process.stdin.write((encoded + "\n").encode())
-            self.child.process.stdin.flush()
-            answer = self.child.process.stdout.readline()
+            self.requests.write((encoded + "\n").encode())
+            self.requests.flush()
+            answer = self.answers.readline()
             if not answer:
-                raise UpgradeRefused(f"Interpreter worker closed without an answer: {self.errors()}")
+                raise UpgradeRefused(
+                    f"Interpreter worker closed without an answer: {self.errors()}")
             return FieldCodec.decode(ProbeReply, FieldCodec.parse(answer.decode()))
 
     def close(self) -> None:
-        try:
-            self.child.process.stdin.close()
+        """Closing its requests ends the worker's loop; it is then reaped and its streams closed."""
+        with ExitStack() as closing:
+            closing.callback(self.diagnostics.close)
+            closing.callback(self.answers.close)
+            closing.callback(self.child.close)
+            self.requests.close()
             self.child.reap()
-        finally:
-            try:
-                self.child.close()
-            finally:
-                self.diagnostics.close()
 
 
 @dataclass
@@ -95,7 +110,8 @@ class InstallCommands:
     workers: dict[InterpreterWorkerKey, InterpreterWorker] = field(default_factory=dict, init=False)
     worker_lock: Lock = field(default_factory=Lock, init=False)
     launcher: ThreadPoolExecutor = field(
-        default_factory=lambda: ThreadPoolExecutor(max_workers=1, thread_name_prefix="install-launch"),
+        default_factory=lambda: ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="install-launch"),
         init=False,
     )
 

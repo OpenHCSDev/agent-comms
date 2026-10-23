@@ -478,7 +478,7 @@ class PosixPlatform(Platform):
         self, command: tuple[str, ...], pass_fds: tuple[int, ...], runtime: LaunchRuntime,
         lifetime: type[ChildLifetime],
     ) -> ChildLaunch:
-        return PosixLaunch(command, pass_fds, runtime, lifetime)
+        return PosixLaunch(self, command, pass_fds, runtime, lifetime)
 
     def parent_death_binding(self) -> int:
         """Darwin has no parent-death signal: its exec gate binds no launcher."""
@@ -1112,9 +1112,11 @@ class WindowsLaunch(ChildLaunch):
 
 
 class PosixLaunch(ChildLaunch):
-    def __init__(self, command: tuple[str, ...], pass_fds: tuple[int, ...], runtime: LaunchRuntime,
+    def __init__(self, platform: PosixPlatform, command: tuple[str, ...],
+                 pass_fds: tuple[int, ...], runtime: LaunchRuntime,
                  lifetime: type[ChildLifetime]):
         super().__init__(runtime)
+        self.platform = platform
         self.command = command
         self.pass_fds = pass_fds
         self.lifetime = lifetime
@@ -1133,7 +1135,7 @@ class PosixLaunch(ChildLaunch):
             _EXEC_GATE,
             str(self.read_fd),
             str(self.error_writer.fileno()),
-            str(self.lifetime.launcher(Platform.current())),
+            str(self.lifetime.launcher(self.platform)),
             str(int(self.lifetime.handoff)),
             str(self.identity_writer.fileno()),
             *self.command,
@@ -1938,7 +1940,7 @@ class SpawnedProcess(SynchronousProcess):
         env: Mapping[str, str] = INHERITED_ENVIRONMENT,
         stdin: int | BinaryIO | TextIO = subprocess.DEVNULL,
         output: int | BinaryIO | TextIO = subprocess.DEVNULL,
-        stderr: int | BinaryIO | TextIO | None = None,
+        stderr: int | BinaryIO | TextIO = subprocess.STDOUT,
         runtime: LaunchRuntime = LaunchRuntime.running(),
         lifetime: type[ChildLifetime] = DiesWithLauncherLifetime,
     ) -> Generator[SpawnedProcess]:
@@ -1947,7 +1949,7 @@ class SpawnedProcess(SynchronousProcess):
             raise ValueError("A child command is required")
         with Platform.current().launch(command, (), runtime, lifetime) as launch:
             child = launch.spawn(cwd=cwd, env=env, stdin=stdin, stdout=output,
-                                 stderr=output if stderr is None else stderr)
+                                 stderr=stderr)
             try:
                 yield child
             except BaseException:
@@ -1986,7 +1988,8 @@ class SpawnedProcess(SynchronousProcess):
         if not math.isfinite(timeout) or timeout <= 0:
             raise ValueError("A positive finite timeout is required")
         deadline = time.monotonic() + timeout
-        with cls.launch(command, cwd=cwd, env=env, output=subprocess.PIPE) as child:
+        with cls.launch(command, cwd=cwd, env=env, output=subprocess.PIPE,
+                        stderr=subprocess.PIPE) as child:
             try:
                 return child.collect(timeout=max(0, deadline - time.monotonic()))
             finally:

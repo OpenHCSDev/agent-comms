@@ -6,7 +6,6 @@ supplies its own imports even when it predates this file.
 
 from __future__ import annotations
 
-
 import inspect
 import json
 import sys
@@ -23,6 +22,7 @@ from pydantic import BaseModel, RootModel
 from pydantic.json_schema import DEFAULT_REF_TEMPLATE
 from typing_extensions import TypeForm
 
+import agent_comms
 from agent_comms.active_route import ActiveRoute, RouteFile, SelectingRoute, active_route_path
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, PathText, WireValue
@@ -77,17 +77,23 @@ class RetainedProgram(ProbeProgram):
     def current(cls) -> RetainedProgram:
         """The operation family and its worker loop, as this checkout holds them now."""
         path = Path(inspect.getfile(RuntimeProbe))
-        return cls(f"__file__ = {str(path)!r}\n"
-                   f"exec(compile({path.read_text()!r}, __file__, 'exec'))\n"
-                   "serve()\n")
+        return cls(
+            f"__file__ = {str(path)!r}\n"
+            f"exec(compile({path.read_text()!r}, __file__, 'exec'))\n"
+            "serve()\n"
+        )
 
     def entry(self) -> tuple[str, str]:
         return "-c", self.source
 
 
 @dataclass(frozen=True)
-class RuntimeProbe[Answer](InterpreterOperation[Answer], DeclaredFamily, affix="Probe",
-                           discovery_package="agent_comms.installer"):
+class RuntimeProbe[Answer](
+    InterpreterOperation[Answer],
+    DeclaredFamily,
+    affix="Probe",
+    discovery_package="agent_comms.installer",
+):
     """A declared operation handled by the install's selected interpreter worker."""
 
 
@@ -139,12 +145,13 @@ class CliCommandProbe(RuntimeProbe[CliOutput]):
 def serve() -> None:
     """Answer declared operations from stdin, one encoded request per line, until it closes."""
     for line in sys.stdin:
+        reply: ProbeReply
         try:
             with redirect_stdout(sys.stderr):
                 probe = FieldCodec.decode(RuntimeProbe, FieldCodec.parse(line))
                 reply = CompletedProbeReply(probe.encode_answer(probe.run()))
-        except Exception:
-            reply = FailedProbeReply(traceback.format_exc())
+        except Exception as error:
+            reply = FailedProbeReply("".join(traceback.format_exception(error)))
         print(json.dumps(FieldCodec.encode(reply)), flush=True)
 
 
@@ -156,8 +163,6 @@ class ClientImportsProbe(RuntimeProbe[None]):
 
 class PackageRootProbe(RuntimeProbe[Path]):
     def run(self) -> Annotated[Path, PathText]:
-        import agent_comms
-
         return Path(agent_comms.__file__).parent
 
 
@@ -332,7 +337,6 @@ class InstalledPackagesProbe(RuntimeProbe[dict[str, PackageRecord]]):
 
         from packaging.utils import canonicalize_name
 
-        import agent_comms
         from agent_comms.package_stamp import STAMP
 
         if not Path(agent_comms.__file__).resolve().is_relative_to(Path(sys.prefix).resolve()):
