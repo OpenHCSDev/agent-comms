@@ -192,7 +192,6 @@ class RegistryEdit:
 
 @dataclass(frozen=True, slots=True)
 class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument]):
-    locks_after = None
     json_indent = 2
     cache: RegistryCache = field(init=False, compare=False, repr=False)
 

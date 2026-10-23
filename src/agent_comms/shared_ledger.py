@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from .runtime_info import RuntimeInfoStore
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, Self
@@ -107,7 +106,6 @@ class LedgerDocument(LedgerValue, JsonShapeMember, CliResult):
 @dataclass(frozen=True, slots=True)
 class SharedLedger(ThreadOwnedState, CarriedDocument[LedgerDocument]):
     """One free-form JSON document; no in-memory mirror."""
-    locks_after = RuntimeInfoStore
 
     filename: ClassVar[str] = "ledger.json"
     json_indent = 2

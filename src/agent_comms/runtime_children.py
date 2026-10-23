@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from .connector_store import ConnectorStore
 import os
 import time
 from abc import abstractmethod
@@ -144,7 +143,6 @@ class RuntimeChildReservation:
 @dataclass(frozen=True, slots=True)
 class RuntimeChildrenStore(ChildRegistration, CarriedDocument[RuntimeChildren]):
     """One file at the selected prefix covers children from every bus root."""
-    locks_after = ConnectorStore
 
     filename: ClassVar[str] = "runtime_children.json"
     record_type = RuntimeChildren

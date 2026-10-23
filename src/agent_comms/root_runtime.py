@@ -11,7 +11,6 @@ from .field_codec import PathText
 from .launch_runtime import LaunchRuntime
 from .locked_store import DurableFile, LockedStore, RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
-from .runtime_children import RuntimeChildrenStore
 
 
 class ForeignRuntimeError(RelationViolationError):
@@ -42,7 +41,6 @@ class RootRuntime:
 
 @dataclass(frozen=True)
 class RootRuntimeStore(LockedStore[RootRuntime], DurableFile):
-    locks_after = RuntimeChildrenStore
     filename = ".root-runtime.json"
     record_type = RootRuntime
 

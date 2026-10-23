@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from .registry_store import RegistryStore
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from copy import deepcopy
@@ -20,7 +19,6 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class ChannelCatalog(ThreadOwnedState, CarriedDocument[CatalogDocument]):
-    locks_after = RegistryStore
     filename: ClassVar[str] = "catalog.json"
     json_indent = 2
 

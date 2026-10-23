@@ -7,7 +7,6 @@ identity still determine whether those reads apply.
 
 from __future__ import annotations
 
-from .catalog_store import ChannelCatalog
 import json
 from abc import abstractmethod
 from collections.abc import Callable, Iterator, Sequence
@@ -123,7 +122,6 @@ class ReadDocument:
 
 
 class ReadLedger(Sealed, ThreadOwnedState, CarriedDocument[ReadDocument]):
-    locks_after = ChannelCatalog
     filename = "read_ledger.json"
 
     record_type = ReadDocument
