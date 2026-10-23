@@ -1,7 +1,7 @@
 """The layer each agent_comms module belongs to, derived from its name and its imports.
 
-The plan's table (plans/remaining-slop-plan.md, Order 1) names each layer's module
-prefixes; a module no prefix claims takes the highest layer among the modules it
+The layer table in this module names each layer's module prefixes; a module no
+prefix claims takes the highest layer among the modules it
 imports, so it adds no violation of its own. Every import that still runs downward
 in the order, or into a top layer from outside it, is a violation.
 
@@ -418,8 +418,9 @@ class Package:
             "Layers in order: " + ", ".join(f"`{layer.name}`" for layer in LAYERS) + ". "
             "Each layer imports only the layers before it; "
             "`ui_model`, `cli` and `commander` sit on top, "
-            "and nothing outside a top layer imports it. A module no prefix in "
-            "`plans/remaining-slop-plan.md` (Order 1) claims takes the highest layer it imports.",
+            "and nothing outside a top layer imports it. The layer table in "
+            "`tools/module_layers.py` declares the claiming prefixes; a module no prefix "
+            "claims takes the highest layer it imports.",
             "",
             f"{len(self.top_level)} top-level units ({len(self.subpackages)} of them subpackages); "
             f"{len(self.violations)} violating imports; {len(self.unreached)} deletion candidates.",
