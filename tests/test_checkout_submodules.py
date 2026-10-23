@@ -118,6 +118,21 @@ def test_an_intact_checkout_prepares_without_reaching_its_source(repository, tmp
     assert (module.path / "catalog.md").read_text() == "patterns\n"
 
 
+def test_prepare_returns_an_off_pin_submodule_to_its_declared_commit(repository, tmp_path):
+    checkout = Checkout.add(repository, tmp_path / "unit--P1", "HEAD", "--detach")
+    (module,) = checkout.submodules()
+    pin = git(module.path, "rev-parse", "HEAD").strip()
+    (module.path / "catalog.md").write_text("not the pin\n")
+    git(module.path, "commit", "-q", "-am", "local catalog change")
+    assert not module.at_pin()
+
+    checkout.prepare()
+
+    assert module.at_pin()
+    assert git(module.path, "rev-parse", "HEAD").strip() == pin
+    assert (module.path / "catalog.md").read_text() == "patterns\n"
+
+
 def test_retiring_a_checkout_with_submodules_keeps_held_work_and_drops_scratch(
     repository, tmp_path
 ):
