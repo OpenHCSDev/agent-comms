@@ -16,7 +16,6 @@ import sys
 import time
 
 import acp
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_text import ForkedParent
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
@@ -150,10 +149,7 @@ async def run(stage, package):
                             history = read_historical_native_inputs(
                                 store,
                                 wire_root_id=root_id,
-                                recipient_lookup=RecordedThreadIncarnation(
-                                    "fixture",
-                                    service.registry.require(child.name).created_at,
-                                ).lookup,
+                                recipient_lookup=service.registry.require(child.name).incarnation.lookup,
                                 source_seq=original.seq,
                                 source_reads=source_reads,
                             )
