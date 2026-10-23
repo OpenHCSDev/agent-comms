@@ -350,7 +350,7 @@ class RecoverySnapshot:
         current = bus.bus.claim_projection().live_in(boundary.registry)
         owned = tuple(
             claim for claim in current.values()
-            if claim.claim_scope.belongs_to(attempt)
+            if claim.resource_scope.belongs_to(attempt)
         )
         if owned:
             bus.publisher.release_resources(boundary, owned, outcome.release_wording)

@@ -10,14 +10,12 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import json
 import os
 from contextlib import suppress
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Literal
+from typing import TYPE_CHECKING, Literal
 
-from agent_comms.child_process import Platform
 from .coordination_database import CoordinationStore
 from .locked_store import DurableFile, PatternFile
 from .store_files import AtomicFile
@@ -29,12 +27,12 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordinator import Coordination
 
-from .comms import Comms
 from .child_process import Platform
+from .comms import Comms
 from .coordination_cohort import sealed_cohort_assignments
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ExistingFileClaim
-from .field_codec import FieldCodec, Id128Text, MalformedRecord, WireName
+from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .message_reference import MessageReference
 from .private_path import PrivateDirectoryRole, PrivateFileRole
 from .thread_identity import ClaimedIdentity, RecordedThreadIncarnation
@@ -55,7 +53,7 @@ class SelectedWriteBinding:
     root_id: str
     source: MessageReference
     assignment_id: str
-    claim_scope: Annotated[ClaimedIdentity, WireName("admission")]
+    claimed_identity: ClaimedIdentity
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -70,7 +68,7 @@ class SelectedWriteIntent(DeclaredFamily, affix="WriteIntent"):
     claim_id: str
     owner: str
     incarnation: float
-    claim_epoch: Annotated[int, WireName("admission_epoch")]
+    claim_epoch: int
     expected_attempt_ordinal: Literal[1]
     operation_id: str
     resource: str
@@ -220,7 +218,7 @@ class SelectedWritePlans(DurableFile, PatternFile):
                 expected_attempt_ordinal=1, operation_id=operation_id, resource=str(path),
                 contents_b64=base64.b64encode(raw).decode("ascii"), digest=hashlib.sha256(raw).hexdigest(),
             )
-            data = json.dumps(FieldCodec.encode(record), sort_keys=True, separators=(",", ":")).encode()
+            data = FieldCodec.compact(FieldCodec.encode(record), sort_keys=True).encode()
             try:
                 fd = os.open(
                     record_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600
@@ -270,6 +268,4 @@ class SelectedWritePlans(DurableFile, PatternFile):
         if accepted.operation_id != operation_id:
             raise IdentityConflict("Selected write intent is no longer unique")
         completed = accepted.applied()
-        AtomicFile(path).write_bytes(json.dumps(
-            FieldCodec.encode(completed), sort_keys=True, separators=(",", ":")
-        ).encode())
+        AtomicFile(path).write_bytes(FieldCodec.compact(FieldCodec.encode(completed), sort_keys=True).encode())

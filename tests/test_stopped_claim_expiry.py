@@ -33,7 +33,7 @@ def test_stopped_incarnation_claims_expire_on_next_transition(comms, tmp_path):
             return comms.bus.publisher._publish_claim_transition_unlocked(
                 boundary.registry, ClaimNoticeKind.claimed(owner),
                 partial(WakeClaims, incarnation=str(owner.created_at), claims=resources,
-                        generation=operation, claim_scope=scope), activity=boundary.activity,
+                        generation=operation, resource_scope=scope), activity=boundary.activity,
             )
 
     old_paths = tuple(str(tmp_path / name) for name in ("untouched.py", "other.py"))

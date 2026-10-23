@@ -13,6 +13,7 @@ every bus has run it.
 from __future__ import annotations
 
 import inspect
+import json
 import subprocess
 from abc import ABC, abstractmethod
 from collections.abc import Callable
@@ -24,7 +25,7 @@ from typing import Annotated, ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import PathText
+from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.installer.interpreter_operation import InterpreterOperation
 
 STEPS = Path("tools/cutover")
@@ -93,6 +94,13 @@ class CarryOperation[Answer](InterpreterOperation[Answer, Carry], DeclaredFamily
 
     @abstractmethod
     def run(self, step: Carry) -> Answer: ...
+
+    def encode_answers(self, answers: tuple[Answer, ...]) -> str:
+        """One pass's answers, in step order, under this operation's declared answer type."""
+        return json.dumps(FieldCodec.encode(answers, tuple[self.answer_type(), ...]))
+
+    def decode_answers(self, answers: str) -> tuple[Answer, ...]:
+        return FieldCodec.decode(tuple[self.answer_type(), ...], FieldCodec.parse(answers))
 
 @dataclass(frozen=True)
 class BackupFilesOperation(CarryOperation[tuple[Annotated[Path, PathText], ...]]):

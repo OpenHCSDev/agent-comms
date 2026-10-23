@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import shutil
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -95,7 +94,7 @@ class PiHelper(DeclaredFamily, affix="Helper"):
     @classmethod
     async def run(cls, request, *, cwd: Path, env: Mapping[str, str] = INHERITED_ENVIRONMENT):
         command, environment = cls.launch(request, dict(env))
-        payload = json.dumps(FieldCodec.encode(request), separators=(",", ":"), allow_nan=False)
+        payload = FieldCodec.compact(FieldCodec.encode(request), allow_nan=False)
         outcome = await BoundedRun.run(
             command,
             input=payload.encode(),

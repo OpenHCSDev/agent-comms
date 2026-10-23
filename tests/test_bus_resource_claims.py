@@ -63,7 +63,7 @@ class ClaimBus:
 
     def acquisition(self, name: str, resources: tuple[str, ...], scope: NativeClaim) -> RecordBuilder:
         return self.builder(name, partial(
-            WakeClaims, claims=resources, generation=scope.operation_id, claim_scope=scope,
+            WakeClaims, claims=resources, generation=scope.operation_id, resource_scope=scope,
         ))
 
     def acquire(self, name: str, resource: str, scope: NativeClaim) -> ClaimOwner:

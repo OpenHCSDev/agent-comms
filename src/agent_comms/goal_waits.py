@@ -273,11 +273,18 @@ class GoalWaitReview:
         """Caller holds the publication lock; no reply decoding belongs in this check."""
         snapshot = goals.registry.snapshot()
         return any(
-            owner.goal == self.owner.goal
+            self._current_goal(owner)
             and owner.turn_lease == self.turn
             and goals.waits.resolve(owner.goal) == self.wait
             for owner in snapshot.threads_for(self.owner.incarnation.require_recorded())
             if self._same_thread(snapshot, owner, self.owner)
+        )
+
+    def _current_goal(self, owner: Thread) -> bool:
+        """A retained wait follows edits of its active goal, not a frozen goal value."""
+        return any(
+            self.wait.current_for(goal, owner.incarnation.require_recorded())
+            for goal in owner.goal.active()
         )
 
     def _same_thread(self, snapshot: RegistrySnapshot, actual: Thread, expected: Thread) -> bool:
@@ -298,6 +305,7 @@ class GoalWaitReview:
     def publishing_unanswered(self, goals: Goals) -> Iterator[bool]:
         """Read without EX; hold it only after this owner's received cut still agrees."""
         owner = self.owner.incarnation.require_recorded()
+        review = self
         while True:
             with goals.bus.bus.reading() as source:
                 replied = self.wait.has_reply(source, owner)
@@ -306,9 +314,18 @@ class GoalWaitReview:
                 yield False
                 return
             with goals.registry.store.locked():
-                if not self.current_for(goals):
-                    yield False
-                    return
+                if not review.current_for(goals):
+                    try:
+                        review = GoalWaitReview.capture(goals, owner)
+                    except UnregisteredThreadError:
+                        yield False
+                        return
+                    if review.wait != self.wait or not review._current_goal(review.owner):
+                        yield False
+                        return
+                    # A new owner/turn fence needs a fresh silence read for this
+                    # same wait. Re-evaluate here; a terminal callback runs once.
+                    continue
                 # The existing indexed sequence query reads at most one metadata row.
                 # Any new candidate needs another unlocked policy read, not a stale release.
                 if goals.bus.bus.received_after(owner.lookup, through_seq):
@@ -333,6 +350,10 @@ class GoalInputReview(GoalWaitReview):
     targets: tuple[GoalWaitTarget, ...]
     unknown: tuple[StoredInput, ...]
     eligible_keys: frozenset[str]
+
+    def _current_goal(self, owner: Thread) -> bool:
+        """Publishing an input review still requires the exact prepared goal."""
+        return owner.goal == self.owner.goal
 
     def current_for(self, goals: Goals) -> bool:
         if not super(GoalInputReview, self).current_for(goals):

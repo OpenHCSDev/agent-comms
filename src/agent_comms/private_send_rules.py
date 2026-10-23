@@ -25,7 +25,7 @@ class RegistryIdentityCheck(RuleCheck):
     expected: Thread
     actual: Thread
     expected_claim: int
-    claim_scope: int | None
+    claim_generation: int | None
     process: ProcessIdentity
     goal_permission: GoalPermission
 
@@ -119,7 +119,7 @@ class RegistryClaimRule(ReservationRule):
     explanation = "The registry claim_scope generation changed."
 
     def violated(self, check: RegistryIdentityCheck) -> bool:
-        return check.claim_scope != check.expected_claim
+        return check.claim_generation != check.expected_claim
 
 
 class RegistryRoleRule(ReservationRule):

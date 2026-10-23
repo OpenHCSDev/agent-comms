@@ -15,7 +15,6 @@ arbitrary code running as the same uid, nor protection from a malicious filesyst
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import secrets
 import sqlite3
@@ -25,7 +24,7 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Annotated, Literal, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.coordination_errors import IdentityConflict
@@ -39,8 +38,8 @@ from .private_path import ObservedPath
 from .store_files import StoreOwner
 from .typed_table import (
     AllObjectsTables,
-    Column,
     ImmutableRows,
+    SingletonRow,
     SQLiteDatabase,
     SQLiteForeignKeys,
     SQLiteSchemaObject,
@@ -209,8 +208,7 @@ def _connect(raw: bytes | None) -> sqlite3.Connection:
 
 
 @dataclass(frozen=True)
-class SnapshotMeta(ImmutableRows, TypedTable):
-    singleton: Annotated[Literal[1], Column(primary_key=True)]
+class SnapshotMeta(ImmutableRows, SingletonRow):
     ddl_digest: str
 
 @dataclass(frozen=True)
@@ -223,7 +221,7 @@ def _schema(row_type: type[TypedTable]) -> dict[str, str]:
 
 
 def _digest(row_type: type[TypedTable]) -> str:
-    return hashlib.sha256(json.dumps(_schema(row_type), separators=(",", ":")).encode()).hexdigest()
+    return hashlib.sha256(FieldCodec.compact(_schema(row_type)).encode()).hexdigest()
 
 
 def _verify_schema(connection: sqlite3.Connection, row_type: type[TypedTable]) -> None:
@@ -372,7 +370,7 @@ def sidecar_connection(
 
 def encode_request(text: str, *, streaming_behavior: type[StreamingInputPolicy] | None = None) -> str:
     """JSON-encode like the pinned native ``_claimNativeInput`` request."""
-    return json.dumps(
+    return FieldCodec.compact(
         {
             "kind": "prompt",
             "text": text,
@@ -380,9 +378,7 @@ def encode_request(text: str, *, streaming_behavior: type[StreamingInputPolicy] 
             "streamingBehavior": FieldCodec.encode(streaming_behavior),
             "expandPromptTemplates": True,
             "source": "rpc",
-        },
-        separators=(",", ":"),
-        ensure_ascii=False,
+        }, ensure_ascii=False,
     )
 
 

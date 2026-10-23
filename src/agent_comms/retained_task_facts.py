@@ -246,8 +246,7 @@ class RetainedTaskFacts:
 
     @staticmethod
     def canonical_bytes(record: object) -> bytes:
-        return json.dumps(record, sort_keys=True, separators=(",", ":"),
-                          allow_nan=False).encode()
+        return FieldCodec.compact(record, sort_keys=True, allow_nan=False).encode()
 
     def original_text_source(self, reference: MessageReference) -> Message | StoredInput:
         originals = {key: source for fact in self.facts

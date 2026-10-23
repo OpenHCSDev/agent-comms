@@ -814,7 +814,7 @@ class MeasuredNativeSegment(ContextSegment):
     def render_into(self, prompt_parts, provider): ...
 
     def text(self):
-        return json.dumps(self.provider_value(), ensure_ascii=False, separators=(",", ":"))
+        return FieldCodec.compact(self.provider_value(), ensure_ascii=False)
 
     def measured_manifest(self):
         # The SDK measures/hashes its exact original JSON representation.
@@ -993,7 +993,7 @@ class ToolCatalogSegment(MeasuredNativeSegment):
         offset = 1
         spans = []
         for tool in self.tools:
-            text = json.dumps(tool, ensure_ascii=False, separators=(",", ":"))
+            text = FieldCodec.compact(tool, ensure_ascii=False)
             coordinates = ContributionCoordinates.capture(type(self), self.provenance, offset, text)
             spans.append(ContextSpan(self.sha256, coordinates))
             offset += coordinates.length + 1
@@ -1104,7 +1104,7 @@ class CoordinationSegment(InstructionSegment):
             name=self.owner.name,
             parent=self.parent,
             project=self.project,
-            peers=json.dumps(FieldCodec.encode(self.peers), separators=(",", ":")),
+            peers=FieldCodec.compact(FieldCodec.encode(self.peers)),
         )
 
 

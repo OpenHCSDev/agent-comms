@@ -147,7 +147,7 @@ async def original_input_consumer_journey(tmp_path, command):
             reservation.release()
     assert agent.inputs.dispositions.record(
         "neutral-original", seq=None, owner="beta",
-        claim_scope=origin.claim_scope.claimed_generation, target="beta", text=wording)
+        claim_scope=origin.claimed_identity.claimed_generation, target="beta", text=wording)
     inputs = agent.inputs.dispositions
     original_inputs = inputs.path.read_bytes()
     other = comms.registry.declare(comms.registry.new_thread('unaddressed', frozenset(), origin.project))

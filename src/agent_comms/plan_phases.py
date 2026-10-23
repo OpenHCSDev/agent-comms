@@ -644,7 +644,11 @@ class OwnedDispatchPhase(RemainingSlopPhase):
     evidence = AllEvidence(
         (
             PatternAbsent(r"class TurnInboxReceiver\b"),
-            PatternAbsent(r"separators=\(\",\", ?\":\"\)"),
+            PatternAbsent(
+                r"""separators\s*=\s*\(\s*["'],["']\s*,\s*["']:["']\s*\)""",
+                ("src", ":!src/agent_comms/field_codec.py"),
+            ),
+            PatternPresent(r"def compact\(", ("src/agent_comms/field_codec.py",)),
         )
     )
 

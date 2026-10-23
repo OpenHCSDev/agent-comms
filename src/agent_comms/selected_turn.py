@@ -165,7 +165,7 @@ class SelectedAttempt:
         return SelectedCodingToolOwner(
             comms=participant.comms,
             store=participant.store,
-            claim_scope=claim_scope,
+            resource_scope=claim_scope,
             owner_name=participant.owner.thread.name,
             session_dir=session.directory,
             input_id=input_id,
