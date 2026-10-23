@@ -146,6 +146,13 @@ class ForgeQuery[Repository](ForgeAnswer):
 
 
 @dataclass(frozen=True)
+class UnpushedHead:
+    head: str
+    commits: int
+    upstream: str
+
+
+@dataclass(frozen=True)
 class WorkBranches:
     """One repository's branches with commits that main does not have."""
 
@@ -214,6 +221,39 @@ query($owner: String!, $name: String!, $after: String) {
         return bool(self.uncommitted()) or bool(
             self._run("git", "rev-list", "--max-count=1", "HEAD", "--not", "--remotes")
         )
+
+    def require_commits(self, remote: str, *commits: str) -> None:
+        """Fetch only comparison objects this checkout does not already hold."""
+        listed = self._run("git", "cat-file", "--batch-check",
+                           input="".join(f"{commit}\n" for commit in commits))
+        missing = tuple(line.removesuffix(" missing") for line in listed.splitlines()
+                        if line.endswith(" missing"))
+        if missing:
+            self._run("git", "fetch", "--quiet", "--no-tags", remote, *missing)
+
+    def unpushed(self) -> tuple[UnpushedHead, ...]:
+        """Compare this HEAD with its actual upstream, without trusting a stale tracking ref."""
+        head = self._run("git", "rev-parse", "HEAD").strip()
+        reference = self._run("git", "rev-parse", "--symbolic-full-name", "HEAD").strip()
+        upstream = self._run("git", "for-each-ref", "--format=%(upstream)", reference).strip()
+        if upstream:
+            remote, remote_ref = self._run(
+                "git", "for-each-ref", "--format=%(upstream:remotename) %(upstream:remoteref)",
+                reference,
+            ).split()
+            published = self._run("git", "ls-remote", "--refs", remote, remote_ref).split()
+            if published:
+                remote_head, _ = published
+                self.require_commits(remote, remote_head)
+                count = int(self._run("git", "rev-list", "--count", f"{remote_head}..{head}"))
+                return (UnpushedHead(head, count, upstream),) if count else ()
+        # Without a published upstream, count work absent from the other known remotes.
+        # A deleted upstream's stale tracking ref cannot count as publication.
+        remotes = tuple(ref for ref in self._run(
+            "git", "for-each-ref", "--format=%(refname)", "refs/remotes/",
+        ).splitlines() if ref != upstream)
+        count = int(self._run("git", "rev-list", "--count", head, "--not", *remotes))
+        return (UnpushedHead(head, count, upstream),)
 
     @property
     def repository(self) -> tuple[str, str]:
