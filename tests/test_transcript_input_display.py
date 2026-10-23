@@ -13,6 +13,7 @@ from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.native_entries import TranscriptProjection
 from agent_comms.pi_payloads import PiMessage
+from agent_comms.threads import Thread
 
 GOAL_PROMPT = (
     "Persistent goal deadbeef: Read files until stopped.\n"
@@ -32,7 +33,7 @@ def saved_row(native_id, text, *, images=False, role="user"):
 
 def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_path):
     comms = installed_comms(tmp_path / "wire")
-    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('worker', frozenset(), str(tmp_path)))
     # These annotations are committed before sending, before Pi creates its first file.
     comms.transcripts.routes.record_input_display("a" * 32, None)
     comms.transcripts.routes.record_input_display(
@@ -97,7 +98,7 @@ async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_p
             ]
         )
     )
-    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(session), comms.root)))
+    comms.registry.declare(Thread('worker', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(session), comms.root)))
     comms.transcripts.routes.record_input_display("a" * 32, None)
     comms.transcripts.routes.record_input_display("b" * 32, "test2")
     agent = CommsAgent(wire(comms.root))

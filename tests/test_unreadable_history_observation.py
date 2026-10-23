@@ -45,6 +45,7 @@ from agent_comms.ui_model.status import OpenThreadStatus
 from agent_comms.turn_context import RecordedContextManifest
 from test_observer_death import readable
 from test_turn_context_wire import corrupt_context_kind, manifest
+from agent_comms.threads import Thread
 
 
 @dataclass(frozen=True)
@@ -56,7 +57,7 @@ class ReadRecordedContext(ReadRequest):
 
 
 def saved_row(comms):
-    owner = comms.registry.new_thread('saved', frozenset(), str(comms.root.parent), created_at=17003.0)
+    owner = Thread('saved', frozenset(), str(comms.root.parent), created_at=17003.0)
     comms.registry.declare(owner)
     comms.contexts.record_after(UNREAD_CONTEXT, manifest(owner))
     with comms.contexts.snapshot() as db:

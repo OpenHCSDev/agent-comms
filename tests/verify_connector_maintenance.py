@@ -27,6 +27,7 @@ from agent_comms.maintenance_barrier import (
 from agent_comms.store_files import _store_lock
 from connector_readiness import ConnectorReadiness
 from verify_connector_live import curl_call
+from agent_comms.threads import Thread
 
 
 def prove(scratch: Path) -> None:
@@ -35,7 +36,7 @@ def prove(scratch: Path) -> None:
         base = Path(directory)
         original = wire(base / "original")
         for name in ("claude-ai", "worker"):
-            original.registry.declare(original.registry.new_thread(name, frozenset(), str(base)))
+            original.registry.declare(Thread(name, frozenset(), str(base)))
         Bus.install(Bus.path_in(original.root))
         original.messaging.send("worker", "claude-ai", "Ready for your message")
         for worker in threading.enumerate():

@@ -20,6 +20,7 @@ from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.native_arguments import GivenArguments
 from native_backend_fixture import native_backend_fixture, wait_for
 from source_programs import SourcePrograms
+from agent_comms.threads import Thread
 
 
 async def stopped_goal_journey(
@@ -32,7 +33,7 @@ async def stopped_goal_journey(
         copied = base / "copy"
         shutil.copytree(fixture.root, copied)
         comms = wire(copied)
-        comms.registry.declare(comms.registry.new_thread(
+        comms.registry.declare(Thread(
             "stop-copy", frozenset(), str(fixture.project)))
         comms.goals.update_goal("stop-copy", SetGoalAction(
             text="Continue the synthetic stopped-goal journey."))

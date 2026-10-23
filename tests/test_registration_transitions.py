@@ -13,12 +13,13 @@ from agent_comms.thread_identity import ReportedTools, ToolName, UnreportedTools
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.turn_lease import NoFinishedTurn
 from agent_comms.thread_text import GivenThreadText
+from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize('transition', ['metadata', 'session', 'restart', 'stop', 'new-turn'])
 def test_registration_transition_preserves_or_revokes_exact_lease(tmp_path, transition):
     registry = Registration(tmp_path / 'registry.json')
-    thread = registry.new_thread('owner', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+    thread = Thread('owner', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     registry.register(thread)
     leased, _ = registry.lease_local_turn('owner', 'turn')
     lease = leased.require_turn_lease()
@@ -68,7 +69,7 @@ def tools(version, *names):
 ])
 def test_owner_restart_compares_tools_with_last_real_record(tmp_path, restart, before, after, lost):
     registry = Registration(tmp_path / 'registry.json')
-    registry.register(registry.new_thread('owner', frozenset(), str(tmp_path)))
+    registry.register(Thread('owner', frozenset(), str(tmp_path)))
     registry.observe_offered_tools(registry.require('owner').incarnation, before)
     stops = restart.count('stop')
     for _ in range(stops):
@@ -82,7 +83,7 @@ def test_owner_restart_compares_tools_with_last_real_record(tmp_path, restart, b
 
 def test_rename_preserves_exact_turn_release_but_not_reused_identity(tmp_path):
     registry = Registration(tmp_path / 'registry.json')
-    thread = registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+    thread = Thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     registry.register(thread)
     leased, _ = registry.lease_local_turn('owner', 'same-id')
     lease = leased.require_turn_lease()
@@ -96,7 +97,7 @@ def test_rename_preserves_exact_turn_release_but_not_reused_identity(tmp_path):
 
 def test_idle_restart_fence_cannot_borrow_metadata_or_claim(tmp_path):
     registry = Registration(tmp_path / 'registry.json')
-    registry.register(registry.new_thread('owner', frozenset(), str(tmp_path)))
+    registry.register(Thread('owner', frozenset(), str(tmp_path)))
     original = registry.snapshot()
     expected = original.threads['owner']
     claim_scope = original.claim_generation('owner')
@@ -115,7 +116,7 @@ def test_idle_restart_fence_cannot_borrow_metadata_or_claim(tmp_path):
 def test_batch_idle_fence_refuses_busy_second_without_partial_commit(tmp_path):
     registry = Registration(tmp_path / "registry.json")
     for name in ("first", "second"):
-        registry.register(registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
+        registry.register(Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     before = registry.snapshot()
     selected = tuple((before.threads[name], before.claim_generation(name)) for name in ("first", "second"))
     registry.lease_local_turn('second', 'busy')

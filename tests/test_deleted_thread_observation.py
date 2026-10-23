@@ -16,11 +16,12 @@ from agent_comms.ui_model.observation import (
 from agent_comms.ui_model.status import OpenThreadStatus
 from test_observer_death import readable
 from agent_comms.thread_text import GivenThreadText
+from agent_comms.threads import Thread
 
 
 def declare(comms, *names):
     for name in names:
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(comms.root.parent)))
+        comms.registry.declare(Thread(name, frozenset(), str(comms.root.parent)))
     Bus.install(Bus.path_in(comms.root))
 
 

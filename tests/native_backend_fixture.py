@@ -32,6 +32,7 @@ from agent_comms.native_arguments import GivenArguments, GivenBinary
 from delivery_owner_fixture import canonical_agent
 from compaction_loopback import LoopbackProvider
 from native_proof_cases import read_proof_rows
+from agent_comms.threads import Thread
 
 
 async def wait_for(predicate):
@@ -44,7 +45,7 @@ class NativeBackendFixture:
     @staticmethod
     def participant_at(root: Path, project: Path) -> RecordedThreadIncarnation:
         """The real thread incarnation used by a direct native turn on this bus."""
-        return wire(root).registry.new_thread(
+        return Thread(
             'direct-native', frozenset(), str(project),
         ).incarnation.require_recorded()
 

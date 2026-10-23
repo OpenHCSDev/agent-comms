@@ -24,13 +24,14 @@ from agent_comms.tools import (
 from agent_comms.installer.backup import StoreBackup
 from test_todos import order
 from source_revision_fixture import SourceRepository
+from agent_comms.threads import Thread
 
 
 def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     source = SourceRepository.create(tmp_path / 'source')
     Bus.install(Bus.path_in(comms.root))
     for name in ("lead", "worker"):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset({"comms"}), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset({"comms"}), str(tmp_path)))
     request = comms.goals.todos.add_request(
         comms.registry.require('lead').incarnation, 'Repair the worker').id
     caller = ThreadCaller("lead")

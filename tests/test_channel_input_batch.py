@@ -8,10 +8,11 @@ from agent_comms.channel_input_batch import InputBatch
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.messages import Message, InfoKind
 from stored_inputs import stored_inputs
+from agent_comms.threads import Thread
 
 
 def test_channel_batch_exact_identity_and_no_false_multi_input_proof(tmp_path, *, thread_registration):
-    owner = thread_registration.new_thread('owner', frozenset(), str(tmp_path))
+    owner = Thread('owner', frozenset(), str(tmp_path))
     ledger = InputDispositions(tmp_path)
     origins = tuple(
         Message("peer", "#comms", f"text {seq}", InfoKind, seq=seq) for seq in (1, 2)

@@ -26,6 +26,7 @@ from agent_comms.exporting import (
     WireTranscriptExporter,
 )
 from agent_comms.messages import Message, InfoKind
+from agent_comms.threads import Thread
 
 
 def message(sequence: int, body: str, *, timestamp: float | None = None) -> Message:
@@ -43,7 +44,7 @@ def message(sequence: int, body: str, *, timestamp: float | None = None) -> Mess
 def export_comms(comms: Comms, tmp_path) -> Comms:
     comms.channels.create_tag("team")
     for name in ("alice", "bob"):
-        comms.registry.declare(comms.registry.new_thread(
+        comms.registry.declare(Thread(
             name, frozenset({"team"}), str(tmp_path)))
     return comms
 
