@@ -40,18 +40,13 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.messages import Message
 from agent_comms.registry_store import RegistryStore
-from agent_comms.repo import Checkout, ScratchCheckout
+from agent_comms.repo import Checkout
 from agent_comms.root_runtime import RootRuntime
 from agent_comms.storage_rules import StorageRule
 from agent_comms.typed_table import ReconciledFile
 from conftest import declare_test_bus, publish_initial
 
 REPOSITORY = Path(__file__).resolve().parents[1]
-
-
-def git(*arguments: str) -> str:
-    return subprocess.run(["git", "-C", REPOSITORY, *arguments], check=True,
-                          capture_output=True, text=True).stdout.strip()
 
 
 @pytest.fixture(scope="module")
@@ -68,12 +63,7 @@ def installed_home(tmp_path_factory) -> dict[str, str]:
     environment = {**os.environ, "HOME": str(home), "UV_CACHE_DIR": caches.stdout.strip(),
                    "npm_config_cache": str(Path.home() / ".npm")}
     environment.pop("PYTHONPATH", None)
-    # The checkout owner adds the tree with its pinned submodules; `git archive` drops them.
-    base = ScratchCheckout.add(REPOSITORY, home / "outgoing-source", git("rev-parse", "HEAD"), "--detach")
-    try:
-        outgoing = Stack.build(base.path, InstallCommands(), home)
-    finally:
-        base.retire()
+    outgoing = Stack.build(REPOSITORY, InstallCommands(), home)
     (home / ".local/share/agent-comms/current").symlink_to(
         outgoing.runtime.prefix, target_is_directory=True)
     return environment
@@ -144,6 +134,30 @@ def test_install_rehearses_without_changing_the_bus(installed_comms, installed_h
     assert result.pending == ()
     assert result.rehearsal.files.names == rewritten
     assert bus_files(comms.root) == before
+
+
+@pytest.mark.timeout(280)
+def test_rehearsal_refuses_changed_native_inputs(installed_comms, installed_home, install_checkout):
+    """The target's own installer refuses a stale pin before rehearsing the bus."""
+    checkout = install_checkout
+    declare_test_bus(installed_comms, channels=("comms",))
+    current = subprocess.check_output(
+        ["git", "-C", checkout, "rev-parse", "HEAD"], text=True).strip()
+    patch = checkout / "stack/stale-pin-test.py"
+    patch.write_text("# A native build input changed without rebuilding the pin.\n")
+    subprocess.run(["git", "-C", checkout, "add", patch], check=True)
+    subprocess.run(["git", "-C", checkout, "-c", "user.name=Installer test",
+                    "-c", "user.email=installer@example.invalid", "commit", "-qm",
+                    "Change a native input without updating its pin"], check=True)
+    target = subprocess.check_output(
+        ["git", "-C", checkout, "rev-parse", "HEAD"], text=True).strip()
+    subprocess.run(["git", "-C", checkout, "checkout", "--detach", "-q", current], check=True)
+    installed = subprocess.run(
+        [Path(sys.executable).with_name("agent-comms"), "--root", installed_comms.root, "install",
+         "--rehearse", "--checkout", checkout, "--to", target, "--project", checkout],
+        cwd=checkout, env=installed_home, capture_output=True, text=True, timeout=270)
+    assert installed.returncode != 0
+    assert "Native build inputs changed; rebuild with --update-pins" in installed.stderr
 
 
 @pytest.mark.timeout(280)

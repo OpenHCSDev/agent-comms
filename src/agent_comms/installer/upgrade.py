@@ -87,7 +87,6 @@ from agent_comms.installer.interpreter_operation import (
     InstalledProgram,
     InstallReportProbe,
     PackageRootProbe,
-    PinnedLocationProbe,
     PrepareNativeProbe,
     ProbeProgram,
     RetainedProgram,
@@ -110,6 +109,8 @@ from agent_comms.installer.reporting import (
 from agent_comms.installer.runtime_resolution import RuntimeResolution, StackProject
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
 from agent_comms.locked_store import BusFile, DeclaredFile, RootFile, UndeclaredFile
+from agent_comms.native_build_inputs import NativeBuildInputs
+from agent_comms.native_package import pinned_package_for
 from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
 from agent_comms.runtime_processes import RuntimeProcesses
 from agent_comms.maintenance_barrier import (
@@ -538,8 +539,13 @@ class Stack:
         acquires its pin there (the installer runs that source and validates the route it
         publishes with it). Copied from the prepared build, or built when no install has
         built this pin yet. Answers the staged build and its layout under ``stack/``."""
-        native = self.probe(PinnedLocationProbe(), source=(self.checkout / "src",))
-        layout = native.relative_to(self.checkout / "stack")
+        manifest = self.checkout / "stack/pi-native.sha256"
+        try:
+            NativeBuildInputs(self.checkout).require_pinned(manifest)
+        except ValueError as error:
+            raise UpgradeRefused(str(error)) from None
+        native = pinned_package_for(manifest)
+        layout = native.relative_to(manifest.parent)
         prepared = self.prepared_natives / layout
         if native.is_dir():
             return native, layout
@@ -770,7 +776,7 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
     bridges = report.bridges
     with report.running(tree):
         StoreBackup.complete_interrupted(root, spill_dir)
-        installed = Stack(checkout, commands)
+        installed = Stack(tree.path, commands)
         current = commands.run("git", "-C", checkout, "rev-parse", "HEAD").strip()
         ancestry = ["git", "-C", str(checkout), "merge-base", "--is-ancestor", current, target]
         with commands.timing(" ".join(ancestry)):
