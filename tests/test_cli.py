@@ -376,7 +376,7 @@ class TestSelectedTargetActions:
         busy = TurnIdentity(owner.incarnation, owner.turn_generation + 1)
         record = StoredTurnRecord.begin(
             comms.registry.store.path, busy,
-            ActiveTurn('busy', owner.require_process().pid, turn_generation=RecordedGeneration(busy.generation)),
+            ActiveTurn('busy', owner.require_process(), turn_generation=RecordedGeneration(busy.generation)),
         )
         assert not RestartCliCommand.thread_bindings(comms,
             replace(owner, turn_record=record, turn_generation=busy.generation), status)

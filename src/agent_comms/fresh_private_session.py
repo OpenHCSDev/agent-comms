@@ -48,7 +48,7 @@ def create_fresh_private_session(
             os.fsync(descriptor)
         finally:
             os.close(descriptor)
-        Platform.current().fsync_directory(session_dir)
+        Platform.current().sync_directory(session_dir)
         return NativeSessionIdentity(session_id, str(path))
     except OSError as error:
         # A failed sync can leave a committed file. Preserve it, never infer success.

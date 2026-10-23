@@ -462,12 +462,12 @@ class AtomicFile:
 
     def replace(self, staged: Path) -> None:
         """Publish an independently prepared file after syncing its data."""
-        Platform.current().fsync_file(staged)
+        Platform.current().sync_file(staged)
         self._publish(staged)
 
     def _publish(self, staged: Path) -> None:
         self._install(staged)
-        Platform.current().fsync_directory(self.path.parent)
+        Platform.current().sync_directory(self.path.parent)
 
     def _install(self, staged: Path) -> None:
         os.replace(staged, self.path)
@@ -475,8 +475,8 @@ class AtomicFile:
     def sync(self) -> None:
         """Sync an existing file without replacing an open database's inode."""
         platform = Platform.current()
-        platform.fsync_file(self.path)
-        platform.fsync_directory(self.path.parent)
+        platform.sync_file(self.path)
+        platform.sync_directory(self.path.parent)
 
 
 class ExclusiveAtomicFile(AtomicFile):

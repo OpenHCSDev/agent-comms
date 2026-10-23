@@ -301,7 +301,7 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
         return LiveCursorScope(
             session_id, self.namespace,
             ClaimedIdentity(owner.thread.incarnation, owner.claimed_generation),
-            owner.thread.require_process().pid,
+            owner.thread.require_process(),
         )
 
     async def cursor_metadata(
@@ -470,7 +470,7 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
                 os.fsync(registry_fd)
             finally:
                 os.close(registry_fd)
-        Platform.current().fsync_directory(self.registry_path.parent)
+        Platform.current().sync_directory(self.registry_path.parent)
         fd = os.open(
             self.path,
             os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
@@ -480,7 +480,7 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
             if os.pwrite(fd, _record(self.root_id, 0, _COMMITTED, digest) * 2, 0) != 2 * _SIZE:
                 _reject("initial slots were incomplete")
             os.fsync(fd)
-            Platform.current().fsync_directory(self.registry_path.parent)
+            Platform.current().sync_directory(self.registry_path.parent)
             self._write(fd, 1, _record(self.root_id, 1, _PENDING, digest))
         finally:
             os.close(fd)
@@ -525,7 +525,7 @@ class PrivateOwnerRenameIntent(DurableFile):
         intent = cls.path_in(root)
         replace(FieldCodec.decode(cls, json.loads(intent.read_text())), completed=True).write(root)
         intent.unlink()
-        Platform.current().fsync_directory(root)
+        Platform.current().sync_directory(root)
 
 
 def _require_no_private_owner_rename(root: Path) -> None:

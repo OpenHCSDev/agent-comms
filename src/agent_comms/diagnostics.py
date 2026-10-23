@@ -277,7 +277,6 @@ class DiagnosticDocument(DurableFile, PatternFile):
     def write(cls, root: Path, name: str, document: dict) -> Path:
         path = cls.path_in(root, name=name)
         path.parent.mkdir(mode=0o700, exist_ok=True)
-        if os.name == "posix":
-            Platform.current().fsync_directory(root)
+        Platform.current().sync_directory(root)
         AtomicFile(path).write_text(json.dumps(document, indent=2) + "\n")
         return path.resolve()

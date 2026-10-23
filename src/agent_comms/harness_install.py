@@ -35,7 +35,7 @@ def replace_link(link: Path, target: Path) -> None:
     try:
         temporary.symlink_to(target)
         os.replace(temporary, link)
-        Platform.current().fsync_directory(link.parent)
+        Platform.current().sync_directory(link.parent)
     finally:
         temporary.unlink(missing_ok=True)
 

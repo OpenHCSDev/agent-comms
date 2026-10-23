@@ -17,7 +17,6 @@ import json
 import os
 import secrets
 import sqlite3
-import stat
 import tempfile
 from abc import abstractmethod
 from collections.abc import Callable
@@ -28,9 +27,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, TypeVar
 from uuid import uuid4
 
-from agent_comms.child_process import Platform
 from agent_comms.goal_turn_permit import GoalTurnPermit
 
+from .child_process import Platform
 from .declared_family import DeclaredFamily
 from .field_codec import MalformedRecord
 from .goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
@@ -691,9 +690,7 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
     def initialize(cls, root: str | Path) -> GoalAttemptStore:
         """Explicit setup; creation or fsync uncertainty never returns a store."""
         directory = Path(root)
-        if not directory.is_dir() or (
-            os.name == "posix" and stat.S_IMODE(directory.stat().st_mode) != 0o700
-        ):
+        if not directory.is_dir() or not Platform.current().is_private(directory.stat(), 0o700):
             raise StorageUncertainError("An existing owner-0700 directory is required.")
         path = cls.path_in(directory)
         if path.exists():
@@ -717,7 +714,7 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
             # The staging descriptor is closed before its inode becomes shared.
             with suppress(FileExistsError):
                 os.link(staging, path, follow_symlinks=False)
-            Platform.current().fsync_directory(directory)
+            Platform.current().sync_directory(directory)
         except (sqlite3.Error, OSError) as error:
             raise StorageUncertainError("Goal attempt initialization is uncertain.") from error
         finally:
@@ -725,14 +722,11 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
         return cls(directory)
 
     def _require_root(self) -> None:
-        if not self.root.is_dir() or (
-            os.name == "posix" and stat.S_IMODE(self.root.stat().st_mode) != 0o700
-        ):
+        if not self.root.is_dir() or not Platform.current().is_private(self.root.stat(), 0o700):
             raise StorageUncertainError("Goal attempt root must remain owner-0700.")
         if (
             self.path.exists()
-            and os.name == "posix"
-            and stat.S_IMODE(self.path.stat().st_mode) != 0o600
+            and not Platform.current().is_private(self.path.stat(), 0o600)
         ):
             raise StorageUncertainError("Goal attempt database must remain owner-0600.")
 

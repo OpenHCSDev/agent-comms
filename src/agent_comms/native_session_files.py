@@ -96,7 +96,7 @@ class SessionFiles:
             freed += path.lstat().st_size
             path.unlink()
         if self.session.parent.is_dir():
-            Platform.current().fsync_directory(self.session.parent)
+            Platform.current().sync_directory(self.session.parent)
         return freed
 
 
@@ -173,11 +173,11 @@ class NativeSessionFiles(NativeSessionIdentity, NativeTranscriptFiles):
             for path in reversed(missing):
                 path.mkdir(mode=0o700, exist_ok=True)
                 cls.require_private_directory(path)
-                Platform.current().fsync_directory(path.parent)
+                Platform.current().sync_directory(path.parent)
             cls.require_private_directory(directory)
             parent = directory.parent
             while True:
-                Platform.current().fsync_directory(parent)
+                Platform.current().sync_directory(parent)
                 if parent == parent.parent:
                     break
                 try:

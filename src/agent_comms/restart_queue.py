@@ -241,7 +241,7 @@ class RestartQueue:
             raise FileExistsError(destination)
         os.rename(path, destination)
         for parent in (path.parent, destination.parent):
-            Platform.current().fsync_directory(parent)
+            Platform.current().sync_directory(parent)
 
     def save(self, record: QueuedRestart) -> None:
         path = self.active_path(record.selection.identity.incarnation.require_recorded())

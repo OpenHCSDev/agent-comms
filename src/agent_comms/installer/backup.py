@@ -6,13 +6,11 @@ import os
 import re
 import shutil
 import stat
-import subprocess
 import sys
 import tempfile
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Collection, Iterable
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from functools import cache
@@ -20,12 +18,11 @@ from pathlib import Path
 from string import Formatter
 from typing import ClassVar, Iterator, Self
 
-from agent_comms.active_route import ActiveRoute, _route_directory, route_directory
 from agent_comms.child_process import Platform
+from agent_comms.active_route import ActiveRoute, _route_directory, route_directory
 from agent_comms.coordination_errors import CoordinationError
-from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
-from agent_comms.installer.interpreter_operation import HoldTranscriptsProbe, RouteSelection
+from agent_comms.installer.interpreter_operation import RouteSelection
 from agent_comms.locked_store import LockedStore, RootFile, RuntimeFile, SQLiteFile
 from agent_comms.private_path import FileObservation, FileRevision, MissingFile
 from agent_comms.store_files import AtomicFile
@@ -106,30 +103,6 @@ class RestoreSpace:
                 f"only {self.free} bytes are free")
 
 
-@contextmanager
-def transcripts_held(root: Path) -> Iterator[None]:
-    """Hold SQLite's writer lock in another process while backup files are read."""
-    path = ExternalTranscript.path_in(root)
-    if not path.exists():
-        yield
-        return
-    ready, held = os.pipe()
-    with tempfile.TemporaryDirectory() as scratch:
-        holder = subprocess.Popen(
-            HoldTranscriptsProbe(path, held).command(
-                Path(sys.executable), Path(scratch) / "result.json"),
-            stdin=subprocess.PIPE, pass_fds=(held,),
-            env={**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)})
-        os.close(held)
-        try:
-            with open(ready, "rb") as holding:
-                if not holding.read():
-                    raise UpgradeRefused(f"Could not hold the transcript store {path}")
-            yield
-        finally:
-            holder.communicate()
-
-
 @dataclass(frozen=True, order=True)
 class BackupName:
     """One fixed-width name declaration owns creation, recognition and ordering."""
@@ -206,7 +179,7 @@ class StoreBackup(ResourceBackup):
     def retire(self) -> Path:
         archived = self.path.with_name(f'{self.path.name}.restored-{time.time_ns()}')
         self.path.rename(archived)
-        Platform.current().fsync_directory(archived.parent)
+        Platform.current().sync_directory(archived.parent)
         print(f'Restored data backup kept at {archived}', flush=True)
         return archived
 
@@ -341,10 +314,9 @@ class StoreBackup(ResourceBackup):
             target = self.data_root / name
             target.parent.mkdir(parents=True, exist_ok=True)
             self.copy_file(source, target)
-            with target.open('rb') as ready:
-                os.fsync(ready.fileno())
+            Platform.current().sync_file(target)
             contents[name] = self.digest(target)
-            Platform.current().fsync_directory(target.parent)
+            Platform.current().sync_directory(target.parent)
         return contents
 
     def file_original(self, name: str, saved: dict[str, str]) -> bool:
@@ -383,7 +355,7 @@ class StoreBackup(ResourceBackup):
                 target.unlink(missing_ok=True)
             for companion in SQLiteFile.files(target)[1:]:
                 companion.unlink(missing_ok=True)
-        Platform.current().fsync_directory(self.root)
+        Platform.current().sync_directory(self.root)
         self.restore_route()
         if not self.stores_original():
             raise UpgradeRefused('Selected stores differ after backup restoration')

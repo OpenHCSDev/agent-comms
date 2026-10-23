@@ -89,7 +89,7 @@ class RegistryOwner:
             self.thread.execution.require_native()
         except RelationViolationError as error:
             raise StaleFence("registry owner is not executable") from error
-        if not turn.owned_by(self.thread.require_process().pid, self.claimed_generation):
+        if not turn.owned_by(self.thread.require_process(), self.claimed_generation):
             raise StaleFence("registry owner turn witness is invalid")
         return turn
 

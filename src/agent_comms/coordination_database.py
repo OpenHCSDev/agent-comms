@@ -22,6 +22,7 @@ from agent_comms.typed_table import (
 )
 
 from .declared_family import DeclaredFamily
+from .child_process import Platform
 from .locked_store import DEFAULT_STORE_CONTENTION, SQLiteFile, StoreContention
 
 
@@ -147,12 +148,8 @@ class CoordinationStore(CarriedWriter, ReconciledFile):
                     os.link(staging, self.path, follow_symlinks=False)
             finally:
                 os.unlink(staging)
-        info = self._private_file()
-        # NTFS ACLs, not POSIX mode bits, define privacy on Windows. The
-        # disposable private execution path is Linux-only; keep the schema
-        # usable here without pretending chmod supplies a Windows ACL.
-        if os.name != "nt" and stat.S_IMODE(info.st_mode) != 0o600:
-            os.chmod(self.path, 0o600, follow_symlinks=False)
+        self._private_file()
+        Platform.current().make_private(self.path, 0o600)
 
     def _private_file(self) -> os.stat_result:
         try:
@@ -167,13 +164,8 @@ class CoordinationStore(CarriedWriter, ReconciledFile):
         return StoreWriter.transaction(self, self._connection)
 
     def _enforce_private_modes(self) -> None:
-        if os.name == "nt":
-            return  # POSIX no-follow chmod cannot establish an NTFS ACL.
         for candidate in self.files(self.path):
-            # SQLite may unlink a journal between observation and chmod.
-            with suppress(FileNotFoundError):
-                if stat.S_IMODE(candidate.lstat().st_mode) != 0o600:
-                    os.chmod(candidate, 0o600, follow_symlinks=False)
+            Platform.current().make_private(candidate, 0o600)
 
     def close(self) -> None:
         self._connection.close()

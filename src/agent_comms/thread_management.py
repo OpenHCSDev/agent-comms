@@ -358,14 +358,14 @@ class ThreadManagement:
             return ProjectChangeResult(thread.name, previous, current, True)
 
     def rename_managed_thread(
-        self, name: str, display_name: str, *, owner_pid: int
+        self, name: str, display_name: str, *, owner: ProcessIdentity
     ) -> RenameThreadResult:
         """Rename a locally managed running thread after proving process ownership."""
         with self.registry.store.locked():
             thread = self.registry.require(name)
-            if owner_pid <= 0 or thread.process_identity != ProcessIdentity.capture(owner_pid):
+            if thread.process_identity != owner:
                 raise RelationViolationError(
-                    f"Process {owner_pid} does not own thread {thread.name!r}."
+                    f"Process {owner.pid} does not own thread {thread.name!r}."
                 )
             new_name = self.registry.snapshot().claim_name(display_name, owner=thread.name)
             return self._rename_thread_unlocked(thread.name, new_name, title=GivenThreadText(display_name))

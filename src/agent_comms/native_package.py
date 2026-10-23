@@ -362,7 +362,7 @@ def install_declared_sources(root: Path, snapshot_root: Path) -> None:
         for source in sources:
             source.verify_installed()
         for parent in {source.destination.parent for source in sources}:
-            Platform.current().fsync_directory(parent)
+            Platform.current().sync_directory(parent)
     except OSError as error:
         raise NativePackageError("Native extension source could not be installed") from error
     finally:

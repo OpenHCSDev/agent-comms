@@ -69,15 +69,20 @@ def test_windows_publication_and_existing_file_sync_use_writable_handles(tmp_pat
     # actual Windows implementation on either host without initializing them.
     platform = object.__new__(Win32Platform)
     monkeypatch.setattr(Platform, "current", classmethod(lambda cls: platform))
+    fsync = os.fsync
+
+    def writable_sync(descriptor):
+        os.write(descriptor, b"")
+        fsync(descriptor)
+
+    monkeypatch.setattr(os, "fsync", writable_sync)
     target = tmp_path / "value"
     AtomicFile(target).write_bytes(b"first")
     staged = tmp_path / "prepared"
     staged.write_bytes(b"second")
     AtomicFile(target).replace(staged)
     AtomicFile(target).sync()
-    with platform.open_for_sync(target) as source:
-        assert source.writable()
-        assert source.read() == b"second"
+    assert target.read_bytes() == b"second"
     # A Windows directory flush does not open the directory, including a path
     # that does not exist; it must not ask os for POSIX-only flags.
-    platform.fsync_directory(tmp_path / "absent")
+    platform.sync_directory(tmp_path / "absent")

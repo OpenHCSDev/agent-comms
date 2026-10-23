@@ -18,7 +18,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal, Self
 
-from .child_process import ProcessIdentity
+from .child_process import Platform, ProcessIdentity
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, ToolRefusedError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
@@ -336,8 +336,7 @@ class MaintenanceBarrier(MaintenanceIngress):
             info = os.fstat(descriptor)
             if (
                 not stat.S_ISREG(info.st_mode)
-                or (os.name == "posix" and info.st_uid != os.geteuid())
-                or (os.name == "posix" and stat.S_IMODE(info.st_mode) != 0o600)
+                or not Platform.current().is_private(info, 0o600)
                 or info.st_nlink != 1
                 or info.st_size > 4096
             ):

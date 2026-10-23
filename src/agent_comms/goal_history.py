@@ -22,6 +22,7 @@ from typing import Annotated, Literal
 from agent_comms.field_codec import WireOmitDefault
 from agent_comms.owner_requests import NoRequestRevision, RequestAtRevision, RequestRevision
 
+from .child_process import Platform
 from .field_codec import FieldCodec, HistoryExclude, MalformedRecord
 from .goals import GoalDeclaration, NoGoal
 from .locked_store import DurableFile
@@ -151,8 +152,7 @@ class GoalHistoryStore(DurableFile, ReconciledFile):
         path = cls.path_in(registry_path.parent)
         try:
             before = path.lstat()
-            if (not stat.S_ISREG(before.st_mode) or before.st_uid != os.geteuid()
-                    or stat.S_IMODE(before.st_mode) != 0o600):
+            if not stat.S_ISREG(before.st_mode) or not Platform.current().is_private(before, 0o600):
                 raise GoalHistoryError("Original goal history must be a private regular file.")
             with closing(cls.read_snapshot(path)) as connection:
                 GoalHistoryEntry.require_schema(connection)
@@ -186,7 +186,7 @@ class GoalHistoryStore(DurableFile, ReconciledFile):
             raise GoalHistoryError("Cannot create goal history database.") from error
         else:
             os.close(descriptor)
-        if os.name == "posix" and stat.S_IMODE(self.path.stat().st_mode) != 0o600:
+        if not Platform.current().is_private(self.path.stat(), 0o600):
             raise GoalHistoryError("Goal history database must be owner-only.")
         try:
             with closing(self._connect()) as connection:

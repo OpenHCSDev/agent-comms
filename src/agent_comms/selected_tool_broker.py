@@ -22,6 +22,7 @@ from agent_comms.child_process import Platform
 from agent_comms.coordinator import Coordination
 
 from .comms import Comms
+from .child_process import Platform
 from agent_comms.native_runtime_input import NativeRuntimeTable
 from .coordination_errors import CoordinationReadUnavailable
 from .coordination_tables.participants import OwnerGenerations
@@ -195,7 +196,7 @@ def consume_selected_slot(directory: Path, input_id: str, call_id: str) -> None:
         info = ledger.lstat()
         if PrivateDirectoryRole.violation(info) is not None:
             raise SelectedToolDenied("Selected tool ledger is not private")
-        Platform.current().fsync_directory(directory)
+        Platform.current().sync_directory(directory)
         fd = os.open(ledger / input_id, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     except FileExistsError as error:
         raise SelectedToolDenied(
@@ -208,7 +209,7 @@ def consume_selected_slot(directory: Path, input_id: str, call_id: str) -> None:
             stream.write((call_id + "\n").encode("ascii"))
             stream.flush()
             os.fsync(stream.fileno())
-        Platform.current().fsync_directory(ledger)
+        Platform.current().sync_directory(ledger)
     except OSError as error:
         # Do NOT remove the visible slot; a failed fsync or a crash may have
         # committed it. No automatic re-append, retry, or write follows.
@@ -224,7 +225,7 @@ def record_selected_terminal(directory: Path, input_id: str, call_id: str) -> No
             output.write((call_id + "\n").encode("ascii"))
             output.flush()
             os.fsync(output.fileno())
-        Platform.current().fsync_directory(result.parent)
+        Platform.current().sync_directory(result.parent)
     except OSError as error:
         raise SelectedToolDenied("Selected tool terminal acknowledgement UNKNOWN; no retry") from error
 

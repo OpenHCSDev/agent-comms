@@ -30,6 +30,7 @@ from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordinator import Coordination
 
 from .comms import Comms
+from .child_process import Platform
 from .coordination_cohort import sealed_cohort_assignments
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ExistingFileClaim
@@ -129,7 +130,7 @@ class SelectedWritePlans(DurableFile, PatternFile):
         # Also on an existing directory: a previous mkdir may have survived
         # while its parent fsync failed. Do not acknowledge a later intent
         # until the directory entry itself is known durable.
-        Platform.current().fsync_directory(self.comms.root)
+        Platform.current().sync_directory(self.comms.root)
 
     def _validate_dir(self) -> bool:
         try:
@@ -233,7 +234,7 @@ class SelectedWritePlans(DurableFile, PatternFile):
                     stream.write(data)
                     stream.flush()
                     os.fsync(stream.fileno())
-                Platform.current().fsync_directory(self.directory)
+                Platform.current().sync_directory(self.directory)
             except BaseException:
                 # The visible file may have committed despite the error. Keep
                 # it as an UNKNOWN barrier; never unlink/retry the operation.

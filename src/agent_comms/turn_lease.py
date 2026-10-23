@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .activity import ObservedActivity
+from .child_process import ProcessIdentity, ProcessState
 from .errors import RelationViolationError
 from .field_codec import (
     NullMember,
@@ -29,7 +30,6 @@ from .thread_identity import ThreadIncarnation, TurnFence, TurnId, TurnIdentity
 from .turn_phase import IdlePhase, PreparingPhase, TurnPhase
 
 if TYPE_CHECKING:
-    from .child_process import ProcessState
     from .goal_presentation import GoalExecution, GoalExecutionSource
     from .registry_document import RegistrySnapshot
     from .threads import Thread
@@ -209,7 +209,7 @@ class UnrecordedGeneration(NullMember, TurnGeneration):
 @dataclass(frozen=True)
 class ActiveTurn(Executing, RecordMember, TurnDeclaration):
     id: str
-    owner_pid: int
+    owner: ProcessIdentity
     started_at: float = field(default_factory=time.time)
     routing: TurnRouting | None = None
     claimed_generation: Annotated[
@@ -282,10 +282,10 @@ class ActiveTurn(Executing, RecordMember, TurnDeclaration):
         if phase != self.phase:
             yield replace(self, phase=phase)
 
-    def owned_by(self, pid: int, claimed_generation: int) -> bool:
+    def owned_by(self, process: ProcessState, claimed_generation: int) -> bool:
         """Check that this turn's local process and registered input generation agree."""
         return (
-            self.owner_pid == pid
+            process.owns_turn(self)
             and self.claimed_generation.matches(claimed_generation)
             and claimed_generation > 0
         )

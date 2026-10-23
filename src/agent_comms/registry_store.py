@@ -12,12 +12,12 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import ClassVar
 
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, NullMember
-from .locked_store import DocumentConversion, RegistryFile
+from .locked_store import RegistryFile
 from .maintenance_barrier import CarriedDocument
 from .native_input_owner import RegistryOwner
 from .private_path import FileObservation, FileRevision, MissingFile
@@ -162,7 +162,7 @@ class RegistryEdit:
         identity = TurnIdentity(current.incarnation, current.turn_generation + 1)
         turn = ActiveTurn(
             turn_id,
-            current.require_process().pid,
+            current.require_process(),
             routing=routing,
             claimed_generation=RecordedGeneration(self.document.claims.generations[current.name]),
             turn_generation=RecordedGeneration(identity.generation),
@@ -184,52 +184,9 @@ class RegistryEdit:
             self.original = self.store.read_revision_unlocked()
 
 
-class RegistryNeedsConversion(RelationViolationError):
-    """The installer must explicitly convert this file before a reader uses it."""
-
-    def __init__(self, operation):
-        super().__init__(f"Registry needs conversion; run {operation.__qualname__}() during installation")
-
-
-class RegistryGoalConversion(DocumentConversion):
-    """The sole unversioned-to-current registry transformation."""
-
-    source_version = 0
-    source_fingerprints = frozenset({
-        "3bef5bd6411c7028a599e2a9bd66cb8662ca2a8e24a4ff4f265cb171bd2d5bbd"})
-
-    @classmethod
-    def target_version(cls) -> int:
-        return RegistryDocument().version
-
-    @classmethod
-    def version(cls, raw: object) -> int:
-        raw = FieldCodec.decode(dict[str, Any], raw)
-        version = FieldCodec.decode(int, raw.get("version", cls.source_version))
-        if version not in (cls.source_version, cls.target_version()):
-            raise RelationViolationError(f"Unsupported registry version: {version}")
-        return version
-
-    @classmethod
-    def require_current(cls, raw: dict) -> None:
-        if cls.version(raw) != cls.target_version():
-            raise RegistryNeedsConversion(RegistryStore.convert_format)
-
-    @classmethod
-    def converted(cls, raw: dict) -> dict:
-        if cls.version(raw) == cls.target_version():
-            return raw
-        threads = {name: dict(thread) for name, thread in raw["threads"].items()}
-        for thread in threads.values():
-            if thread.get("goal") == {}:
-                thread["goal"] = None
-        return {**raw, "version": cls.target_version(), "threads": threads}
-
-
 @dataclass(frozen=True, slots=True)
 class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument]):
     json_indent = 2
-    conversion = RegistryGoalConversion
     cache: RegistryCache = field(init=False, compare=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -247,30 +204,6 @@ class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument]):
     def _read_unlocked(self) -> RegistryDocument:
         return self.read_revision_unlocked().document
 
-    def _current_raw_unlocked(self) -> dict:
-        raw = FieldCodec.parse(self.path.read_bytes())
-        self.conversion.require_current(raw)
-        return raw
-
-    def convert_format(self, *, apply: bool = True) -> bool:
-        """Installer-only operation; validate completely before guarded publication.
-
-        The installer stops all old readers before calling this. A dry run
-        validates the exact same result without publishing it.
-        """
-        with self.locked():
-            self.private_guard_unlocked()
-            if not self.path.exists():
-                return False
-            raw = FieldCodec.parse(self.path.read_bytes())
-            converted = self.conversion.converted(raw)
-            self._decode(converted)
-            if converted is raw:
-                return False
-            if apply:
-                self._write_unlocked(json.dumps(converted, indent=2))
-            return True
-
     def read_revision_unlocked(self) -> RegistryRevision:
         self.private_guard_unlocked()  # before even a cache hit
         revision = FileRevision.capture(self.path)
@@ -283,7 +216,7 @@ class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument]):
 
     def _cache_revision_unlocked(self, stale: CachedRegistry, revision: FileObservation) -> RegistryRevision:
         raw = revision.either(
-            lambda present: self._current_raw_unlocked(), lambda: self._encode(self.empty()))
+            lambda present: FieldCodec.parse(self.path.read_bytes()), lambda: self._encode(self.empty()))
         entry = RegistryRevision(revision, stale.decoded(self, raw), raw)
         self.cache.entry = entry
         return entry
@@ -338,7 +271,7 @@ class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument]):
             ))
 
     def _decode_entry_unlocked(self, name: str) -> RegistryEntry:
-        decoded_entry = RegistryDocument.entry_from_wire(self._current_raw_unlocked(), name)
+        decoded_entry = RegistryDocument.entry_from_wire(FieldCodec.parse(self.path.read_bytes()), name)
         return replace(decoded_entry, thread=self._bind_thread(decoded_entry.thread))
 
     def _encode(self, value: RegistryDocument) -> dict:

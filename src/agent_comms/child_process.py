@@ -18,6 +18,7 @@ import secrets
 import selectors
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import threading
@@ -36,7 +37,7 @@ from contextlib import (
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar, NoReturn
+from typing import TYPE_CHECKING, Any, ClassVar, NoReturn
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -252,7 +253,7 @@ class ProcessIdentity(RecordMember, ProcessState):
         return os.getpid() == self.pid
 
     def owns_turn(self, turn: ActiveTurn) -> bool:
-        return turn.owner_pid == self.pid
+        return turn.owner == self
 
     def signal(self, signum: int) -> None:
         Platform.current().send(self, signum)
@@ -408,22 +409,27 @@ class NamespaceContainment:
 
 class Platform(DeclaredFamily, affix="Platform"):
     store_lock_interval = 0.025
+    sync_open_flags: ClassVar[int] = os.O_RDONLY
 
     @classmethod
     def current(cls) -> Platform:
         return cls.member_named(sys.platform)()
 
-    @abstractmethod
-    def fsync_directory(self, path: Path) -> None:
-        """Finish publication using this platform's directory durability contract."""
+    def sync_file(self, path: Path) -> None:
+        descriptor = os.open(path, self.sync_open_flags)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
 
     @abstractmethod
-    def open_for_sync(self, path: Path) -> BinaryIO:
-        """Open an existing file with the access required by the native flush."""
+    def sync_directory(self, path: Path) -> None: ...
 
-    def fsync_file(self, path: Path) -> None:
-        with self.open_for_sync(path) as source:
-            os.fsync(source.fileno())
+    @abstractmethod
+    def is_private(self, info: os.stat_result, permissions: int) -> bool: ...
+
+    @abstractmethod
+    def make_private(self, path: Path, permissions: int) -> None: ...
 
     @abstractmethod
     def try_store_lock(self, descriptor: int, *, mode: LockMode) -> None:
@@ -493,15 +499,20 @@ class Platform(DeclaredFamily, affix="Platform"):
 
 
 class PosixPlatform(Platform):
-    def fsync_directory(self, path: Path) -> None:
+    def sync_directory(self, path: Path) -> None:
         descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
             os.fsync(descriptor)
         finally:
             os.close(descriptor)
 
-    def open_for_sync(self, path: Path) -> BinaryIO:
-        return path.open("rb")
+    def is_private(self, info: os.stat_result, permissions: int) -> bool:
+        return stat.S_IMODE(info.st_mode) == permissions and info.st_uid == os.geteuid()
+
+    def make_private(self, path: Path, permissions: int) -> None:
+        with suppress(FileNotFoundError):
+            if stat.S_IMODE(path.lstat().st_mode) != permissions:
+                os.chmod(path, permissions, follow_symlinks=False)
 
     def acquire_store_lock(self, descriptor: int, *, mode: LockMode, blocking: bool) -> None:
         import fcntl
@@ -706,13 +717,19 @@ class Win32Platform(Platform):
     """Kernel creation times and named job objects bind the complete child tree."""
 
     store_lock_interval = 0.01
+    # Windows' CRT _commit (used by os.fsync) rejects a read-only descriptor.
+    sync_open_flags: ClassVar[int] = os.O_RDWR
 
-    def fsync_directory(self, path: Path) -> None:
-        """NTFS journals the rename; there is no POSIX directory flush."""
+    def sync_directory(self, path: Path) -> None:
+        # The Windows CRT cannot open a directory for fsync.
+        pass
 
-    def open_for_sync(self, path: Path) -> BinaryIO:
-        # The Windows CRT's fsync requires a writable descriptor.
-        return path.open("rb+")
+    def is_private(self, info: os.stat_result, permissions: int) -> bool:
+        # NTFS ACLs, not POSIX mode bits, determine privacy.
+        return True
+
+    def make_private(self, path: Path, permissions: int) -> None:
+        pass
 
     def try_store_lock(self, descriptor: int, *, mode: LockMode) -> None:
         import errno

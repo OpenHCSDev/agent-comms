@@ -10,6 +10,21 @@ from agent_comms.store_files import AtomicFile
 from agent_comms.thread_status import StoppedThreadStatus
 
 
+def test_missing_registry_version_is_rejected_without_rewriting_the_file(tmp_path):
+    from agent_comms.errors import RelationViolationError
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.registry_document import RegistryDocument
+
+    path = tmp_path / "registry.json"
+    raw = FieldCodec.encode(RegistryDocument())
+    del raw["version"]
+    path.write_text(json.dumps(raw))
+    before = path.read_bytes()
+    with pytest.raises(RelationViolationError, match="version"):
+        Registration(path)
+    assert path.read_bytes() == before
+
+
 def test_malformed_replacement_never_serves_stale_success(tmp_path):
     path = tmp_path / "registry.json"
     registry = Registration(path)
