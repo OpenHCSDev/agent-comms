@@ -1,8 +1,9 @@
 """The steps a retained bus is carried through when its durable format changes.
 
 A step is one module in ``tools/cutover`` holding one ``Carry``
-subclass. Only ``agent-comms install`` runs it, with the target revision's ``src`` and
-``tools``, so every step runs against the source it is installed with. A step is
+subclass. Only ``agent-comms install`` runs it, in the runtime built from the target
+revision with that revision's ``tools``, so every step runs against the source it is
+installed with. A step is
 idempotent: data it already carried reports no change, so a step's own dry run is the
 one owner of whether a bus still needs it. Declared dependencies constrain the order
 the main line added steps, starting at the first whose dry run reports a change.
@@ -19,10 +20,12 @@ from graphlib import TopologicalSorter
 from pathlib import Path
 from typing import Annotated, ClassVar
 
+from typing_extensions import TypeForm
+
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import PathText
-from agent_comms.installer.interpreter_operation import InterpreterOperation
+from agent_comms.installer.interpreter_operation import InterpreterOperation, RuntimeProbe
 from agent_comms.locked_store import RootFile
 from agent_comms.repo import Repo
 
@@ -136,14 +139,18 @@ class RetireInputsOperation(CarryOperation[Carried]):
 
 
 @dataclass(frozen=True)
-class CarryRequest:
-    """One operation and its ordered, typed inputs, sent together to the worker."""
+class CarryProbe[Answer](RuntimeProbe[tuple[Answer, ...]]):
+    """One pass of steps, in order, answered by the staged runtime's worker; the
+    operation owns traversal and declares the answer."""
 
     operation: CarryOperation
     steps: tuple[Carry, ...]
 
-    def run(self) -> str:
-        return self.operation.encode_answer(self.operation.run(self.steps))
+    def answer_type(self) -> TypeForm[tuple[Answer, ...]]:
+        return self.operation.answer_type()
+
+    def run(self) -> tuple[Answer, ...]:
+        return self.operation.run(self.steps)
 
 
 @dataclass(frozen=True)

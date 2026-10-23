@@ -3992,14 +3992,6 @@ class TodoStore(OwnerRequestStore):
                      reader=partial(self._open, state=OpenTodoState))
                      if todo.pending and todo.handed_out_on_release)
 
-    def merged_orders(self, commander: ThreadIncarnation,
-                      registry: Registration) -> tuple[Todo, ...]:
-        """Observe linked merges without holding a write lock."""
-        held = self.held_for_commander(commander)
-        pulls = ProgressRead(held)
-        return tuple(closed for todo in held
-                     for closed in todo.order.closed_by_merge(todo, registry, pulls))
-
     def record_merges(self, completed: tuple[Todo, ...]) -> None:
         """Record only merge changes whose observed revision still holds."""
         if not completed:

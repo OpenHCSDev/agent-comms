@@ -1,5 +1,6 @@
 """Typed installer results use the real publisher and retained channel history."""
 import sys
+from dataclasses import replace
 from agent_comms.cli_bridges.shared import UnobservedBridge
 from pathlib import Path
 
@@ -18,7 +19,7 @@ from agent_comms.installer.carry import Carried
 from agent_comms.installer.launch import InstallReport
 from agent_comms.installer.commands import InstallCommands, TimedCommand
 from agent_comms.installer.interpreter_operation import (
-    InstalledProgram, InstallReportProbe, RetainedProgram,
+    InstalledProgram, InstallReportProbe,
 )
 from agent_comms.installer.reporting import FinishedInstall, RuntimeWriter
 from agent_comms.installer.upgrade import (
@@ -187,7 +188,7 @@ def test_terminal_report_follows_real_tree_cleanup_and_keeps_original_error(
     with InstallCommands() as commands:
         stack = Stack(repository, commands,
                       runtime=RestoredRuntime(Path(sys.executable)))
-        writer = RuntimeWriter(comms.root, stack, RetainedProgram.current())
+        writer = RuntimeWriter(comms.root, stack)
         report = InstallReport()
         refusal = UpgradeRefused("operation refused before its result")
         installed = InstalledUpgrade(
@@ -202,7 +203,8 @@ def test_terminal_report_follows_real_tree_cleanup_and_keeps_original_error(
                     raise refusal
                 if failure == "cleanup":
                     source.git(source.checkout, "worktree", "lock", str(tree.path))
-                report.writer = RuntimeWriter(comms.root, stack, InstalledProgram())
+                published = replace(stack, program=InstalledProgram())
+                report.writer = RuntimeWriter(comms.root, published)
                 report.complete(installed)
         except (UpgradeRefused, GitCommandError) as error:
             observed = error
