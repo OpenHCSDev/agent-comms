@@ -100,7 +100,7 @@ class ArchivedInputs:
 
 
 class CarryOperation[Answer](
-    InterpreterOperation[tuple[Answer, ...], tuple[Carry, ...]],
+    InterpreterOperation[tuple[Answer, ...], tuple[Carry, ...], InstallClock],
     DeclaredFamily, affix="Operation",
 ):
     """One worker pass, with its answer type declared by the operation's run method."""
