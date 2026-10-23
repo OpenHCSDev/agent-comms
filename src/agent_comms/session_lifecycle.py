@@ -163,7 +163,7 @@ class SessionLifecycle:
             auto_title_pending=True,
             role=AcpThreadRole,
         )
-        self.comms.threads.restore_stopped(self.comms.registry.snapshot(), (thread.name,))
+        self.comms.registry.restore_stopped(self.comms.registry.snapshot(), (thread.name,))
         return self.acquire_declared_thread(thread)
 
     def acquire_declared_thread(self, thread: Thread) -> Thread:
