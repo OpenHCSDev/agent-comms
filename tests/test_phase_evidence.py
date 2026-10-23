@@ -1,4 +1,5 @@
 import subprocess
+from pathlib import Path
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.head_review import HeadReview
@@ -27,7 +28,7 @@ from agent_comms.phase_evidence import (
     UnreadableEvidenceError,
 )
 from agent_comms.pinned_audit import GodFunction
-from agent_comms.plan_phases import FLAG, ExternalBoundariesPhase, PlanPhase
+from agent_comms.plan_phases import FLAG, ExternalBoundariesPhase, PlanPhase, RostersPhase
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 
@@ -98,6 +99,36 @@ def main_of(tmp_path, files):
     git(tmp_path, "update-ref", "refs/remotes/origin/main", git(tmp_path, "rev-parse", "HEAD"))
     return PlanReading((), MainTree.of(
         Repo(checkout=tmp_path, github=RepositoryName.from_wire("OpenHCSDev/agent-comms"))))
+
+
+def test_roster_evidence_keeps_external_abi_and_each_remaining_internal_registry(tmp_path):
+    source = Path(__file__).parents[1] / "src/agent_comms"
+    reading = main_of(tmp_path, {
+        "src/phase_evidence.py": (source / "phase_evidence.py").read_text(),
+        "src/plan_phases.py": (source / "plan_phases.py").read_text(),
+        "src/producer.py": "PI_0_85_1_EVENT_KINDS = frozenset({'alpha', 'beta'})\n"
+                           "class Runtime:\n    event_kinds = PI_0_85_1_EVENT_KINDS\n",
+        "src/unrelated.py": "class OtherOwner:\n    members = {}\n"
+                            "def local():\n    types = {}\n",
+    })
+    assert reading.holds(RostersPhase.evidence)
+    for remaining in (
+        "THREAD_CAPABILITIES: tuple[type, ...] = (Steers, Compacts)\n",
+        "class Backend:\n    serves_threads = True\n",
+        "class Backend:\n    serves_new_threads: ClassVar[bool] = True\n",
+        "class Carry:\n    declared: ClassVar[dict] = {}\n",
+        "class ThreadRename:\n    kinds = {}\n",
+        "class BirthlessIncarnation:\n    members = {}\n",
+        "class CliToolArguments:\n    types = {}\n",
+        "class PiTurnPhase:\n    _start_phases = {}\n",
+        "class PiTurnPhase:\n    _end_events = {}\n",
+    ):
+        (tmp_path / "src/remaining.py").write_text(remaining)
+        git(tmp_path, "add", ".")
+        git(tmp_path, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "registry")
+        git(tmp_path, "update-ref", "refs/remotes/origin/main", git(tmp_path, "rev-parse", "HEAD"))
+        changed = PlanReading((), MainTree.of(reading.main.repo))
+        assert not changed.holds(RostersPhase.evidence), remaining
 
 
 def test_source_shape_evidence_reads_declarations_on_main(tmp_path):
