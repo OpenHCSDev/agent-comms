@@ -4,7 +4,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Annotated, Self
+from typing import TYPE_CHECKING, Annotated, Any, Self
 
 from .bus_tables import BusProjectionTables
 from .typed_table import Column, TypedRow, TypedTable
@@ -23,6 +23,14 @@ class ChannelActivity(TypedRow):
         return ChannelActivity(
             max(self.last_message, message.timestamp),
             message.sender_role.last_user_input(self.last_user_input, message.timestamp),
+        )
+
+    @classmethod
+    def from_message(cls, message: Message, **key: Any) -> Self:
+        return cls(
+            last_message=message.timestamp,
+            last_user_input=message.sender_role.last_user_input(0.0, message.timestamp),
+            **key,
         )
 
     @classmethod
@@ -70,14 +78,6 @@ class ActivityMaximum(TypedTable, BusProjectionTables, declared_name=None):
 @dataclass(frozen=True)
 class BusActivityIndex(ChannelActivity, ActivityMaximum):
     target: Annotated[str, Column(primary_key=True)] = field(kw_only=True)
-
-    @classmethod
-    def from_message(cls, message: Message) -> Self:
-        return cls(
-            last_message=message.timestamp,
-            last_user_input=message.sender_role.last_user_input(0.0, message.timestamp),
-            target=message.target,
-        )
 
     @classmethod
     def clocks(cls, db: sqlite3.Connection) -> ActivityClocks:

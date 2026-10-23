@@ -404,7 +404,7 @@ class Message(Addressed, BusCapability):
         from .bus_tables import AnsweredSource, MessageIdentitySource
 
         yield from super().projections()
-        yield BusActivityIndex.from_message(self)
+        yield BusActivityIndex.from_message(self, target=self.target)
         participants = {self.sender, *CommandTarget.named(self.target).direct_names,
                         *(mention.thread for mention in self.mentions)}
         for participant in participants:
