@@ -3,7 +3,6 @@
 from agent_comms.channel_targets import CommandTarget
 
 
-from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 import os
 
 import pytest
@@ -22,7 +21,6 @@ from test_private_human_ingress import _root
 def test_fresh_root_claims_source_gaps_and_empty_cursor(tmp_path, *, source_reads):
     comms, store, root_id, lookups = _root(tmp_path)
     with store:
-        PrivateCoordinatorTable.install(store)
         assert comms.bus.bus.revision() == 0
         empty = SourceCoverage(
             comms.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
@@ -44,7 +42,6 @@ def test_fresh_root_claims_source_gaps_and_empty_cursor(tmp_path, *, source_read
 def test_truncated_coverage_cannot_hide_an_unproven_source(tmp_path, *, source_reads):
     comms, store, root_id, lookups = _root(tmp_path)
     with store:
-        PrivateCoordinatorTable.install(store)
         first = comms.messaging.send_user_message(CommandTarget.named('bob'), "first original", worktree=str(tmp_path))
         second = comms.messaging.send_user_message(CommandTarget.named('bob'), "second original", worktree=str(tmp_path))
         reader = SourceCoverage(

@@ -25,7 +25,8 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.history_result import ChannelHistoryPageResult
 from agent_comms.installer.backup import bus_files
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.interpreter_operation import InstalledProgram, PrepareProducerDigestsProbe
+from agent_comms.installer.interpreter_operation import InstalledProgram
+from agent_comms.installer.probes.native import PrepareProducerDigestsProbe
 from agent_comms.installer.practice import TestHome
 from agent_comms.installer.upgrade import (
     CarriedRehearsal,
@@ -65,7 +66,7 @@ def installed_home(tmp_path_factory) -> dict[str, str]:
     environment = {**os.environ, "HOME": str(home), "UV_CACHE_DIR": caches.stdout.strip(),
                    "npm_config_cache": str(Path.home() / ".npm")}
     environment.pop("PYTHONPATH", None)
-    outgoing = Stack.build(REPOSITORY, InstallCommands(), home)
+    outgoing = Stack.build(Checkout.prepared(REPOSITORY), InstallCommands(), home)
     assert (outgoing.runtime.package_root / "__init__.py").is_file()
     (home / ".local/share/agent-comms/current").symlink_to(
         outgoing.runtime.prefix, target_is_directory=True)
@@ -228,7 +229,7 @@ def test_failed_live_migration_restores_data_checkout_and_runtime(
     current = subprocess.check_output(["git", "-C", checkout, "rev-parse", "HEAD"], text=True).strip()
     step = checkout / "tools/cutover/carry_fault.py"
     step.write_text('''from pathlib import Path
-from agent_comms.installer.carry import Carry, Carried
+from agent_comms.installer.probes.carry import Carry, Carried
 from agent_comms.locked_store import DurableFile
 class Saved(DurableFile):
     filename = "saved"

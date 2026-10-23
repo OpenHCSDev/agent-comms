@@ -68,7 +68,6 @@ from agent_comms.todos import (
     BluntText,
     CheckedDelivery,
     CleanHunt,
-    CommitDelivery,
     DeliveryEvidence,
     DeliverySource,
     DirectiveText,
@@ -83,6 +82,7 @@ from agent_comms.todos import (
     PendingProblemOrder,
     ProblemFinding,
     PullRequestLink,
+    PullRequests,
     RecordPullRequest,
     StrikeReason,
     StrikeTodo,
@@ -220,58 +220,31 @@ def forwarders_added(diff, sources=()):
 
 
 class CommandDeliverySource(DeliverySource, declared_name=None):
-    @classmethod
-    def from_text(cls, text: str) -> CommandDeliverySource:
-        # Reserved arguments derive from declarations; every other token is a Git reference.
-        return ArgumentDeliverySource.member_or_default(text, ReferenceDeliverySource).from_argument(text)
-
-
-class ArgumentDeliverySource(CommandDeliverySource, declared_name=None):
-    @classmethod
-    def from_argument(cls, text: str) -> Self:
-        return cls()
+    """What `order done` checks: the order's merged PR, or an operation the commander names."""
 
 
 @dataclass(frozen=True)
-class ReferenceDeliverySource(ArgumentDeliverySource, declared_name=None):
-    reference: str
+class PullRequestDeliverySource(CommandDeliverySource):
+    """Core reads the order's merged PR: its merge commit is checked, its first commit recorded."""
 
-    @classmethod
-    def from_argument(cls, text: str) -> Self:
-        if not text.strip():
-            raise ValueError("A commit delivery needs a nonempty Git reference.")
-        return cls(text)
-
-
-@dataclass(frozen=True)
-class NoDeliverySource(CommandDeliverySource):
     def require_report(self) -> None:
         pass
 
-    def delivery(self, repo: Path, evidence: DeliveryEvidence) -> CheckedDelivery:
-        raise ValueError("A fix delivery needs --sha COMMIT or --sha op.")
-
-
-@dataclass(frozen=True)
-class OpDeliverySource(ArgumentDeliverySource):
-    def delivery(self, repo: Path, evidence: DeliveryEvidence) -> CheckedDelivery:
-        return OperationDelivery(evidence=evidence)
-
-
-@dataclass(frozen=True)
-class CommitDeliverySource(ReferenceDeliverySource):
-    def delivery(self, repo: Path, evidence: DeliveryEvidence) -> CheckedDelivery:
-        delivered = Repo.git(repo, 'rev-parse', '--verify', f'{self.reference}^{{commit}}').strip()
-        diff = Repo.git(repo, 'show', '--first-parent', '-m', '--format=', delivered)
+    def delivery(self, todo: Todo, repo: Path, evidence: DeliveryEvidence) -> CheckedDelivery:
+        delivery = PullRequests((todo,)).merged_delivery(todo, repo, evidence)
+        diff = Repo.git(repo, 'show', '--first-parent', '-m', '--format=', delivery.commit)
         changed = re.findall(r'^\+\+\+ b/(\S+\.py)$', diff, re.M)
-        sources = [Repo.git(repo, 'show', f'{delivered}:{path}') for path in changed]
+        sources = [Repo.git(repo, 'show', f'{delivery.commit}:{path}') for path in changed]
         if added := forwarders_added(diff, sources):
-            raise ValueError(f'Refused: {delivered} adds forwarders {added[:5]}; '
-                             'slop never counts as delivery. Order the hierarchy fix.')
-        return CommitDelivery(
-            commit=Repo.git(repo, 'rev-parse', '--verify', 'HEAD^{commit}').strip(),
-            delivered_commit=delivered, evidence=evidence,
-        )
+            raise ValueError(f'Refused: pull request merge {delivery.commit} adds forwarders '
+                             f'{added[:5]}; slop never counts as delivery. Order the hierarchy fix.')
+        return delivery
+
+
+@dataclass(frozen=True)
+class OpDeliverySource(CommandDeliverySource):
+    def delivery(self, todo: Todo, repo: Path, evidence: DeliveryEvidence) -> CheckedDelivery:
+        return OperationDelivery(evidence=evidence)
 
 
 @dataclass(frozen=True)
@@ -836,6 +809,13 @@ class DirectiveVerb(CommanderVerb):
         opened = OwedAnswer.opened(ctx.comms, self.who(ctx))
         named = tuple(rule.message for rule in opened
                       if rule.message.message_id in self.answers)
+        snapshot = ctx.comms.registry.snapshot()
+        reached = frozenset(snapshot.canonical_name(name) for name in self.addressed)
+        misaddressed = tuple(reason for rule in opened
+                             if (reason := rule.misaddressed(named, reached)))
+        if misaddressed:
+            sys.exit('REFUSED, nothing recorded: --answers names a message this action never'
+                     ' reaches:\n' + '\n'.join(misaddressed))
         owed = tuple(rule for rule in opened if rule.due(now) and not rule.answered_by(named))
         if owed:
             lines = '\n'.join(f'{rule.line()}: {rule.message.body[:80]}' for rule in owed)
@@ -843,6 +823,11 @@ class DirectiveVerb(CommanderVerb):
                      + '\nReply to the original message or use --answers MESSAGE_ID. An answer '
                      'that must wait is sent now: "waiting on X, owner Y".')
         self.respond(ctx, tuple(dict.fromkeys(message.reference for message in named)))
+
+    @property
+    @abstractmethod
+    def addressed(self) -> tuple[str, ...]:
+        """The threads this action's message is for; only their asks can it answer."""
 
     @abstractmethod
     def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None: ...
@@ -897,6 +882,10 @@ class SendVerb(RequestedOrderVerb):
         ),
     ] = NoSourceReference()
 
+    @property
+    def addressed(self) -> tuple[str, ...]:
+        return (self.unit,)
+
     def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None:
         ctx.send(self.unit, OrderFile.read(Path(self.body_file).read_text()), clean=self.clean,
              reassign=self.reassign, traced=self.traced,
@@ -922,6 +911,10 @@ class StrikeVerb(OrderVerb, DirectiveVerb):
             options={"help": '"WHO at STAGE"; stage is review/install/live/user'},
         ),
     ] = "review"
+
+    @property
+    def addressed(self) -> tuple[str, ...]:
+        return (self.unit,)
 
     def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None:
         ctx.strike(self.unit, self.pid, self.why, self.caught,
@@ -974,7 +967,7 @@ class WithdrawVerb(OrderVerb):
 
 @dataclass(frozen=True, kw_only=True)
 class DoneVerb(OrderVerb):
-    help = "Core checks the delivered commit; late delivery is a strike"
+    help = "Core checks the order's merged PR at its merge commit; late delivery is a strike"
     unit: Annotated[str, Argument(flags=("unit",), options={"metavar": "UNIT"})]
     problem: Annotated[
         str,
@@ -983,15 +976,15 @@ class DoneVerb(OrderVerb):
             options={"metavar": "PROBLEM", "help": "the held problem id from order board"},
         ),
     ]
-    sha: Annotated[
+    source: Annotated[
         CommandDeliverySource,
         Normalize(FieldCodec.encode),
         Argument(
-            flags=("--sha",),
-            options={"type": CommandDeliverySource.from_text, "choices": None,
-                     "help": "for a fix: commit in the recorded checkout, or op"},
+            flags=("--op",),
+            options={"action": "store_const", "const": OpDeliverySource(),
+                     "help": "an operation checked on fresh main, not the order's merged PR"},
         ),
-    ] = dataclasses.field(default_factory=NoDeliverySource)
+    ] = dataclasses.field(default_factory=PullRequestDeliverySource)
     screenshot: Annotated[
         str,
         Argument(
@@ -1009,7 +1002,8 @@ class DoneVerb(OrderVerb):
         todo = ctx.comms.goals.todos.resolve_order(ctx.incarnation, self.unit, self.problem)
         order = todo.order.checked()
         delivery = order.scope.delivery(
-            Repo.selected(ctx.repos, order.check.directory).checkout, self.sha, self.screenshot, self.seen)
+            todo, Repo.selected(ctx.repos, order.check.directory).checkout, self.source,
+            self.screenshot, self.seen)
         ctx.done(todo.id, delivery)
 
 
@@ -1127,6 +1121,10 @@ class SayVerb(OrderVerb, DirectiveVerb):
         str, Argument(flags=("body_file",), options={"metavar": "BODYFILE"})
     ]
 
+    @property
+    def addressed(self) -> tuple[str, ...]:
+        return VerdictAudience(tuple(self.units.split(','))).threads
+
     def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None:
         ctx.say(self.units, self.body_file, references)
 
@@ -1154,6 +1152,10 @@ class ProblemVerb(RequestedOrderVerb):
         ),
     ]
     disk: Annotated[bool, Argument(flags=("--disk",))] = False
+
+    @property
+    def addressed(self) -> tuple[str, ...]:
+        return (self.to,)
 
     def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None:
         document = OrderFile.read(Path(self.order).read_text())

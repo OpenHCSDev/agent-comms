@@ -83,7 +83,7 @@ name, project, session = sys.argv[1:4]
 service.registry.declare(Thread(name, frozenset(), project,
     session_file=RegistrySessionLocation.from_path(session, service.root),
     model=DeclaredModel('response-local/fixture')))
-service.threads.restore_stopped(service.registry.snapshot(), (name,))
+service.registry.restore_stopped(service.registry.snapshot(), (name,))
 service.goals.update_goal(name, SetGoalAction(text='Preserve this blocked private task'))
 service.goals.update_goal(name, BlockedGoalAction(block_reason='Await original input disposition'))
 arguments = ('--provider','response-local','--model','fixture','--thinking','off',

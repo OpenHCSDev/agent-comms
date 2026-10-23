@@ -51,7 +51,7 @@ class ParticipantStore:
             generation = OwnerGenerations.one(self.session._connection, owner_lookup=lookup)
             pointer = CurrentExecutions.one(self.session._connection, owner_lookup=lookup)
             if person is None or generation is None or pointer is None:
-                raise ParticipantNotRegistered("participant aggregate is not registered")
+                raise ParticipantNotRegistered(f"participant {lookup!r} aggregate is not registered")
             return ParticipantSnapshot(
                 lookup,
                 person.committed,

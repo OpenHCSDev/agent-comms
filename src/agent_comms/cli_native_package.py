@@ -7,11 +7,14 @@ import sys
 from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Annotated
+from pathlib import Path
 
 from agent_comms import field_codec
 from agent_comms.command import Command
 from agent_comms.declared_verb import DeclaredVerb
 from agent_comms.native_package import (
+    MANIFEST,
+    NativePackageStore,
     VerifiedNativePackage,
     install_declared_sources,
     package_tree_digest,
@@ -49,7 +52,7 @@ class PackageVerb(NativePackageVerb):
 
 @dataclass(frozen=True, kw_only=True)
 class QualifiedPackageVerb(PackageVerb):
-    """A build/publication boundary qualifies the mutable package before using it."""
+    """Publication checks the manifest-named sealed build before using it."""
 
     def _native_package(self) -> VerifiedNativePackage:
         package = VerifiedNativePackage.qualify(self.package)
@@ -58,13 +61,49 @@ class QualifiedPackageVerb(PackageVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class VerifyVerb(QualifiedPackageVerb):
-    """Qualify a copied build without publishing it."""
+class VerifyVerb(PackageVerb):
+    """Verify build contents and seal the tree before publishing it."""
 
     help = "Verify a copied package against the source pin"
 
     def apply(self, ctx: None = None) -> None:
+        VerifiedNativePackage.prepare(self.package)
+        print(UnitInstructions.prepare(), file=sys.stderr)
+
+
+@dataclass(frozen=True, kw_only=True)
+class QualifyVerb(QualifiedPackageVerb):
+    help = "Check a manifest-named sealed package without reading its contents"
+
+    def apply(self, ctx: None = None) -> None:
         self._native_package()
+
+
+@dataclass(frozen=True, kw_only=True)
+class RetireVerb(PackageVerb):
+    help = "Remove an owned tree containing sealed native directories"
+
+    def apply(self, ctx: None = None) -> None:
+        NativePackageStore.at_home(Path.home()).retire(self.package)
+
+
+@dataclass(frozen=True, kw_only=True)
+class StoreVerb(NativePackageVerb):
+    help = "Prepare and print the native artifact store"
+
+    def apply(self, ctx: None = None) -> None:
+        store = NativePackageStore.at_home(Path.home())
+        store.prepare()
+        print(store.path)
+
+
+@dataclass(frozen=True, kw_only=True)
+class LinkVerb(NativePackageVerb):
+    help = "Bind this manifest's prepared artifact into a resource directory"
+    root: Annotated[StoragePath, field_codec.Argument(flags=("root",))]
+
+    def apply(self, ctx: None = None) -> None:
+        NativePackageStore.at_home(Path.home()).link(MANIFEST, self.root)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -136,7 +175,7 @@ class InstallSourcesVerb(SourceInstallationVerb):
 
 @dataclass(frozen=True, kw_only=True)
 class PublishSourcesVerb(QualifiedPackageVerb, SourceInstallationVerb):
-    """Build publication qualifies a mutable package before installing its sources."""
+    """Build publication checks its sealed package before installing external sources."""
 
     help = "Qualify a build package and install its declared sources before publication"
 
