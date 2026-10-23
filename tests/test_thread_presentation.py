@@ -6,13 +6,19 @@ import pytest
 
 from agent_comms.errors import RouteChangedError, UnregisteredThreadError
 from agent_comms.field_codec import FieldCodec
-from agent_comms.input_attempt import UnresolvedInput
+from agent_comms.input_attempt import UnobservedInputDeliveryScope, UnresolvedInput
+from agent_comms.input_disposition import DeliveryOverview
 from agent_comms.notification_progress import SendingProgress
 from agent_comms.thread_presentation import (
-    IdleThreadPresentationStatus, NoThreadPresentation, OtherRouteThread, SessionDisconnected,
-    StatusPending, ThreadPresentationStatus, WorkingThreadPresentationStatus,
+    IdleThreadPresentationStatus,
+    NoThreadPresentation,
+    OtherRouteThread,
+    SessionDisconnected,
+    StatusPending,
+    ThreadPresentationStatus,
+    WorkingThreadPresentationStatus,
 )
-from agent_comms.ui_model.delivery import InputDelivery
+from agent_comms.ui_model.delivery import DeliveryView, ReadDeliveryView
 from agent_comms.ui_model.status import ThreadStatusModel
 
 
@@ -106,13 +112,16 @@ def test_idle_attention_is_carried_once_through_idle_presentation(replacement):
 def test_input_delivery_keeps_its_explanation_and_original_work(working):
     status = WorkingThreadPresentationStatus() if working else IdleThreadPresentationStatus()
     ordinary = status.activity_presentation("worker", "thinking", "Actual work")
-    delivery = InputDelivery(inputs=(UnresolvedInput(
-        sequence=None, target="worker", text="Unconfirmed input", input_id="unconfirmed", status="unknown",
-    ),))
+    delivery = ReadDeliveryView(DeliveryOverview(
+        inputs=(UnresolvedInput(
+            sequence=None, target="worker", text="Unconfirmed input", input_id="unconfirmed", status="unknown",
+        ),), historical_count=0, dismissed_historical_count=0, historical_inputs=(),
+        current_scope=UnobservedInputDeliveryScope,
+    ))
     shown = delivery.presentation(ordinary)
     assert shown.status.details == (delivery.summary,)
     assert shown.summary == (ordinary.summary if working else delivery.summary)
-    failed = InputDelivery().failed(ValueError("Original read failure"))
+    failed = DeliveryView().failed(ValueError("Original read failure"))
     shown = failed.presentation(ordinary)
     assert shown.status.details == ("Original read failure",)
     assert shown.summary == (ordinary.summary if working else "Original read failure")
