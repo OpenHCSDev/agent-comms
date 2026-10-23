@@ -382,7 +382,7 @@ class GoalWaitTargetRow(TypedTable):
 
     @classmethod
     def references(cls) -> tuple[ForeignKey, ...]:
-        return (ForeignKey(("goal_id",), StoredGoalWaitRow, ("goal_id",), on_delete="CASCADE"),)
+        return (ForeignKey(columns=("goal_id",), target=StoredGoalWaitRow, target_columns=("goal_id",), on_delete="CASCADE"),)
 
 
 @dataclass(frozen=True, slots=True)

@@ -44,7 +44,7 @@ class TableChildRow(TypedTable):
 
     @classmethod
     def references(cls):
-        return (ForeignKey(("parent", "parent_count"), TableParentRow, ("key", "count")),)
+        return (ForeignKey(columns=("parent", "parent_count"), target=TableParentRow, target_columns=("key", "count")),)
 
 
 def test_required_row_distinguishes_absence_from_duplicate_results():

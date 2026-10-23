@@ -110,7 +110,7 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable, GoalFailureEvidence):
     def references(cls):
         from .goal_attempts import AttemptRecord
 
-        return (ForeignKey(("attempt_id",), AttemptRecord, ("attempt_id",)),)
+        return (ForeignKey(columns=("attempt_id",), target=AttemptRecord, target_columns=("attempt_id",)),)
 
 
 @dataclass(frozen=True)

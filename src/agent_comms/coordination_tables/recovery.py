@@ -60,7 +60,7 @@ class RecoveryAudit(ImmutableRows, ExecutionReference, CoordinatorRow):
 
         return super().references() + (
             ForeignKey(
-                ("execution_id", "attempt"), AttemptRecord, ("execution_id", "attempt_ordinal")
+                columns=("execution_id", "attempt"), target=AttemptRecord, target_columns=("execution_id", "attempt_ordinal")
             ),
         )
 

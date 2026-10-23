@@ -105,6 +105,7 @@ from agent_comms.thread_identity import (
 )
 from agent_comms.threads import Thread
 from agent_comms.typed_table import (
+    TableReference,
     Column,
     DurableStore,
     DurableTables,
@@ -3431,7 +3432,7 @@ class Todo(TypedTable):
     state: type[TodoState]
     revision: Annotated[int, Column(check="revision>0")]
     request: Annotated[
-        RequestLink, Column(storage=TextStorage, nullable=True, references=(OwnerRequest, "id")),
+        RequestLink, Column(storage=TextStorage, nullable=True, references=TableReference(OwnerRequest, ("id",))),
     ]
     assignment: Assignment | None
     order: ProblemOrder
