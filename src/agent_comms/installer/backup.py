@@ -26,8 +26,8 @@ from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.interpreter_operation import HoldTranscriptsProbe, RouteSelection
 from agent_comms.locked_store import LockedStore, RootFile, RuntimeFile, SQLiteFile
-from agent_comms.private_path import FileObservation, FileRevision, MissingFile
-from agent_comms.store_files import _atomic_write_text
+from agent_comms.private_path import FileObservation, FileRevision, MissingFile, fsync_directory
+from agent_comms.store_files import AtomicFile
 
 
 class UpgradeRefused(CoordinationError):
@@ -205,11 +205,7 @@ class StoreBackup(ResourceBackup):
     def retire(self) -> Path:
         archived = self.path.with_name(f'{self.path.name}.restored-{time.time_ns()}')
         self.path.rename(archived)
-        directory = os.open(archived.parent, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
+        fsync_directory(archived.parent)
         print(f'Restored data backup kept at {archived}', flush=True)
         return archived
 
@@ -222,7 +218,7 @@ class StoreBackup(ResourceBackup):
                 return
             saved = self.path / 'active-route.json'
             if saved.exists():
-                _atomic_write_text(self.route, saved.read_text(), fsync_parent=True)
+                AtomicFile(self.route).write_text(saved.read_text())
             else:
                 os.unlink(self.route.name, dir_fd=directory)
                 os.fsync(directory)
@@ -269,14 +265,13 @@ class StoreBackup(ResourceBackup):
                 backup.route_revision = FileRevision.capture(route)
             return backup
         path.mkdir(mode=0o700, parents=True)
-        _atomic_write_text(path / 'selected.json', json.dumps(selected), fsync_parent=True)
+        AtomicFile(path / 'selected.json').write_text(json.dumps(selected))
         contents = backup.capture(files)
         with route_directory(route):
             if route.exists():
                 shutil.copy2(route, path / 'active-route.json')
             backup.route_revision = FileRevision.capture(route)
-        _atomic_write_text(path / 'files.json', json.dumps(FieldCodec.encode(contents), indent=1),
-                           fsync_parent=True)
+        AtomicFile(path / 'files.json').write_text(json.dumps(FieldCodec.encode(contents), indent=1))
         return backup
 
     def retain(self, spill_dir: Path) -> tuple[Path, ...]:
@@ -348,11 +343,7 @@ class StoreBackup(ResourceBackup):
             with target.open('rb') as ready:
                 os.fsync(ready.fileno())
             contents[name] = self.digest(target)
-            directory = os.open(target.parent, os.O_RDONLY | os.O_DIRECTORY)
-            try:
-                os.fsync(directory)
-            finally:
-                os.close(directory)
+            fsync_directory(target.parent)
         return contents
 
     def file_original(self, name: str, saved: dict[str, str]) -> bool:
@@ -384,20 +375,14 @@ class StoreBackup(ResourceBackup):
                 stage = Path(temporary)
                 try:
                     shutil.copy2(self.data_root / name, stage)
-                    with stage.open('rb') as ready:
-                        os.fsync(ready.fileno())
-                    os.replace(stage, target)
+                    AtomicFile(target).replace(stage)
                 finally:
                     stage.unlink(missing_ok=True)
             else:
                 target.unlink(missing_ok=True)
             for companion in SQLiteFile.files(target)[1:]:
                 companion.unlink(missing_ok=True)
-        directory = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
+        fsync_directory(self.root)
         self.restore_route()
         if not self.stores_original():
             raise UpgradeRefused('Selected stores differ after backup restoration')

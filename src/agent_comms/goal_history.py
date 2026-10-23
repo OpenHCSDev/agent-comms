@@ -22,11 +22,17 @@ from typing import Annotated, Literal
 from agent_comms.field_codec import WireOmitDefault
 from agent_comms.owner_requests import NoRequestRevision, RequestAtRevision, RequestRevision
 
-from .field_codec import FieldCodec, MalformedRecord, HistoryExclude
+from .field_codec import FieldCodec, HistoryExclude, MalformedRecord
 from .goals import GoalDeclaration, NoGoal
 from .locked_store import DurableFile
+from .store_files import AtomicFile
 from .typed_table import (
-    Column, DurableTables, Index, JsonStorage, ReconciledFile, TypedTable,
+    Column,
+    DurableTables,
+    Index,
+    JsonStorage,
+    ReconciledFile,
+    TypedTable,
 )
 
 
@@ -169,27 +175,7 @@ class GoalHistoryStore(DurableFile, ReconciledFile):
             raise GoalHistoryError("Goal history database is unavailable.") from error
 
     def _sync(self) -> None:
-        self._sync_file(self.path)
-        if os.name == "posix":
-            self._sync_directory(self.path.parent)
-
-    @staticmethod
-    def _sync_file(path: Path) -> None:
-        # Windows' CRT _commit (used by os.fsync) rejects a read-only fd.
-        # Retain the existing read-only POSIX reopen semantics.
-        descriptor = os.open(path, os.O_RDWR if os.name == "nt" else os.O_RDONLY)
-        try:
-            os.fsync(descriptor)
-        finally:
-            os.close(descriptor)
-
-    @staticmethod
-    def _sync_directory(path: Path) -> None:
-        descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(descriptor)
-        finally:
-            os.close(descriptor)
+        AtomicFile(self.path).sync()
 
     def _initialize(self) -> None:
         try:
@@ -262,9 +248,7 @@ class GoalHistoryStore(DurableFile, ReconciledFile):
             targets.append(guard)
         try:
             for target in targets:
-                self._sync_file(target)
-            if os.name == "posix":
-                self._sync_directory(self.registry_path.parent)
+                AtomicFile(target).sync()
         except OSError as error:
             raise GoalHistoryError("Cannot sync visible goal authority.") from error
 

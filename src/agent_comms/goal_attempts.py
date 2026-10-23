@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, TypeVar
 from uuid import uuid4
 
 from agent_comms.goal_turn_permit import GoalTurnPermit
+from agent_comms.private_path import fsync_directory
 
 from .declared_family import DeclaredFamily
 from .field_codec import MalformedRecord
@@ -62,6 +63,7 @@ from .lifecycle_capability import Failed
 from .locked_store import DurableFile, PublishedSQLiteFile, WireWakeFile
 from .pi_counts import PiCount, UnreportedCount
 from .pi_payloads import PiUsage
+from .store_files import AtomicFile
 from .typed_table import Column, Generated, SQLiteJournalMode, TypedTable
 
 if TYPE_CHECKING:
@@ -710,12 +712,12 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
                 conn.execute("PRAGMA foreign_keys=ON")
                 with cls.write_transaction(conn):
                     GoalLedgerTable.create_schema(conn)
-            cls._sync_paths(staging, directory)
+            AtomicFile(staging).sync()
             # Publish only the complete schema; a concurrent initializer may win.
             # The staging descriptor is closed before its inode becomes shared.
             with suppress(FileExistsError):
                 os.link(staging, path, follow_symlinks=False)
-            cls._sync_directory(directory)
+            fsync_directory(directory)
         except (sqlite3.Error, OSError) as error:
             raise StorageUncertainError("Goal attempt initialization is uncertain.") from error
         finally:
@@ -753,27 +755,8 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
         except sqlite3.Error as error:
             raise StorageUncertainError("Goal attempt database unavailable.") from error
 
-    @classmethod
-    def _sync_paths(cls, path: Path, directory: Path) -> None:
-        # Windows' CRT _commit (used by os.fsync) needs a writable handle.
-        file_fd = os.open(path, os.O_RDWR if os.name == "nt" else os.O_RDONLY)
-        try:
-            os.fsync(file_fd)
-        finally:
-            os.close(file_fd)
-        cls._sync_directory(directory)
-
-    @staticmethod
-    def _sync_directory(directory: Path) -> None:
-        if os.name == "posix":
-            dir_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
-            try:
-                os.fsync(dir_fd)
-            finally:
-                os.close(dir_fd)
-
     def _sync(self) -> None:
-        self._sync_paths(self.path, self.root)
+        AtomicFile(self.path).sync()
 
     def _change(
         self, operation: Callable[[sqlite3.Connection], _T], verify: Callable[[_T], bool]

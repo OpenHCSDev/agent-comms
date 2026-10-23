@@ -21,8 +21,15 @@ from typing import Any, ClassVar, Generic, Self, TypeVar
 
 from .coordination_errors import CoordinationReadUnavailable
 from .field_codec import FieldCodec, MalformedRecord
+from .private_path import PrivateFileRole, fsync_directory
 from .store_files import (
-    SharedLock, StoreLock, StoreLockOwner, StoreOwner, _store_lock, store_lock_path,
+    AtomicFile,
+    SharedLock,
+    StoreLock,
+    StoreLockOwner,
+    StoreOwner,
+    _store_lock,
+    store_lock_path,
 )
 
 T = TypeVar("T")
@@ -85,58 +92,32 @@ class JsonDocument(ABC, Generic[T]):
         old-or-new semantics, not a multi-file transaction or recovery journal.
         """
         fd, staged = StoreOwner.stage_file(self.path)
+        os.close(fd)
+        staged.unlink()
         backup = StoreOwner.rollback_file(staged)
-        directory_fd = None
-        published = False
-        had_original = False
-        keep_backup = False
         try:
-            with os.fdopen(fd, "w", encoding="utf-8") as output:
-                try:
-                    mode = stat.S_IMODE(self.path.stat().st_mode)
-                except FileNotFoundError:
-                    mode = 0o600
-                output.write(text)
-                output.flush()
-                os.chmod(staged, mode)
-                os.fsync(output.fileno())
-            if os.name == "posix":
-                directory_fd = os.open(
-                    self.path.parent, os.O_RDONLY | os.O_DIRECTORY
-                )
+            mode = stat.S_IMODE(self.path.stat().st_mode)
+            os.link(self.path, backup)
+        except FileNotFoundError:
+            mode = PrivateFileRole.permissions
+        try:
             try:
-                os.link(self.path, backup)
-                had_original = True
-            except FileNotFoundError:
-                pass
-            os.replace(staged, self.path)
-            published = True
-            if directory_fd is not None:
-                os.fsync(directory_fd)
-            # A failed backup cleanup is still a failed update: retain the old
-            # inode until unlink succeeds so the exception path can restore it.
-            backup.unlink(missing_ok=True)
-        except BaseException:
-            if published:
-                if had_original:
-                    try:
-                        os.replace(backup, self.path)
-                    except BaseException:
-                        # Keep the recovery bytes if the filesystem also
-                        # refuses rollback; never erase the remaining copy.
-                        keep_backup = True
-                        raise
-                else:
-                    self.path.unlink()
-                if directory_fd is not None:
-                    os.fsync(directory_fd)
-            raise
-        finally:
-            if directory_fd is not None:
-                os.close(directory_fd)
-            staged.unlink(missing_ok=True)
-            if not keep_backup:
+                AtomicFile(self.path, mode).write_text(text)
                 backup.unlink(missing_ok=True)
+            except BaseException:
+                if backup.exists():
+                    if not self.path.exists() or not self.path.samefile(backup):
+                        os.replace(backup, self.path)
+                        fsync_directory(self.path.parent)
+                else:
+                    self.path.unlink(missing_ok=True)
+                    fsync_directory(self.path.parent)
+                raise
+        finally:
+            # A failed restore leaves the last original inode for recovery.
+            if backup.exists() and self.path.exists() and self.path.samefile(backup):
+                backup.unlink()
+
 
 
 class RootFile:

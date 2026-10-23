@@ -22,7 +22,9 @@ from typing import Annotated, Literal
 
 from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText, Sha256Text, WireName
 from agent_comms.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
-from agent_comms.private_path import PrivateDirectoryRole, TrustedAncestorRole
+from agent_comms.private_path import PrivateDirectoryRole, TrustedAncestorRole, fsync_directory
+
+from .store_files import AtomicFile
 
 TREE_PREFIX = "# agent-comms-native-tree-v1 "
 MAX_ENTRIES = 30_000
@@ -310,8 +312,7 @@ class NativeSource:
         try:
             with os.fdopen(descriptor, "wb") as stream:
                 stream.write(self.content)
-                stream.flush()
-                os.fsync(stream.fileno())
+
             os.chmod(temporary, 0o600)
             if temporary.stat().st_nlink != 1:
                 raise NativePackageError("Native extension source staging file is shared")
@@ -356,15 +357,11 @@ def install_declared_sources(root: Path, snapshot_root: Path) -> None:
             if not source.is_installed():
                 replacements.append((source.stage(), source))
         for temporary, source in replacements:
-            os.replace(temporary, source.destination)
+            AtomicFile(source.destination).replace(temporary)
         for source in sources:
             source.verify_installed()
         for parent in {source.destination.parent for source in sources}:
-            descriptor = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
-            try:
-                os.fsync(descriptor)
-            finally:
-                os.close(descriptor)
+            fsync_directory(parent)
     except OSError as error:
         raise NativePackageError("Native extension source could not be installed") from error
     finally:

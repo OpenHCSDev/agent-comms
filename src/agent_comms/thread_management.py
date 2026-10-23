@@ -30,8 +30,8 @@ from .agent_backend import RuntimeLocation
 from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
 from .errors import RelationViolationError
-from .importing import ImportLimits, ImportSnapshot, ThreadImported
 from .field_codec import FieldCodec, NullMember, RecordMember, SingleFieldValue, SubclassUnion
+from .importing import ImportLimits, ImportSnapshot, ThreadImported
 from .launch_runtime import LaunchRuntime, TagListText
 from .message_bus import MessageBus
 from .native_arguments import ConfiguredBinary
@@ -43,13 +43,13 @@ from .private_registry_guard import (
 )
 from .registry_document import RegistrySnapshot
 from .registry_provenance import RegistryNames
-from .store_files import _atomic_write_text
-from .thread_identity import AgentThreadRole, ThreadRole
-from .thread_text import ForkedParent, GivenThreadText, NoThreadText, ThreadText
 from .session_file import SavedSessionFile
+from .store_files import AtomicFile
+from .thread_identity import AgentThreadRole, ThreadRole
 from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 from .thread_owned_state import ThreadOwnedState
 from .thread_rename import RenameThreadResult, ThreadRename
+from .thread_text import ForkedParent, GivenThreadText, NoThreadText, ThreadText
 from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread, current_thread
 
 
@@ -258,7 +258,7 @@ class ThreadManagement:
                 or stat.S_IMODE(info.st_mode) != 0o700
             ):
                 raise ValueError("Imported session directory is not owner-controlled.")
-            _atomic_write_text(session_path, snapshot.pi_session(project))
+            AtomicFile(session_path).write_text(snapshot.pi_session(project))
             try:
                 self.registry._declare_unlocked(thread, StoppedThreadStatus())
                 self.bus.mark_delivered_through(name, self.bus.bus.revision())

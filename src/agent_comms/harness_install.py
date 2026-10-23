@@ -16,6 +16,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
+from agent_comms.private_path import fsync_directory
 from agent_comms_hooks import ClaudeHookProgram
 
 from .declared_family import DeclaredFamily
@@ -34,11 +35,7 @@ def replace_link(link: Path, target: Path) -> None:
     try:
         temporary.symlink_to(target)
         os.replace(temporary, link)
-        directory = os.open(link.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
+        fsync_directory(link.parent)
     finally:
         temporary.unlink(missing_ok=True)
 

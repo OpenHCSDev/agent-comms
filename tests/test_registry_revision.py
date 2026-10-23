@@ -6,7 +6,7 @@ import pytest
 
 from agent_comms.field_codec import MalformedRecord
 from agent_comms.registration import Registration
-from agent_comms.store_files import _atomic_write_text
+from agent_comms.store_files import AtomicFile
 from agent_comms.thread_status import StoppedThreadStatus
 
 
@@ -16,11 +16,11 @@ def test_malformed_replacement_never_serves_stale_success(tmp_path):
     registry.register(registry.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
     saved = path.read_text()
     registry.require("worker")
-    _atomic_write_text(path, "{")
+    AtomicFile(path).write_text("{")
     for _ in range(2):
         with pytest.raises(MalformedRecord):
             registry.require("worker")
-    _atomic_write_text(path, saved)
+    AtomicFile(path).write_text(saved)
     assert registry.require("worker").name == "worker"
 
 
@@ -41,7 +41,7 @@ def test_a_new_revision_decodes_only_the_threads_that_changed(tmp_path):
     stopped.register(stopped.new_thread(name='second', tags=frozenset(), worktree=str(tmp_path)))
     stopped.unregister("second")
     raw["statuses"]["second"] = json.loads(stopped.store.path.read_text())["statuses"]["second"]
-    _atomic_write_text(path, json.dumps(raw, indent=2))
+    AtomicFile(path).write_text(json.dumps(raw, indent=2))
 
     after = reader.all_threads()
     # Unchanged threads keep their decoded declarations and statuses.
@@ -65,12 +65,12 @@ def test_a_changed_revision_is_checked_as_a_whole(tmp_path):
     # A declaration without its status: the unchanged rows do not excuse it.
     raw = json.loads(path.read_text())
     del raw["statuses"]["second"]
-    _atomic_write_text(path, json.dumps(raw, indent=2))
+    AtomicFile(path).write_text(json.dumps(raw, indent=2))
     with pytest.raises(RelationViolationError):
         registry.require("first")
     # A changed row that does not decode is rejected too.
     raw = json.loads(path.read_text())
     raw["statuses"]["second"] = {"kind": "no-such-status"}
-    _atomic_write_text(path, json.dumps(raw, indent=2))
+    AtomicFile(path).write_text(json.dumps(raw, indent=2))
     with pytest.raises(RelationViolationError):
         registry.require("first")
