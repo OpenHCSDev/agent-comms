@@ -48,7 +48,9 @@ class CompactionReply(MroDispatch):
 
     @handles(NothingToCompaction)
     def nothing(self, outcome: NothingToCompaction) -> PromptResponse:
-        raise RequestRefused.internal_error({"reason": "nothing_to_compact"}, message="Nothing to compact.")
+        raise RequestRefused.internal_error(
+            {"reason": "nothing_to_compact"}, message="Nothing to compact."
+        )
 
     @handles(FailedCompaction)
     def failed(self, outcome: FailedCompaction) -> PromptResponse:
@@ -56,7 +58,9 @@ class CompactionReply(MroDispatch):
 
     @handles(StaleCompaction)
     def stale(self, outcome: StaleCompaction) -> PromptResponse:
-        raise RequestRefused.internal_error({"reason": "stale"}, message="The history moved past the summary.")
+        raise RequestRefused.internal_error(
+            {"reason": "stale"}, message="The history moved past the summary."
+        )
 
 
 async def compact_context(

@@ -13,14 +13,13 @@ from dataclasses import dataclass, field, replace
 from functools import partial
 from typing import TYPE_CHECKING, Generic, Self, TypeVar
 
-from agent_comms.coordination_errors import RequestRefused
 
 
 from .assignment_states import DeferredAssignment, DeliveredAssignment
 from .child_process import ProcessIdentity
 from .coordination_cohort import pending_sealed_assignments
 from .coordination_database import CoordinationStore
-from .coordination_errors import IdentityConflict, StaleRevision
+from .coordination_errors import IdentityConflict, RequestRefused, StaleRevision
 from .coordination_session import ReadNativeCoordinationSession
 from .coordinator import Coordination
 from .controller import Controller

@@ -8,7 +8,6 @@ from contextlib import asynccontextmanager
 from functools import partial
 from typing import TYPE_CHECKING
 
-from agent_comms.coordination_errors import RequestRefused
 
 from .activity import (
     DrainDiagnostic,
@@ -16,7 +15,7 @@ from .activity import (
     StoppedDrainDiagnostic,
     UnavailableDrainDiagnostic,
 )
-from .coordination_errors import DrainDeferred, DrainUnavailable
+from .coordination_errors import DrainDeferred, DrainUnavailable, RequestRefused
 from .coordinator import Coordination
 from .native_failures import NativeRequestFailure
 

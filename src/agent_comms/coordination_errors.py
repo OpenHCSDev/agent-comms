@@ -7,7 +7,7 @@ from copyreg import __newobj__
 from typing import ClassVar, Never, Self
 
 
-class RequestRefused(Exception):
+class RequestRefused(Exception):  # noqa: N818 - domain request outcome
     """A Core request refusal, independent of the transport carrying it."""
 
     INVALID_PARAMS: ClassVar[int] = -32602
