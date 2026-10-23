@@ -47,7 +47,7 @@ from .recorded_bus import RecordedBusIdentity
 from .registration import Registration
 from .registry_provenance import RegistryProvenance
 from .revision_views import BusSourceView
-from .store_files import AtomicFile
+from .store_files import AtomicFile, SourceTier
 from .thread_identity import UnrecordedThreadIncarnation
 from .threads import ThreadProvenance
 
@@ -398,7 +398,7 @@ class HistoricalThread:
     thread: ThreadProvenance
 
 
-class HistoryArchive(DurableFile, LockedFile):
+class HistoryArchive(DurableFile, LockedFile, SourceTier):
     """Ordered immutable source snapshots; never a delivery/launch authority."""
 
     filename = "history_sources.json"

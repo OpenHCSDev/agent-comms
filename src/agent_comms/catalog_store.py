@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, ClassVar
 from .catalog_document import CatalogDocument
 from .maintenance_barrier import CarriedDocument
 from .private_path import FileObservation, FileRevision
+from .store_files import CatalogTier
 from .thread_owned_state import ThreadOwnedState
 
 if TYPE_CHECKING:
@@ -18,7 +19,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, slots=True)
-class ChannelCatalog(ThreadOwnedState, CarriedDocument[CatalogDocument]):
+class ChannelCatalog(ThreadOwnedState, CarriedDocument[CatalogDocument], CatalogTier):
     filename: ClassVar[str] = "catalog.json"
     json_indent = 2
 

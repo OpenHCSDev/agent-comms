@@ -13,6 +13,8 @@ from agent_comms.locked_store import DocumentChange
 from agent_comms.maintenance_barrier import CarriedDocument
 from agent_comms.thread_owned_state import ThreadOwnedState
 
+from .store_files import DependentStateTier
+
 if TYPE_CHECKING:
     from agent_comms.threads import Thread
 
@@ -104,7 +106,7 @@ class LedgerDocument(LedgerValue, JsonShapeMember, CliResult):
 
 
 @dataclass(frozen=True, slots=True)
-class SharedLedger(ThreadOwnedState, CarriedDocument[LedgerDocument]):
+class SharedLedger(ThreadOwnedState, CarriedDocument[LedgerDocument], DependentStateTier):
     """One free-form JSON document; no in-memory mirror."""
 
     filename: ClassVar[str] = "ledger.json"

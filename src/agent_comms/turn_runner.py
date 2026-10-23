@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import AsyncExitStack, asynccontextmanager
 from functools import partial
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from acp.exceptions import RequestError
 from acp.schema import (
@@ -47,6 +47,7 @@ from .turn_effects import PromptBlock, TurnEffects
 from .turn_lease import TurnLeaseFence, TurnState
 from .turn_phase import CancellingPhase, TurnPhase
 from .turn_terminal import TurnInterruption
+from .turn_outcome import TurnOutcome
 
 if TYPE_CHECKING:
     from . import pi_events as pi
@@ -58,6 +59,8 @@ if TYPE_CHECKING:
 
 AGENT_PREFIX = "!agent "
 RELAY_PREFIX = "!relay "
+
+type TurnTask = asyncio.Task[TurnOutcome | PromptResponse | None]
 
 
 class CompactionObservation(MroDispatch):
@@ -96,7 +99,7 @@ class TurnRunner:
         self.owner_stop = owner_stop
         self.agent_bin = agent_bin.configured()
         self.agent_args = agent_args.configured()
-        self.turn_tasks: dict[str, asyncio.Task[Any]] = {}
+        self.turn_tasks: dict[str, TurnTask] = {}
         # One backend per ACP session, of the bound thread's declared kind.
         self.persistent_backends: dict[str, AgentBackend] = {}
         self.turn_locks: dict[str, asyncio.Lock] = {}
@@ -297,7 +300,7 @@ class TurnRunner:
     def acquire_turn(
         self, resources: AsyncExitStack, session_id: str, thread_name: str,
         turn_id: str, detail: str, routing: TurnRouting | None = None, *,
-        task: asyncio.Task[Any] | None = None,
+        task: TurnTask | None = None,
     ) -> RegistryOwner:
         """Bind the exact installed lease to cleanup before worker delivery.
 
@@ -328,7 +331,7 @@ class TurnRunner:
         session_id: str,
         lease: TurnLeaseFence,
         *,
-        task: asyncio.Task[Any] | None = None,
+        task: TurnTask | None = None,
     ) -> None:
         """Settle after terminal publication, releasing waiters even if the UI fails.
 

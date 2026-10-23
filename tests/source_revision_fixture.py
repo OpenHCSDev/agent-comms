@@ -2,7 +2,7 @@
 import ast
 from pathlib import Path
 import subprocess
-from typing import ClassVar
+from typing import ClassVar, Self
 from tempfile import mkdtemp
 
 from agent_comms.repo import Repo
@@ -58,7 +58,7 @@ class SourceRepository(Repo):
         return remote
 
     @classmethod
-    def create(cls, root: Path, name: RepositoryName = RepositoryName.from_wire('example/source')):
+    def create(cls, root: Path, name: RepositoryName = RepositoryName.from_wire('example/source')) -> Self:
         root.mkdir(parents=True, exist_ok=True)
         root = Path(mkdtemp(prefix='source-', dir=root))
         repository = root / 'repository'
@@ -82,4 +82,6 @@ class SourceRepository(Repo):
         cls.git(repository, 'update-ref', 'refs/heads/feature', branch)
         cls.git(repository, 'push', 'origin', 'main', 'feature:refs/pull/7/head')
         cls.git(repository, 'reset', '--hard', 'main')
-        return cls.of(repository)
+        created = cls.of(repository)
+        assert isinstance(created, cls)
+        return created

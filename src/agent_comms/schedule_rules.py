@@ -16,6 +16,7 @@ from .errors import RelationViolationError
 from .maintenance_barrier import MaintenanceStatus
 from .reservation_rules import ReservationRule, RuleCheck, ReservationViolationError
 from .routing import ScheduledTurn
+from .turn_outcome import TurnOutcome
 
 if TYPE_CHECKING:
     from .goals import GoalDeclaration
@@ -25,7 +26,7 @@ if TYPE_CHECKING:
     from .turn_runner import TurnRunner
 
 
-class WakeOutcome(DeclaredFamily):
+class WakeOutcome(DeclaredFamily, TurnOutcome):
     """A completed wake owns whether observation should run again."""
 
     @abstractmethod
