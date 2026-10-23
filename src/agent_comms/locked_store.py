@@ -186,10 +186,6 @@ class RootFile:
         path = cls.path_in(root)
         return frozenset((path,)) if path.is_file() else frozenset()
 
-    @staticmethod
-    def content_owner(path: Path) -> type[RootFile]:
-        """The file behavior for an arbitrary resource, including undeclared files."""
-        return SQLiteFile if SQLiteFile.is_database(path) else RootFile
 
     @staticmethod
     def copy_file(source: str | Path, target: str | Path) -> Path:
@@ -528,20 +524,6 @@ class SQLiteFile(RootFile):
                 )
                 raise
 
-    @classmethod
-    def is_database(cls, path: Path) -> bool:
-        if path.stat().st_size == 0:
-            return False
-        # Even a header-only plain open/read/close can cancel locks owned by
-        # another SQLite connection in this process. Let SQLite own the fd.
-        with CoordinationReadUnavailable.checking():
-            try:
-                with closing(cls.read_snapshot(path, StoreBusy())):
-                    return True
-            except sqlite3.DatabaseError as error:
-                if error.sqlite_errorcode & 0xFF == sqlite3.SQLITE_NOTADB:
-                    return False
-                raise
 
     @classmethod
     def copy_file(cls, source: str | Path, target: str | Path) -> Path:

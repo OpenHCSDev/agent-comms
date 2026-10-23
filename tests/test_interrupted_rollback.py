@@ -68,7 +68,7 @@ def test_next_install_completes_a_killed_registry_restore(tmp_path, monkeypatch,
     # Put the guard first, as the interrupted historical backup did. Restore ordering
     # must come from the registry declaration, not from this manifest's ordering.
     backup = StoreBackup.take(comms.root, route, tuple(reversed(registry.written)), spill)
-    expected = {path: StoreBackup.digest(path) for path in registry.written}
+    expected = {path: RegistryStore.digest(path) for path in registry.written}
     RegistryTitleCarry(comms.root, comms.root, spill).carry(apply=True)
     killed = subprocess.run(
         [sys.executable, "-c", KILLED_RESTORE, str(comms.root), str(route), str(backup.path), str(publication)],
@@ -82,5 +82,5 @@ def test_next_install_completes_a_killed_registry_restore(tmp_path, monkeypatch,
             tmp_path / "missing-checkout", comms.root, "HEAD", UnnamedInstaller(), RehearsalMode(),
             False, spill, tmp_path / "install-scratch", lambda: None, InstallReport(),
         )
-    assert {path: StoreBackup.digest(path) for path in registry.written} == expected
+    assert {path: RegistryStore.digest(path) for path in registry.written} == expected
     assert comms.registry.require("worker").title != "Carried title"

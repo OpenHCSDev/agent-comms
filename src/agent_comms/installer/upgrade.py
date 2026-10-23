@@ -966,11 +966,14 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
         stack = replace(self.staged, home=home)
         pending = tuple(replace(step, root=copied, spill_dir=practice.spill_dir)
                         for step in self.pending)
-        for destination in stack.backup_files(pending, self.tree):
-            source = self.root / destination.relative_to(copied)
+        inputs = tuple(self.root / destination.relative_to(copied)
+                       for destination in stack.backup_files(pending, self.tree))
+        for resource, owner in RootFile.owned_files(self.root, inputs).items():
+            source = self.root / resource.path
+            destination = copied / resource.path
             if source.exists() and not destination.exists():
                 destination.parent.mkdir(parents=True, exist_ok=True)
-                RootFile.content_owner(source).copy_file(source, destination)
+                owner.copy_file(source, destination)
         self.installed.running_owners(copied)
         maintenance = MaintenanceBarrier(RegistryStore.at(copied).path)
         hold = maintenance.retarget(maintenance.begin(MaintenanceOperator.current()), stack.runtime)
