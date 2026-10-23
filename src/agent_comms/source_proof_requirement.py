@@ -8,6 +8,7 @@ inheritance; policy declarations retain lifecycle/engagement ownership.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -17,6 +18,32 @@ if TYPE_CHECKING:
 class SourceProofRequirement(ABC):
     @abstractmethod
     def proves_source(self, evidence: tuple[HistoricalNativeInput, ...]) -> bool: ...
+
+
+class SourceSettlement(ABC):
+    """Whether a claim is settled, separately from whether it injected native input."""
+
+    @abstractmethod
+    def apply(self, inputs: list[HistoricalNativeInput]) -> bool: ...
+
+
+@dataclass(frozen=True)
+class ProvedByInput(SourceSettlement):
+    evidence: tuple[HistoricalNativeInput, ...]
+
+    def apply(self, inputs: list[HistoricalNativeInput]) -> bool:
+        inputs.extend(self.evidence)
+        return True
+
+
+class SettledWithoutInput(SourceSettlement):
+    def apply(self, inputs: list[HistoricalNativeInput]) -> bool:
+        return True
+
+
+class Unproved(SourceSettlement):
+    def apply(self, inputs: list[HistoricalNativeInput]) -> bool:
+        return False
 
 
 class NoSourceProof(SourceProofRequirement):
