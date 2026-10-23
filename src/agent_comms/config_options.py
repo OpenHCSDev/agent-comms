@@ -13,39 +13,44 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Protocol
 
-from acp import Client, RequestError
+from acp import RequestError
 from acp.schema import (
     ConfigOptionUpdate,
-    SessionConfigOptionBoolean,
     SessionConfigOptionSelect,
     SessionConfigSelectOption,
     SetSessionConfigOptionResponse,
 )
 
-from .active_route import CommsRoute, resolve_comms_route
+from .active_route import resolve_comms_route
 from .agent_backend import UseSettings
 from .child_process import join_retirement
 from .bus import Bus
-from .comms import Comms
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, RestartEnvironment
-from .native_arguments import ConfiguredBinary, InheritedArguments, NativeArguments
-from .native_package import VerifiedNativePackage
+from .native_arguments import ConfiguredBinary, InheritedArguments
 from .native_pi import NativePiRpcLaunch
 from .native_failures import NativePiUnavailable
-from .pi_vocabulary import ThinkingChoice
-from .thread_model import ThreadModel
-from .threads import ChosenModel, NextTurnConfiguration, Thread
+from .threads import ChosenModel, NextTurnConfiguration
 from .watched import FileSource
 
 if TYPE_CHECKING:
+    from acp import Client
+    from acp.schema import SessionConfigOptionBoolean
+
+    from .active_route import CommsRoute
+    from .comms import Comms
+    from .native_arguments import NativeArguments
+    from .native_package import VerifiedNativePackage
     from .pi_commands import SettingCommand
+    from .pi_vocabulary import ThinkingChoice
     from .runtime import RuntimeServer, SocketClient
     from .session_effects import SessionEffects
     from .session_lifecycle import SessionLifecycle
+    from .thread_model import ThreadModel
+    from .threads import Thread
 
 
 class InvalidConfigChoice(ValueError):

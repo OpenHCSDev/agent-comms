@@ -21,7 +21,6 @@ from .agent_backend import AgentBackend
 from .agent_event_updates import AcpEventConsumer, TurnEventConsumer
 from .channel_targets import NamedTarget
 from .channels import AllChannel
-from .comms import Comms
 from .coordinator import Coordination
 from .controller import Controller
 from .errors import RelationViolationError
@@ -50,6 +49,7 @@ from .turn_terminal import EndedWithoutResult, TurnInterruption, TurnTerminal
 
 if TYPE_CHECKING:
     from . import pi_events as pi
+    from .comms import Comms
     from .coordinated_runtime import SelectedExecution
     from .input_drain import DrainTurn, InputDrain
     from .session_lifecycle import SessionLifecycle
