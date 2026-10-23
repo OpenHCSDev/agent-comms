@@ -476,7 +476,7 @@ class StoreLockGraph:
                     acquisitions = self.context_locks(item.context_expr, env, module, 3)
                     if len(acquisitions) > 1:
                         acquisitions = tuple(
-                            sorted(acquisitions, key=lambda x: self.ranks.get(x.store, 999))
+                            sorted(acquisitions, key=lambda x: self.ranks[x.store])
                         )
                     for acquired in acquisitions:
                         for outer in held:
