@@ -239,6 +239,14 @@ class PinnedSubmodule:
         occupied = self.path.is_symlink() or (self.path.is_dir() and any(self.path.iterdir()))
         return (self.store.exists() or occupied) and not self.usable()
 
+    def at_pin(self) -> bool:
+        """The initialized working tree's HEAD equals its owner's declared gitlink."""
+        if not (self.path / ".git").exists():
+            return False
+        gitlink = Repo.git(self.checkout, "ls-tree", "HEAD", "--",
+                           str(self.path.relative_to(self.checkout))).split()[2]
+        return Repo.git(self.path, "rev-parse", "HEAD").strip() == gitlink
+
     def clear(self) -> None:
         """Pinned package data, never a unit's edit: dropped whole so the next update
         clones it again from its declared source."""
@@ -283,14 +291,15 @@ class Checkout:
     def prepare(self) -> None:
         """Populate the pinned submodules, rebuilding any an interrupted clone left broken.
         A tree that pins none has nothing to prepare."""
-        modules = self.submodules()
-        if not modules:
-            return
-        for module in modules:
+        pending: list[str] = []
+        for module in self.submodules():
             if module.broken():
                 module.clear()
-        Repo.git(self.path, "submodule", "update", "--init", "--recursive", "--checkout",
-                 timeout=300)
+            if not module.at_pin():
+                pending.append(str(module.path.relative_to(self.path)))
+        if pending:
+            Repo.git(self.path, "submodule", "update", "--init", "--checkout", "--", *pending,
+                     timeout=300)
 
     def held_work(self) -> str:
         """Changes outside the pinned submodules, which retiring the tree would lose."""
