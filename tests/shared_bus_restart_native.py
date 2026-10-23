@@ -1045,7 +1045,7 @@ async def run(arguments):
                                    for name in names)
                         concurrent_native = True
                         provider.response_gate.set()
-                    replies = service.bus.inbox('fixture-sender')
+                    replies = service.bus.inbox('fixture-sender').page.messages
                     completed = len(replies)==len(names)
                     if arguments.collective:
                         with closing(sqlite3.connect(

@@ -56,7 +56,7 @@ def test_large_uncertain_inputs_do_not_stop_the_message_page_draining(inbox_comm
     comms.messaging.send("a", "b", "An unread new message").message.message_id
     authority_before = ledger.path.read_bytes()
     expected = {
-        "messages": [message.to_wire() for message in comms.bus.inbox("b")],
+        "messages": [message.to_wire() for message in comms.bus.inbox("b").page.messages],
         "acknowledged": 1,
         "remaining": 0,
         "unresolved_inputs": FieldCodec.encode(comms.goals.unresolved_inputs("b")),
@@ -78,7 +78,7 @@ def test_small_inbox_keeps_existing_contract(inbox_comms, ack):
     ledger = seed_unknown(comms, 1, "Earlier unresolved message")
     comms.messaging.send("a", "b", "hello").message.message_id
     expected = {
-        "messages": [message.to_wire() for message in comms.bus.inbox("b")],
+        "messages": [message.to_wire() for message in comms.bus.inbox("b").page.messages],
         "acknowledged": int(ack),
         "remaining": int(not ack),
         "unresolved_inputs": FieldCodec.encode(comms.goals.unresolved_inputs("b")),

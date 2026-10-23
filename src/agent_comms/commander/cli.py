@@ -25,7 +25,12 @@ def main() -> None:
     modules = (import_module(f'{package.__name__}.{m.name}') for m in pkgutil.iter_modules(package.__path__) if m.name != 'cli')
     tools = {tool_name(module.__name__): module for module in modules if hasattr(module, 'main')}
     if not argv or argv[0] not in tools:
-        sys.exit(f'usage: agent-comms-commander {{{",".join(sorted(tools))}}} ARGS...')
+        lines = [f'usage: agent-comms-commander {{{",".join(sorted(tools))}}} ARGS...', '']
+        lines += [f'  {name:<11} {tools[name].__doc__.splitlines()[0]}'
+                  for name in sorted(tools)]
+        asked = argv[:1] in (['-h'], ['--help'])
+        print('\n'.join(lines), file=sys.stdout if asked else sys.stderr)
+        sys.exit(0 if asked else 2)
     try:
         # Every comms process selects its root once at startup, as the comms CLI does.
         LaunchRoot.startup(argv, lambda: (LaunchRoot.from_path(options.root) if options.root
