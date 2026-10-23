@@ -356,7 +356,7 @@ class ReadRequest(AwaitedRead):
     @abstractmethod
     def read(self, comms: Comms) -> object: ...
 
-    def answer(self, comms: Comms) -> ReadAnswered | ReadRefused | ReadBusy:
+    def answer(self, comms: Comms) -> ReadOutcome:
         try:
             self.require_root(comms)
             try:
@@ -398,7 +398,7 @@ class OwnerRead(AwaitedRead):
             service.owner_reads.pop(self.request_id, None)
         service.send(answer)
 
-    async def answer(self, comms: Comms) -> ReadAnswered | ReadRefused:
+    async def answer(self, comms: Comms) -> ReadOutcome:
         try:
             self.require_root(comms)
             return ReadAnswered(self.request_id, await self.ask(comms))
@@ -889,6 +889,10 @@ class ServiceResult(ABC):
     def received(self, process: ObservationProcess, observed: list[Observed]) -> None: ...
 
 
+class ReadOutcome(ServiceResult):
+    """The service's answer to a read, including a read that remains busy."""
+
+
 @dataclass(frozen=True)
 class Observed(ObservationStep, ServiceResult):
     """A result, as of one revision of Core's stores."""
@@ -903,7 +907,7 @@ class Observed(ObservationStep, ServiceResult):
 
 
 @dataclass(frozen=True)
-class ReadAnswered(ServiceResult):
+class ReadAnswered(ReadOutcome):
     request_id: int
     value: object
 
@@ -913,7 +917,7 @@ class ReadAnswered(ServiceResult):
 
 
 @dataclass(frozen=True)
-class ReadBusy(ServiceResult):
+class ReadBusy(ReadOutcome):
     """Source busy: the original read remains pending, not a failed input."""
 
     request_id: int
@@ -934,7 +938,7 @@ class ReadBusy(ServiceResult):
 
 
 @dataclass(frozen=True)
-class ReadRefused(ServiceResult):
+class ReadRefused(ReadOutcome):
     """The read raised ``error``; the UI caller receives that same exception."""
 
     request_id: int

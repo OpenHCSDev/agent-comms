@@ -47,24 +47,20 @@ from .turn_effects import PromptBlock, TurnEffects
 from .turn_lease import TurnLeaseFence, TurnState
 from .turn_phase import CancellingPhase, TurnPhase
 from .turn_terminal import TurnInterruption
+from .turn_outcome import TurnOutcome
 
 if TYPE_CHECKING:
     from . import pi_events as pi
-    from .agent_backend import CompactionOutcome
     from .comms import Comms
     from .coordinated_runtime import SelectedExecution
     from .input_drain import DrainTurn, InputDrain
     from .session_lifecycle import SessionLifecycle
-    from .schedule_rules import WakeOutcome
-    from .selected_result import CoordinatedTurn
 
 
 AGENT_PREFIX = "!agent "
 RELAY_PREFIX = "!relay "
 
-type TurnTask = asyncio.Task[
-    PromptResponse | CoordinatedTurn | CompactionOutcome | WakeOutcome | None
-]
+type TurnTask = asyncio.Task[TurnOutcome | PromptResponse | None]
 
 
 class CompactionObservation(MroDispatch):
