@@ -16,6 +16,19 @@ if TYPE_CHECKING:
     from .goals import Goal
 
 
+class FromBlockedState:
+    @classmethod
+    def after_blocked_state(cls) -> bool:
+        return True
+
+
+class FromCompletedGoal:
+    @classmethod
+    def after_completed_goal(cls) -> bool:
+        return True
+
+
+
 @dataclass(frozen=True)
 class PauseSource(DeclaredFamily, affix="Pause"):
     lifts_on_compliance: ClassVar[bool] = False
@@ -112,11 +125,19 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
 class FromOpenGoal:
     """A state eligible as the target of an active/paused decision."""
 
+    @classmethod
+    def after_open_goal(cls) -> bool:
+        return True
+
 
 class OpenGoal(GoalState):
     @classmethod
     def successors(cls) -> tuple[type[GoalState], ...]:
         return GoalState.members_with(FromOpenGoal)
+
+    @classmethod
+    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
+        return nxt.after_open_goal()
 
 
 @dataclass(frozen=True)
@@ -172,8 +193,12 @@ class BlockedState(GoalState, FromOpenGoal):
         return replace(action.continue_goal(goal, ctx), state=ActiveGoal())
 
     @classmethod
-    def successors(cls) -> tuple[type[GoalState], ...]:
-        return (BlockedGoal,)
+    def successors(cls) -> tuple[type[LifecycleState], ...]:
+        return tuple(FromBlockedState.__subclasses__())
+
+    @classmethod
+    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
+        return nxt.after_blocked_state()
 
     def activity_refusal(self) -> str:
         return self.transition_refusal()
@@ -183,7 +208,7 @@ class BlockedState(GoalState, FromOpenGoal):
 
 
 @dataclass(frozen=True)
-class BlockedGoal(BlockedState):
+class BlockedGoal(FromBlockedState, BlockedState):
     block_reason: str
 
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
@@ -213,7 +238,7 @@ class UnrecordedBlockGoal(BlockedState):
 
 
 @dataclass(frozen=True)
-class CompletedGoal(Complete, Terminal, GoalState, FromOpenGoal):
+class CompletedGoal(FromCompletedGoal, Complete, Terminal, GoalState, FromOpenGoal):
 
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
         from .goal_presentation import CompletedExecution
@@ -224,8 +249,12 @@ class CompletedGoal(Complete, Terminal, GoalState, FromOpenGoal):
         return action.create(ctx)
 
     @classmethod
-    def successors(cls) -> tuple[type[GoalState], ...]:
-        return (CompletedGoal,)
+    def successors(cls) -> tuple[type[LifecycleState], ...]:
+        return tuple(FromCompletedGoal.__subclasses__())
+
+    @classmethod
+    def may_become(cls, nxt: LifecycleState | type[LifecycleState]) -> bool:
+        return nxt.after_completed_goal()
 
     def transition_refusal(self) -> str:
         return "A completed goal cannot be resumed; set a new goal."
