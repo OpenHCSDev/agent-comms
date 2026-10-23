@@ -27,6 +27,7 @@ from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.installer.backup import StoreBackup
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceNotHeldError, MaintenanceOperator
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
@@ -245,9 +246,9 @@ def test_two_commanders_cannot_assign_the_same_unit_concurrently(fork_bus, tmp_p
     print(refused.stderr.strip())
 
 
-def test_a_retained_store_takes_its_declared_schema_on_the_next_write(fork_bus):
-    """The writer's open derives what the declaration says: a missing table and indexes are
-    created, and rows stored under ProblemAllocation's declared earlier name move to it."""
+def test_retained_schema_is_carried_under_maintenance_before_runtime_writes(fork_bus):
+    """Only the installer carries missing objects and declared earlier names;
+    runtime writes refuse a changed schema and resume after that carry."""
     comms, source, order = fork_bus
     store = comms.goals.todos
     retained = store.get('P40')
@@ -255,11 +256,24 @@ def test_a_retained_store_takes_its_declared_schema_on_the_next_write(fork_bus):
         db.execute(f'DROP TABLE "{ProblemAllocation.declared_name}"')
         db.execute(f'DROP INDEX "{Todo.unit_index.name(Todo)}"')
         db.execute(f'DROP INDEX "{Todo.problem_index.name(Todo)}"')
+    with pytest.raises(MaintenanceNotHeldError):
+        store.allocate_problem()
+    barrier = MaintenanceBarrier(comms.registry.store.path)
+    hold = barrier.begin(MaintenanceOperator.current())
+    with hold.holding():
+        assert store.reconcile_at(store.path)
+    barrier.clear(hold)
     assert store.allocate_problem() == 'P41'
     assert store.get('P40') == retained
     with store.writing() as db:
         db.execute(f'ALTER TABLE "{ProblemAllocation.declared_name}" RENAME TO problem_number')
         db.execute(f'DROP INDEX "{Todo.problem_index.name(Todo)}"')
+    with pytest.raises(MaintenanceNotHeldError):
+        store.allocate_problem()
+    hold = barrier.begin(MaintenanceOperator.current())
+    with hold.holding():
+        assert store.reconcile_at(store.path)
+    barrier.clear(hold)
     assert store.allocate_problem() == 'P42'
     with store.snapshot() as db:
         assert [row.number for row in ProblemAllocation.select(db)] == [41, 42]
