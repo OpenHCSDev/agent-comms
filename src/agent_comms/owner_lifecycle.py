@@ -486,7 +486,7 @@ class OwnerLifecycle:
         # native-child absence before terminal settlement.
         self._finish_stopped_owners(owners)
         RecoveryMonitorCapability.settle_stopped_owners(
-            self.root, tuple(thread for thread, _ in owners))
+            self, tuple(thread for thread, _ in owners))
 
     def require_private_launch(self) -> PrivateNkLaunch:
         """The launch authority of a root that must be private."""
@@ -513,7 +513,7 @@ class OwnerLifecycle:
     ) -> Thread:
         # Retire the predecessor while its released declaration is still stopped.
         # Reserving the replacement PID first destroys that observation.
-        RecoveryMonitorCapability.recover_owner(self.root, thread)
+        RecoveryMonitorCapability.recover_owners(self, (thread,))
         self.maintenance.assert_open_unlocked()
         env = dict(os.environ if environment is None else environment)
         launch_runtime.require_available()

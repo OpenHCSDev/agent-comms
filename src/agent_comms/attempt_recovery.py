@@ -50,9 +50,8 @@ from .registration import Registration
 
 if TYPE_CHECKING:
     from agent_comms.coordination_session import NativeBoundary
-    from agent_comms.comms import Comms
     from agent_comms.threads import Thread
-    from agent_comms.owner_lifecycle import OwnerRelease, OwnerReleaseEvidence
+    from agent_comms.owner_lifecycle import OwnerLifecycle, OwnerRelease, OwnerReleaseEvidence
 
 _OWNER_LOSS_ISSUER = object()
 
@@ -328,33 +327,21 @@ class RecoveryMonitorCapability:
         shutil.rmtree(root)
 
     @classmethod
-    def settle_stopped_owners(cls, root: Path, owners: Sequence[Thread]) -> None:
-        """Retire the stopped selection through one root and one recovery-store pass."""
-        from .comms import wire
-
+    def settle_stopped_owners(cls, lifecycle: OwnerLifecycle, owners: Sequence[Thread]) -> None:
+        """Retire the stopped selection through its existing lifecycle and stores."""
         if not owners:
             return
-        comms = wire(root)
-        acknowledgements = comms.owners.releases.read_many(tuple(owner.name for owner in owners))
-        store = comms.goals.open_goal_store()
+        acknowledgements = lifecycle.releases.read_many(tuple(owner.name for owner in owners))
+        store = lifecycle.goals.open_goal_store()
         for owner in owners:
             if not acknowledgements[owner.name].matches(owner):
                 raise RecoveryBlocked("stopped attempt requires the exact exited owner release")
             owner.goal.stopped_permit(store).stop(store)
-        cls.recover_owners(comms, owners)
+        cls.recover_owners(lifecycle, owners)
 
     @classmethod
-    def recover_owner(cls, root: Path, owner: Thread) -> None:
-        """A launch observes its predecessor using the same recovery implementation."""
-        from .comms import wire
-
-        if not CoordinationStore.path_in(root).exists():
-            return
-        cls.recover_owners(wire(root), (owner,))
-
-    @classmethod
-    def recover_owners(cls, comms: Comms, owners: Sequence[Thread]) -> None:
-        path = CoordinationStore.path_in(comms.root)
+    def recover_owners(cls, lifecycle: OwnerLifecycle, owners: Sequence[Thread]) -> None:
+        path = CoordinationStore.path_in(lifecycle.root)
         if not path.exists():
             return  # Goal claims can exist without a selected native execution.
         with Coordination(str(path)) as store:
@@ -368,8 +355,8 @@ class RecoveryMonitorCapability:
                     "the owner pointer names no execution")))
             if not pending:
                 return
-            with (store.session.boundary(comms.bus) as boundary,
-                  comms.owners.releases.reading() as releases):
+            with (store.session.boundary(lifecycle.bus) as boundary,
+                  lifecycle.releases.reading() as releases):
                 for owner, execution_id in pending:
                     with VerifiedOwnerLoss.observe_acquired_release(
                         store, execution_id, boundary, releases,

@@ -107,7 +107,7 @@ def recover_starting_owner(released_starting):
         inputs = input_evidence(store)
     bus = Bus(Bus.path_in(released_starting)).revision()
     dispositions = FileRevision.capture(InputDispositions.path_in(released_starting))
-    RecoveryMonitorCapability.recover_owner(released_starting, owner)
+    RecoveryMonitorCapability.recover_owners(wire(released_starting).owners, (owner,))
     with Coordination(released_starting / "coordination.sqlite3") as store:
         after = store.get(execution_id)
         after.attempt.lifecycle.require(Failed, ValueError("failure required"))
@@ -164,7 +164,7 @@ def test_undispatched_owner_loss_refuses_a_live_native_child(released_starting, 
     ])
     try:
         with pytest.raises(RecoveryBlocked):
-            RecoveryMonitorCapability.recover_owner(released_starting, comms.registry.require("beta"))
+            RecoveryMonitorCapability.recover_owners(wire(released_starting).owners, (comms.registry.require("beta"),))
         with Coordination(released_starting / "coordination.sqlite3") as store:
             pointer = CurrentExecutions.require(store.session._connection, owner_lookup=owner.incarnation.lookup)
             execution_id = pointer.execution_id.require("the live child must keep its attempt unresolved")
@@ -239,7 +239,7 @@ def test_recover_owner_refuses_a_conflicting_input_identity(released_starting, c
             ).insert(db)
         inputs = input_evidence(store)
     with pytest.raises(RecoveryBlocked) as blocked:
-        RecoveryMonitorCapability.recover_owner(released_starting, owner)
+        RecoveryMonitorCapability.recover_owners(wire(released_starting).owners, (owner,))
     assert cli_main(["--root", str(released_starting), "start", "--name", "beta"]) == 1
     assert WATCH_LINE.validate_json(capsys.readouterr().out) == CoreError.from_exception(blocked.value)
     with Coordination(released_starting / "coordination.sqlite3") as store:

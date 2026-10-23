@@ -238,7 +238,7 @@ class FencedOwnerBatch:
             from .attempt_recovery import RecoveryMonitorCapability
 
             RecoveryMonitorCapability.settle_stopped_owners(
-                self.lifecycle.root, tuple(thread for thread, _ in self.captured))
+                self.lifecycle, tuple(thread for thread, _ in self.captured))
             self.ownership.enter_context(cutover.stopped_resources(self.lifecycle))
             snapshot = self.lifecycle.registry.snapshot()
             owners = progress.retired
