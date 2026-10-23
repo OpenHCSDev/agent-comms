@@ -5,12 +5,13 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, ClassVar
 
-from acp.schema import PermissionOption, ToolCallUpdate
 from pydantic import BaseModel
 
 from .coordination_errors import IdentityConflict
 
 if TYPE_CHECKING:
+    from acp.schema import PermissionOption, ToolCallUpdate
+
     from .runtime import RuntimeServer
     from .selected_write_authority import AcpSelectedWriteAuthority
     from .turn_runner import TurnRunner

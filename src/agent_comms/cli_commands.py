@@ -148,7 +148,7 @@ from .registry_document import CommanderProject, RegistrySnapshot
 from .registry_store import RegistryStore
 from .repo import GitCommandError, Repo
 from .restart_scope import AllOwners, OneOwner, RestartTarget
-from .runtime import RuntimeConnection, socket_path
+from .owner_connection import OwnerConnection, socket_path
 from .schema_report import StoreSchemaReport, StoreSchemaReports
 from .send_result import SendResult
 from .shared_ledger import LedgerDocument
@@ -2183,7 +2183,7 @@ class ContextCliCommand(CliCommand):
 
     def apply(self, ctx: Comms) -> CliResult:
         owner = ctx.registry.require(self.thread)
-        connection = RuntimeConnection(ctx, owner.name, socket_path(ctx.root, owner.require_process().pid))
+        connection = OwnerConnection(ctx, owner.name, socket_path(ctx.root, owner.require_process().pid))
 
         async def inspect():
             try:

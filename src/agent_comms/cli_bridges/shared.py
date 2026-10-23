@@ -23,7 +23,6 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar
 
-from acp.schema import SessionConfigSelectOption
 from pydantic import Field, model_validator
 
 from agent_comms import field_codec, messages
@@ -48,7 +47,7 @@ from agent_comms.cli_protocol import (
     raise_child_exit,
 )
 from agent_comms.comms import Comms, wire
-from agent_comms.config_options import CatalogConfigOption, CatalogSelection, ConfigOptions
+from agent_comms.config_options import CatalogChoice, CatalogConfigOption, CatalogSelection, ConfigOptions
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.declared_verb import DeclaredOptions
@@ -378,7 +377,7 @@ class TargetField:
 @dataclass(frozen=True)
 class ChoiceTargetField(TargetField):
     """A prepared finite declaration, from its annotation or configuration catalog."""
-    options: tuple[SessionConfigSelectOption, ...] = ()
+    options: tuple[CatalogChoice, ...] = ()
 
     @property
     def editor_declarations(self) -> tuple[object, ...]:
@@ -386,12 +385,12 @@ class ChoiceTargetField(TargetField):
 
     @property
     def choices(self) -> tuple[tuple[str, str], ...]:
-        return tuple((choice.name, choice.value) for choice in self.options)
+        return tuple((choice.name, choice.acp_value) for choice in self.options)
 
     async def prepare(self, catalogs: ConfigOptions,
                       selection: CatalogSelection) -> ChoiceTargetField:
         decoder = field_codec.compile_decoder(self.annotation)
-        options = (SessionConfigSelectOption(
+        options = (CatalogChoice(
                        name=label, value=decoder.encode_editor(decoder.decode(value)))
                    for label, value in decoder.editor_choices())
         return replace(self, options=tuple(options))
@@ -414,7 +413,7 @@ class CatalogTargetField(ChoiceTargetField):
         catalog = catalogs.catalog_for(self.catalog)
         options = await catalog.display_choices(selection)
         decoder = field_codec.compile_decoder(self.annotation)
-        return replace(self, options=tuple(SessionConfigSelectOption(name=item.name,
+        return replace(self, options=tuple(CatalogChoice(name=item.name,
             value=decoder.encode_editor(decoder.decode(item.value))) for item in options))
 
     def value_schema(self) -> dict[str, object]:
