@@ -164,7 +164,7 @@ class TurnDigestRead(TranscriptRead[ThreadTurns]):
         """A woken input reads as the messages its wake selected, from their bus records."""
         recorded = source.recorded_contexts(
             ContextStore(self.root), tuple(turn.turn_id for turn in turns))
-        selected = {turn_id: manifest.selected_wire() for turn_id, manifest in recorded.items()}
+        selected = {turn_id: manifest.wire_sources() for turn_id, manifest in recorded.items()}
         references = tuple(dict.fromkeys(ref for refs in selected.values() for ref in refs))
         deliveries = (Bus(Bus.path_in(self.root)).deliveries_for_references(references)
                       if references else ())
@@ -175,7 +175,8 @@ class TurnDigestRead(TranscriptRead[ThreadTurns]):
                     if delivery.audience.sender_lookup != self.thread.incarnation.lookup}
         return self.from_turns(tuple(
             turn.with_selected(chosen) if (chosen := tuple(
-                incoming[ref] for ref in selected.get(turn.turn_id, ()) if ref in incoming)) else turn
+                incoming[ref] for ref in selected.get(turn.turn_id, ()) if ref in incoming))
+            else turn
             for turn in turns))
 
     def from_turns(self, turns: tuple[TurnDigest, ...]) -> ThreadTurns:

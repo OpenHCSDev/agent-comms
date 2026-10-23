@@ -334,9 +334,10 @@ class SegmentManifest:
     def sources(self) -> ContextSources:
         return ContextSources(self.provenance)
 
-    def selected_wire(self) -> tuple[MessageReference, ...]:
-        """The committed bus messages a wake in this input selected."""
-        return self.kind.selected_wire(self)
+    def wire_sources(self) -> tuple[MessageReference, ...]:
+        """The committed bus messages a wake in this input recorded: its selected originals
+        and the owner's own sent outcomes."""
+        return self.kind.wire_sources(self)
 
     async def public_text(self, read_reference) -> str:
         if self.public_text_recorded:
@@ -678,9 +679,9 @@ class ContextSegment(
         pass
 
     @classmethod
-    def selected_wire(cls, original: SegmentManifest) -> tuple[MessageReference, ...]:
-        """Only a wake selects bus messages; any other segment answers through its contributors."""
-        return tuple(source for child in original.contributors for source in child.selected_wire())
+    def wire_sources(cls, original: SegmentManifest) -> tuple[MessageReference, ...]:
+        """Only a wake records bus messages; any other segment answers through its contributors."""
+        return tuple(source for child in original.contributors for source in child.wire_sources())
 
     def contributor_manifests(self) -> tuple[SegmentManifest, ...]:
         return ()
