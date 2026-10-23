@@ -47,7 +47,7 @@ from agent_comms.presentation import NoRevision, ReadState, WireRevision
 from agent_comms.registry_document import RosterVisibility
 from agent_comms.registry_provenance import DeletedThread
 from agent_comms.revision_views import NotificationsView, RegistrationsView, SidebarView, StoresView
-from agent_comms.ui_model.delivery import InputDelivery
+from agent_comms.ui_model.delivery import ReadDeliveryView
 from agent_comms.ui_model.sidebar import (
     ChannelRowModel,
     SidebarModel,
@@ -631,15 +631,15 @@ class ReadOwnerGoal(OwnerRead):
 
 
 @dataclass(frozen=True)
-class ReadInputDelivery(OwnerRead):
+class ReadDeliveryOverview(OwnerRead):
     """The owner's delivery notices, checked against its live queue."""
 
     include_history: bool = False
 
-    async def read(self, owner: RuntimeConnection) -> InputDelivery:
-
-        return InputDelivery.from_wire(
-            await owner.request("input_dispositions", include_history=self.include_history))
+    async def read(self, owner: RuntimeConnection) -> ReadDeliveryView:
+        return ReadDeliveryView.from_wire(
+            await owner.request("input_dispositions", include_history=self.include_history)
+        )
 
 
 @dataclass(frozen=True)
