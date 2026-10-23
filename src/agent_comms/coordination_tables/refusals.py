@@ -6,16 +6,15 @@ import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
 from agent_comms.active_route import guard_original_root_write
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.coordination_schema import CoordinatorTable
+from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.coordination_session import CoordinationSession
 from agent_comms.errors import RelationViolationError, ToolRefusedError
 from agent_comms.maintenance_barrier import MaintenanceBarrier
-from agent_comms.store_files import SharedLock, _store_lock
-from agent_comms.typed_table import Column, DurableTables, Index, SharedFileTables, TypedTable
+from agent_comms.typed_table import Column, Index
 
 from ..locked_store import RegistryFile
 
@@ -24,7 +23,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class SendRefusal(CoordinatorTable, TypedTable, SharedFileTables, DurableTables):
+class SendRefusal(CoordinatorRow):
     """One attempted send, with no fabricated message, audience or delivery identity."""
 
     id: Annotated[int, Column(primary_key=True)]
@@ -45,8 +44,8 @@ class SendRefusal(CoordinatorTable, TypedTable, SharedFileTables, DurableTables)
 
     @classmethod
     def record(cls, root: Path, sender: str, target: str, error: ToolRefusedError) -> None:
-        with guard_original_root_write(root), _store_lock(root / "wire", mode=SharedLock()):
-            MaintenanceBarrier(RegistryFile.path_in(root)).assert_open_unlocked()
+        with (guard_original_root_write(root),
+              MaintenanceBarrier(RegistryFile.path_in(root)).allow_input()):
             with (
                 CoordinationSession(str(CoordinationStore.path_in(root))) as store,
                 store.writing() as db,

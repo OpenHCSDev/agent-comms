@@ -203,6 +203,8 @@ class PiPayload(ExternalField):
             # Native null means omitted where the declaration names its not-reported member.
             elif key in value and not (value[key] is None and isinstance(f.default, PiPayload)):
                 decoded[f.name] = FieldCodec.decode_external(hints[f.name], value[key], value)
+            elif (plan := FieldCodec.field_plan(cls, f.name)).constructor_required or plan.required:
+                raise MalformedRecord(f"Missing required field {key}")
         return decoded
 
     @classmethod

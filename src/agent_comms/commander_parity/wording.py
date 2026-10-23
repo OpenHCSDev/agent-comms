@@ -131,22 +131,22 @@ class OrderWordingComparison(WordingComparison):
     def describe(self) -> str:
         return super().describe() + (
             f"; current={OrderFile.problems_found.__qualname__}; "
-            f"native_entry={OrderGoalAction.request_ref.__qualname__}"
+            f"native_entry={OrderGoalAction.require_ready.__qualname__}"
         )
 
     @staticmethod
-    def native_request(context: CommanderContext, todo: Todo, text: str) -> object:
+    def native_request(context: CommanderContext, todo: Todo, text: str) -> None:
         order = replace(todo.order.checked().copy_as(PendingProblemOrder), edits=(text,))
         action = OrderGoalAction(
             problem=todo.id,
             expected_revision=todo.revision,
             order=order,
-            request=context.comms.registry.require(context.commander).goal.require().id,
+            request=todo.request.require(),
             review_at=todo.review_at,
             commander=context.commander,
             assigner=context.incarnation,
         )
-        return action.request_ref(
+        action.require_ready(
             GoalActionContext(
                 context.comms.goals,
                 context.comms.registry.require(todo.held().owner),

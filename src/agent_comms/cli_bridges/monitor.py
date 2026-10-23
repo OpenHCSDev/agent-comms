@@ -253,15 +253,15 @@ class SessionRequest(TaggedWire):
     __registry_config__ = TaggedWire.family_registry()
 
     @contextmanager
-    def connection(self, claim: WatchClaim) -> Iterator[socket.socket]:
+    def connection(self, endpoint: Path) -> Iterator[socket.socket]:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as peer:
             peer.settimeout(30)
-            peer.connect(str(claim.socket_path))
+            peer.connect(str(endpoint))
             peer.sendall((self.model_dump_json() + "\n").encode())
             yield peer
 
-    def exchange(self, claim: WatchClaim) -> SessionReply:
-        with self.connection(claim) as peer, peer.makefile("rb") as stream:
+    def exchange(self, endpoint: Path) -> SessionReply:
+        with self.connection(endpoint) as peer, peer.makefile("rb") as stream:
             raw = stream.readline(4096)
             if not raw:
                 raise ConnectionResetError('Session bridge closed before replying')
@@ -295,8 +295,8 @@ class VerifySession(SessionRequest):
 class InspectSession(SessionRequest):
     wire_tag = "inspect"
 
-    def information(self, claim: WatchClaim) -> SessionInformation:
-        reply = self.exchange(claim)
+    def information(self, endpoint: Path) -> SessionInformation:
+        reply = self.exchange(endpoint)
         if not isinstance(reply, SessionInformation):
             raise ValueError("Session bridge did not report its process and runtime")
         return reply
@@ -306,7 +306,7 @@ class InspectSession(SessionRequest):
         that gap or gone."""
         while True:
             try:
-                return self.information(claim)
+                return self.information(claim.socket_path)
             except (FileNotFoundError, ConnectionRefusedError) as absent:
                 claim.state().await_socket(absent)
 
@@ -388,7 +388,7 @@ async def read_monitor(claim: WatchClaim) -> None:
     with claim.reader_held():
         while session.owner.alive():
             try:
-                current = await asyncio.to_thread(InspectSession().information, claim)
+                current = await asyncio.to_thread(InspectSession().information, claim.socket_path)
                 if current.owner != session.owner:
                     raise ValueError('The session bridge now belongs to a different owner')
                 reader, writer = await asyncio.open_unix_connection(str(claim.socket_path))

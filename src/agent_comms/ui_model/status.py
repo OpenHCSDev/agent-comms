@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from agent_comms.thread_presentation import (
     IdleThreadPresentationStatus,
+    OtherRouteThread,
     SessionDisconnected,
     StatusPending,
     ThreadRetired,
@@ -83,6 +84,10 @@ class ThreadStatusModel:
     @classmethod
     def retired(cls, name: str) -> ThreadStatusModel:
         return cls.known(name, ThreadRetired().presentation(name))
+
+    @classmethod
+    def other_route(cls, name: str) -> ThreadStatusModel:
+        return cls.known(name, OtherRouteThread().presentation(name))
 
     @classmethod
     def unreadable(cls, name: str, error: UnreadableHistory) -> ThreadStatusModel:

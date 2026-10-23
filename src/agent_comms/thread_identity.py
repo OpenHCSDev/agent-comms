@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Callable, ClassVar, Self, TypeVar, Annotated
 from metaclass_registry import AutoRegisterMeta, RegistryConfig
 
 from agent_comms.participant_identity import ParticipantIdentity
-from .agent_backend import AgentBackend, RuntimeLocation
+from .agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
 from .channel_targets import Tag
 from .cli_options import JsonFlagRecord
 from .declared_family import DeclaredFamily, declared_words
@@ -304,7 +304,7 @@ class ThreadProvenance:
     session_file: SessionFile = field(default_factory=NoSessionFile)
     title: ThreadText = field(default_factory=NoThreadText)
     backend: Annotated[type[AgentBackend], WireOmitDefault()] = field(
-        default_factory=AgentBackend.for_new_threads
+        default_factory=NewThreadBackend.selected
     )
 
     @cached_property

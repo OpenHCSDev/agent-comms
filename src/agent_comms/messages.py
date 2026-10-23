@@ -14,7 +14,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, Type, cast, dataclass_transform
 
-from agent_comms.bus_tables import Addressed, BusCapability, HeldResources
+from agent_comms.bus_tables import Addressed, BusCapability, BusRow, HeldResources
 from agent_comms.response_policy import InformationalPolicy, ResponseEligibility, ResponsePolicy
 from agent_comms.typed_table import Column
 
@@ -434,7 +434,7 @@ class Message(Addressed, BusCapability):
         return self
 
     @classmethod
-    def envelope_type(cls) -> type[Message]:
+    def envelope_type(cls) -> builtins.type[Message]:
         """The public message declaration this class's values carry."""
         return Message
 
@@ -541,10 +541,9 @@ class Message(Addressed, BusCapability):
     @classmethod
     def from_wire(cls, data: Mapping) -> Message:
         # Content identity is derived from the declared message fields.
-        public = {key: value for key, value in data.items() if key != "id"}
         plan = FieldCodec.field_plan(Message, 'type')
-        kind = cast(type[MessageKind], plan.value.decode(plan.raw(public)))
-        return kind.decode_message({"ts": 0.0, **public})
+        kind = cast(builtins.type[MessageKind], plan.value.decode(plan.raw(data)))
+        return kind.decode_message({"ts": 0.0, **data})
 
     def response_eligibility(
         self, audience: Sequence[str], *, aliases: Mapping[str, str] | None = None
@@ -573,13 +572,22 @@ class Message(Addressed, BusCapability):
 class BusRecord(Message, DeclaredFamily, affix="Record"):
     """Every record declaration owns its frozen value and derived tables."""
 
+    def append_to(self, db: sqlite3.Connection, seq: int) -> int:
+        """The caller's transaction owns the sequence, including preserved history."""
+        BusRow.insert_values(db, seq=seq, kind=type(self), at=time.time())
+        stored = replace(self, seq=seq)
+        for row in stored.rows():
+            row.insert(db)
+        stored.project_into(db)
+        return stored.seq
+
     @property
     def publication_snapshot(self) -> Message:
         """Delivery capabilities are not message content in a publication intent."""
         return Message.from_message(self).publication_snapshot
 
     @classmethod
-    def envelope_type(cls) -> type[Message]:
+    def envelope_type(cls) -> builtins.type[Message]:
         """A record carries the envelope of the message declaration after it in the MRO."""
         return super().envelope_type()
 
@@ -623,7 +631,7 @@ class ClaimMessage(Claimed, Message):
     """A claimed message binds its transition to its public envelope identity."""
 
     @classmethod
-    def envelope_type(cls) -> type[Message]:
+    def envelope_type(cls) -> builtins.type[Message]:
         return ClaimMessage
 
     @classmethod

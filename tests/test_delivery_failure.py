@@ -20,7 +20,7 @@ from agent_comms.errors import (
     "error, member",
     (
         (OSError("refused"), BackendDeliveryFailure),
-        (HumanSendRefusedError("Message was not sent"), BackendDeliveryFailure),
+        (HumanSendRefusedError(ValueError("refused")), BackendDeliveryFailure),
         (HumanClaimBlockedError("reserved gap"), ClaimBlockedFailure),
     ),
 )
@@ -34,7 +34,7 @@ def test_delivery_failure_decodes_once(error, member):
 
 @pytest.mark.parametrize(
     "error",
-    (HumanSendRefusedError("rolled back"), HumanClaimBlockedError("reserved gap")),
+    (HumanSendRefusedError(ValueError("rolled back")), HumanClaimBlockedError("reserved gap")),
 )
 def test_human_send_failures_reach_the_ui_catch(error):
     with pytest.raises(HumanSendError):
@@ -43,4 +43,4 @@ def test_human_send_failures_reach_the_ui_catch(error):
 
 def test_rolled_back_human_send_remains_a_tool_refusal():
     with pytest.raises(ToolRefusedError):
-        raise HumanSendRefusedError("rolled back")
+        raise HumanSendRefusedError(ValueError("rolled back"))

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ast
 import copy
+import re
 import subprocess
 from abc import ABC, abstractmethod
 from collections import Counter
@@ -43,8 +44,13 @@ class MainTree:
         return self.git("cat-file", "-e", f"{self.commit}:{path}").returncode == 0
 
     def grep(self, *options: str, pattern: str, paths: tuple[str, ...]) -> list[str]:
-        """``git grep -E`` rows under ``paths``; git pathspecs such as ``:!file`` exclude."""
-        run = self.git("grep", *options, "-E", "-e", pattern, self.commit, "--", *paths)
+        """``git grep -E`` rows in this tree, like ``module`` and ``modules``.
+
+        A submodule is another repository's tree, regardless of local recurse settings.
+        Git pathspecs such as ``:!file`` exclude.
+        """
+        run = self.git("grep", "--no-recurse-submodules", *options,
+                       "-E", "-e", pattern, self.commit, "--", *paths)
         if run.returncode not in (0, 1):
             run.check_returncode()
         return run.stdout.splitlines()
@@ -259,6 +265,67 @@ class PatternPresent(PatternEvidence):
 
     def describe(self) -> str:
         return f"{self.pattern!r} in {' '.join(self.paths)} on main"
+
+
+class BusStorageAbsent(MainEvidence, ast.NodeVisitor):
+    """Read executable bus references, not text describing their deletion."""
+
+    symbols = re.compile(r"WireLog|wire_log|_wire_lock_path|has_private_wire_fields")
+    filenames = re.compile(r"bus[.]jsonl|bus_meta[.]json")
+    found = False
+
+    def read(self, main: MainTree) -> bool:
+        scan = type(self)()
+        for tree in main.modules(("src",)):
+            scan.visit(tree)
+        return not scan.found
+
+    def describe(self) -> str:
+        return "no known physical bus symbols, file literals or lock paths in Python source on main"
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self.found |= bool(self.symbols.fullmatch(node.name))
+        self.generic_visit(node)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self.found |= bool(self.symbols.fullmatch(node.name))
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        self.found |= bool(self.symbols.fullmatch((node.module or "").rpartition(".")[2]))
+        self.generic_visit(node)
+
+    def visit_Name(self, node: ast.Name) -> None:
+        self.found |= bool(self.symbols.fullmatch(node.id))
+
+    def visit_Attribute(self, node: ast.Attribute) -> None:
+        self.found |= bool(self.symbols.fullmatch(node.attr))
+        self.generic_visit(node)
+
+    def visit_alias(self, node: ast.alias) -> None:
+        self.found |= bool(self.symbols.fullmatch(node.name.rpartition(".")[2]))
+
+    def visit_Constant(self, node: ast.Constant) -> None:
+        if isinstance(node.value, str):
+            self.found |= bool(self.filenames.fullmatch(node.value))
+
+    def visit_Expr(self, node: ast.Expr) -> None:
+        if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+            return  # A docstring or inert prose cannot open a physical bus.
+        self.generic_visit(node)
+
+    def visit_BinOp(self, node: ast.BinOp) -> None:
+        match node:
+            case ast.BinOp(op=ast.Div(), right=ast.Constant(value="wire")):
+                self.found = True
+        self.generic_visit(node)
+
+    def visit_Call(self, node: ast.Call) -> None:
+        match node:
+            case ast.Call(func=ast.Attribute(attr="with_name" | "joinpath"),
+                          args=[*_, ast.Constant(value="wire")]):
+                self.found = True
+        self.generic_visit(node)
 
 
 @dataclass(frozen=True)
@@ -497,6 +564,7 @@ class ClassFlagsAbsent(MainEvidence):
 
     pattern: str
     paths: tuple[str, ...] = ("src",)
+    class_names: tuple[str, ...] = ()
 
     def read(self, main: MainTree) -> bool:
         matched = main.matching_lines(self.pattern, self.paths)
@@ -504,11 +572,13 @@ class ClassFlagsAbsent(MainEvidence):
             (path, statement.lineno) in matched
             for path in {path for path, _ in matched}
             for declared in Classes.of((main.module(path).tree,))
+            if not self.class_names or declared.name in self.class_names
             for statement in declared.body
         )
 
     def describe(self) -> str:
-        return f"no class body line {self.pattern!r} in {' '.join(self.paths)} on main"
+        owners = f" of {', '.join(self.class_names)}" if self.class_names else ""
+        return f"no class body line {self.pattern!r}{owners} in {' '.join(self.paths)} on main"
 
 
 class NamedClasses(ast.NodeVisitor):

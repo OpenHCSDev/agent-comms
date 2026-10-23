@@ -15,7 +15,7 @@ from agent_comms.coordination_contracts import (
     validate_execution_id,
 )
 from agent_comms.coordination_errors import IdentityConflict, IntegrityViolationError, StaleRevision
-from agent_comms.coordination_schema import CoordinatorTable
+from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.coordination_tables.attempts import (
     APPROVED_REPLAY_FACT_MASK,
     AttemptRecord,
@@ -52,7 +52,6 @@ from agent_comms.typed_table import (
     NonIncreasing,
     OrdinalTransitions,
     TextStorage,
-    TypedTable,
 )
 
 
@@ -115,7 +114,7 @@ class NoPointedAttempt(NullMember, PointerAttempt):
 
 @dataclass(frozen=True, slots=True)
 class CurrentExecutions(
-    IncrementingColumn, GuardedInserts, NoDelete, CoordinatorTable, TypedTable
+    IncrementingColumn, GuardedInserts, NoDelete, CoordinatorRow
 ):
     revision_column = "pointer_revision"
     insert_condition = """NOT EXISTS (SELECT 1 FROM owner_generations
@@ -195,8 +194,7 @@ class ExecutionRecord(
     MonotoneColumns,
     GuardedColumns,
     NoDelete,
-    CoordinatorTable,
-    TypedTable,
+    CoordinatorRow,
     declared_name="executions",
 ):
     column_orders = (NonDecreasing(("updated_at_ms",)),)
@@ -536,8 +534,7 @@ class ReplayAssessments(
     ExecutionReference,
     RetryPartition,
     NoDelete,
-    CoordinatorTable,
-    TypedTable,
+    CoordinatorRow,
 ):
     column_orders = (
         NonDecreasing(("side_effects_possible",)),

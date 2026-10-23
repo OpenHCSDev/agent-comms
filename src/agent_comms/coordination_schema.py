@@ -2,26 +2,32 @@
 
 from __future__ import annotations
 
+import sqlite3
+from collections.abc import Iterable
 from functools import cache
 from typing import Final
 
 from metaclass_registry.discovery import discover_registry_classes
 
 import agent_comms.coordination_tables as coordination_tables
-
 from agent_comms.assignment_states import AssignmentState
 from agent_comms.attempt_states import AttemptState, RetryPredecessor
+from agent_comms.coordination_errors import SchemaVersionError
+from agent_comms.declared_family import DeclaredFamily
 from agent_comms.execution_states import (
-    AttemptExecution, EngagedExecution, ExecutionState, InterruptedExecution,
+    AttemptExecution,
+    EngagedExecution,
+    ExecutionState,
+    InterruptedExecution,
 )
 from agent_comms.lifecycle_capability import Failed, Successful, Terminal
 from agent_comms.obligation_states import ResponseState
 from agent_comms.recovery_states import RecoveryCondition
-from agent_comms.coordination_errors import SchemaVersionError
 from agent_comms.typed_table import (
     DurableTables,
     SharedFileTables,
     TypedTable,
+    sql_literal,
 )
 from agent_comms.wake_policy import WakePolicy
 
@@ -37,22 +43,26 @@ class CoordinatorTable(SharedFileTables, DurableTables):
     schema_error = SchemaVersionError
 
     @classmethod
-    def schema_rows(cls):
+    def schema_rows(cls) -> tuple[type[TypedTable], ...]:
         return tuple(cls.declarations())
 
     @classmethod
-    def declarations(cls):
+    def declarations(cls) -> tuple[type[TypedTable], ...]:
         discover_registry_classes(
             coordination_tables.__path__, coordination_tables.__name__ + ".", CoordinatorTable,
         )
         return TypedTable.members_with(cls)
 
     @classmethod
-    def configure_connection(cls, connection) -> None:
+    def configure_connection(cls, connection: sqlite3.Connection) -> None:
         """A row may install connection behavior required by its own SQL."""
 
+
+class CoordinatorRow(CoordinatorTable, TypedTable, declared_name=None):
+    """Coordinator rows apply their state families to the SQL they declare."""
+
     @classmethod
-    def schema_objects(cls, *, if_not_exists: bool = False):
+    def schema_objects(cls, *, if_not_exists: bool = False) -> dict[str, str]:
         context = _schema_context(*(family.members_with(family) for family in _CONTEXT_FAMILIES))
         return {
             name: sql.format(**context)
@@ -60,14 +70,8 @@ class CoordinatorTable(SharedFileTables, DurableTables):
         }
 
 
-def _sql_values(names):
-    return ",".join("'" + name.replace("'", "''") + "'" for name in names)
-
-
-def _sql_members(family, predicate=lambda member: True):
-    return _sql_values(
-        member.declared_name for member in family.members_with(family) if predicate(member)
-    )
+def _sql_values(names: Iterable[str]) -> str:
+    return ",".join(sql_literal(name) for name in names)
 
 
 _CONTEXT_FAMILIES: Final = (
@@ -76,15 +80,15 @@ _CONTEXT_FAMILIES: Final = (
 
 
 @cache
-def _schema_context(*members):
+def _schema_context(*members: tuple[type[DeclaredFamily], ...]) -> dict[str, str]:
     """The SQL the families' members imply; keyed by the members, so a new one rebuilds it."""
     context = dict(
-        execution_names=_sql_members(ExecutionState),
-        attempt_names=_sql_members(AttemptState),
-        assignment_names=_sql_members(AssignmentState),
-        wake_names=_sql_members(WakePolicy),
-        response_names=_sql_members(ResponseState),
-        recovery_names=_sql_members(RecoveryCondition),
+        execution_names=_sql_values(ExecutionState.names()),
+        attempt_names=_sql_values(AttemptState.names()),
+        assignment_names=_sql_values(AssignmentState.names()),
+        wake_names=_sql_values(WakePolicy.names()),
+        response_names=_sql_values(ResponseState.names()),
+        recovery_names=_sql_values(RecoveryCondition.names()),
         terminal_attempt_names=_sql_values(
             member.declared_name for member in AttemptState.members_with(Terminal)
         ),
@@ -97,23 +101,34 @@ def _schema_context(*members):
         engaged_execution_names=_sql_values(
             member.declared_name for member in ExecutionState.members_with(EngagedExecution)
         ),
-        unstarted_execution_names=_sql_members(ExecutionState, lambda member: member.unstarted),
+        unstarted_execution_names=_sql_values(
+            member.declared_name for member in ExecutionState.members_with(ExecutionState)
+            if member.unstarted
+        ),
         required_attempt_execution_names=_sql_values(
             member.declared_name for member in ExecutionState.members_with(AttemptExecution)
         ),
         optional_attempt_execution_names=_sql_values(
             member.declared_name for member in ExecutionState.members_with(InterruptedExecution)
         ),
-        startable_execution_names=_sql_members(
-            ExecutionState, lambda member: member.starts_attempt
+        startable_execution_names=_sql_values(
+            member.declared_name for member in ExecutionState.members_with(ExecutionState)
+            if member.starts_attempt
         ),
         successful_response_names=_sql_values(
             member.declared_name for member in ResponseState.members_with(Successful)
         ),
-        retryable_response_names=_sql_members(ResponseState, lambda member: member.retryable),
-        intent_response_names=_sql_members(ResponseState, lambda member: member.allows_intent),
-        required_intent_response_names=_sql_members(
-            ResponseState, lambda member: member.requires_intent
+        retryable_response_names=_sql_values(
+            member.declared_name for member in ResponseState.members_with(ResponseState)
+            if member.retryable
+        ),
+        intent_response_names=_sql_values(
+            member.declared_name for member in ResponseState.members_with(ResponseState)
+            if member.allows_intent
+        ),
+        required_intent_response_names=_sql_values(
+            member.declared_name for member in ResponseState.members_with(ResponseState)
+            if member.requires_intent
         ),
     )
 

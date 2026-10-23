@@ -238,15 +238,13 @@ def test_heartbeat_keeps_every_unit_when_one_checkout_is_unreadable(
         assert isinstance(cards[0], Unreadable)
         assert {card.unit.name for card in cards} >= {"worker", "outsider"}
         heartbeat.pass_body(held_bus, observed)
-        page = held_bus.bus.log.read_page(
-            MessagePageRequest(
-                DMDisplayScope.capture(
-                    heartbeat.sender,
-                    "lead",
-                    held_bus.registry.snapshot(),
-                )
+        page = MessagePageRequest(
+            DMDisplayScope.capture(
+                heartbeat.sender,
+                "lead",
+                held_bus.registry.snapshot(),
             )
-        )
+        ).read_opened(held_bus.bus.bus)
         message = next(row for row in page.messages if row.sender == heartbeat.sender)
         assert all(card.line() in message.body for card in cards)
         assert message.body.index(cards[0].line()) < message.body.index(cards[-1].line())

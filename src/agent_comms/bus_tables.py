@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import sqlite3
-import time
+from collections.abc import Iterator
 from contextlib import closing
-from dataclasses import Field, dataclass, fields, make_dataclass, replace
+from dataclasses import Field, dataclass, fields, make_dataclass
 from functools import cache
 from inspect import get_annotations
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, get_origin, get_type_hints
@@ -285,7 +285,7 @@ class HeldResources(TypedTable, BusProjectionTables):
     def owner_for(cls, db: sqlite3.Connection, resource: str) -> ResourceClaim:
         originals = messages.Claimed.table.select(
             db, where=f'{{seq}}=(SELECT claim_seq FROM "{cls.declared_name}" WHERE resource=?)',
-            parameters=(resource,),
+            parameters=(resource,), row_type=messages.Claimed,
         )
         return next((row.claim_transition.claimed(resource) for row in originals), UnclaimedResource())
 
@@ -312,8 +312,8 @@ class HeldResources(TypedTable, BusProjectionTables):
         ), (through,)).fetchone()[0])
         sequences = tuple({row.claim_seq for row in current})
         marks = ",".join("?" for _ in sequences)
-        transitions = {row.seq: row.claim_transition for row in claim_table.select(
-            db, where=f'{{seq}} IN ({marks})', parameters=sequences,
+        transitions = {row.claim_transition.seq: row.claim_transition for row in claim_table.select(
+            db, where=f'{{seq}} IN ({marks})', parameters=sequences, row_type=messages.Claimed,
         )}
         return ClaimProjection(last_seq, {
             row.resource: transitions[row.claim_seq].claimed(row.resource) for row in current
@@ -341,22 +341,28 @@ class HeldResources(TypedTable, BusProjectionTables):
             ClaimOperations(operation_id, transition.seq).insert(db)
 
 
+@dataclass(frozen=True)
+class CapabilityRow(TypedTable, BusTables, declared_name=None):
+    """Every generated capability row belongs to one original bus sequence."""
+
+    seq: Annotated[int, Column(primary_key=True, references=(BusRow, "seq"))]
+
+
 class _CapabilityTable:
     """A class's table is derived once, after its dataclass decorator has run."""
 
-    def __get__(self, instance, owner) -> type[TypedTable]:
+    def __get__(self, instance: BusCapability | None, owner: type[BusCapability]) -> type[CapabilityRow]:
         return self.for_class(owner)
 
     @cache
-    def for_class(self, owner) -> type[TypedTable]:
+    def for_class(self, owner: type[BusCapability]) -> type[CapabilityRow]:
         hints = get_type_hints(owner, include_extras=True)
         return make_dataclass(
             BusTables.__name__.removesuffix("Tables") + owner.__name__ + "Row",
-            [("seq", Annotated[int, Column(primary_key=True, references=(BusRow, "seq"))]),
-             *((item.name, hints[item.name], item) for item in BusCapability.declared_fields(owner)),
+            [*((item.name, hints[item.name], item) for item in BusCapability.declared_fields(owner)),
              *((name, hints[name], vars(owner)[name]) for name in get_annotations(owner)
                if get_origin(hints[name]) is ClassVar and name in vars(owner))],
-            bases=(TypedTable, BusTables),
+            bases=(CapabilityRow,),
             namespace={"__module__": owner.__module__},
             frozen=True,
         )
@@ -372,8 +378,7 @@ class BusCapability(TypedRow):
         return ()
 
     @classmethod
-    @cache
-    def declared_fields(cls, owner: type) -> tuple[Field, ...]:
+    def declared_fields(cls, owner: type[BusCapability]) -> tuple[Field, ...]:
         own = get_annotations(owner)
         header_fields = {item.name for item in fields(BusRow)}
         return tuple(item for item in fields(owner)
@@ -381,11 +386,11 @@ class BusCapability(TypedRow):
 
     @classmethod
     @cache
-    def tables(cls) -> tuple[type[TypedTable], ...]:
+    def tables(cls) -> tuple[type[CapabilityRow], ...]:
         return tuple(base.table for base in cls.__mro__
                      if issubclass(base, BusCapability) and BusCapability.declared_fields(base))
 
-    def rows(self) -> tuple[TypedTable, ...]:
+    def rows(self) -> tuple[CapabilityRow, ...]:
         """Project declared Python fields without flattening their wire representations."""
         return tuple(
             FieldCodec.construct(table, {
@@ -404,22 +409,12 @@ class BusCapability(TypedRow):
             values.update({item.name: getattr(rows[0], item.name) for item in fields(table)})
         return FieldCodec.construct(cls, values)
 
-    def projections(self):
+    def projections(self) -> Iterator[TypedTable]:
         return iter(())
 
     def project_into(self, db: sqlite3.Connection) -> None:
         for row in self.projections():
             row.insert(db)
-
-    def append_to(self, db: sqlite3.Connection, seq: int) -> int:
-        """The caller's transaction owns the sequence, including preserved history."""
-        BusRow.insert_values(db, seq=seq, kind=type(self), at=time.time())
-        stored = replace(self, seq=seq)
-        for row in stored.rows():
-            row.insert(db)
-        stored.project_into(db)
-        return stored.seq
-
 
 @dataclass(frozen=True)
 class Addressed(BusCapability):

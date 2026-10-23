@@ -15,7 +15,7 @@ import re
 import sqlite3
 import types
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
+from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum, IntFlag
@@ -33,6 +33,7 @@ from typing import (
     cast,
     get_args,
     get_origin,
+    overload,
 )
 
 from .declared_family import DeclaredFamily, declared_words
@@ -50,8 +51,15 @@ from .field_codec import (
 )
 from .lifecycle import LifecycleState
 from .locked_store import (
-    DurableFile, FileStore, PublishedSQLiteFile, RegistryFile, RootFile, RuntimeFile,
-    SQLiteFile, StoreBusy, StoreCommittedError,
+    DurableFile,
+    FileStore,
+    PublishedSQLiteFile,
+    RegistryFile,
+    RootFile,
+    RuntimeFile,
+    SQLiteFile,
+    StoreBusy,
+    StoreCommittedError,
 )
 from .maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier
 from .store_files import _store_lock
@@ -475,6 +483,12 @@ class _Field(SqlValue):
             value=plan.value,
         )
 
+    def rebuild_expression(self, stored: tuple[str, ...]) -> str:
+        """A carried value remains stored; table constraints own whether NULL is valid."""
+        if self.wire_name in stored:
+            return _identifier(self.wire_name)
+        return "NULL"
+
 
 def sql_literal(value: str | None | type[DeclaredFamily]) -> str:
     """Quote a declaration-owned SQL constant, never a query parameter."""
@@ -804,11 +818,12 @@ class TableSchema(ABC):
     @classmethod
     def derive_schema(cls, db: sqlite3.Connection) -> None:
         """Inside the caller's write transaction, the stored schema onto the declaration
-        wherever the declaration says how: a row's declared earlier table name, an index,
-        trigger or view rebuilt from its SQL, a declared object the file lacks. What it cannot
-        say, a table whose columns differ, is refused with the rows untouched."""
+        wherever the declaration says how: a row's declared earlier table name, missing
+        nullable fields, an index, trigger or view rebuilt from its SQL, or a missing object.
+        Other table differences are refused with the rows untouched."""
         for row in cls.schema_rows():
             row.take_previous_name(db)
+            row.derive_nullable_fields(db)
         SQLiteCatalogObject.carry(db, cls.declared_schema(),
                                   frozenset(item.name for item in cls.stored_schema(db)))
         cls.require_schema(db)
@@ -1448,14 +1463,15 @@ class TypedTable(
         return expression
 
     @classmethod
-    def schema_objects(cls, *, if_not_exists: bool = False) -> dict[str, str]:
+    def _table_sql(cls, *, if_not_exists: bool = False, columns: tuple[str, ...] = ()) -> str:
         existence = "IF NOT EXISTS " if if_not_exists else ""
         definitions = []
-        keys = tuple(item.name for item in cls._columns() if item.column.primary_key)
-        auto_keys = tuple(item.name for item in cls._columns() if item.column.auto_increment)
+        fields = cls._fields_named(columns) if columns else cls._columns()
+        keys = tuple(item.name for item in fields if item.column.primary_key)
+        auto_keys = tuple(item.name for item in fields if item.column.auto_increment)
         if auto_keys and (auto_keys != keys or len(keys) != 1 or cls.without_rowid):
             raise TypeError("AUTOINCREMENT requires one rowid primary key")
-        for item in cls._columns():
+        for item in fields:
             column = item.column
             sql = f"{_identifier(item.wire_name)} {item.storage.sql_type}"
             if column.auto_increment:
@@ -1481,10 +1497,12 @@ class TypedTable(
         definitions.extend(f"CHECK ({cls._sql(check)})" for check in cls.checks)
         definitions.extend(reference.sql(cls) for reference in cls.references())
         table = _identifier(cls.declared_name)
-        statements = {
-            cls.declared_name: f"CREATE TABLE {existence}{table} ({', '.join(definitions)}) STRICT"
-            + (", WITHOUT ROWID" if cls.without_rowid else "")
-        }
+        return (f"CREATE TABLE {existence}{table} ({', '.join(definitions)}) STRICT"
+                + (", WITHOUT ROWID" if cls.without_rowid else ""))
+
+    @classmethod
+    def schema_objects(cls, *, if_not_exists: bool = False) -> dict[str, str]:
+        statements = {cls.declared_name: cls._table_sql(if_not_exists=if_not_exists)}
         indexes = cls.indexes + tuple(
             Index((item.name,)) for item in cls._columns() if item.column.index
         )
@@ -1533,6 +1551,53 @@ class TypedTable(
     def drop(cls, db: sqlite3.Connection) -> None:
         """Drop the declared table; SQLite drops its indexes with it."""
         db.execute(f"DROP TABLE IF EXISTS {_identifier(cls.declared_name)}")
+
+    @classmethod
+    def rebuild(cls, db: sqlite3.Connection,
+                changed: Mapping[str, str] = types.MappingProxyType({})) -> None:
+        """Copy writable fields into the declared schema, in the caller's transaction.
+
+        Data conversions supply expressions only for the fields they change.
+        The table owns every other column, its indexes, constraints and triggers.
+        """
+        cls._writable_fields(tuple(changed))
+        fields = cls._writable_fields()
+        stored = cls.stored_columns(db)
+        expressions = (
+            changed[item.name] if item.name in changed else item.rebuild_expression(stored)
+            for item in fields
+        )
+        selected = ", ".join(f'{expression} AS {_identifier(item.wire_name)}'
+                             for item, expression in zip(fields, expressions, strict=True))
+        table = _identifier(cls.declared_name)
+        temporary = _identifier(f"rebuild_{cls.declared_name}")
+        db.execute(f"CREATE TEMP TABLE {temporary} AS SELECT {selected} FROM {table}")
+        cls.drop(db)
+        cls.create(db)
+        columns = cls._column_list(tuple(item.name for item in fields))
+        db.execute(f"INSERT INTO {table} ({columns}) SELECT {columns} FROM {temporary}")
+        db.execute(f"DROP TABLE {temporary}")
+
+    @classmethod
+    def derive_nullable_fields(cls, db: sqlite3.Connection) -> None:
+        """Only an exact earlier declaration missing nullable fields can grow rows.
+
+        Extra columns or any other table difference still require a data conversion.
+        Compare through the same DDL owner; do not maintain a second column schema.
+        """
+        stored = cls.stored_columns(db)
+        fields = cls._columns()
+        missing = tuple(item for item in fields if item.wire_name not in stored)
+        if not stored or not missing:
+            return
+        if not all(item.nullable and item.column.writable for item in missing):
+            return
+        previous = cls._table_sql(
+            columns=tuple(item.name for item in fields if item.wire_name in stored),
+        )
+        actual = {item.name: item.sql for item in cls.stored_objects(db)}
+        if actual.get(cls.declared_name) == previous:
+            cls.rebuild(db)
 
     @classmethod
     def take_previous_name(cls, db: sqlite3.Connection) -> None:
@@ -1592,6 +1657,22 @@ class TypedTable(
             parameters + ((limit,) if limit is not None else ()),
         ))
 
+    @overload
+    @classmethod
+    def select(
+        cls, db: sqlite3.Connection, *, row_type: type[RelatedRow], where: str = "1",
+        parameters: tuple = (), order_by: tuple[str, ...] = (), descending: bool = False,
+        limit: int | None = None, **key: object,
+    ) -> list[RelatedRow]: ...
+
+    @overload
+    @classmethod
+    def select(
+        cls, db: sqlite3.Connection, *, row_type: None = None, where: str = "1",
+        parameters: tuple = (), order_by: tuple[str, ...] = (), descending: bool = False,
+        limit: int | None = None, **key: object,
+    ) -> list[Self]: ...
+
     @classmethod
     def select(
         cls,
@@ -1603,8 +1684,24 @@ class TypedTable(
         descending: bool = False,
         row_type: type[RelatedRow] | None = None, limit: int | None = None,
         **key: object,
-    ) -> list[Self | RelatedRow]:
+    ) -> Sequence[Self | RelatedRow]:
         return list(cls._query(db, where, parameters, order_by, descending, key, row_type, limit))
+
+    @overload
+    @classmethod
+    def stream(
+        cls, db: sqlite3.Connection, *, row_type: type[RelatedRow], where: str = "1",
+        parameters: tuple = (), order_by: tuple[str, ...] = (), descending: bool = False,
+        limit: int | None = None, **key: object,
+    ) -> Generator[RelatedRow, None, None]: ...
+
+    @overload
+    @classmethod
+    def stream(
+        cls, db: sqlite3.Connection, *, row_type: None = None, where: str = "1",
+        parameters: tuple = (), order_by: tuple[str, ...] = (), descending: bool = False,
+        limit: int | None = None, **key: object,
+    ) -> Generator[Self, None, None]: ...
 
     @classmethod
     def stream(

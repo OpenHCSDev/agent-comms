@@ -1,5 +1,4 @@
 """Shared fixtures: an isolated Comms wire per test."""
-from agent_comms.native_package import pinned_location, pinned_native_package
 
 import asyncio
 import os
@@ -13,23 +12,25 @@ from contextlib import AsyncExitStack, contextmanager
 from pathlib import Path
 
 import pytest
-import goal_owner_fixture
 from xdist import is_xdist_worker
-from source_programs import SourcePrograms
-from source_revision_fixture import SourceRepository
 
-from agent_comms.bus_publication import AgentOrigin
+import goal_owner_fixture
 from agent_comms.bus import Bus
+from agent_comms.bus_publication import AgentOrigin
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.comms import Comms
+from agent_comms.locked_store import RegistryFile
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.message_bus import MessageBus
+from agent_comms.messages import ConversationRole, InfoKind, Message
+from agent_comms.native_package import pinned_location, pinned_native_package
 from agent_comms.native_tool_transport import ToolListener
 from agent_comms.publisher import ParticipantPublisher, Publisher
 from agent_comms.registration import Registration
-from agent_comms.messages import ConversationRole, InfoKind, Message
 from agent_comms.thread_text import ForkedParent, GivenThreadText
 from agent_comms.typed_table import TypedTable
-from agent_comms.locked_store import RegistryFile
-from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from source_programs import SourcePrograms
+from source_revision_fixture import SourceRepository
 
 pytest_plugins = (goal_owner_fixture.__name__,)
 
@@ -131,7 +132,7 @@ def publish_initial(comms, sender, target, body, type=InfoKind, *, role=Conversa
     type.require_sendable()
     return comms.bus.publisher.publish_ordinary(
         Message(sender=sender, target=target, body=body, type=type, role=role),
-        origin=AgentOrigin(),
+        destination=CommandTarget.named(target), origin=AgentOrigin(),
     )
 
 def pytest_sessionstart(session):
@@ -290,7 +291,7 @@ def configured_repository(durable_home):
 @pytest.fixture
 def installed_runtime(durable_home, tmp_path):
     """A temporary installation record, executable and pointer, never the real home."""
-    from agent_comms.installer.installed_packages import CommitRecord, GitRecord, PackageRecord
+    from agent_comms.installer.interpreter_operation import CommitRecord, GitRecord, PackageRecord
     from agent_comms.installer.runtime_resolution import RuntimePackage, RuntimeResolution
     from agent_comms.launch_runtime import LaunchRuntime
     from agent_comms.repo import Repo

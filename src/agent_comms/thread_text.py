@@ -157,7 +157,8 @@ class SavedSessionFile(GivenText, SessionFile):
 @dataclass(frozen=True, slots=True)
 class NoSessionFile(AbsentText, SessionFile):
     def location(self, backend: type[AgentBackend]) -> RuntimeLocation:
-        return backend.unstarted_type(backend)
+        from .unstarted_runtime import UnstartedRuntime
+        return UnstartedRuntime(backend)
 
     def applied(self, previous: SessionFile) -> SessionFile:
         return previous

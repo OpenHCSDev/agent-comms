@@ -7,7 +7,7 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.coordination_errors import StaleRevision
-from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.errors import RelationViolationError, RouteChangedError, UnregisteredThreadError
 
 from .declared_family import DeclaredFamily
 from .thread_identity import OwnerIdentity
@@ -123,6 +123,14 @@ class ThreadRetired(ThreadPresentationStatus):
 
     def presentation(self, title: str) -> ThreadPresentation:
         return ThreadPresentation(title, "○", "Thread is no longer available", status=self)
+
+
+@dataclass(frozen=True, slots=True)
+class OtherRouteThread(ThreadPresentationStatus):
+    """The view thread lives on a Comms route that is not selected."""
+
+    def presentation(self, title: str) -> ThreadPresentation:
+        return ThreadPresentation(title, "↗", RouteChangedError.reader_sentence, status=self)
 
 
 class ThreadOwnerBinding(DeclaredFamily, affix="ThreadOwnerBinding"):

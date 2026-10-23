@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, ClassVar
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.phase_evidence import (
     AllEvidence,
+    BusStorageAbsent,
     ClassFlagsAbsent,
     CommitMerged,
     NoAbsenceProbes,
@@ -322,9 +323,7 @@ class BusDeletionPhase(VirtualBusPhase):
                     "src/agent_comms/wire_record.py",
                 )
             ),
-            PatternAbsent(
-                r"bus\.jsonl|bus_meta|_wire_lock_path|has_private_wire_fields|/ \"wire\""
-            ),
+            BusStorageAbsent(),
         )
     )
 
@@ -652,9 +651,21 @@ class KindFamiliesPhase(RemainingSlopPhase):
 
 
 class RostersPhase(RemainingSlopPhase):
-    """6.4: rosters beside families are derived from the family."""
+    """6.4: remove the known internal registries; external producer ABI stays independent."""
 
-    evidence = PatternAbsent(r"PI_0_85_1_EVENT_KINDS|THREAD_CAPABILITIES|serves_new_threads")
+    evidence = AllEvidence((
+        PatternAbsent(r"^\s*THREAD_CAPABILITIES\s*[:=]"),
+        ClassFlagsAbsent(r"^\s*serves_(new_)?threads\s*[:=]"),
+        *(ClassFlagsAbsent(r"^\s*" + attribute + r"\s*[:=]", class_names=(owner,))
+          for owner, attribute in (
+              ("Carry", "declared"),
+              ("ThreadRename", "kinds"),
+              ("BirthlessIncarnation", "members"),
+              ("CliToolArguments", "types"),
+              ("PiTurnPhase", "_start_phases"),
+              ("PiTurnPhase", "_end_events"),
+          )),
+    ))
 
 
 class RecordsPhase(RemainingSlopPhase):

@@ -9,8 +9,7 @@ import pytest
 
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
-from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction, SetGoalAction
-from agent_comms.goals import RequestGoalOrder
+from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.order_story import FleetStory, OrderStory
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
@@ -30,12 +29,12 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     Bus.install(Bus.path_in(comms.root))
     for name in ("lead", "worker"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
-    comms.goals.update_goal("lead", SetGoalAction(
-        text="Repair the worker", goal_id="request", order=RequestGoalOrder()))
+    request = comms.goals.todos.add_request(
+        comms.registry.require('lead').incarnation, 'Repair the worker').id
     caller = ThreadCaller("lead")
     caller.invoke(CommsTodoCreateTool(owner="worker", order=CreateProblemGoalAction(
         problem="P1", order=replace(order(source), edits=("Repair the existing record owner",)),
-        request="request", review_at=RecordedEventTime(1000),
+        request=request, review_at=RecordedEventTime(1000),
         commander="lead", assigner=comms.registry.require('lead').incarnation,
         repo=RepositoryName.from_wire("org/repo"), text="Repair the worker")), comms)
     todo = comms.goals.todos.get("P1")
@@ -54,7 +53,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     todo = comms.goals.todos.get("P1")
     caller.invoke(CommsOrderTool(owner="worker", order=OrderGoalAction(
         problem="P1", expected_revision=todo.revision, assigner=actor, commander="lead",
-        request="request", review_at=RecordedEventTime(2000),
+        request=request, review_at=RecordedEventTime(2000),
         order=replace(order(source), id="resent-order"))), comms)
     current = comms.goals.todos.get("P1")
     with pytest.raises(ValueError):

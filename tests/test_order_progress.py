@@ -13,8 +13,7 @@ from test_todos import order
 from source_revision_fixture import SourceRepository
 
 from agent_comms.comms import Comms
-from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
-from agent_comms.goals import RequestGoalOrder
+from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.native_tools import NativeRequestTools
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
@@ -122,10 +121,10 @@ def held(tmp_path):
     Bus.install(Bus.path_in(comms.root))
     for name in ('lead', 'worker'):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
-    comms.goals.update_goal('lead', SetGoalAction(
-        text='Repair the worker', goal_id='request', order=RequestGoalOrder()))
+    request = comms.goals.todos.add_request(
+        comms.registry.require('lead').incarnation, 'Repair the worker').id
     ThreadCaller('lead').invoke(CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
-        problem='P1', order=order(source), request='request', review_at=RecordedEventTime(1000),
+        problem='P1', order=order(source), request=request, review_at=RecordedEventTime(1000),
         commander='lead', assigner=comms.registry.require('lead').incarnation,
         repo=RepositoryName.from_wire('org/repo'), text='Repair the worker')), comms)
     return comms, unit_checkout(tmp_path / 'wt' / 'worker--P1')
