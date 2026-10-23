@@ -25,7 +25,3 @@ class HarnessesProbe(RuntimeProbe[InstallResult]):
 
         with client_wire(self.root) as comms:
             return self.install.apply(comms)
-
-
-if __name__ == "__main__":
-    RuntimeProbe.main()
