@@ -15,6 +15,7 @@ import pytest
 
 from agent_comms.child_process import ObservedProcess, SpawnedProcess
 from agent_comms.field_codec import FieldCodec
+from fixture_git import IDENTITY
 from process_tree_fixture import TREE, identities
 
 from tools.debt_ratchet import (
@@ -130,12 +131,10 @@ class Repository:
         self.root = root
         self.ratchet = ratchet
         self.git("init", "-q")
-        self.git("config", "user.email", "ratchet@example.invalid")
-        self.git("config", "user.name", "Ratchet test")
 
     def git(self, *args: str) -> str:
         return subprocess.check_output(
-            ["git", "-C", str(self.path), *args], text=True, timeout=10
+            ["git", *IDENTITY, "-C", str(self.path), *args], text=True, timeout=10
         ).strip()
 
     def commit(self, files: dict[str, str | None]) -> str:
@@ -147,7 +146,7 @@ class Repository:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(source)
         self.git("add", "--all")
-        self.git("-c", "commit.gpgsign=false", "commit", "-qm", "test", "--allow-empty")
+        self.git("commit", "-qm", "test", "--allow-empty")
         return self.git("rev-parse", "HEAD")
 
     def arguments(self, base: str, head: str) -> tuple[str, ...]:

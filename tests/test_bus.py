@@ -308,7 +308,7 @@ def test_projection_freshness_follows_its_producing_source(bus):
 
         ProjectionProducer.update(
             db, where="{projection}=?", parameters=(MessageIdentitySource.declared_name,),
-            commit=older, producer_digest=older,
+            producer_digest=older,
         )
         MessageIdentitySource.update(db, where="{seq}=?", parameters=(record.seq,), sender="stale")
         assert BusSchema.schema_differs(db)
