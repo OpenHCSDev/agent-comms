@@ -24,6 +24,7 @@ from agent_comms.bus_tables import (
     ClaimOperations,
     HeldResources,
     MessageIdentitySource,
+    ParticipantSource,
     ReceivedSource,
     SentSource,
 )
@@ -269,7 +270,7 @@ class BusReader(RouteCounts, ABC):
     def _source_sequences(
         self, query: str, parameters: tuple[object, ...], *, after: int = 0,
         before: int | None = None, descending: bool = True,
-        sequences: tuple[int, ...] = (),
+        sequences: tuple[int, ...] = (), limit: int | None = None,
     ) -> Generator[int, None, None]:
         """Stream selected frozen participant positions on the held snapshot."""
         with self.observing() as db:
@@ -280,8 +281,8 @@ class BusReader(RouteCounts, ABC):
             order = "DESC" if descending else "ASC"
             with closing(db.execute(
                 f"SELECT seq FROM ({query}) WHERE seq > ? AND seq < ?{selected} "
-                f"ORDER BY seq {order}",
-                (*parameters, after, before, *sequences),
+                f"ORDER BY seq {order}" + (" LIMIT ?" if limit is not None else ""),
+                (*parameters, after, before, *sequences) + ((limit,) if limit is not None else ()),
             )) as rows:
                 for row in rows:
                     yield FieldCodec.decode(int, row[0])
@@ -290,13 +291,18 @@ class BusReader(RouteCounts, ABC):
         self, lookup: str, *, after: int = 0, before: int | None = None, limit: int = 100,
         descending: bool = True, sequences: tuple[int, ...] = (),
     ) -> tuple[Delivered, ...]:
-        with self.reading() as source, closing(source._source_sequences(
-            f'SELECT seq FROM "{SentSource.declared_name}" WHERE lookup=? UNION '
-            f'SELECT seq FROM "{ReceivedSource.declared_name}" WHERE lookup=?',
-            (lookup, lookup), after=after, before=before,
-            descending=descending, sequences=sequences,
-        )) as positions:
-            return tuple(source.delivery(seq) for seq in islice(positions, limit))
+        with self.reading() as source:
+            positions: set[int] = set()
+            for participant in ParticipantSource.schema_rows():
+                with closing(source._source_sequences(
+                    f'SELECT seq FROM "{participant.declared_name}" WHERE lookup=?',
+                    (lookup,), after=after, before=before, descending=descending,
+                    sequences=sequences, limit=limit,
+                )) as selected:
+                    positions.update(selected)
+            return tuple(source.delivery(seq) for seq in islice(
+                sorted(positions, reverse=descending), limit,
+            ))
 
     def sent(
         self, lookup: str, *, after: int = 0, before: int | None = None,
@@ -304,14 +310,14 @@ class BusReader(RouteCounts, ABC):
     ) -> tuple[Delivered, ...]:
         with self.reading() as source, closing(source._source_sequences(
             f'SELECT seq FROM "{SentSource.declared_name}" WHERE lookup=?', (lookup,),
-            after=after, before=before, descending=descending,
+            after=after, before=before, descending=descending, limit=limit,
         )) as positions:
-            return tuple(source.delivery(seq) for seq in islice(positions, limit))
+            return tuple(source.delivery(seq) for seq in positions)
 
     def _received_sequences(
         self, lookup: str, *, after: int = 0, before: int | None = None,
         sender_lookups: tuple[str, ...] = (), descending: bool = True,
-        sequences: tuple[int, ...] = (),
+        sequences: tuple[int, ...] = (), limit: int | None = None,
     ) -> Generator[int, None, None]:
         sender = ""
         if sender_lookups:
@@ -321,7 +327,7 @@ class BusReader(RouteCounts, ABC):
         return self._source_sequences(
             f'SELECT seq FROM "{ReceivedSource.declared_name}" WHERE lookup=?{sender}',
             (lookup, *sender_lookups), after=after, before=before,
-            descending=descending, sequences=sequences,
+            descending=descending, sequences=sequences, limit=limit,
         )
 
     def received(
@@ -331,9 +337,9 @@ class BusReader(RouteCounts, ABC):
     ) -> tuple[Delivered, ...]:
         with self.reading() as source, closing(source._received_sequences(
             lookup, after=after, before=before, sender_lookups=sender_lookups,
-            descending=descending, sequences=sequences,
+            descending=descending, sequences=sequences, limit=limit,
         )) as positions:
-            return tuple(source.delivery(seq) for seq in islice(positions, limit))
+            return tuple(source.delivery(seq) for seq in positions)
 
     def direct_replies(
         self, lookup: str, *, after: int = 0, before: int | None = None, limit: int = 100,

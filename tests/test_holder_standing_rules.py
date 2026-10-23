@@ -685,7 +685,7 @@ def test_first_heartbeat_is_owed_from_the_oldest_open_request_then_survives_rena
     fresh = held_bus.bus.publisher.publish_ordinary(Message(
         sender=CommanderHeartbeat.sender, target="lead", body="The heartbeat is running now",
         type=InfoKind, timestamp=due + 1,
-    ), origin=AgentOrigin())
+    ), destination=CommandTarget.named("lead"), origin=AgentOrigin())
     assert HeartbeatSilent.violations(held_bus, "lead") == ()
 
     held_bus.threads._rename_thread("lead", "renamed-lead")
@@ -698,7 +698,7 @@ def test_first_heartbeat_is_owed_from_the_oldest_open_request_then_survives_rena
     newer = held_bus.bus.publisher.publish_ordinary(Message(
         sender="renamed-heartbeat", target="renamed-lead", body="Heartbeat after both renames",
         type=InfoKind, timestamp=time.time(),
-    ), origin=AgentOrigin())
+    ), destination=CommandTarget.named("renamed-lead"), origin=AgentOrigin())
     assert HeartbeatSilent.violations(held_bus, "renamed-lead") == ()
     monkeypatch.setattr(time, "time", lambda: newer.timestamp + HeartbeatSilent.seconds + 1)
     held_bus.messaging.send("renamed-lead", "renamed-heartbeat", "Read the new beat too")

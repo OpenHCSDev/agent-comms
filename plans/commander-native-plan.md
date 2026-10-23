@@ -255,14 +255,15 @@ and greatest timestamp are separate selections. Unanswered pages apply the
 same real eligibility owner before counting their page limit. No callback,
 callback cache, fake message, policy switch or new index is added.
 
-Eleven focused copied-bus checks pass, including aliases, wrong reference
-hashes, an older question outside the time cut, newer ineligible candidates,
-non-monotonic reply timestamps and an unanswered page limited to one eligible
-original. The retained 19,189-record replay and source census are recorded in
-the PR. This branch starts at accepted #2624 and excludes rejected #2629;
-removing this policy mirror does not establish generic projection freshness.
+Focused copied-bus checks cover aliases, wrong reference hashes, expired
+questions, newer ineligible candidates, non-monotonic reply timestamps and
+eligibility before a one-message page limit. The retained 19,189-record replay
+and source census are recorded in #2630, which is rebased onto the current
+integration branch and carries the accepted heartbeat repair. It excludes
+rejected #2629; removing these mirrors does not establish generic projection
+freshness.
 
-The next checkpoint deletes `DirectReplySource`, the other stored answer
+The change also deletes `DirectReplySource`, the other stored answer
 computed by `Delivered.direct_for`. `Goals._goal_input_review` and
 `RecordedGoalWait.has_reply` now consume `BusReader.direct_replies`, which
 checks actual delivery policy before counting the page limit. Frozen
@@ -271,21 +272,38 @@ preserved. The shared participant reader returns actual `Delivered` values
 through its existing checked decoder, closing the inaccurate `BusRecord`
 return contract used by `cohort_foreground`.
 
-This streaming candidate is not performance-qualified. All sixteen retained
-four-pair direct-reply selections match the stored table, but a 100-reply
-page requires 170–601 full delivery decodes and costs 101–988 milliseconds.
-The same 601 records cost 1,106 milliseconds as full deliveries versus 133
-milliseconds as complete `Message` values: frozen delivery capability decoding
-is the dominant term. The next candidate reads actual complete `Message`
-values first and loads the frozen delivery only for accepted messages.
+The original streaming candidate needed 170–601 full delivery decodes for a
+100-reply page. Frozen capability decoding dominated. The implemented query
+reads actual complete `Message` values first and loads frozen deliveries only
+for accepted messages.
 `ResponsePolicy.starts_direct_turn` owns the shared predicate; `ReceivedSource`
 already establishes the frozen recipient incarnation. All sixteen counted
 replays match: a 100-reply page loads exactly 100 full deliveries, with 170–601
 message reads and 148–363 milliseconds in the completed counted replay.
 An earlier cold cell hit its one-second cutoff; that failed run is retained.
-Neither replay establishes constant cost. Physical retirement of the removed
-table remains open through the existing one-shot cutover owner. The current
-installed pair remains independent of this draft.
+Neither replay establishes constant cost. Ordinary participant pages retain
+their SQL limit. Conversation pages query each declared `ParticipantSource`
+member up to that limit, then combine the bounded candidates before decoding.
+The retained one-message case takes 50 SQLite instructions on both short and
+long sources; the previous UNION materialized 6,050 versus 256,859 instructions.
+
+`tools/cutover/carry_reply_policy.py` retires the exact source-proven old table
+and applies the existing `BusSchema` family carry to the live root and its
+catalog-declared snapshots. The main installation witness and archive catalog
+lock own the work; backup and rewritten paths include every affected copy.
+An actual worker-process carry of the retained bus removes 8,290 cached rows,
+keeps all six durable source-table counts and hashes unchanged, removes the
+old policy column, passes integrity/foreign-key checks and repeats as a no-op.
+It costs 44.02 seconds; no projection skip is restored. A real attached archive
+still validates and browses with identical catalog and read results afterward.
+The cutover is deleted after all buses have run it.
+
+`BusSchema` now compares the complete catalog and rejects unknown tables without
+deleting them. Private coordinator composition remains its original mandatory
+view: optional awareness has a separate owner and absence/drift contract.
+Configured optional awareness is covered by a real coordinator check. The
+current installed pair remains independent of this draft; installation and
+live commander qualification belong to integration acceptance.
 
 ### Phase 8: cutover
 

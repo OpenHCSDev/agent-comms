@@ -285,6 +285,10 @@ def test_scoped_and_frozen_source_queries_are_sequence_bounded(bus):
     )
     selected = bus.selected_sequences("target=?", ("worker",), reply.seq)
     assert {row.seq for row in selected} == {notice.seq, reply.seq}
+    assert bus.conversation("a" * 32, limit=1, descending=False) == (notice,)
+    assert bus.conversation(
+        "a" * 32, limit=1, descending=False, sequences=(reply.seq,),
+    ) == (reply,)
 
 
 def test_unanswered_reference_selection_requires_the_recorded_original_and_exact_owner_answer(bus):
