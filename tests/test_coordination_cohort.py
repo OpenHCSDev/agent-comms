@@ -136,7 +136,7 @@ def test_crash_before_sql_and_lost_ack_replay_after_rename_and_tags(tmp_path: Pa
     reopened = wire(tmp_path / "comms")
     reopened.registry.rename("Alice", "Alicia")
     reopened.registry.register(replace(reopened.registry.require("Bob"), tags=frozenset({"other"})))
-    store = Coordination(str(tmp_path / "comms" / "coordinator.sqlite"), clock_ms=lambda: 4788)
+    store = Coordination(str(CoordinationStore.path_in(comms.root)), clock_ms=lambda: 4788)
     result = accept_delivery_cohort(reopened.bus, root_id, message.seq, store)
     assert isinstance(result, Applied)
     assert (result.value.member_count, result.value.assignment_count) == (2, 2)
@@ -150,7 +150,7 @@ def test_crash_before_sql_and_lost_ack_replay_after_rename_and_tags(tmp_path: Pa
     store.close()
     # The SQL COMMIT succeeded, but the client lost its reply. No reappend or
     # restamping is allowed, even after dispositions and registration evolve.
-    recovered = Coordination(str(tmp_path / "comms" / "coordinator.sqlite"), clock_ms=lambda: 9000)
+    recovered = Coordination(str(CoordinationStore.path_in(comms.root)), clock_ms=lambda: 9000)
     again = accept_delivery_cohort(reopened.bus, root_id, message.seq, recovered)
     assert isinstance(again, AlreadyApplied)
     assert again.value.accepted_at_ms == 4788
@@ -376,7 +376,7 @@ def test_simultaneous_accepts_one_applied_one_replay(tmp_path: Path) -> None:
     coordinator.close()
 
     def worker(_: int) -> str:
-        store = Coordination(str(tmp_path / "comms" / "coordinator.sqlite"))
+        store = Coordination(str(CoordinationStore.path_in(comms.root)))
         try:
             result = accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
             return type(result).__name__

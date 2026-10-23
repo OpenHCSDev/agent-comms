@@ -30,7 +30,7 @@ from agent_comms.selected_claim import (
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
 from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordination_tables.executions import ExecutionProvenance, WireOrigin
+from agent_comms.coordination_tables.executions import WireOrigin
 from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim, NativeClaim, WakeClaim
 from agent_comms.coordination_session import NativeBoundary

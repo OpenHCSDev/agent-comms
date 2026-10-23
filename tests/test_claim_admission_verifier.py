@@ -27,10 +27,9 @@ from agent_comms.selected_claim import (
 from agent_comms.comms import wire
 from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
 from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordination_tables.executions import ExecutionProvenance, WireOrigin
+from agent_comms.coordination_tables.executions import WireOrigin
 from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim, WakeClaim
-from agent_comms.errors import RelationViolationError
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.selected_source_batch import SelectedSource
 from agent_comms.threads import Thread

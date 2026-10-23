@@ -389,9 +389,6 @@ class TestRegistration:
     def test_private_guard_rejects_disk_downgrade_even_with_cached_revision(
         self, tmp_path: Path, damage: str
     ) -> None:
-        from agent_comms.cohort_schema import CohortTable
-        from agent_comms.coordination_database import CoordinationStore
-        from agent_comms.coordinator import Coordination
 
         root = tmp_path / "guarded"
         comms = wire(root)
