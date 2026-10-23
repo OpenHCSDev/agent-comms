@@ -13,7 +13,12 @@ from typing_extensions import TypeForm
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import PathText
-from agent_comms.installer.interpreter_operation import InterpreterOperation, RuntimeProbe
+from agent_comms.installer.interpreter_operation import (
+    InstallClock,
+    InstallPhase,
+    InterpreterOperation,
+    RuntimeProbe,
+)
 from agent_comms.locked_store import RootFile
 from agent_comms.store_files import is_store_lock
 
@@ -107,12 +112,38 @@ class CarryOperation[Answer](
     def run(self, steps: tuple[Carry, ...]) -> tuple[Answer, ...]: ...
 
 
+@dataclass(frozen=True, kw_only=True)
+class CarryPhase(InstallPhase):
+    """Run a declared carry operation in its target interpreter."""
+
+    operation: type[CarryOperation]
+
+    @property
+    def subject(self) -> str:
+        return self.operation.declared_name
+
+
+@dataclass(frozen=True, kw_only=True)
+class CarryStepPhase(InstallPhase):
+    """One carry step inside its operation's worker pass."""
+
+    step: type[Carry]
+
+    @property
+    def subject(self) -> str:
+        return self.step.declared_name
+
+
 @dataclass(frozen=True)
 class MigrateOperation(CarryOperation[Carried]):
     apply: bool
 
     def run(self, steps: tuple[Carry, ...]) -> tuple[Carried, ...]:
-        return tuple(step.carry(apply=self.apply) for step in steps)
+        answers = []
+        for step in steps:
+            with CarryStepPhase(step=type(step)).running(InstallClock.current.get()):
+                answers.append(step.carry(apply=self.apply))
+        return tuple(answers)
 
 
 @dataclass(frozen=True)
@@ -121,7 +152,8 @@ class FirstPendingOperation(CarryOperation[int]):
 
     def run(self, steps: tuple[Carry, ...]) -> tuple[int, ...]:
         for position, step in enumerate(steps):
-            changed_count = step.carry(apply=False).changed
+            with CarryStepPhase(step=type(step)).running(InstallClock.current.get()):
+                changed_count = step.carry(apply=False).changed
             if changed_count:
                 return (position,)
         return (len(steps),)
@@ -130,16 +162,22 @@ class FirstPendingOperation(CarryOperation[int]):
 @dataclass(frozen=True)
 class RetireInputsOperation(CarryOperation[Carried]):
     def run(self, steps: tuple[Carry, ...]) -> tuple[Carried, ...]:
-        return tuple(step.after_acceptance() for step in steps)
+        answers = []
+        for step in steps:
+            with CarryStepPhase(step=type(step)).running(InstallClock.current.get()):
+                answers.append(step.after_acceptance())
+        return tuple(answers)
 
 
 @dataclass(frozen=True)
 class CarryProbe[Answer](RuntimeProbe[tuple[Answer, ...]]):
-    """One pass of steps, in order, answered by the staged runtime's worker; the
-    operation owns traversal and declares the answer."""
+    """A typed carry pass; the common worker exchange owns its measurements."""
 
     operation: CarryOperation
     steps: tuple[Carry, ...]
+
+    def install_phase(self) -> CarryPhase:
+        return CarryPhase(operation=type(self.operation))
 
     def answer_type(self) -> TypeForm[tuple[Answer, ...]]:
         return self.operation.answer_type()

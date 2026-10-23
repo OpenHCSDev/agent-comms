@@ -1,6 +1,7 @@
 """Named destinations own route behavior; strings are decoded at the boundary."""
 from __future__ import annotations
 
+from .class_fact import ClassFact
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
@@ -11,7 +12,7 @@ from .declared_family import DeclaredFamily
 from .errors import HumanSendRefusedError, RelationViolationError, UnregisteredThreadError
 from .field_codec import NullMember, SingleFieldValue, SubclassUnion
 from .history_result import DmHistoryPageResult, HistoryPageResult
-from .projection_source import ProjectionSource
+from .projection_source import ProducedRow, ProjectionSource
 from .response_policy import DirectPolicy, MentionedOnlyPolicy
 from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, UnmentionedWake
 
@@ -106,6 +107,13 @@ def exact_stored_target(name: str) -> bool:
 
 class CommandTarget(ABC, ProjectionSource):
     """A command destination owns its binding and catalog participation."""
+
+    @ClassFact
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
+        from .bus_display_index import BusDisplayIndex
+        from .bus_tables import AwaitingAnswerSource
+        return (BusDisplayIndex, AwaitingAnswerSource)
+
     needs_channel_state: ClassVar[bool] = False
 
     @staticmethod

@@ -223,8 +223,6 @@ class InitialWrites(Publisher):
                     repr((
                         FileRevision.capture(self.registry.store.path),
                         self.channels.revision(),
-                        sorted((name, thread.created_at, sorted(thread.tags))
-                               for name, thread in snapshot.threads.items()),
                     )).encode()
                 ).hexdigest()
                 audience = freeze_audience(
