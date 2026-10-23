@@ -2,7 +2,6 @@
 import asyncio
 import subprocess
 from dataclasses import replace
-from pathlib import Path
 
 import pytest
 
@@ -61,15 +60,13 @@ try {
 """
 
 
-def test_real_durable_history_pages_while_writer_owns_database(tmp_path, thread_registration, durable_home):
+def test_real_durable_history_pages_while_writer_owns_database(tmp_path, thread_registration, durable_home,
+                                                                durable_host_packages):
     start = 1760000000000
     location = DurableDatabase(str(tmp_path / 'history.sqlite3'))
-    hosts = Path(__file__).parents[1] / 'src/agent_comms'
     seeded = subprocess.run(['node', '--input-type=module', '-e', SEED, location.path, str(start)],
-                            cwd=hosts, capture_output=True, text=True, timeout=20)
-    assert seeded.returncode == 0, (
-        f'seeding failed; the durable host needs its locked packages: '
-        f'npm ci --ignore-scripts --omit=dev in {hosts}\n{seeded.stderr[-2000:]}')
+                            cwd=durable_host_packages, capture_output=True, text=True, timeout=20)
+    assert seeded.returncode == 0, seeded.stderr[-2000:]
     async def journey():
         backend = PiDurableBackend()
         thread = Thread('history', frozenset(), str(tmp_path), backend=PiDurableBackend,
