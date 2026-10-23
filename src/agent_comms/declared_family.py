@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from abc import ABC, ABCMeta, abstractmethod
 from collections.abc import Hashable, Iterable, Mapping
+from functools import cache
 from types import ModuleType
 from typing import Any, ClassVar, Self, cast
 
@@ -213,8 +214,13 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
     @classmethod
     def discover_members(cls, package: ModuleType, capability: type) -> tuple[type[Self], ...]:
         """Acquire a producer package before deriving its declared capability members."""
-        discover_registry_classes(package.__path__, package.__name__ + ".", capability)
+        DeclaredFamily._discover_package(package)
         return cls.members_with(capability)
+
+    @staticmethod
+    @cache
+    def _discover_package(package: ModuleType) -> None:
+        discover_registry_classes(package.__path__, package.__name__ + ".", DeclaredFamily)
 
     @classmethod
     def members_with(cls, capability: type) -> tuple[type[Self], ...]:

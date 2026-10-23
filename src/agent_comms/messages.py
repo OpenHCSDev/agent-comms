@@ -25,7 +25,7 @@ from typing import (
 from agent_comms.response_policy import InformationalPolicy, ResponseEligibility, ResponsePolicy
 from agent_comms.typed_table import (
     AppendOnlyTables, Column, DerivedTables, DurableTables, ForeignKey, Index,
-    ProducedRow, SharedFileTables, TableReference, TypedRow, TypedTable,
+    ProducedTable, SharedFileTables, TableReference, TypedRow, TypedTable,
 )
 
 from .change_report import FileLine, NoChangeReport, ReportEvidence
@@ -68,18 +68,15 @@ class BusTables(SharedFileTables, DurableTables, AppendOnlyTables):
     """Bus history cannot be rebuilt from another source."""
 
 
-class BusProjectionTables(ProducedRow, SharedFileTables, DerivedTables):
+class BusProjectionTables(ProducedTable, SharedFileTables, DerivedTables, declared_name=None):
     """Reverse lookups are derived from the record, in its append transaction."""
 
     @classmethod
-    def producer_classes(cls) -> tuple[type, ...]:
-        record_owners = (
-            owner for record in BusRecord.discover_members(agent_comms, BusCapability)
-            for owner in record.__mro__ if owner is not object
+    def producer_classes(cls) -> tuple[type[DeclaredFamily], ...]:
+        return (
+            *BusRecord.discover_members(agent_comms, BusCapability),
+            *ClaimTransition.discover_members(agent_comms, ClaimTransition),
         )
-        return tuple(dict.fromkeys((
-            *record_owners, *ClaimTransition.discover_members(agent_comms, ClaimTransition),
-        )))
 
     @classmethod
     def create_schema(cls, db: sqlite3.Connection) -> None:
@@ -112,7 +109,7 @@ class BusRow(TypedTable, BusTables):
 
 
 @dataclass(frozen=True)
-class ClaimOperations(TypedTable, BusProjectionTables):
+class ClaimOperations(BusProjectionTables):
     """An acquisition's consumed operation refers to its original claim row."""
 
     operation_id: Annotated[str, Column(primary_key=True)]
@@ -128,7 +125,7 @@ class ClaimOperations(TypedTable, BusProjectionTables):
 
 
 @dataclass(frozen=True)
-class HeldResources(TypedTable, BusProjectionTables):
+class HeldResources(BusProjectionTables):
     """Current membership references the canonical transition, never a copy."""
 
     resource: Annotated[str, Column(primary_key=True)]

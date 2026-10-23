@@ -1374,8 +1374,8 @@ class DerivedTables(TableSchema):
     __slots__ = ()
 
     @classmethod
-    def projection_rows(cls) -> tuple[type[TypedTable], ...]:
-        return tuple(row for row in cls.schema_rows() if issubclass(row, ProducedRow))
+    def projection_rows(cls) -> tuple[type[ProducedTable], ...]:
+        return tuple(row for row in cls.schema_rows() if issubclass(row, ProducedTable))
 
     @classmethod
     def schema_differs(cls, db: sqlite3.Connection) -> bool:
@@ -1429,15 +1429,12 @@ class ProducedRow(ABC):
 
     @classmethod
     @abstractmethod
-    def producer_classes(cls) -> tuple[type, ...]:
+    def producer_classes(cls) -> tuple[type[DeclaredFamily], ...]:
         """The record family's declarations that implement this projection's production."""
 
     @classmethod
-    @cache
-    def producer_digest(cls) -> str:
-        modules = {cls.__module__, *(owner.__module__ for owner in cls.producer_classes())}
-        source = "\0".join(getsource(sys.modules[name]) for name in sorted(modules))
-        return hashlib.sha256(source.encode()).hexdigest()
+    @abstractmethod
+    def producer_digest(cls) -> str: ...
 
 
 @lru_cache(maxsize=4)
@@ -1545,7 +1542,7 @@ class TypedTable(
     @classmethod
     def _sql(cls, expression: str) -> str:
         for item in cls._columns():
-            expression = expression.replace("{" + item.name + "}", item.wire_name)
+            expression = expression.replace("{" + item.name + "}", _identifier(item.wire_name))
         return expression
 
     @classmethod
@@ -1961,6 +1958,30 @@ class TypedTable(
         )
 
 
+class ProducedTable(ProducedRow, TypedTable, declared_name=None):
+    """A named table whose producing family owns one source commitment."""
+
+    @classmethod
+    def producer_digest(cls) -> str:
+        for family in cls.__mro__:
+            if issubclass(family, ProducedTable) and "producer_classes" in vars(family):
+                return family._producer_digest()
+        raise TypeError(f"{cls.__name__} has no producing family declaration")
+
+    @classmethod
+    @cache
+    def _producer_digest(cls) -> str:
+        producers = cls.producer_classes()
+        modules = {
+            cls.__module__,
+            *(row.__module__ for row in cls.members_with(cls)),
+            *(owner.__module__ for producer in producers
+              for owner in producer.__mro__ if owner is not object),
+        }
+        source = "\0".join(getsource(sys.modules[name]) for name in sorted(modules))
+        return hashlib.sha256(source.encode()).hexdigest()
+
+
 @dataclass(frozen=True)
 class ProjectionProducer(TypedTable, ProjectionProducerTables):
     projection: Annotated[str, Column(primary_key=True)]
@@ -1968,15 +1989,15 @@ class ProjectionProducer(TypedTable, ProjectionProducerTables):
     producer_digest: str
 
     @classmethod
-    def records_for(cls, rows: tuple[type[TypedTable], ...]) -> tuple[Self, ...]:
+    def records_for(cls, rows: tuple[type[ProducedTable], ...]) -> tuple[Self, ...]:
         commit = STAMP.commit()
         return tuple(cls(row.declared_name, commit, row.producer_digest()) for row in rows)
 
-    def verifies(self, row: type[ProducedRow], commit: str) -> bool:
+    def verifies(self, row: type[ProducedTable], commit: str) -> bool:
         return self.commit == commit or self.producer_digest == row.producer_digest()
 
     @classmethod
-    def matches(cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...]) -> bool:
+    def matches(cls, db: sqlite3.Connection, rows: tuple[type[ProducedTable], ...]) -> bool:
         if not rows:
             return True
         if not cls.present(db):
@@ -1987,23 +2008,21 @@ class ProjectionProducer(TypedTable, ProjectionProducerTables):
                    for row in rows)
 
     @classmethod
-    def verify_build(cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...],
+    def verify_build(cls, db: sqlite3.Connection, rows: tuple[type[ProducedTable], ...],
                      change: SchemaChange) -> bool:
         """After schema verification, record the current build without rebuilding its rows."""
         if not rows:
             return False
         commit = STAMP.commit()
-        names = {row.declared_name for row in rows}
-        outdated = tuple(record for record in cls.select(
-            db, where='"{commit}" != ?', parameters=(commit,),
-        ) if record.projection in names)
-        if not outdated:
+        names = tuple(row.declared_name for row in rows)
+        marks = ",".join("?" for _ in names)
+        where = f"{{commit}} != ? AND {{projection}} IN ({marks})"
+        parameters = (commit, *names)
+        if not cls.exists(db, where=where, parameters=parameters):
             return False
         change.require()
         with SQLiteFile.write_transaction(db):
-            for record in outdated:
-                cls.update(db, where="{projection}=?", parameters=(record.projection,),
-                           commit=commit)
+            cls.update(db, where=where, parameters=parameters, commit=commit)
         return True
 
 
