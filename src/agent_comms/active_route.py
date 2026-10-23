@@ -10,7 +10,6 @@ import fcntl
 import json
 import os
 import stat
-import sys
 import time
 import uuid
 from abc import ABC, abstractmethod
@@ -20,6 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, ClassVar
 
+from .coordination_errors import CoordinationError
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, MalformedRecord, PathText
@@ -328,19 +328,20 @@ def route_lock_holders(directory: int) -> tuple[RouteLockHolder, ...]:
     return tuple(holders)
 
 
+class RouteReadersHold(CoordinationError):
+    """A client still reads the default route; a route change never waits for it."""
+
+
 def acquire_exclusive_route_lock(directory: int) -> None:
-    """Name current readers, then wait for the kernel to release their locks."""
+    """Take route EX now, or refuse naming every reader the owner must close."""
     try:
         fcntl.flock(directory, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        holders = route_lock_holders(directory)
-        detail = '; '.join(holder.describe() for holder in holders)
-        print(
-            f'Waiting for default-route readers: '
-            f'{detail or "unknown (lock changed during inspection)"}',
-            file=sys.stderr, flush=True,
-        )
-        fcntl.flock(directory, fcntl.LOCK_EX)
+    except BlockingIOError as error:
+        detail = '; '.join(holder.describe() for holder in route_lock_holders(directory))
+        raise RouteReadersHold(
+            f'default-route readers hold the route: '
+            f'{detail or "unknown (lock changed during inspection)"}; close them and rerun'
+        ) from error
 
 
 def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:

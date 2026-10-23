@@ -777,6 +777,8 @@ class Install[Rehearsed: Rehearsal](ABC):
         Its control connection survives until live() publishes or rolls back; the
         installed pointer, not a copied target version, selects its successor.
         """
+        with route_directory(active_route_path()):
+            pass  # A live route reader refuses the install here, before any owner stops.
         with ExitStack() as resources:
             try:
                 for bridge in Serve.running(self.installed.home):
