@@ -9,8 +9,7 @@ from __future__ import annotations
 import sqlite3
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Annotated, ClassVar, Literal, TYPE_CHECKING
-
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
 from .coordination_contracts import validate_execution_id
 from .coordination_errors import IdentityConflict, UnrecordedNativeContext
@@ -28,7 +27,18 @@ from .field_codec import (
 from .typed_table import Column, IntegerStorage, SqlStorage, TextStorage
 
 if TYPE_CHECKING:
+    from sqlite3 import Connection
+
     from agent_comms.coordination_tables.executions import ExecutionRecord
+
+    from .assignment_states import AssignmentState
+    from .coordination_tables.assignments import WakeAssignment
+    from .cursor_owner import CursorOwner
+    from .historical_native_inputs import HistoricalNativeInput
+    from .message_reference import MessageReference
+    from .native_entries import MessageEntry, RecordedEntry, TranscriptProjection
+    from .native_runtime_input import NativeRuntimeInput
+    from .transcript_events import TranscriptEvent
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,7 +168,9 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
         names = tuple(member.declared_name for member in cls.members_with(cls))
         return TextStorage.constraints(column, Literal[names])[0]
 
-    def transcript_events(self, entry, projection, user):
+    def transcript_events(
+        self, entry: RecordedEntry, projection: TranscriptProjection, user: MessageEntry,
+    ) -> list[TranscriptEvent]:
         """Selected prompts consume original wire sources, never human authorship.
 
         This display is derived inside the original read snapshot. It is not an
@@ -175,18 +187,18 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
     def require_attempt(self) -> FullNativeExecution:
         raise IdentityConflict("Native triage input has no execution attempt")
 
-    def published_replies(self, db, owner_lookup):
+    def published_replies(self, db: sqlite3.Connection, owner_lookup: str) -> tuple[MessageReference, ...]:
         """TRIAGE has no execution publication; FULL owns that relation."""
         return ()
 
-    def matches_execution(self, execution, owner_lookup: str) -> bool:
+    def matches_execution(self, execution: ExecutionRecord, owner_lookup: str) -> bool:
         return False
 
     def retried_in(self, db: sqlite3.Connection) -> bool:
         """TRIAGE has no attempts, so a later attempt never replaces it."""
         return False
 
-    def proves_full_source(self, proof) -> bool:
+    def proves_full_source(self, proof: HistoricalNativeInput) -> bool:
         return False
 
     @classmethod
@@ -194,7 +206,7 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
     def source_membership_sql(cls) -> str:
         """Select the assignments included in this stage's input."""
 
-    def source_assignment_ids(self, db, input_id) -> tuple[str, ...]:
+    def source_assignment_ids(self, db: Connection, input_id: str) -> tuple[str, ...]:
         from .coordination_tables.assignments import WakeAssignment
 
         columns = ",".join(f"c.{column}" for column in WakeAssignment.columns())
@@ -206,11 +218,13 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
         return tuple(original.assignment_id for original in originals)
 
     @abstractmethod
-    def record_sources(self, db, input_id, assignments) -> None:
+    def record_sources(self, db: Connection, input_id: str, assignments: tuple[WakeAssignment, ...]) -> None:
         """Record only membership which is not already owned by execution claims."""
 
     @abstractmethod
-    def historical_proof(self, record, *, lifecycle, **source):
+    def historical_proof(
+        self, record: NativeRuntimeInput, *, lifecycle: AssignmentState, **source,
+    ) -> HistoricalNativeInput | None:
         """Acquire the declared recorded-proof member from the original SQL row."""
         raise NotImplementedError
 
@@ -221,7 +235,7 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
         raise NotImplementedError
 
     @abstractmethod
-    def binding_fields(self):
+    def binding_fields(self) -> dict[str, NativeColumn]:
         """Publish this member through the unchanged durable SQL contract."""
         raise NotImplementedError
 
@@ -229,7 +243,9 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
 @dataclass(frozen=True)
 class TriageNativeExecution(NativeInputExecution):
 
-    def transcript_events(self, entry, projection, user):
+    def transcript_events(
+        self, entry: RecordedEntry, projection: TranscriptProjection, user: MessageEntry,
+    ) -> list[TranscriptEvent]:
         return [event.as_context() for event in
                 super().transcript_events(entry, projection, user)]
 
@@ -240,7 +256,7 @@ class TriageNativeExecution(NativeInputExecution):
         return (f"SELECT s.input_id, member.value AS assignment_id, CAST(member.key AS INTEGER) AS ordinal "
                 f"FROM {TriageNativeSources.declared_name} s, json_each(s.assignment_ids) member")
 
-    def record_sources(self, db, input_id, assignments) -> None:
+    def record_sources(self, db: Connection, input_id: str, assignments: tuple[WakeAssignment, ...]) -> None:
         from .triage_native_sources import TriageNativeSources
 
         TriageNativeSources(input_id, tuple(row.assignment_id for row in assignments)).insert(db)
@@ -251,10 +267,12 @@ class TriageNativeExecution(NativeInputExecution):
         attempt_ordinal.require_unrecorded()
         return cls()
 
-    def binding_fields(self):
+    def binding_fields(self) -> dict[str, NativeColumn]:
         return {"execution_id": UnrecordedNativeColumn(), "attempt_ordinal": UnrecordedNativeColumn()}
 
-    def historical_proof(self, record, *, lifecycle, **source):
+    def historical_proof(
+        self, record: NativeRuntimeInput, *, lifecycle: AssignmentState, **source,
+    ) -> HistoricalNativeInput | None:
         return record.verdict.historical_proof(record, lifecycle, self, **source)
 
 
@@ -274,7 +292,7 @@ class FullNativeExecution(NativeInputExecution):
                 f"JOIN {ExecutionAssignmentLink.declared_name} c ON c.execution_id=n.execution_id "
                 f"WHERE n.stage='{cls.declared_name}'")
 
-    def record_sources(self, db, input_id, assignments) -> None:
+    def record_sources(self, db: Connection, input_id: str, assignments: tuple[WakeAssignment, ...]) -> None:
         if self.source_assignment_ids(db, input_id) != tuple(row.assignment_id for row in assignments):
             raise IdentityConflict("Full native input differs from its original execution membership")
 
@@ -291,14 +309,14 @@ class FullNativeExecution(NativeInputExecution):
             "attempt_ordinal": FieldCodec.encode(attempt_ordinal),
         })
 
-    def binding_fields(self):
+    def binding_fields(self) -> dict[str, NativeColumn]:
         return {"execution_id": TextNativeColumn(self.execution_id),
                 "attempt_ordinal": NumberNativeColumn(self.attempt_ordinal)}
 
     def require_attempt(self) -> FullNativeExecution:
         return self
 
-    def matches_execution(self, execution, owner_lookup: str) -> bool:
+    def matches_execution(self, execution: ExecutionRecord, owner_lookup: str) -> bool:
         return (
             execution.execution_id == self.execution_id
             and execution.owner_lookup == owner_lookup
@@ -314,7 +332,7 @@ class FullNativeExecution(NativeInputExecution):
         """A transient provider failure leaves this input behind a later attempt."""
         return self._execution(db).lifecycle.current_attempt_ordinal != self.attempt_ordinal
 
-    def published_replies(self, db, owner_lookup):
+    def published_replies(self, db: sqlite3.Connection, owner_lookup: str) -> tuple[MessageReference, ...]:
         from .coordination_tables.responses import ResponseObligation
         execution = self._execution(db)
         if not self.matches_execution(execution, owner_lookup):
@@ -331,13 +349,15 @@ class FullNativeExecution(NativeInputExecution):
             )
         )
 
-    def historical_proof(self, record, *, lifecycle, **source):
+    def historical_proof(
+        self, record: NativeRuntimeInput, *, lifecycle: AssignmentState, **source,
+    ) -> HistoricalNativeInput | None:
         from .historical_native_inputs import FullHistoricalNativeInput
 
         record.verdict.require_undecided()
         return FullHistoricalNativeInput(execution=self, **source)
 
-    def proves_full_source(self, proof) -> bool:
+    def proves_full_source(self, proof: HistoricalNativeInput) -> bool:
         return proof.expected_prompt_equality_established
 
 
@@ -358,7 +378,7 @@ class NativeContextReference(DeclaredFamily, affix="Reference"):
     def require_recorded(self) -> NativeInputReference:
         raise UnrecordedNativeContext("Native input has no recorded context")
 
-    def require_recorded_input(self, owner, db) -> None:
+    def require_recorded_input(self, owner: CursorOwner, db: sqlite3.Connection) -> None:
         """An unrecorded context grants no committed-input identity."""
 
 
@@ -382,7 +402,7 @@ class NativeInputReference(NativeContextReference):
         return self
 
     @classmethod
-    def acquire(cls, row) -> NativeInputReference:
+    def acquire(cls, row: NativeInputContext) -> NativeInputReference:
         """Decode the complete original SQL reference, never a partial projection."""
         try:
             result = FieldCodec.construct(cls, dict(
@@ -400,7 +420,7 @@ class NativeInputReference(NativeContextReference):
         except MalformedRecord as error:
             raise IdentityConflict("Native recorded context reference is incomplete") from error
 
-    def require_recorded_input(self, owner, db) -> None:
+    def require_recorded_input(self, owner: CursorOwner, db: sqlite3.Connection) -> None:
         owner.require_recorded_reference(db, self)
 
 

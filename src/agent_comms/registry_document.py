@@ -42,6 +42,7 @@ from .restart_refusals import (
 from .thread_identity import (
     ClaimedIdentity,
     GenerationCounter,
+    OfferedTools,
     OwnerIdentity,
     RecordedThreadIncarnation,
     ThreadIncarnation,
@@ -529,6 +530,14 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
             return document
         except MalformedRecord as error:
             raise RelationViolationError(f"Invalid registry document: {error}") from error
+
+    def observe_offered_tools(self, identity: ThreadIncarnation, offered: OfferedTools) -> Thread:
+        current = self.require(identity.name)
+        if current.incarnation != identity:
+            raise RelationViolationError("Tool observation belongs to a replaced thread.")
+        updated = current.observing_tools(offered)
+        self.threads[current.name] = updated
+        return updated
 
     def set_work_state(self, name: str, state: ThreadWorkState) -> Thread:
         """Change order availability without replacing the thread's owner or presence."""
