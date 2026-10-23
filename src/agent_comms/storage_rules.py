@@ -27,7 +27,6 @@ from agent_comms.field_codec import (
     SubclassUnion,
 )
 from agent_comms.locked_store import DurableFile
-from agent_comms.mro_dispatch import handles
 from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.repo import Repo
@@ -96,11 +95,6 @@ class UnassignedThreadStorage(NullMember, ThreadStorage):
 class AssignedStorageRoots(FieldRepresentation):
     """A stored thread holds the roots its registry assigned at registration, so its
     stored form is StorageRoots; only an unregistered thread in memory has none."""
-
-    @handles(type(None))
-    @classmethod
-    def decode_null(cls, data: object, structural: object) -> StorageRoots:
-        return cls.decode(data)
 
     @classmethod
     def decode(cls, value: object) -> StorageRoots:

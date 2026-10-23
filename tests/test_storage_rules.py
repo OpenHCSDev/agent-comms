@@ -8,7 +8,8 @@ import runpy
 import pytest
 
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec
+from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import FieldCodec, RecordProblems
 from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.storage_rules import (
     CheckoutStorageEffect, RemoveCheckoutStorageEffect, StorageRoots, StorageRule,
@@ -60,6 +61,12 @@ def test_registry_assigns_a_new_thread_its_roots_at_declaration(tmp_path):
     declared = comms.registry.declare(thread)
     assert declared.storage_roots == StorageRoots(tmp_path / 'scratch' / 'worker')
     assert comms.registry.require('worker').storage_roots == declared.storage_roots
+    stored = declared.to_wire()
+    assert FieldCodec.decode(Thread, stored) == declared
+    with pytest.raises(RecordProblems):
+        FieldCodec.decode(Thread, {**stored, 'storage_roots': None})
+    with pytest.raises(RelationViolationError):
+        thread.to_wire()
 
 
 def test_removed_worktree_frees_quota_and_another_home_cannot_claim_its_parent(tmp_path):
