@@ -14,6 +14,7 @@ from .collaboration_ledger import CollaborationLedger
 from .context_store import ContextStore
 from .goal_management import Goals
 from .history_views import HistoryViews
+from .launch_runtime import LaunchRuntime
 from .locked_store import RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
@@ -22,6 +23,7 @@ from .owner_lifecycle import OwnerLifecycle
 from .publisher import OwnerPublisher, Publisher
 from .registration import Registration
 from .relationships import ThreadRelationships
+from .root_runtime import RootRuntime
 from .thread_configuration import ThreadConfiguration
 from .thread_management import ThreadManagement
 from .transcripts import Transcripts
@@ -32,6 +34,7 @@ class Comms:
         self, root: CommsRoute | Path, publisher: type[Publisher] = OwnerPublisher,
     ) -> None:
         self.route = resolve_comms_route(root)
+        RootRuntime.require_attachable(self.route.root, LaunchRuntime.running())
         self.route.observe_root()
         self.registry = Registration(RegistryFile.path_in(self.root))
         self.bus = MessageBus(
