@@ -22,7 +22,6 @@ from .native_transcript import SessionCut, reverse_records
 from .private_path import FileObservation, FileRevision, MissingFile
 from .read_ledger import ReadDocument, ReadLedger
 from .registry_document import RosterVisibility
-from .store_files import SharedLock, _store_lock
 from .thread_owned_state import ThreadOwnedState
 from .typed_table import Column, JsonStorage, SQLiteTableName, SQLiteUserVersion, TypedRow, TypedTable
 from .ui_model.unread import CappedReplyUnread, IndexingUnread, ReplyUnread, UnreadPresentation
@@ -341,16 +340,15 @@ class NativeReplyPreparation(ReplyPreparation):
         completed = tuple(source for source, reader in self.readers.items() if reader.future.done())
         if not completed:
             return self
-        # Publication stays under the existing deletion and SQLite owners.
+        # The state lock owns local retirement; SQLite owns publication exclusion.
         # A busy writer leaves these exact completed readers for the next observation.
         try:
-            with _store_lock(state.path.parent / "wire", mode=SharedLock(), blocking=False):
-                with (CoordinationReadUnavailable.checking(),
-                      state.publishing_changes(database, state.index_path),
-                      SQLiteFile.write_transaction(database)):
-                    for source in completed:
-                        self.readers[source].commit(database)
-        except (BlockingIOError, CoordinationReadUnavailable):
+            with (CoordinationReadUnavailable.checking(),
+                  state.publishing_changes(database, state.index_path),
+                  SQLiteFile.write_transaction(database)):
+                for source in completed:
+                    self.readers[source].commit(database)
+        except CoordinationReadUnavailable:
             return self
         for source in completed:
             del self.readers[source]
