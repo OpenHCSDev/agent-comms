@@ -105,6 +105,10 @@ class CarryCatalogSource(SubclassUnion, ABC, affix=""):
     def require_snapshot(self) -> None: ...
 
     @abstractmethod
+    def carried_registry(self, mapped: Path) -> Self:
+        """Reseal a registry carried before the bus format changes."""
+
+    @abstractmethod
     def converted(
         self,
         root: Path,
@@ -185,6 +189,14 @@ class HistoryCatalogSource(RecordMember, CarryCatalogSource):
         ):
             raise RelationViolationError(f"Retired archive changed before carrying: {original}")
 
+    def carried_registry(self, mapped: Path) -> Self:
+        return replace(
+            self,
+            root=str(mapped),
+            snapshot_bus_revision=FileRevision.capture(mapped / BusHistory.filename),
+            snapshot_registry_revision=FileRevision.capture(RegistryFile.path_in(mapped)),
+        )
+
     def converted(
         self,
         root: Path,
@@ -206,7 +218,8 @@ class HistoryCatalogSource(RecordMember, CarryCatalogSource):
         )
         source.validate()
         return source, Carried(
-            1, rewritten=tuple(str(path.relative_to(root)) for path in registry.written),
+            1,
+            rewritten=tuple(str(path.relative_to(root)) for path in registry.written),
         )
 
 
@@ -221,13 +234,7 @@ class ConvertedHistorySource(HistorySource, RecordMember, CarryCatalogSource):
     def require_snapshot(self) -> None:
         self.validate()
 
-    def converted(
-        self,
-        root: Path,
-        original_root: Path,
-        bindings: Mapping[RecordedBusIdentity, RecordedBusIdentity],
-    ) -> tuple[HistorySource, Carried]:
-        mapped = self.mapped_root(root, original_root)
+    def carried_registry(self, mapped: Path) -> Self:
         bus = Bus(Bus.path_in(mapped))
         source = replace(
             self,
@@ -237,7 +244,16 @@ class ConvertedHistorySource(HistorySource, RecordMember, CarryCatalogSource):
             snapshot_registry_revision=FileRevision.capture(RegistryFile.path_in(mapped)),
         )
         source.validate()
-        return source, Carried(0)
+        return source
+
+    def converted(
+        self,
+        root: Path,
+        original_root: Path,
+        bindings: Mapping[RecordedBusIdentity, RecordedBusIdentity],
+    ) -> tuple[HistorySource, Carried]:
+        mapped = self.mapped_root(root, original_root)
+        return self.carried_registry(mapped), Carried(0)
 
 
 class HistoryDecision(SubclassUnion, ABC, affix="HistoryDecision"):
@@ -361,18 +377,6 @@ class HistoryRow[Record: BusRecord = BusRecord](
             ).encode("utf-8")
             + b"\n"
         )
-
-    @classmethod
-    def read(cls, raw: bytes, line: int) -> Self:
-        try:
-            if not raw.endswith(b"\n"):
-                raise ValueError("incomplete final row")
-            row = FieldCodec.decode(cls, FieldCodec.parse(raw))
-            if row.line() != raw:
-                raise ValueError("row is not byte-identical to its declared envelope")
-            return row
-        except (MalformedRecord, ValueError) as error:
-            raise RelationViolationError(f"Bus history line {line}: {error}") from error
 
 
 @dataclass(frozen=True)
@@ -639,7 +643,14 @@ class HistoryLine[Row: Message = Message](ABC):
         with source.open("rb") as stream:
             while raw := stream.readline():
                 number += 1
-                row = HistoryRow.read(raw, number)
+                try:
+                    if not raw.endswith(b"\n"):
+                        raise ValueError("incomplete final row")
+                    row = FieldCodec.decode(HistoryRow, FieldCodec.parse(raw))
+                    if row.line() != raw:
+                        raise ValueError("row is not byte-identical to its declared envelope")
+                except (MalformedRecord, ValueError) as error:
+                    raise RelationViolationError(f"Bus history line {number}: {error}") from error
                 if row.seq <= 0 or (number > 1 and row.seq != previous + 1):
                     raise RelationViolationError(
                         f"Bus history line {number}: sequence gap/repeat at {row.seq}"
@@ -695,7 +706,7 @@ class UnclaimedHistoryLine(HistoryLine[ClaimHistoryRow]):
 
 
 class HistoryReadback(ABC):
-    """One source scan; the admitted destination owns how each row is checked."""
+    """One source scan; the opened destination owns how each row is checked."""
 
     minimum_change: ClassVar[int]
 
@@ -712,11 +723,16 @@ class HistoryReadback(ABC):
     @abstractmethod
     def pending(self, line: HistoryLine) -> int: ...
 
+    @abstractmethod
+    def require_count(self, count: int) -> None:
+        """Refuse a total inconsistent with this destination."""
+
     def inspect(self, source: Path, metadata: HistoryMetadata) -> Carried:
         count = changed = 0
         for line in HistoryLine.rows(source, metadata):
             changed += self.pending(line)
             count = line.number
+        self.require_count(count)
         return Carried(
             max(changed, self.minimum_change),
             detail=dict(rows=count, continuous=count, round_tripped=count),
@@ -729,6 +745,9 @@ class UnstoredHistory(HistoryReadback):
     def pending(self, line: HistoryLine) -> int:
         line.verify(line.record())
         return 1
+
+    def require_count(self, count: int) -> None:
+        """An absent destination imposes no stored-row count."""
 
 
 class StoredHistory(BusSnapshot, UnstoredHistory):
@@ -746,11 +765,9 @@ class StoredHistory(BusSnapshot, UnstoredHistory):
             )
         return 0
 
-    def inspect(self, source: Path, metadata: HistoryMetadata) -> Carried:
-        result = super().inspect(source, metadata)
-        if BusRow.count(self._connection) > result.detail["rows"]:
+    def require_count(self, count: int) -> None:
+        if BusRow.count(self._connection) > count:
             raise RelationViolationError("Stored history extends beyond its retained input")
-        return result
 
 
 @dataclass(frozen=True)
@@ -774,7 +791,6 @@ class HistoryInput:
             # original may remain outside this practice copy indefinitely.
             for _ in FileRevision.capture(bus.path).revisions():
                 with bus.observing() as db:
-                    BusSchema.require_schema(db)
                     if HistoryOffset.present(db):
                         raise RelationViolationError(
                             "History input was already staged; restore its backup "
@@ -829,8 +845,11 @@ class BusHistory(Carry, BusFile):
     def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
         """The retired writer advances history and its marker under the history lock."""
         with _store_lock(source, mode=SharedLock()):
-            copied = frozenset(path for path in (source, source.with_name(HistoryMetadata.filename))
-                               if path.exists())
+            copied = frozenset(
+                path
+                for path in (source, source.with_name(HistoryMetadata.filename))
+                if path.exists()
+            )
             for path in copied:
                 RootFile.copy_file(path, target.with_name(path.name))
         return copied

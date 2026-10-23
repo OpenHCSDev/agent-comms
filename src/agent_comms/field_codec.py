@@ -873,13 +873,21 @@ class ExternalJsonShape(FieldRepresentation):
     def from_wire(cls, data: object) -> object: ...
 
 
-class SingleFieldValue(ExternalJsonShape, WireValue):
-    """One declared field is the whole wire value, not an object envelope."""
+class SingleValueEncoding(WireValue):
+    """Encode one declared field as the whole wire value."""
 
     @classmethod
     def wire_field(cls):
         entry, = FieldCodec._record_plan(cls).fields
         return entry
+
+    def to_wire(self):
+        entry = self.wire_field()
+        return FieldCodec.encode_document(getattr(self, entry.name), entry.annotation)
+
+
+class SingleFieldValue(ExternalJsonShape, SingleValueEncoding):
+    """One declared field is the whole wire value, not an object envelope."""
 
     @classmethod
     def from_wire(cls, data):
@@ -893,10 +901,6 @@ class SingleFieldValue(ExternalJsonShape, WireValue):
     @classmethod
     def argument_options(cls) -> dict[str, object]:
         return compile_decoder(cls.wire_field().annotation).argument_options()
-
-    def to_wire(self):
-        entry = self.wire_field()
-        return FieldCodec.encode_document(getattr(self, entry.name), entry.annotation)
 
 
 class SubclassUnion(DeclaredFamily, AcceptsNull, ExternalJsonShape, WireValue):
@@ -983,7 +987,7 @@ class JsonShapeMember:
         return cls(value=value)
 
 
-class JsonShapeFamily(AcceptsNull, ExternalJsonShape, WireValue):
+class JsonShapeFamily(AcceptsNull, ExternalJsonShape, SingleValueEncoding):
     """Untagged external JSON enters one declaration-owned value family.
 
     Put DeclaredFamily before this capability in the root's bases, preserving
@@ -1044,9 +1048,6 @@ class JsonShapeFamily(AcceptsNull, ExternalJsonShape, WireValue):
         alternatives = [FieldCodec.value_schema(annotation)
                         for _, annotation in cls._json_owners.values()]
         return FieldCodec.alternatives_schema("anyOf", alternatives)
-
-    def to_wire(self):
-        return self.value
 
 
 class TextRepresentation[V](FieldRepresentation):

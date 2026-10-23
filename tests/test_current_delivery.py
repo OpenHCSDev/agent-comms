@@ -63,7 +63,7 @@ def test_unordered_times_and_sparse_seen_rows(routed):
     messages = [
         comms.bus.publisher.publish_ordinary(
             Message("sender", "recipient", f"row {index}", InfoKind, timestamp=timestamp),
-            origin=AgentOrigin(),
+            destination=CommandTarget.named("recipient"), origin=AgentOrigin(),
         )
         for index, timestamp in enumerate((birth + 2, birth - 1, birth + 1, birth - 2))
     ]
@@ -82,13 +82,13 @@ def test_retained_cut_clips_future_paint_in_counts_and_listings(routed, tmp_path
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     birth = comms.registry.require(viewer).created_at
     first = comms.bus.publisher.publish_ordinary(
-        Message("sender", viewer, "inside cut", InfoKind, timestamp=birth + 2), origin=AgentOrigin(),
+        Message("sender", viewer, "inside cut", InfoKind, timestamp=birth + 2), destination=CommandTarget.named(viewer), origin=AgentOrigin(),
     )
     with comms.bus.snapshot(viewer=NamedViewer(viewer)) as (basis, source):
         later = comms.bus.publisher.publish_ordinary(Message(
             "sender", viewer, "outside cut", InfoKind,
             timestamp=birth - 1 if birth_crossing else birth + 3,
-        ), origin=AgentOrigin())
+        ), destination=CommandTarget.named(viewer), origin=AgentOrigin())
         displayed = comms.bus.reads.capture(
             viewer, (later,), basis.registry, comms.bus.bus, document=comms.bus.reads.read(),
         )

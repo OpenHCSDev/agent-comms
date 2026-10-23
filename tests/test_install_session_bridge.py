@@ -31,14 +31,15 @@ SERVE_FROM_SOURCE = (sys.executable, '-c', 'from agent_comms.cli_bridges.claude 
 
 
 @contextmanager
-def session_bridge(tmp_path, home, program=SERVE_FROM_SOURCE):
+def session_bridge(tmp_path, home, program=SERVE_FROM_SOURCE, *, state_directory=None):
     comms = Comms(tmp_path / 'bus')
     Bus.install(Bus.path_in(comms.root))
     comms.registry.declare(comms.registry.new_thread(
         'bridge-copy', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
     transcript = tmp_path / 'copied-session.jsonl'
     transcript.write_text('')
-    state = home / '.local/state/agent-comms/claude-bridge-copy'
+    state = (home / '.local/state/agent-comms/claude-bridge-copy'
+             if state_directory is None else state_directory)
     binding = Binding(str(comms.root), 'bridge-copy', transcript.stem)
     with Binding.open(state) as db:
         binding.bind(db)
@@ -58,7 +59,7 @@ def session_bridge(tmp_path, home, program=SERVE_FROM_SOURCE):
         deadline = time.monotonic() + 20
         while child.poll() is None and time.monotonic() < deadline:
             try:
-                observed = InspectSession().information(claim)
+                observed = InspectSession().information(claim.socket_path)
                 break
             except (FileNotFoundError, ConnectionRefusedError):
                 time.sleep(.05)
@@ -121,8 +122,8 @@ def test_wrong_pause_identity_cannot_stop_the_real_session_bridge(
             process=other if wrong_identity == 'process' else observed.process,
         )
         with pytest.raises(ValueError, match='different'):
-            request.exchange(claim)
-        assert InspectSession().information(claim).process == observed.process
+            request.exchange(claim.socket_path)
+        assert InspectSession().information(claim.socket_path).process == observed.process
         assert child.poll() is None, log.read_text()
 
 
@@ -149,6 +150,25 @@ def test_installer_pause_closes_the_real_bridge_and_eof_never_replays_or_relaunc
         assert isinstance(claim.state(), LapsedWatch)
         with Binding.open(home / '.local/state/agent-comms/claude-bridge-copy') as db:
             assert Binding.select(db)[0].thread == claim.thread
+
+
+@pytest.mark.parametrize('state_directory', (
+    Path('.local/state/claude-comms-inbox'), Path('custom session storage'),
+), ids=('default-claude-state', 'custom-state'))
+def test_installer_discovers_the_live_claim_independent_of_state_directory(
+        tmp_path, bridge_home, state_directory):
+    with session_bridge(tmp_path, bridge_home,
+                        state_directory=bridge_home / state_directory) as (
+            home, claim, observed, child, log):
+        (bridge,) = Serve.running(home)
+        assert bridge.claim == claim
+        assert bridge.observed.process == observed.process
+        with ExitStack() as resources:
+            (paused,) = bridge.pause(resources)
+            assert paused.bridge == bridge
+            assert isinstance(claim.state(), LiveWatch)
+        assert child.wait(timeout=15) == 0, log.read_text()
+        assert isinstance(claim.state(), LapsedWatch)
 
 
 def test_session_start_and_runtime_replacement_share_the_declared_launcher(tmp_path):
@@ -217,7 +237,7 @@ def test_install_swap_keeps_the_claim_and_resumes_the_same_process_on_the_new_ru
                 cleanup.callback(stop, monitor)
             bridges.require_resumed()
             assert bridges.lines() == ()
-            resumed = InspectSession().information(claim)
+            resumed = InspectSession().information(claim.socket_path)
             assert resumed.process == observed.process
             assert resumed.process.pid == child.pid
             assert resumed.runtime.prefix == new.prefix.resolve()

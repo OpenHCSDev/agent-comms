@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self, get_args, get_origi
 from uuid import uuid4
 
 from agent_comms import skills
+from agent_comms.active_route import guard_original_root_write
 from agent_comms.build_identity import (
     BuildIdentity,
     CommitInstallation,
@@ -44,7 +45,7 @@ from agent_comms.change_report import (
     SourceReference,
     SourceRevision,
 )
-from agent_comms.channel_targets import CommandTarget, CommsTag
+from agent_comms.channel_targets import CommandTarget, CommsTag, IncarnationThreadTarget, NamedTarget
 from agent_comms.child_process import (
     BoundedRun,
     CheckPrinted,
@@ -54,6 +55,7 @@ from agent_comms.child_process import (
     OrderCheckFailedError,
 )
 from agent_comms.command import Command
+from agent_comms.coordination_session import NativeBoundary
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import (
@@ -61,7 +63,6 @@ from agent_comms.field_codec import (
     GitCommitText,
     MalformedRecord,
     NullMember,
-    RecordMember,
     SingleFieldValue,
     SubclassUnion,
     WireOmitDefault,
@@ -76,6 +77,14 @@ from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message
 from agent_comms.order_runs import OrderRun
 from agent_comms.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
+from agent_comms.owner_requests import (
+    OpenRequestState,
+    OwnerRequestId,
+    RequestAtRevision,
+    RequestDirective,
+    RequestLink,
+    RequestState,
+)
 from agent_comms.plan_phases import OrderPhase, UnplannedPhase
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.progress_claims import MergedClaim, ProgressClaim, WorkingClaim
@@ -96,9 +105,11 @@ from agent_comms.threads import Thread
 from agent_comms.typed_table import (
     Column,
     DurableStore,
+    DurableTables,
     ExpressionIndex,
+    Generated,
     Index,
-    JsonStorage,
+    SharedFileTables,
     TextStorage,
     TypedTable,
 )
@@ -1604,15 +1615,6 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
             raise ValueError("The problem has open orders; link or drop them first.")
         return FoldedProblemOrder(original=self, into=into, why=why)
 
-    @staticmethod
-    def request(sender: Thread, problems: tuple[str, ...]) -> str:
-        if not problems:
-            raise ValueError('An order needs its Problems line.')
-        request = sender.goal.require().require_active()
-        request.order.require_request()
-        return request.id
-
-
 @dataclass(frozen=True, kw_only=True)
 class UnorderedProblemOrder(ProblemOrder):
 
@@ -2082,7 +2084,7 @@ class OrderClaim:
             raise TodoError("A delivery claim needs its report text.")
 
     def original(self, source: BusReader) -> Message:
-        return replace(self.message, seq=source.message_reference(self.message.message_id).seq)
+        return Message.from_message(source.lookup_message(self.message.message_id).message)
 
     @staticmethod
     def originals[K](
@@ -2097,11 +2099,12 @@ class OrderClaim:
     @classmethod
     def for_order(
         cls, todo: Todo, actor: ThreadIncarnation, number: int, head: str,
-        report: str, answer: MessageReference,
+        report: str, answer: MessageReference, *, store: TodoStore,
     ) -> OrderClaim:
+        request = store.owner_request(todo.request.require())
         return cls(
             PullRequestLink(todo.repo, number), head,
-            Message(actor.name, todo.creator, report, InfoKind, answers=(answer,)),
+            Message(actor.name, request.commander.name, report, InfoKind, answers=(answer,)),
         )
 
 
@@ -2336,53 +2339,6 @@ class TodoConflict(TodoError):  # noqa: N818 - domain-specific conflict outcome
         super().__init__(f"Todo {current.id} changed (revision {current.revision}, owner {owner}).")
 
 
-class GoalReference(SubclassUnion):
-    @abstractmethod
-    def request(self) -> str:
-        """The commander's request goal this problem serves."""
-
-    def require_reference(self) -> None:
-        pass
-
-    def threads(self) -> tuple[str, ...]:
-        return ()
-
-
-@dataclass(frozen=True)
-class NoGoalReference(NullMember, GoalReference):
-    def request(self) -> str:
-        raise TodoError("A problem with no request goal cannot be ordered again.")
-
-
-@dataclass(frozen=True)
-class GoalRef(RecordMember, GoalReference):
-
-    owner: str
-    owner_created: float
-    goal_id: str
-
-    def __post_init__(self) -> None:
-        self.require_reference()
-
-    def require_reference(self) -> None:
-        _text(self.owner, "Thread name", 128)
-        try:
-            self.incarnation.require_recorded()
-        except ValueError as error:
-            raise TodoError("Goal reference requires its recorded owner incarnation") from error
-        _text(self.goal_id, "Goal ID", 128)
-
-    @property
-    def incarnation(self) -> ThreadIncarnation:
-        return RecordedThreadIncarnation(self.owner, self.owner_created)
-
-    def threads(self) -> tuple[str, ...]:
-        return (self.owner,)
-
-    def request(self) -> str:
-        return self.goal_id
-
-
 class TodoHolder(ABC):
     """Current, released and absent holders own their assignment behaviour."""
 
@@ -2578,8 +2534,8 @@ class TodoCommand(Command, DeclaredFamily, affix="TodoOperation"):
     def after_record(self, goals: Goals, changed: Todo) -> None:
         """Most operations have no automatic public effect."""
 
-    def require_unit(self, db: sqlite3.Connection, current: Todo) -> None:
-        """Only assignment operations compete for a unit."""
+    def validate(self, db: sqlite3.Connection, current: Todo) -> None:
+        """Validate related records inside the operation's write transaction."""
 
     def apply(self, current: Todo) -> Todo:
         self.require_current(current)
@@ -2607,29 +2563,30 @@ class AssignTodo(TodoOperation):
     proposed: Assignment
     review_at: EventTime
     order: PendingProblemOrder | MergedProblemOrder
-    goal: GoalReference
+    request: OwnerRequestId
     traced: Annotated[FileLine | NoSourceReference, WireOmitDefault()] = NoSourceReference()
 
     @classmethod
     def by(cls, actor: ThreadIncarnation, expected_revision: int, owner: ThreadIncarnation,
            generation: str, review_at: EventTime, order: PendingProblemOrder | MergedProblemOrder,
-           goal: GoalReference, traced: FileLine | NoSourceReference) -> AssignTodo:
+           request: OwnerRequestId, traced: FileLine | NoSourceReference) -> AssignTodo:
         """The one place the typed actor and the assignment's recorded assigner are made."""
         return cls(expected_revision, actor, Assignment.of(owner, actor, generation),
-                   review_at, order, goal, traced)
+                   review_at, order, request, traced)
 
     def authored_by(self, actor: ThreadIncarnation) -> Self:
         return replace(self, actor=actor, proposed=replace(self.proposed,
                        parent=actor.name, parent_created=actor.wire_birth))
 
-    def require_unit(self, db: sqlite3.Connection, current: Todo) -> None:
+    def validate(self, db: sqlite3.Connection, current: Todo) -> None:
         TodoStore.require_unit_in(db, self.proposed.owner_identity, self.actor)
+        OwnerRequest.require(db, id=self.request).require_open(current.creator_identity)
 
     def apply(self, current: Todo) -> Todo:
         self.review_at.require_recorded("A review time")
         proposed = current.proposed_assignment(self.proposed)
-        if (current.assignment, current.review_at, current.order, current.goal) == (
-                proposed, self.review_at, self.order, self.goal):
+        if (current.assignment, current.review_at, current.order, current.request) == (
+                proposed, self.review_at, self.order, self.request):
             return current
         return super(AssignTodo, replace(self, proposed=proposed)).apply(current)
 
@@ -2642,7 +2599,7 @@ class AssignTodo(TodoOperation):
                     else current.state.assign(current, self.proposed, self.traced))
         return replace(assigned, review_at=self.review_at,
                        order=self.order, prior_orders=current.orders_before(self.order),
-                       goal=self.goal,
+                       request=self.request,
                        revision=current.revision + 1)
 
 
@@ -2731,7 +2688,7 @@ class FailedCheckStrike(StrikeTodo):
         goals.bus.publisher.publish_ordinary(
             Message(sender=changed.creator, target=CommsTag.channel(), body=line,
                     type=InfoKind),
-            origin=AgentOrigin())
+            destination=CommandTarget.named(CommsTag.channel()), origin=AgentOrigin())
 
 
 @dataclass(frozen=True)
@@ -2740,12 +2697,14 @@ class VerdictAudience:
     threads: tuple[str, ...]
 
     @classmethod
-    def of(cls, unit: str, goal: GoalReference) -> VerdictAudience:
-        """An order's unit and its goal's thread; no verdict kind today concerns every unit."""
-        return cls(tuple(dict.fromkeys((unit, *goal.threads()))))
+    def of(cls, unit: str, todo: Todo) -> VerdictAudience:
+        """The order records its commander; a request lookup adds no authority."""
+        return cls(tuple(dict.fromkeys((unit, todo.creator))))
 
-    def addressed(self, target: str, body: str) -> str:
-        return CommandTarget.named(target).addressed(self.threads, body)
+    @property
+    def target(self) -> NamedTarget:
+        name = self.threads[0] if len(self.threads) == 1 else CommsTag.channel()
+        return CommandTarget.named(name)
 
 
 @dataclass(frozen=True)
@@ -3111,6 +3070,22 @@ class ClaimOrder(TodoCommand):
     generation: str
     claim: OrderClaim
 
+    def record(self, goals: Goals, problem: str) -> Todo:
+        """Retain the publication's actual address before saving its content identity."""
+        with guard_original_root_write(goals.root), NativeBoundary(goals.bus) as boundary:
+            current = goals.todos.get(problem)
+            target = IncarnationThreadTarget(
+                goals.todos.owner_request(current.request.require()).commander)
+            target.require_publication(
+                self.claim.message, boundary.registry, goals.bus.require_channel)
+            message = replace(
+                self.claim.message,
+                sender=boundary.registry.canonical_name(self.claim.message.sender),
+                target=target.selected_name(boundary.registry),
+            )
+            prepared = replace(self, claim=replace(self.claim, message=message))
+            return super(ClaimOrder, prepared).record(goals, problem)
+
     def changed(self, current: Todo) -> Todo:
         current.state.require_open(current)
         current.require_assignee(self.actor, self.generation)
@@ -3118,7 +3093,10 @@ class ClaimOrder(TodoCommand):
         return replace(current, order=order, revision=current.revision + 1)
 
     def after_record(self, goals: Goals, changed: Todo) -> None:
-        goals.bus.publisher.publish_ordinary(self.claim.message, origin=AgentOrigin())
+        goals.bus.publisher.publish_ordinary(
+            self.claim.message, destination=IncarnationThreadTarget(
+                goals.todos.owner_request(changed.request.require()).commander),
+            origin=AgentOrigin())
 
 
 @dataclass(frozen=True)
@@ -3215,13 +3193,65 @@ class ChangeTodoState(TodoOperation):
 
 
 @dataclass(frozen=True, slots=True)
+class OwnerRequest(TypedTable, SharedFileTables, DurableTables):
+    """One owner's request, independent of any current turn goal."""
+
+    indexes = (Index(("commander_created_at", "state", "created_at")),)
+
+    id: Annotated[OwnerRequestId, Column(primary_key=True, storage=TextStorage)]
+    commander: RecordedThreadIncarnation
+    commander_created_at: ClassVar[Generated] = Generated(
+        float, Column(generated="json_extract({commander}, '$.created_at')"),
+    )
+    text: str
+    state: RequestState = OpenRequestState()
+    directives: tuple[RequestDirective, ...] = ()
+    created_at: float = field(default_factory=time.time)
+
+    def __post_init__(self) -> None:
+        if not self.text.strip():
+            raise TodoError("An owner request needs its text.")
+
+    @classmethod
+    def new(cls, commander: ThreadIncarnation, text: str) -> Self:
+        return cls(OwnerRequestId.new(), commander.require_recorded(), text)
+
+    def require_commander(self, commander: ThreadIncarnation) -> None:
+        if self.commander != commander.require_recorded():
+            raise TodoError(f"Request {self.id.value} belongs to another commander.")
+
+    def require_open(self, commander: ThreadIncarnation) -> OpenRequestState:
+        self.require_commander(commander)
+        return self.state.require_open(self.id)
+
+    def at_revision(self, directives: tuple[RequestDirective, ...]) -> RequestAtRevision:
+        if self.directives[:len(directives)] != directives:
+            raise TodoError(f"Request {self.id.value} history is not a recorded directive prefix.")
+        return RequestAtRevision(self.id, len(directives))
+
+    def directive_messages(
+        self, source: BusReader, responders: frozenset[str],
+    ) -> tuple[tuple[RequestDirective, Message], ...]:
+        """Select exact unanswered references before loading their originals."""
+        unanswered = {reference.seq for reference in source.unanswered_references(
+            tuple(directive.seq for directive in self.directives), responders)}
+        return tuple((directive, directive.original(source)) for directive in self.directives
+                     if directive.seq in unanswered)
+
+
+@dataclass(frozen=True, slots=True)
 class Todo(TypedTable):
     unit_index: ClassVar[ExpressionIndex] = ExpressionIndex((
         Assignment.sql_field('owner'), Assignment.sql_field('owner_created'), '{state}',
     ))
     problem_index: ClassVar[ExpressionIndex] = ExpressionIndex((ProblemNumber.sql_number('{id}'),))
+    serving_request: ClassVar[str] = (
+        f'json_extract("order",\'$.{ProblemOrder.family_discriminator}\') '
+        f'IN {DeliverableProblemOrder.sql_choices()}'
+    )
     indexes = (Index(("creator", "creator_created", "state")), Index(("state",)),
-               unit_index, problem_index)
+               unit_index, problem_index, Index(("request",)),
+               Index(("request",), where=serving_request))
 
     id: Annotated[str, Column(primary_key=True)]
     repo: Annotated[RepositoryName, Column(storage=TextStorage)]
@@ -3230,7 +3260,9 @@ class Todo(TypedTable):
     creator_created: float
     state: type[TodoState]
     revision: Annotated[int, Column(check="revision>0")]
-    goal: Annotated[GoalReference, Column(storage=JsonStorage, nullable=True)]
+    request: Annotated[
+        RequestLink, Column(storage=TextStorage, nullable=True, references=(OwnerRequest, "id")),
+    ]
     assignment: Assignment | None
     order: ProblemOrder
     review_at: EventTime = field(default_factory=UnrecordedEventTime)
@@ -3294,19 +3326,16 @@ class Todo(TypedTable):
     def reference_pattern(self) -> str:
         return rf"(^|[^A-Za-z0-9_]){re.escape(self.id)}([^A-Za-z0-9_]|$)"
 
-    unrequested_goal: ClassVar[GoalReference] = NoGoalReference()
-
     @classmethod
     def ordered(cls, todo_id: str, repo: RepositoryName, text: str, creator: ThreadIncarnation,
                 assignment: Assignment, review_at: EventTime,
                 order: PendingProblemOrder | MergedProblemOrder,
-                goal: GoalReference = unrequested_goal) -> Todo:
+                request: OwnerRequestId) -> Todo:
         _text(todo_id, "Todo ID", 128)
         _text(text, "Todo text", 2000)
         review_at.require_recorded("A review time")
-        goal.require_reference()
         return cls(todo_id, repo, text, creator.name, creator.wire_birth, OpenTodoState,
-                   1, goal, assignment, order, review_at)
+                   1, request, assignment, order, review_at)
 
     @property
     def pending(self):
@@ -3460,7 +3489,7 @@ class Todo(TypedTable):
                 text=proposed.text,
                 creator=proposed.creator,
                 creator_created=proposed.creator_created,
-                goal=proposed.goal,
+                request=proposed.request,
                 review_at=proposed.review_at,
                 order=proposed.order,
             )
@@ -3522,8 +3551,64 @@ class ProblemAllocation(TypedTable):
         return cls.issue(db, ProblemNumber(number))
 
 
+class OwnerRequestStore(DurableStore):
+    """Request lifetime and serving-work queries share the store's transaction."""
+
+    def add_request(self, commander: ThreadIncarnation, text: str) -> OwnerRequest:
+        request = OwnerRequest.new(commander, text)
+        with self.writing() as db:
+            request.insert(db)
+        return request
+
+    def owner_request(self, request: OwnerRequestId) -> OwnerRequest:
+        with self.snapshot() as db:
+            return OwnerRequest.require(db, id=request)
+
+    def open_requests(
+        self, commander: ThreadIncarnation, *, limit: int = -1,
+    ) -> tuple[OwnerRequest, ...]:
+        with self.snapshot() as db:
+            return tuple(OwnerRequest.select(
+                db, where="commander_created_at=?",
+                parameters=(commander.require_recorded().created_at,), state=OpenRequestState(),
+                order_by=("created_at", "id"), descending=True, limit=limit,
+            ))
+
+    def record_directive(self, request: OwnerRequestId, directive: RequestDirective) -> None:
+        with self.writing() as db:
+            current = OwnerRequest.require(db, id=request)
+            current.state.require_open(current.id)
+            replace(current, directives=(*current.directives, directive)).upsert(db)
+
+    def complete_request(
+        self, commander: ThreadIncarnation, request: OwnerRequestId, reason: str,
+    ) -> OwnerRequest:
+        with self.writing() as db:
+            current = OwnerRequest.require(db, id=request)
+            state = current.require_open(commander)
+            completed = replace(current, state=state.complete(
+                request, self._serving(db, request), reason,
+            ))
+            completed.upsert(db)
+        return completed
+
+    @staticmethod
+    def _serving(db: sqlite3.Connection, request: OwnerRequestId) -> tuple[Todo, ...]:
+        return tuple(Todo.select(db, request=request, where=Todo.serving_request))
+
+    def serving_orders(self, request: OwnerRequestId) -> tuple[Todo, ...]:
+        """Pending work and unaccepted claims, through the request's partial index."""
+        with self.snapshot() as db:
+            return self._serving(db, request)
+
+    def for_request(self, request: OwnerRequestId) -> tuple[Todo, ...]:
+        """Every order that served this independent request, open or done."""
+        with self.snapshot() as db:
+            return tuple(Todo.select(db, request=request))
+
+
 @dataclass(frozen=True, slots=True)
-class TodoStore(DurableStore):
+class TodoStore(OwnerRequestStore):
     """One SQLite row owns both todo state and its exclusive assignment.
 
     Assignment identity and revision deduplicate known operations. An uncertain
@@ -3533,7 +3618,7 @@ class TodoStore(DurableStore):
 
     root: Path
     filename: ClassVar[str] = "todos.sqlite3"
-    rows: ClassVar[tuple[type[TypedTable], ...]] = (Todo, HuntRecord, ProblemAllocation)
+    rows: ClassVar[tuple[type[TypedTable], ...]] = (OwnerRequest, Todo, HuntRecord, ProblemAllocation)
 
     @contextmanager
     def writing(self) -> Iterator[sqlite3.Connection]:
@@ -3638,7 +3723,7 @@ class TodoStore(DurableStore):
             linked = target.order.linked(source.order)
             replace(target, order=linked,
                     prior_orders=target.orders_before(linked, source.prior_orders),
-                    assignment=source.held(), goal=source.goal, review_at=source.review_at,
+                    assignment=source.held(), request=source.request, review_at=source.review_at,
                     messages=source.messages, revision=target.revision + 1).upsert(db)
 
     @staticmethod
@@ -3751,12 +3836,6 @@ class TodoStore(DurableStore):
         return any(todo.pending for todo in self._select(
             '1', (), reader=partial(self.held_in, unit=owner)))
 
-    def for_request(self, commander: ThreadIncarnation, goal_id: str) -> tuple[Todo, ...]:
-        """Every order that served one request, a Goal on the commander's thread, open or done."""
-        return self._select(
-            "json_extract(goal,'$.owner')=? AND json_extract(goal,'$.owner_created')=? "
-            "AND json_extract(goal,'$.goal_id')=?", (commander.name, commander.wire_birth, goal_id))
-
     def for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._select("creator=? AND creator_created=?",
                             (commander.name, commander.wire_birth), reader=self._open)
@@ -3814,7 +3893,7 @@ class TodoStore(DurableStore):
         generation: str,
         review_at: EventTime,
         order: PendingProblemOrder,
-        goal: GoalRef,
+        request: OwnerRequestId,
     ) -> Todo:
         number = ProblemNumber.parse(todo_id)
         identity, assignee = _participant(creator), _thread(owner)
@@ -3823,9 +3902,10 @@ class TodoStore(DurableStore):
         order.require_writable()
         proposed = Todo.ordered(
             todo_id, repo, text, identity, Assignment.of(assignee, assigner, generation),
-            review_at, order, goal)
+            review_at, order, request)
         with self.writing() as db:
             self.require_unit_in(db, assignee, assigner)
+            OwnerRequest.require(db, id=request).require_open(identity)
             proposed.insert_if_absent(db)
             current = self._current(db, todo_id)
             current.require_same_creation(proposed)
@@ -3836,10 +3916,10 @@ class TodoStore(DurableStore):
     def apply(self, todo_id: str, command: TodoCommand) -> Todo:
         with self.writing() as db:
             current = self._current(db, todo_id)
-            command.require_unit(db, current)
             result = command.apply(current)
             if result == current:
                 return current
+            command.validate(db, current)
             result.upsert(db)
             return self._current(db, todo_id)
 
@@ -3881,10 +3961,10 @@ class TodoStore(DurableStore):
         owner: Thread,
         assigner: ThreadIncarnation,
         generation: str,
-        goal: GoalRef,
+        request: OwnerRequestId,
         review_at: EventTime,
         order: PendingProblemOrder,
         traced: FileLine | NoSourceReference = NoSourceReference(),
     ) -> Todo:
         return self.apply(todo_id, AssignTodo.by(assigner, expected_revision, _thread(owner),
-                                                 generation, review_at, order, goal, traced))
+                                                generation, review_at, order, request, traced))

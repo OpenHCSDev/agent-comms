@@ -24,12 +24,12 @@ from agent_comms.service_passes import ServicePassStore
 if TYPE_CHECKING:
     from agent_comms.bus import BusReader
     from agent_comms.comms import Comms
-    from agent_comms.goals import RequestDirective
+    from agent_comms.owner_requests import OwnerRequestId, RequestDirective
     from agent_comms.messages import Message
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.storage_rules import MemoryUse, StorageRule
     from agent_comms.thread_identity import ThreadIncarnation
-    from agent_comms.todos import Todo
+    from agent_comms.todos import OwnerRequest, Todo
     from agent_comms.ui_model.unit_state import UnitState
 
 
@@ -172,7 +172,8 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
     @classmethod
     @abstractmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
-                  held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str) -> tuple[Self, ...]:
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str,
+                  requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
         """This member's open debts, inside their window or past it, on one bus cut."""
 
     def due(self, now: float) -> bool:
@@ -185,13 +186,14 @@ class OwedAnswer(IndependentStandingRule, declared_name=None):
 
     @classmethod
     def opened(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        # Orders and goal directives name already-committed messages. Capture them
+        # Orders and request directives name already-committed messages. Capture them
         # before the bus cut so every recorded reference exists in that cut.
         held = cls.holders(comms, commander)
         snapshot = comms.registry.snapshot()
+        requests = comms.goals.todos.open_requests(snapshot.require(commander).incarnation)
         with comms.bus.bus.reading() as source:
             return tuple(rule for member in cls.members_with(cls)
-                         for rule in member.read_open(source, snapshot, held, commander))
+                         for rule in member.read_open(source, snapshot, held, commander, requests))
 
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         """Whether an action naming these open messages answers this one."""
@@ -328,17 +330,17 @@ class LocatedHuntDue(HuntDue, declared_name=None):
 class DirectiveUnacted(OwedAnswer, DatedStandingRule):
     """An owner directive recorded on an open request, past its deadline with no order since."""
 
-    request: str
+    request: OwnerRequestId
     directive: RequestDirective
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
-                  held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str) -> tuple[Self, ...]:
-        thread = snapshot.require(commander)
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str,
+                  requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
         return tuple(
-            cls(original, goal.id, directive)
-            for goal in thread.goal.active()
-            for directive, original in goal.order.directive_messages(source, snapshot.names_for(commander))
+            cls(original, request.id, directive)
+            for request in requests
+            for directive, original in request.directive_messages(source, snapshot.names_for(commander))
         )
 
     def due(self, now: float) -> bool:
@@ -350,7 +352,7 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
     def line(self) -> str:
         return (
             f"DIRECTIVE UNACTED: owner directive {self.cited}"
-            f" on request {self.request},"
+            f" on request {self.request.value},"
             f" due {self.directive.due_time} -> order its next step or mark the request done"
         )
 
@@ -361,7 +363,7 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
         oldest = min(current, key=lambda rule: rule.directive.seq).directive
         newest = max(current, key=lambda rule: rule.directive.seq).directive
         return (
-            f"DIRECTIVE UNACTED: request {self.request}: {len(current)} owner directives; "
+            f"DIRECTIVE UNACTED: request {self.request.value}: {len(current)} owner directives; "
             f"oldest {oldest.seq} due {oldest.due_time}; "
             f"newest {newest.seq} due {newest.due_time} "
             "-> order the next step or mark the request done"

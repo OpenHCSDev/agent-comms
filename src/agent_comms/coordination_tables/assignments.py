@@ -15,7 +15,7 @@ from agent_comms.coordination_contracts import (
     require_optional_nonempty,
     validate_execution_id,
 )
-from agent_comms.coordination_schema import CoordinatorTable
+from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.envelope_claim_transitions import AssignmentBinding
 from agent_comms.field_codec import SnapshotExclude, WireName, projected
 from agent_comms.message_reference import MessageReference
@@ -35,7 +35,6 @@ from agent_comms.typed_table import (
     NoDelete,
     NonDecreasing,
     RequiredColumn,
-    TypedTable,
     WriteOnceColumns,
 )
 from agent_comms.wake_policy import MessageAudience
@@ -51,8 +50,7 @@ class WakeAssignment(
     IncrementingColumn,
     MonotoneColumns,
     NoDelete,
-    CoordinatorTable,
-    TypedTable,
+    CoordinatorRow,
     declared_name="wake_claims",
 ):
     write_once_columns = ('triage_verdict', 'execution_id', 'exact_target')
@@ -275,7 +273,7 @@ class WakeAssignment(
 
 @dataclass(frozen=True, slots=True)
 class ExecutionAssignmentLink(
-    GuardedInserts, ImmutableRows, CoordinatorTable, TypedTable, declared_name="execution_claims"
+    GuardedInserts, ImmutableRows, CoordinatorRow, declared_name="execution_claims"
 ):
 
     insert_condition = """(NOT EXISTS (SELECT 1 FROM executions e

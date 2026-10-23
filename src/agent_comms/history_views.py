@@ -216,7 +216,7 @@ class HistoryViews:
         return self.bus.history.threads(name)
 
     def dm_display_page(
-        self, peer: str, *, worktree: str, bounds: PageBounds = NEWEST_PAGE
+        self, peer: str | ThreadTarget, *, worktree: str, bounds: PageBounds = NEWEST_PAGE
     ) -> MessagePage:
         viewer = self.messaging.user_identity(worktree).name
         return DMDisplayHistory(viewer, peer, worktree).page(self.presentation, bounds)

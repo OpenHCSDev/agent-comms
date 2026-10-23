@@ -15,7 +15,6 @@ from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import ReissuedOrderGoalAction
-from agent_comms.goals import Goal
 from agent_comms.message_bus import WatchPass
 from agent_comms.message_page import MessageReadRequest, PageBounds
 from agent_comms.messages import Message
@@ -35,7 +34,7 @@ from agent_comms.standing_rules import (
 from agent_comms.storage_rules import OrderCheckoutWork
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.threads import Thread
-from agent_comms.todos import Todo
+from agent_comms.todos import OwnerRequest, Todo
 from agent_comms.turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
 from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
 from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
@@ -81,18 +80,17 @@ class InstallDue(IndependentStandingRule, UndatedStandingRule):
 
 @dataclass(frozen=True)
 class RequestStalled(IndependentStandingRule, UndatedStandingRule):
-    goal: Goal
+    request: OwnerRequest
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[RequestStalled, ...]:
         thread = comms.registry.require(commander)
-        return tuple(cls(request) for goal in thread.goal.active()
-                     for request, served in goal.order.open_requests(
-                         goal, comms.goals, thread.incarnation)
-                     if not served)
+        store = comms.goals.todos
+        return tuple(cls(request) for request in store.open_requests(thread.incarnation)
+                     if not store.serving_orders(request.id))
 
     def line(self) -> str:
-        return (f"REQUEST STALLED: {self.goal.id} {self.goal.text}"
+        return (f"REQUEST STALLED: {self.request.id.value} {self.request.text}"
                 " -> order its next step or mark it done")
 
 
@@ -191,7 +189,8 @@ class UnitAskUnanswered(OwedAnswer, UndatedStandingRule):
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
-                  held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str) -> tuple[Self, ...]:
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str,
+                  requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
         return tuple(cls(message, owner.name)
                      for owner, questions in UnansweredUnitAsks.for_orders(
                          source, snapshot, commander, held, time.time(),

@@ -9,9 +9,12 @@ from typing import TYPE_CHECKING
 from .active_route import guard_original_root_write
 from .bus_publication import AgentOrigin, HumanOrigin, InitialOrigin
 from .change_report import NoChangeReport, ReportEvidence
+from .channel_targets import CommandTarget, IncarnationThreadTarget, NamedTarget
 from .coordination_session import NativeBoundary
 from .errors import (
-    CommittedMessageError, MessageAcknowledgmentError, RelationViolationError,
+    CommittedMessageError,
+    MessageAcknowledgmentError,
+    RelationViolationError,
     UnregisteredThreadError,
 )
 from .input_disposition import InputDispositions
@@ -19,7 +22,7 @@ from .message_bus import MessageBus
 from .message_reference import MessageReference
 from .messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole, NoticeRole
 from .registration import Registration
-from .send_result import CorrectionComplete, CorrectionFailed, SendResult
+from .send_result import CorrectionComplete, CorrectionFailed, CorrectionResult, SendResult
 from .task_sources import (
     CurrentTaskScopeSelection,
     HumanConstraintPin,
@@ -45,22 +48,16 @@ class Messaging:
         self.bus = bus
         self.goals = goals
 
-    def _publish(self, message: Message, origin: InitialOrigin) -> Message:
+    def _publish(self, message: Message, origin: InitialOrigin,
+                 *, destination: NamedTarget) -> Message:
         """Record the meaning of a committed ordinary send beyond its bus transaction."""
-        committed: Message | None = None
         try:
-            try:
-                committed = self.bus.publisher.publish_ordinary(message, origin=origin)
-            except CommittedMessageError as error:
-                committed = error.record.message
-                raise
-        finally:
-            if committed is not None:
-                try:
-                    origin.published(self.goals, committed)
-                except Exception as error:
-                    raise CommittedMessageError(committed) from error
-        return committed
+            committed = self.bus.publisher.publish_ordinary(
+                message, origin=origin, destination=destination)
+        except CommittedMessageError as error:
+            origin.complete(self.goals, error.record)
+            raise
+        return origin.complete(self.goals, committed)
 
     def send(
         self,
@@ -98,7 +95,8 @@ class Messaging:
                 report=report,
                 answers=tuple(dict.fromkeys((*answers, *self._answered_by(owner, target)))),
             )
-            committed = self._publish(message, origin)
+            committed = self._publish(message, origin, destination=CommandTarget.named(target))
+        correction: CorrectionResult
         try:
             todos.correct(owner.incarnation, committed.message_id, body)
         except TodoError as error:
@@ -132,7 +130,7 @@ class Messaging:
         with guard_original_root_write(self.root), self.registry.store.locked():
             return self.registry.user_thread().or_create(lambda: self._register_user(worktree))
 
-    def send_user_message(self, target: str, body: str, *, worktree: str,
+    def send_user_message(self, target: str | NamedTarget, body: str, *, worktree: str,
                           task: TaskAttachment = NoTaskAttachment()) -> Message:
         """Cooperative local UI send, not cryptographic same-UID authentication."""
         # The historical root write fence precedes identity creation and
@@ -163,7 +161,7 @@ class Messaging:
             per_hour=per_hour, segments=segments)
 
     def _pin_constraint(self, recipient, subject, declaration, *, worktree, scope, change,
-                        **declaration_options):
+                        **declaration_options) -> Message:
         with guard_original_root_write(self.root):
             user = self.user_identity(worktree)
             owner = self.registry.require(recipient)
@@ -171,13 +169,16 @@ class Messaging:
                                source_user=user.incarnation, recipient=owner.incarnation,
                                change=change, **declaration_options)
             return self._publish_user(
-                user, owner.name, "Pinned constraint from its original source",
+                user, IncarnationThreadTarget(owner.incarnation),
+                "Pinned constraint from its original source",
                 task, role=NoticeRole())
 
-    def _publish_user(self, user, target, body, task, *, role=ConversationRole()):
+    def _publish_user(self, user: Thread, target: str | NamedTarget, body: str,
+                      task: TaskAttachment, *, role: MessageRole = ConversationRole()) -> Message:
+        destination = CommandTarget.named(target)
         return self._publish(
-            Message(user.name, target, body, InfoKind, task=task, role=role),
-            HumanOrigin.of(user),
+            Message(user.name, destination.name, body, InfoKind, task=task, role=role),
+            HumanOrigin.of(user), destination=destination,
         )
 
     def acknowledge(

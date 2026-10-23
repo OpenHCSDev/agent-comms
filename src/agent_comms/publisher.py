@@ -19,7 +19,7 @@ from agent_comms.coordination_tables.publications import (
     PublicationIntents,
 )
 from agent_comms.field_codec import Id128Text
-from agent_comms.messages import ClaimNoticeKind, Message
+from agent_comms.messages import BusRecord, ClaimNoticeKind, Message
 from agent_comms.response_acknowledgement import canonical_publication_key
 
 from .active_route import guard_original_root_write
@@ -68,6 +68,7 @@ class Publisher:
     def _validate_publish_request(
         self, message: Message, *, registry_snapshot: RegistrySnapshot,
         catalog: CatalogDocument, activity: ActivityClocks,
+        destination: NamedTarget,
     ) -> tuple[str, NamedTarget, Callable[[str], Channel]]:
         """Resolve the public route from the caller's acquired declarations."""
 
@@ -76,7 +77,7 @@ class Publisher:
         sender = snapshot.canonical_name(message.sender)
         if sender not in snapshot.threads:
             raise UnregisteredThreadError(f"Sender {message.sender!r} is not a registered thread.")
-        target = CommandTarget.named(message.target)
+        target = destination
         require_channel = partial(catalog.require_channel, activity=activity)
         target.require_publication(message, snapshot, require_channel)
         return sender, target, require_channel
@@ -142,7 +143,9 @@ class ClaimWrites(Publisher):
         self, snapshot: RegistrySnapshot, message: Message,
         make_transition: Callable[..., ClaimTransition], *, activity: ActivityClocks,
     ) -> RecordBuilder:
-        sender, target, require_channel = self._validate_publish_request(message, registry_snapshot=snapshot, catalog=self.channels.read(), activity=activity)
+        sender, target, require_channel = self._validate_publish_request(
+            message, registry_snapshot=snapshot, catalog=self.channels.read(), activity=activity,
+            destination=CommandTarget.named(message.target))
 
         def build(seq: int, db: sqlite3.Connection) -> ClaimRecord:
             stored = self._prepare_message_unlocked(
@@ -186,7 +189,8 @@ class ClaimWrites(Publisher):
 class InitialWrites(Publisher):
     """Publish an initial message and its frozen delivery decisions together."""
 
-    def publish_ordinary(self, message: Message, *, origin: InitialOrigin) -> Message:
+    def publish_ordinary(self, message: Message, *, origin: InitialOrigin,
+                         destination: NamedTarget) -> BusRecord:
         """Hold the registry/catalog cut; check source conditions in the append transaction."""
         with (
             self.opened_activity() as activity,
@@ -195,7 +199,8 @@ class InitialWrites(Publisher):
         ):
             snapshot = self.registry.snapshot()
             sender, target, require_channel = self._validate_publish_request(
-                message, registry_snapshot=snapshot, catalog=catalog, activity=activity)
+                message, registry_snapshot=snapshot, catalog=catalog, activity=activity,
+                destination=destination)
             sender_thread = snapshot.require(sender)
             snapshot.status(sender).require_visible()
             # The kind owns its own validation; one publication check, before
@@ -265,7 +270,8 @@ class ResponseWrites(Publisher):
         message = intent.message
         # A durable exact replay above wins even after registry/route renames.
         sender, target, require_channel = self._validate_publish_request(
-            message, registry_snapshot=registry_snapshot, catalog=self.channels.read(), activity=activity
+            message, registry_snapshot=registry_snapshot, catalog=self.channels.read(), activity=activity,
+            destination=CommandTarget.named(message.target),
         )
         role = registry_snapshot.threads[sender].role
         role.require_executable(RelationViolationError("Keyed response sender must be executable."))

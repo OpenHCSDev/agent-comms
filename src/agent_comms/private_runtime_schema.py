@@ -2,9 +2,20 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from .coordination_errors import SchemaVersionError
 from .coordination_schema import CoordinatorTable
-from .typed_table import ComposedSchemas, DurableTables, SharedFileTables, SQLiteJournalMode, TypedTable
+from .typed_table import (
+    ComposedSchemas,
+    DurableTables,
+    SharedFileTables,
+    SQLiteJournalMode,
+    TypedTable,
+)
+
+if TYPE_CHECKING:
+    from .coordinator import Coordination
 
 
 class PrivateCoordinatorTable(SharedFileTables, DurableTables):
@@ -13,7 +24,7 @@ class PrivateCoordinatorTable(SharedFileTables, DurableTables):
     schema_error = SchemaVersionError
 
     @classmethod
-    def declarations(cls):
+    def declarations(cls) -> tuple[type[TypedTable], ...]:
         from . import (  # noqa: F401 - declarations register in the existing TypedTable family
             cohort_schema,
             coordination_response,
@@ -24,11 +35,11 @@ class PrivateCoordinatorTable(SharedFileTables, DurableTables):
         return TypedTable.members_with(cls)
 
     @classmethod
-    def schema_rows(cls):
+    def schema_rows(cls) -> tuple[type[TypedTable], ...]:
         return cls.declarations()
 
     @classmethod
-    def install(cls, store) -> None:
+    def install(cls, store: Coordination) -> None:
         """Install absent current state; reject drift without repairing it."""
         cls.declarations()
         from .cohort_schema import AwarenessTable

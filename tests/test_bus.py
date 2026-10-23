@@ -376,13 +376,15 @@ def test_human_refusal_rolls_back_the_header(tmp_path, bus):
             "BEGIN SELECT RAISE(ABORT, 'refused'); END"
         )
     origin = HumanOrigin("author", 1, str(tmp_path))
-    with pytest.raises(HumanSendRefusedError, match="was not sent"):
+    with pytest.raises(HumanSendRefusedError, match="was not sent") as failed:
         origin.append(
             bus,
             lambda seq, db: record_from(
                 PrivateRecord, Message("author", "worker", "refused", InfoKind, seq=seq)
             ),
         )
+    assert isinstance(failed.value.cause, sqlite3.IntegrityError)
+    assert failed.value.__cause__ is failed.value.cause
     with closing(sqlite3.connect(bus.path)) as db:
         assert all(table.count(db) == 0 for table in TypedTable.members_with(BusTables))
 
@@ -403,6 +405,22 @@ def test_notification_failure_carries_the_committed_message(tmp_path, bus):
     print(
         "Change notification failure: committed message returned on CommittedMessageError.record"
     )
+
+
+def test_human_programming_failure_propagates_after_rollback(tmp_path, bus):
+    failure = RuntimeError("Broken publication implementation")
+
+    def build(seq, db):
+        record_from(
+            PrivateRecord, Message("author", "worker", "not committed", InfoKind, seq=seq)
+        ).append_to(db, seq)
+        raise failure
+
+    with pytest.raises(RuntimeError) as failed:
+        HumanOrigin("author", 1, str(tmp_path)).append(bus, build)
+    assert failed.value is failure
+    with closing(sqlite3.connect(bus.path)) as db:
+        assert all(table.count(db) == 0 for table in TypedTable.members_with(BusTables))
 
 
 def test_readonly_archive_and_backup_use_the_same_bus(tmp_path):
