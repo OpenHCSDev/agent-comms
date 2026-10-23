@@ -16,8 +16,10 @@ from agent_comms.coordination_tables.participants import Participants
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
+from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, MalformedRecord, NativeContext
 from .native_claim_epoch import NativeClaimEpoch, UnrecordedNativeClaim
+from .native_tool_call import SelectedToolDenied
 from .native_input_record import (
     NativeColumn,
     NativeInputContext,
@@ -330,6 +332,63 @@ class NativeRuntimeInput(
         )
         if updated.rowcount != 1:
             raise StaleFence("native proof was previously committed")
+
+class SelectedSlotState(DeclaredFamily, affix="Slot"):
+    """Consumption is irreversible; only a matching live terminal can acknowledge it."""
+
+    @classmethod
+    def acknowledge(cls) -> type[SelectedSlotState]:
+        raise SelectedToolDenied("Selected tool terminal was already acknowledged; no retry")
+
+    @classmethod
+    def require_acknowledged(cls) -> None:
+        raise SelectedToolDenied("Selected tool outcome UNKNOWN; no terminal acknowledgement")
+
+
+class ConsumedSlot(SelectedSlotState):
+    @classmethod
+    def acknowledge(cls) -> type[SelectedSlotState]:
+        return AcknowledgedSlot
+
+
+class AcknowledgedSlot(SelectedSlotState):
+    @classmethod
+    def require_acknowledged(cls) -> None:
+        pass
+
+
+@dataclass(frozen=True)
+class SelectedToolSlot(NativeRuntimeTable, WithoutRowid):
+    """The consumed slot and its live terminal acknowledgement, in one transaction store."""
+
+    input_id: Annotated[str, FrozenColumn(primary_key=True)]
+    call_id: Annotated[str, FrozenColumn()]
+    state: type[SelectedSlotState] = ConsumedSlot
+
+    @classmethod
+    def consume(
+        cls, db: sqlite3.Connection, input_id: str, call_id: str,
+    ) -> None:
+        if cls(input_id, call_id).insert_if_absent(db).rowcount != 1:
+            raise SelectedToolDenied("Selected tool input already consumed; outcome may be UNKNOWN")
+
+    def require_call(self, call_id: str) -> None:
+        if self.call_id != call_id:
+            raise SelectedToolDenied("Selected tool has no matching terminal acknowledgement")
+
+    def acknowledge(self, db: sqlite3.Connection, call_id: str) -> None:
+        self.require_call(call_id)
+        state = self.state.acknowledge()
+        where, parameters = self._condition(
+            "1", (), {"input_id": self.input_id, "state": self.state},
+        )
+        if self.update(db, where=where, parameters=parameters, state=state).rowcount != 1:
+            raise SelectedToolDenied("Selected tool terminal changed; outcome UNKNOWN; no retry")
+
+    def verify(self, call_id: str) -> None:
+        self.require_call(call_id)
+        self.state.require_acknowledged()
+
 
 @dataclass(frozen=True)
 class CurrentNativeCursor(

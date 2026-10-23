@@ -28,6 +28,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import tomllib
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
@@ -106,7 +107,7 @@ from agent_comms.installer.practice import (
 from agent_comms.installer.reporting import (
     OutgoingWriter, RootWriter, RuntimeWriter, UnpostedWriter,
 )
-from agent_comms.installer.runtime_resolution import RuntimeResolution
+from agent_comms.installer.runtime_resolution import RuntimeResolution, StackProject
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
 from agent_comms.locked_store import BusFile, DeclaredFile, RootFile, UndeclaredFile
 from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
@@ -462,14 +463,22 @@ class Stack:
         if not os.access(self.uv, os.X_OK):
             raise UpgradeRefused(f"No uv executable at {self.uv}; the installer runs only that uv")
 
+    def resolve(self) -> None:
+        """Refresh declared source packages while retaining the committed release pins."""
+        with self.lock.with_name("pyproject.toml").open("rb") as definition:
+            project = StackProject.model_validate(tomllib.load(definition))
+        upgrades = tuple(argument for name in project.tool.uv.sources
+                         for argument in ("--upgrade-package", name))
+        self.commands.run(self.uv, "lock", "--project", "stack", *upgrades,
+                          "--python", "3.14", cwd=self.checkout)
+
     @classmethod
     def build(cls, checkout: Path, commands: InstallCommands, home: Path = HOME) -> Stack:
         """Resolve current mains once, then build or reuse their immutable installation."""
         Checkout(checkout).prepare()
         source = cls(checkout, commands, home, runtime=LaunchRuntime.running())
         source.require_uv()
-        commands.run(source.uv, "lock", "--project", "stack", "--upgrade", "--python", "3.14",
-                     cwd=checkout)
+        source.resolve()
         core = commands.run("git", "-C", checkout, "rev-parse", "HEAD").strip()
         resolution = hashlib.sha256(source.lock.read_bytes()).hexdigest()[:16]
         prefix = home / ".local/share/agent-comms/runtimes" / f"core-{core[:9]}-lock-{resolution}"
@@ -622,7 +631,7 @@ class Stack:
             self.commands.run(self.python, "-m", step_worker.__name__,
                               request_path, result,
                               cwd=tree.path, env=self.environment(*tree.source_paths()))
-            return operation.decode_answers(result.read_text())
+            return operation.decode_answer(result.read_text())
 
     def running_owners(self, root: Path) -> list[str]:
         """Use the restart request's receiving declaration in the selected runtime."""
