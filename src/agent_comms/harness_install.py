@@ -124,8 +124,8 @@ class CodexHarness(Harness):
     skills_dir: ClassVar[str] = ".codex/skills"
 
     def configure(self) -> tuple[Path, ...]:
-        CodexInboxService.install()
-        return (CodexInboxService.unit_file(),)
+        CodexInboxService.install(home=self.home)
+        return (CodexInboxService.unit_file(self.home),)
 
 
 @dataclass(frozen=True)

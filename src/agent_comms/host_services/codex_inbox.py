@@ -57,13 +57,11 @@ class CodexInboxService(SystemdUserService):
         return tuple(instance for instance in instances if instance.pid() != 0)
 
     def serves(self) -> None:
-        state = subprocess.run(
-            ("systemctl", "--user", "is-active", self.unit_name()),
+        active = subprocess.run(
+            ("systemctl", "--user", "is-active", "--quiet", self.unit_name()),
             check=False,
-            capture_output=True,
-            text=True,
         )
-        if state.returncode != 0 or state.stdout.strip() != "active":
+        if active.returncode != 0:
             raise ServiceNotServingError(f"{self.described()} is not active")
         runtime = self.runtime()
         installed = LaunchRuntime.installed().interpreter

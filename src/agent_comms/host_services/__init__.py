@@ -108,10 +108,14 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
     def running_on(self, installed: Path) -> RestartedService:
         failure = f"{self.described()} did not run again within {self.patience}s"
         for _ in range(self.patience):
-            runtime = self.runtime()
-            if runtime == installed:
-                return RestartedService(self.described(), installed)
-            failure = f"{self.described()} runs {runtime}, not the installed {installed}"
+            for instance in type(self).running():
+                if instance == self:
+                    runtime = instance.runtime()
+                    if runtime == installed:
+                        return RestartedService(instance.described(), installed)
+                    failure = (
+                        f"{instance.described()} runs {runtime}, not the installed {installed}"
+                    )
             time.sleep(1)
         raise ServiceNotServingError(failure)
 
@@ -129,8 +133,10 @@ class SystemdUserService(HostService, declared_name=None):
     service_options: ClassVar[tuple[str, ...]] = ("Type=notify", "NotifyAccess=main")
 
     @classmethod
-    def unit_file(cls) -> Path:
-        return Path.home() / ".config/systemd/user" / cls.unit
+    def unit_file(cls, home: Path | None = None) -> Path:
+        if home is None:
+            home = Path.home()
+        return home / ".config/systemd/user" / cls.unit
 
     def unit_name(self) -> str:
         return self.unit
@@ -160,9 +166,10 @@ class SystemdUserService(HostService, declared_name=None):
         return cls.render_unit(cls.command_line(arguments))
 
     @classmethod
-    def install(cls, arguments: tuple[str, ...] = ()) -> None:
-        cls.unit_file().parent.mkdir(parents=True, exist_ok=True)
-        cls.unit_file().write_text(cls.unit_text(arguments), encoding="utf-8")
+    def install(cls, arguments: tuple[str, ...] = (), *, home: Path | None = None) -> None:
+        unit = cls.unit_file(home)
+        unit.parent.mkdir(parents=True, exist_ok=True)
+        unit.write_text(cls.unit_text(arguments), encoding="utf-8")
         subprocess.run(("systemctl", "--user", "daemon-reload"), check=True)
 
     def enable(self) -> None:

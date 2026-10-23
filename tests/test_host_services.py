@@ -88,8 +88,9 @@ def test_a_private_home_does_not_discover_the_real_user_service(tmp_path, monkey
 
 
 def test_codex_inbox_template_publication_reloads_each_rewrite(tmp_path, monkeypatch):
-    monkeypatch.setenv("HOME", str(tmp_path))
-    template = CodexInboxService.unit_file()
+    monkeypatch.setenv("HOME", str(tmp_path / "ambient-home"))
+    home = tmp_path / "harness-home"
+    template = CodexInboxService.unit_file(home)
     runtime = tmp_path / "old-runtime"
     loaded: list[str] = []
 
@@ -102,7 +103,8 @@ def test_codex_inbox_template_publication_reloads_each_rewrite(tmp_path, monkeyp
     monkeypatch.setattr(subprocess, "run", run)
     monkeypatch.setattr(LaunchRuntime, "current_pointer", classmethod(lambda cls: runtime))
 
-    assert CodexHarness(tmp_path).configure() == (template,)
+    assert CodexHarness(home).configure() == (template,)
+    assert not CodexInboxService.unit_file().exists()
     assert len(loaded) == 1
     assert str(runtime / "bin/agent-comms-codex-bridge") in loaded[0]
     assert '"watch" --session "%i"' in loaded[0]
@@ -110,7 +112,7 @@ def test_codex_inbox_template_publication_reloads_each_rewrite(tmp_path, monkeyp
     assert "NotifyAccess=main" not in loaded[0]
 
     runtime = tmp_path / "new-runtime"
-    CodexInboxService.install()
+    CodexInboxService.install(home=home)
     assert len(loaded) == 2
     assert str(runtime / "bin/agent-comms-codex-bridge") in loaded[1]
     assert "old-runtime" not in loaded[1]
