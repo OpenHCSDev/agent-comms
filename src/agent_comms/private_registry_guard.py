@@ -19,10 +19,11 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sqlite3
 import stat
 import struct
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
@@ -33,9 +34,12 @@ from .coordinator import Coordination
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, WireName
 from .locked_store import DurableFile, WireWakeFile
+from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from .private_path import fsync_directory
 
 if TYPE_CHECKING:
+    from .bus_publication import Delivered
+    from .notification_assignment import NotificationAssignmentRead
     from .acp_extension import CursorAdvancedUpdate, CursorScope
     from .cursor_publication import CursorPublication
     from .private_nk_entrypoint import RootLaunch
@@ -155,8 +159,30 @@ class RegistryPrivacy(ABC):
     @abstractmethod
     def require_root(self, root_id: str, error: Exception) -> None: ...
 
+    @abstractmethod
+    def notification_context_sql(self, connection: sqlite3.Connection) -> str:
+        """Context evidence for every row in the captured assignment window ``w``."""
+
+    @abstractmethod
+    def missing_notification_assignments(
+        self, sources: Sequence[Delivered],
+    ) -> NotificationAssignmentRead: ...
+
 
 class PublicRegistry(RegistryPrivacy):
+    def notification_context_sql(self, connection: sqlite3.Connection) -> str:
+        return (
+            "SELECT assignment_id,0 AS triage_inflight,"
+            "NULL AS context_committed_at_ms FROM w"
+        )
+
+    def missing_notification_assignments(
+        self, sources: Sequence[Delivered],
+    ) -> NotificationAssignmentRead:
+        from .notification_assignment import NotificationAssignmentRead
+
+        return NotificationAssignmentRead(tuple(sources), ())
+
     def cursor_scope(
         self, snapshot: RegistrySnapshot, thread_name: str, session_id: str,
     ) -> CursorScope:
@@ -196,6 +222,17 @@ class PublicRegistry(RegistryPrivacy):
 
 class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
     filename = ".registry-owner-guard"
+
+    def notification_context_sql(self, connection: sqlite3.Connection) -> str:
+        NativeRuntimeTable.require_installed(connection)
+        return NativeRuntimeInput.notification_context_sql()
+
+    def missing_notification_assignments(
+        self, sources: Sequence[Delivered],
+    ) -> NotificationAssignmentRead:
+        from .coordination_errors import PublicationActivationBlocked
+
+        raise PublicationActivationBlocked("Private notification coordinator is missing")
 
     def __init__(self, registry_path: Path, wire_root_id: str):
         try:

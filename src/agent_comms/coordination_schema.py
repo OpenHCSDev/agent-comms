@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from functools import cache
-from importlib import import_module
-from pkgutil import iter_modules
 from typing import Final
+
+from metaclass_registry.discovery import discover_registry_classes
 
 import agent_comms.coordination_tables as coordination_tables
 
@@ -42,8 +42,9 @@ class CoordinatorTable(SharedFileTables, DurableTables):
 
     @classmethod
     def declarations(cls):
-        for module in iter_modules(coordination_tables.__path__, coordination_tables.__name__ + "."):
-            import_module(module.name)
+        discover_registry_classes(
+            coordination_tables.__path__, coordination_tables.__name__ + ".", CoordinatorTable,
+        )
         return TypedTable.members_with(cls)
 
     @classmethod

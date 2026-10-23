@@ -77,7 +77,7 @@ def _verify_selected_wake_state(
             raise IdentityConflict("Wake claim is not in the sealed selected cohort")
         assignment = store.assignments.get(claim_scope.wake_assignment_id)
         participant = store.participants.get(claim_scope.recipient_lookup)
-        snapshot = store.snapshots.get(claim_scope.execution_id)
+        snapshot = store.get(claim_scope.execution_id)
         if assignment.require_engaged_binding() != claim_scope.binding:
             raise IdentityConflict("Wake assignment binding changed")
         expected_owner = OwnerGenerations(

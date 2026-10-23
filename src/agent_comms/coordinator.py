@@ -26,7 +26,6 @@ from .coordination_session import (
 from .execution_store import ExecutionStore
 from .participant_store import ParticipantStore
 from .private_runtime_schema import PrivateRuntimeSchema
-from .recovery_reader import RecoveryReader
 from .store_files import StoreLock
 from .working_memory_annotations import WorkingMemoryAnnotations
 
@@ -97,7 +96,7 @@ class StandaloneRoute(CoordinationRoute):
 STANDALONE_ROUTE: Final = StandaloneRoute()
 
 
-class Coordination:
+class Coordination(ExecutionStore, AttemptStore):
     session_type = NativeCoordinationSession
     _worker: ContextVar[CoordinationRoute] = ContextVar(
         "coordination_worker",
@@ -205,11 +204,6 @@ class Coordination:
     def _bind_tables(self) -> None:
         self.participants = ParticipantStore(self.session)
         self.assignments = AssignmentStore(self.session)
-        self.snapshots = RecoveryReader(self.session, self.participants, self.assignments)
-        self.executions = ExecutionStore(
-            self.session, self.participants, self.assignments, self.snapshots
-        )
-        self.attempts = AttemptStore(self.session, self.participants, self.snapshots)
         self.annotations = WorkingMemoryAnnotations(self.session)
 
     def install_private_runtime(self) -> None:

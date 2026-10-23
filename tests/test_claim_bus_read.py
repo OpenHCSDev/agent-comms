@@ -8,17 +8,13 @@ the owner's event loop with the wire, bus and registry locks held.
 
 from __future__ import annotations
 
-from bus_record_fixture import prepare_native_comms
 from agent_comms.context_store import UNREAD_CONTEXT
 
-from conftest import _root_lifetime, publish_initial
+from conftest import publish_initial
 import hashlib
 import os
 import sys
-from contextlib import contextmanager
 from dataclasses import replace
-from pathlib import Path
-from tempfile import TemporaryDirectory
 
 import pytest
 
@@ -76,82 +72,77 @@ def record_context(comms: Comms, name: str, generation: int) -> None:
     ))
 
 
-@contextmanager
-def selected_turn():
+@pytest.fixture
+def selected_turn(private_comms, private_directory):
     """Alice runs a selected turn for one message; context rows surround it."""
-    with (
-        TemporaryDirectory(prefix="ac-claim-read-") as dirname,
-        _root_lifetime(Path(dirname)),
-    ):
-        root = Path(dirname) / "wire"
-        root.mkdir(mode=0o700)
-        worktree = Path(dirname) / "work"
-        worktree.mkdir(mode=0o700)
-        resource = worktree / "module.py"
-        resource.write_text("value = 1\n")
-        comms = prepare_native_comms(Comms(root))
-        for name, created in (("sender", 17021.0), ("Alice", 17022.0)):
-            comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(worktree), process_identity=ProcessIdentity.capture(os.getpid()), created_at=created))
-        root_id = comms.registry.prepare_native_root().namespace
-        record_context(comms, "Alice", 1)
-        message = publish_initial(comms, "sender", "#team", "@Alice investigate")
-        record_context(comms, "Alice", 2)
-        initial = comms.bus.bus.delivery(message.seq)
-        with Coordination(str(root / "coordination.sqlite3")) as store:
-            install_private_cohort_schema(store)
-            for recipient in initial.audience.recipients:
-                store.participants.register(
-                    recipient.recipient_lookup, recipient.canonical_thread,
-                    recipient.canonical_thread, committed=True,
-                )
-            accept_delivery_cohort(comms.bus, root_id, message.seq, store)
-            lookup = RecordedThreadIncarnation("fixture", comms.registry.require("Alice").created_at).lookup
-            assignment = sealed_cohort_assignments(store, lookup)[0]
-            owner, generation = comms.registry.live_owner_with_claim("Alice")
-            owner, generation = comms.registry.lease_live_turn_with_claim(
-                owner, "selected-turn", expected_generation=generation
+    comms = private_comms
+    root = comms.root
+    worktree = private_directory / "work"
+    worktree.mkdir(mode=0o700)
+    resource = worktree / "module.py"
+    resource.write_text("value = 1\n")
+    for name, created in (("sender", 17021.0), ("Alice", 17022.0)):
+        comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(worktree), process_identity=ProcessIdentity.capture(os.getpid()), created_at=created))
+    root_id = comms.registry.prepare_native_root().namespace
+    record_context(comms, "Alice", 1)
+    message = publish_initial(comms, "sender", "#team", "@Alice investigate")
+    record_context(comms, "Alice", 2)
+    initial = comms.bus.bus.delivery(message.seq)
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        install_private_cohort_schema(store)
+        for recipient in initial.audience.recipients:
+            store.participants.register(
+                recipient.recipient_lookup, recipient.canonical_thread,
+                recipient.canonical_thread, committed=True,
             )
-            person = store.participants.get(lookup)
-            store.executions.create(
-                "execution", ExecutionOrigin.WIRE, lookup, owner.name, 1,
-                sources=(SelectedSource(assignment.assignment_id, store.assignments, initial),),
-            )
-            snapshot = store.snapshots.get("execution")
-            snapshot = store.executions.mark_pending(
-                "execution", expected_revision=snapshot.execution.revision
-            ).value
-            store.attempts.start(AttemptStart(
-                "execution", 1, owner.name, person.owner_identity.generation, prepare_fence_token(),
-                expected_execution_revision=snapshot.execution.revision,
-                expected_pointer_revision=snapshot.pointer_revision,
-            ))
-            claim_scope = WakeClaim(
-                wire_root_id=root_id,
-                source_seq=message.seq,
-                source_message_id=message.message_id,
-                wake_assignment_id=assignment.assignment_id,
-                wake_revision=store.assignments.get(assignment.assignment_id).revision,
-                recipient_lookup=lookup,
-                execution_id="execution",
-                operation_id="f" * 32,
-                owner_claimed_generation=generation,
-                turn_id=owner.require_turn_lease().turn_id,
-                participant_generation=person.owner_identity.generation,
-                attempt_ordinal=1,
-            )
-            yield comms, store, claim_scope, resource
+        accept_delivery_cohort(comms.bus, root_id, message.seq, store)
+        lookup = RecordedThreadIncarnation("fixture", comms.registry.require("Alice").created_at).lookup
+        assignment = sealed_cohort_assignments(store, lookup)[0]
+        owner, generation = comms.registry.live_owner_with_claim("Alice")
+        owner, generation = comms.registry.lease_live_turn_with_claim(
+            owner, "selected-turn", expected_generation=generation
+        )
+        person = store.participants.get(lookup)
+        store.create(
+            "execution", ExecutionOrigin.WIRE, lookup, owner.name, 1,
+            sources=(SelectedSource(assignment.assignment_id, store.assignments, initial),),
+        )
+        snapshot = store.get("execution")
+        snapshot = store.mark_pending(
+            "execution", expected_revision=snapshot.execution.revision
+        ).value
+        store.start(AttemptStart(
+            "execution", 1, owner.name, person.owner_identity.generation, prepare_fence_token(),
+            expected_execution_revision=snapshot.execution.revision,
+            expected_pointer_revision=snapshot.pointer_revision,
+        ))
+        claim_scope = WakeClaim(
+            wire_root_id=root_id,
+            source_seq=message.seq,
+            source_message_id=message.message_id,
+            wake_assignment_id=assignment.assignment_id,
+            wake_revision=store.assignments.get(assignment.assignment_id).revision,
+            recipient_lookup=lookup,
+            execution_id="execution",
+            operation_id="f" * 32,
+            owner_claimed_generation=generation,
+            turn_id=owner.require_turn_lease().turn_id,
+            participant_generation=person.owner_identity.generation,
+            attempt_ordinal=1,
+        )
+        yield comms, store, claim_scope, resource
 
 
 def settle_failed(store):
     from agent_comms.attempt_states import AttemptFailedAttempt
 
     with store.session.settlement() as boundary:
-        snapshot = store.snapshots.get("execution")
+        snapshot = store.get("execution")
         snapshot.attempt.advance(
             store.session, type(snapshot.attempt.lifecycle), backend_done=True,
             process_dead=True, progress=False, reason_code=NoReasonCode(),
         )
-        store.snapshots.get("execution").settle(store.session, AttemptFailedAttempt(), NoReasonCode(), boundary)
+        store.get("execution").settle(store.session, AttemptFailedAttempt(), NoReasonCode(), boundary)
 
 
 def claim_originals(comms: Comms) -> tuple[ClaimMessage, ...]:
@@ -178,68 +169,68 @@ def release_tool_claim(comms: Comms, claim) -> None:
         comms.bus.publisher.release_resources(boundary, (claim,), "Finished test tool operation")
 
 
-def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.MonkeyPatch) -> None:
-    with selected_turn() as (comms, store, claim_scope, resource):
-        def whole_bus(*_, **__):
-            raise AssertionError("a claim read every row of the bus")
+def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.MonkeyPatch, selected_turn) -> None:
+    (comms, store, claim_scope, resource) = selected_turn
+    def whole_bus(*_, **__):
+        raise AssertionError("a claim read every row of the bus")
 
-        with monkeypatch.context() as patch:
-            patch.setattr(BusReader, "message_history", whole_bus)
-            claimed = publish_selected_resource_claim(
-                comms, store, claim_scope, "Alice", ExistingFileClaim(resource)
-            )
-            # Asking again for the same file in the same turn returns the held claim.
-            assert publish_selected_resource_claim(
-                comms, store, claim_scope, "Alice", ExistingFileClaim(resource)
-            ) == claimed
-            write_selected_claimed_file(comms, store, claim_scope, "Alice", claimed, b"value = 2\n")
-            record_context(comms, "Alice", 3)
-            settle_failed(store)
-        assert resource.read_bytes() == b"value = 2\n"
-        # The strict whole-bus reader agrees with what the claim path left.
-        assert dict(comms.bus.bus.claim_projection()) == {}
-        claims = claim_originals(comms)
-        displayed = tuple(message for message in MessagePageRequest(
-            AllChannelDisplayScope("#any"),
-        ).read_opened(comms.bus.bus).messages if isinstance(message, ClaimMessage))
-        assert displayed == claims
-        assert [(m.claim_transition.claims, len(m.claim_transition.releases)) for m in claims] == [
-            ((str(resource),), 0), ((), 1),
-        ]
-        assert all(message.type is ClaimNoticeKind for message in claims)
-        assert (claims[0].sender, claims[0].target, claims[0].body) == (
-            "Alice", "Alice", "Claimed",
-        )
-        snapshot = comms.registry.snapshot()
-        dm_scope = DMDisplayScope.capture("Alice", "sender", snapshot)
-        assert ConversationMessagePageRequest(dm_scope).read_opened(comms.bus.bus).messages == ()
-        raw_channel = comms.views.history_page(CommandTarget.named("#team")).messages
-        assert [message.body for message in raw_channel] == ["@Alice investigate"]
-        channel = comms.views.channel_display_page("#team").messages
-        assert [message.body for message in channel] == ["@Alice investigate"]
-        assert all(message.role.notification_references(message) for message in channel)
-        with pytest.raises(ValueError):
-            comms.messaging.send(
-                "Alice", "sender", "Invented claim notice", ClaimNoticeKind
-            ).message
-
-
-def test_claim_operation_is_refused_after_its_claim_was_released() -> None:
-    with selected_turn() as (comms, store, claim_scope, resource):
+    with monkeypatch.context() as patch:
+        patch.setattr(BusReader, "message_history", whole_bus)
         claimed = publish_selected_resource_claim(
             comms, store, claim_scope, "Alice", ExistingFileClaim(resource)
         )
-        assert dict(comms.bus.bus.claim_projection()) == {str(resource): claimed}
-        release_tool_claim(comms, claimed)
-        with pytest.raises(IdentityConflict):
-            publish_selected_resource_claim(
-                comms, store, claim_scope, "Alice", ExistingFileClaim(resource)
-            )
-        again = publish_selected_resource_claim(
-            comms, store, replace(claim_scope, operation_id="e" * 32), "Alice",
-            ExistingFileClaim(resource),
+        # Asking again for the same file in the same turn returns the held claim.
+        assert publish_selected_resource_claim(
+            comms, store, claim_scope, "Alice", ExistingFileClaim(resource)
+        ) == claimed
+        write_selected_claimed_file(comms, store, claim_scope, "Alice", claimed, b"value = 2\n")
+        record_context(comms, "Alice", 3)
+        settle_failed(store)
+    assert resource.read_bytes() == b"value = 2\n"
+    # The strict whole-bus reader agrees with what the claim path left.
+    assert dict(comms.bus.bus.claim_projection()) == {}
+    claims = claim_originals(comms)
+    displayed = tuple(message for message in MessagePageRequest(
+        AllChannelDisplayScope("#any"),
+    ).read_opened(comms.bus.bus).messages if isinstance(message, ClaimMessage))
+    assert displayed == claims
+    assert [(m.claim_transition.claims, len(m.claim_transition.releases)) for m in claims] == [
+        ((str(resource),), 0), ((), 1),
+    ]
+    assert all(message.type is ClaimNoticeKind for message in claims)
+    assert (claims[0].sender, claims[0].target, claims[0].body) == (
+        "Alice", "Alice", "Claimed",
+    )
+    snapshot = comms.registry.snapshot()
+    dm_scope = DMDisplayScope.capture("Alice", "sender", snapshot)
+    assert ConversationMessagePageRequest(dm_scope).read_opened(comms.bus.bus).messages == ()
+    raw_channel = comms.views.history_page(CommandTarget.named("#team")).messages
+    assert [message.body for message in raw_channel] == ["@Alice investigate"]
+    channel = comms.views.channel_display_page("#team").messages
+    assert [message.body for message in channel] == ["@Alice investigate"]
+    assert all(message.role.notification_references(message) for message in channel)
+    with pytest.raises(ValueError):
+        comms.messaging.send(
+            "Alice", "sender", "Invented claim notice", ClaimNoticeKind
+        ).message
+
+
+def test_claim_operation_is_refused_after_its_claim_was_released(selected_turn) -> None:
+    (comms, store, claim_scope, resource) = selected_turn
+    claimed = publish_selected_resource_claim(
+        comms, store, claim_scope, "Alice", ExistingFileClaim(resource)
+    )
+    assert dict(comms.bus.bus.claim_projection()) == {str(resource): claimed}
+    release_tool_claim(comms, claimed)
+    with pytest.raises(IdentityConflict):
+        publish_selected_resource_claim(
+            comms, store, claim_scope, "Alice", ExistingFileClaim(resource)
         )
-        assert again.generation != claimed.generation
-        assert dict(comms.bus.bus.claim_projection()) == {str(resource): again}
+    again = publish_selected_resource_claim(
+        comms, store, replace(claim_scope, operation_id="e" * 32), "Alice",
+        ExistingFileClaim(resource),
+    )
+    assert again.generation != claimed.generation
+    assert dict(comms.bus.bus.claim_projection()) == {str(resource): again}
 
 

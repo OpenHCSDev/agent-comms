@@ -86,10 +86,16 @@ class Registration:
             self._commit_registration(edit, change)
 
     def prepare_native_root(self) -> PrivateRegistryGuard:
-        """Explicit owner launch prepares registry authority before any coordinator exists."""
+        """Prepare native authority, then its complete runtime outside the registry lock."""
+        from .coordination_database import CoordinationStore
+        from .coordinator import Coordination
+
         with self.store.locked():
             self.store.read_snapshot_unlocked().purpose.require_write()
-            return self.store.private_guard_unlocked().prepare_native(self.store.path)
+            guard = self.store.private_guard_unlocked().prepare_native(self.store.path)
+        with Coordination(CoordinationStore.path_in(self.store.path.parent)) as store:
+            store.install_private_runtime()
+        return guard
 
     def register_commander_child(self, name: str, parent_name: str, goals: Goals) -> Thread:
         """Declare or resume one child and its own request under the registry's lock."""

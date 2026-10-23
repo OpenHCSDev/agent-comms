@@ -134,7 +134,7 @@ class PublicationAppendDispatches(ResponseTable, TypedTable):
         for current_id in execution_ids:
             if execution_id is not None and current_id != execution_id:
                 continue
-            snapshot = store.snapshots.get(current_id)
+            snapshot = store.get(current_id)
             if snapshot.execution.owner_thread != owner_thread:
                 raise StaleFence("retained response belongs to another owner")
             for frozen in snapshot.publication_intents:
@@ -143,7 +143,7 @@ class PublicationAppendDispatches(ResponseTable, TypedTable):
                 ) is not None:
                     continue
                 with store.session.writing() as db:
-                    snapshot = store.snapshots.get(current_id)
+                    snapshot = store.get(current_id)
                     _require_cohort_assignments(store, bus, snapshot, boundary.privacy)
                     intent, obligation = snapshot.require_publishing_intent(
                         frozen.exact_target
@@ -192,8 +192,8 @@ class PublicationAppendDispatches(ResponseTable, TypedTable):
             revision=obligation.revision + 1,
             updated_at_ms=store.session.now(obligation.updated_at_ms),
         )
-        store.snapshots.get(intent.execution_id).finish_publications(store.session, boundary)
-        return store.snapshots.get(intent.execution_id)
+        store.get(intent.execution_id).finish_publications(store.session, boundary)
+        return store.get(intent.execution_id)
 
 
 @dataclass(frozen=True)
@@ -384,7 +384,7 @@ def _require_final_owner(
     owner_witness: LiveResponseOwner,
     exact_target: str,
 ) -> RecoverySnapshot:
-    snapshot, attempt = store.attempts.require_fence(fence)
+    snapshot, attempt = store.require_fence(fence)
     snapshot.require_final_response(owner_witness.recipient_lookup, exact_target)
     _require_cohort_assignments(store, bus, snapshot, privacy)
     return snapshot
@@ -492,7 +492,7 @@ def _terminal_replay(
     exact_target: str,
 ) -> AlreadyApplied[RecoverySnapshot] | None:
     """A finished immutable acknowledgement may be re-read, never re-published."""
-    snapshot = store.snapshots.get(fence.execution_id)
+    snapshot = store.get(fence.execution_id)
     if ResponseObligation.response_record(snapshot.publication_evidence, exact_target) is None:
         return None
     if snapshot.execution.owner_lookup != owner_witness.recipient_lookup:

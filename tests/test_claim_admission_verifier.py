@@ -81,7 +81,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             )
             person = store.participants.get(alice_lookup)
             execution_id = "verifier-execution"
-            store.executions.create(
+            store.create(
                 execution_id,
                 ExecutionOrigin.WIRE,
                 alice_lookup,
@@ -89,11 +89,11 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 1,
                 sources=(SelectedSource(assignment.assignment_id, store.assignments, initial),),
             )
-            snapshot = store.snapshots.get(execution_id)
-            snapshot = store.executions.mark_pending(
+            snapshot = store.get(execution_id)
+            snapshot = store.mark_pending(
                 execution_id, expected_revision=snapshot.execution.revision
             ).value
-            started = store.attempts.start(AttemptStart(
+            started = store.start(AttemptStart(
                 execution_id,
                 1,
                 owner.name,
@@ -215,10 +215,10 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                     verify_selected_wake(comms, store, candidate, name)
             fence = started.value.fence
             for phase in (PromptAcceptedAttempt, ModelRunningAttempt):
-                fence = store.attempts.advance(
+                fence = store.advance(
                     fence, phase, expected_pointer_revision=started.value.snapshot.pointer_revision
                 ).value.fence
-            store.attempts.advance(
+            store.advance(
                 fence,
                 SettlingAttempt,
                 expected_pointer_revision=started.value.snapshot.pointer_revision,
