@@ -425,17 +425,16 @@ class Stack:
                           "--python", "3.14", cwd=self.checkout)
 
     @classmethod
-    def build(cls, checkout: Path, commands: InstallCommands, home: Path = HOME) -> Stack:
+    def build(cls, checkout: Checkout, commands: InstallCommands, home: Path = HOME) -> Stack:
         """Resolve current mains once, then build or reuse their immutable installation."""
-        Checkout(checkout).prepare()
-        source = cls(checkout, commands, home, runtime=LaunchRuntime.running())
+        source = cls(checkout.path, commands, home, runtime=LaunchRuntime.running())
         source.require_uv()
         source.resolve()
-        core = commands.git(checkout, "rev-parse", "HEAD").strip()
+        core = commands.git(checkout.path, "rev-parse", "HEAD").strip()
         resolution = hashlib.sha256(source.lock.read_bytes()).hexdigest()[:16]
         prefix = home / ".local/share/agent-comms/runtimes" / f"core-{core[:9]}-lock-{resolution}"
         built = replace(source, runtime=LaunchRuntime(prefix / "bin/python"),
-                        program=TargetProgram(checkout / STEPS.parent))
+                        program=TargetProgram(checkout.path / STEPS.parent))
         if prefix.exists():
             if not RuntimeResolution.at(prefix).matches(source.lock, built, core):
                 raise UpgradeRefused("Existing built runtime differs from its resolved inputs")
@@ -446,7 +445,7 @@ class Stack:
         prefix.mkdir(mode=0o700)
         try:
             commands.run(source.uv, "sync", "--project", "stack", "--locked", "--python", "3.14",
-                         "--no-editable", cwd=checkout,
+                          "--no-editable", cwd=checkout.path,
                          env={**built.environment(), "UV_PROJECT_ENVIRONMENT": str(prefix)})
             built.install_native()
             RuntimeResolution.capture(built, core).save(prefix)
@@ -718,7 +717,7 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
         installed.require_uv()
         if not installed.python.exists():
             raise UpgradeRefused(f"No installed stack at {installed.python}")
-        staged = Stack.build(tree.path, commands)
+        staged = Stack.build(ScratchCheckout(tree.path), commands)
         report.starting(mode.destination(member.initial_writer(root, installed)), target)
         install, rehearsal = member.rehearsed(checkout, root, current, target, chain,
                                               installed, staged, tree, installer, spill_dir)
