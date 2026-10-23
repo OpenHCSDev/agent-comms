@@ -357,6 +357,13 @@ class ClaimedIdentity:
         return self.incarnation == previous.incarnation and self.claimed_generation >= previous.claimed_generation
 
 
+@dataclass(frozen=True)
+class ClaimScoped:
+    """A record scoped to one registry-allocated input identity."""
+
+    claimed_identity: ClaimedIdentity
+
+
 @dataclass(frozen=True, slots=True)
 class ThreadAuthority:
     """One registry participant's owner lease and allocated input claim."""

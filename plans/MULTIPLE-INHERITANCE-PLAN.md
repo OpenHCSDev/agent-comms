@@ -73,7 +73,7 @@ obligations; do not distort production code to make the shape comparison pass.
 
 **`FieldDirectivesPhase`.** One owner handles related field declarations and their readers together. The directive classes already exist in `FieldCodec` and `TypedTable`; extend them rather than introducing another metadata vocabulary. Fields attach the declared directives through `Annotated`.
 
-Factor surviving shared field requirements through their owners. The phase names `TurnItem`, `ClaimScoped`, `SingletonRow`, `SchemaMeta`, `Revisioned`, `ExecutionKeyed` and `WithoutRowid`. Check current declarations and members before adding any class. Table factoring must preserve the stored table/column DDL described above.
+Factor surviving shared field requirements through their owners. The phase names `TurnItem`, `ClaimScoped`, `SingletonRow` and `WithoutRowid`. Check current declarations and members before adding any class. Table factoring must preserve the stored table/column DDL described above. `SchemaMeta` has no shared field beyond `SingletonRow`. `Revisioned` and `ExecutionKeyed` would reorder table columns because inherited fields come first (`typed_table.py:1480`), violating the stored DDL rule.
 
 Do not add an `OwnerIncarnation` field mixin merely to preserve copies of registry identity: that deletion belongs to `plans/REMAINING-SLOP-PLAN.md`. The virtual bus owns `Addressed` and deletes obsolete bus byte spans and wire positions. Coordinate shared field lines with those owners; do not factor fields that another plan removes.
 

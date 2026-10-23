@@ -440,16 +440,16 @@ class DuplicatesPhase(MultipleInheritancePhase):
 
 class FieldDirectivesPhase(MultipleInheritancePhase):
     """Batch 2: the field groups and table mixins the plan names exist and each has members.
-    The bus groups are deleted by the virtual bus, and ``Addressed`` is the bus's own."""
+    The bus groups are deleted by the virtual bus, and ``Addressed`` is the bus's own.
+    SchemaMeta has no shared field beyond SingletonRow.
+    Revisioned and ExecutionKeyed would reorder table columns because inherited fields
+    come first (typed_table.py:1480), violating the plan's stored DDL rule."""
 
     evidence = ParentsShared(
         names=(
             "TurnItem",
             "ClaimScoped",
             "SingletonRow",
-            "SchemaMeta",
-            "Revisioned",
-            "ExecutionKeyed",
             "WithoutRowid",
         )
     )

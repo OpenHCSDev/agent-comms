@@ -53,6 +53,11 @@ class MroDispatch:
                 if capability in classes:
                     yield name
 
+    @classmethod
+    def handler_for(cls, value_type: type) -> Callable[..., Any]:
+        """The most specific class-level handler declared for ``value_type``."""
+        return getattr(cls, next(cls.handler_names_for(value_type)))
+
     def handlers_for(self, value: Any):
         for name in self.handler_names_for(type(value)):
             yield getattr(self, name)

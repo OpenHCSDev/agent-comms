@@ -19,7 +19,7 @@ from string import Formatter
 from typing import Annotated, ClassVar, Iterator, Self
 
 from agent_comms.child_process import Platform
-from agent_comms.active_route import ActiveRoute, _route_directory, active_route_path, route_directory
+from agent_comms.active_route import ActiveRoute, RouteFile, _route_directory, active_route_path, route_directory
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.installer.interpreter_operation import RouteSelection
@@ -211,7 +211,7 @@ class StoreBackup(ResourceBackup):
                 return
             if self.route_original():
                 return
-            saved = self.path / 'active-route.json'
+            saved = self.path / RouteFile.filename
             if saved.exists():
                 AtomicFile(self.route).write_text(saved.read_text())
             else:
@@ -236,7 +236,7 @@ class StoreBackup(ResourceBackup):
                 self.route_revision = FileRevision.capture(path)
 
     def route_original(self) -> bool:
-        saved = self.path / 'active-route.json'
+        saved = self.path / RouteFile.filename
         if not saved.exists():
             return not self.route.exists()
         if not self.route.exists():
@@ -269,7 +269,7 @@ class StoreBackup(ResourceBackup):
         contents = backup.capture(files)
         with route_directory(route):
             if route.exists():
-                shutil.copy2(route, path / 'active-route.json')
+                shutil.copy2(route, path / RouteFile.filename)
             backup.route_revision = FileRevision.capture(route)
         AtomicFile(path / 'files.json').write_text(json.dumps(
             {PathText.encode(file): digest for file, digest in contents.items()}, indent=1))

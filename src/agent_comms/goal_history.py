@@ -26,6 +26,7 @@ from .child_process import Platform
 from .field_codec import FieldCodec, HistoryExclude, MalformedRecord
 from .goals import GoalDeclaration, NoGoal
 from .locked_store import DurableFile
+from .private_registry_guard import PrivateRegistryGuard
 from .store_files import AtomicFile
 from .typed_table import (
     Column,
@@ -243,7 +244,7 @@ class GoalHistoryStore(DurableFile, ReconciledFile):
     def _sync_visible_registry(self) -> None:
         """Adopt a visible post-crash registry value before attesting an intent."""
         targets = [self.registry_path]
-        guard = self.registry_path.parent / ".registry-owner-guard"
+        guard = PrivateRegistryGuard.path_in(self.registry_path.parent)
         if guard.exists():
             targets.append(guard)
         try:

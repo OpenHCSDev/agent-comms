@@ -41,7 +41,7 @@ from pydantic import TypeAdapter
 from agent_comms import cli
 from agent_comms.active_route import ActiveRoute, active_route_path, route_directory
 from agent_comms.bus import Bus
-from agent_comms.cli_bridges.shared import Serve, SessionBridgeResumes
+from agent_comms.cli_bridges.shared import BridgeResume, Serve, SessionBridgeResumes
 from agent_comms.cli_commands import (
     BusReadBack,
     CliCommand,
@@ -411,12 +411,14 @@ class InstalledUpgrade(RehearsedUpgrade, Extendable):
     """The harnesses registered on the bus the target now reads."""
     processes: RuntimeProcesses = field(kw_only=True, default=RuntimeProcesses(()))
     """Applications still running an outgoing runtime; reported, never signalled."""
+    bridge_resumes: tuple[BridgeResume, ...] = field(kw_only=True, default=())
 
     finished: ClassVar[str] = "Install finished"
     """The headline of the post that reports this upgrade."""
 
     def lines(self) -> tuple[str, ...]:
-        return (*super().lines(), *self.live.lines(), *self.processes.lines())
+        return (*super().lines(), *self.live.lines(), *self.processes.lines(),
+                *(line for outcome in self.bridge_resumes for line in outcome.lines()))
 
 
 @dataclass(frozen=True)
@@ -424,12 +426,7 @@ class UnresumedUpgrade(InstalledUpgrade):
     """Installed, with session bridges paused for the swap that did not come back: the
     install exits non-zero after reporting it."""
 
-    unresumed: tuple[str, ...]
-
     finished: ClassVar[str] = "Install finished; session bridges not resumed"
-
-    def lines(self) -> tuple[str, ...]:
-        return (*super().lines(), *self.unresumed)
 
 
 @dataclass(frozen=True)
@@ -819,8 +816,9 @@ class Install[Rehearsed: Rehearsal](ABC):
         finished = InstalledUpgrade(
             rehearsed.source, rehearsed.target, rehearsed.root, rehearsed.pending,
             rehearsed.rehearsal, live_run, harnesses(), commands=tuple(self.staged.commands.ran),
-            processes=RuntimeProcesses.observe(self.staged.runtime))
-        return (finished.extended(UnresumedUpgrade, unresumed=bridges.lines())
+            processes=RuntimeProcesses.observe(self.staged.runtime),
+            bridge_resumes=tuple(bridges.outcomes))
+        return (finished.extended(UnresumedUpgrade)
                 if bridges.failures else finished)
 
     def install(self, rehearsal: Rehearsed, bridges: SessionBridgeResumes,

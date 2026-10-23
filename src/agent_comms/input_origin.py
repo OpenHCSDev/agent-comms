@@ -13,7 +13,7 @@ from .errors import RelationViolationError
 from .field_codec import Id128Text
 from .goals import GoalCheckpoint
 from .message_reference import MessageReference
-from .thread_identity import ClaimedIdentity
+from .thread_identity import ClaimScoped, ClaimedIdentity
 from .turn_context import Provenance
 
 if TYPE_CHECKING:
@@ -111,7 +111,7 @@ class WireInputOrigin(InputOrigin):
 
 
 @dataclass(frozen=True)
-class HumanInputOrigin(InputOrigin):
+class HumanInputOrigin(InputOrigin, ClaimScoped):
     """Same cooperative local USER contract as the original wire publisher.
 
     The attached controller proves only who holds the transport. This USER
@@ -120,7 +120,6 @@ class HumanInputOrigin(InputOrigin):
 
     root_id: Annotated[str, Id128Text]
     author: HumanOrigin
-    claimed_identity: ClaimedIdentity
     project: str
     goal: GoalCheckpoint
 
@@ -136,8 +135,10 @@ class HumanInputOrigin(InputOrigin):
             root_id = comms.registry.store.private_guard_unlocked().namespace
             root_id = Id128Text.decode(root_id)
             user = comms.messaging.user_identity(owner.worktree)
-            return cls(root_id, HumanOrigin.of(user),
-                       claim_scope, owner.worktree, owner.goal.captured)
+            return cls(
+                root_id=root_id, author=HumanOrigin.of(user),
+                claimed_identity=claim_scope, project=owner.worktree, goal=owner.goal.captured,
+            )
 
     @property
     def reply_target(self) -> str:
