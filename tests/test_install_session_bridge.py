@@ -236,7 +236,7 @@ def test_install_swap_keeps_the_claim_and_resumes_the_same_process_on_the_new_ru
                 )
                 cleanup.callback(stop, monitor)
             bridges.require_resumed()
-            assert bridges.lines() == ()
+            assert bridges.failures == ()
             resumed = InspectSession().information(claim.socket_path)
             assert resumed.process == observed.process
             assert resumed.process.pid == child.pid

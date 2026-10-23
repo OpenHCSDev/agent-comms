@@ -1,6 +1,7 @@
 """Typed installer results use the real publisher and retained channel history."""
 import subprocess
 import sys
+from agent_comms.cli_bridges.shared import UnobservedBridge
 from pathlib import Path
 
 import pytest
@@ -165,13 +166,13 @@ def test_an_install_whose_bridges_did_not_resume_says_so_in_its_headline(private
     comms = declare_test_bus(private_comms, channels=("comms",))
     unresumed = UnresumedUpgrade(
         "a" * 40, "b" * 40, comms.root, (), FreshRehearsal(), UnchangedRun(),
-        InstallResult(NoConfigFile(), {}), ("Not resumed: Session bridge copied-session",),
-        commands=(),
+        InstallResult(NoConfigFile(), {}), commands=(),
+        bridge_resumes=(UnobservedBridge("copied-session", "new runtime absent"),),
     )
     InstallReportProbe(comms.root, "\n".join(FinishedInstall(unresumed).lines())).run()
     body = HistoryCliCommand(target=CommsTag.channel()).apply(comms).messages[0].body
     assert body.startswith(UnresumedUpgrade.finished)
-    assert "Not resumed: Session bridge copied-session" in body
+    assert "Session bridge copied-session: new runtime was not observed" in body
 
 
 @pytest.mark.parametrize("failure", ("none", "work", "cleanup"))
