@@ -4016,12 +4016,9 @@ class TodoStore(OwnerRequestStore):
         return self._select("creator=? AND creator_created=?",
                             (commander.name, commander.wire_birth), reader=self._open)
 
-    def timers_up_for_commander(
-        self, commander: ThreadIncarnation, registry: Registration, now: float,
-        pulls: ProgressRead,
-    ) -> tuple[tuple[Todo, RecordedEventTime], ...]:
-        """Held work whose review timer is up, with its round; merged work waits on install.
-        The caller's frame reader answers, so one frame asks the forge once."""
+    def timers_up_for_commander(self, commander: ThreadIncarnation, registry: Registration,
+            now: float, pulls: ProgressRead) -> tuple[tuple[Todo, RecordedEventTime], ...]:
+        """Held work whose review timer is up, read through the caller's one frame reader."""
         held = self.held_for_commander(commander)
         pulls = pulls.register(held)
         progress = {todo.id: OrderProgress.read(todo, registry, pulls) for todo in held}
