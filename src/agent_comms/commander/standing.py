@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from abc import abstractmethod
 from collections.abc import Iterable, Mapping, Sequence
@@ -361,7 +362,9 @@ class UnownedOrderWatch(WatchPass[tuple[UnownedObservation, ...]]):
 
     def pass_body(self, comms: Comms, observed: tuple[UnownedObservation, ...]) -> None:
         for item in observed:
-            StandingRule.enforce_all(comms, item.commander.name, (item.rule,))
+            rejected = StandingRule.enforce_all(comms, item.commander.name, (item.rule,))
+            for rule, error in rejected.items():
+                logging.info("%s", rule.rejected_line(error))
 
 
 class WaitingUnownedWheelSpin(UnownedWheelSpin, declared_name=None):

@@ -8,7 +8,7 @@ import pytest
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
 from agent_comms.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, RulePing
-from agent_comms.errors import UnregisteredThreadError
+from agent_comms.errors import OverdueHeadRefusalError, UnregisteredThreadError
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.read_basis import DMDisplayScope
@@ -70,6 +70,30 @@ def test_recreated_watcher_reads_original_committed_unit_observation(notificatio
     beat(comms, states=state_cards(comms, UnitState))
     unchanged, = notifications(comms)
     assert unchanged.reference == first.reference
+
+
+def test_overdue_head_refusal_is_published_and_later_rule_still_runs(notification_bus, monkeypatch):
+    comms = notification_bus
+    enforced = []
+
+    def enforce(rule, _comms, _commander):
+        enforced.append(rule.watch)
+        if rule.watch == "overdue-head":
+            raise OverdueHeadRefusalError("Review overdue heads before sending new orders:\ntoad#1176")
+
+    monkeypatch.setattr(ServicePassFailing, "enforce", enforce)
+    rules = (ServicePassFailing("overdue-head", 1.0, "review pending"),
+             ServicePassFailing("following-rule", 1.0, "another rule"))
+    beat(comms, rules)
+
+    assert enforced == ["overdue-head", "following-rule"]
+    message, = notifications(comms)
+    assert "Not applied (a reviewed head is overdue):" in message.body
+    assert rules[0].line() in message.body
+    assert RulePing.capture(rules[0]) not in message.task.handled
+    assert RulePing.capture(rules[1]) in message.task.handled
+    assert comms.registry.require("lead").incarnation in (
+        ServicePassStore.at(comms.root).read().commander_completed)
 
 
 def test_rule_packets_lead_with_five_and_publish_all_current_occurrences(notification_bus):
