@@ -20,11 +20,13 @@ from agent_comms.installer.backup import UpgradeRefused
 from agent_comms.installer.interpreter_operation import (
     ProbeProgram,
     ProbeReply,
+    ProbeRequest,
     RuntimeProbe,
     RuntimeProbeFailed,
     SourceProgram,
 )
 from agent_comms.launch_runtime import RestoredRuntime
+from agent_comms.maintenance_barrier import MaintenanceHolder
 from agent_comms.repo import Repo
 
 
@@ -175,7 +177,7 @@ class InstallCommands:
                       cwd: Path = Path(), env: Mapping[str, str] = os.environ,
                       program: ProbeProgram = SourceProgram()) -> Answer:
         key = InterpreterWorkerKey(python, tuple(map(str, program.entry())), cwd.absolute(),
-                                   tuple(sorted(env.items())))
+                                   tuple(sorted(MaintenanceHolder.outside(env).items())))
         with self.timing(f"{python} {type(probe).__name__}"):
             with self.worker_lock:
                 if key not in self.workers:
@@ -183,7 +185,8 @@ class InstallCommands:
                     # thread until all workers close, including calls from short-lived pools.
                     self.workers[key] = self.launcher.submit(InterpreterWorker.start, key).result()
                 worker = self.workers[key]
-            reply = worker.exchange(FieldCodec.compact(FieldCodec.encode(probe)))
+            reply = worker.exchange(FieldCodec.compact(FieldCodec.encode(
+                ProbeRequest(probe, MaintenanceHolder.current().nonce))))
         try:
             return probe.decode_answer(reply.answer())
         except RuntimeProbeFailed as error:
