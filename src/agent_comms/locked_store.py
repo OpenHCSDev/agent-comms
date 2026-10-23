@@ -179,6 +179,23 @@ class RootFile:
         return primaries
 
     @classmethod
+    def declaring_owner(cls) -> type[RootFile]:
+        """A locking store can inherit its filename from a location-only declaration."""
+        if issubclass(cls, StoreLockOwner):
+            return cls
+        stores = tuple(
+            owner
+            for owner in StoreLockOwner.members_with(cls)
+            if issubclass(owner, RootFile)
+            and owner.filename == cls.filename
+            and owner.root_directory == cls.root_directory
+        )
+        if not stores:
+            return cls
+        (owner,) = stores
+        return owner
+
+    @classmethod
     def owned_files(
         cls, root: Path, paths: Collection[Path],
     ) -> dict[DeclaredFile | UndeclaredFile, type[RootFile]]:
@@ -189,9 +206,15 @@ class RootFile:
         store declaration for it.
         """
         primaries = cls.primaries_in(root)
-        declarations = {member: owner for owner, directory in cls.declarations_in(root)
-                        for member in owner.files_in(directory)}
-        declarations.update(primaries)
+        declaring = {
+            owner: owner.declaring_owner() for owner, _ in cls.declarations_in(root)
+        }
+        declarations = {
+            member: declaring[owner]
+            for owner, directory in cls.declarations_in(root)
+            for member in owner.files_in(directory)
+        }
+        declarations.update((path, declaring[owner]) for path, owner in primaries.items())
         selected = frozenset(paths)
         owners: dict[Path, type[RootFile]] = {
             path: owner for path, owner in primaries.items() if path in selected
@@ -312,12 +335,18 @@ class DeclaredFile(RootFile):
     owner: type[RootFile]
     path: Path
 
+    def takes_store_lock(self) -> bool:
+        return issubclass(self.owner, StoreLockOwner)
+
 
 @dataclass(frozen=True)
 class UndeclaredFile(RootFile):
     """A physical file without a stored declaration, still identified by its path."""
 
     path: Path
+
+    def takes_store_lock(self) -> bool:
+        return False
 
 
 class LockedFile(RootFile, StoreLockOwner, declared_name=None):

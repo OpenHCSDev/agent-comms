@@ -157,12 +157,13 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
 
     from agent_comms.bus import Bus, ClaimRecord, PublicRecord
     from agent_comms.errors import RelationViolationError, UnclaimedError
-    from agent_comms.field_codec import FieldCodec
     from agent_comms.historical_views import HistoryArchive
     from agent_comms.installer.backup import StoreBackup, bus_files
-    from agent_comms.installer.carry import Carried, CarryChain, CarryRequest, MigrateOperation
+    from agent_comms.installer.carry import Carried, CarryChain, MigrateOperation
     from agent_comms.installer.commands import InstallCommands
-    from agent_comms.installer.upgrade import RehearsalFiles, StepRun, carried
+    from agent_comms.installer.interpreter_operation import TargetProgram
+    from agent_comms.installer.upgrade import RehearsalFiles, Stack, StepRun, carried
+    from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
     from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
     from agent_comms.messages import BusRecord
     from agent_comms.read_ledger import ReadLedger
@@ -220,18 +221,12 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
         request_result = requests.carry(apply=True)
         assert request_result.detail == request_dry_run.detail
         assert requests.carry(apply=False).changed == 0
-    with hold.holding(), InstallCommands().exchange(
-        FieldCodec.compact(FieldCodec.encode(CarryRequest(operation, (request,))))
-    ) as (request_path, result_path):
-        completed = subprocess.run(
-            [sys.executable, "-m", "agent_comms.installer.step_worker",
-             str(request_path), str(result_path)], cwd=REPOSITORY,
-            env={**os.environ, "PYTHONPATH": os.pathsep.join(
-                map(str, (REPOSITORY / "src", REPOSITORY / "tools")))},
-            capture_output=True, text=True, timeout=60,
-        )
-        assert completed.returncode == 0, completed.stdout + completed.stderr
-        (result,) = operation.decode_answer(result_path.read_text())
+    # The pass crosses the installer's own worker, as the staged runtime runs it.
+    with hold.holding(), InstallCommands() as commands:
+        staged = Stack(REPOSITORY, commands, home=tmp_path,
+                       runtime=RestoredRuntime(LaunchRuntime.running().interpreter),
+                       program=TargetProgram(REPOSITORY / "tools"))
+        (result,) = staged.call_steps((request,), operation)
     steps = (StepRun(requests.declared_name, request_result), StepRun(request.declared_name, result))
     carried(root, saved, steps, RehearsalFiles.declared(steps))
     maintenance.clear(hold)

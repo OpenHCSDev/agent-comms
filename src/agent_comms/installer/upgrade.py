@@ -37,7 +37,9 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from pydantic import TypeAdapter
 
-from agent_comms.active_route import ActiveRoute, RouteFile, active_route_path, route_directory
+from agent_comms.active_route import (
+    ActiveRoute, RouteFile, RouteFileSelection, active_route_path, route_directory,
+)
 from agent_comms.bus import Bus
 from agent_comms.cli_bridges.shared import BridgeResume, Serve, SessionBridgeResumes
 from agent_comms.cli_commands import (
@@ -58,7 +60,6 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText
 from agent_comms.host_services import HostService, RestartedService
 from agent_comms.install_choices import InstallerChoice, RunMode
-from agent_comms.installer import publication, step_worker
 from agent_comms.installer.backup import (
     BackupReport,
     RestoreSpace,
@@ -73,7 +74,7 @@ from agent_comms.installer.carry import (
     Carry,
     CarryChain,
     CarryOperation,
-    CarryRequest,
+    CarryProbe,
     FirstPendingOperation,
     MigrateOperation,
     RetireInputsOperation,
@@ -83,17 +84,16 @@ from agent_comms.installer.declared_uv import DeclaredUv
 from agent_comms.installer.interpreter_operation import (
     CliCommandProbe,
     ClientImportsProbe,
-    InstalledProgram,
     PackageRootProbe,
     PrepareNativeProbe,
     ProbeProgram,
+    PublicationProbe,
     RetainedProgram,
-    RouteSelection,
     RunningOwnersProbe,
     RuntimeProbe,
     SelectedRouteProbe,
     ServingProbe,
-    SourceProgram,
+    TargetProgram,
 )
 from agent_comms.installer.practice import (
     PracticeCopy,
@@ -107,8 +107,8 @@ from agent_comms.installer.reporting import (
     UnpostedWriter,
 )
 from agent_comms.installer.runtime_resolution import RuntimeResolution, StackProject
-from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
-from agent_comms.locked_store import BusFile, DeclaredFile, RootFile, UndeclaredFile
+from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
+from agent_comms.locked_store import BusFile, DeclaredFile, UndeclaredFile
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
     MaintenanceOperator,
@@ -260,11 +260,10 @@ class CarriedPass(Extendable):
     read: BusReadBack
     retired_inputs: tuple[StepRun, ...] = field(default=(), kw_only=True)
 
-    def after_acceptance(self, pending: tuple[Carry, ...], stack: Stack,
-                         tree: TargetTree) -> Self:
+    def after_acceptance(self, pending: tuple[Carry, ...], stack: Stack) -> Self:
         return replace(self, retired_inputs=tuple(
             StepRun(step.declared_name, retired) for step, retired in
-            zip(pending, stack.call_steps(pending, tree, RetireInputsOperation()), strict=True)
+            zip(pending, stack.call_steps(pending, RetireInputsOperation()), strict=True)
         ))
 
     def require_read(self, carried_from: BusReadBack) -> None:
@@ -446,6 +445,10 @@ class Stack:
     commands: InstallCommands
     home: Path = HOME
     runtime: LaunchRuntime = field(default_factory=LaunchRuntime.installed)
+    program: ProbeProgram = field(default_factory=RetainedProgram.current)
+    """How this runtime's worker reaches the operation family: the outgoing runtime runs
+    the target's source of it, read once so reports outlive the tree; a runtime built
+    from the target declares it itself."""
 
     @property
     def python(self) -> Path:
@@ -496,7 +499,8 @@ class Stack:
         core = commands.git(checkout, "rev-parse", "HEAD").strip()
         resolution = hashlib.sha256(source.lock.read_bytes()).hexdigest()[:16]
         prefix = home / ".local/share/agent-comms/runtimes" / f"core-{core[:9]}-lock-{resolution}"
-        built = replace(source, runtime=LaunchRuntime(prefix / "bin/python"))
+        built = replace(source, runtime=LaunchRuntime(prefix / "bin/python"),
+                        program=TargetProgram(checkout / STEPS.parent))
         if prefix.exists():
             if not RuntimeResolution.at(prefix).matches(source.lock, built, core):
                 raise UpgradeRefused("Existing built runtime differs from its resolved inputs")
@@ -532,11 +536,12 @@ class Stack:
                 "--basetemp", Path(temporary) / "pytest", "-p", "no:cacheprovider",
                 *pytest_arguments, cwd=self.checkout, env=self.environment()), end="")
 
-    def probe[Answer](self, probe: RuntimeProbe[Answer], *,
-                      source: tuple[Path, ...] = (),
-                      program: ProbeProgram = SourceProgram()) -> Answer:
+    def probe[Answer](self, probe: RuntimeProbe[Answer]) -> Answer:
+        """Every call into this runtime during an install goes to its one worker, which
+        imports the runtime once."""
         return self.commands.probe(probe, self.python, cwd=self.home,
-                                   env=self.environment(*source), program=program)
+                                   env=self.environment(*self.program.import_roots()),
+                                   program=self.program)
 
     def imports(self) -> None:
         self.probe(ClientImportsProbe())
@@ -601,21 +606,17 @@ class Stack:
     def publish(self, root: Path) -> None:
         """The selected interpreter owns console metadata and harness declarations, and
         ``root`` belongs to this stack's runtime from now on."""
-        self.commands.run(
-                          self.python, "-m", publication.__name__,
-                          cwd=self.checkout, env=self.environment(),
-        )
+        self.probe(PublicationProbe())
         RootRuntime.publish(root, self.runtime)
 
     def environment(self, *paths: Path) -> dict:
-        """Use the artifact's packages; carry steps also select the target tree's source."""
+        """Use the artifact's packages; ``paths`` are searched first, in order (the target
+        tree's carry steps, or its source for a native build)."""
         environment = {**self.runtime.environment(os.environ), "HOME": str(self.home)}
-        if paths:
-            imports = SpecifiedImportPath(os.pathsep.join(map(str, paths)))
-            configuration: RestartEnvironment = replace(
-                RestartEnvironment.inherit(environment), pythonpath=imports)
-            return configuration.apply_runtime(environment)
-        return environment
+        configuration = RestartEnvironment.inherit(environment)
+        for path in reversed(paths):
+            configuration = configuration.with_import_root(path)
+        return configuration.apply_runtime(environment)
 
     def cli[Answer: CliResult](self, root: Path, command: type[CliCommand[Answer]],
                                *arguments: str) -> Answer:
@@ -639,20 +640,15 @@ class Stack:
             time.sleep(5)
         raise UpgradeRefused(f"{verb}: still unavailable after 20 minutes: {failure.error}")
 
-    def call_steps[Answer](self, steps: tuple[Carry, ...], tree: TargetTree,
+    def call_steps[Answer](self, steps: tuple[Carry, ...],
                            operation: CarryOperation[Answer]) -> tuple[Answer, ...]:
-        """Run one pass of steps, in order, in one worker in the target tree with this
-        stack's interpreter; the operation owns traversal and its answer tuple. Every
-        caller passes the staged stack, built from this tree, so Core comes from its
-        compiled installation and only the steps come from the tree."""
+        """Run one pass of steps, in order, in this stack's worker; the operation owns
+        traversal and its answer tuple. Every caller passes the staged stack, built from
+        the target tree, so Core comes from its compiled installation and only the steps
+        come from the tree (``TargetProgram``)."""
         if not steps:
             return ()
-        request = CarryRequest(operation, steps)
-        with self.commands.exchange(FieldCodec.compact(FieldCodec.encode(request))) as (request_path, result):
-            self.commands.run(self.python, "-m", step_worker.__name__,
-                              request_path, result,
-                              cwd=tree.path, env=self.environment(tree.steps_package))
-            return operation.decode_answer(result.read_text())
+        return self.probe(CarryProbe(operation, steps))
 
     def running_owners(self, root: Path) -> list[str]:
         """Use the restart request's receiving declaration in the selected runtime."""
@@ -761,14 +757,13 @@ class PracticeBus:
         ):
             yield cls(Path(scratch), PracticeCopy(root, Path(scratch) / "bus"), root, Path(spill))
 
-    def pending(self, chain: CarryChain, staged: Stack,
-                tree: TargetTree) -> tuple[type[Carry], ...]:
+    def pending(self, chain: CarryChain, staged: Stack) -> tuple[type[Carry], ...]:
         """Read-only dry runs in one worker stop at the first step that says work remains."""
         if not chain.steps:
             return ()
         steps = tuple(step(self.original_root, self.original_root, self.spill_dir)
                       for step in chain.steps)
-        (position,) = staged.call_steps(steps, tree, FirstPendingOperation())
+        (position,) = staged.call_steps(steps, FirstPendingOperation())
         return chain.steps[position:]
 
     def select(self, pending: tuple[Carry, ...], reconciled: tuple[Path, ...]) -> tuple[Path, ...]:
@@ -841,16 +836,16 @@ class Install[Rehearsed: Rehearsal](ABC):
         """The outgoing runtime posts until the target's runtime takes the bus over, unless
         the route file refuses it as a borrower; install's own route step replaces that file."""
         return RouteFile.read(active_route_path()).outgoing_writer(
-            RuntimeWriter(root, installed, RetainedProgram.current()), UnpostedWriter())
+            RuntimeWriter(root, installed), UnpostedWriter())
 
-    def backed_up(self, files: tuple[Path, ...]) -> tuple[StoreBackup, RouteSelection]:
+    def backed_up(self, files: tuple[Path, ...]) -> tuple[StoreBackup, RouteFileSelection]:
         backup = StoreBackup.take(self.root, active_route_path(), files, self.spill_dir)
         with route_directory(backup.route):
             backup.require_route_revision()
-            selected = self.installed.probe(SelectedRouteProbe())
+            selected = self.staged.probe(SelectedRouteProbe())
         return backup, selected
 
-    def publish(self, backup: StoreBackup, selected: RouteSelection) -> str:
+    def publish(self, backup: StoreBackup, selected: RouteFileSelection) -> str:
         """The converted bus's route is ready before new runtime entrypoints open it."""
         incoming = ActiveRoute(self.root.absolute(), RecordedBusIdentity.capture(Bus.path_in(self.root)))
         route = backup.rebind_route(incoming, selected)
@@ -928,7 +923,7 @@ class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
         if chain.steps or staged.cli(root, PlannedReconcileCliCommand).rewritten:
             with PracticeBus.of(root, installer, spill_dir) as practice:
                 install = cls.of(checkout, root, current, target,
-                                 practice.pending(chain, staged, tree),
+                                 practice.pending(chain, staged),
                                  installed, staged, tree, installer, spill_dir)
                 return install, install.rehearsal(practice)
         install = cls.of(checkout, root, current, target, (), installed, staged, tree,
@@ -973,11 +968,10 @@ class PreparedMigration(Extendable):
         root = Path(hold.root)
         return cls(hold, bus_files(root), outgoing.verify(root))
 
-    def carry(self, pending: tuple[Carry, ...], staged: Stack,
-              tree: TargetTree) -> CarriedPass:
+    def carry(self, pending: tuple[Carry, ...], staged: Stack) -> CarriedPass:
         """One migration sequence for rehearsal and the backed-up live bus."""
         steps = [StepRun(step.declared_name, carried) for step, carried in zip(
-            pending, staged.call_steps(pending, tree, MigrateOperation(apply=True)), strict=True)]
+            pending, staged.call_steps(pending, MigrateOperation(apply=True)), strict=True)]
         reconciled = staged.cli(self.root, ReconcileStoresCliCommand)
         steps.append(StepRun(ReconcileStoresCliCommand.declared_name, Carried(
             len(reconciled.rewritten), rewritten=reconciled.rewritten)))
@@ -1015,8 +1009,8 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
         hold = maintenance.retarget(maintenance.begin(MaintenanceOperator.current()), stack.runtime)
         with hold.holding():
             migration = PreparedMigration.capture(hold, self.installed)
-            passed = migration.carry(pending, stack, self.tree)
-            passed = passed.after_acceptance(pending, stack, self.tree)
+            passed = migration.carry(pending, stack)
+            passed = passed.after_acceptance(pending, stack)
         maintenance.clear(hold)
         return passed.extended(CarriedRehearsal, copy=practice.copy.measurement, inputs=inputs)
 
@@ -1061,7 +1055,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
             try:
                 self.staged.commands.git(self.checkout, "merge", "--ff-only", "-q", self.target)
                 Checkout(self.checkout).prepare()
-                passed = migration.carry(self.pending, self.staged, self.tree)
+                passed = migration.carry(self.pending, self.staged)
                 passed.files.require_rehearsal(rehearsal.files)
                 self.publish(migration.backup, selected_route)
                 holder.close()
@@ -1100,12 +1094,12 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                                         runtime=self.installed.runtime) from error
             # Installed: the carries ran and the runtime is published. Starting the owners it
             # stopped is reported per owner and never rolls the install back.
-            report.writer = RuntimeWriter(self.root, self.staged, InstalledProgram())
+            report.writer = RuntimeWriter(self.root, self.staged)
             try:
                 retirement = tuple(replace(
                     step, spill_dir=migration.backup.spill_directory(self.spill_dir),
                 ) for step in self.pending)
-                passed = passed.after_acceptance(retirement, self.staged, self.tree)
+                passed = passed.after_acceptance(retirement, self.staged)
             finally:
                 started = self.staged.start(self.root, running)
             retired_backups = migration.backup.retain(self.spill_dir)
@@ -1128,7 +1122,8 @@ class UnchangedInstall(ExistingBusInstall[UnchangedRehearsal]):
 
     def live(self, rehearsal: UnchangedRehearsal, report: InstallReport) -> UnchangedRun:
         self.installed.publish(self.root)
-        report.writer = RuntimeWriter(self.root, self.installed, InstalledProgram())
+        # The staged stack is the installed runtime here; its worker is already running.
+        report.writer = RuntimeWriter(self.root, self.staged)
         return UnchangedRun()
 
 
@@ -1160,7 +1155,7 @@ class FreshInstall(Install[FreshRehearsal]):
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         wire(self.root).registry.prepare_native_root()
         Bus.install(Bus.path_in(self.root))
-        report.writer = RuntimeWriter(self.root, self.staged, InstalledProgram())
+        report.writer = RuntimeWriter(self.root, self.staged)
         backup, selected_route = self.backed_up(())
         try:
             route = self.publish(backup, selected_route)

@@ -138,11 +138,12 @@ class ActiveRoute(CommsRoute):
 
     @classmethod
     def from_record(cls, value: object, path: Path) -> ActiveRoute:
+        value = FieldCodec.decode(dict[str, object], value)
         match value:
             case {"version": int(found), **record} if found == cls.version:
                 pass
             case _:
-                stamped = value.get("version") if isinstance(value, dict) else None
+                stamped = value.get("version")
                 raise MalformedRecord(
                     f"active comms route {path} is version {stamped!r}; "
                     f"this installation reads version {cls.version}. "
@@ -376,6 +377,28 @@ def route_new_bus(route: ActiveRoute, path: Path) -> str:
         return RouteFile.read(path).route_new_bus(route, path, directory)
 
 
+class RouteFileSelection(DeclaredFamily, affix="Selection", declared_name=None):
+    """The outgoing reader's validated choice owns whether this bus may be published."""
+
+    def publish(self, route: ActiveRoute, path: Path, directory: int) -> str:
+        return RouteFile.read(path).route_new_bus(route, path, directory)
+
+
+@dataclass(frozen=True)
+class NoRouteSelection(RouteFileSelection):
+    """No route selects an existing bus; the installer may publish this one."""
+
+
+@dataclass(frozen=True)
+class PublishedRouteSelection(RouteFileSelection):
+    root: Annotated[Path, PathText]
+
+    def publish(self, route: ActiveRoute, path: Path, directory: int) -> str:
+        if self.root.resolve() != route.root.resolve():
+            return f"kept {path}: it selects {self.root}"
+        return super().publish(route, path, directory)
+
+
 class RouteFile(ABC):
     """What the default route file holds when install or the owner's repair reads it. A file
     that selects no bus (unreadable, an old version, or naming a root gone or replaced) is
@@ -395,6 +418,9 @@ class RouteFile(ABC):
             case ActiveRoute():
                 return ReplaceableRoute()
         return AbsentRoute()
+
+    def selection(self) -> RouteFileSelection:
+        return NoRouteSelection()
 
     def launch_root(self) -> Path:
         """Where install runs: the default root, where it creates a bus."""
@@ -436,6 +462,9 @@ class SelectingRoute(RouteFile):
     """Still selects its own bus: it is kept, and install runs there."""
 
     current: ActiveRoute
+
+    def selection(self) -> RouteFileSelection:
+        return PublishedRouteSelection(self.current.observe_root())
 
     def launch_root(self) -> Path:
         return self.current.root

@@ -14,6 +14,7 @@ from abc import ABC, abstractmethod
 from contextlib import redirect_stdout
 from dataclasses import dataclass
 from importlib import import_module
+from importlib.metadata import distributions
 from io import StringIO
 from pathlib import Path
 from typing import Annotated, ClassVar, Self, cast
@@ -23,7 +24,7 @@ from pydantic.json_schema import DEFAULT_REF_TEMPLATE
 from typing_extensions import TypeForm
 
 import agent_comms
-from agent_comms.active_route import ActiveRoute, RouteFile, SelectingRoute, active_route_path
+from agent_comms.active_route import RouteFile, RouteFileSelection, active_route_path
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, PathText, WireValue
 from agent_comms.maintenance_barrier import HOLDER_NONCE
@@ -52,6 +53,10 @@ class ProbeProgram(ABC):
     @abstractmethod
     def entry(self) -> tuple[str | Path, ...]: ...
 
+    def import_roots(self) -> tuple[Path, ...]:
+        """Directories the interpreter imports from beside its own packages."""
+        return ()
+
 
 class SourceProgram(ProbeProgram):
     """The target's file can run against a predecessor that does not declare it yet."""
@@ -65,6 +70,17 @@ class InstalledProgram(ProbeProgram):
 
     def entry(self) -> tuple[str, str]:
         return "-c", f"from {__name__} import serve; serve()"
+
+
+@dataclass(frozen=True)
+class TargetProgram(InstalledProgram):
+    """The runtime built from the target tree declares every operation, carry passes
+    included; their steps ship in no runtime, so the tree's ``steps`` supply them."""
+
+    steps: Path
+
+    def import_roots(self) -> tuple[Path]:
+        return (self.steps,)
 
 
 @dataclass(frozen=True)
@@ -137,11 +153,16 @@ class ProbeRequest:
 def serve() -> None:
     """Answer declared operations from stdin, one encoded answer per request line, until it
     closes. An operation that raises ends the worker: its traceback goes to stderr, and the
-    caller reads the exit in place of an answer."""
+    caller reads the exit in place of an answer. The answers own stdout's descriptor; every
+    other write, an operation's exit handlers included, lands on stderr."""
+    answers = os.fdopen(os.dup(sys.stdout.fileno()), "w")
+    os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
     for line in sys.stdin:
-        with redirect_stdout(sys.stderr):
-            answer = FieldCodec.decode(ProbeRequest, FieldCodec.parse(line)).answer()
-        print(answer, flush=True)
+        print(
+            FieldCodec.decode(ProbeRequest, FieldCodec.parse(line)).answer(),
+            file=answers,
+            flush=True,
+        )
 
 
 class ClientImportsProbe(RuntimeProbe[None]):
@@ -155,36 +176,11 @@ class PackageRootProbe(RuntimeProbe[Path]):
         return Path(agent_comms.__file__).parent
 
 
-class RouteSelection(DeclaredFamily, affix="Selection", declared_name=None):
-    """The outgoing reader's validated choice owns whether this bus may be published."""
+class SelectedRouteProbe(RuntimeProbe[RouteFileSelection]):
+    """The staged runtime reads the published route before source changes."""
 
-    def publish(self, route: ActiveRoute, path: Path, directory: int) -> str:
-        return RouteFile.read(path).route_new_bus(route, path, directory)
-
-
-@dataclass(frozen=True)
-class NoRouteSelection(RouteSelection):
-    """No route selects an existing bus; the installer may publish this one."""
-
-
-@dataclass(frozen=True)
-class PublishedRouteSelection(RouteSelection):
-    root: Annotated[Path, PathText]
-
-    def publish(self, route: ActiveRoute, path: Path, directory: int) -> str:
-        if self.root.resolve() != route.root.resolve():
-            return f"kept {path}: it selects {self.root}"
-        return super().publish(route, path, directory)
-
-
-class SelectedRouteProbe(RuntimeProbe[RouteSelection]):
-    """The outgoing reader validates its own published route before source changes."""
-
-    def run(self) -> RouteSelection:
-        route = RouteFile.read(active_route_path())
-        if isinstance(route, SelectingRoute):
-            return PublishedRouteSelection(route.current.observe_root())
-        return NoRouteSelection()
+    def run(self) -> RouteFileSelection:
+        return RouteFile.read(active_route_path()).selection()
 
 
 class PrepareNativeProbe(RuntimeProbe[None]):
@@ -236,10 +232,19 @@ class ServingProbe(RuntimeProbe[None]):
                 instance.serves()
 
 
+class PublicationProbe(RuntimeProbe[None]):
+    """The selected interpreter publishes itself: console launchers and harness links move
+    to it, then ``current`` does."""
+
+    def run(self) -> None:
+        # Imported here: publication -> runtime_resolution -> interpreter_operation is a cycle.
+        from agent_comms.installer.publication import RuntimePublication
+
+        RuntimePublication.installed().publish_links()
+
+
 class DistributionVersionsProbe(RuntimeProbe[dict[str, str]]):
     def run(self) -> dict[str, str]:
-        from importlib.metadata import distributions
-
         from packaging.utils import canonicalize_name
 
         return {canonicalize_name(dist.metadata["Name"]): dist.version for dist in distributions()}
@@ -322,8 +327,6 @@ class InstalledPackagesProbe(RuntimeProbe[dict[str, PackageRecord]]):
     core: str
 
     def run(self) -> dict[str, PackageRecord]:
-        from importlib.metadata import distributions
-
         from packaging.utils import canonicalize_name
 
         from agent_comms.package_stamp import STAMP

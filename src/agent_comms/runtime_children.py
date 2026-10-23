@@ -25,6 +25,7 @@ from .field_codec import PathText
 from .launch_runtime import CallingThreadUnavailable, LaunchRuntime, ThreadLaunch
 from .locked_store import DocumentChange
 from .maintenance_barrier import CarriedDocument
+from .store_files import DependentStateTier
 
 
 class ChildInitiator(DeclaredFamily, affix="ChildInitiator"):
@@ -141,7 +142,7 @@ class RuntimeChildReservation:
 
 
 @dataclass(frozen=True, slots=True)
-class RuntimeChildrenStore(ChildRegistration, CarriedDocument[RuntimeChildren]):
+class RuntimeChildrenStore(ChildRegistration, CarriedDocument[RuntimeChildren], DependentStateTier):
     """One file at the selected prefix covers children from every bus root."""
 
     filename: ClassVar[str] = "runtime_children.json"

@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field, fields, replace
 from functools import cmp_to_key
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Literal, Annotated
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
 from agent_comms import field_codec
 
@@ -36,6 +36,7 @@ from .peer_relevance import (
 )
 from .registry_document import RegistrySnapshot, RosterVisibility
 from .routing import DeliveryScope
+from .store_files import DependentStateTier
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
@@ -649,7 +650,7 @@ class RemoveRelationshipEdit(RelationshipEdit[None]):
         )
 
 
-class RelationshipStore(ThreadOwnedState, CarriedDocument[RelationshipDocument]):
+class RelationshipStore(ThreadOwnedState, CarriedDocument[RelationshipDocument], DependentStateTier):
     """One current durable typed schema; retired formats are rejected."""
 
     filename = "relationships.json"
