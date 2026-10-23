@@ -24,7 +24,7 @@ from agent_comms.assignment_states import (
     DeliveredAssignment,
     FullPendingAssignment,
 )
-from agent_comms.cohort_schema import ClaimBatchAcknowledgements, CohortDeliveries
+from agent_comms.cohort_schema import AcceptanceFrontier, ClaimBatchAcknowledgements, CohortDeliveries
 from agent_comms.messages import Message
 from agent_comms.private_registry_guard import RegistryPrivacy
 from agent_comms.comms import Comms, wire
@@ -181,12 +181,14 @@ def test_sealed_receipts_follow_recipient_progress(tmp_path: Path) -> None:
         wire_root_id=root_id,
         recipient_lookup=lookups["Alice"],
         after_seq=alice_first.seq,
+        limit=AcceptanceFrontier.page,
     ) == frozenset({alice_second.seq})
     assert CohortDeliveries.sealed_sequences_after(
         store.session._connection,
         wire_root_id=root_id,
         recipient_lookup=lookups["Bob"],
         after_seq=0,
+        limit=AcceptanceFrontier.page,
     ) == frozenset({bob.seq})
 
 

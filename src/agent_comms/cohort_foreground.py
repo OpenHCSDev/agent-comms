@@ -11,7 +11,6 @@ from agent_comms.coordinator import Coordination
 
 from .cohort_schema import AcceptanceFrontier, CohortDeliveries, CohortTable
 from .coordination_cohort import AcceptedCohort
-from .cursor_owner import CursorOwner
 from .errors import RelationViolationError
 from .message_bus import MessageBus
 
@@ -37,27 +36,21 @@ async def _accept_visible_deliveries(
             with resource.session.read():
                 db = resource.session._connection
                 CohortTable.require_installed(db)
-                thread = boundary.registry.require(owner_name)
-                participant = resource.participants.get(lookup)
-                cursor = CursorOwner(
-                    thread=thread,
-                    claimed_generation=boundary.registry.claim_generation(owner_name),
-                    wire_root_id=root_id,
-                    generation=participant.owner_identity.generation,
-                ).state(db)
                 after_seq = AcceptanceFrontier.scan_after(
                     db,
                     wire_root_id=root_id,
                     recipient_lookup=lookup,
-                    covered_seq=cursor.covered_seq,
                 )
                 sealed = CohortDeliveries.sealed_sequences_after(
                     db,
                     wire_root_id=root_id,
                     recipient_lookup=lookup,
                     after_seq=after_seq,
+                    limit=AcceptanceFrontier.page,
                 )
-            originals = source.received(lookup, after=after_seq, limit=101, descending=False)
+            originals = source.received(
+                lookup, after=after_seq, limit=AcceptanceFrontier.page, descending=False,
+            )
             addressed = tuple(original.seq for original in originals)
             # Progress comes from every addressed original in the fixed source
             # cut, including already sealed/historical recipient rows.
@@ -71,8 +64,6 @@ async def _accept_visible_deliveries(
                 if any(r.canonical_thread == owner_name for r in recipients):
                     unaccepted.append(initial)
         visited_after = addressed[-1] if addressed else after_seq
-        if len(unaccepted) > 100:
-            raise IdentityConflict("recipient initial cohort batch exceeds bounded foreground scan")
         if unaccepted and acquire_package is not None:
             # An ACP observation with new originals must still validate the package
             # before SQL acceptance. Sealed evidences require no repeated preflight.

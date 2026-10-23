@@ -262,7 +262,7 @@ class CohortDeliveries(
         wire_root_id: str,
         recipient_lookup: str,
         after_seq: int,
-        limit: int = 101,
+        limit: int,
     ) -> frozenset[int]:
         """Sealed positions for one bounded page after its acceptance frontier."""
         rows = db.execute(
@@ -290,6 +290,8 @@ class CohortDeliveries(
 class AcceptanceFrontier(CohortTable, WithoutRowid):
     """Addressed originals visited for acceptance, independent of native consumption."""
 
+    page: ClassVar[int] = 101
+
     wire_root_id: Annotated[str, Column(primary_key=True)]
     recipient_lookup: Annotated[str, Column(primary_key=True)]
     through_seq: Annotated[int, Column(check="through_seq >= 0")]
@@ -301,10 +303,10 @@ class AcceptanceFrontier(CohortTable, WithoutRowid):
         *,
         wire_root_id: str,
         recipient_lookup: str,
-        covered_seq: int = 0,
     ) -> int:
-        recorded = cls.require(db, wire_root_id=wire_root_id, recipient_lookup=recipient_lookup)
-        return max(covered_seq, recorded.through_seq)
+        return cls.require(
+            db, wire_root_id=wire_root_id, recipient_lookup=recipient_lookup,
+        ).through_seq
 
     def advance(self, db: sqlite3.Connection) -> None:
         """A concurrent acceptance can extend this scan, never rewind it."""

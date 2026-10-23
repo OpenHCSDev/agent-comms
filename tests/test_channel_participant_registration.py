@@ -73,8 +73,13 @@ async def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_coh
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("earlier_hole", [False, True])
-async def test_carried_acceptance_frontier_reaches_new_dm_in_one_wake(tmp_path, earlier_hole):
+@pytest.mark.parametrize(
+    "earlier_hole,sealed_count,new_count",
+    [(False, 102, 1), (True, 102, 1), (False, 0, 101)],
+)
+async def test_carried_acceptance_frontier_reaches_new_dm_in_one_wake(
+    tmp_path, earlier_hole, sealed_count, new_count,
+):
     comms = prepare_native_comms(wire(tmp_path / "wire"))
     root_id = comms.registry.prepare_native_root().namespace
     for name in ("sender", "receiver"):
@@ -84,12 +89,15 @@ async def test_carried_acceptance_frontier_reaches_new_dm_in_one_wake(tmp_path, 
     path = comms.root / "coordination.sqlite3"
     unaccepted = []
     with Coordination(str(path)) as store:
-        for index in range(102):
+        for index in range(sealed_count):
             if earlier_hole and index == 40:
                 unaccepted.append(comms.messaging.send("sender", "receiver", "earlier DM").message)
             sealed = comms.messaging.send("sender", "receiver", f"sealed {index}").message
             accept_delivery_cohort(comms.bus, root_id, sealed.seq, store)
-        unaccepted.append(comms.messaging.send("sender", "receiver", "new DM").message)
+        unaccepted.extend(
+            comms.messaging.send("sender", "receiver", f"new DM {index}").message
+            for index in range(new_count)
+        )
         # The pre-install store has acceptance records but no frontier row.
         with store.session.writing() as db:
             AcceptanceFrontier.delete(db, wire_root_id=root_id, recipient_lookup=lookup)
