@@ -1,5 +1,6 @@
 """The real bus publishes only files declared by their existing state owners."""
 
+from contextlib import closing
 from pathlib import Path
 import sqlite3
 
@@ -12,11 +13,12 @@ from agent_comms.native_session_files import NativeInputProof
 from agent_comms.comms import Comms
 from agent_comms.coordination_session import NativeBoundary
 from agent_comms.envelope_claim_transitions import ExistingFileClaim, NativeClaim
-from agent_comms.locked_store import DurableFile, RootFile, RuntimeFile
+from agent_comms.locked_store import DurableFile, RootFile, RuntimeFile, SQLiteFile
 from agent_comms.private_registry_guard import PrivateOwnerRenameIntent
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.todos import TodoStore
+from agent_comms.typed_table import ReconciledFile
 from test_todos import order
 
 
@@ -81,3 +83,28 @@ def test_parameterized_sqlite_resources_follow_their_file_owner(tmp_path: Path, 
         assert len(actual) > 1  # The real SQLite writer has an open journal/WAL.
         assert actual <= NativeInputProof.files_in(tmp_path)
         assert str(proof.relative_to(tmp_path)) in bus_files(tmp_path)
+
+
+def test_installer_reconciles_a_native_proof_journal_onto_its_declaration(tmp_path: Path) -> None:
+    proof = NativeInputProof.path_in(tmp_path, lookup="a" * 32, name="session")
+    proof.parent.mkdir(parents=True, mode=0o700)
+    with sqlite3.connect(proof) as db:
+        for statement in NativeContextJournal.schema_objects().values():
+            db.execute(statement)
+        NativeContextJournal(
+            input_id="b" * 32, session_id="session", session_entry_id="entry",
+            request_generation=1, llm_context_digest="c" * 64,
+            committed_at_ms=1_791_964_800_001, schema=2, type="context_committed",
+        ).insert(db)
+        # A journal written before the trigger names moved: triggers hold no rows.
+        for name in ("insert", "update", "delete"):
+            db.execute(f"DROP TRIGGER native_context_journal_{name}_before_abort")
+        db.execute("CREATE TRIGGER native_context_journal_update BEFORE UPDATE ON "
+                   "native_context_journal BEGIN SELECT RAISE(ABORT,'append only'); END")
+    assert ReconciledFile.existing_in(tmp_path) == {proof: NativeInputProof}
+    assert NativeInputProof.bus_root(proof) == tmp_path
+    with closing(NativeInputProof.writer(proof, isolation_level=None)) as db:
+        with SQLiteFile.write_transaction(db):
+            NativeContextJournal.carry_schema(db)
+        assert not NativeContextJournal.schema_differs(db)
+        assert db.execute("SELECT count(*) FROM native_context_journal").fetchone() == (1,)

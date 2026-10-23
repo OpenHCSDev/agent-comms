@@ -30,7 +30,7 @@ from .native_input_owner import ParticipantOwner, RegistryOwner
 from .native_entries import NativeEvidenceScope
 from .native_pi import NativeContextProof, NativePiTerminalFailure, NativeTurnResult
 from .native_prompt_binding import bind_expected_prompt
-from .native_prompt_send import PromptBoundary, send_fenced_prompt
+from .native_prompt_send import PromptBoundary
 from .native_session_reopen import NativeSessionIdentity
 from .native_startup import NativeStartup
 from .native_tool_call import NativeToolMode
@@ -271,11 +271,9 @@ class PrivateSendClaim(PromptBoundary):
             # all of these operations have finished successfully.
 
     async def send_prompt(self, turn: TrackedTurnSession) -> None:
-        stdin = turn.native.proc.stdin
-        assert stdin is not None
         with turn.startup.measurements.operation("prompt_writer_join"):
-            await send_fenced_prompt(
-                stdin, turn.native.reader.encode(turn.command),
+            await turn.native.send_fenced(
+                turn.command,
                 partial(self.prompt_boundary, turn), measurements=turn.startup.measurements,
             )
 
