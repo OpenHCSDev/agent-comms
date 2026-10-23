@@ -262,19 +262,18 @@ class CohortDeliveries(
         wire_root_id: str,
         recipient_lookup: str,
         after_seq: int,
+        limit: int = 101,
     ) -> frozenset[int]:
-        """Sealed addressed evidences after one recipient's visited position."""
-        rows = cls.read(
-            db.execute(
-                "SELECT d.* FROM cohort_delivery_receipts d "
-                "JOIN claim_batch_receipts r ON r.wire_root_id=d.wire_root_id "
-                "AND r.wire_seq=d.wire_seq AND r.sealed=1 "
-                "WHERE d.wire_root_id=? AND d.recipient_lookup=? AND d.wire_seq>? "
-                "ORDER BY d.wire_seq",
-                (wire_root_id, recipient_lookup, after_seq),
-            )
+        """Sealed positions for one bounded page after its acceptance frontier."""
+        rows = db.execute(
+            "SELECT d.wire_seq FROM cohort_delivery_receipts d "
+            "JOIN claim_batch_receipts r ON r.wire_root_id=d.wire_root_id "
+            "AND r.wire_seq=d.wire_seq AND r.sealed=1 "
+            "WHERE d.wire_root_id=? AND d.recipient_lookup=? AND d.wire_seq>? "
+            "ORDER BY d.wire_seq LIMIT ?",
+            (wire_root_id, recipient_lookup, after_seq, limit),
         )
-        return frozenset(row.wire_seq for row in rows)
+        return frozenset(row[0] for row in rows)
 
     @classmethod
     def references(cls):
@@ -285,6 +284,48 @@ class CohortDeliveries(
                 columns=("wire_root_id", "wire_seq"), target=ClaimBatchAcknowledgements, target_columns=("wire_root_id", "wire_seq")
             ),
         )
+
+
+@dataclass(frozen=True, kw_only=True)
+class AcceptanceFrontier(CohortTable, WithoutRowid):
+    """Addressed originals visited for acceptance, independent of native consumption."""
+
+    wire_root_id: Annotated[str, Column(primary_key=True)]
+    recipient_lookup: Annotated[str, Column(primary_key=True)]
+    through_seq: Annotated[int, Column(check="through_seq >= 0")]
+
+    @classmethod
+    def scan_after(
+        cls,
+        db: sqlite3.Connection,
+        *,
+        wire_root_id: str,
+        recipient_lookup: str,
+        covered_seq: int = 0,
+    ) -> int:
+        recorded = cls.require(db, wire_root_id=wire_root_id, recipient_lookup=recipient_lookup)
+        return max(covered_seq, recorded.through_seq)
+
+    def advance(self, db: sqlite3.Connection) -> None:
+        """A concurrent acceptance can extend this scan, never rewind it."""
+        current = self.scan_after(
+            db,
+            wire_root_id=self.wire_root_id,
+            recipient_lookup=self.recipient_lookup,
+        )
+        if self.through_seq > current:
+            self.upsert(db)
+
+    @classmethod
+    def references(cls):
+        return (
+            ForeignKey(
+                columns=("recipient_lookup",),
+                target=Participants,
+                target_columns=("participant_lookup",),
+            ),
+        )
+
 
 @dataclass(frozen=True, kw_only=True)
 class AwarenessClaimGenerations(

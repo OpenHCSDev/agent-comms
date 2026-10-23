@@ -17,6 +17,7 @@ from .errors import RelationViolationError
 from .coordination_session import CoordinationSession
 from .goals import GoalDeclaration, NoGoal
 from .participant_store import ParticipantStore
+from .private_registry_guard import RegistryPrivacy
 from .thread_status import ThreadStatus
 from .threads import Thread
 
@@ -64,8 +65,11 @@ class InitialRegistration(RegistrationChange):
 
     def prepare_participant(self, root: Path) -> None:
         """The participant commits before the registry makes this incarnation visible."""
+        privacy = RegistryPrivacy.capture(root)
         with CoordinationSession(str(CoordinationSession.path_in(root))) as session:
             ParticipantStore(session).register(self.thread.incarnation.lookup, committed=True)
+            with session.writing() as db:
+                privacy.declare_acceptance(db, self.thread.incarnation.lookup)
 
     def restarted(self) -> RegistrationChange:
         return InitialOwnerRegistration(thread=self.thread, status=self.status)

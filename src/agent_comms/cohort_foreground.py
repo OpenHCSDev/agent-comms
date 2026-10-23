@@ -9,8 +9,9 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_session import NativeBoundary
 from agent_comms.coordinator import Coordination
 
-from .cohort_schema import CohortDeliveries, CohortTable
-from .coordination_cohort import accept_delivery_cohort
+from .cohort_schema import AcceptanceFrontier, CohortDeliveries, CohortTable
+from .coordination_cohort import AcceptedCohort
+from .cursor_owner import CursorOwner
 from .errors import RelationViolationError
 from .message_bus import MessageBus
 
@@ -20,24 +21,38 @@ async def _accept_visible_deliveries(
     root_id: str,
     store_path: Path,
     lookup: str,
-    after_seq: int,
     *,
     owner_name: str,
     acquire_package: Callable[[], None] | None = None,
-) -> int:
+) -> None:
     """Accept only committed initial messages addressed to this registered recipient.
 
     Use the checked address index to find messages and decode only those not
     yet accepted. Every participant must already be registered. Public message
     text alone cannot identify the group receiving private input.
     """
-    def accept(resource: Coordination) -> int:
+    def accept(resource: Coordination) -> None:
         with NativeBoundary(bus) as boundary, bus.bus.reading() as source:
             boundary.privacy.require_root(root_id, IdentityConflict("native namespace changed"))
             with resource.session.read():
-                CohortTable.require_installed(resource.session._connection)
+                db = resource.session._connection
+                CohortTable.require_installed(db)
+                thread = boundary.registry.require(owner_name)
+                participant = resource.participants.get(lookup)
+                cursor = CursorOwner(
+                    thread=thread,
+                    claimed_generation=boundary.registry.claim_generation(owner_name),
+                    wire_root_id=root_id,
+                    generation=participant.owner_identity.generation,
+                ).state(db)
+                after_seq = AcceptanceFrontier.scan_after(
+                    db,
+                    wire_root_id=root_id,
+                    recipient_lookup=lookup,
+                    covered_seq=cursor.covered_seq,
+                )
                 sealed = CohortDeliveries.sealed_sequences_after(
-                    resource.session._connection,
+                    db,
                     wire_root_id=root_id,
                     recipient_lookup=lookup,
                     after_seq=after_seq,
@@ -62,11 +77,21 @@ async def _accept_visible_deliveries(
             # An ACP observation with new originals must still validate the package
             # before SQL acceptance. Sealed evidences require no repeated preflight.
             acquire_package()
-        for initial in unaccepted:
-            # A prior canonical name is historical after a private owner rename.
-            # Never create a NEW generation's selected attempt from that old
-            # frozen recipient, or infer it was consumed.
-            accept_delivery_cohort(bus, root_id, initial.message.seq, resource)
-        return visited_after
+        # The frontier cannot outlive a rolled-back acceptance, nor does it
+        # assert that any native input was consumed.
+        with (
+            NativeBoundary(bus) as boundary,
+            bus.bus.reading() as source,
+            resource.session.writing() as db,
+        ):
+            boundary.privacy.require_root(root_id, IdentityConflict("native namespace changed"))
+            for initial in unaccepted:
+                # Frozen recipients keep their original names after a rename.
+                AcceptedCohort.record(source.delivery(initial.seq), boundary.privacy, resource, db)
+            AcceptanceFrontier(
+                wire_root_id=root_id,
+                recipient_lookup=lookup,
+                through_seq=visited_after,
+            ).advance(db)
 
-    return await Coordination.run_async(store_path, accept)
+    await Coordination.run_async(store_path, accept)

@@ -31,7 +31,11 @@ async def test_interrupted_following_delivery_recovers_only_before_native_send(
     store_path = comms.root / "coordination.sqlite3"
     lookup = owner.incarnation.lookup
     await _accept_visible_deliveries(
-        comms.bus, root_id, store_path, lookup, 0, owner_name=owner.name,
+        comms.bus,
+        root_id,
+        store_path,
+        lookup,
+        owner_name=owner.name,
     )
 
     with Coordination(str(store_path)) as store:
@@ -112,7 +116,7 @@ async def test_recovery_without_paused_assignments_is_read_only(tmp_path, monkey
     publish_initial(comms, "sender", "beta", "unbound recovery source")
     store_path = comms.root / "coordination.sqlite3"
     lookup = owner.incarnation.lookup
-    await _accept_visible_deliveries(comms.bus, root_id, store_path, lookup, 0, owner_name="beta")
+    await _accept_visible_deliveries(comms.bus, root_id, store_path, lookup, owner_name="beta")
     with Coordination(str(store_path)) as store:
         assignments = pending_sealed_assignments(store, lookup)
         deliveries = comms.bus.bus.deliveries_for_references(
