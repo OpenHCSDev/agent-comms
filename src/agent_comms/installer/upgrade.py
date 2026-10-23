@@ -42,7 +42,16 @@ from agent_comms.active_route import (
 )
 from agent_comms.bus import Bus
 from agent_comms.cli_bridges.shared import BridgeResume, Serve, SessionBridgeResumes
-from agent_comms.cli_commands import BusReadBack, CliCommand, PlannedReconcileCliCommand, ReadBackCliCommand, ReconcileStoresCliCommand, StartCliCommand, StopCliCommand
+from agent_comms.cli_commands import (
+    BusReadBack,
+    CliCommand,
+    PlannedReconcileCliCommand,
+    ReadBackCliCommand,
+    ReconcileStoresCliCommand,
+    StartCliCommand,
+    StopCliCommand,
+    TargetActionCliCommand,
+)
 from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.cli_protocol import CoreError
 from agent_comms.cli_result import CliResult
@@ -558,18 +567,15 @@ class Stack:
         """Use the restart request's receiving declaration in the selected runtime."""
         return self.probe(RunningOwnersProbe(root))
 
-    def owners(self, root: Path, command: type[CliCommand[CliResult]],
-               names: list[str]) -> None:
-        """Run the captured owner set together and join every request before proceeding.
-
-        Every request is submitted and the pool's exit joins them all; only then does a
-        failure propagate, naming each failed owner. ``Executor.map`` is not used: it
-        cancels the requests not yet started the moment the first result raises."""
-        with ThreadPoolExecutor(max_workers=max(1, len(names))) as pool:
-            requests = [pool.submit(self.cli, root, command, "--name", name) for name in names]
-        if failures := [request.exception() for request in requests if request.exception()]:
-            raise UpgradeRefused("; ".join(str(failure.args[0]) for failure in failures)
-                                 ) from failures[0]
+    def stop_owners(self, root: Path, names: list[str]) -> None:
+        """One target batch owns the signal pass and grace period for every owner."""
+        if not names:
+            return
+        invocation = TargetActionCliCommand.invocation(
+            "--operation", StopCliCommand.declared_name, "--targets", *names)
+        completed = self.probe(CliCommandProbe(("--root", str(root), *invocation)))
+        if completed.returncode:
+            raise UpgradeRefused(f"agent-comms {' '.join(invocation)}: {completed.stdout.strip()}")
 
     def start_owner(self, root: Path, name: str) -> OwnerStart:
         try:
@@ -941,7 +947,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
         holder.enter_context(held.holding())  # this run's own CLI calls read under its hold
         try:
             try:
-                self.installed.owners(self.root, StopCliCommand, running)
+                self.installed.stop_owners(self.root, running)
                 held = maintenance.retarget(held, self.staged.runtime)
                 holder.close()
                 holder.enter_context(held.holding())
@@ -1084,7 +1090,7 @@ class RetiringInstall(FreshInstall):
 
     def live(self, rehearsal: FreshRehearsal, report: InstallReport) -> RetiredRun:
         running = self.installed.running_owners(self.root)
-        self.installed.owners(self.root, StopCliCommand, running)
+        self.installed.stop_owners(self.root, running)
         retired = self.root.with_name(f"{self.root.name}.retired-{time.strftime('%Y%m%dT%H%M%S')}")
         self.root.rename(retired)
         return super().live(rehearsal, report).extended(
