@@ -68,7 +68,8 @@ from .cli_bridges.history import (
     OfflineHistory,
     OnlineHistory,
 )
-from .cli_bridges.shared import ChoiceTargetField, DeclaredOptions, SendRequest, TargetField
+from .cli_bridges.shared import ChoiceTargetField, SendRequest, TargetField
+from .declared_verb import DeclaredOptions
 from .cli_protocol import ArrivedMessage, EarlierItems
 from .cli_result import CliResult
 from .command import Command

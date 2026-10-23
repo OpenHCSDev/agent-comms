@@ -42,7 +42,7 @@ from pydantic import JsonValue
 
 
 from .bus_publication import DirectorOrigin
-from .cli_bridges.shared import DeclaredVerb
+from .declared_verb import DeclaredVerb
 from .cli_protocol import CoreError
 from .command import Command
 from .comms import Comms, client_wire, wire
