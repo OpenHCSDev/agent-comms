@@ -20,6 +20,7 @@ from agent_comms.goals import GoalChangedError
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.service_passes import ServicePassStore
+from agent_comms.repository_name import RepositoryName
 
 if TYPE_CHECKING:
     from agent_comms.bus import BusReader
@@ -29,7 +30,7 @@ if TYPE_CHECKING:
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.storage_rules import MemoryUse, StorageRule
     from agent_comms.thread_identity import ThreadIncarnation
-    from agent_comms.todos import OwnerRequest, Todo
+    from agent_comms.todos import OrderClaim, OwnerRequest, PullRequest, Todo
     from agent_comms.ui_model.unit_state import UnitState
 
 
@@ -307,6 +308,54 @@ class ReviewTimerUp(HeldOrderDue):
     def line(self) -> str:
         return (f"TIMER UP: {self.holder} {self.problem} at {self.since.clock()}, "
                 f"order {self.order} -> read its diff and judge it")
+
+
+@dataclass(frozen=True)
+class DeliveredHeadReview(DatedStandingRule):
+    """A recorded delivery waits on a review of its current ready PR head."""
+
+    problem: str
+    holder: str
+    order: str
+    repo: RepositoryName
+    pr: int
+    head: str
+    due_at: float
+    minutes: ClassVar[float] = 5
+
+    @classmethod
+    def for_head(
+        cls, problem: str, holder: str, order: str, claim: OrderClaim,
+        request: PullRequest, now: float,
+    ) -> tuple[Self, ...]:
+        due_at = claim.message.timestamp + cls.minutes * 60
+        if request.draft or request.has_head_review or now < due_at:
+            return ()
+        return (cls(problem, holder, order, claim.pull_request.repo,
+                    request.number, request.head, due_at),)
+
+    @classmethod
+    def scan_observed(
+        cls, comms: Comms, commander: str, observed: Sequence[UnitState],
+    ) -> tuple[Self, ...]:
+        return tuple(
+            rule
+            for state in observed
+            for todo in state.source.todos
+            for claim, request in state.source.pulls.claimed_heads(todo)
+            for rule in cls.for_head(
+                todo.id, todo.held().owner, todo.order.checked().id,
+                claim, request, state.source.now,
+            )
+        )
+
+    def began(self) -> float:
+        return self.due_at
+
+    def line(self) -> str:
+        return (f"DELIVERED HEAD NEEDS REVIEW: order {self.order} ({self.problem}), "
+                f"holder {self.holder}, {self.repo.to_wire()}#{self.pr} head {self.head} "
+                "-> commander reviews this head")
 
 
 @dataclass(frozen=True)

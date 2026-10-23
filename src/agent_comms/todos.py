@@ -88,6 +88,7 @@ from agent_comms.owner_requests import (
     RequestState,
 )
 from agent_comms.plan_phases import OrderPhase, UnplannedPhase
+from agent_comms.head_review import HeadReview
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.progress_claims import MergedClaim, ProgressClaim, WorkingClaim
 from agent_comms.recorded_time import (
@@ -520,6 +521,11 @@ class PullRequest(DeclaredFamily, affix="PullRequest"):
     base: str = field(default=WorkBranches.main, kw_only=True)
     problems: tuple[str, ...] = field(default=(), kw_only=True)
     draft: bool = field(default=False, kw_only=True)
+    status_contexts: tuple[str, ...] = field(default=(), kw_only=True)
+
+    @property
+    def has_head_review(self) -> bool:
+        return HeadReview.context in self.status_contexts
 
     def belongs_to(self, todo: Todo) -> bool:
         return (todo.id in self.problems
@@ -573,10 +579,12 @@ class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
     updated: str
     base: str
     draft: bool = field(default=False, kw_only=True)
+    status_contexts: tuple[str, ...] = field(default=(), kw_only=True)
 
     def parsed(self, problems: tuple[str, ...], orders: tuple[str, ...]) -> PullRequest:
         return UnmergedPullRequest(self.number, self.branch, self.head, _github_time(self.updated),
-                                   orders, base=self.base, problems=problems, draft=self.draft)
+                                   orders, base=self.base, problems=problems, draft=self.draft,
+                                   status_contexts=self.status_contexts)
 
 
 class UnmergedListedPullRequest(ListedPullRequest):
@@ -596,7 +604,8 @@ class MergedListedPullRequest(ListedPullRequest):
         return MergedPullRequest(self.number, self.branch, self.head, _github_time(self.updated),
                                  orders, base=self.base,
                                  merge=self.merge.oid, merged_at=_github_time(self.merged),
-                                 problems=problems, draft=self.draft)
+                                 problems=problems, draft=self.draft,
+                                 status_contexts=self.status_contexts)
 
 
 class PullRequests:
@@ -613,6 +622,13 @@ class PullRequests:
             self._todos.setdefault(todo.repo, {})[todo.id] = todo
         return self
 
+    def claimed_heads(self, todo: Todo) -> Iterator[tuple[OrderClaim, PullRequest]]:
+        """Join the current claim to its open PR in this same GitHub read."""
+        for claim in todo.order.commander_claims():
+            for request in self.listed(claim.pull_request.repo, UnmergedListedPullRequest, todo):
+                if request.number == claim.pull_request.number:
+                    yield claim, request
+
     def listed(self, repo: RepositoryName, kind: type[ListedPullRequest],
                todo: Todo) -> tuple[PullRequest, ...]:
         key = (repo, kind, todo.id)
@@ -627,7 +643,9 @@ class PullRequests:
         linked: dict[int, list[Todo]] = {}
         for candidate in problems.values():
             for number in {link.number for order in candidate.order_history
-                           for link in order.pull_requests if link.repo == repo}:
+                           for link in (*order.pull_requests,
+                                        *(claim.pull_request for claim in order.commander_claims()))
+                           if link.repo == repo}:
                 linked.setdefault(number, []).append(candidate)
         if not linked:
             for candidate in problems.values():
@@ -636,7 +654,9 @@ class PullRequests:
         selections = [
             f'p{number}: pullRequest(number: {number}) {{ number branch: headRefName '
             'head: headRefOid base: baseRefName draft: isDraft closed merge: mergeCommit { oid } '
-            'merged: mergedAt updated: updatedAt }' for number in linked]
+            'merged: mergedAt updated: updatedAt '
+            'head_statuses: commits(last: 1) { nodes { commit { status { contexts { context } } } } } }'
+            for number in linked]
         query = (f'query {{ repository(owner: {json.dumps(repo.owner)}, '
                  f'name: {json.dumps(repo.name)}) {{ {" ".join(selections)} }} }}')
         listed = repo.api(
@@ -645,7 +665,9 @@ class PullRequests:
             '(if .closed then '
             f'del(.merge,.merged) + {{kind: "{ClosedListedPullRequest.declared_name}"}} else '
             f'del(.merge,.merged) + {{kind: "{UnmergedListedPullRequest.declared_name}"}} end) else '
-            f'. + {{kind: "{MergedListedPullRequest.declared_name}"}} end) | del(.closed))')
+            f'. + {{kind: "{MergedListedPullRequest.declared_name}"}} end) '
+            '| . + {status_contexts: [.head_statuses.nodes[].commit.status.contexts[]?.context]} '
+            '| del(.closed,.head_statuses))')
         if listed.returncode:
             raise WorkBranchError(
                 listed.stderr.strip() or f"GitHub order lookup in {repo.to_wire()} failed.")
