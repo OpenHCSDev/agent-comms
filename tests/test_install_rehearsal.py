@@ -291,7 +291,7 @@ def test_installed_entry_reports_completion_after_target_source_retirement(
     result = FieldCodec.decode(Upgrade, FieldCodec.parse(completed.stdout))
     assert isinstance(result, InstalledUpgrade) and type(result.live) is live_kind
     # The bus now belongs to the installed runtime, so its own CLI reads it.
-    read = subprocess.run([outgoing, "--root", root, "history", "--target", "#comms"],
+    read = subprocess.run([outgoing, "--root", root, "history", "#comms"],
                           env=installed_home, capture_output=True, text=True, check=True, timeout=60)
     page = FieldCodec.parse(read.stdout)[ChannelHistoryPageResult.messages_key]
     history = tuple(reversed(FieldCodec.decode(tuple[Message, ...], page)))

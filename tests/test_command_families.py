@@ -135,9 +135,9 @@ def test_invalid_runtime_parameters_use_canonical_decode_and_domain_errors(param
 @pytest.mark.parametrize(
     "arguments,result_type,per_root",
     [
-        (["history", "--target", "#team"], ChannelHistoryPageResult, 1),
-        (["history", "--target", "#any"], EverythingHistoryPageResult, 2),
-        (["history", "--target", "@alice", "--as", "bob"], DmHistoryPageResult, 1),
+        (["history", "#team"], ChannelHistoryPageResult, 1),
+        (["history", "#any"], EverythingHistoryPageResult, 2),
+        (["history", "alice", "--as", "bob"], DmHistoryPageResult, 1),
     ],
 )
 def test_normal_history_cli_keeps_migrated_content_and_source_identity(
