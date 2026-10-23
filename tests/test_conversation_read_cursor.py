@@ -5,6 +5,7 @@ from agent_comms.read_basis import ChannelConversation, ConversationCursor, Read
 from agent_comms.read_ledger import ReadDocument
 from agent_comms.recorded_bus import RecordedBusIdentity
 from conftest import installed_comms
+from agent_comms.threads import Thread
 
 
 def test_prefixes_and_alias_union_stay_in_their_conversation():
@@ -48,7 +49,7 @@ def test_add_closes_gaps_without_losing_sparse_reads_or_mutating_the_source():
 def setup_conversations(root):
     comms = installed_comms(root)
     for name in ("sender", "reader"):
-        comms.registry.declare(comms.registry.new_thread(
+        comms.registry.declare(Thread(
             name, frozenset({"a", "b"}), str(root),
         ))
     messages = [comms.messaging.send("sender", target, target).message

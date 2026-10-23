@@ -51,6 +51,7 @@ from agent_comms.maintenance_barrier import (
 )
 from agent_comms.store_files import _store_lock
 from agent_comms.tools import CommsChannelsTool, ReadTool, ToolRequest, invoke_tool
+from agent_comms.threads import Thread
 
 LIST = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
 
@@ -92,7 +93,7 @@ def test_connector_round_trip_reads_this_bus_as_its_caller(comms, tmp_path, regi
     import subprocess
     import sys
 
-    comms.registry.declare(comms.registry.new_thread("claude-ai", frozenset(), str(comms.root)))
+    comms.registry.declare(Thread("claude-ai", frozenset(), str(comms.root)))
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
@@ -139,7 +140,7 @@ def store(tmp_path: Path) -> ConnectorStore:
 @pytest.fixture
 def connector(store: ConnectorStore, root: Path, comms: Comms):
     for created_at, name in enumerate(("worker", "claude-ai"), start=1):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(root), created_at=created_at))
+        comms.registry.declare(Thread(name, frozenset(), str(root), created_at=created_at))
     return Connector(store, "http://127.0.0.1:18766", root)
 
 
@@ -429,7 +430,7 @@ async def test_connector_lists_every_tool(client, store, comms):
 
 
 async def test_connector_reads_two_newest_first_conversation_pages(client, store, comms):
-    comms.registry.declare(comms.registry.new_thread("commander", frozenset(), str(comms.root)))
+    comms.registry.declare(Thread("commander", frozenset(), str(comms.root)))
     originals = [comms.messaging.send("worker", "claude-ai", f"history {number}").message
                  for number in range(5)]
     comms.messaging.send("commander", "claude-ai", "not this conversation")

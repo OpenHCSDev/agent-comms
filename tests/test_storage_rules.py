@@ -8,11 +8,12 @@ import runpy
 import pytest
 
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec
+from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import FieldCodec, RecordProblems
 from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.storage_rules import (
     CheckoutStorageEffect, RemoveCheckoutStorageEffect, StorageRoots, StorageRule,
-    StorageDenied, StorageProjection, UnitStorage, shell_storage_effects,
+    StorageDenied, StorageProjection, UnassignedThreadStorage, UnitStorage, shell_storage_effects,
 )
 from agent_comms.threads import Thread
 
@@ -47,17 +48,25 @@ def test_storage_paths_round_trip_inside_collections(tmp_path):
         FieldCodec.decode(StorageRoots, {**encoded, 'checkouts': []})
 
 
-def test_registry_rule_supplies_new_thread_roots(tmp_path):
+def test_registry_assigns_a_new_thread_its_roots_at_declaration(tmp_path):
     import json
     (tmp_path / 'storage.json').write_text(json.dumps({
         'scratch_base': str(tmp_path / 'scratch'), 'floor_gib': 47,
     }))
     comms = wire(tmp_path)
     rule = comms.registry.storage_rule
-    thread = comms.registry.new_thread('worker', frozenset(), str(tmp_path / 'home'))
-    assert thread.storage_roots.scratch == tmp_path / 'scratch' / 'worker'
+    thread = Thread('worker', frozenset(), str(tmp_path / 'home'))
+    assert thread.storage_roots == UnassignedThreadStorage()
     assert rule.floor_gib == 47
-    assert comms.registry.declare(thread).storage_roots == thread.storage_roots
+    declared = comms.registry.declare(thread)
+    assert declared.storage_roots == StorageRoots(tmp_path / 'scratch' / 'worker')
+    assert comms.registry.require('worker').storage_roots == declared.storage_roots
+    stored = declared.to_wire()
+    assert FieldCodec.decode(Thread, stored) == declared
+    with pytest.raises(RecordProblems):
+        FieldCodec.decode(Thread, {**stored, 'storage_roots': None})
+    with pytest.raises(RelationViolationError):
+        thread.to_wire()
 
 
 def test_removed_worktree_frees_quota_and_another_home_cannot_claim_its_parent(tmp_path):
@@ -71,8 +80,8 @@ def test_removed_worktree_frees_quota_and_another_home_cannot_claim_its_parent(t
     rule = StorageRule(checkout_base=base, scratch_base=tmp_path / 'scratch', floor_gib=0, max_checkouts=1)
     comms = wire(tmp_path / 'wire')
     comms.registry.storage_rule = rule
-    thread = comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(home)))
-    other = comms.registry.declare(comms.registry.new_thread('other', frozenset(), str(tmp_path)))
+    thread = comms.registry.declare(Thread('worker', frozenset(), str(home)))
+    other = comms.registry.declare(Thread('other', frozenset(), str(tmp_path)))
     assert rule.checkouts_of(thread) == (home, old)
     storage = UnitStorage.read(rule, thread)
     assert storage.home == home
@@ -105,7 +114,7 @@ def test_cannot_remove_current_project_but_can_remove_another_checkout(tmp_path)
     project_link.symlink_to(current, target_is_directory=True)
     comms = wire(tmp_path / 'wire')
     comms.registry.storage_rule = StorageRule(checkout_base=base, scratch_base=tmp_path / 'scratch')
-    thread = comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(project_link)))
+    thread = comms.registry.declare(Thread('worker', frozenset(), str(project_link)))
     assert thread.project_path == current
     assert UnitStorage.read(comms.registry.storage_rule, thread).home == current
     with pytest.raises(StorageDenied):

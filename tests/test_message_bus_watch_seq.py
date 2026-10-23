@@ -11,6 +11,7 @@ from agent_comms.publisher import Publisher
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.registration import Registration
 from bus_record_fixture import append_reply
+from agent_comms.threads import Thread
 
 
 @pytest.mark.asyncio
@@ -18,7 +19,7 @@ async def test_real_message_bus_watch_recipient_suffix_and_rollback(bus):
     root = bus.path.parent
     registry = Registration(RegistryFile.path_in(root))
     people = {
-        name: registry.declare(registry.new_thread(
+        name: registry.declare(Thread(
             name, frozenset(), str(root))).incarnation.require_recorded()
         for name in ("sender", "target", "idle")
     }

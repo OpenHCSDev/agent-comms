@@ -76,7 +76,7 @@ pytest_plugins = ("test_holder_standing_rules", "test_unowned_checkout_work", "t
 
 def thread(name: str, root: Path, created: float) -> Thread:
     thread_registration = Registration(Path(root) / "registry.json")
-    return thread_registration.new_thread(name, frozenset(), str(root), created_at=created)
+    return Thread(name, frozenset(), str(root), created_at=created)
 
 
 def order(source: SourceRepository):
@@ -306,7 +306,7 @@ def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, durable_home):
     }))
     monkeypatch.setenv("PATH", os.pathsep.join((str(binaries), os.environ["PATH"])))
     Bus.install(Bus.path_in(tmp_path))
-    lead = Registration(tmp_path / "registry.json").new_thread(
+    lead = Thread(
         'lead', frozenset(), str(source.checkout), created_at=1.0)
     rule = StorageRule(checkout_base=source.checkout.parent)
     (tmp_path / "storage.json").write_text(json.dumps(FieldCodec.encode(rule)))

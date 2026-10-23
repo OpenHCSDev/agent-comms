@@ -21,11 +21,12 @@ from agent_comms.goal_presentation import PausedExecution, UnrecordedBlockExecut
 from agent_comms.goals import Goal
 from agent_comms.tools import ToolRequest
 from agent_comms.tool_caller import ThreadCaller
+from agent_comms.threads import Thread
 
 
 def _owner(tmp_path):
     comms = installed_comms(tmp_path)
-    comms.registry.declare(comms.registry.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
+    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Finish selected work"))
     assert goal is not None
     return comms, goal

@@ -24,6 +24,7 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.wake_candidate_index import WakeCandidateIndex
 from agent_comms.wake_policy import FullWake, MessageAudience
 from bus_record_fixture import append_reply, record_from
+from agent_comms.threads import Thread
 
 
 @pytest.fixture
@@ -98,7 +99,7 @@ def test_startup_observation_is_unconditional_even_without_messages(bus, owner):
 
 def test_settled_observation_filters_committed_recipient_suffix(bus, peer):
     registry = Registration(RegistryFile.path_in(bus.path.parent))
-    thread = registry.declare(registry.new_thread(
+    thread = registry.declare(Thread(
         "observed", frozenset(), str(bus.path.parent)))
     recipient = thread.incarnation.require_recorded()
     first = append_reply(bus, peer, recipient)

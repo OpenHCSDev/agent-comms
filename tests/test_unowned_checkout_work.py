@@ -44,6 +44,7 @@ from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.ui_model.unit_state import UnitState, Unreadable
 from agent_comms.work_branches import UnreadableCheckoutRead, WorkBranches
 from order_scope_fixture import FIX_SCOPE
+from agent_comms.threads import Thread
 
 
 def git(directory: Path, *arguments: str) -> str:
@@ -134,7 +135,7 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
     spare = tmp_path / 'idle-project'
     git(home, 'worktree', 'add', '-q', '-b', 'idle-home', str(spare))
     for name, worktree in (('lead', home), ('worker', home), ('idle', spare)):
-        c.registry.declare(c.registry.new_thread(
+        c.registry.declare(Thread(
             name, frozenset(), str(worktree), execution=ExternalThreadExecution))
     request = c.goals.todos.add_request(
         c.registry.require('lead').incarnation, 'Keep changes with their author').id

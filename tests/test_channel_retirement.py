@@ -17,6 +17,7 @@ from agent_comms.messages import InfoKind, Membership, Message
 from agent_comms.page_traversal import LiveCursor
 from bus_history import read_history
 from test_private_human_ingress import _root
+from agent_comms.threads import Thread
 
 
 def saved_catalog(root):
@@ -49,7 +50,7 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
     Bus.install(Bus.path_in(tmp_path))
     comms = wire(tmp_path)
     for name, tags in (("a", {"api"}), ("b", {"ui"}), ("other", set())):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(tags), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset(tags), str(tmp_path)))
     original = saved_catalog(tmp_path)
     rows = [
         Message("other", target, str(i), InfoKind, timestamp=i, seq=i)

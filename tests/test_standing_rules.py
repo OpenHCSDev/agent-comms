@@ -5,6 +5,7 @@ from dataclasses import replace
 
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.todos import (DirectiveText)
+from agent_comms.threads import Thread
 
 
 
@@ -26,7 +27,7 @@ def working(comms, name, created):
     if name in comms.registry.all_threads():
         comms.registry.register(replace(comms.registry.require(name), session_file=RegistrySessionLocation.from_path(str(path), comms.root)))
     else:
-        comms.registry.declare(comms.registry.new_thread(
+        comms.registry.declare(Thread(
             name, frozenset(), str(comms.root), session_file=RegistrySessionLocation.from_path(str(path), tmp_path), created_at=created))
 
 

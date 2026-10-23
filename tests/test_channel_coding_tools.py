@@ -30,6 +30,7 @@ from agent_comms.coordination_session import NativeBoundary
 from agent_comms.native_tools import CodingTool
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import ToolCallContent
+from agent_comms.threads import Thread
 
 
 def test_create_claim_competes_before_file_exists_and_releases_without_creation():
@@ -40,7 +41,7 @@ def test_create_claim_competes_before_file_exists_and_releases_without_creation(
         work.mkdir()
         c = wire(root)
         for name, created in [("a", 21.0), ("b", 22.0)]:
-            thread = c.registry.new_thread(name, frozenset({'team'}), str(work), created_at=created)
+            thread = Thread(name, frozenset({'team'}), str(work), created_at=created)
             c.registry.declare(replace(thread, process_identity=ProcessIdentity.capture(os.getpid())))
         Bus.install(Bus.path_in(c.root))
         resource = WritableFileClaim(Path("new/nested/file.py"))
@@ -75,7 +76,7 @@ def test_stopped_holder_reclaimed_in_copied_root(tmp_path, monkeypatch, existing
         resource.resource.write_text("original\n")
     original = wire(tmp_path / "original")
     for name in ("holder-a", "holder-b"):
-        thread = original.registry.new_thread(name, frozenset(), str(work))
+        thread = Thread(name, frozenset(), str(work))
         original.registry.declare(replace(
             thread, process_identity=ProcessIdentity.capture(os.getpid())
         ))

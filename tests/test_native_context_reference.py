@@ -43,6 +43,7 @@ from agent_comms.selected_triage import (
     FullSelectedTriage,
     IgnoreSelectedTriage,
 )
+from agent_comms.threads import Thread
 
 
 def cursor():
@@ -139,7 +140,7 @@ def historical_source(recorded):
 def test_cursor_owner_enforces_exact_settlement_without_restricting_refresh(
     tmp_path, recorded, historical_source, make_owner, permitted,
 ):
-    thread = wire(tmp_path).registry.new_thread("owner", frozenset(), str(tmp_path))
+    thread = Thread("owner", frozenset(), str(tmp_path))
     original = replace(
         recorded, owner_lookup=thread.incarnation.require_recorded().lookup,
         verdict=DecidedTriageRecord(IgnoreSelectedTriage),

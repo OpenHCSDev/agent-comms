@@ -35,6 +35,7 @@ from agent_comms.goal_generation import (
 )
 from agent_comms.pi_counts import PiCount, UnreportedCount
 from agent_comms.pi_payloads import PiUsage
+from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(
     os.name != "posix", reason="POSIX fork and directory fsync crash instrumentation."
@@ -430,7 +431,7 @@ def claimed_owner(comms):
         [sys.executable, "-c", "import time; time.sleep(300)"], start_new_session=True,
     )
     try:
-        owner = comms.registry.new_thread(
+        owner = Thread(
             "stopped-goal", frozenset(), str(comms.root),
             process_identity=ProcessIdentity.capture(child.pid),
         )

@@ -4,11 +4,12 @@ import pytest
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import invoke_tool
+from agent_comms.threads import Thread
 
 
 def conversation(comms):
     for name in ("claude-ai", "commander", "user", "other"):
-        comms.registry.declare(comms.registry.new_thread(
+        comms.registry.declare(Thread(
             name=name, tags=frozenset(), worktree="/work",
         ))
     expected = []

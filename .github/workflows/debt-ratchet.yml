@@ -101,7 +101,9 @@ jobs:
         with:
           python-version-file: pyproject.toml
       - name: Install uv
-        run: python -m pip install uv==0.12.0
+        run: |
+          python -m pip install packaging
+          python -m pip install "$(python -I src/agent_comms/installer/declared_uv.py pyproject.toml)"
       - name: Install non-editable Core and test dependencies
         run: python -m pip install -e src/agent_comms/skills/refactor-audit '.[dev]'
       - name: Build the installer's private runtime and rehearse through its CLI
@@ -159,7 +161,8 @@ jobs:
 
       - name: Install agent-comms
         run: |
-          python -m pip install uv==0.12.0
+          python -m pip install packaging
+          python -m pip install "$(python -I src/agent_comms/installer/declared_uv.py pyproject.toml)"
           uv sync --locked --all-extras
           echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
 

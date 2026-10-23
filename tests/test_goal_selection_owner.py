@@ -15,13 +15,14 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.goal_states import ActiveGoal
 from goal_owner_fixture import canonical_goal_wire
+from agent_comms.threads import Thread
 
 
 @pytest.fixture
 def selected_goal(tmp_path):
     comms = canonical_goal_wire(tmp_path / "wire")
     for name in ("worker", "peer", "other"):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Original objective"))
     return comms, goal
 

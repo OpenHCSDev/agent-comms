@@ -28,7 +28,7 @@ def installed_bus(tmp_path: Path):
 
 def _peer(root: Path, name: str) -> Thread:
     thread_registration = Registration(Path(root) / "registry.json")
-    return thread_registration.new_thread(name, frozenset({'talk'}), str(root), process_identity=ProcessIdentity.capture(os.getpid()))
+    return Thread(name, frozenset({'talk'}), str(root), process_identity=ProcessIdentity.capture(os.getpid()))
 
 
 def _mark(comms, peer, root, page):
@@ -95,7 +95,7 @@ def test_viewer_rebind_and_foreign_worktree_reject_old_basis(tmp_path: Path):
         comms.views.mark_page_read(page, worktree=str(tmp_path / "foreign"))
     comms.registry.unregister(viewer)
     comms.registry.remove(viewer)
-    comms.registry.declare(comms.registry.new_thread(viewer, frozenset(), str(tmp_path), role=UserThreadRole))
+    comms.registry.declare(Thread(viewer, frozenset(), str(tmp_path), role=UserThreadRole))
     comms.messaging.send("peer", viewer, "new viewer unseen").message.message_id
     before = comms.bus.pending_count(viewer, CommandTarget.named("peer"))
     assert before == 1
@@ -111,7 +111,7 @@ def test_old_viewer_alive_but_new_human_selected_rejects_stale_basis(tmp_path: P
     comms.messaging.send("peer", old_viewer, "old viewer painted").message.message_id
     page = comms.views.dm_display_page(ThreadTarget("peer"), worktree=str(tmp_path))
     assert isinstance(page.selection, DMSelection) and page.selection.basis.viewer == old_viewer
-    comms.registry.declare(comms.registry.new_thread('new_user', frozenset(), str(tmp_path), role=UserThreadRole))
+    comms.registry.declare(Thread('new_user', frozenset(), str(tmp_path), role=UserThreadRole))
     # Normal registry rename retains the old human declaration but moves its
     # insertion position behind new_user. user_identity now selects new_user.
     comms.registry.rename(old_viewer, "old_user")

@@ -39,6 +39,7 @@ from agent_comms.native_prompt_send import (
 from agent_comms.store_files import store_lock_path
 from conftest import installed_comms
 from test_coordinated_runtime import tmp_path as private_root_fixture
+from agent_comms.threads import Thread
 
 tmp_path = private_root_fixture
 
@@ -154,7 +155,7 @@ class PreflightDrainWriteCase(PromptWriteCase):
 async def _same_loop_backpressure_case(directory: Path, case_name: str):
     case = PromptWriteCase.member_named(case_name)()
     comms = installed_comms(directory / "wire")
-    comms.registry.declare(comms.registry.new_thread(
+    comms.registry.declare(Thread(
         "owner", frozenset(), str(directory),
         process_identity=ProcessIdentity.capture(os.getpid()),
     ))

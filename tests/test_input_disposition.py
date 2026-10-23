@@ -25,6 +25,7 @@ from agent_comms.input_origin import DeliveredInput, UndeliveredInput, WireInput
 from agent_comms.message_reference import MessageReference
 from agent_comms.text_digest import TextDigest
 from stored_inputs import stored_inputs
+from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize("invalid_text", [["list"], [], {"text": "dict"}, 7, False, None])
@@ -74,7 +75,7 @@ def test_unresolved_projection_follows_rename_without_private_receipts(tmp_path:
 
     comms = wire(tmp_path)
     comms.registry.declare(
-        comms.registry.new_thread(name='kid', tags=frozenset(), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+        Thread(name='kid', tags=frozenset(), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     store = InputDispositions(comms.root)
     store.record("bus:7", seq=7, owner="kid", claim_scope=1, target="#review", text="exact source")

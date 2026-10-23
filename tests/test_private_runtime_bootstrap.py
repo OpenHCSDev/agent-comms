@@ -11,13 +11,14 @@ from agent_comms.comms import wire
 from agent_comms.coordination_errors import SchemaVersionError
 from agent_comms.coordinator import Coordination
 from bus_history import read_history
+from agent_comms.threads import Thread
 
 
 def test_drifted_private_owner_refused_and_readers_leave_missing_schema_alone(tmp_path):
     comms = wire(tmp_path / "wire")
     comms.registry.prepare_native_root()
     Bus.install(Bus.path_in(comms.root))
-    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('owner', frozenset(), str(tmp_path)))
     database = comms.root / "coordination.sqlite3"
     with sqlite3.connect(database) as db:
         db.execute("DROP TABLE claim_batch_members")

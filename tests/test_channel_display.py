@@ -15,6 +15,7 @@ from agent_comms.message_page import PageBounds
 from agent_comms.page_traversal import LiveCursor, NewerTraversal
 from agent_comms.read_basis import ChannelDisplayScope, DMDisplayScope, NamedViewer
 from bus_record_fixture import prepare_native_comms
+from agent_comms.threads import Thread
 
 
 def test_missing_painted_scope_is_a_stale_bound():
@@ -39,7 +40,7 @@ def populated(tmp_path):
         ("bob", {"ui"}),
         ("outsider", set()),
     ):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(tags), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset(tags), str(tmp_path)))
     return comms
 
 
