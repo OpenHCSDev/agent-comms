@@ -1464,8 +1464,58 @@ class SQLiteUserVersion(TypedRow):
     user_version: int
 
 
+class DeclaredSchemaFacts:
+    """The schema facts a row derives once from its declaration, and the one fact the
+    whole family shares. Follows ``DeclaredFamily`` in a row's bases, so every row
+    declaration reaches ``__init_subclass__`` here."""
+
+    @ClassFact
+    @staticmethod
+    def _columns(cls: type[TypedTable]) -> tuple[_Field, ...]:
+        """Every stored column: the record's fields, each generated column after the field
+        declared before it."""
+        fields = cls._fields
+        if any(not item.column.writable for item in fields):
+            raise TypeError(
+                f"{cls.__name__} must declare generated columns as ClassVar[Generated]")
+        names = {item.name for item in fields}
+        following: dict[str, list[_Field]] = {}
+        for owner in cls.__mro__:
+            declared = tuple(
+                annotationlib.get_annotations(owner, format=annotationlib.Format.STRING))
+            for position, name in enumerate(declared):
+                match vars(owner).get(name):
+                    case Generated() as declaration:
+                        match [before for before in declared[:position] if before in names]:
+                            case [*_, anchor]:
+                                following.setdefault(anchor, []).append(
+                                    declaration.table_column(name))
+                            case []:
+                                raise TypeError(f"{cls.__name__}.{name} follows no record field")
+        return tuple(column for item in fields for column in (item, *following.get(item.name, ())))
+
+    @ClassFact
+    @staticmethod
+    def schema_names(cls: type[TypedTable]) -> frozenset[str]:
+        """Every object this row declares, by name; overrides change only the SQL."""
+        return frozenset(cls.schema_objects())
+
+    @FamilyFact
+    @staticmethod
+    def claimed_names(cls: type[DeclaredSchemaFacts]) -> frozenset[str]:
+        """Every object name any row of the family declares, held once on this class;
+        each new row declaration forgets it, so it always covers the whole registry."""
+        return frozenset(name for row in TypedTable.members_with(TypedTable)
+                         for name in row.schema_names)
+
+    def __init_subclass__(cls) -> None:
+        super().__init_subclass__()
+        FamilyFact.forget_declared(cls)
+
+
 class TypedTable(
-    FrozenColumns, TypedRow, DeclaredFamily, affix="Row", discovery_package="agent_comms"
+    FrozenColumns, TypedRow, DeclaredFamily, DeclaredSchemaFacts,
+    affix="Row", discovery_package="agent_comms",
 ):
     """The row declaration owns its table; no separate table/schema registry.
 
@@ -1499,29 +1549,6 @@ class TypedTable(
     def references(cls) -> tuple[ForeignKey, ...]:
         # A method permits mutually referring row classes without string names.
         return ()
-
-    @ClassFact
-    @staticmethod
-    def _columns(cls: type[TypedTable]) -> tuple[_Field, ...]:
-        """Every stored column: the record's fields, each generated column after the field
-        declared before it."""
-        fields = cls._fields
-        if any(not item.column.writable for item in fields):
-            raise TypeError(f"{cls.__name__} must declare generated columns as ClassVar[Generated]")
-        names = {item.name for item in fields}
-        following: dict[str, list[_Field]] = {}
-        for owner in cls.__mro__:
-            declared = tuple(annotationlib.get_annotations(owner, format=annotationlib.Format.STRING))
-            for position, name in enumerate(declared):
-                match vars(owner).get(name):
-                    case Generated() as declaration:
-                        match [before for before in declared[:position] if before in names]:
-                            case [*_, anchor]:
-                                following.setdefault(anchor, []).append(
-                                    declaration.table_column(name))
-                            case []:
-                                raise TypeError(f"{cls.__name__}.{name} follows no record field")
-        return tuple(column for item in fields for column in (item, *following.get(item.name, ())))
 
     @classmethod
     def _computed_columns(cls) -> frozenset[str]:
@@ -1588,23 +1615,6 @@ class TypedTable(
         table = _identifier(cls.declared_name)
         return (f"CREATE TABLE {existence}{table} ({', '.join(definitions)}) STRICT"
                 + (", WITHOUT ROWID" if cls.without_rowid else ""))
-
-    @ClassFact
-    @staticmethod
-    def schema_names(cls: type[TypedTable]) -> frozenset[str]:
-        """Every object this row declares, by name; overrides change only the SQL."""
-        return frozenset(cls.schema_objects())
-
-    @FamilyFact
-    @staticmethod
-    def claimed_names(cls: type[TypedTable]) -> frozenset[str]:
-        """Every object name any row of the family declares, held once on ``TypedTable``;
-        each new row declaration forgets it, so it always covers the whole registry."""
-        return frozenset(name for row in cls.members_with(cls) for name in row.schema_names)
-
-    def __init_subclass__(cls, **kwargs: str | None) -> None:
-        super().__init_subclass__(**kwargs)
-        TypedTable.__dict__["claimed_names"].forget(cls)
 
     @classmethod
     def schema_objects(cls, *, if_not_exists: bool = False) -> dict[str, str]:

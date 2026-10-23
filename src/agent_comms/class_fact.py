@@ -22,13 +22,11 @@ class ClassFact[Owner, Value]:
         """The class whose namespace holds the value read through ``owner``."""
         return owner
 
-    def __get__(self, instance: Owner | None, owner: type[Owner]) -> Value:
+    def __get__(self, instance: object, owner: type[Owner]) -> Value:
         holder = self.holder(owner)
-        try:
-            value: Value = holder.__dict__[self.slot]
-        except KeyError:
-            value = self.derive(holder)
-            setattr(holder, self.slot, value)
+        if self.slot not in holder.__dict__:
+            setattr(holder, self.slot, self.derive(holder))
+        value: Value = holder.__dict__[self.slot]
         return value
 
     def forget(self, owner: type[Owner]) -> None:
@@ -48,3 +46,11 @@ class FamilyFact[Owner, Value](ClassFact[Owner, Value]):
 
     def holder(self, owner: type[Owner]) -> type[Owner]:
         return self.root
+
+    @staticmethod
+    def forget_declared(member: type) -> None:
+        """Forget every family fact ``member`` inherits, so the next read counts it."""
+        inherited = [fact for base in member.__mro__ for fact in vars(base).values()
+                     if isinstance(fact, FamilyFact)]
+        for fact in inherited:
+            fact.forget(member)
