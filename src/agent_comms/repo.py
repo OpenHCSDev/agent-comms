@@ -296,16 +296,30 @@ class Checkout:
         """Changes outside the pinned submodules, which retiring the tree would lose."""
         return Repo.git(self.path, "status", "--porcelain", "--ignore-submodules=all")
 
+    def discard_generated(self) -> None:
+        """A persistent checkout has no run-owned changes to discard."""
+
     def retire(self) -> None:
-        """Remove this worktree. Git refuses any tree holding submodules without --force,
-        so this owner checks for held work itself and then forces."""
+        """Retire a clean worktree after releasing its pinned submodules."""
         held = self.held_work()
         if held:
             raise CheckoutHoldsWorkError(self.path, held)
         common = Path(
             Repo.git(self.path, "rev-parse", "--path-format=absolute", "--git-common-dir").strip()
         )
-        Repo.git(common.parent, "worktree", "remove", "--force", str(self.path))
+        directory = Path(Repo.git(self.path, "rev-parse", "--absolute-git-dir").strip())
+        if directory == common:
+            raise ValueError(f"Cannot retire the primary checkout: {self.path}")
+        self.discard_generated()
+        if self.submodules():
+            Repo.git(self.path, "submodule", "deinit", "--all")
+            # Deinit empties the working directory but retains this worktree's
+            # module repositories. Git still refuses removal while they exist.
+            modules = directory / "modules"
+            if modules.exists():
+                shutil.rmtree(modules)
+        Repo.git(common.parent, "worktree", "remove", str(self.path))
+        Repo.git(common.parent, "worktree", "prune")
 
 
 class ScratchCheckout(Checkout):
@@ -313,3 +327,8 @@ class ScratchCheckout(Checkout):
 
     def held_work(self) -> str:
         return ""
+
+    def discard_generated(self) -> None:
+        """Only a run-owned disposable tree may discard its generated build inputs."""
+        Repo.git(self.path, "restore", "--staged", "--worktree", "--", ".")
+        Repo.git(self.path, "clean", "-fd")

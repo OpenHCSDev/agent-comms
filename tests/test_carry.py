@@ -29,6 +29,7 @@ from agent_comms.installer.carry import (
 )
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.commands import InstallCommands
+from agent_comms.installer.interpreter_operation import CarryPhase
 from agent_comms.installer.interpreter_operation import ProbeRequest, TargetProgram
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.installer.upgrade import (
@@ -107,7 +108,7 @@ def test_pending_uses_one_worker_on_a_real_bus(comms, stack, private_directory, 
     (tree.path / "tools").symlink_to(REPO / "tools", target_is_directory=True)
     practice = PracticeBus(private_directory / "practice",
                            PracticeCopy(comms.root, private_directory / "practice" / "bus"),
-                           comms.root, private_directory / "spill")
+                           comms.root, private_directory / "spill", stack.commands.clock)
     if pending:
         # ParkedThreads must run before CommanderProjectCarry can decode this.
         (comms.root / "commander.json").write_text('{"parked": []}')
@@ -119,13 +120,13 @@ def test_pending_uses_one_worker_on_a_real_bus(comms, stack, private_directory, 
         if answer.changed:
             position = index
             break
-    before = len(staged.commands.ran)
+    before = len(staged.commands.clock.phases)
     assert practice.pending(chain, staged) == chain.steps[position:]
-    commands = staged.commands.ran[before:]
-    assert len(commands) == 1
-    assert commands[0].command.endswith(" CarryProbe")
+    phases = staged.commands.clock.phases[before:]
+    assert phases[0].phase == CarryPhase(FirstPendingOperation.declared_name)
+    assert len(phases) == 1 + min(position + 1, len(chain.steps))
     assert practice.pending(CarryChain(()), staged) == ()
-    assert len(staged.commands.ran) == before + 1
+    assert len(staged.commands.clock.phases) == before + len(phases)
     # Every pass, the per-step reads and the whole-chain pending, went to one interpreter.
     assert len(staged.commands.workers) == 1
     assert not practice.copy.copied

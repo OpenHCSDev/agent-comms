@@ -86,7 +86,7 @@ def test_next_install_completes_a_killed_registry_restore(tmp_path, installed_ru
     with pytest.raises(GitCommandError):
         upgrade(
             tmp_path / "missing-checkout", comms.root, "HEAD", UnnamedInstaller(), RehearsalMode(),
-            False, spill, tmp_path / "install-scratch", lambda: None, InstallReport(),
+            False, spill, tmp_path / "install-scratch", lambda: None, InstallReport(), phases=[],
         )
     assert {path: RegistryStore.digest(path) for path in registry.written} == expected
     assert comms.registry.require("worker").title != GivenThreadText("Carried title")
@@ -109,7 +109,7 @@ def test_next_install_leaves_a_completed_installs_backup_alone(tmp_path, install
     with pytest.raises(GitCommandError):
         upgrade(
             tmp_path / "missing-checkout", comms.root, "HEAD", UnnamedInstaller(), RehearsalMode(),
-            False, spill, tmp_path / "install-scratch", lambda: None, InstallReport(),
+            False, spill, tmp_path / "install-scratch", lambda: None, InstallReport(), phases=[],
         )
     assert {path: RegistryStore.digest(path) for path in registry.written} == carried
     assert comms.registry.require("worker").title == GivenThreadText("Carried title")

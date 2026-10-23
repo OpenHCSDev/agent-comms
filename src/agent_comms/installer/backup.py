@@ -89,7 +89,6 @@ class BackupReport:
 class RestoreSpace:
     bytes: int
     free: int
-    seconds: float
 
     @property
     def needed(self) -> int:
@@ -97,9 +96,8 @@ class RestoreSpace:
 
     @classmethod
     def measure(cls, rewritten_bytes: int, filesystem: Path) -> Self:
-        started = time.perf_counter()
         free = shutil.disk_usage(filesystem).free
-        return cls(rewritten_bytes, free, time.perf_counter() - started)
+        return cls(rewritten_bytes, free)
 
     def require(self) -> None:
         if self.free < self.needed:

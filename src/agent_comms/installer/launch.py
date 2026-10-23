@@ -15,7 +15,7 @@ import sys
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from traceback import extract_tb
 from typing import Annotated, TextIO
@@ -26,6 +26,7 @@ from agent_comms.cli_commands import InstallCliCommand, InstallResult
 from agent_comms.field_codec import FieldCodec, Id128Text, PathText
 from agent_comms.installer.backup import StoreBackup, UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
+from agent_comms.installer.interpreter_operation import InstallClock, InstallerProcessPhase, LauncherPhase, PhaseTiming, PreparePhase, PublicationPhase, TreeClosePhase
 from agent_comms.installer.reporting import (
     FinishedInstall, InstallOutcome, RootWriter, UnfinishedInstall, UnpostedWriter,
 )
@@ -68,23 +69,29 @@ class InstallReport(MroDispatch):
                 f"{frame.filename}:{frame.lineno}")
 
     @contextmanager
-    def running(self, tree: TargetTree) -> Iterator[None]:
+    def running(self, tree: TargetTree, clock: InstallClock) -> Iterator[None]:
         """Every writer runs installed artifacts from outside ``tree``, so the report follows
         the tree's cleanup and a cleanup failure is the install's failure."""
         try:
-            with tree:
+            tree.__enter__()
+            try:
                 yield
+            finally:
+                with TreeClosePhase().running(clock):
+                    tree.__exit__(*sys.exc_info())
             lines = self.outcome.lines()
         except BaseException as error:
             failure = (*next(self.handlers_for(error))(error), *self.bridges.lines())
             try:
-                self.writer.post(failure)
+                with PublicationPhase("failure report").running(clock):
+                    self.writer.post(failure)
             except BaseException as publication_error:
                 error.add_note(f"Install failure report also failed: {publication_error}")
                 print(f"install: failure report also failed: {publication_error}", file=sys.stderr)
             raise
         else:
-            self.writer.post(lines)
+            with PublicationPhase("finished report").running(clock):
+                self.writer.post(lines)
 
 
 @dataclass(frozen=True)
@@ -120,19 +127,21 @@ class InstallRun:
     root: Annotated[Path, PathText]
     scratch: Annotated[Path, PathText]
     target: str
+    phases: list[PhaseTiming] = field(default_factory=list)
 
     @classmethod
     def start(cls, command: InstallCliCommand, root: Path) -> InstallRun:
         checkout = command.checkout
-        with InstallCommands() as commands:
+        with InstallCommands() as commands, LauncherPhase().running(commands.clock):
             commands.git(checkout, "fetch", "-q", "origin")
             target = commands.git(checkout, "rev-parse", "--verify",
                                   f"{command.to}^{{commit}}").strip()
         parent = command.installer.scratch(StorageRule.load(root))
         parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         scratch = Path(tempfile.mkdtemp(dir=parent, prefix="install-"))
-        TargetTree(checkout, scratch, target).add()
-        return cls(command, root, scratch, target)
+        with PreparePhase("target checkout").running(commands.clock):
+            TargetTree(checkout, scratch, target).add()
+        return cls(command, root, scratch, target, commands.clock.phases)
 
     def launch(self, output: TextIO) -> int:
         """The install outlives its caller: a new session, its output in files beside the bus.
@@ -140,27 +149,34 @@ class InstallRun:
         tree = TargetTree(self.command.checkout, self.scratch, self.target)
         logs = InstallLogs(self.root).minted()
         result, errors = logs / "result.json", logs / "stderr.log"
-        with result.open("xb") as stdout, errors.open("xb") as stderr:
-            process = subprocess.Popen(
-                [sys.executable, "-m", agent_comms.installer.__name__], cwd=tree.path,
-                env={**os.environ, "PYTHONPATH": os.pathsep.join(map(str, tree.source_paths()))},
-                stdin=subprocess.PIPE, stdout=stdout, stderr=stderr, start_new_session=True,
-            )
-        print(f"install: pid {process.pid} runs {self.target[:12]}; diagnostics {errors}",
-              file=sys.stderr, flush=True)
-        process.communicate(json.dumps(FieldCodec.encode(self)).encode())
-        if process.returncode:
-            print(f"install failed ({process.returncode}): {errors.read_text().strip()}",
-                  file=sys.stderr)
-        else:
-            output.write(result.read_text())
+        clock = InstallClock(self.phases)
+        inherited = len(clock.phases)
+        with InstallerProcessPhase().running(clock) as measured:
+            with result.open("xb") as stdout, errors.open("xb") as stderr:
+                process = subprocess.Popen(
+                    [sys.executable, "-m", agent_comms.installer.__name__], cwd=tree.path,
+                    env={**os.environ, "PYTHONPATH": os.pathsep.join(map(str, tree.source_paths()))},
+                    stdin=subprocess.PIPE, stdout=stdout, stderr=stderr, start_new_session=True,
+                )
+            print(f"install: pid {process.pid} runs {self.target[:12]}; diagnostics {errors}",
+                  file=sys.stderr, flush=True)
+            process.communicate(json.dumps(FieldCodec.encode(self)).encode())
+            if process.returncode:
+                print(f"install failed ({process.returncode}): {errors.read_text().strip()}",
+                      file=sys.stderr)
+                return process.returncode
+            answer = FieldCodec.decode(RehearsedUpgrade, FieldCodec.parse(result.read_text()))
+            # The child received our existing records plus this active launch.
+            # Only its subsequent operations are new measurements.
+            clock.include(answer.phases[inherited + 1:], measured)
+        output.write(json.dumps(FieldCodec.encode(replace(answer, phases=clock.phases)), indent=2))
         return process.returncode
 
     def run(self) -> Upgrade:
         command = self.command
         return upgrade(command.checkout, self.root, self.target, command.installer,
                        command.mode, command.retire, command.spill_dir, self.scratch,
-                       self.harnesses, InstallReport())
+                       self.harnesses, InstallReport(), self.phases)
 
     def harnesses(self, stack: Stack) -> InstallResult:
         # The target runtime is published by now, and only its installed package

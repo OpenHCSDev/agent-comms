@@ -388,6 +388,10 @@ class Platform(DeclaredFamily, affix="Platform"):
     @abstractmethod
     def identity(self, pid: int) -> ProcessIdentity: ...
 
+    def started_at(self, identity: ProcessIdentity) -> float:
+        """This recorded process's birth on the monotonic clock."""
+        raise NotImplementedError("This platform does not expose process elapsed time")
+
     def parent_identity(self, pid: int) -> ProcessIdentity:
         raise NotImplementedError('This platform does not expose exact parent identities')
 
@@ -515,6 +519,10 @@ class LinuxPlatform(PidfdHandles, PosixPlatform):
     def identity(self, pid: int) -> ProcessIdentity:
         return self._stat(pid).identity
 
+    def started_at(self, identity: ProcessIdentity) -> float:
+        age = time.clock_gettime(time.CLOCK_BOOTTIME) - identity.start_time / os.sysconf("SC_CLK_TCK")
+        return time.monotonic() - age
+
     def parent_identity(self, pid: int) -> ProcessIdentity:
         return self.identity(self._stat(pid).parent)
 
@@ -627,6 +635,9 @@ class DarwinPlatform(PosixPlatform):
             pid, info.start_seconds * 1_000_000 + info.start_microseconds, info.pgid,
         )
 
+    def started_at(self, identity: ProcessIdentity) -> float:
+        return time.monotonic() - (time.time() - identity.start_time / 1_000_000)
+
     def members_of_group(self, pgid: int) -> tuple[ProcessIdentity, ...]:
         # proc_listpids returns bytes. Grow until one query fits; never mistake
         # a full buffer for a complete process-group observation.
@@ -708,6 +719,7 @@ class Win32Platform(Platform):
         self._api("OpenProcess", handle, dword, ctypes.c_int, dword)
         self._api("CloseHandle", ctypes.c_int, handle)
         self._api("GetProcessTimes", ctypes.c_int, handle, pointer, pointer, pointer, pointer)
+        self._api("GetSystemTimeAsFileTime", None, pointer)
         self._api("WaitForSingleObject", dword, handle, dword)
         self._api("CreateJobObjectW", handle, pointer, ctypes.c_wchar_p)
         self._api("OpenJobObjectW", handle, dword, ctypes.c_int, ctypes.c_wchar_p)
@@ -758,6 +770,11 @@ class Win32Platform(Platform):
     def identity(self, pid: int) -> ProcessIdentity:
         with self.process_handle(pid) as handle:
             return self._identity(pid, handle)
+
+    def started_at(self, identity: ProcessIdentity) -> float:
+        current = ctypes.c_uint64()
+        self.kernel.GetSystemTimeAsFileTime(ctypes.byref(current))
+        return time.monotonic() - (current.value - identity.start_time) / 10_000_000
 
     @staticmethod
     def job_name(identity: ProcessIdentity) -> str:

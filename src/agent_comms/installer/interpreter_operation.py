@@ -10,6 +10,11 @@ import inspect
 import json
 import os
 import sys
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import field
+from threading import Lock
 from abc import ABC, abstractmethod
 from contextlib import redirect_stdout
 from dataclasses import dataclass
@@ -24,10 +29,150 @@ from pydantic.json_schema import DEFAULT_REF_TEMPLATE
 from typing_extensions import TypeForm
 
 import agent_comms
+from agent_comms.child_process import Platform
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, PathText, WireValue
 from agent_comms.maintenance_barrier import HOLDER_NONCE
 from agent_comms.service_sender import ServiceSender
+
+
+@dataclass(frozen=True)
+class InstallPhase(DeclaredFamily, affix="Phase"):
+    """A declared operation measures its own run through the install's shared clock."""
+
+    detail: str = ""
+
+    def label(self) -> str:
+        return f"{type(self).__name__}: {self.detail}" if self.detail else type(self).__name__
+
+    def started_at(self, now: float) -> float:
+        return now
+
+    @contextmanager
+    def running(self, clock: InstallClock) -> Iterator[PhaseTiming]:
+        with clock.lock:
+            now = clock.advance()
+            started = self.started_at(now)
+            measured = PhaseTiming(self, seconds=now - started)
+            clock.phases.append(measured)
+            clock.active.append(measured)
+        try:
+            yield measured
+        finally:
+            with clock.lock:
+                measured.elapsed_seconds = clock.advance() - started
+                clock.active[:] = [active for active in clock.active if active is not measured]
+
+
+class InstallRunPhase(InstallPhase):
+    """The whole installer, including teardown and its final publication."""
+
+
+class InstallerProcessPhase(InstallPhase):
+    """Launch the target interpreter, collect its answer and reap it."""
+
+
+class LauncherPhase(InstallPhase):
+    """The launcher's real lifetime starts before Python imports its CLI."""
+
+    def started_at(self, now: float) -> float:
+        platform = Platform.current()
+        return platform.started_at(platform.identity(os.getpid()))
+
+
+class PreparePhase(InstallPhase):
+    """Read the selected target, outgoing runtime and pending operation declarations."""
+
+
+class BuildPhase(InstallPhase):
+    """Resolve and build the target stack and its native package."""
+
+
+class CommandPhase(InstallPhase):
+    """An external command, identified by its actual invocation."""
+
+
+class GitPhase(InstallPhase):
+    """A Git operation through the shared repository owner."""
+
+
+class ProbePhase(InstallPhase):
+    """A declared operation answered by an interpreter worker."""
+
+
+class PracticePhase(InstallPhase):
+    """Select and rehearse the incoming changes on their practice bus."""
+
+
+class CopyPhase(InstallPhase):
+    """Copy and retain the practice inputs selected by their file owners."""
+
+
+class CarryPhase(InstallPhase):
+    """Run a declared carry operation in its target interpreter."""
+
+
+class VerifyPhase(InstallPhase):
+    """Read back the carried bus and compare the files the steps changed."""
+
+
+class LivePhase(InstallPhase):
+    """Stop owners, carry the held bus, publish and restart its captured owners."""
+
+
+class PublicationPhase(InstallPhase):
+    """Publish the route, runtime or install result through its existing owner."""
+
+
+class WorkerClosePhase(InstallPhase):
+    """Close and reap the install's persistent interpreter workers."""
+
+
+class TreeClosePhase(InstallPhase):
+    """Retire the target worktree and the install's scratch directory."""
+
+
+@dataclass
+class PhaseTiming:
+    phase: InstallPhase
+    seconds: float = 0.0
+    """Exclusive wall time: overlapping work is charged once, to the last active phase."""
+    elapsed_seconds: float = 0.0
+    """The phase's own elapsed run, including its nested or concurrent work."""
+
+    def line(self) -> str:
+        return f"{self.seconds:.3f}s {self.phase.label()} ({self.elapsed_seconds:.3f}s elapsed)"
+
+
+@dataclass
+class InstallClock:
+    """The single timing record and active execution stack shared by all install workers.
+
+    Each phase boundary advances the same clock. Exclusive seconds partition the
+    run, rather than adding a parent's duration to its children's durations. A
+    concurrent operation shares that wall interval; its elapsed_seconds still
+    records its full duration. There is no per-command or per-copy timer.
+    """
+
+    phases: list[PhaseTiming] = field(default_factory=list)
+    active: list[PhaseTiming] = field(default_factory=list, init=False)
+    lock: Lock = field(default_factory=Lock, init=False)
+    previous: float = field(default_factory=time.monotonic, init=False)
+
+    def advance(self) -> float:
+        now = time.monotonic()
+        if self.active:
+            self.active[-1].seconds += now - self.previous
+        self.previous = now
+        return now
+
+    def include(self, phases: list[PhaseTiming], worker: PhaseTiming) -> None:
+        """The serial carry worker measured part of this run already: replace that
+        part of its parent's seconds, rather than counting the subprocess twice."""
+        with self.lock:
+            self.advance()
+            worker.seconds -= sum(phase.seconds for phase in phases)
+            self.phases.extend(phases)
 
 
 class InterpreterOperation[Answer, *Arguments](ABC):
@@ -111,6 +256,13 @@ class RuntimeProbe[Answer](
     discovery_package="agent_comms.installer",
 ):
     """A declared operation handled by the install's selected interpreter worker."""
+
+    def install_phase(self) -> InstallPhase:
+        return ProbePhase(type(self).__name__)
+
+    def phase_timings(self, answer: Answer) -> list[PhaseTiming]:
+        """Nested phases the worker measured while answering this operation."""
+        return []
 
 
 @dataclass(frozen=True)
