@@ -246,7 +246,9 @@ class UnreadableHistory(ValueError):  # noqa: N818 - nominal stored-read state
             return ReadUnreadable(error, cls.capture(error))
 
     def __eq__(self, other: object) -> bool:
-        return isinstance(other, UnreadableHistory) and self.args == other.args
+        if not isinstance(other, UnreadableHistory):
+            return NotImplemented
+        return self.args == other.args
 
     def __hash__(self) -> int:
         return hash(self.args)

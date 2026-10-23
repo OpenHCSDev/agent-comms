@@ -102,7 +102,9 @@ from agent_comms.installer.practice import (
     RuntimeHome,
     practice_copy,
 )
-from agent_comms.installer.reporting import RootWriter, RuntimeWriter, UnpostedWriter
+from agent_comms.installer.reporting import (
+    OutgoingWriter, RootWriter, RuntimeWriter, UnpostedWriter,
+)
 from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
 from agent_comms.locked_store import BusFile, DeclaredFile, RootFile, UndeclaredFile
@@ -754,11 +756,11 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
         except ValueError as error:
             raise UpgradeRefused(str(error)) from None
         member = Install.member(root, retire)
-        report.starting(mode.destination(member.initial_writer(root, installed)), target)
         installed.require_uv()
         if not installed.python.exists():
             raise UpgradeRefused(f"No installed stack at {installed.python}")
         staged = Stack.build(tree.path, commands)
+        report.starting(mode.destination(member.initial_writer(root, installed, staged)), target)
         install, rehearsal = member.rehearsed(checkout, root, current, target, chain,
                                               installed, staged, tree, installer, spill_dir)
         result = report.complete(mode.finish(install, rehearsal, bridges, harnesses, report))
@@ -783,8 +785,10 @@ class Install[Rehearsed: Rehearsal](ABC):
     spill_dir: Path
 
     @staticmethod
-    def initial_writer(root: Path, installed: Stack) -> RootWriter:
-        return RuntimeWriter(root, installed, RetainedProgram.of(InstallReportProbe))
+    def initial_writer(root: Path, installed: Stack, staged: Stack) -> RootWriter:
+        """The outgoing runtime is asked nothing before the target's runtime has routed to
+        this bus, which only the target's source can do."""
+        return OutgoingWriter(root, installed, RetainedProgram.of(InstallReportProbe), staged)
 
     def backed_up(self, files: tuple[Path, ...]) -> tuple[StoreBackup, RouteSelection]:
         backup = StoreBackup.take(self.root, active_route_path(), files, self.spill_dir)
@@ -1088,7 +1092,7 @@ class FreshInstall(Install[FreshRehearsal]):
         return install, install.rehearsal()
 
     @staticmethod
-    def initial_writer(root: Path, installed: Stack) -> RootWriter:
+    def initial_writer(root: Path, installed: Stack, staged: Stack) -> RootWriter:
         """A fresh bus has nowhere to publish a start message yet."""
         return UnpostedWriter()
 

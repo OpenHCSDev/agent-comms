@@ -38,9 +38,10 @@ from .active_route import (
     CommsRoute,
     RouteFile,
     active_route_path,
-    replace_unreadable_active_route,
+    route_new_bus,
 )
 from .activity import ActivityState
+from .bus import Bus
 from .catalog_document import CatalogDocument
 from .channel_management import KeepThreadsTagDisposition, TagChangeResult, TagDisposition
 from .channel_targets import (
@@ -2547,13 +2548,24 @@ class PinThreadCliCommand(MultipleTargets, NamedCliCommand, declared_name="pin-t
 @dataclass(frozen=True)
 class RouteReplacedResult(CliResult):
     root: str
-    backup: str
+    route: str
 
 
-class ReplaceRouteCliCommand(CliCommand, declared_name=ActiveRoute.repair_command):
-    help = ("Replace an old-version or unreadable active route file with a route to --root; "
-            "the old file is kept beside it")
+@dataclass(frozen=True, kw_only=True)
+class ReplaceRouteCliCommand(CliCommand[RouteReplacedResult],
+                             declared_name=ActiveRoute.repair_command):
+    help = ("Route to --root's bus unless the active route file selects a bus; a file that "
+            "selects none (unreadable, an old version, or naming a root gone or replaced) "
+            "is kept beside the new one")
 
-    def apply(self, ctx: Comms) -> CliResult:
-        route = ActiveRoute(ctx.root, RecordedBusIdentity.capture(ctx.bus.bus.path))
-        return RouteReplacedResult(str(ctx.root), str(replace_unreadable_active_route(route)))
+    def answer(self, root: Path) -> RouteReplacedResult:
+        route = ActiveRoute(root, RecordedBusIdentity.capture(Bus.path_in(root)))
+        return RouteReplacedResult(str(root), route_new_bus(route, active_route_path()))
+
+    def apply(self, ctx: Comms) -> RouteReplacedResult:
+        return self.answer(ctx.root)
+
+    def execute(self, route: CommsRoute, output: TextIO) -> int:
+        """Every client borrows the published route, and a route that selects no bus refuses
+        each borrower, so the repair of that route borrows none."""
+        return self.written(self.answer(route.root), output)
