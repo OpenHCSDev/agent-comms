@@ -115,6 +115,9 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     def append_to(self, events: list[TranscriptEvent]) -> None:
         events.append(self)
 
+    def followed_by_assistant(self, text: AssistantTranscript) -> TranscriptEvent | None:
+        return None
+
     def for_assigned_source(self, source, published: bool) -> tuple[TranscriptEvent, ...]:
         return (self,)
 
@@ -303,10 +306,13 @@ class UserTranscript(NativeTextTranscript):
 
 class AssistantTranscript(AgentTextTranscript):
     def append_to(self, events: list[TranscriptEvent]) -> None:
-        if events and (merged := events[-1].merge(self)) is not None:
-            events[-1] = replace(merged, text=events[-1].text + self.text)
+        if events and (merged := events[-1].followed_by_assistant(self)) is not None:
+            events[-1] = merged
         else:
             super().append_to(events)
+
+    def followed_by_assistant(self, text: AssistantTranscript) -> TranscriptEvent:
+        return replace(self, text=self.text + text.text)
 
     def for_assigned_source(self, source, published: bool) -> tuple[TranscriptEvent, ...]:
         return () if published else (self,)

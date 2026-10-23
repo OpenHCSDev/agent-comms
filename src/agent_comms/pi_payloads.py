@@ -215,11 +215,9 @@ class PiPayload(ExternalField):
         return FieldCodec.decode_external(cls, value, {})
 
     def to_wire(self):
-        data = FieldCodec.encode(self)
-        for key in FieldCodec._tag(self):
-            data.pop(key)
-            if self.wire_tag is not None:
-                data[self.wire_tag] = self.wire_discriminator()
+        data = FieldCodec.encode_fields(self)
+        if self.wire_tag is not None and DeclaredFamily.record_tag(self):
+            data[self.wire_tag] = self.wire_discriminator()
         return data
 
     def wire_discriminator(self):
