@@ -173,7 +173,7 @@ class OwnedSend(CodingToolOwner):
 
     def verify(self, store, turn, snapshot) -> None:
         """Recheck the running original without binding it or consuming its wait again."""
-        from .native_tool_call import SelectedToolDenied
+        from .tool_denial import SelectedToolDenied
 
         if not turn.started_input or not turn.accepts_output:
             raise SelectedToolDenied("Native tool has no started original input")

@@ -9,7 +9,7 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
-from agent_comms.native_tool_call import SelectedToolDenied
+from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.storage_rules import (
     CheckoutStorageEffect, RemoveCheckoutStorageEffect, StorageRoots, StorageRule,
     StorageDenied, StorageProjection, UnitStorage, shell_storage_effects,
@@ -81,13 +81,13 @@ def test_removed_worktree_frees_quota_and_another_home_cannot_claim_its_parent(t
     assert rule.owns_checkout(thread, home, home)
     assert not rule.owns_checkout(other, old, old)
     with pytest.raises(StorageDenied):
-        comms.registry.decide_storage(other.name, (CheckoutStorageEffect(new, home),))
+        StorageProjection(comms.registry.storage_rule, comms.registry.require(other.name)).check((CheckoutStorageEffect(new, home),))
     with pytest.raises(SelectedToolDenied):
-        comms.registry.decide_storage('worker', (CheckoutStorageEffect(new, home),))
-    comms.registry.decide_storage('worker', (RemoveCheckoutStorageEffect(old),))
+        StorageProjection(comms.registry.storage_rule, comms.registry.require('worker')).check((CheckoutStorageEffect(new, home),))
+    StorageProjection(comms.registry.storage_rule, comms.registry.require('worker')).check((RemoveCheckoutStorageEffect(old),))
     shutil.rmtree(old)
     assert rule.checkouts_of(thread) == (home,)
-    comms.registry.decide_storage('worker', (CheckoutStorageEffect(new, home),))
+    StorageProjection(comms.registry.storage_rule, comms.registry.require('worker')).check((CheckoutStorageEffect(new, home),))
     assert comms.registry.require('worker').storage_roots == thread.storage_roots
 
 
@@ -109,10 +109,10 @@ def test_cannot_remove_current_project_but_can_remove_another_checkout(tmp_path)
     assert thread.project_path == current
     assert UnitStorage.read(comms.registry.storage_rule, thread).home == current
     with pytest.raises(StorageDenied):
-        comms.registry.decide_storage('worker', shell_storage_effects(
+        StorageProjection(comms.registry.storage_rule, comms.registry.require('worker')).check(shell_storage_effects(
             f'git worktree remove {project_link}', repository))
     assert current.is_dir()
-    comms.registry.decide_storage('worker', shell_storage_effects(
+    StorageProjection(comms.registry.storage_rule, comms.registry.require('worker')).check(shell_storage_effects(
         f'git worktree remove {other}', repository))
     subprocess.run(('git', '-C', str(repository), 'worktree', 'remove', str(other)), check=True)
     assert not other.exists()
@@ -125,9 +125,7 @@ def test_forbidden_shell_operations_use_declared_rule(tmp_path, command):
     rule = StorageRule()
     thread = Thread('worker', frozenset(), str(tmp_path), storage_roots=rule.initial_roots('worker'))
     with pytest.raises(SelectedToolDenied):
-        projection = StorageProjection(rule, thread)
-        for effect in shell_storage_effects(command, tmp_path):
-            effect.check(projection)
+        StorageProjection(rule, thread).check(shell_storage_effects(command, tmp_path))
 
 
 def test_programs_do_not_claim_to_be_effect_values():

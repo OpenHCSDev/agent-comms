@@ -162,7 +162,7 @@ def test_coding_names_and_argument_types_come_from_declarations():
     ("write", {"path": "x", "content": 3}),
 ])
 def test_pi_argument_records_reject_bad_shapes_without_claiming(name, arguments):
-    from agent_comms.native_tool_call import SelectedToolDenied
+    from agent_comms.tool_denial import SelectedToolDenied
 
     from agent_comms.native_tool_call import RefusedCodingCall
 
@@ -173,7 +173,7 @@ def test_pi_argument_records_reject_bad_shapes_without_claiming(name, arguments)
 
 
 def test_family_selector_is_denied_but_record_presentation_stays_readable():
-    from agent_comms.native_tool_call import SelectedToolDenied
+    from agent_comms.tool_denial import SelectedToolDenied
     from agent_comms.tool_declaration import NoToolRecord, ToolDeclaration
 
     arguments = {"path": "x", "tool": "write"}
@@ -253,7 +253,7 @@ async def test_child_that_stopped_waiting_is_logged_not_raised(tmp_path, caplog,
         input_id = secrets.token_hex(16)
 
         async def allow(self, turn, round_number, call):
-            from agent_comms.native_tool_call import SelectedToolDenied
+            from agent_comms.tool_denial import SelectedToolDenied
 
             answered.set()
             if refused:

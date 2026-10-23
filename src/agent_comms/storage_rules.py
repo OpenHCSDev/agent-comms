@@ -7,7 +7,7 @@ import math
 import re
 import shutil
 import time
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.locked_store import DurableFile
-from agent_comms.native_tool_call import SelectedToolDenied
+from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
@@ -400,6 +400,11 @@ class StorageProjection:
     def storage(self) -> UnitStorage:
         return UnitStorage.read(self.rule, self.thread)
 
+    def check(self, effects: Sequence[StorageEffect]) -> None:
+        """Preflight every effect of one call against this one snapshot."""
+        for effect in effects:
+            effect.check(self)
+
 
 class ShellProgram:
     names: ClassVar[frozenset[str]] = frozenset()
@@ -429,9 +434,13 @@ class StorageDenied(SelectedToolDenied):
     """The storage preflight refused an operation before it executed."""
 
 
-class StorageEffect:
+class StorageEffect(ABC):
     """Preflight one actual operation and declare its measured work, if any."""
     work: ClassVar[tuple] = ()
+
+    @abstractmethod
+    def check(self, projection: StorageProjection) -> None:
+        """Refuse this operation if the thread's storage cannot take it."""
 
 
 @dataclass(frozen=True)
