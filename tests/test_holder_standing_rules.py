@@ -570,6 +570,10 @@ def test_every_pass_beats_and_a_stale_beat_is_heartbeat_silent(held_bus, monkeyp
     assert HeartbeatSilent.violations(held_bus, "lead") == ()
     later = unchanged.timestamp + HeartbeatSilent.seconds + 1
     monkeypatch.setattr(time, "time", lambda: later)
+    # Neither a commander reply nor a fresh beat sent to another commander proves
+    # this commander's heartbeat is alive.
+    held_bus.messaging.send("lead", CommanderHeartbeat.sender, "I read the last beat")
+    held_bus.messaging.send(CommanderHeartbeat.sender, "outsider", "Another commander is healthy")
     silent, = HeartbeatSilent.violations(held_bus, "lead")
     assert silent.beat == unchanged.seq
     assert silent.line().startswith(f"HEARTBEAT SILENT: no beat since seq {unchanged.seq}")
