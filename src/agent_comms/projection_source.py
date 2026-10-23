@@ -19,9 +19,13 @@ class ProjectionSource:
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
-        for parent in cls.__mro__:
-            if "writes" in vars(parent):
-                ProjectionSource._declarations.setdefault(parent, set()).add(cls)
+        for parent in cls.writer_declarations():
+            ProjectionSource._declarations.setdefault(parent, set()).add(cls)
+
+    @classmethod
+    def writer_declarations(cls) -> tuple[type[ProjectionSource], ...]:
+        """Value-family members share their declared producing behavior."""
+        return tuple(parent for parent in cls.__mro__ if "writes" in vars(parent))
 
     @staticmethod
     def writers_for(table: type) -> set[type]:
