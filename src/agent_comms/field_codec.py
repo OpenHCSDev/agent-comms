@@ -1010,7 +1010,7 @@ class SingleFieldValue(ExternalJsonShape, SingleValueEncoding):
 class DeclaredWireType(ExternalJsonShape, WireValue):
     """A member whose whole wire value is one declared JSON type, converted by its own
     from_wire and to_wire. Its shape and schema derive from that type; inherited from a
-    union, its shape would be the union holding it, and admitting would never return."""
+    union, its shape would be the union holding it, and the shape check would never return."""
 
     wire_type: ClassVar[object]
 
@@ -1949,16 +1949,16 @@ class ValueDecoder[T](ABC):
     def wire_children(self) -> tuple[ValueDecoder[object], ...]:
         return ()
 
-    def admits_wire(self, data: object) -> bool:
+    def fits_wire(self, data: object) -> bool:
         """Check outer wire shape without decoding nested values.
 
-        This may admit a value decoding rejects, but must never reject one decoding accepts.
+        This may pass a value decoding rejects, but must never reject one decoding accepts.
         """
         return True
 
-    def admits_external(self, data: object) -> bool:
+    def fits_external(self, data: object) -> bool:
         """A sibling-aware external reader may accept more than the stored wire shape."""
-        return any(self.external_decoders(data)) or self.admits_wire(data)
+        return any(self.external_decoders(data)) or self.fits_wire(data)
 
     def selects_record(self, select: WireRecordFilter) -> bool:
         return False
@@ -2110,7 +2110,7 @@ class _ExactScalarDecoder(_ScalarDecoder):
     def accepts(self, data: object) -> bool:
         return type(data) is self.target
 
-    def admits_wire(self, data: object) -> bool:
+    def fits_wire(self, data: object) -> bool:
         return self.accepts(data)
 
     def accepts_value(self, value: object) -> bool:
@@ -2158,11 +2158,11 @@ class _RealDecoder(_NumberDecoder):
     __slots__ = ()
     annotations = (float,)
 
-    def admits_wire(self, data: object) -> bool:
+    def fits_wire(self, data: object) -> bool:
         return type(data) in (int, float)
 
     def accepts(self, data: object) -> bool:
-        return self.admits_wire(data) and math.isfinite(cast(float, data))
+        return self.fits_wire(data) and math.isfinite(cast(float, data))
 
 
 @dataclass(frozen=True, slots=True)
@@ -2180,18 +2180,14 @@ class _RepresentedDecoder(ValueDecoder[Any]):
     def wire_children(self) -> tuple[ValueDecoder[object], ...]:
         return (self.wire_structure,)
 
-    def admits_wire(self, data: object) -> bool:
+    def fits_wire(self, data: object) -> bool:
         # Null handlers can change the structural null contract; leave that decision to decode.
-        return data is None or self.wire_structure.admits_wire(data)
+        return data is None or self.wire_structure.fits_wire(data)
 
-    def admits_external(self, data: object) -> bool:
-        # The representation reads through its wire structure, so an external read admits
-        # whatever that structure's external reader admits.
-        return (
-            any(self.external_decoders(data))
-            or data is None
-            or self.wire_structure.admits_external(data)
-        )
+    def fits_external(self, data: object) -> bool:
+        # The representation reads through its wire structure, so an external read takes
+        # whatever that structure's external reader takes.
+        return ValueDecoder.fits_external(self, data) or self.wire_structure.fits_external(data)
 
     def _rewrite_records(
         self, data: object, change: WireRecordChange, select: WireRecordFilter,
@@ -2302,7 +2298,7 @@ class _TypeDecoder(_ScalarDecoder):
 
 
 class _FamilyNameDecoder(_TypeDecoder, _ChoiceDecoder[Any]):
-    def admits_wire(self, data: object) -> bool:
+    def fits_wire(self, data: object) -> bool:
         return type(data) is str
 
     def encode(self, value: type[DeclaredFamily]) -> str:
@@ -2330,8 +2326,8 @@ class _LiteralDecoder(_ChoiceDecoder[Any]):
     def accepts_value(self, value: object) -> bool:
         return any(type(value) is type(item) and value == item for item in self.values)
 
-    def admits_wire(self, data: object) -> bool:
-        return any(plan.admits_wire(data) for plan in self.value_plans)
+    def fits_wire(self, data: object) -> bool:
+        return any(plan.fits_wire(data) for plan in self.value_plans)
 
     def encode(self, value: object) -> object:
         for item, plan in zip(self.values, self.value_plans, strict=True):
@@ -2357,8 +2353,8 @@ class UnionDecoder[T](_ContextDecoder[T]):
     def wire_children(self) -> tuple[ValueDecoder[object], ...]:
         return self.alternatives
 
-    def admits_wire(self, data: object) -> bool:
-        return any(alternative.admits_wire(data) for alternative in self.alternatives)
+    def fits_wire(self, data: object) -> bool:
+        return any(alternative.fits_wire(data) for alternative in self.alternatives)
 
     def _rewrite_records(
         self, data: object, change: WireRecordChange, select: WireRecordFilter,
@@ -2394,7 +2390,7 @@ class UnionDecoder[T](_ContextDecoder[T]):
             return self.decode_bound(data, record)
         return self.decode_resolved(self.decode_candidates(
             lambda alternative: alternative.decode_external(data, record),
-            admits=lambda alternative: alternative.admits_external(data),
+            fits=lambda alternative: alternative.fits_external(data),
         ))
 
     @property
@@ -2416,17 +2412,17 @@ class UnionDecoder[T](_ContextDecoder[T]):
     def decode_bound(self, data: object, context: Mapping[str, object]) -> T:
         return self.decode_candidates(
             lambda alternative: alternative.decode_bound(data, context),
-            admits=lambda alternative: alternative.admits_wire(data),
+            fits=lambda alternative: alternative.fits_wire(data),
         )
 
     def decode_candidates(
         self, decode: Callable[[ValueDecoder[T]], T], *,
-        admits: Callable[[ValueDecoder[T]], bool],
+        fits: Callable[[ValueDecoder[T]], bool],
     ) -> T:
         first_error = None
         # Shapes only rule alternatives out; when they rule out every one, the first
         # alternative's own decode states the refusal.
-        candidates = tuple(filter(admits, self.alternatives)) or self.alternatives[:1]
+        candidates = tuple(filter(fits, self.alternatives)) or self.alternatives[:1]
         try:
             for alternative in candidates:
                 try:
@@ -2454,7 +2450,7 @@ class _ArrayDecoder(ValueDecoder[Any]):
     def wire_children(self) -> tuple[ValueDecoder[object], ...]:
         return self.items
 
-    def admits_wire(self, data: object) -> bool:
+    def fits_wire(self, data: object) -> bool:
         return isinstance(data, list)
 
     def _rewrite_records(
@@ -2533,8 +2529,8 @@ class _VariadicTupleDecoder(_TupleDecoder):
 
 
 class _FixedTupleDecoder(_TupleDecoder):
-    def admits_wire(self, data: object) -> bool:
-        return super().admits_wire(data) and len(cast(list[object], data)) == len(self.items)
+    def fits_wire(self, data: object) -> bool:
+        return super().fits_wire(data) and len(cast(list[object], data)) == len(self.items)
 
     def plan_items(self, data: list[object]) -> Iterable[tuple[ValueDecoder[object], object]]:
         with MalformedRecord.refusing("Tuple length does not match declaration"):
@@ -2635,7 +2631,7 @@ class _DictDecoder(ValueDecoder[Any]):
 class _StringKeyDictDecoder(_DictDecoder):
     entries = staticmethod(_object_entries)
 
-    def admits_wire(self, data: object) -> bool:
+    def fits_wire(self, data: object) -> bool:
         return isinstance(data, dict)
 
     @staticmethod
@@ -2656,7 +2652,7 @@ class _StringKeyDictDecoder(_DictDecoder):
 class _PairKeyDictDecoder(_DictDecoder):
     entries = staticmethod(_object_or_pair_entries)
 
-    def admits_wire(self, data: object) -> bool:
+    def fits_wire(self, data: object) -> bool:
         return isinstance(data, (dict, list))
 
     @staticmethod
@@ -2674,7 +2670,7 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
 
     target: type[Member]
 
-    def admits_wire(self, data: object) -> bool:
+    def fits_wire(self, data: object) -> bool:
         return isinstance(data, dict) and isinstance(data.get(self.target.family_discriminator), str)
 
     @property
@@ -2723,9 +2719,9 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
 class _LeafDocumentDecoder(_FamilyRecordDecoder):
     """A directly declared leaf document omits its family selector."""
 
-    def admits_wire(self, data: object) -> bool:
-        return (super().admits_wire(data)
-                or _member_decoder(self.target).admits_wire(data))
+    def fits_wire(self, data: object) -> bool:
+        return (super().fits_wire(data)
+                or _member_decoder(self.target).fits_wire(data))
 
     def encode_document(self, value: DeclaredFamily) -> object:
         return _member_decoder(type(value)).encode(value)
@@ -2746,7 +2742,7 @@ class _RecordDecoder(_ContextDecoder[Any]):
 
     target: type
 
-    def admits_wire(self, data: object) -> bool:
+    def fits_wire(self, data: object) -> bool:
         if not isinstance(data, dict):
             return False
         plan = FieldCodec._record_plan(self.target)
