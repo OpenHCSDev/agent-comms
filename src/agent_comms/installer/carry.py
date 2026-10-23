@@ -13,7 +13,6 @@ every bus has run it.
 from __future__ import annotations
 
 import inspect
-import json
 import subprocess
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
@@ -23,7 +22,7 @@ from typing import Annotated, ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec, PathText
+from agent_comms.field_codec import PathText
 from agent_comms.installer.interpreter_operation import InterpreterOperation
 from agent_comms.locked_store import RootFile
 
@@ -98,50 +97,39 @@ class ArchivedInputs:
         return tuple(sorted(paths))
 
 
-class CarryOperation[Answer](InterpreterOperation[Answer, Carry], DeclaredFamily, affix="Operation"):
-    """Typed step work and the operation's traversal of one worker's pass."""
+class CarryOperation[Answer](
+    InterpreterOperation[tuple[Answer, ...], tuple[Carry, ...]],
+    DeclaredFamily, affix="Operation",
+):
+    """One worker pass, with its answer type declared by the operation's run method."""
 
     @abstractmethod
-    def run(self, step: Carry) -> Answer: ...
-
-    def run_steps(self, steps: tuple[Carry, ...]) -> tuple[Answer, ...]:
-        return tuple(self.run(step) for step in steps)
-
-    def encode_answers(self, answers: tuple[Answer, ...]) -> str:
-        """One pass's answers, in step order, under this operation's declared answer type."""
-        return json.dumps(FieldCodec.encode(answers, tuple[self.answer_type(), ...]))
-
-    def decode_answers(self, answers: str) -> tuple[Answer, ...]:
-        return FieldCodec.decode(tuple[self.answer_type(), ...], FieldCodec.parse(answers))
-
-
+    def run(self, steps: tuple[Carry, ...]) -> tuple[Answer, ...]: ...
 
 @dataclass(frozen=True)
 class MigrateOperation(CarryOperation[Carried]):
     apply: bool
 
-    def run(self, step: Carry) -> Carried:
-        return step.carry(apply=self.apply)
+    def run(self, steps: tuple[Carry, ...]) -> tuple[Carried, ...]:
+        return tuple(step.carry(apply=self.apply) for step in steps)
 
 
 @dataclass(frozen=True)
 class FirstPendingOperation(CarryOperation[int]):
     """One position: stop before asking a step that needs a pending predecessor."""
 
-    def run(self, step: Carry) -> int:
-        return step.carry(apply=False).changed
-
-    def run_steps(self, steps: tuple[Carry, ...]) -> tuple[int, ...]:
+    def run(self, steps: tuple[Carry, ...]) -> tuple[int, ...]:
         for position, step in enumerate(steps):
-            if self.run(step):
+            changed_count = step.carry(apply=False).changed
+            if changed_count:
                 return (position,)
         return (len(steps),)
 
 
 @dataclass(frozen=True)
 class RetireInputsOperation(CarryOperation[Carried]):
-    def run(self, step: Carry) -> Carried:
-        return step.after_acceptance()
+    def run(self, steps: tuple[Carry, ...]) -> tuple[Carried, ...]:
+        return tuple(step.after_acceptance() for step in steps)
 
 
 @dataclass(frozen=True)
@@ -152,7 +140,7 @@ class CarryRequest:
     steps: tuple[Carry, ...]
 
     def run(self) -> str:
-        return self.operation.encode_answers(self.operation.run_steps(self.steps))
+        return self.operation.encode_answer(self.operation.run(self.steps))
 
 
 @dataclass(frozen=True)
