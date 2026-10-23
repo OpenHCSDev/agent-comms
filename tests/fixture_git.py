@@ -4,7 +4,27 @@ No test writes identity or signing into a repository's config. When GIT_DIR leak
 (``git bisect run`` from a linked worktree, a hook), ``git config`` writes the caller's
 repository instead of the fixture's: on 10-23 two fixtures stamped "Citation fixture" and
 "Ratchet test" into the shared agent-comms config, and 106 real commits carried the second.
-A setting given per command persists nothing, whichever repository git resolves."""
+A setting given per command persists nothing, whichever repository git resolves.
+
+Importing this module also removes the caller's repository from the environment, so every
+test repository's git addresses the test repository even outside pytest's conftest."""
+
+import os
+
+
+def _without_caller_repository() -> None:
+    """A caller's git selects no repository for any test git call.
+
+    ``git bisect run`` from a linked worktree exports GIT_DIR, and a fixture's
+    ``git -C tmp init`` then re-initialised the caller's checkout as bare instead of
+    creating its own; ``SourceRepository.create`` would also add its remote, move ``main``
+    and hard-reset the caller's work tree. Removed at import, before session start's own git
+    call and before xdist workers inherit the environment."""
+    for name in tuple(name for name in os.environ if name.startswith("GIT_")):
+        del os.environ[name]
+
+
+_without_caller_repository()
 
 SETTINGS = (
     ("user.name", "Test fixture"),

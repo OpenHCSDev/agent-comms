@@ -12,6 +12,7 @@ import pytest
 from agent_comms.installer import practice
 from agent_comms.installer.backup import SavedFile, UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
+from agent_comms.installer.declared_uv import DeclaredUv
 from agent_comms.installer.upgrade import Stack
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repo import Checkout
@@ -107,3 +108,20 @@ def test_checkout_native_tests_use_a_private_runtime(tmp_path, test_uv):
     assert witness.read_text() == "Existing installation"
     assert not tuple((live_home / ".cache/agent-scratch").iterdir())
     print(result.stdout)
+
+
+def test_the_installer_replaces_a_uv_its_checkout_does_not_declare(tmp_path, test_uv):
+    """A uv reporting another version is replaced by the checkout's declared uv, in place."""
+    checkout = Path(__file__).resolve().parents[1]
+    uv = practice.RuntimeHome.uv_path(tmp_path)
+    uv.parent.mkdir(parents=True)
+    uv.write_text(f'#!/bin/sh\n[ "$1" = --version ] && echo "uv 0.0.0" && exit\n'
+                  f'exec {test_uv} "$@"\n')
+    uv.chmod(0o700)
+    with InstallCommands() as commands:
+        stack = Stack(checkout, commands, tmp_path, runtime=LaunchRuntime.running())
+        stack.require_uv()
+        declared = DeclaredUv.of(checkout / "pyproject.toml", uv)
+        assert declared.accepts(commands.run(uv, "--version"))
+        assert not uv.is_symlink() and not uv.read_bytes().startswith(b"#!")
+        assert [path.name for path in uv.parent.iterdir()] == ["uv"]

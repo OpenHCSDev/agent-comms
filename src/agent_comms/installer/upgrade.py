@@ -80,6 +80,7 @@ from agent_comms.installer.carry import (
     RetireInputsOperation,
 )
 from agent_comms.installer.commands import InstallCommands, TimedCommand
+from agent_comms.installer.declared_uv import DeclaredUv
 from agent_comms.installer.interpreter_operation import (
     CliCommandProbe,
     ClientImportsProbe,
@@ -459,8 +460,21 @@ class Stack:
         return RuntimeHome.uv_path(self.home)
 
     def require_uv(self) -> None:
+        """The installer runs only the uv its checkout declares; a different one installs the
+        declared uv in its own place before any lock is written."""
         if not os.access(self.uv, os.X_OK):
             raise UpgradeRefused(f"No uv executable at {self.uv}; the installer runs only that uv")
+        declared = DeclaredUv.of(self.checkout / "pyproject.toml", self.uv)
+        if declared.accepts(self.commands.run(self.uv, "--version")):
+            return
+        with tempfile.TemporaryDirectory(dir=self.uv.parent, prefix=".uv-") as staging:
+            self.commands.run(self.uv, "pip", "install", "--quiet", "--target", staging,
+                              "--python", self.python, str(declared.requirement))
+            fetched = Path(staging) / "bin/uv"
+            reported = self.commands.run(fetched, "--version")
+            if not declared.accepts(reported):
+                raise UpgradeRefused(f"Fetched {reported.strip()}; {declared.requirement} declared")
+            os.replace(fetched, self.uv)
 
     def resolve(self) -> None:
         """Refresh declared source packages while retaining the committed release pins."""
