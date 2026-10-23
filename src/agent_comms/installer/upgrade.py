@@ -689,7 +689,8 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
         bridges.require_resumed()
         return result
     except UpgradeRefused as error:
-        report.failed(error)
+        if not rehearse_only:
+            report.failed(error)
         raise
     finally:
         tree.close()

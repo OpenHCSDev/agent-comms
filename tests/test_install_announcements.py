@@ -30,13 +30,34 @@ from agent_comms.installer.upgrade import (
     UnchangedRun,
     UnresumedUpgrade,
     Upgrade,
+    upgrade,
 )
+from agent_comms.install_choices import UnnamedInstaller
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.thread_execution import ExternalThreadExecution
 from conftest import declare_test_bus
+from source_revision_fixture import SourceRepository
 
 
 RESTARTED = RestartedService("Connector on port 1 for /bus", Path("/runtime/bin/python"))
+
+
+def test_failed_rehearsal_does_not_publish_to_the_source_bus(private_comms, tmp_path):
+    source = SourceRepository.create(tmp_path / "source")
+    target = source.git(source.checkout, "rev-parse", "HEAD").strip()
+    (source.checkout / "owner.py").write_text("# Tracked local change refuses the rehearsal.\n")
+    before_bus = private_comms.bus.bus.revision()
+    before_registry = private_comms.registry.snapshot()
+
+    with pytest.raises(UpgradeRefused, match="local changes"):
+        upgrade(
+            source.checkout, private_comms.root, target, UnnamedInstaller(), True, False,
+            tmp_path / "spill", tmp_path / "scratch", lambda: None,
+            InstallReport(private_comms.root),
+        )
+
+    assert private_comms.bus.bus.revision() == before_bus
+    assert private_comms.registry.snapshot() == before_registry
 
 
 @pytest.mark.parametrize("live", (

@@ -222,7 +222,8 @@ class SelectedParticipant(MroDispatch):
         """Capture detached registry, participant and optional context in one worker."""
         with comms.registry.store.locked(mode=SharedLock()):
             _require_no_private_owner_rename(comms.root)
-            comms.registry.store.private_guard_unlocked().require_root(
+            privacy = comms.registry.store.private_guard_unlocked()
+            privacy.require_root(
                 root_id, IdentityConflict("Selected claim namespace changed"))
         try:
             thread, generation = comms.registry.live_owner_with_claim(name)
@@ -249,7 +250,7 @@ class SelectedParticipant(MroDispatch):
                 store, lookup, thread.name, after_seq=after_seq
             )
             sent_read = NotificationAssignment.capture(
-                store.session._connection, sent_sources
+                store.session._connection, sent_sources, privacy,
             )
         if pending:
             participant.pointer.require_idle()

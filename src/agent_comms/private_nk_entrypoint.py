@@ -81,7 +81,6 @@ class RootLaunch(ABC):
         root = self.child_root
         Registration(RegistryFile.path_in(root)).prepare_native_root()
         with Coordination(str(CoordinationStore.path_in(root))) as store:
-            store.install_private_runtime()
             store.participants.register(
                 thread.incarnation.require_recorded().lookup, thread.name, thread.name,
                 committed=True,
