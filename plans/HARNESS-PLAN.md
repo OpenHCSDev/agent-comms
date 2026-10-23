@@ -2,6 +2,30 @@
 
 Decision (Tristan, 2026-10-21 22:45): the commander fixes the harness it commands with. It works with full authority on this plan only: it makes each change, inspects it with full attention, runs only the tests the change touches, and pushes straight to `main`. Audited against `origin/main` at `39fdfe810`.
 
+## Expanded installer integration, 2026-10-22
+
+Tristan requested the next paired installation include the useful remaining open
+work. Core's virtual-bus checkpoint passed the full configured-root rehearsal:
+19,182 records, 194 threads, preserved read ledger, 208.38 seconds. That is a
+rehearsal result, not an installed checkpoint.
+
+Root owns porting the remaining reporting and bridge-lifetime work from #2556
+and #2527 into the current `ChangedInstall` and `PreparedMigration` family.
+The old branches' detached migration paths stay deleted. Reports before carry
+must execute in the outgoing runtime; reports after accepted carry use the
+incoming runtime. Rehearsals publish nothing. The report lifetime includes
+target-tree cleanup, so cleanup failure cannot leave a successful terminal post.
+Bridge outcomes belong to the actual captured bridge and survive failed exits.
+
+The reused finished checkout is `/home/ts/wt/harness-plan`, branch
+`integration/installer-report-lifetime`. Before-source evidence is
+`/home/ts/.cache/agent-scratch/root-installer-report-before.json`: NRA parsed
+953 production/test/tool modules and retained 5,341 original class declarations;
+5,151 project into the conservative family index. The remaining 190 original
+declarations stay visible rather than being counted as resolved. No parse
+omissions; source evidence does not prove behavior. Implementation and affected
+CLI/application qualification remain open.
+
 ## Why
 
 On 2026-10-21 the plans Tristan asked for at 18:30 the day before had not landed 28 hours later. Every error pulled the fleet off them, and the errors came from the harness itself:
