@@ -103,7 +103,7 @@ class Goals:
 
     def open_goal_store(self) -> GoalAttemptStore:
         if self.goal_store is None:
-            private = self.root / GoalAttemptStore.root_directory
+            private = GoalAttemptStore.directory_in(self.root)
             private.mkdir(mode=0o700, exist_ok=True)
             self.goal_store = GoalAttemptStore.initialize(private)
         return self.goal_store

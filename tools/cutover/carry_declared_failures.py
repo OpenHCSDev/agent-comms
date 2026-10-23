@@ -50,9 +50,9 @@ class DeclaredFailures(Carry):
         paths = tuple(
             path for root in self.roots()
             for path in (
-                *GoalAttemptStore.files(GoalAttemptStore.path_in(root)),
+                *GoalAttemptStore.files(GoalAttemptStore.path_in(GoalAttemptStore.directory_in(root))),
                 *DiagnosticDocument.files_in(root),
-                *GoalAttemptStore.source_paths(root),
+                *GoalAttemptStore.source_paths(GoalAttemptStore.directory_in(root)),
             ) if path.exists()
         )
         for path in paths:
@@ -63,7 +63,8 @@ class DeclaredFailures(Carry):
         self.backup_files()
         if apply:
             # The installer's root hold also covers its retained, inactive snapshots.
-            HeldBusFile(GoalAttemptStore, GoalAttemptStore.path_in(self.root)).require()
+            HeldBusFile(GoalAttemptStore, GoalAttemptStore.path_in(
+                GoalAttemptStore.directory_in(self.root))).require()
         results = tuple(self.carry_root(root, apply=apply) for root in self.roots())
         return Carried(
             sum(result.changed for result in results),
@@ -73,7 +74,8 @@ class DeclaredFailures(Carry):
     def carry_root(self, root: Path, *, apply: bool) -> Carried:
         changed = 0
         rewritten: list[str] = []
-        path = GoalAttemptStore.path_in(root)
+        store = GoalAttemptStore.directory_in(root)
+        path = GoalAttemptStore.path_in(store)
         if path.exists():
             with closing(SQLiteFile.writer(":memory:")) as prepared:
                 with closing(SQLiteFile.read_snapshot(path)) as original:
@@ -107,7 +109,7 @@ class DeclaredFailures(Carry):
                             prepared.backup(destination)
                         GoalAttemptStore.publish_change(path)
                         rewritten.extend(str(file.relative_to(self.root)) for file in (
-                            path, *GoalAttemptStore.source_paths(root),
+                            path, *GoalAttemptStore.source_paths(store),
                         ))
         for diagnostic in DiagnosticDocument.matching_in(root):
             document = json.loads(diagnostic.read_text())

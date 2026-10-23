@@ -121,7 +121,7 @@ class SelectedWritePlans(DurableFile, PatternFile):
     def __init__(self, comms: Comms, root_id: str):
         self.comms = comms
         self.root_id = root_id
-        self.directory = comms.root / self.root_directory
+        self.directory = self.directory_in(comms.root)
 
     def _prepare_dir(self) -> None:
         with suppress(FileExistsError):
