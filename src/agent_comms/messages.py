@@ -79,7 +79,8 @@ class BusProjectionTables(ProducedTable, SharedFileTables, DerivedTables, declar
         """Create/rebuild rows from history using the append projection owner."""
         selected = cls.schema_rows() if rows is None else rows
         super().create_schema(db, selected)
-        writers = {writer for row in selected for writer in ProjectionSource.writers_for(row)}
+        projections = tuple(row for row in cls.projection_rows() if row in selected)
+        writers = {writer for row in projections for writer in ProjectionSource.writers_for(row)}
         kinds = tuple(kind for kind in BusRecord.members_with(BusRecord) if kind in writers)
         holders = ReplayedHolders(tables=frozenset(selected))
         for record in BusCapability.history(db, kinds):
@@ -194,7 +195,7 @@ class ProjectionPass(ABC, ProjectionSource):
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
-        return BusProjectionTables.schema_rows()
+        return BusProjectionTables.projection_rows()
 
     def write(self, db: sqlite3.Connection, row: TypedTable) -> None:
         row.insert(db)

@@ -1432,10 +1432,11 @@ class DerivedTables(TableSchema):
     def changed_rows(
         cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
     ) -> tuple[type[TypedTable], ...]:
-        projections = cls.projection_rows()
+        changed_producers = frozenset(
+            row for row in cls.projection_rows() if not ProjectionProducer.matches(db, (row,)))
         return tuple(row for row in cls.schema_rows() if SQLiteSchemaObject.differences(
             TypedTable.objects_of(db, (row,), sharing), row.schema_objects(),
-        ) or (row in projections and not ProjectionProducer.matches(db, (row,))))
+        ) or row in changed_producers)
 
     @classmethod
     def create_schema(
