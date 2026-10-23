@@ -37,7 +37,7 @@ from agent_comms.coordination_tables.recovery import (
 )
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
-from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from agent_comms.recovery_states import DeferredRecovery, FailedRecovery
 
 from .coordination_database import CoordinationStore
@@ -72,7 +72,6 @@ class VerifiedOwnerLoss(ABC):
     @contextmanager
     def _observing(cls, store: Coordination) -> Iterator[tuple[OwnerReleaseStore, NativeBoundary]]:
         from agent_comms.comms import wire
-        from agent_comms.native_runtime_input import NativeRuntimeTable
 
         if store.session.path.name != CoordinationStore.filename:
             raise RecoveryBlocked("native recovery requires the canonical coordination store")
@@ -363,6 +362,8 @@ class RecoveryMonitorCapability:
 
     @classmethod
     def recover_released_triage(cls, store: Coordination, owner: Thread) -> None:
+        if not NativeRuntimeInput.present(store.session._connection):
+            return  # No native input was ever recorded, so no triage reservation exists.
         identity = store.participants.get(owner.incarnation.lookup).owner_identity
         inputs = NativeRuntimeInput.select(
             store.session._connection,
