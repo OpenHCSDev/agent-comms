@@ -12,6 +12,14 @@ from pydantic import BaseModel, RootModel
 from agent_comms.installer.interpreter_operation import RuntimeProbe, main
 
 
+if __name__ == "__main__":
+    # The script is an entry point for the canonical declaration, not another member.
+    from agent_comms.installer.installed_packages import InstalledPackagesProbe  # noqa: F401
+
+    main()
+    raise SystemExit(0)
+
+
 @dataclass(frozen=True)
 class PackagePin:
     version: str
@@ -91,5 +99,3 @@ class InstalledPackagesProbe(RuntimeProbe[dict[str, PackageRecord]]):
         }) for dist in distributions()}
 
 
-if __name__ == "__main__":
-    main()
