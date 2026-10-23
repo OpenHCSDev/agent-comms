@@ -754,7 +754,7 @@ class Win32Platform(Platform):
                          ctypes.c_uint32, ctypes.c_uint32, ctypes.POINTER(self.InputLockOffset))
         lock.restype = ctypes.c_int
         if not lock(msvcrt.get_osfhandle(descriptor), 2, 0, 1, 0, ctypes.byref(offset)):
-            raise ctypes.WinError(ctypes.get_last_error())
+            self.raise_last_error()
 
     store_lock_interval = 0.01
     # Windows' CRT _commit (used by os.fsync) rejects a read-only descriptor.
@@ -835,6 +835,10 @@ class Win32Platform(Platform):
         self._api("OpenThread", handle, dword, ctypes.c_int, dword)
         self._api("ResumeThread", dword, handle)
 
+    def raise_last_error(self) -> NoReturn:
+        """Translate this thread's saved Windows error through ctypes once."""
+        raise ctypes.WinError(ctypes.get_last_error())
+
     def _api(self, name: str, result, *arguments) -> None:
         function = getattr(self.kernel, name)
         function.restype, function.argtypes = result, arguments
@@ -863,7 +867,7 @@ class Win32Platform(Platform):
             ctypes.byref(kernel),
             ctypes.byref(user),
         ):
-            raise ctypes.WinError(ctypes.get_last_error())
+            self.raise_last_error()
         return ProcessIdentity(pid, created.value)
 
     def identity(self, pid: int) -> ProcessIdentity:
@@ -875,7 +879,7 @@ class Win32Platform(Platform):
     ) -> None:
         event = self.kernel.CreateEventW(None, True, False, None)
         if not event:
-            raise ctypes.WinError(ctypes.get_last_error())
+            self.raise_last_error()
         callback = self.wait_callback_type(lambda _context, _expired: self.kernel.SetEvent(event))
         try:
             with ExitStack() as waits:
@@ -891,13 +895,13 @@ class Win32Platform(Platform):
                     if not self.kernel.RegisterWaitForSingleObject(
                         ctypes.byref(registered), handle, callback, None, 0xFFFFFFFF, 8,
                     ):  # INFINITE; WT_EXECUTEONLYONCE
-                        raise ctypes.WinError(ctypes.get_last_error())
+                        self.raise_last_error()
                     # Join callbacks before closing their process handles and shared event.
                     waits.callback(self.kernel.UnregisterWaitEx, registered, ctypes.c_void_p(-1))
                 milliseconds = (0xFFFFFFFF if math.isinf(timeout)
                                 else max(0, math.ceil(timeout * 1000)))
                 if self.kernel.WaitForSingleObject(event, milliseconds) == 0xFFFFFFFF:
-                    raise ctypes.WinError(ctypes.get_last_error())
+                    self.raise_last_error()
         finally:
             self.kernel.CloseHandle(event)
 
@@ -909,7 +913,7 @@ class Win32Platform(Platform):
     def job(self, identity: ProcessIdentity):
         handle = self.kernel.OpenJobObjectW(0x000C, False, self.job_name(identity))
         if not handle:
-            raise ctypes.WinError(ctypes.get_last_error())
+            self.raise_last_error()
         try:
             yield handle
         finally:
@@ -933,7 +937,7 @@ class Win32Platform(Platform):
                                 members.append(self.identity(pid))
                         return tuple(members)
                     if ctypes.get_last_error() != 234:  # ERROR_MORE_DATA
-                        raise ctypes.WinError(ctypes.get_last_error())
+                        self.raise_last_error()
                     capacity *= 2
         except FileNotFoundError:
             if self.matches(leader):
@@ -945,7 +949,7 @@ class Win32Platform(Platform):
             if self._identity(identity.pid, handle) != identity:
                 raise IdentityMismatchError(identity.pid)
             if not self.kernel.TerminateProcess(handle, signum):
-                raise ctypes.WinError(ctypes.get_last_error())
+                self.raise_last_error()
 
     def terminate_group(self, identity: ProcessIdentity) -> None:
         if not self.matches(identity):
@@ -959,7 +963,7 @@ class Win32Platform(Platform):
         try:
             with self.job(identity) as job:
                 if not self.kernel.TerminateJobObject(job, 1):
-                    raise ctypes.WinError(ctypes.get_last_error())
+                    self.raise_last_error()
         except FileNotFoundError:
             if self.matches(identity):
                 raise RuntimeError("Refusing to kill a process without its owned job") from None
@@ -970,13 +974,13 @@ class Win32Platform(Platform):
                 raise IdentityMismatchError(identity.pid)
             job = self.kernel.CreateJobObjectW(None, self.job_name(identity))
             if not job:
-                raise ctypes.WinError(ctypes.get_last_error())
+                self.raise_last_error()
             try:
                 if not self.kernel.AssignProcessToJobObject(job, process):
-                    raise ctypes.WinError(ctypes.get_last_error())
+                    self.raise_last_error()
                 snapshot = self.kernel.CreateToolhelp32Snapshot(4, 0)  # TH32CS_SNAPTHREAD
                 if snapshot == ctypes.c_void_p(-1).value:
-                    raise ctypes.WinError(ctypes.get_last_error())
+                    self.raise_last_error()
                 try:
                     entry = self.ThreadEntry()
                     entry.size = ctypes.sizeof(entry)
@@ -985,10 +989,10 @@ class Win32Platform(Platform):
                         if entry.owner == identity.pid:
                             thread = self.kernel.OpenThread(2, False, entry.tid)
                             if not thread:
-                                raise ctypes.WinError(ctypes.get_last_error())
+                                self.raise_last_error()
                             try:
                                 if self.kernel.ResumeThread(thread) == 0xFFFFFFFF:
-                                    raise ctypes.WinError(ctypes.get_last_error())
+                                    self.raise_last_error()
                                 return
                             finally:
                                 self.kernel.CloseHandle(thread)

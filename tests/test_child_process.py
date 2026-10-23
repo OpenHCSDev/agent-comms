@@ -72,6 +72,7 @@ def test_stop_batch_shares_one_force_deadline() -> None:
     children = tuple(SpawnedProcess.launch(command, output=subprocess.PIPE) for _ in range(2))
     try:
         for child in children:
+            assert child.process.stdout is not None
             assert child.process.stdout.readline() == b"ready\n"
         started = time.monotonic()
         outcomes = SynchronousProcess.stop_together(
