@@ -198,6 +198,7 @@ PROJECTION_MECHANISM_MODULES = frozenset({
     "agent_comms.field_codec",
     "agent_comms.mro_dispatch",
     "agent_comms.projection_source",
+    "agent_comms.repo",  # CheckoutStamp.commit reads HEAD through Repo.git
     "agent_comms.typed_table",
 })
 
