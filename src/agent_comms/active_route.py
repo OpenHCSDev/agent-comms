@@ -295,11 +295,6 @@ class ExitedLockHolder(IdentifiedLockHolder):
         return "process exited"
 
 
-class EmptyCommandLockHolder(IdentifiedLockHolder):
-    def detail(self) -> str:
-        return "empty command"
-
-
 class UnidentifiedLockHolder(RouteLockHolder):
     def describe(self) -> str:
         return "kernel did not identify the owner"
@@ -328,7 +323,7 @@ def route_lock_holders(directory: int) -> tuple[RouteLockHolder, ...]:
             except ProcessLookupError:
                 holders.append(ExitedLockHolder(pid))
             else:
-                holders.append(RunningLockHolder(pid, command) if command else EmptyCommandLockHolder(pid))
+                holders.append(RunningLockHolder(pid, command))
     return tuple(holders)
 
 

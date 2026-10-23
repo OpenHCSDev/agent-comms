@@ -567,6 +567,8 @@ class LinuxPlatform(PidfdHandles, PosixPlatform):
             raw = Path(f"/proc/{process.pid}/cmdline").read_bytes()
         except FileNotFoundError:
             raise ProcessLookupError(process.pid) from None
+        if not raw:
+            raise ProcessLookupError(process.pid)
         return tuple(os.fsdecode(word) for word in raw.split(b"\0")[:-1])
 
     def environment(self, process: ProcessIdentity) -> dict[str, str]:

@@ -12,7 +12,6 @@ from typing import Annotated, Self
 
 from . import ServiceNotServingError, SystemdUserService
 from ..active_route import ActiveRoute
-from ..child_process import ProcessIdentity
 from ..comms import client_wire
 from ..connector import (
     CALLER, LOOPBACK, PORT, ConnectorOptions, ConnectorVerb, ServeVerb,
@@ -82,10 +81,7 @@ class SystemdConnectorService(ConnectorService, SystemdUserService):
     @classmethod
     def from_process(cls, pid: int) -> Self:
         # Our installed console script's argv is interpreter, script, verb, options.
-        arguments = ProcessIdentity.capture(pid).arguments()
-        if not arguments or not arguments[0]:
-            raise ServiceNotServingError(f"{cls.unit} has no running command")
-        endpoint = ServeVerb.parse(arguments[2:])
+        endpoint = ServeVerb.parse(cls.running_arguments(pid)[2:])
         return cls(launch=LaunchRoot.from_path(endpoint.root), port=endpoint.port)
 
     def exec_arguments(self, issuer: str) -> tuple[str, ...]:

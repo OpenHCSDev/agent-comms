@@ -196,11 +196,15 @@ class SystemdUserService(HostService, declared_name=None):
         pid = cls.pid()
         return () if pid == 0 else (cls.from_process(pid),)
 
+    @classmethod
+    def running_arguments(cls, pid: int) -> tuple[str, ...]:
+        try:
+            return ProcessIdentity.capture(pid).arguments()
+        except ProcessLookupError:
+            raise ServiceNotServingError(f"{cls.unit} has no running command") from None
+
     def runtime(self) -> Path:
-        arguments = ProcessIdentity.capture(self.pid()).arguments()
-        if not arguments or not arguments[0]:
-            raise ServiceNotServingError(f"{self.unit} has no running command")
-        return Path(arguments[0])
+        return Path(self.running_arguments(self.pid())[0])
 
     def restart(self) -> None:
         subprocess.run(("systemctl", "--user", "restart", self.unit), check=True)
