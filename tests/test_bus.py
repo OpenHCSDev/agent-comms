@@ -39,7 +39,6 @@ from agent_comms.messages import (
     NoticeRole,
 )
 from agent_comms.message_reference import MessageReference
-from agent_comms.package_stamp import STAMP
 from agent_comms.response_acknowledgement import (
     canonical_publication_key,
 )
@@ -92,12 +91,12 @@ def test_install_refuses_existing_schema_changes_until_an_explicit_rebuild(bus):
     assert bus.page(3, 2) == (second, record)
 
 
-def test_projection_freshness_follows_the_installed_core_commit(bus):
+def test_projection_freshness_follows_its_producing_source(bus):
     record = bus.append(lambda seq, db: PublicRecord.from_message(
         Message("author", "worker", "preserved source", InfoKind, seq=seq),
     ))
-    current = STAMP.commit()
-    older = "0" * 40
+    current = MessageIdentitySource.producer_digest()
+    older = "0" * 64
     assert older != current
     with bus.writer_connection() as db:
         before = db.total_changes
@@ -113,7 +112,8 @@ def test_projection_freshness_follows_the_installed_core_commit(bus):
         assert BusSchema.schema_differs(db)
         assert BusSchema.reconcile_schema(db, WriterOwnedFile())
         assert MessageIdentitySource.require(db, seq=record.seq).sender == record.sender
-        assert all(row.commit == current for row in ProjectionProducer.select(db))
+        assert ProjectionProducer.select(db) == list(ProjectionProducer.records_for(
+            BusProjectionTables.projection_rows()))
 
         ProjectionProducer.drop(db)
         MessageIdentitySource.update(db, where="{seq}=?", parameters=(record.seq,), sender="stale")

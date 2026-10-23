@@ -13,13 +13,15 @@ import json
 import os
 import re
 import sqlite3
+import sys
 import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum, IntFlag
-from functools import lru_cache
+from functools import cache, lru_cache
+from inspect import getsource
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
@@ -62,7 +64,6 @@ from .locked_store import (
     StoreCommittedError,
 )
 from .maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier
-from .package_stamp import STAMP
 from .store_files import _store_lock
 
 if TYPE_CHECKING:
@@ -913,7 +914,8 @@ class ComposedSchemas:
     @classmethod
     def carry_schema(cls, db: sqlite3.Connection) -> None:
         for family in cls.schema_families():
-            family.carry_schema(db)
+            if family.schema_differs(db):
+                family.carry_schema(db)
 
 
 class RowMutation(Enum):
@@ -1415,8 +1417,20 @@ class ProjectionProducerTables(SharedFileTables, DurableTables):
     """The producer declaration last committed with each rebuilt projection."""
 
 
-class ProducedRow:
-    """Rows rebuilt whenever the installed Core build changes."""
+class ProducedRow(ABC):
+    """Rows rebuilt when their declared producing modules change."""
+
+    @classmethod
+    @abstractmethod
+    def producer_classes(cls) -> tuple[type, ...]:
+        """The record family's declarations that implement this projection's production."""
+
+    @classmethod
+    @cache
+    def producer_digest(cls) -> str:
+        modules = {cls.__module__, *(owner.__module__ for owner in cls.producer_classes())}
+        source = "\0".join(getsource(sys.modules[name]) for name in sorted(modules))
+        return hashlib.sha256(source.encode()).hexdigest()
 
 
 @lru_cache(maxsize=4)
@@ -1947,7 +1961,7 @@ class ProjectionProducer(TypedTable, ProjectionProducerTables):
 
     @classmethod
     def records_for(cls, rows: tuple[type[TypedTable], ...]) -> tuple[Self, ...]:
-        return tuple(cls(row.declared_name, STAMP.commit()) for row in rows)
+        return tuple(cls(row.declared_name, row.producer_digest()) for row in rows)
 
     @classmethod
     def matches(cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...]) -> bool:

@@ -55,6 +55,13 @@ class BusProjectionTables(ProducedRow, SharedFileTables, DerivedTables):
     """Reverse lookups are derived from the record, in its append transaction."""
 
     @classmethod
+    def producer_classes(cls) -> tuple[type, ...]:
+        return tuple(dict.fromkeys(
+            owner for record in messages.BusRecord.members_with(BusCapability)
+            for owner in record.__mro__ if "project_into" in owner.__dict__
+        ))
+
+    @classmethod
     def create_schema(cls, db: sqlite3.Connection) -> None:
         """Create/rebuild rows from history using the append projection owner."""
         super().create_schema(db)
