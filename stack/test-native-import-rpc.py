@@ -340,6 +340,9 @@ if __name__ == "__main__":
     with tempfile.TemporaryDirectory(prefix="native-import-rpc-") as directory:
         root = Path(directory)
         prepared = pinned_native_package()
-        native_root = root / prepared.parents[2].name
-        native_root.symlink_to(prepared.parents[2], target_is_directory=True)
-        main(VerifiedNativePackage.qualify(native_root / PACKAGE_LAYOUT), root)
+        # Node resolves modules by realpath, so a link would put every ancestor of the
+        # probed ws entry back in the shared store; only an owned copy has owned ancestors.
+        package = root / prepared.parents[2].name / PACKAGE_LAYOUT
+        package.parent.mkdir(parents=True, mode=0o700)
+        shutil.copytree(prepared, package)
+        main(VerifiedNativePackage.qualify(package), root)
