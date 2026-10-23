@@ -43,7 +43,7 @@ from agent_comms.active_route import (
 from agent_comms.bus import Bus
 from agent_comms.cli_bridges.shared import BridgeResume, Serve, SessionBridgeResumes
 from agent_comms.cli_commands import BusReadBack, CliCommand, PlannedReconcileCliCommand, ReadBackCliCommand, ReconcileStoresCliCommand, StartCliCommand, StopCliCommand
-from agent_comms.installer.harness_installation import InstallResult
+from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.cli_protocol import CoreError
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import wire
@@ -60,7 +60,8 @@ from agent_comms.installer.backup import (
     UpgradeRefused,
     bus_files,
 )
-from agent_comms.installer.carry import STEPS, Carried, Carry, CarryChain, CarryOperation, FirstPendingOperation, MigrateOperation, RetireInputsOperation
+from agent_comms.installer.carry import STEPS, CarryChain
+from agent_comms.installer.probes.carry import Carried, Carry, CarryOperation, FirstPendingOperation, MigrateOperation, RetireInputsOperation
 from agent_comms.installer.probes.carry import CarryProbe
 from agent_comms.installer.commands import InstallCommands, TimedCommand
 from agent_comms.installer.declared_uv import DeclaredUv

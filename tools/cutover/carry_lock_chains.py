@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agent_comms.installer.carry import Carried, Carry
+from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.store_files import is_store_lock, locked_store_path
 from agent_comms.threads import ThreadCatalog
 

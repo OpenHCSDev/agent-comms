@@ -1,6 +1,6 @@
 """A copy's lock beside a non-locking file goes; a declared writer fence and unknown locks stay."""
 
-from agent_comms.installer.carry import Carried
+from agent_comms.installer.probes.carry import Carried
 from agent_comms.native_session_files import NativeSessionLocks, PrivateSession
 from agent_comms.store_files import store_lock_path
 from cutover.carry_unused_store_locks import UnusedStoreLocks

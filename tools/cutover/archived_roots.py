@@ -9,7 +9,7 @@ from typing import Self
 
 from agent_comms.field_codec import FieldCodec, SubclassUnion
 from agent_comms.historical_views import HistoryArchive, HistorySource
-from agent_comms.installer.carry import ArchivedInputs, Carried, Carry
+from agent_comms.installer.probes.carry import ArchivedInputs, Carried, Carry
 from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.store_files import AtomicFile
 

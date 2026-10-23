@@ -47,7 +47,7 @@ from agent_comms.field_codec import (
     WireOrder,
 )
 from agent_comms.historical_views import HistoryArchive, HistorySource
-from agent_comms.installer.carry import ArchivedInputs, Carried, Carry
+from agent_comms.installer.probes.carry import ArchivedInputs, Carried, Carry
 from agent_comms.locked_store import BusFile, RegistryFile, RootFile
 from agent_comms.private_path import FileObservation, FileRevision
 from agent_comms.read_ledger import ReadLedger

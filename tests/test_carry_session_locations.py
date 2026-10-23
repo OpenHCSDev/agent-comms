@@ -10,7 +10,7 @@ from agent_comms.bus import Bus
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.historical_views import HistoryArchive
-from agent_comms.installer.carry import Carried
+from agent_comms.installer.probes.carry import Carried
 from agent_comms.pi_native_backend import PiNativeBackend
 from agent_comms.registry_store import RegistryStore
 from agent_comms.session_file import BusSessionLocation, ExternalSessionLocation, RegistrySessionLocation

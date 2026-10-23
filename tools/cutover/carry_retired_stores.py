@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import ClassVar
 
-from agent_comms.installer.carry import Carried, Carry
+from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.typed_table import HeldBusFile
 
 from .retired_store_files import RetiredRootFile

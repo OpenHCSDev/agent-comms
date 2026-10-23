@@ -116,7 +116,7 @@ from .field_codec import (
     boundary_decoder,
 )
 from .harness_install import Harness
-from .installer.harness_installation import HarnessInstallation, InstallResult
+from agent_comms.installer.probes.harnesses import HarnessInstallation, InstallResult
 from .history_result import HistoryPageResult
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported

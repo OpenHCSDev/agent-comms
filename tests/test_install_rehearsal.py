@@ -182,7 +182,7 @@ def test_failed_live_migration_restores_data_checkout_and_runtime(
     current = subprocess.check_output(["git", "-C", checkout, "rev-parse", "HEAD"], text=True).strip()
     step = checkout / "tools/cutover/carry_fault.py"
     step.write_text('''from pathlib import Path
-from agent_comms.installer.carry import Carry, Carried
+from agent_comms.installer.probes.carry import Carry, Carried
 from agent_comms.locked_store import DurableFile
 class Saved(DurableFile):
     filename = "saved"

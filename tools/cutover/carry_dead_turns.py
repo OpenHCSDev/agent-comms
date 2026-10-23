@@ -15,7 +15,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from agent_comms.errors import RelationViolationError
-from agent_comms.installer.carry import Carried, Carry
+from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RegistryFile
 from agent_comms.registry_store import RegistryStore
 from agent_comms.turn_lease import StoredTurnRecord

@@ -18,7 +18,8 @@ from agent_comms.installer.backup import (
     UpgradeRefused,
     bus_files,
 )
-from agent_comms.installer.carry import STEPS, Carried, Carry, CarryChain, FirstPendingOperation, MigrateOperation
+from agent_comms.installer.carry import STEPS, CarryChain
+from agent_comms.installer.probes.carry import Carried, Carry, FirstPendingOperation, MigrateOperation
 from agent_comms.installer.probes.carry import CarryProbe
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.commands import InstallCommands
@@ -50,7 +51,7 @@ REPO = Path(__file__).resolve().parents[1]
 
 def step_source() -> str:
     return (
-        "from agent_comms.installer.carry import Carried, Carry\n\n"
+        "from agent_comms.installer.probes.carry import Carried, Carry\n\n"
         "class Step(Carry):\n"
         "    opened_files = ()\n"
         "    def carry(self, *, apply):\n        return Carried(0)\n"
@@ -195,7 +196,7 @@ def noisy_step(tmp_path_factory):
     module = tree.path / "tools" / "cutover" / "carry_noisy.py"
     module.write_text(
         "from pathlib import Path\n"
-        "from agent_comms.installer.carry import Carry, Carried\n"
+        "from agent_comms.installer.probes.carry import Carry, Carried\n"
         "class Noisy(Carry):\n"
         "    opened_files = ()\n"
         "    def carry(self, *, apply):\n"

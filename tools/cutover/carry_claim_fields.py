@@ -15,7 +15,7 @@ from pathlib import Path
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, compile_decoder
 from agent_comms.historical_views import HistoryArchive
-from agent_comms.installer.carry import Carried, Carry
+from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import JsonDocument, RegistryFile, RootFile, SQLiteFile
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.registry_store import RegistryStore

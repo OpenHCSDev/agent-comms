@@ -159,7 +159,8 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
     from agent_comms.errors import RelationViolationError, UnclaimedError
     from agent_comms.historical_views import HistoryArchive
     from agent_comms.installer.backup import StoreBackup, bus_files
-    from agent_comms.installer.carry import Carried, CarryChain, MigrateOperation
+    from agent_comms.installer.probes.carry import Carried, MigrateOperation
+    from agent_comms.installer.carry import CarryChain
     from agent_comms.installer.commands import InstallCommands
     from agent_comms.installer.interpreter_operation import TargetProgram
     from agent_comms.installer.upgrade import RehearsalFiles, Stack, StepRun, carried
@@ -325,7 +326,7 @@ def test_absent_history_leaves_schema_repair_to_reconcile(tmp_path):
     from agent_comms.messages import (Addressed)
     from agent_comms.errors import RelationViolationError
     from agent_comms.installer.backup import bus_files
-    from agent_comms.installer.carry import Carried
+    from agent_comms.installer.probes.carry import Carried
     from agent_comms.messages import InfoKind, Message
     from agent_comms.typed_table import Index
     from conftest import maintenance_held

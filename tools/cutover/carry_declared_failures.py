@@ -17,7 +17,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore
 from agent_comms.goal_failure_observation import FailedTurnEvidence, GoalLedgerTable
 from agent_comms.historical_views import HistoryArchive
-from agent_comms.installer.carry import Carried, Carry
+from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.store_files import AtomicFile
 from agent_comms.typed_table import HeldBusFile, sql_literal

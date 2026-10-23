@@ -17,7 +17,7 @@ from typing import ClassVar
 from agent_comms.child_process import Platform
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import RelationViolationError
-from agent_comms.installer.carry import Carried, Carry
+from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.native_runtime_input import (
     AcknowledgedSlot,

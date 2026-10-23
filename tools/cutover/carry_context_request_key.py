@@ -11,7 +11,7 @@ from contextlib import closing
 from pathlib import Path
 
 from agent_comms.context_store import ContextRequest, ContextStore
-from agent_comms.installer.carry import Carried, Carry
+from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.store_files import _store_lock
 from agent_comms.typed_table import SQLiteSchemaObject, TypedTable

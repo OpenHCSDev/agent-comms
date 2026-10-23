@@ -16,7 +16,7 @@ from agent_comms.coordination_tables.attempts import AttemptRecord
 from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
 from agent_comms.errors import RelationViolationError
-from agent_comms.installer.carry import Carried, Carry
+from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import DurableFile, SQLiteFile
 from agent_comms.native_prompt_binding import PromptBinding
 from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput

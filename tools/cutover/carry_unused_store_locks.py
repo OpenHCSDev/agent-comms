@@ -11,7 +11,7 @@ deleted. Delete this carry after it has run on the live root.
 from pathlib import Path
 from typing import ClassVar
 
-from agent_comms.installer.carry import Carried, Carry
+from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RootFile
 from agent_comms.store_files import StoreLockFile, is_store_lock, locked_store_path, store_lock_path
 

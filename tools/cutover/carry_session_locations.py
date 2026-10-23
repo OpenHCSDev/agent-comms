@@ -16,7 +16,7 @@ from pathlib import Path
 
 from agent_comms.field_codec import FieldCodec, compile_decoder
 from agent_comms.historical_views import HistoryArchive, HistorySource
-from agent_comms.installer.carry import Carried
+from agent_comms.installer.probes.carry import Carried
 from agent_comms.locked_store import RegistryFile
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.registry_store import RegistryStore

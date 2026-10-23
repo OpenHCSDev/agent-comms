@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 
 from agent_comms.field_codec import FieldCodec
-from agent_comms.installer.carry import Carried, Carry
+from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RegistryFile, RetiredCommanderFile
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import AtomicFile
