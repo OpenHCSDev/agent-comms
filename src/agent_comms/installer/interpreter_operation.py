@@ -184,24 +184,6 @@ class InstallReportProbe(RuntimeProbe[None], ServiceSender):
             comms.messaging.send(self.sender, CommsTag.channel(), self.body)
 
 
-@dataclass(frozen=True)
-class HoldTranscriptsProbe(RuntimeProbe[None]):
-    path: Annotated[Path, PathText]
-    ready_fd: int
-
-    def run(self) -> None:
-        from contextlib import closing
-
-        from agent_comms.locked_store import SQLiteFile
-
-        with closing(SQLiteFile.writer(self.path, isolation_level=None)) as writer:
-            writer.execute("BEGIN IMMEDIATE")
-            with open(self.ready_fd, "wb") as held:
-                held.write(b"held")
-            sys.stdin.read()
-            writer.execute("ROLLBACK")
-
-
 class DistributionVersionsProbe(RuntimeProbe[dict[str, str]]):
     def run(self) -> dict[str, str]:
         from importlib.metadata import distributions
