@@ -49,6 +49,7 @@ from agent_comms.threads import Thread
 )
 def test_storage_family_reads_once_and_renders_each_broken_fact(
     tmp_path: Path,
+    configured_repository,
     has_home: bool,
     extra_count: int,
     expected: set[type[StorageViolation]],
@@ -96,6 +97,7 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
     )
     comms = wire(root)
     lead = comms.registry.declare(Thread("lead", frozenset(), str(repository)))
+    configured_repository(comms)
     worker = comms.registry.declare(
         Thread("worker", frozenset(), str(home))
     )
