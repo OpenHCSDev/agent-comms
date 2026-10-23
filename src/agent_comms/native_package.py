@@ -89,6 +89,14 @@ class PackageInventory(ABC):
     entries: int = 1
     bytes: int = 0
 
+    def inspect(self, root: Path) -> None:
+        if os.name != "posix":
+            raise NativePackageError("Native package filesystem verification requires POSIX")
+        try:
+            self.visit(os.fspath(root), ".", 0)
+        except OSError as error:
+            raise NativePackageError("Native package could not be verified") from error
+
     @staticmethod
     def identity(info: os.stat_result) -> tuple[int, ...]:
         return (
@@ -212,13 +220,8 @@ def remove_native_tree(root: Path) -> None:
 
 def package_tree_digest(root: Path) -> str:
     """Hash sorted content records with final sealed directory modes and bounded reads."""
-    if os.name != "posix":
-        raise NativePackageError("Native package filesystem verification requires POSIX")
     inventory = PackageContentInventory()
-    try:
-        inventory.visit(os.fspath(root), ".", 0)
-    except OSError as error:
-        raise NativePackageError("Native package could not be verified") from error
+    inventory.inspect(root)
     return inventory.digest.hexdigest()
 
 
@@ -488,15 +491,10 @@ class VerifiedNativePackage:
     @classmethod
     def qualify(cls, root: Path) -> VerifiedNativePackage:
         """Check this manifest's named, sealed build without reading package files."""
-        if (
-            root.parts[-3:] != ("node_modules", "@earendil-works", "pi-coding-agent")
-            or root.parents[2].name != pinned_package_for(MANIFEST).parents[2].name
-        ):
+        layout = pinned_package_for(MANIFEST).relative_to(MANIFEST.parent).parts
+        if root.parts[-len(layout):] != layout:
             raise NativePackageError("Native package directory differs from its manifest-derived name")
-        try:
-            SealedPackageInventory().visit(os.fspath(root), ".", 0)
-        except OSError as error:
-            raise NativePackageError("Native package seal could not be verified") from error
+        SealedPackageInventory().inspect(root)
         return cls(root)
 
     @property
@@ -521,7 +519,8 @@ class VerifiedNativePackage:
         root = root.absolute()  # Do not resolve away symlink components.
         if ".." in root.parts:
             raise NativePackageError("Pinned native Pi package path is not lexical")
-        if root.parts[-3:] != ("node_modules", "@earendil-works", "pi-coding-agent"):
+        layout = Path(PACKAGE_LAYOUT).parts
+        if root.parts[-len(layout):] != layout:
             raise NativePackageError("Canonical native Pi package layout is required")
         if not root.is_relative_to(MANIFEST.parent):
             raise NativePackageError("Native Pi package is outside this code's native resources")
