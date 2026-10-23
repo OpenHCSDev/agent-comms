@@ -13,11 +13,12 @@ import json
 import os
 import re
 import sqlite3
+import sys
 import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from enum import Enum, IntEnum, IntFlag
 from functools import cache, lru_cache
 from inspect import getsource
@@ -65,7 +66,7 @@ from .locked_store import (
 from .maintenance_barrier import MaintenanceBarrier, MaintenanceHolder
 from .package_stamp import STAMP
 from .projection_source import ProjectionSource
-from .store_files import _store_lock
+from .store_files import AtomicFile, _store_lock
 
 if TYPE_CHECKING:
     from .execution_states import ExecutionState
@@ -1389,17 +1390,6 @@ class DerivedTables(TableSchema):
                 or not ProjectionProducer.matches(db, cls.projection_rows()))
 
     @classmethod
-    def reconcile_writes(cls, db: sqlite3.Connection) -> bool:
-        return (super().reconcile_writes(db)
-                or bool(ProjectionProducer.unstamped(db, cls.projection_rows())))
-
-    @classmethod
-    def reconcile_schema(cls, db: sqlite3.Connection, change: SchemaChange) -> bool:
-        changed = super().reconcile_schema(db, change)
-        refreshed = ProjectionProducer.verify_build(db, cls.projection_rows(), change)
-        return changed or refreshed
-
-    @classmethod
     def create_schema(cls, db: sqlite3.Connection) -> None:
         super().create_schema(db)
         for producer in ProjectionProducer.records_for(cls.projection_rows()):
@@ -1982,8 +1972,13 @@ class ProducedTable(ProducedRow, TypedTable, declared_name=None):
     def producer_digest(cls) -> str:
         for family in cls.__mro__:
             if issubclass(family, ProducedTable) and "producer_package" in vars(family):
-                return family._producer_digest()
+                return family._built_digest()
         raise TypeError(f"{cls.__name__} has no producing family declaration")
+
+    @classmethod
+    @cache
+    def _built_digest(cls) -> str:
+        return BuildProducerDigests.current().digest(cls)
 
     @classmethod
     @cache
@@ -2009,18 +2004,47 @@ class ProducedTable(ProducedRow, TypedTable, declared_name=None):
 
 
 @dataclass(frozen=True)
+class BuildProducerDigests:
+    """The producer digests one build computed, kept in one file beside its interpreter.
+
+    A build's source never changes, so each producing family's source is digested once per
+    build rather than once per process. Which build verified which digest belongs to the
+    build, never to a carried store: the bus keeps only the digest that produced its rows.
+    """
+
+    path: Path
+
+    @classmethod
+    @cache
+    def current(cls) -> BuildProducerDigests:
+        return cls(Path(sys.prefix) / "agent-comms-producers" / f"{STAMP.commit()}.json")
+
+    def digest(self, family: type[ProducedTable]) -> str:
+        name = f"{family.__module__}.{family.__qualname__}"
+        stored = self.stored()
+        if name not in stored:
+            stored[name] = family._producer_digest()
+            AtomicFile(self.path).write_text(json.dumps(stored, sort_keys=True) + "\n")
+        return stored[name]
+
+    def stored(self) -> dict[str, str]:
+        if not self.path.is_file():
+            return {}
+        stored: dict[str, str] = json.loads(self.path.read_text(encoding="utf-8"))
+        return stored
+
+
+@dataclass(frozen=True)
 class ProjectionProducer(TypedTable, ProjectionProducerTables):
     projection: Annotated[str, Column(primary_key=True)]
-    commit: str
     producer_digest: str
 
     @classmethod
     def records_for(cls, rows: tuple[type[ProducedTable], ...]) -> tuple[Self, ...]:
-        commit = STAMP.commit()
-        return tuple(cls(row.declared_name, commit, row.producer_digest()) for row in rows)
+        return tuple(cls(row.declared_name, row.producer_digest()) for row in rows)
 
-    def verifies(self, row: type[ProducedTable], commit: str) -> bool:
-        return self.commit == commit or self.producer_digest == row.producer_digest()
+    def verifies(self, row: type[ProducedTable]) -> bool:
+        return self.producer_digest == row.producer_digest()
 
     @classmethod
     def matches(cls, db: sqlite3.Connection, rows: tuple[type[ProducedTable], ...]) -> bool:
@@ -2029,34 +2053,8 @@ class ProjectionProducer(TypedTable, ProjectionProducerTables):
         if not cls.present(db):
             return False
         stored = {record.projection: record for record in cls.select(db)}
-        commit = STAMP.commit()
-        return all(row.declared_name in stored and stored[row.declared_name].verifies(row, commit)
+        return all(row.declared_name in stored and stored[row.declared_name].verifies(row)
                    for row in rows)
-
-    @classmethod
-    def verify_build(cls, db: sqlite3.Connection, rows: tuple[type[ProducedTable], ...],
-                     change: SchemaChange) -> bool:
-        """After schema verification, record the current build without rebuilding its rows."""
-        stale = cls.unstamped(db, rows)
-        if not stale:
-            return False
-        change.require()
-        commit = STAMP.commit()
-        with SQLiteFile.write_transaction(db):
-            for record in stale:
-                replace(record, commit=commit).upsert(db)
-        return True
-
-    @classmethod
-    def unstamped(cls, db: sqlite3.Connection, rows: tuple[type[ProducedTable], ...]
-                  ) -> tuple[Self, ...]:
-        """The records ``verify_build`` restamps with this build, as the plan reads them."""
-        if not rows:
-            return ()
-        commit = STAMP.commit()
-        names = {row.declared_name for row in rows}
-        return tuple(record for record in cls.select(db)
-                     if record.projection in names and record.commit != commit)
 
 
 class StoreWriter(PublishedSQLiteFile, FileStore):
