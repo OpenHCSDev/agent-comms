@@ -35,21 +35,26 @@ class RepositorySelection(ABC):
 class GitCommandError(RuntimeError):
     """A Git operation failure, not malformed order data to aggregate and continue past."""
 
-    def __init__(self, repository: str, run: subprocess.CompletedProcess[str]):
-        self.run = run
-        detail = run.stderr.strip() or f"git failed with exit {run.returncode}"
+    def __init__(self, repository: str, run: subprocess.CompletedProcess[bytes]):
+        self.returncode = run.returncode
+        self.stderr = run.stderr.decode(errors="replace")
+        detail = self.stderr.strip() or f"git failed with exit {run.returncode}"
         super().__init__(f"Git in {repository}: {detail}")
 
     def source_path_absent(self, sha: str, file: str) -> bool:
         """Only Git's missing-path result, never a failed fetch or corrupt repository."""
-        return self.run.returncode == 128 and self.run.stderr in (
+        return self.returncode == 128 and self.stderr in (
             f"fatal: path '{file}' does not exist in '{sha}'\n",
             f"fatal: path '{file}' exists on disk, but not in '{sha}'\n",
         )
 
+    def no_such_revision(self) -> bool:
+        """``rev-parse --verify --quiet``'s unresolved revision, not a broken repository."""
+        return self.returncode == 1 and not self.stderr
+
     def no_check_ran_on(self, sha: str) -> bool:
         """Git's absent-note reply, not a corrupt repository or an invalid revision."""
-        return self.run.returncode == 1 and self.run.stderr in (
+        return self.returncode == 1 and self.stderr in (
             "", f"error: no note found for object {sha}.\n",
         )
 
@@ -122,18 +127,26 @@ class Repo(BaseModel, WireValue):
 
     @staticmethod
     def _run(
-        checkout: Path | str, *args: str, timeout: int = 60
-    ) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(("git", "-C", str(checkout), *args), capture_output=True, text=True,
-                              timeout=timeout, env=os.environ | {"LC_ALL": "C"})
+        checkout: Path | str, *args: str, timeout: float = 60, input: bytes = b""
+    ) -> subprocess.CompletedProcess[bytes]:
+        """The one Git subprocess: C-locale output, bytes in and out."""
+        return subprocess.run(("git", "-C", str(checkout), *args), capture_output=True,
+                              input=input, timeout=timeout, env=os.environ | {"LC_ALL": "C"})
 
     @classmethod
-    def git(cls, checkout: Path | str, *args: str, timeout: int = 60) -> str:
-        """The one Git runner: C-locale output, and every failure a GitCommandError."""
-        run = cls._run(checkout, *args, timeout=timeout)
+    def git_bytes(cls, checkout: Path | str, *args: str, timeout: float = 60,
+                  input: str = "") -> bytes:
+        """Git's exact output, for answers sized in bytes (``cat-file --batch``); every
+        failure a GitCommandError."""
+        run = cls._run(checkout, *args, timeout=timeout, input=input.encode())
         if run.returncode:
             raise GitCommandError(str(checkout), run)
         return run.stdout
+
+    @classmethod
+    def git(cls, checkout: Path | str, *args: str, timeout: float = 60, input: str = "") -> str:
+        """Git's output as text; every failure a GitCommandError."""
+        return cls.git_bytes(checkout, *args, timeout=timeout, input=input).decode()
 
     @classmethod
     def answers(cls, checkout: Path | str, *args: str) -> bool:
@@ -157,14 +170,14 @@ class Repo(BaseModel, WireValue):
         return cls._run(store, "--git-dir", ".", *args).returncode == 0
 
     @classmethod
-    def grep_files(cls, checkout: Path | str, *args: str) -> tuple[str, ...]:
-        """``git grep -l`` over the named revisions: exit 1 means no file matched."""
-        run = cls._run(checkout, "grep", "-l", *args)
+    def grep(cls, checkout: Path | str, *args: str) -> tuple[str, ...]:
+        """``git grep`` rows: exit 1 means nothing matched."""
+        run = cls._run(checkout, "grep", *args)
         if run.returncode == 1:
             return ()
         if run.returncode:
             raise GitCommandError(str(checkout), run)
-        return tuple(run.stdout.splitlines())
+        return tuple(run.stdout.decode().splitlines())
 
     @classmethod
     def of(cls, checkout: Path) -> Repo:

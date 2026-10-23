@@ -13,7 +13,6 @@ import json
 import os
 import re
 import shlex
-import subprocess
 import time
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping
@@ -144,6 +143,7 @@ from .read_basis import (
 from .recorded_bus import RecordedBusIdentity
 from .registry_document import CommanderProject, RegistrySnapshot
 from .registry_store import RegistryStore
+from .repo import GitCommandError, Repo
 from .restart_scope import AllOwners, OneOwner, RestartTarget
 from .runtime import RuntimeConnection, socket_path
 from .schema_report import StoreSchemaReport, StoreSchemaReports
@@ -1871,34 +1871,33 @@ class CheckpointCliCommand(NameArgument, CliCommand, declared_name="checkpoint")
     def apply(self, ctx: Comms) -> CliResult:
         worktree = Path(ctx.registry.require(self.name).worktree).resolve()
         branch = f"checkpoint/{self.name}"
-        # Git requires an absolute ceiling. Stop before entering the declared
-        # worktree's parent, never checkpoint an ancestor repository.
-        environment = {**os.environ, "GIT_CEILING_DIRECTORIES": str(worktree.parent)}
-
-        def git(*arguments: str, timeout: int = 60):
-            done = subprocess.run(["git", "-C", str(worktree), *arguments],
-                                  capture_output=True, text=True, timeout=timeout,
-                                  env=environment)
-            return done.returncode, done.stdout, done.stderr
-
-        code, out, _ = git("rev-parse", "--is-inside-work-tree")
-        if code != 0 or out.strip() != "true":
-            return RefusedCheckpoint(
-                self.name, branch, "the thread declaration's worktree is not a git worktree")
-        if not git("status", "--porcelain")[1].strip():
+        # Only the declared worktree's own repository; never checkpoint an ancestor's.
+        refused = RefusedCheckpoint(
+            self.name, branch, "the thread declaration's worktree is not a git worktree")
+        try:
+            top = Path(Repo.git(worktree, "rev-parse", "--show-toplevel").strip()).resolve()
+        except GitCommandError:
+            return refused
+        if top != worktree:
+            return refused
+        if not Repo.git(worktree, "status", "--porcelain").strip():
             return CleanCheckpoint(self.name, branch)
-        git("add", "-A")
-        code, out, err = git("commit", "-m", f"Checkpoint {self.name} before compaction")
-        if code != 0 and "nothing to commit" in (out + err):
-            return CleanCheckpoint(self.name, branch)
-        if code != 0:
-            return FailedCheckpoint(self.name, branch, (err.strip() or out.strip())[:400])
+        try:
+            Repo.git(worktree, "add", "-A")
+            if Repo.answers(worktree, "diff", "--cached", "--quiet"):
+                return CleanCheckpoint(self.name, branch)
+            Repo.git(worktree, "commit", "-m", f"Checkpoint {self.name} before compaction")
+        except GitCommandError as error:
+            return FailedCheckpoint(self.name, branch, str(error)[:400])
         # The transport can fail mid-flight; the named state is what survives,
         # never a silent skip and never a block on compaction.
-        code, out, err = git("push", "--force", "origin", f"HEAD:refs/heads/{branch}", timeout=120)
-        if code != 0:
-            return PushUnknownCheckpoint(self.name, branch, (err.strip() or out.strip())[:400])
-        return PushedCheckpoint(self.name, branch, git("rev-parse", "--short", "HEAD")[1].strip())
+        try:
+            Repo.git(worktree, "push", "--force", "origin", f"HEAD:refs/heads/{branch}",
+                     timeout=120)
+        except GitCommandError as error:
+            return PushUnknownCheckpoint(self.name, branch, str(error)[:400])
+        return PushedCheckpoint(self.name, branch,
+                                Repo.git(worktree, "rev-parse", "--short", "HEAD").strip())
 
 
 @dataclass(frozen=True, kw_only=True)

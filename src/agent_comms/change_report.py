@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import ast
 import re
-import subprocess
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -250,17 +249,24 @@ class ChangeReport(RecordMember, ReportEvidence):
 
     def require_references_exist(self, worktree: Path) -> None:
         """Every owner and consumer reference exists at this declared branch head."""
-        revision = _git(worktree, "rev-parse", "--verify", "--quiet",
-                        f"{self.branch}^{{commit}}", branch=self.branch)
+        try:
+            revision = Repo.git(worktree, "rev-parse", "--verify", "--quiet",
+                                f"{self.branch}^{{commit}}").strip()
+        except GitCommandError as error:
+            if error.no_such_revision():
+                raise ValueError(f"Change report branch {self.branch!r} does not resolve "
+                                 f"in {worktree}") from None
+            raise
         sources: dict[str, str] = {}
         for fact in self.facts:
             for reference in (fact.owner, *fact.consumers):
                 content = sources.get(reference.file)
                 if content is None:
                     try:
-                        content = _git(worktree, "show", f"{revision}:{reference.file}",
-                                       branch=self.branch)
-                    except ValueError:
+                        content = Repo.git(worktree, "show", f"{revision}:{reference.file}")
+                    except GitCommandError as error:
+                        if not error.source_path_absent(revision, reference.file):
+                            raise
                         raise ValueError(
                             f"Change report references {reference.file}, absent at "
                             f"branch head {self.branch} ({revision[:12]}) in {worktree}"
@@ -272,20 +278,6 @@ class ChangeReport(RecordMember, ReportEvidence):
                         f"past the {len(content.splitlines())} lines present at branch "
                         f"head {self.branch} ({revision[:12]}) in {worktree}"
                     )
-
-
-def _git(worktree: Path, *arguments: str, branch: str) -> str:
-    """One git read against the sending worktree; failures name the branch."""
-    result = subprocess.run(
-        ["git", "-C", str(worktree), *arguments],
-        capture_output=True, timeout=20,
-    )
-    if result.returncode != 0:
-        detail = result.stderr.decode(errors="replace").strip() or "git failed"
-        raise ValueError(
-            f"Change report branch {branch!r} does not resolve in {worktree}: {detail}"
-        )
-    return result.stdout.decode(errors="replace").strip()
 
 
 @dataclass(frozen=True, slots=True)

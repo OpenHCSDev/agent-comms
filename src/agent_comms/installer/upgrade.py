@@ -479,7 +479,7 @@ class Stack:
         source = cls(checkout, commands, home, runtime=LaunchRuntime.running())
         source.require_uv()
         source.resolve()
-        core = commands.run("git", "-C", checkout, "rev-parse", "HEAD").strip()
+        core = commands.git(checkout, "rev-parse", "HEAD").strip()
         resolution = hashlib.sha256(source.lock.read_bytes()).hexdigest()[:16]
         prefix = home / ".local/share/agent-comms/runtimes" / f"core-{core[:9]}-lock-{resolution}"
         built = replace(source, runtime=LaunchRuntime(prefix / "bin/python"))
@@ -508,7 +508,7 @@ class Stack:
         self.commands.run(self.uv, "pip", "install", "--python", self.python,
                           "-r", "pyproject.toml", "--extra", "dev", cwd=self.checkout,
                           env=self.environment())
-        core = self.commands.run("git", "-C", self.checkout, "rev-parse", "HEAD").strip()
+        core = self.commands.git(self.checkout, "rev-parse", "HEAD").strip()
         scratch = StorageRule().scratch_base
         scratch.mkdir(mode=0o700, parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=scratch, prefix=f"tests-{core[:12]}-") as temporary:
@@ -781,12 +781,12 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
     with commands, report.running(tree):
         StoreBackup.complete_interrupted(root, spill_dir)
         installed = Stack(tree.path, commands)
-        current = commands.run("git", "-C", checkout, "rev-parse", "HEAD").strip()
+        current = commands.git(checkout, "rev-parse", "HEAD").strip()
         with commands.timing(f"git merge-base --is-ancestor {current} {target}"):
             follows = Repo.descends(checkout, current, target)
         if not follows:
             raise UpgradeRefused(f"{target[:12]} does not follow the checkout's {current[:12]}")
-        if commands.run("git", "-C", checkout, "status", "--porcelain",
+        if commands.git(checkout, "status", "--porcelain",
                         "--untracked-files=no").strip():
             raise UpgradeRefused("The checkout has local changes")
         try:
@@ -1045,7 +1045,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                       f"maintenance cleared; owners: {started}", file=sys.stderr)
                 raise
             try:
-                self.staged.commands.run("git", "-C", self.checkout, "merge", "--ff-only", "-q", self.target)
+                self.staged.commands.git(self.checkout, "merge", "--ff-only", "-q", self.target)
                 Checkout(self.checkout).prepare()
                 passed = migration.carry(self.pending, self.staged, self.tree)
                 passed.files.require_rehearsal(rehearsal.files)
@@ -1069,9 +1069,9 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                     maintenance, restored, MaintenanceOperator.current())
                 holder.close()
                 holder.enter_context(restored_hold.holding())
-                head = self.installed.commands.run("git", "-C", self.checkout, "rev-parse", "HEAD").strip()
+                head = self.installed.commands.git(self.checkout, "rev-parse", "HEAD").strip()
                 if head != self.current:
-                    self.installed.commands.run("git", "-C", self.checkout, "reset", "-q", "--keep", self.current)
+                    self.installed.commands.git(self.checkout, "reset", "-q", "--keep", self.current)
                     Checkout(self.checkout).prepare()
                 self.installed.publish(self.root)
                 holder.close()
@@ -1140,7 +1140,7 @@ class FreshInstall(Install[FreshRehearsal]):
         return FreshRehearsal()
 
     def live(self, rehearsal: FreshRehearsal, report: InstallReport) -> CreatedRun:
-        self.staged.commands.run("git", "-C", self.checkout, "merge", "--ff-only", "-q",
+        self.staged.commands.git(self.checkout, "merge", "--ff-only", "-q",
                                  self.target)
         Checkout(self.checkout).prepare()
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
