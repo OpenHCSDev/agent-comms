@@ -9,18 +9,17 @@ from typing import ClassVar, Self
 
 from agent_comms.build_identity import RecordedBuildIdentity
 from agent_comms.bus import BusReader
-from agent_comms.channel_targets import ThreadTarget
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import ReissuedOrderGoalAction
 from agent_comms.message_bus import WatchPass
-from agent_comms.message_page import MessageReadRequest, PageBounds
+from agent_comms.message_page import MessageReadRequest
 from agent_comms.messages import Message
 from agent_comms.phase_evidence import PlanReading
 from agent_comms.plan_phases import PlanPhase
-from agent_comms.read_basis import NamedViewer, RepliesDisplayScope
+from agent_comms.read_basis import DirectedDMDisplayScope, RepliesDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.standing_rules import (
@@ -355,11 +354,11 @@ class HeartbeatSilent(IndependentStandingRule, DatedStandingRule):
         if CommanderHeartbeat.sender not in comms.registry or (
                 comms.registry.require(commander).incarnation not in served):
             return ()
-        page = comms.views.history_page(ThreadTarget(CommanderHeartbeat.sender),
-                                        PageBounds(limit=1), viewer=NamedViewer(commander))
-        return tuple(cls(beat.seq, beat.timestamp + cls.seconds) for beat in page.messages[-1:]
-                     if beat.sender == CommanderHeartbeat.sender
-                     and beat.timestamp + cls.seconds < time.time())
+        snapshot = comms.registry.snapshot()
+        scope = DirectedDMDisplayScope.capture(CommanderHeartbeat.sender, commander, snapshot)
+        beats = scope.records(comms.bus.bus, descending=True, limit=1)
+        return tuple(cls(beat.seq, beat.timestamp + cls.seconds) for beat in beats
+                     if beat.timestamp + cls.seconds < time.time())
 
     def began(self) -> float:
         return self.since

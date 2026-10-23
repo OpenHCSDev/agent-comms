@@ -883,13 +883,38 @@ class AnyTargetDisplayScope(MessageDisplayScope, declared_name=None):
 
 
 @dataclass(frozen=True, slots=True)
-class DMDisplayScope(MessageDisplayScope):
+class DirectedDMDisplayScope(MessageDisplayScope):
+    """Messages authored by the first participant and addressed to the second."""
+
     first_names: frozenset[str]
     second_names: frozenset[str]
 
     @classmethod
-    def capture(cls, a: str, b: str, snapshot: RegistryProvenance) -> DMDisplayScope:
+    def capture(cls, a: str, b: str, snapshot: RegistryProvenance) -> Self:
         return cls(snapshot.names_for(a), snapshot.names_for(b))
+
+    @property
+    def index_predicate(self) -> tuple[str, tuple]:
+        return self.address_predicate("sender", "target")
+
+    @property
+    def index_targets(self) -> frozenset[str]:
+        return self.second_names
+
+    def address_predicate(self, sender: str, target: str) -> tuple[str, tuple]:
+        first, second = tuple(self.first_names), tuple(self.second_names)
+        a, b = ",".join("?" for _ in first), ",".join("?" for _ in second)
+        return f"({sender} IN ({a}) AND {target} IN ({b}))", (*first, *second)
+
+    def addresses(self, sender: str, target: str) -> bool:
+        return sender in self.first_names and target in self.second_names
+
+    def includes(self, message: Message) -> bool:
+        return self.addresses(message.sender, message.target)
+
+
+class DMDisplayScope(DirectedDMDisplayScope):
+    """A conversation includes both directions of its participants' direct messages."""
 
     @classmethod
     def capture_human(cls, viewer: str, peer: str, snapshot: RegistrySnapshot) -> DMDisplayScope:
@@ -903,25 +928,17 @@ class DMDisplayScope(MessageDisplayScope):
             raise DMScopeChanged("DM display identity changed; refresh the page.")
         return cls.capture(first.name, second.name, snapshot)
 
-    @property
-    def index_predicate(self) -> tuple[str, tuple]:
-        return self.address_predicate("sender", "target")
-
     def address_predicate(self, sender: str, target: str) -> tuple[str, tuple]:
-        first, second = tuple(self.first_names), tuple(self.second_names)
-        a, b = ",".join("?" for _ in first), ",".join("?" for _ in second)
-        return (f"(({sender} IN ({a}) AND {target} IN ({b})) OR "
-                f"({sender} IN ({b}) AND {target} IN ({a})))",
-                (*first, *second, *second, *first))
+        forward, first = super().address_predicate(sender, target)
+        reverse, second = super().address_predicate(target, sender)
+        return f"({forward} OR {reverse})", (*first, *second)
 
     @property
     def index_targets(self) -> frozenset[str]:
         return self.first_names | self.second_names
 
-    def includes(self, message: Message) -> bool:
-        return (message.sender in self.first_names and message.target in self.second_names) or (
-            message.sender in self.second_names and message.target in self.first_names
-        )
+    def addresses(self, sender: str, target: str) -> bool:
+        return super().addresses(sender, target) or super().addresses(target, sender)
 
 
 @dataclass(frozen=True)
