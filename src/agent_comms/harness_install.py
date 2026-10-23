@@ -129,7 +129,7 @@ Description=Core message stream to Codex conversation %i
 
 [Service]
 Type=simple
-ExecStart={self.bin('agent-comms-codex-bridge')} watch --state %h/.local/state/codex-comms-inbox --session %i
+ExecStart={self.bin('agent-comms-codex-bridge')} watch --session %i
 Restart=on-failure
 RestartSec=5
 KillMode=control-group
