@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import pytest
 from metaclass_registry import DuplicateRegistryKeyError
 
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.declared_family import DeclaredFamily, DeclaredOrder
 
 
 class SampleFamily(DeclaredFamily, affix="Case"):
@@ -38,6 +38,7 @@ def test_golden_names_decode_capability_and_slots_identity():
     assert SampleFamily.member_named("http_ready") is HTTPReadyCase
     assert SampleFamily.members_with(Capability) == (HTTPReadyCase,)
     assert HTTPReadyCase(3).execute() == 3
+    assert HTTPReadyCase.declared_position() < CustomCase.declared_position()
     with pytest.raises(TypeError):
         AbstractCase()
     with pytest.raises(ValueError):
@@ -131,3 +132,36 @@ def test_independent_families_and_inherited_names_are_derived():
 
         class Cross(HTTPReady, CustomCase):
             pass
+
+
+def test_ordered_family_views_have_one_declaration_module():
+    from agent_comms.acp_failure import ACPFailure
+    from agent_comms.native_input_record import NativeInputExecution
+    from agent_comms.todos import FoundProgress
+    from agent_comms.tools import ToolRequest
+    from agent_comms.turn_failure import TurnFailure
+
+    for family in (TurnFailure, FoundProgress, ACPFailure, NativeInputExecution, ToolRequest):
+        assert {member.__module__ for member in family.members_with(family)} == {family.__module__}
+
+
+def test_plain_order_requires_exactly_one_rank_and_derives_its_position():
+    class Rank(DeclaredOrder):
+        pass
+
+    class First(Rank):
+        pass
+
+    class Second(Rank):
+        pass
+
+    class Selected(Second):
+        pass
+
+    class Ambiguous(First, Second):
+        pass
+
+    assert Rank.position_of(First) < Rank.position_of(Selected)
+    for member in (object, Ambiguous):
+        with pytest.raises(ValueError):
+            Rank.position_of(member)
