@@ -663,7 +663,9 @@ async def second(value):
             "TypeSwitch",
             "def decide(x):\n    return isinstance(x, A) or isinstance(x, B) or isinstance(x, C)\n",
         ),
-        ("AnyAnnotation", "from typing import Any\ndef read(value: Any) -> None: ...\n"),
+        ("AnyName", "from typing import Any\ndef read(value: Any) -> None: ...\n"),
+        ("AnyName", "from typing import Any\nvalue = Any\n"),
+        ("UnannotatedParameter", "def read(value): ...\n"),
         ("Unformatted", "value=1\n"),
         ("LintFindings", "import os\n"),
         ("TypeErrors", 'value: int = "text"\n'),
@@ -853,7 +855,7 @@ ANY_DECLARATIONS = (
     + "\n"
 )
 
-# Each line names a type or a value without declaring ``Any`` as a type.
+# Loaded Any references count even outside a declaration; literal strings do not.
 ANY_NON_DECLARATIONS = (
     "\n".join(
         [
@@ -872,10 +874,10 @@ ANY_NON_DECLARATIONS = (
 )
 
 
-def test_any_is_counted_wherever_a_type_is_declared(repo: Repository) -> None:
-    from tools.debt_ratchet import AnyAnnotation
+def test_any_is_counted_once_in_declarations_and_values(repo: Repository) -> None:
+    from tools.debt_ratchet import AnyName
 
-    uses = AnyAnnotation.uses(ANY_DECLARATIONS.encode(), "declarations.py")
+    uses = AnyName.uses(ANY_DECLARATIONS.encode(), "declarations.py")
     assert sorted((use.site, use.owner) for use in uses) == [
         ("alias", ""),
         ("alias", ""),
@@ -888,14 +890,14 @@ def test_any_is_counted_wherever_a_type_is_declared(repo: Repository) -> None:
         ("return", "Plain.read"),
         ("variable", "Plain.read"),
     ]
-    assert AnyAnnotation.count(ANY_NON_DECLARATIONS.encode(), "values.py") == 0
+    assert AnyName.count(ANY_NON_DECLARATIONS.encode(), "values.py") == 3
 
     base = repo.commit({"declarations.py": "", "values.py": ""})
     head = repo.commit({"declarations.py": ANY_DECLARATIONS, "values.py": ANY_NON_DECLARATIONS})
     status, report = repo.compare(base, head)
     assert status == 1
-    assert report["delta"][f"AnyAnnotation:{repo.root}/declarations.py"] == len(uses)
-    assert report["delta"][f"AnyAnnotation:{repo.root}/values.py"] == 0
+    assert report["delta"][f"AnyName:{repo.root}/declarations.py"] == len(uses)
+    assert report["delta"][f"AnyName:{repo.root}/values.py"] == 3
 
 
 def test_stating_a_type_lowers_the_any_count_and_passes(repo: Repository) -> None:
@@ -905,7 +907,7 @@ def test_stating_a_type_lowers_the_any_count_and_passes(repo: Repository) -> Non
     )
     status, report = repo.compare(base, head)
     assert status == 0
-    assert report["delta"][f"AnyAnnotation:{repo.root}/declarations.py"] == -1
+    assert report["delta"][f"AnyName:{repo.root}/declarations.py"] == -1
 
 
 @pytest.mark.parametrize(

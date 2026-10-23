@@ -17,7 +17,9 @@ from functools import cache
 from importlib import import_module
 from pathlib import Path
 from pkgutil import walk_packages
-from typing import Any, ClassVar, Generic, Self, TypeVar
+from typing import ClassVar, Generic, Self, TypeVar
+
+from pydantic import JsonValue
 
 from .child_process import Platform
 from .coordination_errors import CoordinationReadUnavailable
@@ -48,9 +50,6 @@ class DocumentChange[D, R]:
     def to(cls, document: D) -> DocumentChange[D, D]:
         """A change whose answer is the successor itself."""
         return cls(document, document)
-
-
-
 
 
 class RootFile:
@@ -219,7 +218,7 @@ class JsonDocument(RootFile, ABC, Generic[T]):
     def _read_unlocked(self) -> T:
         return self._read_using(self._decode)
 
-    def _read_using(self, decode: Callable[[object], T]) -> T:
+    def _read_using(self, decode: Callable[[JsonValue], T]) -> T:
         try:
             return decode(FieldCodec.parse(self.path.read_bytes()))
         except FileNotFoundError:
@@ -231,11 +230,11 @@ class JsonDocument(RootFile, ABC, Generic[T]):
         """Strict by default; optional owners may declare a fail-closed value."""
         raise error
 
-    def _decode(self, data: Any) -> T:
+    def _decode(self, data: JsonValue) -> T:
         """Decode the current declaration at the storage boundary."""
         return FieldCodec.decode_document(self.record_type, data)
 
-    def _encode(self, value: T) -> Any:
+    def _encode(self, value: T) -> JsonValue:
         """Owners with an established external shape may project that encoding."""
         return FieldCodec.encode_document(value, self.record_type)
 

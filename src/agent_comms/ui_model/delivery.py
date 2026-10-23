@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
-from typing import Any
+from pydantic import JsonValue
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
@@ -43,10 +43,10 @@ class InputDelivery:
     unconfirmed. Rows are the owner's public input records.
     """
 
-    inputs: tuple[dict[str, Any], ...] = ()
+    inputs: tuple[dict[str, JsonValue], ...] = ()
     historical_count: int = 0
     dismissed_historical_count: int = 0
-    historical_inputs: tuple[dict[str, Any], ...] = ()
+    historical_inputs: tuple[dict[str, JsonValue], ...] = ()
     owner_queue: bool = False
     read_state: InputDeliveryReadState = LoadedInputDeliveryReadState()
 
@@ -64,7 +64,7 @@ class InputDelivery:
         return self.read_state.present_status(status).present_attention(ordinary)
 
     @classmethod
-    def from_wire(cls, overview: Mapping[str, Any]) -> InputDelivery:
+    def from_wire(cls, overview: Mapping[str, JsonValue]) -> InputDelivery:
         decoded = FieldCodec.decode(DeliveryOverview, overview)
         # Toad's current presentation API still consumes wire rows. The paired
         # consumer migration follows the stabilization install; it must not be

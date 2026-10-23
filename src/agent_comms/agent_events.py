@@ -9,7 +9,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from functools import partial
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, ClassVar
+
+from acp.schema import ToolKind
 
 from .acp_failure import (
     FailedNativeTurnOutcome,
@@ -201,7 +203,7 @@ class ToolEvent(AgentEvent):
 class ToolStart(ToolEvent):
     title: str = ""
     args: object = None
-    kind: str = "other"
+    kind: ToolKind = "other"
 
     @classmethod
     def from_call(cls, call_id: str, name: str, arguments: object) -> ToolStart:
@@ -266,7 +268,7 @@ class Done(AgentEvent, FailedGoalTurn):
     text: str
     ok: bool
     failure: TurnFailure | None = None
-    diagnostic: dict[str, Any] | None = None
+    diagnostic: dict[str, int] | None = None
     outcome: NativeTurnOutcome = field(default_factory=UnresolvedNativeTurnOutcome)
     # Immutable completion snapshot of TurnOutput's already decoded result.
     retry_result: ProviderRetryResult | None = None
