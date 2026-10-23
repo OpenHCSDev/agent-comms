@@ -1858,24 +1858,24 @@ class SpawnedProcess(SynchronousProcess):
         self.process = process
 
     @classmethod
-    def launch(
+    @contextmanager
+    def launching(
         cls,
         command: tuple[str, ...],
         *,
         cwd: str | Path | None = None,
         env: Mapping[str, str] = INHERITED_ENVIRONMENT,
         output: Any = subprocess.DEVNULL,
-        before_start: Callable[[ProcessIdentity], None] | None = None,
         runtime: LaunchRuntime = LaunchRuntime.running(),
         lifetime: type[ChildLifetime] = DiesWithLauncherLifetime,
-    ) -> SpawnedProcess:
+    ) -> Generator[SpawnedProcess]:
+        """Yield the child before it executes; leaving the body releases it, raising reaps it."""
         if not command:
             raise ValueError("A child command is required")
         with Platform.current().launch(command, (), runtime, lifetime) as launch:
             child = launch.spawn(cwd=cwd, env=env, stdout=output, stderr=output)
             try:
-                if before_start is not None:
-                    before_start(child.identity)
+                yield child
             except BaseException:
                 launch.cancel_before_release(child.identity)
                 child.reap()
@@ -1887,7 +1887,12 @@ class SpawnedProcess(SynchronousProcess):
             except BaseException:
                 child.close()
                 raise
-        return child
+
+    @classmethod
+    def launch(cls, command: tuple[str, ...], **options: Any) -> SpawnedProcess:
+        """Launch with nothing to reserve before the child executes."""
+        with cls.launching(command, **options) as child:
+            return child
 
     def collect(self, *, timeout: float) -> subprocess.CompletedProcess[bytes]:
         """Collect within the caller's owned context; its exit retires descendants."""

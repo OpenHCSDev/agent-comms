@@ -683,7 +683,7 @@ class RecordsPhase(RemainingSlopPhase):
 
     evidence = AllEvidence(
         (
-            PatternAbsent(r"ConnectivityFacet|observe_connectivity"),
+            PatternAbsent(r"[C]onnectivityFacet|[o]bserve_connectivity"),
             PatternAbsent(
                 r"^\s*nonlocal\b",
                 (
