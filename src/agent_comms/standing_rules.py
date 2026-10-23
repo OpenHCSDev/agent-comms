@@ -169,9 +169,9 @@ class HeldBranchRule(UndatedStandingRule, declared_name=None):
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState]) -> tuple[Self, ...]:
         branches = tuple(
-            HeldBranch(todo.id, state.unit, state.source.pulls.branch_difference(
+            HeldBranch(todo.id, unit, state.source.pulls.branch_difference(
                 state.source.thread.project_path))
-            for state in observed for todo in state.source.todos
+            for state in observed for unit in state.readable_units() for todo in state.source.todos
         )
         ordered = tuple(sorted(branches, key=lambda held: (
             held.difference.repository.to_wire(), held.difference.branch,
