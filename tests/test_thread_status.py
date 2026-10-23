@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from dataclasses import replace
 
 import pytest
@@ -20,11 +21,12 @@ from agent_comms.presentation import CountedRead, ThreadView
 from agent_comms.registration import Registration
 from agent_comms.thread_status import (
     ArchivedThreadStatus,
-    CliInboxPresence,
     ConnectedThreadStatus,
     DeletingThreadStatus,
     NoBridgeThreadStatus,
+    HeartbeatThreadStatus,
     IdleThreadStatus,
+    ProcessThreadStatus,
     RunningThreadStatus,
     StoppedThreadStatus,
     ThreadStatus,
@@ -50,7 +52,8 @@ def test_captured_owner_presentation_survives_exit_until_fresh_acquisition(tmp_p
         assert view.presentation == displayed
         assert transferred.presentation == displayed
         fresh, = comms.views.thread_views()
-        assert fresh.presentation.summary == "Owner exited"
+        assert fresh.status == StoppedThreadStatus()
+        assert fresh.presentation.summary == "Stopped"
         assert not fresh.presentation.status.working
     finally:
         if child.poll() is None:
@@ -59,12 +62,16 @@ def test_captured_owner_presentation_survives_exit_until_fresh_acquisition(tmp_p
 
 
 @pytest.mark.parametrize("status", [member() for member in ThreadStatus.members_with(ThreadStatus)])
-def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status):
+@pytest.mark.parametrize("age", [0.0, HeartbeatThreadStatus.max_age + 1])
+def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status, age):
     comms = installed_comms(tmp_path)
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
     try:
         thread = Thread('owner', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(child.pid), title=GivenThreadText('Retained title'), session_file=RegistrySessionLocation.from_path('/retained/session.jsonl', comms.root), created_at=12.5)
         comms.registry.register(thread, status)
+        with comms.registry.store.editing() as edit:
+            edit.document.last_seen[thread.name] = time.time() - age
+            edit.commit()
         before = comms.registry.snapshot()
         saved = comms.registry.store.path.read_bytes()
         raw = json.loads(saved)
@@ -72,7 +79,7 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status)
         assert raw["threads"]["owner"]["created_at"] == 12.5
         reopened = Registration(comms.registry.store.path)
         assert reopened.snapshot() == before
-        expected = status.registered(thread)
+        expected = status.registered(thread, before.seen_at(thread.name))
         assert reopened.status("owner") == expected
         assert FieldCodec.decode(ThreadStatus, FieldCodec.encode(status)) == status
         assert comms.views.thread_detail("owner", CountedRead()).to_wire()["status"] == expected.declared_name
@@ -96,12 +103,12 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status)
                     individual.require("owner")
         with pytest.raises(UnregisteredThreadError):
             comms.views.thread_presentations(("missing",)).require("missing")
-        if isinstance(status, CliInboxPresence):
-            assert reopened.status("owner") == ConnectedThreadStatus()
-            child.kill()
-            child.wait(timeout=5)
-            assert reopened.status("owner") == NoBridgeThreadStatus()
-            assert comms.registry.store.path.read_bytes() == saved
+        child.kill()
+        child.wait(timeout=5)
+        expected = status.registered(thread, before.seen_at(thread.name))
+        assert reopened.status("owner") == expected
+        assert comms.agents.is_live(thread.incarnation, reopened.snapshot()) == expected.running
+        assert comms.registry.store.path.read_bytes() == saved
     finally:
         child.kill()
         child.wait(timeout=5)
@@ -172,6 +179,8 @@ def test_inactive_owner_survives_a_refused_viewer(tmp_path, status):
 @pytest.mark.parametrize("status,listed,rename", [
     (RunningThreadStatus(), True, True),
     (IdleThreadStatus(), True, False),
+    (ProcessThreadStatus(), True, False),
+    (HeartbeatThreadStatus(), True, True),
     (ConnectedThreadStatus(), True, True),
     (NoBridgeThreadStatus(), True, True),
     (StoppedThreadStatus(), False, False),
@@ -197,7 +206,8 @@ def test_presence_owns_roster_membership_and_self_rename(status, listed, rename)
 ])
 def test_reconfiguration_keeps_caller_authority_across_renaming(tmp_path, status, allows_other_caller):
     comms = wire(tmp_path)
-    comms.registry.declare(Thread("subject", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread("subject", frozenset(), str(tmp_path),
+                                  process_identity=ProcessIdentity.capture(os.getpid())))
     comms.registry.declare(Thread("other", frozenset(), str(tmp_path)))
     comms.registry.rename("subject", "renamed")
     comms.registry.register(comms.registry.require("renamed"), status)
@@ -210,7 +220,8 @@ def test_reconfiguration_keeps_caller_authority_across_renaming(tmp_path, status
 @pytest.mark.parametrize("status", [RunningThreadStatus(), IdleThreadStatus()])
 def test_configure_command_keeps_active_configuration_in_its_session(tmp_path, status):
     comms = wire(tmp_path)
-    comms.registry.register(Thread("subject", frozenset(), str(tmp_path)), status)
+    comms.registry.register(Thread("subject", frozenset(), str(tmp_path),
+                                   process_identity=ProcessIdentity.capture(os.getpid())), status)
     with pytest.raises(RelationViolationError, match="change its settings through its session"):
         ConfigureCliCommand(name="subject").apply(comms)
 
