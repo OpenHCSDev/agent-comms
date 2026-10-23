@@ -101,9 +101,14 @@ class ClientImportsProbe(RuntimeProbe[None]):
 
 
 class PinnedLocationProbe(RuntimeProbe[Path]):
-    def run(self) -> Annotated[Path, PathText]:
-        from agent_comms.native_package import pinned_location
+    """Where a checkout's pin puts its built package, once its sources still hash to the
+    inputs that pin declares: the pin is then the key of every build made from them."""
 
+    def run(self) -> Annotated[Path, PathText]:
+        from agent_comms.native_build_inputs import NativeBuildInputs
+        from agent_comms.native_package import MANIFEST, pinned_location
+
+        NativeBuildInputs(MANIFEST.parent.parent).require_pinned(MANIFEST)
         return pinned_location()
 
 

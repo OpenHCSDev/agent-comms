@@ -255,8 +255,8 @@ class CarriedPass(Extendable):
     def after_acceptance(self, pending: tuple[Carry, ...], stack: Stack,
                          tree: TargetTree) -> Self:
         return replace(self, retired_inputs=tuple(
-            StepRun(step.declared_name, stack.call_step(step, tree, RetireInputsOperation()))
-            for step in pending
+            StepRun(step.declared_name, retired) for step, retired in
+            zip(pending, stack.call_steps(pending, tree, RetireInputsOperation()), strict=True)
         ))
 
     def require_read(self, carried_from: BusReadBack) -> None:
@@ -469,6 +469,7 @@ class Stack:
         if prefix.exists():
             if not RuntimeResolution.at(prefix).matches(source.lock, built.python, core, commands):
                 raise UpgradeRefused("Existing built runtime differs from its resolved inputs")
+            built.prepare_native()
             return built
         prefix.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         prefix.mkdir(mode=0o700)
@@ -508,16 +509,41 @@ class Stack:
     def imports(self) -> None:
         self.probe(ClientImportsProbe())
 
+    @property
+    def prepared_natives(self) -> Path:
+        """Every runtime's built native package, laid out as ``stack/`` is and keyed by the
+        pin, so a runtime whose pin was already built copies it instead of rebuilding it."""
+        return self.home / ".local/share/agent-comms/native"
+
     def install_native(self) -> None:
-        """Build, copy and qualify this interpreter's native artifact before publication."""
-        self.commands.run(self.checkout / "stack/bin/prepare-pi-native", "--python", self.python,
-                          cwd=self.checkout, env=self.environment(self.checkout / "src"))
+        """Copy this pin's built native package into the interpreter, building it only when
+        no runtime has built this pin yet; qualifying the copy checks it against the pin."""
         native = self.probe(PinnedLocationProbe(), source=(self.checkout / "src",))
+        layout = native.relative_to(self.checkout / "stack")
+        prepared = self.prepared_natives / layout
+        if not prepared.is_dir():
+            self.commands.run(self.checkout / "stack/bin/prepare-pi-native", "--python",
+                              self.python, cwd=self.checkout,
+                              env=self.environment(self.checkout / "src"))
+            self.keep_native(native, layout)
         package = self.probe(PackageRootProbe())
-        destination = package / "_native" / native.relative_to(self.checkout / "stack")
+        destination = package / "_native" / layout
         destination.parents[2].mkdir(mode=0o700, parents=True)
-        shutil.copytree(native, destination)
+        shutil.copytree(prepared, destination)
         self.prepare_native()
+
+    def keep_native(self, native: Path, layout: Path) -> None:
+        """Publish a fresh build under its pin whole, and retire other pins' builds: each
+        runtime holds its own copy, so only the next runtime reads this one."""
+        self.prepared_natives.mkdir(mode=0o700, parents=True, exist_ok=True)
+        stage = Path(tempfile.mkdtemp(dir=self.prepared_natives, prefix=".stage-"))
+        try:
+            shutil.copytree(native, stage / layout)
+            for retired in self.prepared_natives.glob(".pi-native-*"):
+                shutil.rmtree(retired)
+            stage.joinpath(layout.parts[0]).rename(self.prepared_natives / layout.parts[0])
+        finally:
+            shutil.rmtree(stage, ignore_errors=True)
 
     def prepare_native(self) -> None:
         self.probe(PrepareNativeProbe())
@@ -564,22 +590,31 @@ class Stack:
             time.sleep(5)
         raise UpgradeRefused(f"{verb}: still unavailable after 20 minutes: {failure.error}")
 
-    def call_step[Answer](self, step: Carry, tree: TargetTree,
-                          operation: CarryOperation[Answer]) -> Answer:
-        """Run the step in the target tree with this stack's interpreter."""
+    def call_steps[Answer](self, steps: tuple[Carry, ...], tree: TargetTree,
+                           operation: CarryOperation[Answer]) -> tuple[Answer, ...]:
+        """Run one pass of steps, in order, in one worker in the target tree with this
+        stack's interpreter; each step's answer in step order."""
+        if not steps:
+            return ()
         with tempfile.TemporaryDirectory() as scratch:
             result = Path(scratch) / "result.json"
-            self.commands.run(self.python, "-m", step_worker.__name__, step.declared_name,
-                              json.dumps(FieldCodec.encode(step)),
-                              json.dumps(FieldCodec.encode(operation)), result, cwd=tree.path,
-                              env=self.environment(*tree.source_paths()))
-            return operation.decode_answer(result.read_text())
+            self.commands.run(self.python, "-m", step_worker.__name__,
+                              json.dumps(FieldCodec.encode(operation)), result,
+                              json.dumps([[step.declared_name, FieldCodec.encode(step)]
+                                          for step in steps]),
+                              cwd=tree.path, env=self.environment(*tree.source_paths()))
+            return operation.decode_answers(result.read_text())
+
+    def call_step[Answer](self, step: Carry, tree: TargetTree,
+                          operation: CarryOperation[Answer]) -> Answer:
+        (answer,) = self.call_steps((step,), tree, operation)
+        return answer
 
     def backup_files(self, pending: tuple[Carry, ...],
                      tree: TargetTree) -> tuple[Path, ...]:
         return tuple(sorted({
-            path for step in pending
-            for path in self.call_step(step, tree, BackupFilesOperation())
+            path for paths in self.call_steps(pending, tree, BackupFilesOperation())
+            for path in paths
         }))
 
     def running_owners(self, root: Path) -> list[str]:
@@ -864,10 +899,8 @@ class PreparedMigration(Extendable):
     def carry(self, pending: tuple[Carry, ...], staged: Stack,
               tree: TargetTree) -> CarriedPass:
         """One migration sequence for rehearsal and the backed-up live bus."""
-        steps = []
-        for step in pending:
-            steps.append(StepRun(step.declared_name, staged.call_step(
-                step, tree, MigrateOperation(apply=True))))
+        steps = [StepRun(step.declared_name, carried) for step, carried in zip(
+            pending, staged.call_steps(pending, tree, MigrateOperation(apply=True)), strict=True)]
         reconciled = staged.cli(self.root, ReconcileStoresCliCommand)
         steps.append(StepRun(ReconcileStoresCliCommand.declared_name, Carried(
             len(reconciled.rewritten), rewritten=reconciled.rewritten)))
@@ -896,7 +929,6 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
         RehearsalHome(home).prepare()
         (home / ".claude").symlink_to(Path.home() / ".claude")
         stack = replace(self.staged, home=home)
-        stack.prepare_native()
         pending = tuple(replace(step, root=copied, spill_dir=practice.spill_dir)
                         for step in self.pending)
         for destination in stack.backup_files(pending, self.tree):
@@ -953,7 +985,6 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
             try:
                 self.staged.commands.run("git", "-C", self.checkout, "merge", "--ff-only", "-q", self.target)
                 Checkout(self.checkout).prepare()
-                self.staged.prepare_native()
                 passed = migration.carry(self.pending, self.staged, self.tree)
                 passed.files.require_rehearsal(rehearsal.files)
                 self.publish(migration.backup, selected_route)
@@ -1046,7 +1077,6 @@ class FreshInstall(Install[FreshRehearsal]):
         self.staged.commands.run("git", "-C", self.checkout, "merge", "--ff-only", "-q",
                                  self.target)
         Checkout(self.checkout).prepare()
-        self.staged.prepare_native()
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         Comms(self.root).registry.prepare_native_root()
         Bus.install(Bus.path_in(self.root))

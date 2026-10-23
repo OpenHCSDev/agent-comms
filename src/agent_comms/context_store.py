@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import sqlite3
 import uuid
@@ -11,7 +10,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, ClassVar, Literal, Self, cast
+from typing import Annotated, ClassVar, Self, cast
 
 from .errors import RelationViolationError, StoredHistoryUnreadable
 from .field_codec import (
@@ -35,7 +34,7 @@ from .turn_context import (
     UnrecordedSegment,
 )
 
-from .typed_table import Column, DurableStore, Generated, Index, TypedTable
+from .typed_table import Column, DurableStore, Generated, Index, SingletonRow, TypedTable
 
 
 @dataclass(frozen=True)
@@ -91,8 +90,7 @@ class UnrecordedContextSource(ContextSourceState):
 
 
 @dataclass(frozen=True)
-class ContextStoreInfo(ContextSourceState, TypedTable):
-    singleton: Annotated[Literal[1], Column(primary_key=True)]
+class ContextStoreInfo(ContextSourceState, SingletonRow):
     source: ContextStoreIdentity
 
     @classmethod
@@ -186,8 +184,7 @@ class ContextSegmentVersion(TypedTable):
 
     @classmethod
     def append(cls, db: sqlite3.Connection, segment: RecordedSegmentManifest) -> int:
-        encoded = json.dumps(FieldCodec.encode(segment), sort_keys=True, separators=(",", ":"))
-        digest = hashlib.sha256(encoded.encode()).hexdigest()
+        digest = FieldCodec.digest(segment)
         rows = cls.select(db, digest=digest)
         if rows:
             existing = rows[0]

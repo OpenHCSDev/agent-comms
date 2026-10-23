@@ -248,7 +248,7 @@ class StoredInput(InputAttempt):
     key: str
     sequence: int | None
     owner: str
-    claim_scope: Annotated[int, WireName("admission")]
+    claim_generation: int
     target: str
     source_text: str
     origin: Annotated[InputOrigin, WireOmitDefault()] = field(
@@ -266,7 +266,7 @@ class StoredInput(InputAttempt):
             for value in (self.key, self.owner, self.target, self.source_text):
                 if not FieldCodec.decode(str, value):
                     raise ValueError("Input identity text cannot be empty")
-            GenerationCounter.require_positive(self.claim_scope)
+            GenerationCounter.require_positive(self.claim_generation)
         except ValueError as error:
             raise ValueError("Invalid ACP input identity") from error
         if self.sequence is not None and (
@@ -288,7 +288,7 @@ class StoredInput(InputAttempt):
         return self.origin.matches_owner(self.owner, source_owner)
 
     def matches_claim(self, claim_scope: int) -> bool:
-        return self.claim_scope == claim_scope
+        return self.claim_generation == claim_scope
 
     def _transition(self, target: type[StoredInput], **changes) -> StoredInput:
         values = {item.name: getattr(self, item.name) for item in fields(self)}
@@ -334,7 +334,7 @@ class ReservedInput(Unresolved, RecoverableUnboundInput):
     def bind(
         self, *, claim_scope: int, turn_id: str, native_id: str, text: str
     ) -> InputTransition:
-        if self.claim_scope != claim_scope:
+        if self.claim_generation != claim_scope:
             return UnchangedInput(self)
         return MovedInput(self._transition(
             BoundUnknownInput, turn_id=turn_id, native_id=native_id, sent_digest=TextDigest.of(text)

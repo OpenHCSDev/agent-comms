@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import math
 from abc import abstractmethod
 from collections.abc import Mapping
@@ -14,11 +13,18 @@ from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS, require_bounded, require_nonempty, validate_execution_id,
 )
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import MalformedRecord, NullMember, RecordMember, SubclassUnion
+from agent_comms.field_codec import (
+    FieldCodec,
+    MalformedRecord,
+    NullMember,
+    RecordMember,
+    SubclassUnion,
+)
+
 
 def _canonical(value: object) -> bytes:
-    return json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+    return FieldCodec.compact(
+        value, sort_keys=True, ensure_ascii=False, allow_nan=False,
     ).encode("utf-8")
 
 

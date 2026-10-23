@@ -59,7 +59,7 @@ async def test_interrupted_following_delivery_recovers_only_before_native_send(
         leased = comms.agents.begin_turn(owner.name, "interrupted-turn")
         assert agent.inputs.dispositions.bind(
             item.key,
-            claim_scope=row.claim_scope,
+            claim_scope=row.claim_generation,
             turn_id=leased.thread.require_turn_lease().turn_id,
             native_id="a" * 32,
             text=row.source_text,

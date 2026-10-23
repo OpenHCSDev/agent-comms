@@ -14,7 +14,7 @@ from .typed_table import (
     Column,
     GuardedInserts,
     ImmutableRows,
-    TypedTable,
+    WithoutRowid,
 )
 
 
@@ -23,7 +23,7 @@ class TriageNativeSources(
     GuardedInserts,
     ImmutableRows,
     NativeRuntimeTable,
-    TypedTable,
+    WithoutRowid,
     declared_name="native_runtime_triage_sources",
 ):
     insert_condition = """(NOT EXISTS (SELECT 1 FROM native_runtime_input n
@@ -39,7 +39,6 @@ class TriageNativeSources(
     ]
     assignment_ids: tuple[str, ...]
 
-    without_rowid = True
     checks = ("json_array_length(assignment_ids)>0",)
 
     def __post_init__(self):

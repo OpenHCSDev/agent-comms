@@ -50,7 +50,7 @@ from .typed_table import (
     GuardedInserts,
     ImmutableRows,
     Index,
-    TypedTable,
+    WithoutRowid,
 )
 
 if TYPE_CHECKING:
@@ -215,7 +215,7 @@ class NativeContextRecord(NativeInputCommit):
 
 @dataclass(frozen=True, slots=True)
 class NativeContextJournal(
-    GuardedInserts, ImmutableRows, NativeContextRecord, TypedTable, DurableTables
+    GuardedInserts, ImmutableRows, NativeContextRecord, WithoutRowid, DurableTables
 ):
     """One proof declaration owns wire facts and the indexed durable journal."""
 
@@ -230,7 +230,6 @@ class NativeContextJournal(
     schema: Literal[2]
     type: Literal["context_committed"]
 
-    without_rowid = True
     indexes = (Index(("request_generation",)), Index(("session_id",)))
 
     @classmethod

@@ -23,7 +23,15 @@ from .private_path import FileObservation, FileRevision, MissingFile
 from .read_ledger import ReadDocument, ReadLedger
 from .registry_document import RosterVisibility
 from .thread_owned_state import ThreadOwnedState
-from .typed_table import Column, JsonStorage, SQLiteTableName, SQLiteUserVersion, TypedRow, TypedTable
+from .typed_table import (
+    Column,
+    JsonStorage,
+    SQLiteTableName,
+    SQLiteUserVersion,
+    TypedRow,
+    TypedTable,
+    WithoutRowid,
+)
 from .ui_model.unread import CappedReplyUnread, IndexingUnread, ReplyUnread, UnreadPresentation
 from .watched import FileSource
 
@@ -115,10 +123,9 @@ class ReplyRead:
 
 
 @dataclass(frozen=True)
-class TranscriptReply(ReplyIndexTable, TypedTable):
+class TranscriptReply(ReplyIndexTable, WithoutRowid):
     source: Annotated[str, Column(primary_key=True)]
     end: Annotated[int, Column(primary_key=True)]
-    without_rowid = True
 
     @classmethod
     def after(cls, database: sqlite3.Connection, ends: Mapping[str, int]) -> dict[str, int]:

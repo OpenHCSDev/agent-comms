@@ -16,7 +16,8 @@ import json
 import os
 import stat
 import tempfile
-from dataclasses import dataclass
+from _hashlib import HASH
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -77,13 +78,15 @@ def pinned_native_package() -> Path:
     return package
 
 
-def package_tree_digest(root: Path) -> str:
-    """Hash sorted path/type/execute-mode/size/content records with bounded reads."""
-    if os.name != "posix":
-        raise NativePackageError("Native package filesystem verification requires POSIX")
-    digest = hashlib.sha256()
-    count, total = 1, 0
+@dataclass
+class PackageInventory:
+    """One bounded package walk and its ordered content commitment."""
 
+    entries: int = 1
+    bytes: int = 0
+    digest: HASH = field(default_factory=hashlib.sha256, repr=False)
+
+    @staticmethod
     def identity(info: os.stat_result) -> tuple[int, ...]:
         return (
             info.st_dev,
@@ -96,35 +99,39 @@ def package_tree_digest(root: Path) -> str:
             info.st_ctime_ns if info.st_mode & 0o222 else 0,
         )
 
-    def visit(path: str, relative: str, depth: int) -> None:
-        nonlocal count, total
-        if count > MAX_ENTRIES or depth > MAX_DEPTH:
+    def require_inventory_limit(self, depth: int) -> None:
+        if self.entries > MAX_ENTRIES or depth > MAX_DEPTH:
             raise NativePackageError("Native package inventory limit exceeded")
+
+    def require_byte_limit(self) -> None:
+        if self.bytes > MAX_BYTES:
+            raise NativePackageError("Native package byte limit exceeded")
+
+    def visit(self, path: str, relative: str, depth: int) -> None:
+        self.require_inventory_limit(depth)
         before = os.lstat(path)
         if before.st_uid not in (0, os.getuid()) or before.st_mode & 0o022:
             raise NativePackageError("Native package is not owner-controlled")
         if stat.S_ISDIR(before.st_mode):
             record = ["directory", relative, before.st_mode & 0o111]
-            digest.update((json.dumps(record, ensure_ascii=True) + "\n").encode())
+            self.digest.update((json.dumps(record, ensure_ascii=True) + "\n").encode())
             names = []
             with os.scandir(path) as entries:
                 for entry in entries:
-                    count += 1  # Include pending siblings before recursive descent.
-                    if count > MAX_ENTRIES:
-                        raise NativePackageError("Native package inventory limit exceeded")
+                    self.entries += 1  # Include pending siblings before recursive descent.
+                    self.require_inventory_limit(depth)
                     names.append(entry.name)
             for name in sorted(names):
-                visit(os.path.join(path, name), f"{relative}/{name}", depth + 1)
+                self.visit(os.path.join(path, name), f"{relative}/{name}", depth + 1)
         elif stat.S_ISREG(before.st_mode):
             if before.st_nlink != 1 and before.st_mode & 0o222:
                 raise NativePackageError("Native package shared resource is writable")
-            total += before.st_size
-            if total > MAX_BYTES:
-                raise NativePackageError("Native package byte limit exceeded")
+            self.bytes += before.st_size
+            self.require_byte_limit()
             content = hashlib.sha256()
             fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
             try:
-                if identity(os.fstat(fd)) != identity(before):
+                if self.identity(os.fstat(fd)) != self.identity(before):
                     raise NativePackageError("Native package changed while opening")
                 remaining = before.st_size
                 while remaining:
@@ -133,22 +140,28 @@ def package_tree_digest(root: Path) -> str:
                         raise NativePackageError("Native package truncated while hashing")
                     content.update(block)
                     remaining -= len(block)
-                if os.read(fd, 1) or identity(os.fstat(fd)) != identity(before):
+                if os.read(fd, 1) or self.identity(os.fstat(fd)) != self.identity(before):
                     raise NativePackageError("Native package changed while hashing")
             finally:
                 os.close(fd)
             record = ["file", relative, before.st_mode & 0o111, before.st_size, content.hexdigest()]
-            digest.update((json.dumps(record, ensure_ascii=True) + "\n").encode())
+            self.digest.update((json.dumps(record, ensure_ascii=True) + "\n").encode())
         else:
             raise NativePackageError("Native package contains symlinks or special files")
-        if identity(os.lstat(path)) != identity(before):
+        if self.identity(os.lstat(path)) != self.identity(before):
             raise NativePackageError("Native package changed during verification")
 
+
+def package_tree_digest(root: Path) -> str:
+    """Hash sorted path/type/execute-mode/size/content records with bounded reads."""
+    if os.name != "posix":
+        raise NativePackageError("Native package filesystem verification requires POSIX")
+    inventory = PackageInventory()
     try:
-        visit(os.fspath(root), ".", 0)
+        inventory.visit(os.fspath(root), ".", 0)
     except OSError as error:
         raise NativePackageError("Native package could not be verified") from error
-    return digest.hexdigest()
+    return inventory.digest.hexdigest()
 
 
 def share_native_resources(root: Path, deployments: Path) -> dict[str, int]:
