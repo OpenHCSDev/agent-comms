@@ -1473,7 +1473,8 @@ def test_observation_closes_failed_reads_and_preserves_schema_disposition(db_pat
 @pytest.mark.parametrize("invalid", ["false", 0, 1, None], ids=["string", "zero", "one", "none"])
 def test_other_public_evidence_flags_require_exact_bool(db_path: Path, invalid: str | int | None) -> None:
     with store(db_path) as db:
-        pytest.raises(ValueError, db.participants.register, "owner", committed=invalid)
+        with pytest.raises(ValueError):
+            db.participants.register("owner", committed=invalid)
         assert (
             db.session._connection.execute("SELECT count(*) FROM participants").fetchone()[0] == 0
         )
@@ -1481,18 +1482,20 @@ def test_other_public_evidence_flags_require_exact_bool(db_path: Path, invalid: 
         _, fence = started(db)
         before = db.get("exec")
         for field in ("backend_done", "process_dead", "progress"):
-            pytest.raises(
-                    ValueError, db.advance, fence,
+            with pytest.raises(ValueError):
+                db.advance(
+                    fence,
                     PromptAcceptedAttempt,
                     expected_pointer_revision=1,
                     **{field: invalid},
                 )
             assert db.get("exec") == before
         for field in ("replay_safe", "side_effects_possible"):
-            flags: dict[str, bool | str | int | None] = {"replay_safe": True, "side_effects_possible": False}
+            flags = {"replay_safe": True, "side_effects_possible": False}
             flags[field] = invalid
-            pytest.raises(
-                    ValueError, db.observe_replay, fence,
+            with pytest.raises(ValueError):
+                db.observe_replay(
+                    fence,
                     expected_pointer_revision=1,
                     expected_replay_revision=None,
                     facts=ReplayFact.NONE,
