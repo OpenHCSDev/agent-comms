@@ -348,29 +348,18 @@ class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, declared_name=
     since: float
 
     @classmethod
-    def scan_owner(cls) -> type[StandingRule]:
-        return HeartbeatSilent
-
-    @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        return tuple(rule for member in cls.members_with(cls)
+                     for rule in member.violations(comms, commander))
+
+    @staticmethod
+    def beats(comms: Comms, commander: str) -> tuple[Message, ...]:
         snapshot = comms.registry.snapshot()
-        thread = snapshot.require(commander)
-        requests = CommanderHeartbeat.requested_by(thread, comms.goals)
-        if not requests:
+        if snapshot.canonical_name(CommanderHeartbeat.sender) not in snapshot.threads:
             return ()
-        request, = requests
-        beats: tuple[Message, ...] = ()
-        if snapshot.canonical_name(CommanderHeartbeat.sender) in snapshot.threads:
-            beats = comms.bus.bus.latest_addressed(
-                snapshot.names_for(CommanderHeartbeat.sender), snapshot.names_for(thread.name),
-            )
-        found = (tuple(MissedHeartbeat(
-            since=max(request.created_at, beat.timestamp) + cls.seconds, beat=beat.seq,
-        ) for beat in beats) if beats else (
-            HeartbeatNotStarted(since=request.created_at + cls.seconds, request=request.id),
-        ))
-        now = time.time()
-        return tuple(rule for rule in found if isinstance(rule, cls) and rule.since < now)
+        return comms.bus.bus.latest_addressed(
+            snapshot.names_for(CommanderHeartbeat.sender), snapshot.names_for(commander),
+        )
 
     def began(self) -> float:
         return self.since
@@ -379,6 +368,18 @@ class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, declared_name=
 @dataclass(frozen=True)
 class MissedHeartbeat(HeartbeatSilent):
     beat: int
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        requests = CommanderHeartbeat.requested_by(comms.registry.require(commander), comms.goals)
+        if not requests:
+            return ()
+        now = time.time()
+        found = tuple(
+            cls(since=max(request.created_at, beat.timestamp) + cls.seconds, beat=beat.seq)
+            for request in requests for beat in cls.beats(comms, commander)
+        )
+        return tuple(rule for rule in found if rule.since < now)
 
     def line(self) -> str:
         return (f"HEARTBEAT SILENT: no beat since seq {self.beat}, silent past "
@@ -389,6 +390,16 @@ class MissedHeartbeat(HeartbeatSilent):
 @dataclass(frozen=True)
 class HeartbeatNotStarted(HeartbeatSilent):
     request: OwnerRequestId
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        requests = CommanderHeartbeat.requested_by(comms.registry.require(commander), comms.goals)
+        if not requests or cls.beats(comms, commander):
+            return ()
+        now = time.time()
+        found = tuple(cls(since=request.created_at + cls.seconds, request=request.id)
+                      for request in requests)
+        return tuple(rule for rule in found if rule.since < now)
 
     def line(self) -> str:
         return (f"HEARTBEAT NOT STARTED: no beat for request {self.request.value}, overdue since "
