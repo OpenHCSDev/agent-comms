@@ -18,7 +18,7 @@ import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum, IntEnum, IntFlag
 from functools import cache, lru_cache
 from inspect import getsource
@@ -1541,8 +1541,10 @@ class TypedTable(
 
     @classmethod
     def _sql(cls, expression: str) -> str:
+        """Durable files compare their stored DDL text with this rendering, so a change
+        here is a schema change every retained root would need carried."""
         for item in cls._columns():
-            expression = expression.replace("{" + item.name + "}", _identifier(item.wire_name))
+            expression = expression.replace("{" + item.name + "}", item.wire_name)
         return expression
 
     @classmethod
@@ -2014,15 +2016,15 @@ class ProjectionProducer(TypedTable, ProjectionProducerTables):
         if not rows:
             return False
         commit = STAMP.commit()
-        names = tuple(row.declared_name for row in rows)
-        marks = ",".join("?" for _ in names)
-        where = f"{{commit}} != ? AND {{projection}} IN ({marks})"
-        parameters = (commit, *names)
-        if not cls.exists(db, where=where, parameters=parameters):
+        names = {row.declared_name for row in rows}
+        stale = tuple(record for record in cls.select(db)
+                      if record.projection in names and record.commit != commit)
+        if not stale:
             return False
         change.require()
         with SQLiteFile.write_transaction(db):
-            cls.update(db, where=where, parameters=parameters, commit=commit)
+            for record in stale:
+                replace(record, commit=commit).upsert(db)
         return True
 
 
