@@ -36,7 +36,8 @@ def test_copied_registry_resolves_turn_from_its_new_location(tmp_path):
 
     forged = json.loads((copied / 'registry.json').read_text())
     forged['threads']['worker']['turn_record']['lookup'] = 'wrong-identity'
+    (copied / 'registry.json').write_text(json.dumps(forged))
     with pytest.raises(RelationViolationError):
-        moved._decode(forged)
+        RegistryStore(copied / 'registry.json').read_entry('worker')
 
 
