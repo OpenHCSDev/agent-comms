@@ -166,7 +166,10 @@ class ReviewQueuePhase(CommanderNativePhase):
     """
 
     after = (RecordPlanePhase,)
-    evidence = RulesetGates()
+    evidence = AllEvidence((
+        ClassDeclared("HeadReviewRecord", ("src/agent_comms/todos.py",)),
+        RulesetGates(),
+    ))
 
 
 COMMANDER = "src/agent_comms/commander/"
