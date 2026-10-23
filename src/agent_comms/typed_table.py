@@ -64,6 +64,7 @@ from .locked_store import (
 )
 from .maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier
 from .package_stamp import STAMP
+from .projection_source import ProjectionSource
 from .store_files import _store_lock
 
 if TYPE_CHECKING:
@@ -1435,17 +1436,12 @@ class ProjectionProducerTables(SharedFileTables, DerivedTables):
 
 
 class ProducedRow(ABC):
-    """Rows rebuilt when their declared producing modules change."""
+    """Rows rebuilt when the source of a class producing them changes."""
 
     @classmethod
     @abstractmethod
-    def producer_capabilities(cls) -> tuple[tuple[type[DeclaredFamily], type], ...]:
-        """Each record family and the capability whose declarations produce these rows."""
-
-    @classmethod
-    @abstractmethod
-    def producer_classes(cls) -> tuple[type[DeclaredFamily], ...]:
-        """The record family's declarations that implement this projection's production."""
+    def producer_package(cls) -> types.ModuleType:
+        """The package whose ProjectionSource classes produce these rows."""
 
     @classmethod
     @abstractmethod
@@ -1985,34 +1981,31 @@ class ProducedTable(ProducedRow, TypedTable, declared_name=None):
     @classmethod
     def producer_digest(cls) -> str:
         for family in cls.__mro__:
-            if issubclass(family, ProducedTable) and "producer_classes" in vars(family):
+            if issubclass(family, ProducedTable) and "producer_package" in vars(family):
                 return family._producer_digest()
         raise TypeError(f"{cls.__name__} has no producing family declaration")
 
     @classmethod
     @cache
     def _producer_digest(cls) -> str:
-        producers = cls.producer_classes()
+        source = "\0".join(
+            f"{owner.__module__}.{owner.__qualname__}\0{getsource(owner)}"
+            for owner in cls.producer_owners()
+        )
+        return hashlib.sha256(source.encode()).hexdigest()
+
+    @classmethod
+    def producer_owners(cls) -> tuple[type, ...]:
+        """Every class whose source the produced rows depend on, in a stable order."""
+        DeclaredFamily.discover_package(cls.producer_package())
         owners: set[type] = {
             owner
             for row in (cls, *cls.members_with(cls))
             for owner in row.__mro__
             if issubclass(owner, cls)
         }
-        # The capability's classes outside the record family (Message, Claimed) hold the
-        # production code itself, so they belong to the digest beside the family.
-        capabilities = tuple(capability for _, capability in cls.producer_capabilities())
-        for producer in producers:
-            owners.update(
-                owner
-                for owner in producer.__mro__
-                if issubclass(owner, (cls, producer.family_root(), *capabilities))
-            )
-        source = "\0".join(
-            f"{owner.__module__}.{owner.__qualname__}\0{getsource(owner)}"
-            for owner in sorted(owners, key=lambda owner: (owner.__module__, owner.__qualname__))
-        )
-        return hashlib.sha256(source.encode()).hexdigest()
+        owners.update(ProjectionSource.sources())
+        return tuple(sorted(owners, key=lambda owner: (owner.__module__, owner.__qualname__)))
 
 
 @dataclass(frozen=True)

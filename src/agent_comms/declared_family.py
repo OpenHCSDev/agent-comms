@@ -217,12 +217,12 @@ class DeclaredFamily(ABC, metaclass=FamilyMeta):
     @classmethod
     def discover_members(cls, package: ModuleType, capability: type) -> tuple[type[Self], ...]:
         """Acquire a producer package before deriving its declared capability members."""
-        DeclaredFamily._discover_package(package)
+        DeclaredFamily.discover_package(package)
         return cls.members_with(capability)
 
     @staticmethod
     @cache
-    def _discover_package(package: ModuleType) -> None:
+    def discover_package(package: ModuleType) -> None:
         """Import each module of the package once, so its members register themselves."""
         for module in pkgutil.iter_modules(package.__path__, package.__name__ + "."):
             if not module.ispkg:

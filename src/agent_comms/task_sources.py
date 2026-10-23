@@ -13,6 +13,7 @@ from .field_codec import FieldCodec, WireOmitDefault
 from .goals import GoalDeclaration, GoalRevision
 from .message_reference import MessageReference
 from .owner_requests import OwnerRequestId, RequestDirective
+from .projection_source import ProjectionSource
 from .thread_identity import (
     RecordedThreadIncarnation,
     ThreadIncarnation,
@@ -185,7 +186,7 @@ class CorrectionTaskChange(TaskChange, declared_name="correction"):
             raise RelationViolationError("Retained correction lacks its original source") from error
 
 
-class TaskAttachment(DeclaredFamily, affix="TaskAttachment"):
+class TaskAttachment(DeclaredFamily, ProjectionSource, affix="TaskAttachment"):
     """Absent attachments have no publication, fact or author effects."""
 
     retains_authored_task = False

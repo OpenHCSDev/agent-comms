@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Callable, ClassVar, Self, TypeVar
 
 
 from agent_comms.participant_identity import ParticipantIdentity
+from .projection_source import ProjectionSource
 from .cli_options import JsonFlagRecord
 from .declared_family import DeclaredFamily, UniqueExternalSelector, UnknownFamilyMember, declared_words
 from .errors import RelationViolationError
@@ -421,7 +422,7 @@ class ThreadIncarnationRecord:
 
 
 @dataclass(frozen=True, slots=True)
-class TurnId:
+class TurnId(ProjectionSource):
     value: str
 
     @classmethod
@@ -525,7 +526,7 @@ class TurnFence:
 
 
 @dataclass(slots=True)
-class GenerationCounter:
+class GenerationCounter(ProjectionSource):
     """One monotonic allocation domain, including deleted-name tombstones."""
 
     counter: int = 0
@@ -558,7 +559,7 @@ class GenerationCounter:
         self.generations[new] = self.generations.pop(old)
 
 
-class ThreadRole(DeclaredFamily, affix="ThreadRole"):
+class ThreadRole(DeclaredFamily, ProjectionSource, affix="ThreadRole"):
     """Whether a thread executes turns is the member's type; its wire name is its spelling."""
 
     origin_label: ClassVar[str]

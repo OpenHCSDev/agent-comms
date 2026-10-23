@@ -6,6 +6,7 @@ from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Self
 
 from .field_codec import FieldCodec
+from .projection_source import ProjectionSource
 from .typed_table import TypedRow
 
 if TYPE_CHECKING:
@@ -14,7 +15,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, slots=True)
-class ChannelActivity(TypedRow):
+class ChannelActivity(TypedRow, ProjectionSource):
     last_message: float = 0
     last_user_input: float = 0
 

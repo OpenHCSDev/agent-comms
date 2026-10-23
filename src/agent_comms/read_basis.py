@@ -28,6 +28,7 @@ from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .private_path import FileObservation, MissingFile
+from .projection_source import ProjectionSource
 from .recorded_bus import RecordedBus, RecordedBusIdentity
 from .store_files import SharedLock
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
@@ -815,7 +816,7 @@ class DMDisplayBasis:
         self.displayed.validate(self.viewer, snapshot, bus_identity)
 
 
-class MessageDisplayScope(DeclaredFamily, ABC, affix="DisplayScope"):
+class MessageDisplayScope(DeclaredFamily, ABC, ProjectionSource, affix="DisplayScope"):
     """Captured inclusion and its exact predicate on the bus capability tables."""
 
     def read_key(self, sender: str, target: str, snapshot: RegistryProvenance) -> Conversation:
