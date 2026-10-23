@@ -28,6 +28,7 @@ from functools import partial
 from typing import TYPE_CHECKING
 
 from acp import RequestError
+from acp.agent.connection import AgentSideConnection
 from acp.connection import StreamEvent
 from acp.core import DEFAULT_STDIO_BUFFER_LIMIT_BYTES
 from acp.stdio import stdio_streams
@@ -39,6 +40,9 @@ from acp.schema import (
     LoadSessionResponse,
     NewSessionResponse,
     PromptResponse,
+    PermissionOption,
+    RequestPermissionResponse,
+    ToolCallUpdate,
     SessionNotification,
     SetSessionConfigOptionResponse,
     TextContentBlock,
@@ -56,7 +60,9 @@ from .acp_failure import NativeTurnError
 from .channel_targets import NamedTarget
 from .cohort_foreground import _accept_visible_deliveries
 from .comms import Comms, wire
-from .controller import AcpController, Controller, SessionUpdateSink, UNBOUND_CONTROLLER
+from .controller import (
+    ACP_PERMISSION_TIMEOUT_SECONDS, Controller, SessionUpdateSink, UNBOUND_CONTROLLER,
+)
 from .coordination_cohort import next_sealed_assignment
 from .coordination_database import CoordinationStore
 from .cursor_owner import CursorOwner
@@ -84,12 +90,13 @@ from .turn_terminal import EndedWithoutResult, TurnInterruption
 
 if TYPE_CHECKING:
     from .selected_tool_broker import SelectedToolIntent
+    from .selected_write_authority import AcpSelectedWriteAuthority
 
 from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary
 from .turn_runner import RELAY_PREFIX
 
 
-class SdkSessionConnection(AcpController, SessionUpdateSink):
+class SdkSessionConnection(AgentSideConnection, Controller, SessionUpdateSink):
     """The SDK connection and controller publish one Core acceptance answer."""
 
     async def publish_update(self, *, session_id: str, update: BaseModel) -> bool:
@@ -98,6 +105,31 @@ class SdkSessionConnection(AcpController, SessionUpdateSink):
         })
         await self.session_update(session_id=notification.session_id, update=notification.update)
         return True
+
+
+    def require_current(self, authority: AcpSelectedWriteAuthority, session_id: str) -> None:
+        if self is not authority.agent.sessions.client:
+            raise IdentityConflict("Selected write ACP controller changed")
+
+    async def request_ui_permission(
+        self, runner: TurnRunner, session_id: str,
+        request: tuple[ToolCallUpdate, list[PermissionOption]],
+    ) -> dict[str, object] | None:
+        tool_call, options = request
+        if self is runner.sessions.client:
+            response = await asyncio.wait_for(
+                self.request_permission(
+                    session_id=session_id, tool_call=tool_call, options=options
+                ),
+                timeout=ACP_PERMISSION_TIMEOUT_SECONDS,
+            )
+            return RequestPermissionResponse.model_validate(response).outcome.model_dump(
+                by_alias=True, exclude_none=True
+            )
+        return None
+
+    def departed(self, runtime: RuntimeServer, session_id: str) -> bool:
+        return False
 
 
 class CommsAgent(SessionEffects, InputEffects, TurnEffects):
@@ -123,6 +155,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         self._comms = comms
         if private_selected_tool_intent is not None:
             from .selected_tool_broker import SelectedToolIntent
+    from .selected_write_authority import AcpSelectedWriteAuthority
 
             if type(private_selected_tool_intent) is not SelectedToolIntent:
                 raise TypeError("private selected tool needs a nominal owner intent")
