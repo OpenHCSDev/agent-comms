@@ -94,7 +94,7 @@ class RouteCounts:
         SELECT route.actor,row.*,
             CASE WHEN addressed.seq IS NULL THEN route.unaddressed ELSE route.addressed END AS since
         FROM route_since AS route
-        JOIN "{BusRouteCounts.declared_name}" AS row ON row.target=route.target
+        CROSS JOIN "{BusRouteCounts.declared_name}" AS row ON row.target=route.target
             AND row.sender=route.sender AND row.sender_lookup=route.sender_lookup
         LEFT JOIN "{ReceivedSource.declared_name}" AS addressed
             ON addressed.lookup=route.recipient_lookup AND addressed.seq=row.seq
@@ -149,7 +149,7 @@ class RouteCounts:
             {delivery.actor: seen}, after,
             f''', unread AS (
                 SELECT request.seq,request.target,request.sender,message.mentions
-                FROM cursors AS request JOIN "{Message.table.declared_name}" AS message USING(seq)
+                FROM cursors AS request CROSS JOIN "{Message.table.declared_name}" AS message USING(seq)
                 WHERE actor=? AND {ReadCursor.unread_sql}
             ) SELECT seq,target FROM unread WHERE ({predicate}) AND (? IS NULL OR seq < ?)
             ORDER BY seq {traversal.seq_order} LIMIT ?''',
