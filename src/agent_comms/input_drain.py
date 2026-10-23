@@ -45,6 +45,7 @@ from .input_attempt import (
 )
 from .input_disposition import InputDispositions, InputDocument
 from .input_effects import InputEffects
+from .image_inputs import ImageInput
 from .lifecycle_capability import Executing
 from .maintenance_barrier import MaintenanceBarrier, MaintenanceIngress
 from .native_input_owner import RegistryOwner
@@ -691,7 +692,7 @@ class InputDrain(InputObservation):
         text: str,
         display_text: str,
         request: PromptRequest,
-        images: tuple[Any, ...],
+        images: tuple[ImageInput, ...],
     ) -> PromptResponse:
         inbox = self.state(session_id).require_inbox()
         controller = self.runtime.controller.get()

@@ -12,7 +12,7 @@ from acp.schema import (
     PromptResponse,
 )
 
-from .image_inputs import prompt_images
+from .image_inputs import ImageInput, prompt_images
 from .following_inputs import OwnerFollowingInputs
 from .queued_input import InitialInput
 from .input_origin import InputOrigin, UnattributedInputOrigin
@@ -43,7 +43,8 @@ from .runtime import (
 from .pi_payloads import StateData
 from .threads import Thread
 from .transcript_updates import TurnTranscriptUpdate
-from .turn_effects import TurnEffects
+from .turn_effects import PromptBlock, TurnEffects
+from pydantic import JsonValue
 from .turn_lease import TurnLeaseFence, TurnState
 from .turn_phase import CancellingPhase, TurnPhase
 from .turn_terminal import EndedWithoutResult, TurnInterruption, TurnTerminal
@@ -173,7 +174,7 @@ class TurnRunner:
         return context.require_session_file(thread.runtime.path)
 
     async def prompt_owned(
-        self, session_id: str, prompt: list[Any], *, display_text: str | None = None,
+        self, session_id: str, prompt: list[PromptBlock], *, display_text: str | None = None,
         input_id: str | None = None,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> PromptResponse:
@@ -234,7 +235,7 @@ class TurnRunner:
                 actor=OwnerInvocable,
             )
 
-    async def cancel(self, session_id: str, **kwargs: Any) -> None:
+    async def cancel(self, session_id: str, **kwargs: JsonValue) -> None:
         if session_id in self.sessions.proxies:
             await self.sessions.proxies[session_id].request("cancel")
             return
@@ -424,7 +425,7 @@ class TurnRunner:
         task: str,
         *,
         origins: tuple[Message, ...] = (),
-        images: tuple[Any, ...] = (),
+        images: tuple[ImageInput, ...] = (),
         original_keys: tuple[str, ...] = (),
         initial_display_text: str | None = None,
         autonomous_goal: bool = False,
