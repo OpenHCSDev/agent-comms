@@ -820,7 +820,7 @@ class Install[Rehearsed: Rehearsal](ABC):
         """The outgoing runtime posts until the target's runtime takes the bus over, unless
         the route file refuses it as a borrower; install's own route step replaces that file."""
         return RouteFile.read(active_route_path()).outgoing_writer(
-            RuntimeWriter(root, installed, RetainedProgram.current()))
+            RuntimeWriter(root, installed, RetainedProgram.current()), UnpostedWriter())
 
     def backed_up(self, files: tuple[Path, ...]) -> tuple[StoreBackup, RouteSelection]:
         backup = StoreBackup.take(self.root, active_route_path(), files, self.spill_dir)

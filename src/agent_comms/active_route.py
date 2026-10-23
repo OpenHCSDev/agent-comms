@@ -407,21 +407,19 @@ class RouteFile(ABC):
     def route_new_bus(self, route: ActiveRoute, path: Path, directory: int) -> str:
         return f"replaced {path}; old route kept at {self.replace(route, path, directory)}"
 
-    def outgoing_writer(self, writer: RootWriter) -> RootWriter:
+    def outgoing_writer(self, outgoing: RootWriter, unposted: RootWriter) -> RootWriter:
         """Who posts install reports before install routes to its bus: the outgoing runtime,
         which borrows this file like every client."""
-        return writer
+        return outgoing
 
 
 class ReplaceableRoute(RouteFile):
     """Selects no bus: install and the repair both replace it."""
 
-    def outgoing_writer(self, writer: RootWriter) -> RootWriter:
+    def outgoing_writer(self, outgoing: RootWriter, unposted: RootWriter) -> RootWriter:
         """Every borrower of the default root refuses this file, the outgoing runtime
         included, so nothing posts until install's route step replaces it."""
-        from .installer.reporting import UnpostedWriter
-
-        return UnpostedWriter()
+        return unposted
 
 
 class AbsentRoute(RouteFile):
