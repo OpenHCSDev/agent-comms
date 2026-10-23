@@ -435,7 +435,7 @@ class Argument(FieldDirective):
         owner = self.group.owner(parser, groups)
         # argparse actions own an extensible keyword protocol, not a closed Core record.
         options: Mapping[str, object] = {
-            **({} if "action" in self.options else plan.value.argument_options()),
+            **({} if "action" in self.options else plan.value.argument_options(self)),
             **self.options,
             **self.default.options(plan),
         }
@@ -1311,6 +1311,17 @@ class SpelledText(TextRepresentation[str], ValidatedScalar):
         return value
 
     @classmethod
+    def command_line(cls, text: str) -> str:
+        try:
+            return cls.from_text(text)
+        except MalformedRecord as error:
+            raise argparse.ArgumentTypeError(f"{text!r}: {error}") from error
+
+    @classmethod
+    def argument_options(cls) -> dict[str, object]:
+        return {"type": cls.command_line}
+
+    @classmethod
     def schema(cls) -> dict[str, object]:
         return {"type": "string", "pattern": f"^(?:{cls.spelling.pattern})$"}
 
@@ -1424,6 +1435,19 @@ class Id128Text(SpelledText):
     @classmethod
     def mint(cls) -> str:
         return uuid4().hex
+
+
+class MessageIdText(SpelledText):
+    """A bus message's content identity, the first twelve hex digits of the SHA-256
+    of sender, target, timestamp and body.
+    """
+
+    digits: ClassVar[int] = 12
+    spelling = re.compile(f"[0-9a-f]{{{digits}}}")
+
+    @classmethod
+    def mint(cls, text: str) -> str:
+        return hashlib.sha256(text.encode()).hexdigest()[:cls.digits]
 
 
 class Hex256Text(SpelledText):
@@ -2097,7 +2121,7 @@ class ValueDecoder[T](DecoderPlan):
     def editor_choices(self) -> tuple[tuple[str, object], ...]:
         raise TypeError("The declared decoder does not offer finite choices")
 
-    def argument_options(self) -> dict[str, object]:
+    def argument_options(self, argument: Argument | None = None) -> dict[str, object]:
         """argparse options for this annotation's command-line text."""
         return {}
 
@@ -2128,7 +2152,7 @@ class _ChoiceDecoder[T](ValueDecoder[T]):
 
     __slots__ = ()
 
-    def argument_options(self) -> dict[str, object]:
+    def argument_options(self, argument: Argument | None = None) -> dict[str, object]:
         return {"choices": [self.argument_text(value) for _, value in self.editor_choices()]}
 
 
@@ -2191,14 +2215,14 @@ class _FlagDecoder(_ExactScalarDecoder[bool]):
     __slots__ = ()
     annotations = (bool,)
 
-    def argument_options(self) -> dict[str, object]:
+    def argument_options(self, argument: Argument | None = None) -> dict[str, object]:
         return {"action": "store_true"}
 
 
 class _NumberDecoder[T: (int, float)](_ExactScalarDecoder[T]):
     __slots__ = ()
 
-    def argument_options(self) -> dict[str, object]:
+    def argument_options(self, argument: Argument | None = None) -> dict[str, object]:
         return {"type": self.target}
 
 
@@ -2260,7 +2284,7 @@ class _RepresentedDecoder[T](ValueDecoder[T]):
     def uses_representation(self) -> bool:
         return True
 
-    def argument_options(self) -> dict[str, object]:
+    def argument_options(self, argument: Argument | None = None) -> dict[str, object]:
         return self.representation.argument_options()
 
     def encode(self, value: T) -> object:
@@ -2456,8 +2480,8 @@ class UnionDecoder[T](_ContextDecoder[T]):
     def editor_annotation(self):
         return Union[tuple(item.editor_annotation for item in self.alternatives)]
 
-    def argument_options(self) -> dict[str, object]:
-        return self.alternatives[0].argument_options()
+    def argument_options(self, argument: Argument | None = None) -> dict[str, object]:
+        return self.alternatives[0].argument_options(argument)
 
     def accepts_value(self, value: object) -> bool:
         return any(alternative.accepts_value(value) for alternative in self.alternatives)
@@ -2599,6 +2623,11 @@ class _TupleDecoder[E](_ArrayDecoder[tuple[E, ...]]):
 class _VariadicTupleDecoder[E](_TupleDecoder[E]):
     """The inherited item decoder applies to every tuple element."""
 
+    def argument_options(self, argument: Argument | None = None) -> dict[str, object]:
+        if argument is not None and "nargs" in argument.options:
+            return self.items[0].argument_options(argument)
+        return super().argument_options(argument)
+
 
 class _FixedTupleDecoder[E](_TupleDecoder[E]):
     def fits_wire(self, data: object) -> bool:
@@ -2663,7 +2692,7 @@ class _DictDecoder[K, V](ValueDecoder[dict[K, V]]):
             for key, value in self.entries(data)
         )
 
-    def argument_options(self) -> dict[str, object]:
+    def argument_options(self, argument: Argument | None = None) -> dict[str, object]:
         return {"type": FieldCodec.parse}
 
     @classmethod
@@ -2776,7 +2805,7 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
         return tuple((member.label, {self.target.family_discriminator: member.declared_name})
                      for member in self.target.members_with(self.target))
 
-    def argument_options(self) -> dict[str, object]:
+    def argument_options(self, argument: Argument | None = None) -> dict[str, object]:
         """Every member is a command-line choice, labelled or not."""
         return {"choices": list(self.target.names())}
 

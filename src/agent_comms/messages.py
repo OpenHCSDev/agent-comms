@@ -6,7 +6,6 @@ import agent_comms
 from .projection_source import ProjectionSource
 from .turn_origin import TurnOrigin
 import builtins
-import hashlib
 import re
 import sqlite3
 import time
@@ -42,6 +41,7 @@ from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,
     InlineRecord,
+    MessageIdText,
     NullMember,
     PublicationExclude,
     WireName,
@@ -863,10 +863,7 @@ class Message(Addressed, BusCapability, TurnOrigin):
 
     @projected(view="wire", name="id")
     def message_id(self) -> str:
-        digest = hashlib.sha256(
-            f"{self.sender}:{self.target}:{self.timestamp}:{self.body}".encode()
-        ).hexdigest()[:12]
-        return digest
+        return MessageIdText.mint(f"{self.sender}:{self.target}:{self.timestamp}:{self.body}")
 
     @property
     def history_source(self) -> HistorySource | None:
