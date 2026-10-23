@@ -49,7 +49,7 @@ def decide(
     message: Message,
     lookup: str = "lookup-alpha",
     members: tuple[FrozenRecipient, ...] = MEMBERS,
-    control: MessageControl = OrdinaryControl,
+    control: type[MessageControl] = OrdinaryControl,
 ) -> RecipientDecision | None:
     recipient = next(
         (member for member in members if member.recipient_lookup == lookup),
@@ -155,7 +155,7 @@ def test_mixed_in_and_out_of_scope_mentions_only_name_valid_frozen_member() -> N
 @pytest.mark.parametrize("control", MessageControl.members_with(MessageControl))
 @pytest.mark.parametrize("role", [NoticeRole(), MembershipConversationRole(JoinedMembership)])
 def test_notice_and_membership_are_passive_regardless_of_control_or_sender(
-    role, control: MessageControl
+    role, control: type[MessageControl]
 ) -> None:
     message = replace(stored(sender_role=AgentThreadRole), role=role)
     assert decide(message, control=control) == WakeDecision(

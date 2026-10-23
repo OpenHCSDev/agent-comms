@@ -103,7 +103,7 @@ class ResponseConversation:
     def record(self, seq: int, message: Message, intent) -> KeyedPrivateRecord:
         from agent_comms.bus import KeyedPrivateRecord
         from agent_comms.delivery_policy import ResponseDeliveryPolicy
-        from agent_comms.wake import MessageControl, OrdinaryControl
+        from agent_comms.wake import OrdinaryControl
 
         stored = replace(message, seq=seq)
         audience = self.audience(stored)

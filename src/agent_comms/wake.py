@@ -11,14 +11,16 @@ from .audience_manifest import FrozenAudience, FrozenRecipient, freeze_audience
 from .channel_targets import CommandTarget, NamedTarget
 from .declared_family import DeclaredFamily
 from .messages import Message
-from .wake_policy import NoWakeDecision, PassiveWake, RecipientDecision
+from .wake_policy import NoWakeDecision, PassiveWake, RecipientDecision, WakePolicy
 
 
 class MessageControl(DeclaredFamily, affix="Control"):
     """Explicit system-control classification; not inferred from text or ACK type."""
 
     @classmethod
-    def wake_mode(cls, target, recipient, mentions):
+    def wake_mode(
+        cls, target: NamedTarget, recipient: FrozenRecipient, mentions: frozenset[str],
+    ) -> WakePolicy:
         return target.wake_policy(recipient, mentions)
 
 
@@ -28,7 +30,9 @@ class OrdinaryControl(MessageControl):
 
 class SystemControl(MessageControl, declared_name="system_control"):
     @classmethod
-    def wake_mode(cls, target, recipient, mentions):
+    def wake_mode(
+        cls, target: NamedTarget, recipient: FrozenRecipient, mentions: frozenset[str],
+    ) -> WakePolicy:
         return PassiveWake()
 
 

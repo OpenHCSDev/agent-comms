@@ -14,7 +14,7 @@ from agent_comms.messages import ClaimMessage, ConversationRole, InfoKind, Messa
 from agent_comms.response_acknowledgement import (
     KeyedResponseAcknowledgement, canonical_publication_key, public_envelope_digest,
 )
-from agent_comms.wake import MessageControl, resolve_wake_cohort, OrdinaryControl
+from agent_comms.wake import OrdinaryControl, resolve_wake_cohort
 
 
 publication_processes = ForkServerContext()

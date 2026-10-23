@@ -163,7 +163,7 @@ class ChangeReportKind(SendableMessageKind, declared_name="change-report"):
 
 class MembershipTransition(DeclaredFamily, affix="Membership"):
     @classmethod
-    def conversation_role(cls):
+    def conversation_role(cls) -> MembershipConversationRole:
         return MembershipConversationRole(cls)
 
     @classmethod

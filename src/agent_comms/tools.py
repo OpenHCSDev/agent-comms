@@ -37,7 +37,7 @@ from agent_comms.todos import (
 
 from . import cli as comms_cli
 from .change_report import NoChangeReport, ReportEvidence
-from .channel_management import KeepThreadsTagDisposition, ListTagEdit, TagDisposition, TagEdit
+from .channel_management import ListTagEdit, TagEdit
 from agent_comms.channel_targets import ChannelTarget, CommandTarget, NamedTarget
 from .channels import AnyChannel, Channel, SavedView, ViewMatch, ViewPredicate
 from .cli_commands import (

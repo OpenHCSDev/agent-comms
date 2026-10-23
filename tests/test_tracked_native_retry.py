@@ -3,7 +3,7 @@ import pytest
 from agent_comms.native_arguments import SelectedModel
 from agent_comms.native_startup import NativeStartupPolicy
 
-from agent_comms.agent_backend import BusyInputPolicy, SteerInputPolicy
+from agent_comms.agent_backend import SteerInputPolicy
 from agent_comms.pi_events import NativeRetryEnd
 from agent_comms.pi_payloads import FailedProviderRetry, PiMessage, SucceededProviderRetry
 from agent_comms.tracked_turn import CompletedTrackedTerminal, PendingTrackedTerminal, TrackedTurnSession

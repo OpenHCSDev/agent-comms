@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
-from typing import Annotated, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
@@ -56,20 +56,28 @@ from agent_comms.typed_table import (
 )
 
 
+if TYPE_CHECKING:
+    from agent_comms.coordination_tables.assignments import WakeAssignment
+    from agent_comms.coordination_tables.responses import ResponseObligation
+    from agent_comms.selected_source_batch import SelectedSource
+
+
 class ExecutionProvenance(DeclaredFamily, affix="Origin"):
     """The origin owns source membership, route eligibility and retry policy."""
 
     @classmethod
     @abstractmethod
-    def require_sources(cls, sources) -> None: ...
+    def require_sources(cls, sources: tuple[SelectedSource, ...]) -> None: ...
 
     @classmethod
     @abstractmethod
-    def validate_routes(cls, assignments, obligations) -> None: ...
+    def validate_routes(
+        cls, assignments: tuple[WakeAssignment, ...], obligations: tuple[ResponseObligation, ...],
+    ) -> None: ...
 
     @classmethod
     @abstractmethod
-    def retry_authorized(cls, obligations) -> bool: ...
+    def retry_authorized(cls, obligations: tuple[ResponseObligation, ...]) -> bool: ...
 
     @classmethod
     @abstractmethod
@@ -78,17 +86,19 @@ class ExecutionProvenance(DeclaredFamily, affix="Origin"):
 
 class ClaimlessOrigin(ExecutionProvenance, declared_name=None):
     @classmethod
-    def require_sources(cls, sources) -> None:
+    def require_sources(cls, sources: tuple[SelectedSource, ...]) -> None:
         if sources:
             raise IdentityConflict("claimless execution cannot bind claims")
 
     @classmethod
-    def validate_routes(cls, assignments, obligations) -> None:
+    def validate_routes(
+        cls, assignments: tuple[WakeAssignment, ...], obligations: tuple[ResponseObligation, ...],
+    ) -> None:
         if assignments or obligations:
             raise IntegrityViolationError("claimless snapshots cannot have claims or obligations")
 
     @classmethod
-    def retry_authorized(cls, obligations) -> bool:
+    def retry_authorized(cls, obligations: tuple[ResponseObligation, ...]) -> bool:
         return True
 
     @classmethod
@@ -100,17 +110,19 @@ class ClaimlessOrigin(ExecutionProvenance, declared_name=None):
 
 class WireOrigin(ExecutionProvenance):
     @classmethod
-    def require_sources(cls, sources) -> None:
+    def require_sources(cls, sources: tuple[SelectedSource, ...]) -> None:
         if not sources:
             raise IdentityConflict("wire execution requires ordered original sources")
 
     @classmethod
-    def validate_routes(cls, assignments, obligations) -> None:
+    def validate_routes(
+        cls, assignments: tuple[WakeAssignment, ...], obligations: tuple[ResponseObligation, ...],
+    ) -> None:
         if not assignments or not obligations:
             raise IntegrityViolationError("wire snapshots require original obligations")
 
     @classmethod
-    def retry_authorized(cls, obligations) -> bool:
+    def retry_authorized(cls, obligations: tuple[ResponseObligation, ...]) -> bool:
         return bool(obligations) and all(row.lifecycle.retryable for row in obligations)
 
     @classmethod
@@ -119,12 +131,16 @@ class WireOrigin(ExecutionProvenance):
 
     @classmethod
     def matches_sql(cls, column: str) -> str:
-        return f"{column} = {sql_literal(cls)}"
+        members = cls.members_with(cls)
+        # Preserve the existing scalar DDL; additional sourced cases derive a set.
+        if len(members) == 1:
+            return f"{column} = {sql_literal(members[0])}"
+        return f"{column} IN {cls.sql_choices()}"
 
     @classmethod
     def retry_sql(cls, execution: str) -> str:
         return (
-            f"({execution}.origin != {sql_literal(cls)} OR (EXISTS (SELECT 1 FROM obligations o\n"
+            f"(NOT ({cls.matches_sql(execution + '.origin')}) OR (EXISTS (SELECT 1 FROM obligations o\n"
             f"       WHERE o.execution_id={execution}.execution_id) AND NOT EXISTS "
             "(SELECT 1 FROM obligations o\n"
             f"       WHERE o.execution_id={execution}.execution_id AND o.retryable != 1)))"
@@ -307,7 +323,9 @@ class ExecutionRecord(
         return super().schema_objects(if_not_exists=if_not_exists) | {
             cls.retry_view: f"CREATE VIEW {existence}{cls.retry_view} AS\n" + _RETRY_BASIS}
 
-    def retry_authorized(self, replay: ReplayState, obligations) -> bool:
+    def retry_authorized(
+        self, replay: ReplayState, obligations: tuple[ResponseObligation, ...],
+    ) -> bool:
         return (
             self.lifecycle.has_retry_budget(self.max_attempts)
             and replay.allows_retry

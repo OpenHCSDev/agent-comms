@@ -29,7 +29,7 @@ from agent_comms.field_codec import (
     WireNonNull,
     WireTransient,
 )
-from agent_comms.messages import ConversationRole, InfoKind, MembershipTransition, MembershipConversationRole, MembershipNoticeRole, Message, MessageRole, NoticeRole, JoinedMembership, LeftMembership
+from agent_comms.messages import ConversationRole, InfoKind, MembershipConversationRole, MembershipNoticeRole, Message, MessageRole, NoticeRole, JoinedMembership, LeftMembership
 
 
 def test_transient_plan_excludes_fields_before_decoder_or_value_access():
