@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import os
+from collections.abc import AsyncIterator
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, fields
+from functools import partial
 from pathlib import Path
 from typing import Self
 
@@ -105,6 +110,37 @@ class NativeTranscriptFiles(SessionFiles):
     """Share native transcript/writer-lock lifetime without owning proof storage."""
 
     __slots__ = ()
+
+    @asynccontextmanager
+    async def accept_input(self) -> AsyncIterator[None]:
+        """Keep later inputs queued until this session's current input settles.
+
+        Acquire before reserving a NativeRuntimeInput. Its original queued wake
+        assignments remain unchanged while the kernel waits, across processes.
+        """
+        descriptor = os.open(self.writer_lock, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        # Lock waiters must not exhaust the workers the current input needs
+        # to finish. This worker retires as soon as its kernel wait completes.
+        waiter = ThreadPoolExecutor(max_workers=1, thread_name_prefix="session-input")
+        acquisition = asyncio.get_running_loop().run_in_executor(
+            waiter, Platform.current().acquire_session_writer, descriptor)
+        waiter.shutdown(wait=False)
+        try:
+            await asyncio.shield(acquisition)
+            yield
+        finally:
+            # Cancellation cannot close a descriptor still used by its waiter.
+            if acquisition.done():
+                self._close_input_writer(descriptor, acquisition)
+            else:
+                acquisition.add_done_callback(partial(self._close_input_writer, descriptor))
+
+    @staticmethod
+    def _close_input_writer(descriptor: int, acquisition: asyncio.Future[None]) -> None:
+        try:
+            acquisition.exception()
+        finally:
+            os.close(descriptor)
 
     @property
     def schema_paths(self) -> tuple[Path, ...]:

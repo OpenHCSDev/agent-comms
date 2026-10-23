@@ -23,7 +23,7 @@ from agent_comms.typed_table import (
 
 from .child_process import Platform
 from .declared_family import DeclaredFamily
-from .locked_store import DEFAULT_STORE_CONTENTION, StoreBusy, StoreContention
+from .locked_store import DEFAULT_STORE_CONTENTION, StoreContention
 
 
 class StoreFile(DeclaredFamily):
@@ -96,7 +96,7 @@ class CoordinationStore(CarriedWriter, ReconciledFile):
                 return InvalidStore("Coordinator is empty")
             with (
                 CoordinationReadUnavailable.checking(),
-                closing(cls.read_snapshot(path, StoreBusy())),
+                closing(cls.read_snapshot(path)),
             ):
                 pass
         except FileNotFoundError:

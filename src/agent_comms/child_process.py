@@ -37,6 +37,11 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar, NoReturn, TextIO
 
+with suppress(ModuleNotFoundError):
+    import fcntl
+with suppress(ModuleNotFoundError):
+    import msvcrt
+
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, NullMember, RecordMember, SubclassUnion
@@ -377,6 +382,10 @@ class Platform(DeclaredFamily, affix="Platform"):
         """POSIX locks end at last close, including inherited descriptors."""
 
     @abstractmethod
+    def acquire_session_writer(self, descriptor: int) -> None:
+        """Wait in the kernel for this session's input writer; close releases it."""
+
+    @abstractmethod
     def launch(
         self, command: tuple[str, ...], pass_fds: tuple[int, ...], runtime: LaunchRuntime,
         lifetime: type[ChildLifetime],
@@ -460,6 +469,9 @@ class PosixPlatform(Platform):
         import fcntl
 
         fcntl.flock(descriptor, mode.flock() | fcntl.LOCK_NB)
+
+    def acquire_session_writer(self, descriptor: int) -> None:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
 
     def launch(
         self, command: tuple[str, ...], pass_fds: tuple[int, ...], runtime: LaunchRuntime,
@@ -659,6 +671,24 @@ class Win32Platform(Platform):
         raise refusal
 
     """Kernel creation times and named job objects bind the complete child tree."""
+
+    class InputLockOffset(ctypes.Structure):
+        _fields_ = [
+            ("Internal", ctypes.c_size_t),
+            ("InternalHigh", ctypes.c_size_t),
+            ("Offset", ctypes.c_uint32),
+            ("OffsetHigh", ctypes.c_uint32),
+            ("hEvent", ctypes.c_void_p),
+        ]
+
+    def acquire_session_writer(self, descriptor: int) -> None:
+        offset = self.InputLockOffset()
+        lock = self.kernel.LockFileEx
+        lock.argtypes = (ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32,
+                         ctypes.c_uint32, ctypes.c_uint32, ctypes.POINTER(self.InputLockOffset))
+        lock.restype = ctypes.c_int
+        if not lock(msvcrt.get_osfhandle(descriptor), 2, 0, 1, 0, ctypes.byref(offset)):
+            raise ctypes.WinError(ctypes.get_last_error())
 
     store_lock_interval = 0.01
     # Windows' CRT _commit (used by os.fsync) rejects a read-only descriptor.
