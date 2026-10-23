@@ -76,8 +76,8 @@ class SessionConfigOptions(ConfigOptions):
         return SessionConfigOptionSelect(
             id=FieldCodec.encode(type(option)), name=option.title,
             description=option.description, category=option.category, type="select",
-            current_value=next(choice.acp_value for choice in choices if choice.value == configured),
-            options=[SessionConfigSelectOption(name=choice.name, value=choice.acp_value)
+            current_value=next(choice.editor_value for choice in choices if choice.value == configured),
+            options=[SessionConfigSelectOption(name=choice.name, value=choice.editor_value)
                      for choice in choices],
         )
 

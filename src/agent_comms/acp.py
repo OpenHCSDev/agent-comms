@@ -322,9 +322,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
         owner = self.sessions.require(session_id)
         controller = self._runtime.controller.get()
-        attached = (
-            self.sessions.client if controller is not None and not controller.bound else controller
-        )
+        attached = controller.attached(self.sessions.client) if controller is not None else None
         if attached is None:
             raise RequestRefused.invalid_params(
                 {"reason": "Selected write requires attached ACP controller"}
@@ -379,7 +377,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             existing = self._runtime.controller.get()
             context = (
                 self._runtime.controller.set(self.sessions.client)
-                if existing is not None and not existing.bound
+                if existing is not None and existing.attached(None) is None
                 else None
             )
             try:

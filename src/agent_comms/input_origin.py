@@ -145,7 +145,7 @@ class HumanInputOrigin(InputOrigin, ClaimScoped):
         return self.author.sender
 
     def require_ingress(self, comms, snapshot, claim_scope, controller):
-        if controller is None or not controller.bound:
+        if controller is None or controller.attached(None) is None:
             raise RelationViolationError("User input origin requires its attached ACP controller")
         from .store_files import SharedLock
 

@@ -51,7 +51,7 @@ class CatalogChoice:
     value: str | None
 
     @property
-    def acp_value(self) -> str:
+    def editor_value(self) -> str:
         return self.value if self.value is not None else ""
 
 
@@ -145,7 +145,7 @@ class CatalogConfigOption(ConfigOption):
 
     def require_value(self, value: str | None, choices: list[CatalogChoice]) -> None:
         if value not in {choice.value for choice in choices}:
-            valid = ", ".join(choice.acp_value for choice in choices)
+            valid = ", ".join(choice.editor_value for choice in choices)
             raise InvalidConfigChoice(
                 f"{self.title} {value!r} is unavailable; choose one of: {valid}"
             )

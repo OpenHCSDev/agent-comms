@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
@@ -26,7 +26,8 @@ class SessionUpdateSink(ABC):
 
 
 class Controller(ABC):
-    bound: ClassVar[bool] = True
+    def attached(self, client: Controller | None) -> Controller | None:
+        return self
 
     @abstractmethod
     def require_current(self, authority: AcpSelectedWriteAuthority, session_id: str) -> None: ...
@@ -46,7 +47,8 @@ class Controller(ABC):
 class UnboundController(Controller):
     """No prompt has selected a transport; ingress may still bind its ACP client."""
 
-    bound = False
+    def attached(self, client: Controller | None) -> Controller | None:
+        return client
 
     def require_current(self, authority: AcpSelectedWriteAuthority, session_id: str) -> None:
         raise IdentityConflict("Selected write ACP controller changed")

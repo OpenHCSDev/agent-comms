@@ -17,7 +17,6 @@ from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from . import agent_events as events
 from .agent_backend import InputContent, TurnDelivery
 from .channel_input_batch import InputBatch
-from .controller import UNBOUND_CONTROLLER
 from .coordinator import Coordination
 from .field_codec import Id128Text
 from .goals import Goal
@@ -290,8 +289,8 @@ class OwnedTurn:
             if self.accepted_input_id is not None
             else self.runner.runtime.controller.get()
         )
-        if self.controller is not None and not self.controller.bound:
-            self.controller = None  # Autonomous/channel/goal turns have no controller.
+        if self.controller is not None:
+            self.controller = self.controller.attached(None)  # Autonomous/channel/goal turns have no controller.
         self.runner.inputs.state(self.session_id).capture_first_source(self.original)
         self.input_cleanup.pop_all()
         self.input_cleanup.push_async_callback(

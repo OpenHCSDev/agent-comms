@@ -385,7 +385,7 @@ class ChoiceTargetField(TargetField):
 
     @property
     def choices(self) -> tuple[tuple[str, str], ...]:
-        return tuple((choice.name, choice.acp_value) for choice in self.options)
+        return tuple((choice.name, choice.editor_value) for choice in self.options)
 
     async def prepare(self, catalogs: ConfigOptions,
                       selection: CatalogSelection) -> ChoiceTargetField:
