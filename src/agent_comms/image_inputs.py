@@ -2,11 +2,6 @@
 
 from __future__ import annotations
 
-import base64
-import binascii
-from dataclasses import dataclass, field
-from typing import Annotated, Literal
-
 from acp.schema import (
     BlobResourceContents,
     EmbeddedResourceContentBlock,
@@ -15,58 +10,28 @@ from acp.schema import (
     TextResourceContents,
 )
 
-from agent_comms import field_codec
-
+from . import image_input
 from .mro_dispatch import MroDispatch, handles
 
-IMAGE_MIME_TYPES = frozenset({"image/png", "image/jpeg", "image/gif", "image/webp"})
-MAX_IMAGE_BYTES = 4 * 1024 * 1024
 MAX_PROMPT_IMAGES = 8
-
-
-@dataclass(frozen=True, slots=True)
-class ImageInput:
-    data: str
-    mime_type: Annotated[str, field_codec.WireName("mimeType")]
-    type: Annotated[Literal["image"], field_codec.WireRequired()] = field(
-        default="image", kw_only=True
-    )
-
-    def __post_init__(self) -> None:
-        if self.mime_type not in IMAGE_MIME_TYPES:
-            raise ValueError(f"Unsupported image type: {self.mime_type}")
-        if len(self.data) > 4 * ((MAX_IMAGE_BYTES + 2) // 3):
-            raise ValueError("Image attachments exceed the 4 MiB prompt limit.")
-        try:
-            decoded = base64.b64decode(self.data, validate=True)
-        except (ValueError, binascii.Error) as error:
-            raise ValueError("Image data must be valid base64.") from error
-        if not decoded:
-            raise ValueError("Image data is empty.")
-        if len(decoded) > MAX_IMAGE_BYTES:
-            raise ValueError("Image attachments exceed the 4 MiB prompt limit.")
-
-    @property
-    def size(self) -> int:
-        return len(self.data) * 3 // 4 - (len(self.data) - len(self.data.rstrip("=")))
 
 
 class PromptImages(MroDispatch):
     """Project ACP's declared content family into bounded native images."""
 
     def __init__(self) -> None:
-        self.images: list[ImageInput] = []
+        self.images: list[image_input.ImageInput] = []
 
-    def append(self, image: ImageInput) -> None:
+    def append(self, image: image_input.ImageInput) -> None:
         self.images.append(image)
         if len(self.images) > MAX_PROMPT_IMAGES:
             raise ValueError("At most 8 image attachments are allowed per prompt.")
-        if sum(image.size for image in self.images) > MAX_IMAGE_BYTES:
+        if sum(image.size for image in self.images) > image_input.MAX_IMAGE_BYTES:
             raise ValueError("Image attachments exceed the 4 MiB prompt limit.")
 
     @handles(ImageContentBlock)
     def image(self, block: ImageContentBlock) -> None:
-        self.append(ImageInput(block.data, block.mime_type))
+        self.append(image_input.ImageInput(block.data, block.mime_type))
 
     @handles(EmbeddedResourceContentBlock)
     def resource(self, block: EmbeddedResourceContentBlock) -> None:
@@ -75,7 +40,7 @@ class PromptImages(MroDispatch):
     @handles(BlobResourceContents)
     def blob(self, resource: BlobResourceContents) -> None:
         if resource.mime_type and resource.mime_type.startswith("image/"):
-            self.append(ImageInput(resource.blob, resource.mime_type))
+            self.append(image_input.ImageInput(resource.blob, resource.mime_type))
 
     @handles(TextResourceContents)
     def text(self, resource: TextResourceContents) -> None:
@@ -83,7 +48,7 @@ class PromptImages(MroDispatch):
             raise ValueError("Image input requires base64 data and a MIME type.")
 
 
-def prompt_images(request: PromptRequest) -> tuple[ImageInput, ...]:
+def prompt_images(request: PromptRequest) -> tuple[image_input.ImageInput, ...]:
     images = PromptImages()
     for block in request.prompt:
         images.dispatch_sync(block)
