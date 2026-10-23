@@ -217,9 +217,19 @@ The fix is one derived model with four renderers. **Core is the engine, Toad is 
 conversation and then checks its sender. A commander reply after the last beat
 therefore hides a silent heartbeat. The existing display-scope family will own
 the one-way service-to-commander predicate, applied before the bounded SQL page.
-The bus remains the liveness authority; no parallel timestamp, ping store or
-scheduler is added. The complete phase and its installed-session/parity evidence
-remain open. Source census and the copied-bus check accompany the delivery PR.
+The bus remains the liveness authority. `CommanderHeartbeat.requested_by` derives
+live eligibility and the oldest open request from `OwnerRequestStore`; the shared
+silence scan derives its grace from that request and the latest actual beat.
+`HeartbeatNotStarted` and `MissedHeartbeat` own their distinct evidence and wording.
+A newer request, service registration, commander reply or rename cannot erase the
+older debt. No parallel timestamp, ping store or scheduler is added.
+
+Draft #2624 is stacked on the published owner-request port #2621. The directional
+scope has its own commit; never-started handling follows in a separate commit.
+Seventeen focused copied-bus/request/page/channel checks pass (5.73 seconds),
+including the real rename and frozen scope family. Installed full-session/parity
+acceptance and the complete control-plane phase remain open. The source and
+consumer census has zero parse omissions; unprojected declarations remain visible.
 
 ### Phase 8: cutover
 
