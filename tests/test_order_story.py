@@ -105,7 +105,8 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     assert linked.line.count(reason) == linked.line.count(standalone) == 1
     linked_fleet = FieldCodec.decode(FleetStory, CommsFleetStoryTool.invoke(
         copied, {"thread": "lead"}, caller=caller))
-    assert linked_fleet == fleet
+    assert linked_fleet.lines == (
+        *fleet.lines, f"P2 worker: {copied.goals.todos.get('P2').order.line}")
     current = copied.goals.todos.get(saved.id)
     previous = current.held()
     released = copied.goals.todos.apply(current.id, ReleaseTodo(
@@ -118,6 +119,6 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     ))
     assert withdrawn.state is DoneTodoState
     assert FieldCodec.decode(FleetStory, CommsFleetStoryTool.invoke(
-        copied, {"thread": "lead"}, caller=caller)).lines == ()
+        copied, {"thread": "lead"}, caller=caller)).lines == linked_fleet.lines[1:]
     with pytest.raises(TodoError):
         CommsOrderStoryTool.invoke(copied, {"order_id": "absent-order"}, caller=caller)
