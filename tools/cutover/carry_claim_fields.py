@@ -1,7 +1,8 @@
 """Give retained claim fields their declared names, once, under install maintenance.
 
 The old spelling is selected by the record declaration, never by the JSON value.
-Opaque provider JSON is not a record and is never searched for matching strings.
+Opaque provider JSON is not a record and is never rewritten by matching strings;
+old key text only lets the carry skip rows and files that cannot change.
 Delete this step after every retained root has crossed this format change.
 """
 
@@ -98,7 +99,10 @@ class ClaimFields(RetiredClaimFields, Carry):
                     if not plan.contains_records(self.selects_record):
                         continue
                     with _store_lock(path):
-                        raw = json.loads(path.read_bytes())
+                        text = path.read_bytes()
+                        if not any(key.encode() in text for key in self.retired_keys()):
+                            continue
+                        raw = json.loads(text)
                         current = plan.rewrite_document(raw, self.rename_record, self.selects_record)
                         count = int(current != raw)
                         if count and apply:
@@ -141,7 +145,12 @@ class ClaimFields(RetiredClaimFields, Carry):
                         for field in primary)
                     if not primary:
                         raise RelationViolationError(f"{row.__name__} has no declared row key")
-                    with closing(db.execute(f"SELECT {columns} FROM {_identifier(row.declared_name)}")) as rows:
+                    # A row can change only if a JSON column holds an old key's text.
+                    retired = " OR ".join(
+                        f"instr({renamed.get(field.name, _identifier(field.wire_name))}, ?)>0"
+                        for field in json_fields for _ in cls.retired_keys())
+                    query = f"SELECT {columns} FROM {_identifier(row.declared_name)} WHERE {retired}"
+                    with closing(db.execute(query, cls.retired_keys() * len(json_fields))) as rows:
                         for values in rows:
                             keys, payloads = values[:len(primary)], values[len(primary):]
                             updates = {}
