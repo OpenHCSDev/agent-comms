@@ -20,7 +20,9 @@ from contextlib import ExitStack, suppress
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
+
+from pydantic import BaseModel
 
 from acp.exceptions import RequestError
 from acp.schema import (
@@ -50,6 +52,9 @@ from .errors import RelationViolationError, UnregisteredThreadError
 from .coordination_errors import CoordinationError
 from .native_failures import NativeRequestFailure
 from .private_path import PrivateSocketRole
+
+if TYPE_CHECKING:
+    from .acp import CommsAgent
 
 
 def socket_path(root: Path, pid: int) -> Path:
@@ -144,7 +149,7 @@ class SocketClient:
                 )
         self.pending.clear()
 
-    async def session_update(self, *, session_id: str, update: Any) -> None:
+    async def session_update(self, *, session_id: str, update: BaseModel) -> None:
         await self.send(OwnerUpdate.of(update))
 
 
@@ -174,7 +179,7 @@ class SessionClients(dict[str, set[SocketClient]]):
 
 
 class RuntimeServer:
-    def __init__(self, agent: Any):
+    def __init__(self, agent: CommsAgent):
         self.agent = agent
         self.server: asyncio.Server | None = None
         self.clients = SessionClients(self)
@@ -222,7 +227,7 @@ class RuntimeServer:
         self,
         *,
         session_id: str,
-        update: Any,
+        update: BaseModel,
         _expected_client: Any = _UNBOUND_PUBLICATION_CLIENT,
         _expected_thread: str | None = None,
         _expected_sockets: frozenset[SocketClient] | None = None,
@@ -471,7 +476,7 @@ class OwnerAttachment:
 
 
 class RuntimeProxy(RuntimeConnection):
-    def __init__(self, agent: Any, session_id: str, path: Path):
+    def __init__(self, agent: CommsAgent, session_id: str, path: Path):
         super().__init__(agent._comms, session_id, path)
         self.agent = agent
         self.writer: asyncio.StreamWriter | None = None
