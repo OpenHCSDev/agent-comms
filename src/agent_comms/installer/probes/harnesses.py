@@ -46,6 +46,15 @@ class HarnessInstallation:
         ),
     ] = KeptCommander()
 
+    def declared_part(self) -> HarnessInstallation:
+        """Project a CLI subclass onto this operation's declared fields."""
+        return HarnessInstallation(
+            **{
+                option.name: getattr(self, option.name)
+                for option in dataclasses.fields(HarnessInstallation)
+            }
+        )
+
     def apply(self, ctx: Comms) -> InstallResult:
         """The install's last step, on the bus it carried or created, run by that bus's
         runtime (HarnessesProbe)."""

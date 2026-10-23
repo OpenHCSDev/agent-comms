@@ -25,7 +25,8 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.history_result import ChannelHistoryPageResult
 from agent_comms.installer.backup import bus_files
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.interpreter_operation import InstalledProgram, PrepareProducerDigestsProbe
+from agent_comms.installer.interpreter_operation import InstalledProgram
+from agent_comms.installer.probes.native import PrepareProducerDigestsProbe
 from agent_comms.installer.practice import TestHome
 from agent_comms.installer.upgrade import (
     CarriedRehearsal,
