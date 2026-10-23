@@ -34,7 +34,7 @@ def block(text: str) -> TextContentBlock:
 
 
 @pytest.mark.asyncio
-async def test_attached_compact_routes_to_owner_not_attached_model(tmp_path):
+async def test_attached_compact_routes_to_owner_not_attached_model(tmp_path, native_runtime_package):
     agent = canonical_agent(wire(tmp_path / "wire"), auto_wake=False)
     calls = []
 
@@ -51,7 +51,9 @@ async def test_attached_compact_routes_to_owner_not_attached_model(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_compact_rejects_multimodal_and_overlong_without_bridge_or_model(tmp_path):
+async def test_compact_rejects_multimodal_and_overlong_without_bridge_or_model(
+    tmp_path, native_runtime_package
+):
     agent = canonical_agent(wire(tmp_path / "wire"), auto_wake=False)
     session = (await agent.new_session(cwd=str(tmp_path / "work"))).session_id
     try:
