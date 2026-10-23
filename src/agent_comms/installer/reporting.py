@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from agent_comms.cli_commands import ReplaceRouteCliCommand
 from agent_comms.installer.interpreter_operation import InstallReportProbe, ProbeProgram
 
 if TYPE_CHECKING:
@@ -50,3 +51,16 @@ class RuntimeWriter(RootWriter):
 
     def post(self, lines: tuple[str, ...]) -> None:
         self.stack.probe(InstallReportProbe(self.root, "\n".join(lines)), program=self.program)
+
+
+@dataclass(frozen=True)
+class OutgoingWriter(RuntimeWriter):
+    """The outgoing runtime posts until the target's runtime takes the bus over. It refuses
+    a route that selects no bus, which install replaces anyway, so the target's runtime
+    replaces that route before each post."""
+
+    target: Stack
+
+    def post(self, lines: tuple[str, ...]) -> None:
+        self.target.cli(self.root, ReplaceRouteCliCommand)
+        super().post(lines)
