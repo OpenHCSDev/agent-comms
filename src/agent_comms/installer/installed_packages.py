@@ -93,9 +93,8 @@ class InstalledPackagesProbe(RuntimeProbe[dict[str, PackageRecord]]):
             raise ValueError("Core is editable, not a built runtime package")
         if STAMP.commit() != self.core:
             raise ValueError("The wheel stamp does not name the selected source")
-        return {canonicalize_name(dist.metadata["Name"]): PackageRecord.model_validate({
-            "version": dist.version,
-            "source": json.loads(source) if (source := dist.read_text("direct_url.json")) else None,
-        }) for dist in distributions()}
-
+        return {canonicalize_name(dist.metadata["Name"]): PackageRecord(
+            version=dist.version,
+            source=json.loads(source) if (source := dist.read_text("direct_url.json")) else None,
+        ) for dist in distributions()}
 
