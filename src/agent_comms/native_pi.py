@@ -15,7 +15,9 @@ from collections.abc import Iterator
 from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Literal
+
+from pydantic import JsonValue
 
 from agent_comms.participant_identity import ParticipantIdentity
 
@@ -231,7 +233,7 @@ class NativeContextJournal(
     indexes = (Index(("request_generation",)), Index(("session_id",)))
 
     @classmethod
-    def native_contract(cls) -> dict[str, Any]:
+    def native_contract(cls) -> dict[str, JsonValue]:
         """Generate the native writer's SQLite contract from this declaration."""
         table = cls.declared_name
         return {

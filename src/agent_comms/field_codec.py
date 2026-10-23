@@ -35,6 +35,7 @@ from typing import (
 )
 from uuid import uuid4
 
+from pydantic import JsonValue
 from typing_extensions import TypeAliasType, TypeForm
 
 from .declared_family import DeclaredFamily
@@ -907,7 +908,7 @@ class FieldRepresentation(MroDispatch, ABC):
     def decode(cls, value: object) -> object: ...
 
     @classmethod
-    def schema(cls) -> dict[str, Any]:
+    def schema(cls) -> dict[str, JsonValue]:
         raise TypeError(f"{cls.__name__} has no JSON schema")
 
     @classmethod
@@ -947,11 +948,11 @@ class WireValue(WireForm):
     __slots__ = ()
 
     @abstractmethod
-    def to_wire(self) -> Any: ...
+    def to_wire(self) -> JsonValue: ...
 
     @classmethod
     @abstractmethod
-    def from_wire(cls, data: Any) -> Self: ...
+    def from_wire(cls, data: JsonValue) -> Self: ...
 
     @classmethod
     def decode(cls, value: object) -> Self:
@@ -1230,7 +1231,7 @@ class JsonShapeFamily(AcceptsNull, ExternalJsonShape, SingleValueEncoding):
         return compile_decoder(Union[tuple(annotation for _, annotation in cls._json_owners.values())])
 
     @classmethod
-    def schema(cls) -> dict[str, Any]:
+    def schema(cls) -> dict[str, JsonValue]:
         alternatives = [FieldCodec.value_schema(annotation)
                         for _, annotation in cls._json_owners.values()]
         return FieldCodec.alternatives_schema("anyOf", alternatives)
@@ -1257,7 +1258,7 @@ class TextRepresentation[V](FieldRepresentation):
     def from_text(cls, value: str) -> V: ...
 
     @classmethod
-    def schema(cls) -> dict[str, Any]:
+    def schema(cls) -> dict[str, JsonValue]:
         return {"type": "string", "description": f"{cls.__module__}.{cls.__qualname__} text"}
 
 
@@ -1481,8 +1482,6 @@ class FieldCodec(MroDispatch, Sealed):
         if len(representations) > 1:
             raise TypeError("A field must have one representation")
         if isinstance(target, TypeAliasType):
-            from pydantic import JsonValue
-
             if target is JsonValue:
                 return Any, representations[0] if representations else _JsonValueRepresentation
         if representations:
@@ -1525,14 +1524,14 @@ class FieldCodec(MroDispatch, Sealed):
 
     @overload
     @classmethod
-    def encode(cls, value: DeclaredFamily) -> dict[str, Any]: ...
+    def encode(cls, value: DeclaredFamily) -> dict[str, JsonValue]: ...
 
     @overload
     @classmethod
-    def encode(cls, value: object, annotation: object = None) -> Any: ...
+    def encode(cls, value: object, annotation: object = None) -> JsonValue: ...
 
     @classmethod
-    def encode(cls, value: object, annotation: object = None) -> Any:
+    def encode(cls, value: object, annotation: object = None) -> JsonValue:
         return compile_decoder(annotation).encode(value)
 
     @staticmethod
@@ -1565,7 +1564,7 @@ class FieldCodec(MroDispatch, Sealed):
         return cast(T, compile_decoder(declared).decode_document(data))
 
     @classmethod
-    def encode_record(cls, value: object) -> dict[str, Any]:
+    def encode_record(cls, value: object) -> dict[str, JsonValue]:
         """Encode a record: its family tag, then its declared fields."""
         return {**cls._tag(value), **cls.encode_fields(value)}
 
@@ -1681,13 +1680,13 @@ class FieldCodec(MroDispatch, Sealed):
 
     @staticmethod
     def alternatives_schema(
-        combinator: Literal["anyOf", "oneOf"], alternatives: list[dict[str, Any]],
-    ) -> dict[str, Any]:
+        combinator: Literal["anyOf", "oneOf"], alternatives: list[dict[str, JsonValue]],
+    ) -> dict[str, JsonValue]:
         """An alternative schema with no possible member rejects every value."""
         return {combinator: alternatives} if alternatives else {"not": {}}
 
     @classmethod
-    def _family_schema(cls, target: type[DeclaredFamily]) -> dict[str, Any]:
+    def _family_schema(cls, target: type[DeclaredFamily]) -> dict[str, JsonValue]:
         """Instance values carry their selector inside the encoded object."""
         alternatives = []
         for member in target.members_with(target):
@@ -1698,14 +1697,14 @@ class FieldCodec(MroDispatch, Sealed):
         return cls.alternatives_schema("oneOf", alternatives)
 
     @classmethod
-    def record_schema(cls, target: type) -> dict[str, Any]:
+    def record_schema(cls, target: type) -> dict[str, JsonValue]:
         """Named request fields; external tool/CLI selection remains separate."""
         return cls._record_schema(target, {}, [])
 
     @classmethod
     def _record_schema(
-        cls, target: type, properties: dict[str, Any], required: list[str]
-    ) -> dict[str, Any]:
+        cls, target: type, properties: dict[str, JsonValue], required: list[str]
+    ) -> dict[str, JsonValue]:
         """Build fields once, including an internally supplied family selector."""
         cls._record_plan(target).schema_fields(properties, required)
         return {
@@ -1716,7 +1715,7 @@ class FieldCodec(MroDispatch, Sealed):
         }
 
     @classmethod
-    def value_schema(cls, annotation: object) -> dict[str, Any]:
+    def value_schema(cls, annotation: object) -> dict[str, JsonValue]:
         """Derive external scalar/array choices from the same decode declarations."""
         annotation, representation = cls._representation(annotation)
         if representation is not None:
@@ -1759,7 +1758,7 @@ class FieldCodec(MroDispatch, Sealed):
         raise TypeError(f"No declared JSON schema for {annotation}")
 
     @classmethod
-    def project(cls, value: object, view: str, annotation: object = None) -> Any:
+    def project(cls, value: object, view: str, annotation: object = None) -> JsonValue:
         """Encode a redacted view using field exclusions and owned properties.
 
         A family record carries its tag at every depth, as in its wire form.
@@ -2217,7 +2216,7 @@ class _JsonValueRepresentation(FieldRepresentation):
     @staticmethod
     @lru_cache(maxsize=1)
     def validator():
-        from pydantic import ConfigDict, JsonValue, TypeAdapter
+        from pydantic import ConfigDict, TypeAdapter
 
         return TypeAdapter(JsonValue, config=ConfigDict(allow_inf_nan=False))
 
@@ -2240,7 +2239,7 @@ class _JsonValueRepresentation(FieldRepresentation):
 
 
 @dataclass(frozen=True, slots=True)
-class _AnyDecoder(_JsonValueRepresentation, ValueDecoder[Any]):
+class _AnyDecoder(_JsonValueRepresentation, ValueDecoder[JsonValue]):
     """Only an undeclared value needs runtime representation selection."""
 
     annotations = (Any, None)
@@ -2824,7 +2823,7 @@ class _RecordDecoder(_ContextDecoder[Any]):
 
 
 @dataclass(frozen=True, slots=True)
-class _EnumDecoder(_ChoiceDecoder[Any]):
+class _EnumDecoder(_ChoiceDecoder[Enum]):
     target: type[Enum]
     value_plan: ValueDecoder[object]
 
