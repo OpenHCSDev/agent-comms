@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import agent_comms
+from .class_fact import ClassFact
 from .projection_source import ProjectionSource
 from .turn_origin import TurnOrigin
 import builtins
@@ -10,7 +10,6 @@ import hashlib
 import re
 import sqlite3
 import time
-from types import ModuleType
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import closing
@@ -73,9 +72,12 @@ class BusTables(TypedTable, AppendOnlyTables, SharedFileTables, DurableTables, d
 class BusProjectionTables(ProducedTable, SharedFileTables, DerivedTables, declared_name=None):
     """Reverse lookups are derived from the record, in its append transaction."""
 
-    @classmethod
-    def producer_package(cls) -> ModuleType:
-        return agent_comms
+    @ClassFact
+    def shared_producers(cls) -> tuple[type, ...]:
+        return (
+            *ProducedTable.shared_producers, BusCapability, BusRecord,
+            ProjectionPass, StoredHolders, ReplayedHolders,
+        )
 
     @classmethod
     def create_schema(cls, db: sqlite3.Connection) -> None:
@@ -126,6 +128,11 @@ class ClaimOperations(BusProjectionTables):
 @dataclass(frozen=True)
 class HeldResources(BusProjectionTables):
     """Current membership references the canonical transition, never a copy."""
+
+    @ClassFact
+    def writes(cls) -> tuple[type, ...]:
+        return (HeldResources, ClaimOperations)
+
 
     resource: Annotated[str, Column(primary_key=True)]
     claim_seq: int
@@ -376,6 +383,12 @@ class MessageKind(DeclaredFamily, ProjectionSource, affix="Kind"):
     stored it. Publication-time checks run once, from the single commit path.
     """
 
+    @ClassFact
+    def writes(cls) -> tuple[type, ...]:
+        from .bus_route_counts import BusRouteCounts
+        return (BusRouteCounts,)
+
+
     conversation_message: ClassVar[bool] = True
 
     @classmethod
@@ -404,6 +417,12 @@ class SendableMessageKind(MessageKind, declared_name=None):
 
 class ClaimNoticeKind(MessageKind, declared_name="claim-notice"):
     """A claim-owner record, not a delivery to a reader."""
+
+    @ClassFact
+    def writes(cls) -> tuple[type, ...]:
+        from .bus_route_counts import BusRouteCounts
+        return (BusRouteCounts,)
+
 
     conversation_message = False
 
@@ -571,6 +590,12 @@ class SendableRole(MessageRole, DeclaredFamily, affix="Role"):
 
 
 class InformationalMessage(ProjectionSource):
+
+    @ClassFact
+    def writes(cls) -> tuple[type, ...]:
+        from .bus_activity_index import SentActivity
+        return (SentActivity,)
+
     def response_policy(self, message):
         return InformationalPolicy.instance()
 
@@ -586,6 +611,12 @@ class InformationalMessage(ProjectionSource):
 
 @dataclass(frozen=True, slots=True)
 class ConversationRole(SendableRole):
+
+    @ClassFact
+    def writes(cls) -> tuple[type, ...]:
+        from .bus_activity_index import SentActivity
+        return (SentActivity,)
+
     category = InboundCategory
 
     def wire_fields(self):
@@ -703,6 +734,18 @@ class Message(Addressed, BusCapability, TurnOrigin):
     The bus assigns ``seq`` (a monotonically increasing log position) at send
     time; the hash-derived ``message_id`` is identity only and is not ordered.
     """
+
+    @ClassFact
+    def writes(cls) -> tuple[type, ...]:
+        from .bus_activity_index import BusActivityIndex, SentActivity
+        from .bus_display_index import BusDisplayIndex
+        from .bus_route_counts import BusRouteCounts
+        from .bus_tables import MessageIdentitySource, AnsweredSource
+        return (
+            BusActivityIndex, SentActivity, BusDisplayIndex, BusRouteCounts,
+            MessageIdentitySource, AnsweredSource,
+        )
+
 
     body: Annotated[str, WireName("text"), WireOrder(6)]
     type: Annotated[builtins.type[MessageKind], WireOrder(5)]
@@ -959,6 +1002,11 @@ class BusRecord(Message, DeclaredFamily, affix="Record"):
 @dataclass(frozen=True, kw_only=True)
 class Claimed(BusCapability):
     """The transition attesting this row, stored in its append transaction."""
+
+    @ClassFact
+    def writes(cls) -> tuple[type, ...]:
+        return (HeldResources, ClaimOperations)
+
 
     claim_transition: Annotated[ClaimTransition, WireOrder(11)]
 

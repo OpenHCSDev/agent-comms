@@ -1,25 +1,37 @@
-"""The declared capability of code that produces derived projection rows."""
+"""Writer-owned declarations of the projection tables their code produces."""
 
 from __future__ import annotations
 
 from typing import ClassVar
 
+from .class_fact import ClassFact
+
 
 class ProjectionSource:
-    """A class whose code decides projection row content.
+    """A writer declares ``writes`` as table classes, inherited by its members.
 
-    Its source, and every subclass's source, belongs to the digest that tells a
-    stored projection it is still fresh. A class reached while rows are produced
-    that does not inherit this capability is a hole in that digest.
+    ClassFact defers the table references until imports finish: a value such as
+    MessageReference can produce a table that itself inherits MessageReference.
+    Only explicit output declarations register writers; importing another subclass
+    without such a declaration contributes nothing to any projection.
     """
 
     __slots__ = ()
-    _sources: ClassVar[list[type[ProjectionSource]]] = []
+    _declarations: ClassVar[dict[ClassFact[ProjectionSource, tuple[type, ...]], set[type]]] = {}
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
-        ProjectionSource._sources.append(cls)
+        for parent in cls.__mro__:
+            if "writes" in vars(parent):
+                declaration = vars(parent)["writes"]
+                ProjectionSource._declarations.setdefault(declaration, set()).add(cls)
 
     @staticmethod
-    def sources() -> tuple[type[ProjectionSource], ...]:
-        return tuple(ProjectionSource._sources)
+    def writers_for(table: type) -> set[type]:
+        """Reverse the writers' declarations, without discovering unrelated modules."""
+        return {
+            writer
+            for declaration, writers in ProjectionSource._declarations.items()
+            for writer in writers
+            if table in declaration.__get__(None, writer)
+        }

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .class_fact import ClassFact
+from .projection_source import ProjectionSource
 from abc import abstractmethod
 from dataclasses import dataclass
 
@@ -10,7 +12,13 @@ from .page_traversal import LiveCursor, NewestCursor, PageCursor, PageTraversal
 
 
 @dataclass(frozen=True, slots=True)
-class MessageReference:
+class MessageReference(ProjectionSource):
+
+    @ClassFact
+    def writes(cls) -> tuple[type, ...]:
+        from .bus_tables import MessageIdentitySource, AnsweredSource
+        return (MessageIdentitySource, AnsweredSource)
+
     seq: int
     message_id: str
 

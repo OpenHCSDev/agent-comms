@@ -7,6 +7,7 @@ uses ThreadIncarnation; process and turn generations do not alter provenance.
 
 from __future__ import annotations
 
+from .class_fact import ClassFact
 import asyncio
 import json
 from abc import ABC, abstractmethod
@@ -941,6 +942,12 @@ class DMDisplayScope(MessageDisplayScope):
 @dataclass(frozen=True)
 class RepliesDisplayScope(AnyTargetDisplayScope, DMDisplayScope):
     """Peer requests, direct or channel-addressed, and every reply by the first participant."""
+
+    @ClassFact
+    def writes(cls) -> tuple[type, ...]:
+        from .bus_tables import AwaitingAnswerSource
+        return (AwaitingAnswerSource,)
+
 
     @property
     def index_predicate(self) -> tuple[str, tuple]:

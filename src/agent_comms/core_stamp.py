@@ -12,7 +12,8 @@ class CoreStamp(ABC):
 
     @abstractmethod
     def producer_digests(
-        self, declared: Mapping[str, Callable[[], str]],
+        self,
+        declared: Mapping[str, Callable[[], str]],
     ) -> dict[str, str]: ...
 
     def write(self, path: Path) -> None:
@@ -33,6 +34,7 @@ class WheelStamp(CoreStamp):
         return self.value
 
     def producer_digests(
-        self, declared: Mapping[str, Callable[[], str]],
+        self,
+        declared: Mapping[str, Callable[[], str]],
     ) -> dict[str, str]:
         return self.digests

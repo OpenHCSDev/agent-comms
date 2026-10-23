@@ -1464,11 +1464,6 @@ class ProducedRow(ABC):
 
     @classmethod
     @abstractmethod
-    def producer_package(cls) -> types.ModuleType:
-        """The package whose ProjectionSource classes produce these rows."""
-
-    @classmethod
-    @abstractmethod
     def producer_digest(cls) -> str: ...
 
 
@@ -2008,40 +2003,36 @@ class TypedTable(
         )
 
 
-class ProducedTable(ProducedRow, TypedTable, declared_name=None):
-    """A named table whose producing family owns one source commitment.
+class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=None):
+    """A table derives its producers from the writers that declare it as an output."""
 
-    The first install after this change rebuilds bus projections once because the digest
-    format changed.
-    """
+    shared_producers: ClassVar[tuple[type, ...]] = (TypedTable, TypedRow, FieldCodec)
+
+    @ClassFact
+    def writes(cls) -> tuple[type, ...]:
+        return (cls,)
 
     @classmethod
     def producer_digest(cls) -> str:
-        for family in cls.__mro__:
-            if issubclass(family, ProducedTable) and "producer_package" in vars(family):
-                return family._producer_digest()
-        raise TypeError(f"{cls.__name__} has no producing family declaration")
+        return cls._producer_digest()
 
     @classmethod
     @cache
     def _producer_digest(cls) -> str:
-        source = "\0".join(
+        # slots dataclasses recreate a class; its declaration contributes once.
+        source = "\0".join(sorted({
             f"{owner.__module__}.{owner.__qualname__}\0{getsource(owner)}"
             for owner in cls.producer_owners()
-        )
+        }))
         return hashlib.sha256(source.encode()).hexdigest()
 
     @classmethod
     def producer_owners(cls) -> tuple[type, ...]:
-        """Every class whose source the produced rows depend on, in a stable order."""
-        DeclaredFamily.discover_package(cls.producer_package())
-        owners: set[type] = {
-            owner
-            for row in (cls, *cls.members_with(cls))
-            for owner in row.__mro__
-            if issubclass(owner, cls)
-        }
-        owners.update(ProjectionSource.sources())
+        """Only this table's declared writers and their inherited implementations."""
+        owners = set(cls.shared_producers)
+        for writer in ProjectionSource.writers_for(cls):
+            owners.update(parent for parent in writer.__mro__
+                          if parent.__module__.partition(".")[0] == __package__)
         return tuple(sorted(owners, key=lambda owner: (owner.__module__, owner.__qualname__)))
 
 

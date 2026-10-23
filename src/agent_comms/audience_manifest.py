@@ -8,6 +8,7 @@ and bind the value to the original committed envelope before runtime use.
 
 from __future__ import annotations
 
+from .class_fact import ClassFact
 import hashlib
 import math
 import re
@@ -61,6 +62,12 @@ def _digest(domain: bytes, payload: bytes) -> str:
 class FrozenRecipient(ProjectionSource):
     """Stable coordination lookup paired with its send-time canonical name."""
 
+    @ClassFact
+    def writes(cls) -> tuple[type, ...]:
+        from .bus_tables import ReceivedSource, AwaitingAnswerSource
+        return (ReceivedSource, AwaitingAnswerSource)
+
+
     recipient_lookup: str
     canonical_thread: str
 
@@ -76,6 +83,12 @@ class FrozenAudience(ProjectionSource):
     Neither the digest nor direct construction attests a bus append. At recovery,
     the bus owner must match this value to the original wire envelope/sideband.
     """
+
+    @ClassFact
+    def writes(cls) -> tuple[type, ...]:
+        from .bus_tables import SentSource, ReceivedSource, AwaitingAnswerSource
+        return (SentSource, ReceivedSource, AwaitingAnswerSource)
+
 
     wire_seq: int
     message_id: str

@@ -1,6 +1,7 @@
 """Message-derived activity clocks, independent of bus storage and routing."""
 from __future__ import annotations
 
+from .class_fact import ClassFact
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Self
@@ -16,6 +17,13 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class ChannelActivity(TypedRow, ProjectionSource):
+
+    @ClassFact
+    def writes(cls) -> tuple[type, ...]:
+        from .bus_activity_index import BusActivityIndex
+        from .bus_display_index import BusDisplayIndex
+        return (BusActivityIndex, BusDisplayIndex)
+
     last_message: float = 0
     last_user_input: float = 0
 

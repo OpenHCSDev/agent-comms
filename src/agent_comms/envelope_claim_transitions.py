@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .class_fact import ClassFact
 import stat
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
@@ -138,6 +139,12 @@ class AssignmentBinding(ProjectionSource):
 @dataclass(frozen=True)
 class ClaimScope(SubclassUnion, ABC, ProjectionSource, affix=""):
     """What one acquisition belongs to; its member answers reuse, liveness and operation use."""
+
+    @ClassFact
+    def writes(cls) -> tuple[type, ...]:
+        from .messages import ClaimOperations
+        return (ClaimOperations,)
+
 
     def reuses(self, other: RecordedScope) -> bool:
         return self == other
@@ -279,6 +286,12 @@ class AcquiringClaim(ClaimIdentity):
 @dataclass(frozen=True)
 class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, ProjectionSource, affix=""):
     """One original resource transition; its member declares what it changes."""
+
+    @ClassFact
+    def writes(cls) -> tuple[type, ...]:
+        from .messages import HeldResources, ClaimOperations
+        return (HeldResources, ClaimOperations)
+
 
     max_resources: ClassVar[int] = 32
     expired: Annotated[
@@ -462,6 +475,12 @@ class ClaimOwner(AcquiringClaim, ResourceClaim):
 @dataclass(frozen=True, slots=True)
 class ClaimProjection(Mapping[str, ClaimOwner], ProjectionSource):
     """Immutable sorted claim table plus the last processed envelope sequence."""
+
+    @ClassFact
+    def writes(cls) -> tuple[type, ...]:
+        from .messages import HeldResources
+        return (HeldResources,)
+
 
     last_seq: Annotated[int, ProjectionSequence] = 0
     # Built from a dict by the transitions and the holder tables; held as a read-only view.
