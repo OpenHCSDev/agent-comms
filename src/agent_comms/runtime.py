@@ -15,6 +15,7 @@ import logging
 import os
 import secrets
 import socket
+from abc import ABC, abstractmethod
 from collections.abc import Coroutine
 from contextlib import ExitStack, suppress
 from contextvars import ContextVar
@@ -72,7 +73,12 @@ class SubscriberClosed(ConnectionError):
     """The attached reader left; the normal end of a subscription, not a failed request."""
 
 
-class SocketClient(Controller):
+class SessionUpdateSink(ABC):
+    @abstractmethod
+    async def session_update(self, *, session_id: str, update: BaseModel) -> None: ...
+
+
+class SocketClient(Controller, SessionUpdateSink):
     def __init__(self, writer: asyncio.StreamWriter):
         self.writer = writer
         transport = writer.transport

@@ -25,9 +25,10 @@ import sys
 import time
 from contextlib import AsyncExitStack
 from functools import partial
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from acp import RequestError
+from acp.agent.connection import AgentSideConnection
 from acp.connection import StreamEvent
 from acp.core import DEFAULT_STDIO_BUFFER_LIMIT_BYTES
 from acp.stdio import stdio_streams
@@ -71,6 +72,7 @@ from .queued_input import DeliveredInput
 from .runtime import (
     RuntimeProxy,
     RuntimeServer,
+    SessionUpdateSink,
     socket_path,
 )
 from .schedule_rules import SelectedWakeCheck
@@ -291,9 +293,11 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         if kind != "text":
             raise RequestError.invalid_params({"reason": "/compact requires text only."})
 
-    async def emit_session_identity(self, session_id: str, name: str, client: Any = None) -> None:
+    async def emit_session_identity(
+        self, session_id: str, name: str, client: SessionUpdateSink | AgentSideConnection,
+    ) -> None:
         """Let a subscriber identify its owner before potentially long replay."""
-        await (client or self._runtime).session_update(
+        await client.session_update(
             session_id=session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
