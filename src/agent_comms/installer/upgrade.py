@@ -94,6 +94,7 @@ from agent_comms.installer.interpreter_operation import (
     RunningOwnersProbe,
     RuntimeProbe,
     SelectedRouteProbe,
+    ServingProbe,
     SourceProgram,
 )
 from agent_comms.installer.practice import (
@@ -658,6 +659,18 @@ class Stack:
         with ThreadPoolExecutor(max_workers=max(1, len(names))) as pool:
             return tuple(pool.map(lambda name: OwnerStart.attempt(self, root, name), names))
 
+    def restart_services(self) -> tuple[RestartedService, ...]:
+        """Every running host service moves onto this runtime, which owns the root and so
+        proves each one serves it."""
+        services = HostService.restart_running(self.python)
+        self.probe(ServingProbe())
+        return services
+
+    def start_services(self, stopped: tuple[HostService, ...]) -> tuple[RestartedService, ...]:
+        services = tuple(service.start_onto(self.python) for service in stopped)
+        self.probe(ServingProbe())
+        return services
+
     def verify(self, root: Path) -> BusReadBack:
         """What the carried bus answers through the CLI of the runtime that serves it next."""
         return self.cli(root, ReadBackCliCommand)
@@ -734,7 +747,7 @@ class PracticeBus:
 
 def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice, mode: RunMode,
             retire: bool, spill_dir: Path, scratch: Path,
-            harnesses: Callable[[], InstallResult], report: InstallReport) -> Upgrade:
+            harnesses: Callable[[Stack], InstallResult], report: InstallReport) -> Upgrade:
     """``scratch`` holds the target's worktree the launcher runs this source from; this
     run owns it and removes it. A live run ends by registering the ``harnesses``."""
     commands = InstallCommands()
@@ -827,12 +840,12 @@ class Install[Rehearsed: Rehearsal](ABC):
             commands=tuple(self.staged.commands.ran))
 
     def finished(self, rehearsal: Rehearsed, bridges: SessionBridgeResumes,
-                 harnesses: Callable[[], InstallResult], report: InstallReport) -> InstalledUpgrade:
+                 harnesses: Callable[[Stack], InstallResult], report: InstallReport) -> InstalledUpgrade:
         rehearsed = self.reported(rehearsal)
         live_run = self.install(rehearsal, bridges, report)
         finished = InstalledUpgrade(
             rehearsed.source, rehearsed.target, rehearsed.root, rehearsed.pending,
-            rehearsed.rehearsal, live_run, harnesses(), commands=tuple(self.staged.commands.ran),
+            rehearsed.rehearsal, live_run, harnesses(self.staged), commands=tuple(self.staged.commands.ran),
             processes=RuntimeProcesses.observe(self.staged.runtime),
             bridge_resumes=tuple(bridges.outcomes))
         return (finished.extended(UnresumedUpgrade)
@@ -1016,10 +1029,13 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                 self.publish(migration.backup, selected_route)
                 holder.close()
                 maintenance.clear(held)
-                services = HostService.restart_running(self.staged.python)
+                services = self.staged.restart_services()
             except BaseException as error:
                 print(f"install: install failed ({type(error).__name__}: {error}); "
                       "restoring original installation", file=sys.stderr)
+                # A running service writes the root (the connector its passes), so none may
+                # run while the backup is restored; they start again on the original runtime.
+                stopped = HostService.stop_running()
                 state = maintenance.read()
                 recovery = state.phase.hold_for(maintenance, state, MaintenanceOperator.current())
                 holder.close()
@@ -1037,6 +1053,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                 self.installed.publish(self.root)
                 holder.close()
                 maintenance.clear(restored_hold)
+                self.installed.start_services(stopped)
                 started = self.installed.start(self.root, running)
                 print(f"install: restored after failure ({type(error).__name__}: {error}); "
                       f"original runtime selected; owners: {started}; "
@@ -1110,7 +1127,7 @@ class FreshInstall(Install[FreshRehearsal]):
         backup, selected_route = self.backed_up(())
         try:
             route = self.publish(backup, selected_route)
-            services = HostService.restart_running(self.staged.python)
+            services = self.staged.restart_services()
         except BaseException:
             backup.restore_route()
             self.installed.publish(self.root)

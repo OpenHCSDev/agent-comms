@@ -13,12 +13,16 @@ from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from itertools import combinations
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.goals import GoalChangedError
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repo import Repo
+from agent_comms.repository_name import RepositoryName
+from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.work_branches import BranchDifference
 from agent_comms.service_passes import ServicePassStore
 
 if TYPE_CHECKING:
@@ -28,9 +32,8 @@ if TYPE_CHECKING:
     from agent_comms.messages import Message
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.storage_rules import MemoryUse, StorageRule
-    from agent_comms.thread_identity import ThreadIncarnation
-    from agent_comms.todos import OwnerRequest, Todo
-    from agent_comms.ui_model.unit_state import UnitState
+    from agent_comms.todos import OrderClaim, OwnerRequest, PullRequest, Todo
+    from agent_comms.ui_model.unit_state import UnitObservation, UnitState
 
 
 @dataclass(frozen=True)
@@ -180,6 +183,101 @@ class UndatedStandingRule(StandingRule, declared_name=None):
         return True
 
 
+@dataclass(frozen=True)
+class HeldBranch:
+    """One open order joined to the holder's current recorded checkout."""
+
+    todo: Todo
+    holder: ThreadIncarnation
+    difference: BranchDifference
+    source: UnitObservation = field(compare=False, repr=False)
+
+    @property
+    def problem(self) -> str:
+        return self.todo.id
+
+
+class HeldBranchRule(UndatedStandingRule, declared_name=None):
+    """Branch rules share the heartbeat's existing progress frame and one scan."""
+
+    @classmethod
+    def scan_owner(cls) -> type[StandingRule]:
+        return HeldBranchRule
+
+    @classmethod
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState]) -> tuple[Self, ...]:
+        branches = tuple(
+            HeldBranch(todo, unit, state.source.pulls.branch_difference(
+                state.source.thread.project_path), state.source)
+            for state in observed for unit in state.readable_units() for todo in state.source.todos
+        )
+        ordered = tuple(sorted(branches, key=lambda held: (
+            held.difference.repository.to_wire(), held.difference.branch,
+            held.holder.require_recorded().lookup, held.problem,
+        )))
+        return tuple(rule for member in cls.members_with(cls) for rule in member.derive(ordered))
+
+    @classmethod
+    @abstractmethod
+    def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]: ...
+
+
+@dataclass(frozen=True)
+class BranchBehindMain(HeldBranchRule):
+    """A held branch needs a new base after too much main work passed it."""
+
+    problem: str
+    holder: ThreadIncarnation
+    repository: RepositoryName
+    branch: str
+    behind: int = field(compare=False)
+    limit: ClassVar[int] = 30
+
+    @classmethod
+    def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
+        return tuple(cls(held.problem, held.holder, held.difference.repository,
+                         held.difference.branch, held.difference.behind)
+                     for held in branches if held.difference.behind > cls.limit)
+
+    def line(self) -> str:
+        return (f"BRANCH BEHIND MAIN: {self.problem} {self.holder.name} "
+                f"{self.repository.to_wire()}:{self.branch} is {self.behind} commits behind "
+                f"origin/main (limit {self.limit}) -> update its base")
+
+
+@dataclass(frozen=True)
+class SharedFileBranches(HeldBranchRule):
+    """Different held branches touch the same repository-relative file."""
+
+    problem: str
+    holder: ThreadIncarnation
+    branch: str
+    other_problem: str
+    other_holder: ThreadIncarnation
+    other_branch: str
+    repository: RepositoryName
+    path: str
+
+    @classmethod
+    def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
+        found = []
+        for first, second in combinations(branches, 2):
+            left, right = first.difference, second.difference
+            if (first.holder == second.holder or left.repository != right.repository
+                    or left.branch == right.branch):
+                continue
+            found.extend(cls(first.problem, first.holder, left.branch,
+                             second.problem, second.holder, right.branch, left.repository, path)
+                         for path in sorted(left.files & right.files))
+        return tuple(found)
+
+    def line(self) -> str:
+        return (f"SHARED FILE BRANCHES: {self.problem} {self.holder.name} ({self.branch}) "
+                f"and {self.other_problem} {self.other_holder.name} ({self.other_branch}) "
+                f"touch {self.repository.to_wire()}:{self.path} -> coordinate their merge")
+
+
 class DatedStandingRule(StandingRule, declared_name=None):
     """A rule that says when its condition began: it is broken on the reads after that."""
 
@@ -277,13 +375,13 @@ class HeldOrderDue(IndependentStandingRule, DatedStandingRule, declared_name=Non
     """Each held order supplies one dated condition; the rule owns its wording."""
 
     problem: str
-    holder: str
+    holder: ThreadIncarnation
     order: str
     since: EventTime
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        return tuple(cls(todo.id, todo.held().owner, todo.order.checked().id, due)
+        return tuple(cls(todo.id, todo.held().owner_identity, todo.order.checked().id, due)
                      for todo, due in cls.conditions(comms, commander))
 
     @classmethod
@@ -305,8 +403,58 @@ class ReviewTimerUp(HeldOrderDue):
             actor, comms.registry, time.time())
 
     def line(self) -> str:
-        return (f"TIMER UP: {self.holder} {self.problem} at {self.since.clock()}, "
+        return (f"TIMER UP: {self.holder.name} {self.problem} at {self.since.clock()}, "
                 f"order {self.order} -> read its diff and judge it")
+
+
+@dataclass(frozen=True)
+class DeliveredHeadReview(DatedStandingRule):
+    """A recorded delivery waits on a review of its current ready PR head."""
+
+    problem: str
+    holder: ThreadIncarnation
+    order: str
+    repo: RepositoryName
+    pr: int
+    head: str
+    due_at: float
+    minutes: ClassVar[float] = 5
+
+    @classmethod
+    def for_head(
+        cls, problem: str, holder: ThreadIncarnation, order: str, claim: OrderClaim,
+        request: PullRequest, now: float,
+    ) -> tuple[Self, ...]:
+        due_at = claim.message.timestamp + cls.minutes * 60
+        if request.draft or request.has_head_review or now < due_at:
+            return ()
+        return (cls(problem, holder, order, claim.pull_request.repo,
+                    request.number, request.head, due_at),)
+
+    @classmethod
+    def scan_observed(
+        cls, comms: Comms, commander: str, observed: Sequence[UnitState],
+    ) -> tuple[Self, ...]:
+        pulls = next((state.source.pulls for state in observed), None)
+        now = time.time()
+        return tuple(
+            rule
+            for todo, claim, request in comms.goals.todos.claimed_heads_for_commander(
+                comms.registry.require(commander).incarnation, pulls,
+            )
+            for rule in cls.for_head(
+                todo.id, todo.held().owner_identity, todo.order.checked().id,
+                claim, request, now,
+            )
+        )
+
+    def began(self) -> float:
+        return self.due_at
+
+    def line(self) -> str:
+        return (f"DELIVERED HEAD NEEDS REVIEW: order {self.order} ({self.problem}), "
+                f"holder {self.holder.name}, {self.repo.to_wire()}#{self.pr} head {self.head} "
+                "-> commander reviews this head")
 
 
 @dataclass(frozen=True)

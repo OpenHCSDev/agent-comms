@@ -88,6 +88,7 @@ from agent_comms.owner_requests import (
     RequestState,
 )
 from agent_comms.plan_phases import OrderPhase, UnplannedPhase
+from agent_comms.head_review import HeadReview
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.progress_claims import MergedClaim, ProgressClaim, WorkingClaim
 from agent_comms.recorded_time import (
@@ -118,7 +119,7 @@ from agent_comms.typed_table import (
     TextStorage,
     TypedTable,
 )
-from agent_comms.work_branches import WorkBranchError, WorkBranches
+from agent_comms.work_branches import BranchDifference, WorkBranchError, WorkBranches
 
 if TYPE_CHECKING:
     from agent_comms.commander.order import (
@@ -520,6 +521,11 @@ class PullRequest(DeclaredFamily, affix="PullRequest"):
     base: str = field(default=WorkBranches.main, kw_only=True)
     problems: tuple[str, ...] = field(default=(), kw_only=True)
     draft: bool = field(default=False, kw_only=True)
+    status_contexts: tuple[str, ...] = field(default=(), kw_only=True)
+
+    @property
+    def has_head_review(self) -> bool:
+        return HeadReview.context in self.status_contexts
 
     def belongs_to(self, todo: Todo) -> bool:
         return (todo.id in self.problems
@@ -573,10 +579,12 @@ class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
     updated: str
     base: str
     draft: bool = field(default=False, kw_only=True)
+    status_contexts: tuple[str, ...] = field(default=(), kw_only=True)
 
     def parsed(self, problems: tuple[str, ...], orders: tuple[str, ...]) -> PullRequest:
         return UnmergedPullRequest(self.number, self.branch, self.head, _github_time(self.updated),
-                                   orders, base=self.base, problems=problems, draft=self.draft)
+                                   orders, base=self.base, problems=problems, draft=self.draft,
+                                   status_contexts=self.status_contexts)
 
 
 class UnmergedListedPullRequest(ListedPullRequest):
@@ -596,7 +604,8 @@ class MergedListedPullRequest(ListedPullRequest):
         return MergedPullRequest(self.number, self.branch, self.head, _github_time(self.updated),
                                  orders, base=self.base,
                                  merge=self.merge.oid, merged_at=_github_time(self.merged),
-                                 problems=problems, draft=self.draft)
+                                 problems=problems, draft=self.draft,
+                                 status_contexts=self.status_contexts)
 
 
 class PullRequests:
@@ -613,6 +622,13 @@ class PullRequests:
             self._todos.setdefault(todo.repo, {})[todo.id] = todo
         return self
 
+    def claimed_heads(self, todo: Todo) -> Iterator[tuple[OrderClaim, PullRequest]]:
+        """Join the current claim to its open PR in this same GitHub read."""
+        for claim in todo.order.commander_claims():
+            for request in self.listed(claim.pull_request.repo, UnmergedListedPullRequest, todo):
+                if request.number == claim.pull_request.number:
+                    yield claim, request
+
     def listed(self, repo: RepositoryName, kind: type[ListedPullRequest],
                todo: Todo) -> tuple[PullRequest, ...]:
         key = (repo, kind, todo.id)
@@ -627,7 +643,9 @@ class PullRequests:
         linked: dict[int, list[Todo]] = {}
         for candidate in problems.values():
             for number in {link.number for order in candidate.order_history
-                           for link in order.pull_requests if link.repo == repo}:
+                           for link in (*order.pull_requests,
+                                        *(claim.pull_request for claim in order.commander_claims()))
+                           if link.repo == repo}:
                 linked.setdefault(number, []).append(candidate)
         if not linked:
             for candidate in problems.values():
@@ -636,7 +654,9 @@ class PullRequests:
         selections = [
             f'p{number}: pullRequest(number: {number}) {{ number branch: headRefName '
             'head: headRefOid base: baseRefName draft: isDraft closed merge: mergeCommit { oid } '
-            'merged: mergedAt updated: updatedAt }' for number in linked]
+            'merged: mergedAt updated: updatedAt '
+            'head_statuses: commits(last: 1) { nodes { commit { status { contexts { context } } } } } }'
+            for number in linked]
         query = (f'query {{ repository(owner: {json.dumps(repo.owner)}, '
                  f'name: {json.dumps(repo.name)}) {{ {" ".join(selections)} }} }}')
         listed = repo.api(
@@ -645,7 +665,9 @@ class PullRequests:
             '(if .closed then '
             f'del(.merge,.merged) + {{kind: "{ClosedListedPullRequest.declared_name}"}} else '
             f'del(.merge,.merged) + {{kind: "{UnmergedListedPullRequest.declared_name}"}} end) else '
-            f'. + {{kind: "{MergedListedPullRequest.declared_name}"}} end) | del(.closed))')
+            f'. + {{kind: "{MergedListedPullRequest.declared_name}"}} end) '
+            '| . + {status_contexts: [.head_statuses.nodes[].commit.status.contexts[]?.context]} '
+            '| del(.closed,.head_statuses))')
         if listed.returncode:
             raise WorkBranchError(
                 listed.stderr.strip() or f"GitHub order lookup in {repo.to_wire()} failed.")
@@ -869,9 +891,14 @@ class PresentCheckout(ProgressCheckout):
         return tuple(pushes)
 
     @cached_property
+    def branches(self) -> WorkBranches:
+        """One Git branch reader for this checkout during the progress frame."""
+        return WorkBranches(self.path)
+
+    @cached_property
     def checked_out(self) -> dict[str, tuple[str, ...]]:
         """Branch name -> the worktree paths that have it checked out."""
-        return WorkBranches(self.path).worktrees()
+        return self.branches.worktrees()
 
     @cached_property
     def check_notes(self) -> dict[str, tuple[CheckedCommit, ...]]:
@@ -912,7 +939,7 @@ class PresentCheckout(ProgressCheckout):
     def edits(self) -> tuple[float, ...]:
         """When each uncommitted change in this checkout was last written; a deletion has none."""
         return tuple(path.stat().st_mtime
-                     for path in WorkBranches(self.path).read_checkout().uncommitted()
+                     for path in self.branches.read_checkout().uncommitted()
                      if path.exists())
 
     def readings(self, source: ProgressSource) -> DistanceReadings:
@@ -950,10 +977,24 @@ class CheckoutReads:
 
     def __init__(self) -> None:
         self._checkouts: dict[Path, PresentCheckout] = {}
+        self._branch_mains: dict[RepositoryName, str] = {}
+        self._branch_facts: dict[Path, BranchDifference] = {}
 
     def checkout(self, path: Path) -> PresentCheckout:
         """This read's one reader of the checkout at path."""
         return self._checkouts.setdefault(path, PresentCheckout(path))
+
+
+    def branch_difference(self, path: Path) -> BranchDifference:
+        """All consumers share each branch read and one main commit per repository."""
+        path = path.resolve()
+        if path not in self._branch_facts:
+            reader = self.checkout(path).branches
+            repository = RepositoryName(*reader.repository)
+            if repository not in self._branch_mains:
+                self._branch_mains[repository] = reader.origin_main
+            self._branch_facts[path] = reader.difference(self._branch_mains[repository])
+        return self._branch_facts[path]
 
 
 class ProgressRead(PullRequests, CheckoutReads):
@@ -4085,6 +4126,16 @@ class TodoStore(OwnerRequestStore):
     def held_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._select("creator=? AND creator_created=? AND assignment IS NOT NULL",
             (commander.name, commander.wire_birth), reader=self._open)
+
+    def claimed_heads_for_commander(
+        self, commander: ThreadIncarnation, pulls: PullRequests | None = None,
+    ) -> Iterator[tuple[Todo, OrderClaim, PullRequest]]:
+        """Recorded delivery claims survive a missing or stopped unit observation."""
+        held = self.held_for_commander(commander)
+        reader = PullRequests(held) if pulls is None else pulls.register(held)
+        for todo in held:
+            for claim, request in reader.claimed_heads(todo):
+                yield todo, claim, request
 
     def held_by(self, commander: ThreadIncarnation, unit: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._select('creator=? AND creator_created=?',

@@ -6,8 +6,9 @@ from importlib import import_module
 from pathlib import Path
 
 import agent_comms.commander as package
-from agent_comms.active_route import resolve_comms_route
+from agent_comms.active_route import ActiveRoute, resolve_comms_route
 from agent_comms.errors import ToolRefusedError
+from agent_comms.launch_root import LaunchRoot
 
 from .order import Commander
 
@@ -26,6 +27,9 @@ def main() -> None:
     if not argv or argv[0] not in tools:
         sys.exit(f'usage: agent-comms-commander {{{",".join(sorted(tools))}}} ARGS...')
     try:
+        # Every comms process selects its root once at startup, as the comms CLI does.
+        LaunchRoot.startup(argv, lambda: (LaunchRoot.from_path(options.root) if options.root
+                                          else ActiveRoute.published_launch()))
         context = Commander.read_root(resolve_comms_route(options.root).root)
         tools[argv[0]].main(argv[1:], context)
     except ToolRefusedError as refused:

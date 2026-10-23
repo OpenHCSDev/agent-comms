@@ -78,13 +78,11 @@ class ClaimFields(RetiredClaimFields, Carry):
                     with registry.locked():
                         registry.private_guard_unlocked()
                         raw = json.loads(registry.path.read_bytes())
-                        current = self.convert(RegistryDocument, raw)
-                        if current != raw:
-                            changed += 1
-                            if apply:
-                                registry._write_unlocked(json.dumps(current, indent=2))
-                                rewritten.extend(path.relative_to(self.root)
-                                                 for path in registry.written)
+                    current = self.convert(RegistryDocument, raw)
+                    # The registry is written last, so its declared spelling means every
+                    # other file of this root crossed before it.
+                    if current == raw:
+                        continue
                 files = RootFile.existing_in(root)
                 for path, owner in files.items():
                     self.require_confined(self.root, path)
@@ -110,6 +108,13 @@ class ClaimFields(RetiredClaimFields, Carry):
                     changed += count
                     if count and apply:
                         rewritten.append(path.relative_to(self.root))
+                if registry.path.exists():
+                    changed += 1
+                    if apply:
+                        with registry.locked():
+                            registry.private_guard_unlocked()
+                            registry._write_unlocked(json.dumps(current, indent=2))
+                        rewritten.extend(path.relative_to(self.root) for path in registry.written)
             if apply and rewritten:
                 rebound = tuple(source.carried_registry(source.mapped_root(self.root, self.original_root))
                                 for source in sources)
