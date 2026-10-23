@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Annotated,
-    Any,
     ClassVar,
     Literal,
     Protocol,
@@ -99,7 +98,7 @@ class MalformedRecord(ValueError):  # noqa: N818 - names the refused data
 
     @classmethod
     def refusing(cls, subject: str) -> MalformedRecord._Refusal:
-        """Any check that refuses decoded data with ValueError refuses a malformed record.
+        """Each check that refuses decoded data with ValueError refuses a malformed record.
 
         A domain error raised by the record's own checks stays the cause.
         """
@@ -438,7 +437,7 @@ class Argument(FieldDirective):
     ) -> None:
         owner = self.group.owner(parser, groups)
         # argparse actions own an extensible keyword protocol, not a closed Core record.
-        options: dict[str, Any] = {
+        options: Mapping[str, object] = {
             **({} if "action" in self.options else plan.value.argument_options()),
             **self.options,
         }
@@ -1497,7 +1496,7 @@ class FieldCodec(MroDispatch, Sealed):
         if annotation is None:
             return None, None
         if annotation is object:
-            return Any, _JsonValueRepresentation
+            return object, _JsonValueRepresentation
         if get_origin(annotation) is Annotated:
             target, *metadata = get_args(annotation)
         else:
@@ -1510,13 +1509,11 @@ class FieldCodec(MroDispatch, Sealed):
             raise TypeError("A field must have one representation")
         if isinstance(target, TypeAliasType):
             if target is JsonValue:
-                return Any, representations[0] if representations else _JsonValueRepresentation
+                return object, representations[0] if representations else _JsonValueRepresentation
         if representations:
             return target, representations[0]
         if target is object:
-            return Any, _JsonValueRepresentation
-        if target is Any:
-            return target, _AnyDecoder
+            return object, _JsonValueRepresentation
         if isinstance(target, type) and issubclass(target, WireValue):
             return target, target
         return target, None
@@ -2274,10 +2271,10 @@ class _JsonValueRepresentation(FieldRepresentation):
 
 
 @dataclass(frozen=True, slots=True)
-class _AnyDecoder(_JsonValueRepresentation, ValueDecoder[JsonValue]):
+class _UndeclaredDecoder(_JsonValueRepresentation, ValueDecoder[JsonValue]):
     """Only an undeclared value needs runtime representation selection."""
 
-    annotations = (Any, None)
+    annotations = (object, None)
 
     def accepts_value(self, value: object) -> bool:
         return True
@@ -2504,7 +2501,7 @@ class _ArrayDecoder(ValueDecoder[Any]):
 
     @classmethod
     def from_annotation(cls, target, args):
-        return cls(target, tuple(compile_decoder(item) for item in (args or (Any,))))
+        return cls(target, tuple(compile_decoder(item) for item in (args or (None,))))
 
     @classmethod
     def representation_plan(
@@ -2560,7 +2557,7 @@ class _TupleDecoder(_ArrayDecoder):
     @classmethod
     def from_annotation(cls, target, args):
         if target is tuple:
-            return _VariadicTupleDecoder(target, (compile_decoder(Any),))
+            return _VariadicTupleDecoder(target, (compile_decoder(None),))
         if len(args) == 2 and args[1] is Ellipsis:
             return _VariadicTupleDecoder(target, (compile_decoder(args[0]),))
         return _FixedTupleDecoder(target, tuple(compile_decoder(item) for item in args))
@@ -2638,7 +2635,7 @@ class _DictDecoder(ValueDecoder[Any]):
 
     @classmethod
     def from_annotation(cls, target, args):
-        key, value = args or (str, Any)
+        key, value = args or (str, None)
         plan = _StringKeyDictDecoder if key is str else _PairKeyDictDecoder
         return plan(target, compile_decoder(key), compile_decoder(value))
 

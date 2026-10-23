@@ -516,7 +516,7 @@ def test_union_success_releases_rejected_payload_and_failure_keeps_first_cause()
 
 def test_scalar_dispatch_keeps_representation_and_exact_type_contracts():
     import math
-    from typing import Any, Literal
+    from typing import Literal
 
     from agent_comms.field_codec import AcceptsNull, FieldRepresentation
 
@@ -563,8 +563,6 @@ def test_scalar_dispatch_keeps_representation_and_exact_type_contracts():
     assert type(FieldCodec.decode(Literal[True, 1], 1)) is int
     with pytest.raises(ValueError):
         FieldCodec.decode(Literal[1], True)
-    with pytest.raises(MalformedRecord):
-        FieldCodec.decode(Any, math.inf)
 
 
 def test_record_dispatch_precedes_dynamic_scalar_equality():
