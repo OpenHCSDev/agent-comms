@@ -351,6 +351,7 @@ class PidfdHandles:
 class Platform(DeclaredFamily, affix="Platform"):
     store_lock_interval = 0.025
     sync_open_flags: ClassVar[int] = os.O_RDONLY
+    serves_local_socket: ClassVar[bool] = True
 
     @classmethod
     def current(cls) -> Platform:
@@ -368,6 +369,12 @@ class Platform(DeclaredFamily, affix="Platform"):
 
     @abstractmethod
     def require_pinned_paths(self, refusal: Exception) -> None: ...
+
+    @abstractmethod
+    def require_posix(self, refusal: Exception) -> None: ...
+
+    @abstractmethod
+    def require_watched_procfs(self, refusal: Exception) -> None: ...
 
     @abstractmethod
     def is_private(self, info: os.stat_result, permissions: int) -> bool: ...
@@ -469,6 +476,9 @@ class Platform(DeclaredFamily, affix="Platform"):
 
 
 class PosixPlatform(Platform):
+    def require_posix(self, refusal: Exception) -> None:
+        return None
+
     def require_pinned_paths(self, refusal: Exception) -> None:
         return None
 
@@ -537,6 +547,9 @@ class LinuxProcessRecord:
 
 
 class LinuxPlatform(PidfdHandles, PosixPlatform):
+    def require_watched_procfs(self, refusal: Exception) -> None:
+        return None
+
     @contextmanager
     def socket_address(self, path: Path, descriptor: int) -> Generator[Path, None, None]:
         yield Path(f"/proc/{os.getpid()}/fd/{descriptor}") / path.name
@@ -648,6 +661,9 @@ class LinuxPlatform(PidfdHandles, PosixPlatform):
 
 class DarwinPlatform(PosixPlatform):
     """libproc exposes microsecond birth times, unlike formatted ps output."""
+
+    def require_watched_procfs(self, refusal: Exception) -> None:
+        raise refusal
 
     class ProcessInfo(ctypes.Structure):
         # External Darwin proc_bsdinfo ABI, from xnu/bsd/sys/proc_info.h.
@@ -770,6 +786,14 @@ class DarwinPlatform(PosixPlatform):
 
 class Win32Platform(Platform):
     """Kernel creation times and named job objects bind the complete child tree."""
+
+    serves_local_socket: ClassVar[bool] = False
+
+    def require_posix(self, refusal: Exception) -> None:
+        raise refusal
+
+    def require_watched_procfs(self, refusal: Exception) -> None:
+        raise refusal
 
     def require_pinned_paths(self, refusal: Exception) -> None:
         raise refusal
