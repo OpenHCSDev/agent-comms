@@ -26,7 +26,7 @@ def test_old_labels_carry_in_the_goal_store_the_bus_declares(tmp_path):
         db.execute(f'ALTER TABLE "{FailedTurnEvidence.declared_name}" RENAME COLUMN failure TO reason')
         db.commit()
     step = DeclaredFailures(comms.root, comms.root, tmp_path / "spill")
-    assert store in step.backup_files()
+    assert store in step.input_files()
     assert step.carry(apply=False).changed == 1
     hold = MaintenanceBarrier(RegistryStore.at(comms.root).path).begin(MaintenanceOperator.current())
     with hold.holding():
