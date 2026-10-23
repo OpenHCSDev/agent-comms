@@ -6,7 +6,6 @@ import json
 import math
 import re
 import shutil
-import subprocess
 import time
 from abc import abstractmethod
 from collections.abc import Iterable, Iterator, Sequence
@@ -176,10 +175,7 @@ class StorageRule(RoomAllocation, DurableFile):
         for repository in candidates:
             if repository in listed or not (repository / '.git').exists():
                 continue
-            output = subprocess.run(
-                ('git', '-C', str(repository), 'worktree', 'list', '--porcelain', '-z'),
-                capture_output=True, text=True, check=True, timeout=10,
-            ).stdout
+            output = Repo.git(repository, 'worktree', 'list', '--porcelain', '-z', timeout=10)
             entries = tuple(Path(field.removeprefix('worktree ')).resolve()
                             for field in output.split('\0') if field.startswith('worktree '))
             listed.update(entries)

@@ -13,7 +13,6 @@ every bus has run it.
 from __future__ import annotations
 
 import inspect
-import subprocess
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from graphlib import TopologicalSorter
@@ -25,6 +24,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import PathText
 from agent_comms.installer.interpreter_operation import InterpreterOperation
 from agent_comms.locked_store import RootFile
+from agent_comms.repo import Repo
 
 STEPS = Path("tools/cutover")
 
@@ -156,10 +156,8 @@ class CarryChain:
         tree = tree.resolve()
         directory = tree / STEPS
         steps = [step for step in Carry.members_with(Carry) if step.module().parent == directory]
-        log = subprocess.check_output(
-            ["git", "-C", str(tree), "log", "-m", "--first-parent", "--no-renames",
-             "--diff-filter=A", "--reverse", "--name-only", "--format=", "HEAD", "--",
-             str(STEPS)]).decode().split()
+        log = Repo.git(tree, "log", "-m", "--first-parent", "--no-renames", "--diff-filter=A",
+                       "--reverse", "--name-only", "--format=", "HEAD", "--", str(STEPS)).split()
         added = {Path(path): position for position, path in reversed(list(enumerate(log)))}
         unordered = sorted(step.declared_name for step in steps
                            if step.module().relative_to(tree) not in added)
