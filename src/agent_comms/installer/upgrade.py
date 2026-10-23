@@ -82,7 +82,6 @@ from agent_comms.installer.declared_uv import DeclaredUv
 from agent_comms.installer.interpreter_operation import (
     CliCommandProbe,
     ClientImportsProbe,
-    InstalledProgram,
     PackageRootProbe,
     PrepareNativeProbe,
     ProbeProgram,
@@ -1122,7 +1121,8 @@ class UnchangedInstall(ExistingBusInstall[UnchangedRehearsal]):
 
     def live(self, rehearsal: UnchangedRehearsal, report: InstallReport) -> UnchangedRun:
         self.installed.publish(self.root)
-        report.writer = RuntimeWriter(self.root, replace(self.installed, program=InstalledProgram()))
+        # The staged stack is the installed runtime here; its worker is already running.
+        report.writer = RuntimeWriter(self.root, self.staged)
         return UnchangedRun()
 
 
