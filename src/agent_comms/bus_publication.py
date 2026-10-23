@@ -42,12 +42,14 @@ class Delivered(BusRecord, declared_name=None):
         return self.audience.sender_lookup
 
     def projections(self):
-        from .bus_tables import ReceivedSource, SentSource
+        from .bus_tables import DirectReplySource, ReceivedSource, SentSource
 
         yield from super().projections()
         yield SentSource(self.audience.sender_lookup, self.seq)
         for recipient in self.audience.recipients:
             yield ReceivedSource(recipient.recipient_lookup, self.seq)
+            if self.direct_for(recipient.recipient_lookup):
+                yield DirectReplySource(recipient.recipient_lookup, self.seq)
 
     def deliveries(self) -> tuple[Self, ...]:
         return (self,)

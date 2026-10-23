@@ -95,6 +95,10 @@ class ReceivedSource(ParticipantSource):
         return query, (*parameters, *sender_lookups)
 
 
+class DirectReplySource(ReceivedSource):
+    """Frozen deliveries whose declared response policy starts a direct turn."""
+
+
 @dataclass(frozen=True)
 class MessageIdentitySource(MessageReference, TypedTable, BusProjectionTables):
     """A record's existing reference, searchable without recomputing its content hash."""

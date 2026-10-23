@@ -23,6 +23,7 @@ from agent_comms.bus_tables import (
     BusRow,
     BusSchema,
     ClaimOperations,
+    DirectReplySource,
     HeldResources,
     MessageIdentitySource,
     ParticipantSource,
@@ -335,16 +336,12 @@ class BusReader(RouteCounts, ABC):
         sender_lookups: tuple[str, ...] = (), descending: bool = True,
         sequences: tuple[int, ...] = (),
     ) -> tuple[Delivered, ...]:
-        """Read actual message policy before loading accepted frozen deliveries."""
-        with self.reading() as source, source.observing() as db, closing(source._source_sequences(
-            *ReceivedSource.query(lookup, sender_lookups), after=after,
-            descending=descending, sequences=sequences, limit=-1,
+        """Read the bounded append-time policy index before loading deliveries."""
+        with self.reading() as source, closing(source._source_sequences(
+            *DirectReplySource.query(lookup, sender_lookups), after=after,
+            descending=descending, sequences=sequences, limit=limit,
         )) as positions:
-            messages = (Message.read_from(db, seq) for seq in positions)
-            # ReceivedSource already establishes the frozen recipient incarnation.
-            eligible = (message for message in messages
-                        if message.role.response_policy(message).starts_direct_turn)
-            return tuple(source.delivery(message.seq) for message in islice(eligible, limit))
+            return tuple(source.delivery(seq) for seq in positions)
 
     def unanswered_references(
         self, sequences: tuple[int, ...], responders: frozenset[str],
