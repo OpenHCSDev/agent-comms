@@ -12,7 +12,7 @@ from .field_codec import WireForm
 from .launch_root import LaunchRoot
 from .launch_runtime import CallingThreadUnavailable
 from .presentation import MessageNotification, ThreadRecord
-from .thread_identity import CommanderForkIdentity, ThreadIncarnation
+from .thread_identity import ThreadIncarnation
 from .tool_result import ToolResult
 
 if TYPE_CHECKING:
