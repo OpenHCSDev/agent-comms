@@ -6,6 +6,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar
 
+from .projection_source import ProjectionSource
 from .activity_clocks import ActivityClocks
 from .declared_family import DeclaredFamily
 from .errors import HumanSendRefusedError, RelationViolationError, UnregisteredThreadError
@@ -103,7 +104,7 @@ def exact_stored_target(name: str) -> bool:
             if name in BuiltinChannelView.addresses() else True)
 
 
-class CommandTarget(ABC):
+class CommandTarget(ABC, ProjectionSource):
     """A command destination owns its binding and catalog participation."""
     needs_channel_state: ClassVar[bool] = False
 
@@ -573,7 +574,7 @@ _TAG_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789-_")
 
 
 @dataclass(frozen=True, slots=True)
-class Tag:
+class Tag(ProjectionSource):
     name: str
 
     def __post_init__(self) -> None:

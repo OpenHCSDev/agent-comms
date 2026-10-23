@@ -6,6 +6,7 @@ from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated
 
+from .projection_source import ProjectionSource
 from .channel_targets import CommandTarget
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -185,7 +186,7 @@ class CorrectionTaskChange(TaskChange, declared_name="correction"):
             raise RelationViolationError("Retained correction lacks its original source") from error
 
 
-class TaskAttachment(DeclaredFamily, affix="TaskAttachment"):
+class TaskAttachment(DeclaredFamily, ProjectionSource, affix="TaskAttachment"):
     """Absent attachments have no publication, fact or author effects."""
 
     retains_authored_task = False

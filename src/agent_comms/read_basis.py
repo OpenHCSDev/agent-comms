@@ -19,6 +19,7 @@ from itertools import product
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self, TextIO
 
+from .projection_source import ProjectionSource
 from .activity_clocks import ActivityClocks, ChannelActivity
 from .channel_targets import CommandTarget, ThreadTarget
 from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged, HistoricalSourceChanged
@@ -817,7 +818,7 @@ class DMDisplayBasis:
         self.displayed.validate(self.viewer, snapshot, bus_identity)
 
 
-class MessageDisplayScope(DeclaredFamily, ABC, affix="DisplayScope"):
+class MessageDisplayScope(DeclaredFamily, ABC, ProjectionSource, affix="DisplayScope"):
     """Captured inclusion and its exact predicate on the bus capability tables."""
 
     def read_key(self, sender: str, target: str, snapshot: RegistryProvenance) -> Conversation:
