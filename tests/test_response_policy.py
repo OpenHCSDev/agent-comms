@@ -19,10 +19,6 @@ def test_new_policy_drives_eligibility_guidance_and_batching(tmp_path):
         def recipients(self, message, audience, *, aliases=None):
             return self.selected(audience)
 
-        @classmethod
-        def recipients_sql(cls, mentions, audience):
-            return ("1" if cls.selected(audience) else "0"), ()
-
         def guidance(self, message, *, aliases=None):
             return "review; only reviewers respond"
 

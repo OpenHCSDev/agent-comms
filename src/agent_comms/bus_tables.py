@@ -22,7 +22,6 @@ from agent_comms.envelope_claim_transitions import (
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, WireName, WireOrder
 from agent_comms.message_reference import MessageReference
-from agent_comms.response_policy import ResponsePolicy
 from agent_comms.typed_table import (
     AppendOnlyTables,
     Column,
@@ -31,6 +30,8 @@ from agent_comms.typed_table import (
     DurableTables,
     ForeignKey,
     Index,
+    ProducedRow,
+    ProjectionProducerTables,
     SharedFileTables,
     TypedRow,
     TypedTable,
@@ -46,7 +47,7 @@ class BusTables(SharedFileTables, DurableTables, AppendOnlyTables):
     """Bus history cannot be rebuilt from another source."""
 
 
-class BusProjectionTables(SharedFileTables, DerivedTables):
+class BusProjectionTables(ProducedRow, SharedFileTables, DerivedTables):
     """Reverse lookups are derived from the record, in its append transaction."""
 
     @classmethod
@@ -58,13 +59,20 @@ class BusProjectionTables(SharedFileTables, DerivedTables):
                 header.kind.read_from(db, header.seq).project_into(db)
 
 
-class BusSchema(ComposedSchemas, BusTables, BusProjectionTables):
+class BusSchema(ComposedSchemas, BusTables, ProjectionProducerTables, BusProjectionTables):
     """One file reconciles its declared families using each family's carry policy."""
+
 
 @dataclass(frozen=True)
 class ParticipantSource(TypedTable, BusProjectionTables, declared_name=None):
+    """A recorded participant's positions in actual frozen deliveries."""
+
     lookup: Annotated[str, Column(primary_key=True)]
     seq: Annotated[int, Column(primary_key=True)]
+
+    @classmethod
+    def query(cls, lookup: str) -> tuple[str, tuple[object, ...]]:
+        return f'SELECT seq FROM "{cls.declared_name}" WHERE lookup=?', (lookup,)
 
 
 class SentSource(ParticipantSource):
@@ -74,9 +82,51 @@ class SentSource(ParticipantSource):
 class ReceivedSource(ParticipantSource):
     """The participant belongs to the frozen delivery audience."""
 
+    @classmethod
+    def query(
+        cls, lookup: str, sender_lookups: tuple[str, ...] = (),
+    ) -> tuple[str, tuple[object, ...]]:
+        query, parameters = super().query(lookup)
+        if sender_lookups:
+            marks = ",".join("?" for _ in sender_lookups)
+            query += (f' AND seq IN (SELECT seq FROM "{SentSource.declared_name}" '
+                      f'WHERE lookup IN ({marks}))')
+        return query, (*parameters, *sender_lookups)
 
-class DirectReplySource(ReceivedSource):
-    """The record's declared reply policy starts a separate direct turn."""
+
+@dataclass(frozen=True)
+class AwaitingAnswerSource(ReceivedSource):
+    """The scope owner's append-time answer eligibility for a frozen recipient."""
+
+    recipient: str
+    starts_direct_turn: bool
+    renamed_from = ("direct_reply_source",)
+    indexes = (
+        Index(("recipient", "seq")),
+        Index(("lookup", "starts_direct_turn", "seq")),
+    )
+
+    @classmethod
+    def recipient_predicate(
+        cls, sequence: str, recipients: frozenset[str],
+    ) -> tuple[str, tuple[str, ...]]:
+        marks = ",".join("?" for _ in recipients)
+        return (
+            f'EXISTS (SELECT 1 FROM "{cls.declared_name}" AS awaiting '
+            f'WHERE awaiting.seq={sequence} AND awaiting.recipient IN ({marks}))',
+            tuple(recipients),
+        )
+
+
+class DirectReplySource(AwaitingAnswerSource, declared_name=None):
+    """A bounded selection of the same answer index, with no second stored table."""
+
+    @classmethod
+    def query(
+        cls, lookup: str, sender_lookups: tuple[str, ...] = (),
+    ) -> tuple[str, tuple[object, ...]]:
+        query, parameters = AwaitingAnswerSource.query(lookup, sender_lookups)
+        return query + " AND starts_direct_turn=?", (*parameters, True)
 
 
 @dataclass(frozen=True)
@@ -84,7 +134,6 @@ class MessageIdentitySource(MessageReference, TypedTable, BusProjectionTables):
     """A record's existing reference, searchable without recomputing its content hash."""
 
     sender: str
-    response_policy: type[ResponsePolicy]
     indexes = (
         Index(("seq",), unique=True),
         Index(("message_id",)),
@@ -98,16 +147,6 @@ class MessageIdentitySource(MessageReference, TypedTable, BusProjectionTables):
             for value in (sql_literal(key), cls._sql(alias + ".{" + item.name + "}"))
         )
         return f"json_object({fields})"
-
-    @classmethod
-    def eligible_sql(cls, scope: RepliesDisplayScope, identity: str,
-                     content: str, address: str) -> tuple[str, tuple]:
-        return scope.response_predicate(
-            cls._sql(identity + ".{sender}"),
-            Addressed.table._sql(address + ".{target}"),
-            cls._sql(identity + ".{response_policy}"),
-            messages.Message.table._sql(content + ".{mentions}"),
-        )
 
 
 @dataclass(frozen=True)
@@ -149,8 +188,8 @@ class AnsweredSource(TypedTable, BusProjectionTables):
         """Read unanswered originals through the existing reference and sender indexes."""
         requesters, responders = scope.second_names - scope.first_names, scope.first_names
         reference = MessageIdentitySource.reference_sql("asked")
-        eligible, eligibility = MessageIdentitySource.eligible_sql(
-            scope, "asked", "message", "asked_route",
+        eligible, eligibility = AwaitingAnswerSource.recipient_predicate(
+            "asked.seq", scope.first_names,
         )
         asking = ",".join("?" for _ in requesters)
         replying = ",".join("?" for _ in responders)
@@ -162,7 +201,6 @@ class AnsweredSource(TypedTable, BusProjectionTables):
         query = (
             f'SELECT asked.seq FROM "{MessageIdentitySource.declared_name}" AS asked '
             f'JOIN "{messages.Message.table.declared_name}" AS message USING(seq) '
-            f'JOIN "{Addressed.table.declared_name}" AS asked_route USING(seq) '
             f'WHERE asked.sender IN ({asking}) AND '
             + messages.Message.table._sql('message.{timestamp} BETWEEN ? AND ? ')
             + f'AND asked.seq < ? {kind_filter}AND ({eligible}) AND NOT EXISTS ('
@@ -184,8 +222,8 @@ class AnsweredSource(TypedTable, BusProjectionTables):
         since: float, selection: str,
     ) -> sqlite3.Cursor:
         requesters, responders = scope.second_names, scope.first_names
-        eligible, eligibility = MessageIdentitySource.eligible_sql(
-            scope, "asked", "question", "asked_route",
+        eligible, eligibility = AwaitingAnswerSource.recipient_predicate(
+            "asked.seq", scope.first_names,
         )
         asking = ",".join("?" for _ in requesters)
         replying = ",".join("?" for _ in responders)
@@ -202,7 +240,6 @@ class AnsweredSource(TypedTable, BusProjectionTables):
             f'JOIN "{identity}" AS asked ON '
             + cls._sql(f'answered.{{original}}={MessageIdentitySource.reference_sql("asked")} ')
             + f'JOIN "{content.declared_name}" AS question ON question.seq=asked.seq '
-            f'JOIN "{Addressed.table.declared_name}" AS asked_route ON asked_route.seq=asked.seq '
             f'WHERE answered.seq=reply.seq AND asked.seq<reply.seq '
             f'AND asked.sender IN ({asking}) AND '
             + content._sql('question.{timestamp} >= ? ')
@@ -420,3 +457,4 @@ class BusCapability(TypedRow):
 class Addressed(BusCapability):
     sender: Annotated[str, WireName("from"), WireOrder(2)]
     target: Annotated[str, WireName("to"), WireOrder(3), Column(index=True)]
+    indexes: ClassVar[tuple[Index, ...]] = (Index(("sender", "target", "seq")),)

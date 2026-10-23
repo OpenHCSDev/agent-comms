@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 import sqlite3
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Generator, Iterable, Iterator
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
 from dataclasses import dataclass, replace
+from heapq import nlargest
+from itertools import islice, product
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
@@ -21,8 +23,10 @@ from agent_comms.bus_tables import (
     BusRow,
     BusSchema,
     ClaimOperations,
+    DirectReplySource,
     HeldResources,
     MessageIdentitySource,
+    ParticipantSource,
     ReceivedSource,
     SentSource,
 )
@@ -81,6 +85,22 @@ class AddressedRow(Addressed, BusRow, declared_name=None):
             f'FROM "{addresses.declared_name}" '
             f'JOIN "{BusRow.declared_name}" USING(seq) '
             f'WHERE {addresses._sql(predicate)}', parameters))
+
+
+    @classmethod
+    def latest(
+        cls, db: sqlite3.Connection, senders: frozenset[str], targets: frozenset[str],
+    ) -> tuple[Message, ...]:
+        """One indexed candidate per alias pair; an empty selection stays empty."""
+        positions = nlargest(1, (
+            row.seq for sender, target in product(senders, targets)
+            for row in Addressed.table.select(
+                db, sender=sender, target=target,
+                order_by=("seq",), descending=True, limit=1,
+            )
+        ))
+        headers = (BusRow.require(db, seq=seq) for seq in positions)
+        return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
 
 class BusReader(RouteCounts, ABC):
@@ -231,6 +251,12 @@ class BusReader(RouteCounts, ABC):
                 (*parameters, through),
             )
 
+    def latest_addressed(
+        self, senders: frozenset[str], targets: frozenset[str],
+    ) -> tuple[Message, ...]:
+        with self.observing() as db:
+            return AddressedRow.latest(db, senders, targets)
+
     def messages_for_references(
         self, references: Iterable[MessageReference],
     ) -> tuple[Message, ...]:
@@ -248,60 +274,74 @@ class BusReader(RouteCounts, ABC):
         return tuple(delivery for record in self.messages_for_references(references)
                      for delivery in record.deliveries())
 
-    def _source_page(
+    def _source_sequences(
         self, query: str, parameters: tuple[object, ...], *, after: int = 0,
         before: int | None = None, limit: int = 100, descending: bool = True,
         sequences: tuple[int, ...] = (),
-    ) -> tuple[BusRecord, ...]:
+    ) -> Generator[int]:
+        """Stream selected frozen participant positions on the held snapshot."""
         with self.observing() as db:
             before = BusRow.last_seq(db) + 1 if before is None else before
             selected = ""
             if sequences:
                 selected = " AND seq IN (" + ",".join("?" for _ in sequences) + ")"
             order = "DESC" if descending else "ASC"
-            rows = db.execute(
+            with closing(db.execute(
                 f"SELECT seq FROM ({query}) WHERE seq > ? AND seq < ?{selected} "
                 f"ORDER BY seq {order} LIMIT ?",
                 (*parameters, after, before, *sequences, limit),
-            )
-            headers = (BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in rows)
-            return tuple(header.kind.read_from(db, header.seq) for header in headers)
+            )) as rows:
+                for row in rows:
+                    yield FieldCodec.decode(int, row[0])
 
     def conversation(
         self, lookup: str, *, after: int = 0, before: int | None = None, limit: int = 100,
         descending: bool = True, sequences: tuple[int, ...] = (),
-    ) -> tuple[BusRecord, ...]:
-        return self._source_page(
-            f'SELECT seq FROM "{SentSource.declared_name}" WHERE lookup=? UNION '
-            f'SELECT seq FROM "{ReceivedSource.declared_name}" WHERE lookup=?',
-            (lookup, lookup), after=after, before=before, limit=limit,
-            descending=descending, sequences=sequences,
-        )
+    ) -> tuple[Delivered, ...]:
+        with self.reading() as source:
+            positions: set[int] = set()
+            for participant in ParticipantSource.schema_rows():
+                with closing(source._source_sequences(
+                    *participant.query(lookup), after=after, before=before, descending=descending,
+                    sequences=sequences, limit=limit,
+                )) as selected:
+                    positions.update(selected)
+            return tuple(source.delivery(seq) for seq in islice(
+                sorted(positions, reverse=descending), limit,
+            ))
 
     def sent(
         self, lookup: str, *, after: int = 0, before: int | None = None,
         limit: int = 100, descending: bool = True,
-    ) -> tuple[BusRecord, ...]:
-        return self._source_page(
-            f'SELECT seq FROM "{SentSource.declared_name}" WHERE lookup=?', (lookup,),
-            after=after, before=before, limit=limit, descending=descending,
-        )
+    ) -> tuple[Delivered, ...]:
+        with self.reading() as source, closing(source._source_sequences(
+            *SentSource.query(lookup),
+            after=after, before=before, descending=descending, limit=limit,
+        )) as positions:
+            return tuple(source.delivery(seq) for seq in positions)
 
     def received(
         self, lookup: str, *, after: int = 0, before: int | None = None, limit: int = 100,
         sender_lookups: tuple[str, ...] = (), descending: bool = True,
-        source: type[ReceivedSource] = ReceivedSource, sequences: tuple[int, ...] = (),
-    ) -> tuple[BusRecord, ...]:
-        sender = ""
-        if sender_lookups:
-            marks = ",".join("?" for _ in sender_lookups)
-            sender = (f' AND seq IN (SELECT seq FROM "{SentSource.declared_name}" '
-                      f'WHERE lookup IN ({marks}))')
-        return self._source_page(
-            f'SELECT seq FROM "{source.declared_name}" WHERE lookup=?{sender}',
-            (lookup, *sender_lookups), after=after, before=before, limit=limit,
-            descending=descending, sequences=sequences,
-        )
+        sequences: tuple[int, ...] = (),
+    ) -> tuple[Delivered, ...]:
+        with self.reading() as source, closing(source._source_sequences(
+            *ReceivedSource.query(lookup, sender_lookups), after=after, before=before,
+            descending=descending, sequences=sequences, limit=limit,
+        )) as positions:
+            return tuple(source.delivery(seq) for seq in positions)
+
+    def direct_replies(
+        self, lookup: str, *, after: int = 0, limit: int = 100,
+        sender_lookups: tuple[str, ...] = (), descending: bool = True,
+        sequences: tuple[int, ...] = (),
+    ) -> tuple[Delivered, ...]:
+        """Read the bounded append-time policy index before loading deliveries."""
+        with self.reading() as source, closing(source._source_sequences(
+            *DirectReplySource.query(lookup, sender_lookups), after=after,
+            descending=descending, sequences=sequences, limit=limit,
+        )) as positions:
+            return tuple(source.delivery(seq) for seq in positions)
 
     def unanswered_references(
         self, sequences: tuple[int, ...], responders: frozenset[str],

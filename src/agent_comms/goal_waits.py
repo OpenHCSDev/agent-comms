@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .bus import BusReader
 from .bus_publication import Delivered
-from .bus_tables import DirectReplySource
 from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
 from .field_codec import NullMember
@@ -203,12 +202,10 @@ class RecordedGoalWait(GoalWait):
             return False
         return any(
             self.matches(original, owner)
-            for record in bus.received(
+            for original in bus.direct_replies(
                 owner.lookup, after=self.after_seq, limit=1, descending=False,
                 sender_lookups=tuple(target.incarnation.lookup for target in self.targets),
-                source=DirectReplySource,
             )
-            for original in record.deliveries()
         )
 
 

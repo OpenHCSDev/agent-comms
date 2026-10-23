@@ -44,7 +44,6 @@ if TYPE_CHECKING:
     from .native_input_owner import RegistryOwner
     from .registry_document import RegistrySnapshot
     from .thread_identity import ThreadIncarnation
-from .bus_tables import DirectReplySource
 from .goal_presentation import (
     GoalExecution,
     GoalExecutionSource,
@@ -205,18 +204,18 @@ class Goals:
             through_seq = source.revision()
             # Preserve older UNKNOWN rows; new inputs begin at this wait's own cursor.
             # Both selections use the same frozen recipient and sender projections.
-            page = source.received(
+            page = source.direct_replies(
                 lookup, sequences=sequences, limit=len(sequences), descending=False,
-                sender_lookups=senders, source=DirectReplySource,
+                sender_lookups=senders,
             ) if sequences else ()
             while True:
                 replies.update({
                     InputDispositions.bus_key(original.message, thread): original.message
-                    for record in page for original in record.deliveries()
+                    for original in page
                 })
-                page = source.received(
+                page = source.direct_replies(
                     lookup, after=after_seq, limit=100, descending=False,
-                    sender_lookups=senders, source=DirectReplySource,
+                    sender_lookups=senders,
                 )
                 if not page:
                     break
