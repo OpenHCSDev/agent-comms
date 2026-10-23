@@ -26,13 +26,13 @@ from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.importing import ImportLimits
 from agent_comms.cli import main
 from agent_comms.cli_bridges.claude import ClaudeBridge, ClaudeTranscript, RunningClaude
-from agent_comms.cli_bridges.codex import CodexAppServer, CodexBridge
-from agent_comms.cli_bridges.codex_protocol import InitializeResponse
+from agent_comms.cli_bridges.codex import CodexAppServer, CodexBridge, CodexConnection
+from agent_comms.cli_bridges.codex_protocol import InitializeResponse, RequestParams, ItemsList
 from agent_comms.cli_bridges.codex_rollout import ROLLOUT_RECORD, ForeignItem, ForeignRecord, ResponseItemRecord
 from agent_comms.cli_bridges.history import (
     AnySession, DefaultAddress, History, NamedSession, OfflineHistory, OnlineHistory,
 )
-from agent_comms.cli_bridges.opencode import OpenCodeBridge, OpenCodeServer
+from agent_comms.cli_bridges.opencode import OpenCodeBridge, OpenCodeServer, OpenCodeConnection
 from agent_comms.cli_bridges.opencode_parts import SavedMessage
 from agent_comms.cli_bridges.opencode_protocol import Session
 from agent_comms.cli_bridges.opencode_store import OpenCodeDatabase, OpenCodeExport
@@ -42,7 +42,7 @@ from agent_comms.importing import ImportBuffer, ThreadImported, ImportSnapshot, 
 from agent_comms.native_entries import NativeEntry, ImportedMetadataEntry
 from agent_comms.threads import ThreadProvenance
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.runtime_updates import FinishedItem
+from agent_comms.runtime_updates import FinishedItem, TurnEnded
 from agent_comms.transcript_events import ImportedReply, ImportedRequest, TextTranscript
 from agent_comms.ui_model.message_category import AgentCategory, UserCategory
 from agent_comms.turn_context import CodexRolloutProvenance
@@ -133,6 +133,45 @@ def claude_result(uuid: str, tool_id: str, text: str, error: bool = False) -> di
 
 
 
+def test_claude_subagent_keeps_its_task_its_commander_and_its_tools(tmp_path: Path) -> None:
+    session = tmp_path / "session.jsonl"
+    lines(session, [claude_prompt("h", "hello", origin={"kind": "human"})])
+    subagent = tmp_path / "session/subagents/agent-a1.jsonl"
+    subagent.parent.mkdir(parents=True)
+    subagent.with_suffix(".meta.json").write_text(json.dumps({"description": "Fix the importer"}))
+    lines(subagent, [
+        {"type": "fork-context-ref", "agentId": "a1", "parentSessionId": "session"},
+        claude_prompt("t", "Your task: fix the importer"),
+        {"type": "api-request-shape", "sessionId": "session", "shapeHash": "h", "shape": {"system": []}},
+        {"type": "api-request-blob", "sessionId": "session", "hash": "b", "message": {"role": "user"}},
+        {"type": "api-request", "sessionId": "session", "id": "q", "shapeHash": "h", "params": {}},
+        claude_prompt("r", "<system-reminder>harness note</system-reminder>", isMeta=True),
+        claude_tool("c", "g1", "Glob", {}),
+        claude_result("e", "g1", "pattern is required", error=True),
+        claude_tool("c2", "b1", "Bash", {"command": "pytest"}),
+        claude_result("o", "b1", "42 passed"),
+        claude_prompt("m", "Also delete the old decoder", isMeta=True, origin={"kind": "coordinator"}),
+        claude_reply("d", "Done."),
+    ], tail='{"type":"assistant","uuid":"cut')
+    snapshot = read(ClaudeCodeHarness, subagent)
+    assert snapshot.source_id == "agent-a1" and snapshot.title == GivenThreadText("Fix the importer")
+    assert snapshot.project == "/work/project"
+    assert bodies(snapshot) == [
+        "Your task: fix the importer",
+        "[Historical tool call: Glob]\n{}",
+        "[Historical tool result, failed]\npattern is required",
+        '[Historical tool call: bash]\n{"command": "pytest"}',
+        "[Historical tool result]\n42 passed",
+        "Also delete the old decoder",
+        "Done.",
+    ]
+    assert [type(message) for message in snapshot.messages][::5] == [ImportedRequest, ImportedRequest]
+    assert snapshot.latest_request == "Also delete the old decoder"
+    assert "harness note" not in str(snapshot.messages)
+    assert ClaudeTranscript.subagents(session) == (subagent,)
+
+
+
 def claude_narration(uuid: str, text: str) -> dict[str, JsonValue]:
     """Claude Code saves narration and hidden reasoning under one tag; only narration has text."""
     return claude("assistant", uuid, message={"content": [
@@ -161,6 +200,22 @@ def test_claude_narration_before_a_tool_call_is_a_regular_message(tmp_path: Path
             if body in {"Reading the decoder first.", "Fixed."}] == [
         (ImportedReply, "Reading the decoder first."), (ImportedReply, "Fixed.")]
 
+
+
+
+def test_claude_reads_from_its_latest_compaction(tmp_path: Path) -> None:
+    source = lines(tmp_path / "s.jsonl", [
+        claude_prompt("old", "Obsolete request", origin={"kind": "human"}),
+        claude_reply("old-r", "Obsolete reply"),
+        claude("system", "b", subtype="compact_boundary"),
+        claude_prompt("s", "Summary of the work so far", isCompactSummary=True),
+        claude_reply("n", "Next step"),
+    ])
+    snapshot = read(ClaudeCodeHarness, source)
+    assert snapshot.summary == "Summary of the work so far"
+    assert bodies(snapshot) == ["Next step"]
+    # The selected history has no request, so the newest earlier one is reported.
+    assert snapshot.latest_request == "Obsolete request"
 
 
 
@@ -329,6 +384,30 @@ def test_codex_import_uses_requested_name_not_rollout_filename(tmp_path: Path, c
 
 
 
+def test_codex_uses_response_items_not_mirrored_events_and_keeps_recent_budget(tmp_path: Path) -> None:
+    records = [codex_meta("codex-id", tmp_path)]
+    for index in range(10):
+        records += [{"type": "event_msg", "payload": {"type": "user_message", "message": "duplicate"}},
+                    codex_message("user", f"Message {index}")]
+    records += [
+        {"type": "compacted", "payload": {"message": "Earlier context summary"}},
+        {"type": "response_item", "payload": {"type": "reasoning", "encrypted_content": "opaque"}},
+        {"type": "response_item", "payload": {"type": "function_call", "name": "exec", "arguments": "{}"}},
+        {"type": "response_item", "payload": {"type": "function_call_output", "output": "x" * 400}},
+    ]
+    source = codex_lines(tmp_path / "rollout.jsonl", records, tail='{"partial"')
+    snapshot = read(CodexHarness, source, ImportLimits(4, 300, 100))
+    assert len(snapshot.messages) <= 4 and sum(len(m.body) for m in snapshot.messages) <= 300
+    assert snapshot.truncated_messages == 1
+    assert snapshot.summary == "Earlier context summary"
+    assert "duplicate" not in str(snapshot.messages) and "opaque" not in str(snapshot.messages)
+    tail = read(CodexHarness, source, ImportLimits(1, 100, 100))
+    assert len(tail.messages) == 1 and tail.messages[0].body.startswith("[Historical tool result]")
+    assert tail.latest_request == "Message 9"
+    assert "Message 9" in tail.pi_session(tmp_path)
+
+
+
 class CountingReader:
     def __init__(self, stream: BinaryIO, after_end: Callable[[], None] | None = None) -> None:
         self.stream = stream
@@ -420,6 +499,18 @@ def test_codex_fixed_boundary_ignores_concurrent_append(tmp_path: Path, monkeypa
 
 
 
+def test_codex_without_checkpoint_keeps_chronological_bounded_suffix(tmp_path: Path) -> None:
+    records = [codex_meta("plain", tmp_path)]
+    for index in range(3):
+        records += [codex_message("user", f"Request {index}"), codex_message("assistant", f"Answer {index}")]
+    source = codex_lines(tmp_path / "uncompacted-rollout.jsonl", records, tail='{"partial"')
+    snapshot = read(CodexHarness, source, ImportLimits(2, 1_000, 100))
+    assert bodies(snapshot) == ["Request 2", "Answer 2"]
+    assert snapshot.messages_seen == 6
+    assert snapshot.latest_request == "Request 2"
+
+
+
 def test_bounded_suffix_is_one_contiguous_newest_run(tmp_path: Path) -> None:
     source = codex_lines(tmp_path / "budgeted-rollout.jsonl", [codex_meta("budget", tmp_path)] + [
         codex_message("assistant", body) for body in ("o" * 10, "m" * 80, "n" * 60)])
@@ -485,6 +576,55 @@ def test_codex_rollout_must_start_with_its_session_and_decode_completely(tmp_pat
 
 
 # OpenCode
+
+
+class FakeCodex(CodexConnection):
+    def __init__(self, pages: dict[str | None, JsonValue]) -> None:
+        self.pages = pages
+        self.calls: list[RequestParams] = []
+        self.initialized = InitializeResponse(userAgent="codex/0.0.0")
+
+    async def call(self, params: RequestParams) -> JsonValue:
+        self.calls.append(params)
+        if params.method == "thread/resume":
+            return {"thread": {"status": {"type": "idle"}, "cwd": "/work/codex"}}
+        assert isinstance(params, ItemsList)
+        return self.pages[params.cursor]
+
+
+
+def codex_entry(turn: str, item: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    return {"turnId": turn, "item": item, "startedAtMs": 1, "completedAtMs": 2}
+
+
+
+def test_codex_app_server_reads_only_newest_page_and_keeps_bus_inputs() -> None:
+    from agent_comms.cli_bridges.codex_protocol import BusInput
+
+    bus = BusInput.for_message("thread", "m1", "from the bus")
+    newest: dict[str, JsonValue] = {"data": [
+        codex_entry("t2", {"type": "agentMessage", "id": "i3", "text": "second answer"}),
+        codex_entry("t2", {"type": "userMessage", "id": "i1", "clientId": bus.clientUserMessageId,
+                           "content": [{"type": "text", "text": "from the bus"}]}),
+    ], "nextCursor": "older"}
+    older: dict[str, JsonValue] = {"data": [
+        codex_entry("t1", {"type": "agentMessage", "id": "i2", "text": "first answer"}),
+    ], "nextCursor": None}
+    codex = FakeCodex({None: newest, "older": older})
+    server = CodexAppServer("thread", "unused")
+
+    async def collect() -> ImportSnapshot:
+        buffer = ImportBuffer(ImportLimits())
+        async for update in server.seen(codex):
+            update.add_to(buffer)
+        return buffer.snapshot(CodexHarness)
+
+    snapshot = asyncio.run(collect())
+    assert bodies(snapshot) == ["from the bus", "second answer"]
+    assert snapshot.project == "/work/codex" and snapshot.source_id == "thread"
+    assert [type(message) for message in snapshot.messages] == [ImportedRequest, ImportedReply]
+    assert [call.method for call in codex.calls] == ["thread/resume", "thread/items/list"]
+
 
 
 def opencode_message(message_id: str, role: str, parts: list[dict[str, JsonValue]], **info: JsonValue) -> dict[str, JsonValue]:
@@ -586,6 +726,68 @@ def test_opencode_database_uses_readonly_snapshot(tmp_path: Path) -> None:
 
 
 
+
+
+
+class FakeOpenCode(OpenCodeConnection):
+    session = "ses_test"
+    info = Session(id="ses_test", directory="/work/opencode", title="Live task")
+
+    def __init__(self, messages: list[dict[str, JsonValue]]) -> None:
+        self.saved = [SavedMessage.model_validate(message) for message in messages]
+        self.queries: list[dict[str, str]] = []
+
+    async def messages(self, query: dict[str, str]) -> list[SavedMessage]:
+        self.queries.append(query)
+        return self.saved
+
+    async def status(self) -> TurnEnded:
+        from agent_comms.runtime_updates import TurnEnded
+
+        return TurnEnded()
+
+
+
+def test_opencode_server_reads_all_messages_including_the_users() -> None:
+    from agent_comms.cli_bridges.opencode_protocol import OpenCodeStream
+
+    connection = FakeOpenCode([
+        opencode_message("user", "user", [{"type": "text", "text": "Live prompt"}]),
+        opencode_message("assistant", "assistant", [{"type": "text", "text": "Live answer"}]),
+    ])
+    server = OpenCodeServer("ses_test", "http://unused", Path("/work/opencode"))
+
+    async def collect() -> ImportSnapshot:
+        buffer = ImportBuffer(ImportLimits())
+        async for update in server.seen(connection, OpenCodeStream(connection)):
+            update.add_to(buffer)
+        return buffer.snapshot(OpenCodeHarness)
+
+    snapshot = asyncio.run(collect())
+    assert bodies(snapshot) == ["Live prompt", "Live answer"]
+    assert snapshot.title == GivenThreadText("Live task") and connection.queries == [{}]
+    with pytest.raises(ValueError):
+        OnlineHistory.of(OpenCodeHarness, "ses_test", DefaultAddress(), Path("/work"))
+
+
+
+def test_opencode_server_leaves_out_what_the_user_reverted() -> None:
+    from agent_comms.cli_bridges.opencode_protocol import OpenCodeStream
+
+    connection = FakeOpenCode([
+        opencode_message("user", "user", [{"type": "text", "text": "Kept prompt"}]),
+        opencode_message("assistant", "assistant", [{"type": "text", "text": "Undone answer"}]),
+    ])
+    connection.info = Session.model_validate({"id": "ses_test", "directory": "/work/opencode", "revert": {"messageID": "assistant"}})
+
+    async def collect() -> ImportSnapshot:
+        buffer = ImportBuffer(ImportLimits())
+        async for update in OpenCodeServer("ses_test", "http://unused", Path("/work")).seen(
+                connection, OpenCodeStream(connection)):
+            update.add_to(buffer)
+        return buffer.snapshot(OpenCodeHarness)
+
+    assert bodies(asyncio.run(collect())) == ["Kept prompt"]
 
 
 

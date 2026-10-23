@@ -407,6 +407,20 @@ class CountChoice(Choice):
 
 
 
+@pytest.mark.parametrize(
+    "annotation,data",
+    [
+        (type[Choice], "absent"),
+        (Choice, {"kind": "absent"}),
+    ],
+)
+def test_family_refusal_keeps_its_own_message_once(annotation: TypeForm[Choice | type[Choice]], data: JsonValue) -> None:
+    with pytest.raises(MalformedRecord) as refused:
+        FieldCodec.decode(annotation, data)
+    assert type(refused.value.__cause__) is UnknownFamilyMember
+
+
+
 @dataclass(frozen=True)
 class Record:
     choice: Choice
@@ -488,6 +502,24 @@ def test_tuple_shape_and_strict_bool() -> None:
     with pytest.raises(ValueError):
         FieldCodec.decode(bool, 1)
 
+
+
+
+def test_union_success_releases_rejected_payload_and_failure_keeps_first_cause() -> None:
+    from weakref import ref
+
+    class Payload(list[int]):
+        pass
+
+    payload = Payload([1])
+    original = ref(payload)
+    assert FieldCodec.decode(tuple[str, ...] | list[int], payload) == [1]
+    del payload
+    assert original() is None
+
+    with pytest.raises(ValueError) as failure:
+        FieldCodec.decode(str | int, None)
+    assert isinstance(failure.value.__cause__, ValueError)
 
 
 
@@ -767,6 +799,24 @@ class FieldInlineContainer:
 
 
 
+@pytest.mark.parametrize(
+    "value", [InlineContainer(InlinePair(7, "seven")), FieldInlineContainer(Pair(7, "seven"))]
+)
+def test_inline_record_owns_keys_for_encode_decode_schema_and_projection(value: InlineContainer | FieldInlineContainer) -> None:
+    container, wire = type(value), {"number": 7, "text": "seven"}
+    assert FieldCodec.encode(value) == wire
+    assert FieldCodec.decode(container, wire) == value
+    assert FieldCodec.project(value, "report") == wire
+    required = FieldCodec.record_schema(container)["required"]
+    assert isinstance(required, list)
+    assert set(required) == wire.keys()
+    with pytest.raises(MalformedRecord):
+        FieldCodec.decode(container, {"text": "seven"})
+    with pytest.raises(ValueError):
+        FieldCodec.decode(container, {**wire, "other": 1})
+
+
+
 @dataclass(frozen=True)
 class TypeInlineClash:
     pair: InlinePair
@@ -841,6 +891,36 @@ class _SavedRow:
 
 
 
+
+
+
+@pytest.mark.parametrize(
+    "wire,refusal",
+    [
+        ({"path": 7, "at": "2026-10-18T12:00:00+00:00", "count": 1}, "received int"),
+        ({"path": "/saved", "at": 1.5, "count": 1}, "received float"),
+        (
+            {"path": "/saved", "at": "2026-10-18T12:00:00+00:00"},
+            "Missing required fields for _SavedRow: count",
+        ),
+    ],
+)
+def test_refused_record_data_raises_the_declared_error(wire: dict[str, JsonValue], refusal: str) -> None:
+    with pytest.raises(MalformedRecord) as raised:
+        FieldCodec.decode(_SavedRow, wire)
+    from agent_comms.field_codec import RecordProblems
+
+    assert type(raised.value) is RecordProblems
+    assert len(raised.value.problems) == 1
+
+
+
+def test_record_reports_missing_unknown_and_malformed_siblings_together() -> None:
+    from agent_comms.field_codec import RecordProblems
+
+    with pytest.raises(RecordProblems) as raised:
+        FieldCodec.decode(_SavedRow, {"path": 7, "at": 1.5, "extra": 0})
+    assert set(raised.value.problems) == {"path", "at", "count", "extra"}
 
 
 
