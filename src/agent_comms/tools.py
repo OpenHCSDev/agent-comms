@@ -57,6 +57,7 @@ from .cli_commands import (
 )
 from .cli_result import ToolCatalogResult
 from .commander.vibe_check import OverloadDegradation
+from .commander_heartbeat import CommanderHud
 from .coordination_tables.refusals import SendRefusal
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
@@ -980,6 +981,18 @@ class CommsCommanderLoadTool(ThreadReadTool):
 
     def apply(self, comms: Comms, caller: ToolCaller) -> OverloadDegradation:
         return OverloadDegradation.of(comms, caller.subject(self.thread))
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsHudTool(ThreadReadTool):
+    label = "Commander HUD"
+    description = (
+        "comms_hud reads orders by holder, review timers, strikes, unjudged edit counts, "
+        "ready/draft PRs, declared plan phases and the overload decision from their owners."
+    )
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> CommanderHud:
+        return CommanderHud.read(comms, caller.subject(self.thread))
 
 
 @dataclass(frozen=True, kw_only=True)

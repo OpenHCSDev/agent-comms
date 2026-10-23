@@ -511,6 +511,7 @@ class PullRequest(DeclaredFamily, affix="PullRequest"):
     orders: tuple[str, ...] = ()
     base: str = field(default=WorkBranches.main, kw_only=True)
     problems: tuple[str, ...] = field(default=(), kw_only=True)
+    draft: bool = field(default=False, kw_only=True)
 
     def belongs_to(self, todo: Todo) -> bool:
         return (todo.id in self.problems
@@ -563,10 +564,11 @@ class ListedPullRequest(DeclaredFamily, affix="ListedPullRequest"):
     head: str
     updated: str
     base: str
+    draft: bool = field(default=False, kw_only=True)
 
     def parsed(self, problems: tuple[str, ...], orders: tuple[str, ...]) -> PullRequest:
         return UnmergedPullRequest(self.number, self.branch, self.head, _github_time(self.updated),
-                                   orders, base=self.base, problems=problems)
+                                   orders, base=self.base, problems=problems, draft=self.draft)
 
 
 class UnmergedListedPullRequest(ListedPullRequest):
@@ -586,7 +588,7 @@ class MergedListedPullRequest(ListedPullRequest):
         return MergedPullRequest(self.number, self.branch, self.head, _github_time(self.updated),
                                  orders, base=self.base,
                                  merge=self.merge.oid, merged_at=_github_time(self.merged),
-                                 problems=problems)
+                                 problems=problems, draft=self.draft)
 
 
 class PullRequests:
@@ -625,7 +627,7 @@ class PullRequests:
             return ()
         selections = [
             f'p{number}: pullRequest(number: {number}) {{ number branch: headRefName '
-            'head: headRefOid base: baseRefName closed merge: mergeCommit { oid } '
+            'head: headRefOid base: baseRefName draft: isDraft closed merge: mergeCommit { oid } '
             'merged: mergedAt updated: updatedAt }' for number in linked]
         query = (f'query {{ repository(owner: {json.dumps(repo.owner)}, '
                  f'name: {json.dumps(repo.name)}) {{ {" ".join(selections)} }} }}')
@@ -3844,7 +3846,12 @@ class TodoStore(OwnerRequestStore):
                                 now: float) -> tuple[tuple[Todo, RecordedEventTime], ...]:
         """Held work whose review timer is up, with its round; merged work waits on install."""
         held = self.held_for_commander(commander)
-        pulls = ProgressRead(held)
+        return self.timers_up_in(held, registry, now, ProgressRead(held))
+
+    @staticmethod
+    def timers_up_in(held: Sequence[Todo], registry: Registration, now: float,
+                     pulls: ProgressRead) -> tuple[tuple[Todo, RecordedEventTime], ...]:
+        """Review rounds from this read's orders and PR facts, excluding installation waits."""
         return tuple((todo, up) for todo in held for up in todo.timer_up(now)
                      if not todo.order.waiting_on_install(
                          todo, {todo.id: OrderProgress.read(todo, registry, pulls)}))
