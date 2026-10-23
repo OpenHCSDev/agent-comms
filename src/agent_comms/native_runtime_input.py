@@ -39,6 +39,7 @@ from .selected_triage import (
     TriageDecisionRecord,
 )
 from .typed_table import (
+    TableReference,
     Column,
     DurableTables,
     FinalizedColumn,
@@ -254,11 +255,11 @@ class NativeRuntimeInput(
     execution_id: Annotated[
         NativeColumn,
         FrozenColumn(
-            references=(ExecutionRecord, "execution_id"), storage=TextStorage, nullable=True
+            references=TableReference(ExecutionRecord, ("execution_id",)), storage=TextStorage, nullable=True
         ),
     ]
     attempt_ordinal: Annotated[NativeColumn, FrozenColumn(storage=IntegerStorage, nullable=True)]
-    owner_lookup: Annotated[str, FrozenColumn(references=(Participants, "participant_lookup"))]
+    owner_lookup: Annotated[str, FrozenColumn(references=TableReference(Participants, ("participant_lookup",)))]
     owner_thread: Annotated[str, FrozenColumn()]
     owner_generation: Annotated[int, FrozenColumn(check="owner_generation>0")]
     owner_token_digest: Annotated[str, FrozenColumn(check="length(owner_token_digest)=64")]
@@ -360,7 +361,7 @@ class CurrentNativeCursor(
         ),
     ]
     recipient_lookup: Annotated[
-        str, FrozenColumn(primary_key=True, references=(Participants, "participant_lookup"))
+        str, FrozenColumn(primary_key=True, references=TableReference(Participants, ("participant_lookup",)))
     ]
     owner_thread: Annotated[str, FrozenColumn(check="owner_thread<>''")]
     owner_generation: Annotated[int, FrozenColumn(primary_key=True, check="owner_generation>0")]
@@ -382,7 +383,7 @@ class CurrentNativeCursor(
     ]
     input_id: Annotated[
         NativeColumn,
-        Column(references=(NativeRuntimeInput, "input_id"), storage=TextStorage, nullable=True),
+        Column(references=TableReference(NativeRuntimeInput, ("input_id",)), storage=TextStorage, nullable=True),
         NativeContext(str),
     ]
     stage: Annotated[

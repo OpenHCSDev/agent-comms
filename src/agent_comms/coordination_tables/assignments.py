@@ -251,22 +251,22 @@ class WakeAssignment(
         from agent_comms.coordination_tables.responses import ResponseObligation
 
         return (
-            ForeignKey(("recipient_lookup",), Participants, ("participant_lookup",)),
-            ForeignKey(("execution_id",), ExecutionRecord, ("execution_id",)),
+            ForeignKey(columns=("recipient_lookup",), target=Participants, target_columns=("participant_lookup",)),
+            ForeignKey(columns=("execution_id",), target=ExecutionRecord, target_columns=("execution_id",)),
             ForeignKey(
-                ("execution_id", "exact_target"), ResponseObligation,
-                ("execution_id", "exact_target"), deferred=True,
+                columns=("execution_id", "exact_target"), target=ResponseObligation,
+                target_columns=("execution_id", "exact_target"), deferred=True,
             ),
             ForeignKey(
-                ("execution_id", "assignment_id"),
-                ExecutionAssignmentLink,
-                ("execution_id", "assignment_id"),
+                columns=("execution_id", "assignment_id"),
+                target=ExecutionAssignmentLink,
+                target_columns=("execution_id", "assignment_id"),
                 deferred=True,
             ),
             ForeignKey(
-                ("execution_id", "claim_status_kind"),
-                ExecutionRecord,
-                ("execution_id", "claim_status_kind"),
+                columns=("execution_id", "claim_status_kind"),
+                target=ExecutionRecord,
+                target_columns=("execution_id", "claim_status_kind"),
                 deferred=True,
             ),
         )
@@ -301,8 +301,8 @@ class ExecutionAssignmentLink(
         from agent_comms.coordination_tables.executions import ExecutionRecord
 
         return (
-            ForeignKey(("execution_id",), ExecutionRecord, ("execution_id",), on_delete="RESTRICT"),
+            ForeignKey(columns=("execution_id",), target=ExecutionRecord, target_columns=("execution_id",), on_delete="RESTRICT"),
             ForeignKey(
-                ("assignment_id", "execution_id"), WakeAssignment, ("assignment_id", "execution_id")
+                columns=("assignment_id", "execution_id"), target=WakeAssignment, target_columns=("assignment_id", "execution_id")
             ),
         )

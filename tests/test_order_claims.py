@@ -28,7 +28,7 @@ from agent_comms.todos import (
 )
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import (
-    CommsHistoryTool, CommsOrderDeliverTool, CommsVerdictTool, TodoChanged,
+    CommsHistoryTool, CommsHudTool, CommsOrderDeliverTool, CommsVerdictTool, TodoChanged,
 )
 from test_held_problem_orders import (  # noqa: F401 - shared copied-bus fixture family
     held_commander,
@@ -68,7 +68,7 @@ def test_claim_verdict_family_on_retained_copy(held_commander):
                 if message.message_id == claimed.order.claim.message.message_id)
     assert sent.sender == "worker" and sent.target == ctx.commander
     assert sent.answers and sent.answers == claimed.order.claim.message.answers
-    assert "Claimed by the unit" in ctx.board_text()
+    assert "Claimed by the unit" in "\n".join(ctx.call(CommsHudTool()).frame)
     with pytest.raises(TodoError, match="Only a pending order"):
         ThreadCaller("worker").invoke(request, comms)
     assert comms.goals.todos.get("P1") == claimed

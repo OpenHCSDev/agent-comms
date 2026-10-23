@@ -189,15 +189,24 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
 
     @classmethod
     def of(cls, comms: Comms, commander: str) -> Self:
-        return cls(
-            len(StandingRule.pending_todos(comms, commander)),
+        return cls.from_orders(
+            StandingRule.todos(comms, commander),
             len(ReviewTimerUp.violations(comms, commander)),
             OrderEditCountRead.count(comms, commander),
         )
 
+    @classmethod
+    def from_orders(cls, orders: Sequence[Todo], timers_up: int, unjudged: int) -> Self:
+        """The same load projection for a captured HUD read and an independent rule read."""
+        return cls(sum(todo.pending for todo in orders), timers_up, unjudged)
+
     @projected(view="wire")
     def total(self) -> float:
         return self.owed + 2 * self.timers_up + self.unjudged / 10
+
+    @projected(view="wire")
+    def overloaded(self) -> bool:
+        return self.total >= self.ceiling
 
     def __str__(self) -> str:
         return (
@@ -208,7 +217,7 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
     @classmethod
     def found(cls, comms: Comms, commander: str) -> tuple[Sign, ...]:
         load = cls.of(comms, commander)
-        if load.total < cls.ceiling:
+        if not load.overloaded:
             return ()
         return (Sign(cls, (int(time.time() // cls.round_seconds),),
                      f"{load}, over {cls.ceiling:.0f}"),)

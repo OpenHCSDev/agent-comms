@@ -7,18 +7,17 @@ from pathlib import Path
 
 
 from agent_comms.session_file import SavedSessionFile
-from agent_comms import native_package
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.native_package import VerifiedNativePackage
 
 
-async def test_fork_runs_selected_python_before_copying_saved_history(tmp_path, monkeypatch, *, thread_registration):
+async def test_fork_runs_selected_python_before_copying_saved_history(tmp_path, monkeypatch, pinned_native, *, thread_registration):
     from agent_comms.comms import Comms
     from agent_comms.fresh_private_session import create_fresh_private_session
     from agent_comms.pi_native_backend import PiNativeBackend
 
-    package = VerifiedNativePackage.acquire(native_package.pinned_native_package())
+    package = VerifiedNativePackage.acquire(pinned_native)
     comms = Comms(tmp_path / "wire")
     Bus.install(Bus.path_in(comms.root))
     LaunchRoot.from_path(comms.root).install()

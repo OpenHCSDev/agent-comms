@@ -19,7 +19,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.commander_parity import ParityRow
 from agent_comms.field_codec import FieldCodec
 from agent_comms.head_review import HeadReview
 from agent_comms.pinned_audit import ForeignAbsenceProbe, GodFunction, ParsedModule
@@ -351,14 +350,8 @@ class AllEvidence(PhaseEvidence):
 
 
 @dataclass(frozen=True)
-class ParityEvidence(PhaseEvidence):
-    """The native/current comparison rows, which own the cutover decision."""
-
-    def holds(self, reading: PlanReading) -> bool:
-        return ParityRow.done(reading.todos)
-
-    def describe(self) -> str:
-        return "every parity row passes"
+class ParityEvidence(AllEvidence):
+    """Native owners supply the facts; the historical comparison matrix cannot overrule them."""
 
 
 @dataclass(frozen=True)

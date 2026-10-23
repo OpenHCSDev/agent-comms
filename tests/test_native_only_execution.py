@@ -32,10 +32,11 @@ def test_headless_discovery_cannot_admit_an_unnamed_owner(tmp_path, arguments, c
     assert not root.exists()
 
 
-async def test_unvalidated_configuration_refuses_before_child(tmp_path):
+async def test_unvalidated_configuration_refuses_before_child(tmp_path, pinned_native):
     missing = tmp_path / "missing-native"
     with pytest.raises(FileNotFoundError) as caught:
-        [item async for item in one_turn_events(str(missing), (), "must not send", str(tmp_path))]
+        [item async for item in one_turn_events(
+            str(missing), (), "must not send", str(tmp_path), package=pinned_native)]
     assert caught.value.filename == str(missing)
 
 

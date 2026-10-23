@@ -17,6 +17,7 @@ from agent_comms.host_services.connector import InstallServiceVerb, SystemdConne
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.locked_store import DocumentChange
 
 
 def test_the_connector_is_a_declared_service():
@@ -40,7 +41,7 @@ def connector_service(comms, tmp_path, monkeypatch):
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
     store = ConnectorStore.owned()
-    store.update(lambda grants: grants)
+    store.update(DocumentChange.to)
     with socket.socket() as reserved:
         reserved.bind(("127.0.0.1", 0))
         port = reserved.getsockname()[1]

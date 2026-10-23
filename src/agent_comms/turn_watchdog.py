@@ -12,7 +12,6 @@ from . import agent_events as events
 from . import turn_failure as failures
 from . import turn_phase as phases
 from .declared_family import DeclaredFamily
-from .diagnostics import FailureReason
 from .mro_dispatch import MroDispatch, handles
 from .native_startup import SessionLoad
 
@@ -76,7 +75,7 @@ class TurnWait(DeclaredFamily, affix="Wait"):
 
 
 class PreflightWait(TurnWait):
-    reason = "native_preflight_timeout"
+    reason = failures.NativePreflightTimeout.declared_name
     phase = "await_get_state"
 
     async def expire(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
@@ -84,7 +83,6 @@ class PreflightWait(TurnWait):
         elapsed_ms = round((watchdog.clock() - watchdog.launch_started_at) * 1000)
         wait_ms = round(self.elapsed * 1000)
         budget_ms = round(self.budget * 1000)
-        session.output.preflight_failure = FailureReason.PREFLIGHT_TIMEOUT
         session.output.diagnostic = {
             "elapsed_ms": elapsed_ms,
             "wait_ms": wait_ms,
@@ -94,7 +92,7 @@ class PreflightWait(TurnWait):
         session.output.diagnostic.update(watchdog.session_load.diagnostic)
         session_size = watchdog.session_load.summary
         session.output.record_failure(
-            failures.InputIdUnavailable(
+            failures.NativePreflightTimeout(
                 "Pi native input-ID capability preflight timed out "
                 f"(phase={self.phase}, elapsed_ms={elapsed_ms}, "
                 f"wait_ms={wait_ms}, budget_ms={budget_ms}, "

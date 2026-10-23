@@ -193,18 +193,6 @@ class ControlPlanePhase(CommanderNativePhase):
     )
 
 
-class ParityPhase(CommanderNativePhase):
-    after = (RecordPlanePhase, ReviewQueuePhase, ControlPlanePhase)
-    evidence = ParityEvidence()
-
-
-class CutoverPhase(CommanderNativePhase):
-    """The parity gate passes and the machine-wide commander configuration is gone."""
-
-    after = (RecordPlanePhase, ReviewQueuePhase, ControlPlanePhase, ParityPhase)
-    evidence = AllEvidence((ParityEvidence(), PatternAbsent(r"\bCommanderConfig\b")))
-
-
 OUTSIDE_PARITY = ("src", ":!src/agent_comms/commander_parity")
 
 
@@ -232,6 +220,20 @@ class CommanderPagePhase(CommanderNativePhase):
             PatternPresent(r"\bcomms_hud\b", OUTSIDE_PARITY),
         )
     )
+
+
+class ParityPhase(CommanderNativePhase):
+    """The native capability owners, not a second matrix of demonstrations, decide completion."""
+
+    after = (RecordPlanePhase, ReviewQueuePhase, ControlPlanePhase, CommanderPagePhase)
+    evidence = ParityEvidence(tuple(phase.evidence for phase in after))
+
+
+class CutoverPhase(CommanderNativePhase):
+    """The native evidence passes and the machine-wide commander configuration is gone."""
+
+    after = (ParityPhase,)
+    evidence = AllEvidence((ParityPhase.evidence, PatternAbsent(r"\bCommanderConfig\b")))
 
 
 class SkillPhase(CommanderNativePhase):
@@ -683,7 +685,7 @@ class RecordsPhase(RemainingSlopPhase):
 
     evidence = AllEvidence(
         (
-            PatternAbsent(r"ConnectivityFacet|observe_connectivity"),
+            PatternAbsent(r"[C]onnectivityFacet|[o]bserve_connectivity"),
             PatternAbsent(
                 r"^\s*nonlocal\b",
                 (
