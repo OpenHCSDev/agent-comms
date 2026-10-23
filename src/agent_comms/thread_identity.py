@@ -65,6 +65,9 @@ class OfferedTools(DeclaredFamily, affix="OfferedTools"):
         return ((f"runtime {self.version} -> {version}, tool set unreported",)
                 if self.version != version else ())
 
+    def filled_by(self, current: OfferedTools) -> bool:
+        return False
+
 
 @dataclass(frozen=True)
 class ReportedTools(OfferedTools):
@@ -80,6 +83,9 @@ class ReportedTools(OfferedTools):
 
 
 class UnreportedTools(OfferedTools):
+    def filled_by(self, current: OfferedTools) -> bool:
+        return self.version == current.version
+
     def changes_from(self, previous: OfferedTools) -> tuple[str, ...]:
         return previous.before_unreported(self.version)
 

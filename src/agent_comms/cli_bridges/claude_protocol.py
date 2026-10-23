@@ -139,7 +139,9 @@ class ClaudeReaderPhase(ReadingPhase):
 @dataclass
 class CatchUp(ClaudeReaderPhase):
     pending: tuple[StatusUpdate, ...] = ()
-    latest_tools: tuple[OfferedToolsObserved, ...] = ()
+    latest_tools: tuple[OfferedToolsObserved, ...] = (
+        OfferedToolsObserved(UnreportedTools('unreported')),
+    )
 
     def offered(self, update: OfferedToolsObserved) -> tuple[RuntimeUpdate, ...]:
         self.latest_tools = (update,)
@@ -240,6 +242,16 @@ class ClaudeSession:
     tools: dict[str, ClaudeToolDraft] = field(default_factory=dict)
     phase: ClaudeReaderPhase = field(default_factory=CatchUp)
     project: str = ''
+    offered_tools: OfferedTools = UnreportedTools('unreported')
+
+    def version_reported(self, version: str | None) -> tuple[RuntimeUpdate, ...]:
+        if version is None or version == self.offered_tools.version:
+            return ()
+        return self.offered(UnreportedTools(version))
+
+    def offered(self, offered: OfferedTools) -> tuple[RuntimeUpdate, ...]:
+        self.offered_tools = offered
+        return (OfferedToolsObserved(offered),)
 
     def located(self, cwd: str) -> tuple[RuntimeUpdate, ...]:
         if not cwd or cwd == self.project:
@@ -303,6 +315,7 @@ class ClaudeHeader(WireHeader):
 class ClaudeRecord(TaggedWire, ABC, affix=""):
     header = ClaudeHeader
     cwd: str = ''
+    version: str | None = None
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return ()
@@ -790,10 +803,8 @@ class ApiRequestShape(MetadataRecord, declared_name='api-request-shape'):
     """The system prompt and tools a request was sent with, stored once by hash."""
 
     shape: ClaudeRequestShape
-    version: str = 'unreported'
-
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return (OfferedToolsObserved(self.shape.offered(self.version)),)
+        return session.offered(self.shape.offered(self.version or session.offered_tools.version))
 
 
 class ApiRequestBlob(MetadataRecord, declared_name='api-request-blob'):

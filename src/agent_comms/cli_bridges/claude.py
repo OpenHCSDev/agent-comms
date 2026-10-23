@@ -37,7 +37,7 @@ class ClaudeJsonLines(JsonLinesFile):
     def record_updates(self, record: ClaudeRecord, state: ClaudeSession, offset: int,
                        raw: bytes) -> Iterator[RuntimeUpdate]:
         yield from state.located(record.cwd)
-        for update in record.updates(state):
+        for update in (*state.version_reported(record.version), *record.updates(state)):
             yield from update.during(state.phase)
 
     def facts(self, stream: BinaryIO, boundary: int) -> Iterator[RuntimeUpdate]:

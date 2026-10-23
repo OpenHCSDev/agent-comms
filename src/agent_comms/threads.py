@@ -296,6 +296,8 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         """Keep two distinct runtime observations in the original thread record."""
         if self.offered_tools and self.offered_tools[0] == offered:
             return self
+        if self.offered_tools and self.offered_tools[0].filled_by(offered):
+            return replace(self, offered_tools=(offered, *self.offered_tools[1:]))
         return replace(self, offered_tools=(offered, *self.offered_tools[:1]))
 
     def lost_tools(self) -> tuple[str, ...]:
