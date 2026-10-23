@@ -67,7 +67,7 @@ from .cli_bridges.history import (
     OnlineHistory,
 )
 from .cli_bridges.shared import ChoiceTargetField, SendRequest, TargetField
-from .cli_protocol import ArrivedMessage, EarlierItems
+from .cli_protocol import CLI_FAILURES, ArrivedMessage, EarlierItems
 from .cli_result import CliResult
 from .command import Command
 from .commander.config import (
@@ -303,6 +303,9 @@ class TargetFailed(TargetOutcome):
     error_type: str
     error: str
 
+    def __str__(self) -> str:
+        return f"{self.target}: {self.error_type}: {self.error}"
+
 
 @dataclass(frozen=True)
 class TargetBatchResult(CliResult):
@@ -326,6 +329,10 @@ class TargetBatchResult(CliResult):
 
     def exit_code(self) -> int:
         return int(not self.successful)
+
+    def require_success(self, refusal: type[Exception]) -> None:
+        for outcome in self.outcomes:
+            outcome.require(Successful, refusal(str(outcome)))
 
 
 class CommandSelectionChanged(ToolRefusedError):
@@ -433,7 +440,7 @@ class TargetBatch(TargetSelection):
                     scope = f' in {context}' if context is not None else ''
                     raise CommandSelectionChanged(f'The bound command for {name}{scope} changed; refresh the selection')
                 command.schedule(TargetBatchSchedule(position, name, outcomes, together), comms)
-            except ToolRefusedError as error:
+            except CLI_FAILURES as error:
                 result = TargetFailed(name.name, type(error).__name__, str(error))
                 outcomes.append((position, result))
         for together_declaration, members in together.items():
