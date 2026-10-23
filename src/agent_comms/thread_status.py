@@ -165,10 +165,13 @@ class ActiveThreadPresence(AlwaysListed, Visible, ThreadStatus, declared_name=No
     receiving = True
 
     def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
-        return self.process_seen(thread.process_identity)
+        return thread.process_identity.thread_status(self, last_seen)
 
     def process_seen(self, process: ProcessState) -> ThreadStatus:
         return self if process.alive() else StoppedThreadStatus()
+
+    def heartbeat_seen(self, last_seen: float) -> ThreadStatus:
+        return HeartbeatThreadStatus().when_seen(last_seen)
 
     def require_inactive(self, message: str) -> None:
         raise RelationViolationError(message)
@@ -241,16 +244,10 @@ class ActiveThreadPresence(AlwaysListed, Visible, ThreadStatus, declared_name=No
 
 
 class ProcessThreadStatus(ActiveThreadPresence):
-    """A process-backed registration, not a saved liveness observation."""
-
-    def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
-        return thread.process_identity.thread_status(self, last_seen)
+    """A registration awaiting observation, not a saved liveness answer."""
 
     def process_seen(self, process: ProcessState) -> ThreadStatus:
         return RunningThreadStatus().process_seen(process)
-
-    def heartbeat_seen(self, last_seen: float) -> ThreadStatus:
-        return HeartbeatThreadStatus().when_seen(last_seen)
 
 
 class RunningThreadStatus(SelfRenaming, ActiveThreadPresence):

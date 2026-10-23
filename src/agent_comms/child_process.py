@@ -53,7 +53,7 @@ if TYPE_CHECKING:
     from .runtime_children import RuntimeChildrenStore, RuntimeChildReservation
     from .store_files import LockMode
     from .thread_identity import ThreadIncarnation, ThreadRole
-    from .thread_status import ProcessThreadStatus, ThreadStatus
+    from .thread_status import ActiveThreadPresence, ThreadStatus
     from .thread_presentation import ThreadOwnerBinding, ThreadPresentation
     from .turn_lease import ActiveTurn
 
@@ -118,7 +118,7 @@ class ProcessState(SubclassUnion, affix=""):
     def alive(self) -> bool: ...
 
     @abstractmethod
-    def thread_status(self, presence: ProcessThreadStatus, last_seen: float) -> ThreadStatus: ...
+    def thread_status(self, presence: ActiveThreadPresence, last_seen: float) -> ThreadStatus: ...
 
     @abstractmethod
     def runs_here(self) -> bool: ...
@@ -173,7 +173,7 @@ class NoProcess(NullMember, ProcessState):
     def alive(self) -> bool:
         return False
 
-    def thread_status(self, presence: ProcessThreadStatus, last_seen: float) -> ThreadStatus:
+    def thread_status(self, presence: ActiveThreadPresence, last_seen: float) -> ThreadStatus:
         return presence.heartbeat_seen(last_seen)
 
     def runs_here(self) -> bool:
@@ -278,7 +278,7 @@ class ProcessIdentity(RecordMember, ProcessState):
         if self != process:
             raise RelationViolationError("Only the registered owner may release itself.")
 
-    def thread_status(self, presence: ProcessThreadStatus, last_seen: float) -> ThreadStatus:
+    def thread_status(self, presence: ActiveThreadPresence, last_seen: float) -> ThreadStatus:
         return presence.process_seen(self)
 
     def registration_change(
