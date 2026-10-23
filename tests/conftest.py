@@ -290,9 +290,8 @@ def configured_repository(durable_home):
 @pytest.fixture
 def installed_runtime(durable_home, tmp_path):
     """A temporary installation record, executable and pointer, never the real home."""
-    from agent_comms.installer.runtime_resolution import (
-        CommitRecord, GitRecord, PackageRecord, RuntimePackage, RuntimeResolution,
-    )
+    from agent_comms.installer.installed_packages import CommitRecord, GitRecord, PackageRecord
+    from agent_comms.installer.runtime_resolution import RuntimePackage, RuntimeResolution
     from agent_comms.launch_runtime import LaunchRuntime
     from agent_comms.repo import Repo
 

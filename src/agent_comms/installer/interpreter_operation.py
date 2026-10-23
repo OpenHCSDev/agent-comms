@@ -11,7 +11,7 @@ import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, PathText
@@ -36,7 +36,8 @@ class InterpreterOperation[Answer](ABC):
 @dataclass(frozen=True)
 class RuntimeProbe[Answer](InterpreterOperation[Answer], DeclaredFamily, affix="Probe"):
     def command(self, python: Path, result: Path) -> tuple[str | Path, ...]:
-        return (python, "-P", Path(__file__), json.dumps(FieldCodec.encode(self)), result)
+        return (python, "-P", Path(inspect.getfile(type(self))),
+                json.dumps(FieldCodec.encode(self)), result)
 
 
 class ClientImportsProbe(RuntimeProbe[None]):
@@ -90,25 +91,6 @@ class HoldTranscriptsProbe(RuntimeProbe[None]):
                 held.write(b"held")
             sys.stdin.read()
             writer.execute("ROLLBACK")
-
-
-@dataclass(frozen=True)
-class InstalledPackagesProbe(RuntimeProbe[dict[str, dict[str, Any]]]):
-    core: str
-
-    def run(self) -> dict[str, dict[str, Any]]:
-        from importlib.metadata import distributions
-        from packaging.utils import canonicalize_name
-        import agent_comms
-        from agent_comms.package_stamp import STAMP
-        if not Path(agent_comms.__file__).resolve().is_relative_to(Path(sys.prefix).resolve()):
-            raise ValueError("Core is editable, not a built runtime package")
-        if STAMP.commit() != self.core:
-            raise ValueError("The wheel stamp does not name the selected source")
-        return {canonicalize_name(dist.metadata["Name"]): {
-            "version": dist.version,
-            "source": json.loads(source) if (source := dist.read_text("direct_url.json")) else None,
-        } for dist in distributions()}
 
 
 class DistributionVersionsProbe(RuntimeProbe[dict[str, str]]):

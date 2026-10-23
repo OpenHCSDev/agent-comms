@@ -23,15 +23,13 @@ from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
-from agent_comms.installer.runtime_resolution import (
+from agent_comms.installer.installed_packages import (
     ArchiveRecord,
     CommitRecord,
-    CorePackage,
     GitRecord,
     PackageRecord,
-    RuntimePackage,
-    RuntimeResolution,
 )
+from agent_comms.installer.runtime_resolution import CorePackage, RuntimePackage, RuntimeResolution
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.progress_claims import WorkingClaim
