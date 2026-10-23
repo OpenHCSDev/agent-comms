@@ -1,6 +1,7 @@
 """Shared fixtures: an isolated Comms wire per test."""
 
 import asyncio
+import fcntl
 import os
 import sqlite3
 import subprocess
@@ -136,21 +137,13 @@ def publish_initial(comms, sender, target, body, type=InfoKind, *, role=Conversa
     )
 
 def pytest_sessionstart(session):
-    """The controller prepares this checkout's pinned inputs before any worker runs.
-
-    Its pinned submodules are populated as every tree of ours is (Checkout), and
-    prepare-pi-native keys its build by the pin and reuses a verified one, so an unchanged
-    pin costs nothing and a changed pin rebuilds without anyone remembering.
-    Collection loads declarations only; it neither starts workers nor needs either.
-    """
+    """The controller populates this checkout's pinned submodules before any worker runs,
+    as every tree of ours is (Checkout). Collection loads declarations only."""
     if session.config.option.collectonly or is_xdist_worker(session):
         return
     from agent_comms.repo import Checkout
 
-    root = Path(__file__).resolve().parents[1]
-    Checkout(root).prepare()
-    if not pinned_location().is_dir():
-        subprocess.run([str(root / "stack/bin/prepare-pi-native"), "--python", sys.executable], check=True)
+    Checkout(Path(__file__).resolve().parents[1]).prepare()
 
 
 @pytest.fixture
@@ -191,12 +184,31 @@ def cursor_delivery(source_reads):
 
 
 @pytest.fixture(scope="session")
-def native_runtime_package():
+def pinned_native() -> Path:
+    """The pinned Pi build, prepared the first time a test asks for it.
+
+    prepare-pi-native keys its build by the pin and reuses a verified one, so an unchanged
+    pin costs nothing and a changed pin rebuilds. A run whose tests never ask never builds;
+    workers asking together wait on the stack directory's lock and the first one builds.
+    """
+    stack = Path(__file__).resolve().parents[1] / "stack"
+    held = os.open(stack, os.O_RDONLY)
+    try:
+        fcntl.flock(held, fcntl.LOCK_EX)
+        if not pinned_location().is_dir():
+            subprocess.run([str(stack / "bin/prepare-pi-native"), "--python", sys.executable], check=True)
+    finally:
+        os.close(held)
+    return pinned_native_package()
+
+
+@pytest.fixture(scope="session")
+def native_runtime_package(pinned_native):
     """The running interpreter's artifact, qualified by the real installer before tests."""
     from agent_comms.native_package import VerifiedNativePackage
     from agent_comms.unit_instructions import UnitInstructions
 
-    package = VerifiedNativePackage.qualify(pinned_native_package())
+    package = VerifiedNativePackage.qualify(pinned_native)
     UnitInstructions.prepare()
     return package
 
