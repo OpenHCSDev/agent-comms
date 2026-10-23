@@ -51,7 +51,10 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
     precedes: ClassVar[tuple[type[Carry], ...]] = ()
     """Steps whose decoders require this step's output, regardless of addition date."""
 
-    opened_files: ClassVar[tuple[type[RootFile], ...]]
+    @property
+    @abstractmethod
+    def opened_files(self) -> tuple[type[RootFile], ...]:
+        """The store owners this carry reads or writes, declared by every member."""
 
     def input_files(self) -> tuple[Path, ...]:
         """Enumerate declared inputs without opening any store with the staged runtime."""
