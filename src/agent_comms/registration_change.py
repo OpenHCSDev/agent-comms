@@ -51,7 +51,7 @@ class RegistrationChange(ABC):
 
     def apply(self, document: RegistryDocument) -> None:
         """Caller holds registry/publication authority and records goal history."""
-        thread = self.thread
+        thread = self.thread.restarted_tools() if self.changes_owner else self.thread
         document.install_thread(thread)
         document.set_status(thread.name, self.status)
         document.last_seen[thread.name] = time.time()

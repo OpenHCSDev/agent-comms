@@ -21,6 +21,7 @@ from .declared_family import DeclaredFamily, UniqueExternalSelector, UnknownFami
 from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,
+    SingleFieldValue,
     WireValue,
 )
 from .response_policy import CollectivePolicy, InformationalPolicy, ResponsePolicy
@@ -36,6 +37,118 @@ if TYPE_CHECKING:
     from .todos import Todo
 
 T = TypeVar("T")
+
+
+@dataclass(frozen=True, slots=True, order=True)
+class ToolName(SingleFieldValue):
+    """A name supplied by the runtime's offered-tool declaration."""
+
+    value: str
+
+
+class OfferedTools(DeclaredFamily, affix="OfferedTools"):
+    """No observation, a reported catalogue, or an explicitly unreported catalogue."""
+
+    @abstractmethod
+    def changes_from(self, previous: OfferedTools) -> tuple[str, ...]: ...
+
+    @abstractmethod
+    def before_reported(self, current: ReportedTools) -> tuple[str, ...]: ...
+
+    @abstractmethod
+    def before_unreported(self, current: UnreportedTools) -> tuple[str, ...]: ...
+
+    @abstractmethod
+    def on_version(self, version: str) -> tuple[OfferedTools, ...]: ...
+
+    @abstractmethod
+    def restarted_over(self, before: OfferedTools) -> OfferedTools: ...
+
+    def on_catalogue(self, names: frozenset[ToolName]) -> tuple[OfferedTools, ...]:
+        return ()
+
+    def without_catalogue(self) -> tuple[OfferedTools, ...]:
+        return ()
+
+    def fills_version(self, version: str) -> bool:
+        return False
+
+    def filled_by(self, current: OfferedTools) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
+class UnobservedTools(OfferedTools):
+    """No runtime has reported yet; this member never produces a publication."""
+
+    def changes_from(self, previous: OfferedTools) -> tuple[str, ...]:
+        return ()
+
+    def before_reported(self, current: ReportedTools) -> tuple[str, ...]:
+        return ()
+
+    def before_unreported(self, current: UnreportedTools) -> tuple[str, ...]:
+        return ()
+
+    def on_version(self, version: str) -> tuple[OfferedTools, ...]:
+        return (UnreportedTools(version),)
+
+    def restarted_over(self, before: OfferedTools) -> OfferedTools:
+        return before  # Nothing observed: the last real record stays the comparison.
+
+    def filled_by(self, current: OfferedTools) -> bool:
+        return True
+
+
+@dataclass(frozen=True)
+class ObservedTools(OfferedTools, declared_name=None):
+    version: str
+
+    def unreported_change(self, version: str) -> tuple[str, ...]:
+        return ((f"runtime {self.version} -> {version}, tool set unreported",)
+                if self.version != version else ())
+
+    def before_unreported(self, current: UnreportedTools) -> tuple[str, ...]:
+        return self.unreported_change(current.version)
+
+    def on_version(self, version: str) -> tuple[OfferedTools, ...]:
+        return (UnreportedTools(version),) if self.version != version else ()
+
+    def on_catalogue(self, names: frozenset[ToolName]) -> tuple[OfferedTools, ...]:
+        return (ReportedTools(self.version, names),)
+
+    def without_catalogue(self) -> tuple[OfferedTools, ...]:
+        return (UnreportedTools(self.version),)
+
+    def fills_version(self, version: str) -> bool:
+        return self.version == version
+
+    def restarted_over(self, before: OfferedTools) -> OfferedTools:
+        return self
+
+
+@dataclass(frozen=True)
+class ReportedTools(ObservedTools):
+    names: frozenset[ToolName]
+
+    def changes_from(self, previous: OfferedTools) -> tuple[str, ...]:
+        return previous.before_reported(self)
+
+    def before_reported(self, current: ReportedTools) -> tuple[str, ...]:
+        missing = self.names - current.names
+        return ((f"missing tools {', '.join(sorted(name.value for name in missing))}; "
+                 f"runtime {current.version}",) if missing else ())
+
+
+class UnreportedTools(ObservedTools):
+    def filled_by(self, current: OfferedTools) -> bool:
+        return current.fills_version(self.version)
+
+    def changes_from(self, previous: OfferedTools) -> tuple[str, ...]:
+        return previous.before_unreported(self)
+
+    def before_reported(self, current: ReportedTools) -> tuple[str, ...]:
+        return self.unreported_change(current.version)
 
 
 @dataclass(frozen=True, slots=True)
