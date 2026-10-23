@@ -410,7 +410,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
         # A rejected result adds a non-waking alert to the canonical source
         # prefix; injection still names the exact original reply.
         assert delivered[-1].covered_seq == reply.seq + reject_triage
-        assert delivered[-1].stage is TriageNativeExecution
+        assert delivered[-1].reference_stage is TriageNativeExecution
         assert delivered[-1].input_id in {row[0] for row in rows}
         assert len(rows) == 2 and all(row[2] for row in rows)
         assert len({row[0] for row in rows}) == 2
