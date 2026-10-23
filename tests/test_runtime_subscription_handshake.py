@@ -16,6 +16,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import MalformedRecord
 from agent_comms.owner_protocol import OwnerAnnouncement
 from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.ui_model.observation import ObserverDied
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
 
@@ -40,7 +41,9 @@ async def test_subscription_busy_read_retains_original_traceback(tmp_path, caplo
     try:
         with caplog.at_level(logging.ERROR, logger="agent_comms.runtime"):
             # Hold the coordinator's actual exclusive transaction. The real
-            # subscription must refuse its transcript read before ready.
+            # subscription must refuse its transcript read before ready; that
+            # read runs in the observation process, which reports its own
+            # traceback across its pipe.
             holder.execute("BEGIN EXCLUSIVE")
             try:
                 with pytest.raises(RuntimeError):
@@ -49,13 +52,11 @@ async def test_subscription_busy_read_retains_original_traceback(tmp_path, caplo
                 holder.execute("ROLLBACK")
         failures = [record for record in caplog.records if record.exc_info]
         assert len(failures) == 1
-        error = failures[0].exc_info[1]
-        assert error.__cause__.sqlite_errorname == "SQLITE_BUSY"
-        assert any(str(database) in note for note in error.__cause__.__notes__)
+        assert isinstance(failures[0].exc_info[1], ObserverDied)
         text = logging.Formatter().formatException(failures[0].exc_info)
         assert "runtime_requests.py" in text
         assert "transcript_updates.py" in text
-        assert "native_runtime_input.py" in text
+        assert "SQLITE_BUSY" in text
         assert "SELECT name FROM sqlite_master LIMIT 1" in text
         assert str(database) in text
         assert proxy.task is None and proxy.controller_token is None

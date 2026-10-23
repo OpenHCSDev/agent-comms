@@ -24,7 +24,7 @@ import time
 import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterator, Mapping
-from contextlib import AbstractContextManager, ExitStack, aclosing
+from contextlib import AbstractContextManager, ExitStack, aclosing, suppress
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
@@ -1307,7 +1307,7 @@ class ObservationProcess(AbstractContextManager):
         process = cls(route)
         descriptor = process.fileno()
         try:
-            loop.add_reader(descriptor, process.results)
+            loop.add_reader(descriptor, process.answer_reads)
         except BaseException:
             process.close()
             raise
@@ -1412,6 +1412,15 @@ class ObservationProcess(AbstractContextManager):
                 raise self.ended(None) from None
             result.received(self, observed)
         return observed
+
+    def answer_reads(self) -> None:
+        """The loop's reader for awaited reads: answered reads resolve their waiters.
+
+        The service's end has no caller here. ``ended`` already settles it into
+        every awaited read and into the status the next request raises.
+        """
+        with suppress(ObserverDied):
+            self.results()
 
     def close(self) -> None:
         self._resources.close()
