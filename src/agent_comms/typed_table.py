@@ -1383,7 +1383,7 @@ class ProjectionProducerTables(SharedFileTables, DurableTables):
     """The producer declaration last committed with each rebuilt projection."""
 
 
-class ProducedRow(ABC):
+class ProducedRow:
     """Rows rebuilt whenever the installed Core build changes."""
 
 

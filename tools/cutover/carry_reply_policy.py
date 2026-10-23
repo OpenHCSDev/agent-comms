@@ -22,14 +22,16 @@ from agent_comms.typed_table import (
     Column,
     DerivedTables,
     SharedFileTables,
-    SQLiteTableName,
     TypedTable,
 )
+
 from .carry_bus_history import CarryCatalogSource
 
 
 @dataclass(frozen=True)
-class StoredDirectReply(TypedTable, SharedFileTables, DerivedTables, declared_name="direct_reply_source"):
+class StoredDirectReply(
+    TypedTable, SharedFileTables, DerivedTables, declared_name="direct_reply_source"
+):
     """Only the removed input shape; no incoming schema family owns this row."""
 
     lookup: Annotated[str, Column(primary_key=True)]
@@ -39,7 +41,10 @@ class StoredDirectReply(TypedTable, SharedFileTables, DerivedTables, declared_na
 class ReplyPolicy(Carry):
     def backup_files(self) -> tuple[Path, ...]:
         sources = CarryCatalogSource.read(self.root, self.original_root)
-        roots = (self.root, *(source.mapped_root(self.root, self.original_root) for source in sources))
+        roots = (
+            self.root,
+            *(source.mapped_root(self.root, self.original_root) for source in sources),
+        )
         paths = tuple(dict.fromkeys(Bus.path_in(root) for root in roots))
         for path in paths:
             self.require_confined(self.root, path)
@@ -60,13 +65,19 @@ class ReplyPolicy(Carry):
                 if apply:
                     # The installer's main-root hold also owns its retained sources.
                     Bus.schema_change(Bus.path_in(self.root)).require()
-                    with closing(SQLiteFile.writer(path, isolation_level=None)) as db:
-                        with SQLiteFile.write_transaction(db):
-                            if present:
-                                StoredDirectReply.require_schema(db)
-                                SQLiteTableName(StoredDirectReply.declared_name).drop(db)
-                            # Catalog snapshots use the same current family carry as main.
-                            BusSchema.carry_schema(db)
+                    with (
+                        closing(SQLiteFile.writer(path, isolation_level=None)) as db,
+                        SQLiteFile.write_transaction(db),
+                    ):
+                        if present:
+                            StoredDirectReply.require_schema(db)
+                            StoredDirectReply.drop(db)
+                        # Catalog snapshots use the same current family carry as main.
+                        BusSchema.carry_schema(db)
                 changed += 1
                 rewritten.append(str(path.relative_to(self.root)))
-        return Carried(changed, {"retired_direct_replies": rows}, tuple(rewritten)) if changed else Carried(0)
+        return (
+            Carried(changed, {"retired_direct_replies": rows}, tuple(rewritten))
+            if changed
+            else Carried(0)
+        )
