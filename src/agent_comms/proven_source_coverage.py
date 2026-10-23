@@ -17,14 +17,14 @@ from typing import TYPE_CHECKING, Annotated
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 from agent_comms.lifecycle_capability import Active
+from agent_comms.native_runtime_input import NativeRuntimeTable
 
 from .agent_backend import InputId
 from .audience_manifest import FrozenRecipient
-from .cohort_schema import ClaimBatchAcknowledgements, CohortTable
-from agent_comms.native_runtime_input import NativeRuntimeTable
 from .bus import Bus
 from .bus_publication import Delivered
 from .bus_source_page import CoveragePage
+from .cohort_schema import ClaimBatchAcknowledgements, CohortTable
 from .coordination_cohort import AcceptedCohort, _claim_record
 from .coordination_session import NativeBoundary
 from .field_codec import FieldCodec, Id128Text
@@ -72,10 +72,12 @@ class CoverageInput(ABC):
     """The new suffix either injects one native reference or preserves the old one."""
 
     @abstractmethod
-    def injected_for(self, state) -> int: ...
+    def injected_for(self, state: CursorState) -> int: ...
 
     @abstractmethod
-    def candidate(self, state, owner, coverage): ...
+    def candidate(
+        self, state: CursorState, owner: CursorOwner, coverage: ProvenSourceCoverage,
+    ) -> CurrentNativeCursor: ...
 
     @abstractmethod
     def allows(self, owner: CursorOwner, db: sqlite3.Connection, state: CursorState) -> bool: ...
@@ -83,7 +85,7 @@ class CoverageInput(ABC):
     @abstractmethod
     def require_reference(self, owner: CursorOwner, cursor: CurrentNativeCursor) -> None: ...
 
-    def build(self, owner, covered_seq):
+    def build(self, owner: CursorOwner, covered_seq: int) -> CurrentNativeCursor:
         return CurrentNativeCursor(
             wire_root_id=owner.wire_root_id, recipient_lookup=owner.lookup,
              owner_generation=owner.generation,
@@ -97,14 +99,16 @@ class CoverageInput(ABC):
 
 @dataclass(frozen=True)
 class NoInjectedInput(CoverageInput):
-    def input_fields(self):
+    def input_fields(self) -> dict:
         return dict(injected_seq=0, input_id=UnrecordedNativeColumn(), stage=UnrecordedNativeColumn(),
                     session_id=UnrecordedNativeColumn(), request_generation=UnrecordedNativeColumn())
 
-    def injected_for(self, state):
+    def injected_for(self, state: CursorState) -> int:
         return state.injected_seq
 
-    def candidate(self, state, owner, coverage):
+    def candidate(
+        self, state: CursorState, owner: CursorOwner, coverage: ProvenSourceCoverage,
+    ) -> CurrentNativeCursor:
         return state.without_input(self, owner, coverage)
 
     def allows(self, owner: CursorOwner, db: sqlite3.Connection, state: CursorState) -> bool:
@@ -118,7 +122,7 @@ class NoInjectedInput(CoverageInput):
 class InjectedInput(CoverageInput):
     original: HistoricalNativeInput
 
-    def input_fields(self):
+    def input_fields(self) -> dict:
         original = self.original
         return dict(
             injected_seq=original.source_seq, input_id=TextNativeColumn(original.input_id),
@@ -126,10 +130,12 @@ class InjectedInput(CoverageInput):
             session_id=TextNativeColumn(original.context.session_id),
             request_generation=NumberNativeColumn(original.context.request_generation),
         )
-    def injected_for(self, state):
+    def injected_for(self, state: CursorState) -> int:
         return self.original.source_seq
 
-    def candidate(self, state, owner, coverage):
+    def candidate(
+        self, state: CursorState, owner: CursorOwner, coverage: ProvenSourceCoverage,
+    ) -> CurrentNativeCursor:
         return self.build(owner, coverage.covered_seq)
 
     def allows(self, owner: CursorOwner, db: sqlite3.Connection, state: CursorState) -> bool:

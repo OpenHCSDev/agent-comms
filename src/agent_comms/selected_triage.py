@@ -6,7 +6,7 @@ import json
 from abc import abstractmethod
 from dataclasses import dataclass
 from functools import partial
-from typing import ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 from .assignment_states import FailedAssignment, IgnoredAssignment, TriagePendingAssignment
 from .coordination_tables.assignments import WakeAssignment
@@ -20,6 +20,21 @@ from .field_codec import (
     TextRepresentation,
 )
 from .typed_table import TextStorage
+
+if TYPE_CHECKING:
+    from sqlite3 import Connection
+
+    from .assignment_states import AssignmentState
+    from .coordinated_runtime import SelectedExecution
+    from .historical_native_inputs import HistoricalNativeInput, TriageHistoricalNativeInput
+    from .native_input_record import TriageNativeExecution
+    from .native_pi import NativeContextProof
+    from .native_runtime_input import NativeRuntimeInput
+    from .private_send_claim import PrivateSendClaim
+    from .private_send_stage import TriageNativeSend
+    from .selected_participant import SelectedParticipant
+    from .selected_result import CoordinatedTurn
+    from .selected_session import SelectedSession
 
 
 class InvalidTriageDecision(ValueError):
@@ -54,22 +69,22 @@ class SelectedTriage(DeclaredFamily, affix="SelectedTriage"):
 
     @classmethod
     @abstractmethod
-    def proves_source(cls, evidence) -> bool: ...
+    def proves_source(cls, evidence: tuple[HistoricalNativeInput, ...]) -> bool: ...
 
     @abstractmethod
-    def settle(self, store, db, current: WakeAssignment) -> None: ...
+    def settle(self, store: Coordination, db: Connection, current: WakeAssignment) -> None: ...
 
     @abstractmethod
-    async def continue_turn(self, participant, session, input_id, execution, settled): ...
+    async def continue_turn(self, participant: SelectedParticipant, session: SelectedSession, input_id: str, execution: SelectedExecution, settled: tuple[WakeAssignment, ...]) -> CoordinatedTurn: ...
 
 
 @dataclass(frozen=True)
 class IgnoreSelectedTriage(SelectedTriage, declared_name="IGNORE"):
     @classmethod
-    def proves_source(cls, evidence) -> bool:
+    def proves_source(cls, evidence: tuple[HistoricalNativeInput, ...]) -> bool:
         return True
 
-    def settle(self, store, db, current):
+    def settle(self, store: Coordination, db: Connection, current: WakeAssignment) -> None:
         # Both declared edges stay in the native proof's one transaction. Never
         # publish a retryable TRIAGE_PENDING state after the input has been sent.
         now = store.session.now(current.updated_at_ms)
@@ -90,7 +105,7 @@ class IgnoreSelectedTriage(SelectedTriage, declared_name="IGNORE"):
             updated_at_ms=store.session.now(now),
         )
 
-    async def continue_turn(self, participant, session, input_id, execution, settled):
+    async def continue_turn(self, participant: SelectedParticipant, session: SelectedSession, input_id: str, execution: SelectedExecution, settled: tuple[WakeAssignment, ...]) -> CoordinatedTurn:
         from .selected_result import CoordinatedTurn
 
         await Coordination.run_worker(participant.consume_reply_wait)
@@ -100,14 +115,14 @@ class IgnoreSelectedTriage(SelectedTriage, declared_name="IGNORE"):
 @dataclass(frozen=True)
 class FullSelectedTriage(SelectedTriage, declared_name="FULL"):
     @classmethod
-    def proves_source(cls, evidence) -> bool:
+    def proves_source(cls, evidence: tuple[HistoricalNativeInput, ...]) -> bool:
         return any(proof.execution.proves_full_source(proof) for proof in evidence)
 
-    def settle(self, store, db, current):
+    def settle(self, store: Coordination, db: Connection, current: WakeAssignment) -> None:
         # Deferred until the execution owner atomically engages this exact claim.
         pass
 
-    async def continue_turn(self, participant, session, input_id, execution, settled):
+    async def continue_turn(self, participant: SelectedParticipant, session: SelectedSession, input_id: str, execution: SelectedExecution, settled: tuple[WakeAssignment, ...]) -> CoordinatedTurn:
         from .coordination_tables.executions import WireOrigin
 
         await participant.require_current()
@@ -131,21 +146,21 @@ class SelectedTriageOutcome(DeclaredFamily, affix="TriageOutcome"):
             return RejectedTriageOutcome(error)
 
     @abstractmethod
-    def settle(self, participant, stage, claim_scope, context) -> tuple[WakeAssignment, ...]: ...
+    def settle(self, participant: SelectedParticipant, stage: TriageNativeSend, claim_scope: PrivateSendClaim, context: NativeContextProof) -> tuple[WakeAssignment, ...]: ...
 
     @abstractmethod
-    async def continue_turn(self, participant, session, input_id, execution, settled): ...
+    async def continue_turn(self, participant: SelectedParticipant, session: SelectedSession, input_id: str, execution: SelectedExecution, settled: tuple[WakeAssignment, ...]) -> CoordinatedTurn | None: ...
 
 
 @dataclass(frozen=True)
 class DecidedTriageOutcome(SelectedTriageOutcome):
     decision: SelectedTriage
 
-    def settle(self, participant, stage, claim_scope, context):
+    def settle(self, participant: SelectedParticipant, stage: TriageNativeSend, claim_scope: PrivateSendClaim, context: NativeContextProof) -> tuple[WakeAssignment, ...]:
         return stage.commit(participant.store, participant.identity, claim_scope.input_id,
                             claim_scope.token_digest, context, self.decision)
 
-    async def continue_turn(self, participant, session, input_id, execution, settled):
+    async def continue_turn(self, participant: SelectedParticipant, session: SelectedSession, input_id: str, execution: SelectedExecution, settled: tuple[WakeAssignment, ...]) -> CoordinatedTurn | None:
         return await self.decision.continue_turn(participant, session, input_id, execution, settled)
 
 
@@ -153,11 +168,11 @@ class DecidedTriageOutcome(SelectedTriageOutcome):
 class RejectedTriageOutcome(SelectedTriageOutcome):
     error: InvalidTriageDecision
 
-    def settle(self, participant, stage, claim_scope, context):
+    def settle(self, participant: SelectedParticipant, stage: TriageNativeSend, claim_scope: PrivateSendClaim, context: NativeContextProof) -> tuple[WakeAssignment, ...]:
         return stage.fail_decision(participant.store, participant.identity,
                                    claim_scope.input_id, claim_scope.token_digest, context)
 
-    async def continue_turn(self, participant, session, input_id, execution, settled):
+    async def continue_turn(self, participant: SelectedParticipant, session: SelectedSession, input_id: str, execution: SelectedExecution, settled: tuple[WakeAssignment, ...]) -> CoordinatedTurn | None:
         from .selected_result import CoordinatedTurn, publish_native_failure
 
         sent = await Coordination.run_worker(partial(
@@ -177,7 +192,7 @@ class TriageDecisionRecord(DeclaredFamily, JsonShapeFamily, affix="TriageDecisio
     decided: ClassVar[bool] = True
 
     @abstractmethod
-    def historical_proof(self, record, lifecycle, execution, **source): ...
+    def historical_proof(self, record: NativeRuntimeInput, lifecycle: AssignmentState, execution: TriageNativeExecution, **source) -> TriageHistoricalNativeInput | None: ...
 
     def require_undecided(self) -> None:
         raise MalformedRecord("A full native input records no triage verdict")
@@ -188,10 +203,10 @@ class TriageDecisionText(TriageDecisionRecord, JsonShapeMember):
     value: str
 
     @classmethod
-    def from_json_value(cls, value):
+    def from_json_value(cls, value: str) -> DecidedTriageRecord:
         return DecidedTriageRecord(RecordedTriageText.from_text(value))
 
-    def historical_proof(self, record, lifecycle, execution, **source):
+    def historical_proof(self, record: NativeRuntimeInput, lifecycle: AssignmentState, execution: TriageNativeExecution, **source) -> TriageHistoricalNativeInput | None:
         raise TypeError("Triage decision text must be decoded at ingress")
 
 
@@ -199,10 +214,10 @@ class TriageDecisionText(TriageDecisionRecord, JsonShapeMember):
 class DecidedTriageRecord(TriageDecisionRecord):
     decision: type[SelectedTriage]
 
-    def to_wire(self):
+    def to_wire(self) -> str:
         return RecordedTriageText.encode(self.decision)
 
-    def historical_proof(self, record, lifecycle, execution, **source):
+    def historical_proof(self, record: NativeRuntimeInput, lifecycle: AssignmentState, execution: TriageNativeExecution, **source) -> TriageHistoricalNativeInput | None:
         from .historical_native_inputs import TriageHistoricalNativeInput
 
         return TriageHistoricalNativeInput(execution=execution, decision=self.decision, **source)
@@ -216,7 +231,7 @@ class AbsentTriageDecisionRecord(TriageDecisionRecord, JsonShapeMember):
     def require_undecided(self) -> None:
         pass
 
-    def historical_proof(self, record, lifecycle, execution, **source):
+    def historical_proof(self, record: NativeRuntimeInput, lifecycle: AssignmentState, execution: TriageNativeExecution, **source) -> TriageHistoricalNativeInput | None:
         return lifecycle.rejected_triage_history(execution, **source)
 
 
@@ -224,7 +239,7 @@ class RecordedTriageText(TextRepresentation[type[SelectedTriage]]):
     """The original native SQL decision uses lowercase declared triage names."""
 
     @classmethod
-    def encode(cls, value):
+    def encode(cls, value) -> str:
         return FieldCodec.encode(value, type[SelectedTriage]).lower()
 
     @classmethod
@@ -235,7 +250,7 @@ class RecordedTriageText(TextRepresentation[type[SelectedTriage]]):
         return decision
 
     @classmethod
-    def schema(cls):
+    def schema(cls) -> dict[str, str | list[str]]:
         return {
             "type": "string",
             "enum": [member.declared_name.lower() for member in SelectedTriage.members_with(SelectedTriage)],
