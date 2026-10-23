@@ -7,7 +7,6 @@ from agent_comms.bus import Bus
 
 import argparse
 import json
-import logging
 import os
 import shlex
 import shutil
@@ -23,7 +22,7 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander.order import Commander, PullRequestVerb, SayVerb
-from agent_comms.standing_rules import OwedAnswer
+from agent_comms.standing_rules import OwedAnswer, StandingRule
 from agent_comms.ui_model.unit_state import AwaitingCommander
 from agent_comms.commander.standing import UnownedOrderWatch
 from agent_comms.commander_heartbeat import CommanderHeartbeat
@@ -449,11 +448,10 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
         assert c.goals.todos.get(original.id) == original
 
 
-def test_reused_enforcement_rejects_a_new_idle_goal(checkout_bus, caplog):
+def test_reused_enforcement_rejects_a_new_idle_goal(checkout_bus):
     from agent_comms.commander.standing import ReassignedWheelSpin
     from agent_comms.goals import GoalChangedError, NoGoal
 
-    caplog.set_level(logging.INFO)
     with LaunchRoot.from_path(checkout_bus.root).selected():
         watch = UnownedOrderWatch()
         observed = watch.observe(checkout_bus)
@@ -467,13 +465,12 @@ def test_reused_enforcement_rejects_a_new_idle_goal(checkout_bus, caplog):
         changed = checkout_bus.goals.update_goal(selected.name, SetGoalAction(
             text="New independent work after the idle observation"))
         before = checkout_bus.goals.todos.get(item.rule.todo.id)
-        watch.pass_body(checkout_bus, observed)
+        rejected = StandingRule.enforce_all(checkout_bus, item.commander.name, (item.rule,))
         assert checkout_bus.registry.require(selected.name).goal == changed
         assert checkout_bus.goals.todos.get(before.id) == before
-        rejected = caplog.records[-1].args[0]
-        assert isinstance(rejected, GoalChangedError)
-        assert rejected.thread.name == selected.name
-        assert rejected.expected == selected.goal.captured
+        assert isinstance(rejected[item.rule], GoalChangedError)
+        assert rejected[item.rule].thread.name == selected.name
+        assert rejected[item.rule].expected == selected.goal.captured
 
 
 @pytest.mark.parametrize("number", (0, -1))

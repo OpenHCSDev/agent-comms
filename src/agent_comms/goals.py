@@ -252,7 +252,7 @@ class PresentGoalCheckpoint(GoalCheckpoint, declared_name="present"):
 
 
 class GoalChangedError(RejectedEnforcement):
-    """A checked action's observed goal is no longer current."""
+    """An observed goal changed before its checked action could run."""
 
     reason: ClassVar[str] = "goal changed"
 
@@ -643,7 +643,7 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
 
     def require_checkpoint(self, checkpoint: GoalRevision) -> Goal:
         if not PresentGoalCheckpoint(checkpoint).matches(self):
-            raise ValueError("The goal no longer matches this action; the action was not applied.")
+            raise ValueError("The goal changed before this action; the action was not applied.")
         return self.require()
 
     def matching(self, goal_id: str) -> GoalDeclaration:
