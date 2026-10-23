@@ -747,7 +747,7 @@ class PracticeBus:
 
 def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice, mode: RunMode,
             retire: bool, spill_dir: Path, scratch: Path,
-            harnesses: Callable[[], InstallResult], report: InstallReport) -> Upgrade:
+            harnesses: Callable[[Stack], InstallResult], report: InstallReport) -> Upgrade:
     """``scratch`` holds the target's worktree the launcher runs this source from; this
     run owns it and removes it. A live run ends by registering the ``harnesses``."""
     commands = InstallCommands()
@@ -840,12 +840,12 @@ class Install[Rehearsed: Rehearsal](ABC):
             commands=tuple(self.staged.commands.ran))
 
     def finished(self, rehearsal: Rehearsed, bridges: SessionBridgeResumes,
-                 harnesses: Callable[[], InstallResult], report: InstallReport) -> InstalledUpgrade:
+                 harnesses: Callable[[Stack], InstallResult], report: InstallReport) -> InstalledUpgrade:
         rehearsed = self.reported(rehearsal)
         live_run = self.install(rehearsal, bridges, report)
         finished = InstalledUpgrade(
             rehearsed.source, rehearsed.target, rehearsed.root, rehearsed.pending,
-            rehearsed.rehearsal, live_run, harnesses(), commands=tuple(self.staged.commands.ran),
+            rehearsed.rehearsal, live_run, harnesses(self.staged), commands=tuple(self.staged.commands.ran),
             processes=RuntimeProcesses.observe(self.staged.runtime),
             bridge_resumes=tuple(bridges.outcomes))
         return (finished.extended(UnresumedUpgrade)
