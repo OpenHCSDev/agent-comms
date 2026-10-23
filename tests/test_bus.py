@@ -193,6 +193,7 @@ def test_projection_digest_tracks_producing_source(
 
 # Mechanisms that decode, store and dispatch rows; their edits never change row content.
 PROJECTION_MECHANISM_MODULES = frozenset({
+    "agent_comms.class_fact",
     "agent_comms.core_stamp",
     "agent_comms.declared_family",
     "agent_comms.field_codec",
@@ -307,7 +308,7 @@ def test_projection_freshness_follows_its_producing_source(bus):
 
         ProjectionProducer.update(
             db, where="{projection}=?", parameters=(MessageIdentitySource.declared_name,),
-            commit=older, producer_digest=older,
+            producer_digest=older,
         )
         MessageIdentitySource.update(db, where="{seq}=?", parameters=(record.seq,), sender="stale")
         assert BusSchema.schema_differs(db)

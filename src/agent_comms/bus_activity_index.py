@@ -1,16 +1,13 @@
 """Activity maxima derived in the transaction that appends their original message."""
 from __future__ import annotations
 
-from . import activity_clocks
 import sqlite3
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Annotated, Self
+from typing import Annotated
 
+from . import activity_clocks
 from .messages import BusProjectionTables
-from .typed_table import Column, TypedTable
-
-if TYPE_CHECKING:
-    from .messages import Message
+from .typed_table import Column
 
 
 class ActivityMaximum(BusProjectionTables, declared_name=None):
@@ -18,7 +15,7 @@ class ActivityMaximum(BusProjectionTables, declared_name=None):
 
     def insertion(self) -> tuple[str, tuple]:
         statement, values = self._insertion()
-        keys = tuple(item.name for item in self._fields() if item.column.primary_key)
+        keys = tuple(item.name for item in self._fields if item.column.primary_key)
         updates = tuple(item.wire_name for item in self._writable_fields()
                         if not item.column.primary_key)
         statement += f" ON CONFLICT ({self._column_list(keys)}) DO UPDATE SET "

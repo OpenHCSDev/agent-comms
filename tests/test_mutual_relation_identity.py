@@ -6,9 +6,9 @@ from agent_comms.threads import Thread
 
 
 def test_new_relation_reuses_owned_incident_and_counterpart_behavior(*, thread_registration):
-    first = thread_registration.new_thread('first', frozenset(), '/wt', created_at=1)
-    second = thread_registration.new_thread('second', frozenset(), '/wt', created_at=2)
-    replacement = thread_registration.new_thread('second', frozenset(), '/wt', created_at=3)
+    first = Thread('first', frozenset(), '/wt', created_at=1)
+    second = Thread('second', frozenset(), '/wt', created_at=2)
+    replacement = Thread('second', frozenset(), '/wt', created_at=3)
 
     class ReviewRelation(MutualThreadRelation):
         relevance = GoalContactRelevance

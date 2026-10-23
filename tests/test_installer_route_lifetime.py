@@ -32,7 +32,8 @@ from test_carry_bus_history import OUTGOING_V2, predecessor_history
 
 
 @pytest.fixture
-def route_bus(tmp_path):
+def route_bus(tmp_path, pinned_native):
+    """Publishing a route validates its launch, which acquires the pinned native build."""
     root = tmp_path / "wire"
     prepare_native_comms(wire(root))
     return ActiveRoute(root, RecordedBusIdentity.capture(Bus.path_in(root)))

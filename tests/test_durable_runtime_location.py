@@ -2,7 +2,6 @@
 import asyncio
 import subprocess
 from dataclasses import replace
-from pathlib import Path
 
 import pytest
 
@@ -20,7 +19,7 @@ from agent_comms.unstarted_runtime import UnstartedRuntime
 @pytest.mark.parametrize('saved', [False, True])
 def test_durable_thread_roundtrip_and_worker_selection(tmp_path, saved, *, thread_registration):
     location = DurableDatabase(str(tmp_path / 'session.sqlite3'))
-    thread = thread_registration.new_thread('durable', frozenset(), str(tmp_path), backend=PiDurableBackend, session_file=RegistrySessionLocation.from_path(location.read_key, tmp_path) if saved else NoSessionFile())
+    thread = thread_registration.declare(Thread('durable', frozenset(), str(tmp_path), backend=PiDurableBackend, session_file=RegistrySessionLocation.from_path(location.read_key, tmp_path) if saved else NoSessionFile()))
     restored = FieldCodec.decode(Thread, FieldCodec.encode(thread))
     restored = replace(restored, session_file=restored.session_file.bound_to(tmp_path))
     assert restored.runtime == (location if saved else UnstartedRuntime(PiDurableBackend))
@@ -61,18 +60,16 @@ try {
 """
 
 
-def test_real_durable_history_pages_while_writer_owns_database(tmp_path, thread_registration, durable_home):
+def test_real_durable_history_pages_while_writer_owns_database(tmp_path, thread_registration, durable_home,
+                                                                durable_host_packages):
     start = 1760000000000
     location = DurableDatabase(str(tmp_path / 'history.sqlite3'))
-    hosts = Path(__file__).parents[1] / 'src/agent_comms'
     seeded = subprocess.run(['node', '--input-type=module', '-e', SEED, location.path, str(start)],
-                            cwd=hosts, capture_output=True, text=True, timeout=20)
-    assert seeded.returncode == 0, (
-        f'seeding failed; the durable host needs its locked packages: '
-        f'npm ci --ignore-scripts --omit=dev in {hosts}\n{seeded.stderr[-2000:]}')
+                            cwd=durable_host_packages, capture_output=True, text=True, timeout=20)
+    assert seeded.returncode == 0, seeded.stderr[-2000:]
     async def journey():
         backend = PiDurableBackend()
-        thread = thread_registration.new_thread('history', frozenset(), str(tmp_path), backend=PiDurableBackend,
+        thread = Thread('history', frozenset(), str(tmp_path), backend=PiDurableBackend,
                         session_file=RegistrySessionLocation.from_path(location.path, tmp_path))
         host = await backend.open(thread)
         try:

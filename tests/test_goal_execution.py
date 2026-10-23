@@ -28,12 +28,13 @@ from agent_comms.goal_presentation import (
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.turn_terminal import OwnerStop
+from agent_comms.threads import Thread
 
 
 @pytest.fixture
 def execution_bus(copied_goal_bus):
     comms = copied_goal_bus
-    comms.registry.declare(comms.registry.new_thread(
+    comms.registry.declare(Thread(
         "worker", frozenset(), str(comms.root.parent),
         process_identity=ProcessIdentity.capture(os.getpid()),
     ))

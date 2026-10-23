@@ -16,6 +16,7 @@ from agent_comms.child_process import BoundedRun
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.acp_extension import CoordinationChangedUpdate, decode_updates
 from pi_session_turn import one_turn_events
+from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize("arguments,code", [(('--help',), 0), (('tools',), 2), ((), 1)])
@@ -57,7 +58,7 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
         caller_project.mkdir()
         comms = wire(base / "wire")
         Bus.install(Bus.path_in(comms.root))
-        comms.registry.declare(comms.registry.new_thread('headless', frozenset(), str(project)))
+        comms.registry.declare(Thread('headless', frozenset(), str(project)))
         env = dict(
             os.environ,
             AGENT_COMMS_ROOT=str(comms.root),

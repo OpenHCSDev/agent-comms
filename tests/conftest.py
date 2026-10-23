@@ -7,6 +7,7 @@ import os
 import sqlite3
 import subprocess
 import sys
+import sysconfig
 import tempfile
 import uuid
 from collections.abc import Awaitable, Iterator
@@ -16,6 +17,8 @@ from pathlib import Path
 import pytest
 from xdist import is_xdist_worker
 
+# First: importing it removes the caller's repository from the environment before any git runs.
+import fixture_git  # noqa: F401
 import goal_owner_fixture
 from agent_comms.bus import Bus
 from agent_comms.bus_publication import AgentOrigin
@@ -27,12 +30,14 @@ from agent_comms.message_bus import MessageBus
 from agent_comms.messages import ConversationRole, InfoKind, Message
 from agent_comms.native_package import pinned_location, pinned_native_package
 from agent_comms.native_tool_transport import ToolListener
+from agent_comms.pi_durable_backend import PiDurableBackend
 from agent_comms.publisher import ParticipantPublisher, Publisher
 from agent_comms.registration import Registration
 from agent_comms.thread_text import ForkedParent, GivenThreadText
 from agent_comms.typed_table import TypedTable
 from source_programs import SourcePrograms
 from source_revision_fixture import SourceRepository
+from agent_comms.threads import Thread
 
 pytest_plugins = (goal_owner_fixture.__name__,)
 
@@ -137,20 +142,6 @@ def publish_initial(comms, sender, target, body, type=InfoKind, *, role=Conversa
         destination=CommandTarget.named(target), origin=AgentOrigin(),
     )
 
-def _without_caller_repository() -> None:
-    """A caller's git selects no repository for any test git call.
-
-    ``git bisect run`` from a linked worktree exports GIT_DIR, and a fixture's
-    ``git -C tmp init`` then re-initialised the caller's checkout as bare instead of
-    creating its own. Removed at import, before session start's own git call and before
-    xdist workers inherit the environment."""
-    for name in tuple(name for name in os.environ if name.startswith("GIT_")):
-        del os.environ[name]
-
-
-_without_caller_repository()
-
-
 def pytest_sessionstart(session):
     """The controller populates this checkout's pinned submodules before any worker runs,
     as every tree of ours is (Checkout). Collection loads declarations only."""
@@ -215,6 +206,41 @@ def pinned_native() -> Path:
     finally:
         os.close(held)
     return pinned_native_package()
+
+
+@pytest.fixture(scope="session")
+def durable_host_packages() -> Path:
+    """The locked packages the durable host imports from beside it, installed the first
+    time a test asks for them.
+
+    npm ci rewrites node_modules/.package-lock.json, so an unchanged lock costs nothing and
+    a newer lock reinstalls; workers asking together wait on the host directory's lock.
+    """
+    host = Path(sys.modules[PiDurableBackend.__module__].__file__).parent
+    installed = host / "node_modules/.package-lock.json"
+    locked = host / "package-lock.json"
+    held = os.open(host, os.O_RDONLY)
+    try:
+        fcntl.flock(held, fcntl.LOCK_EX)
+        if not installed.is_file() or installed.stat().st_mtime < locked.stat().st_mtime:
+            subprocess.run(
+                ["npm", "ci", "--ignore-scripts", "--omit=dev", "--no-audit", "--no-fund"],
+                cwd=host, check=True,
+            )
+    finally:
+        os.close(held)
+    return host
+
+
+@pytest.fixture
+def test_uv(monkeypatch: pytest.MonkeyPatch) -> Path:
+    """The uv the dev extra installs beside this interpreter, first on PATH, as a test
+    runtime home requires of its caller (practice.TestHome)."""
+    uv = Path(sysconfig.get_path("scripts")) / "uv"
+    if not uv.is_file():
+        raise FileNotFoundError(f"{uv} is missing: install the dev extra, which pins uv")
+    monkeypatch.setenv("PATH", f"{uv.parent}{os.pathsep}{os.environ['PATH']}")
+    return uv
 
 
 @pytest.fixture(scope="session")
@@ -389,8 +415,8 @@ def thread_registration(tmp_path_factory):
 def wired(comms: Comms) -> Comms:
     """A wire with PR111 (parent) and fixer (child) registered."""
     return declare_test_bus(comms, channels=("base", "auth"), threads=(
-        comms.registry.new_thread(name='PR111', tags=frozenset({'base'}), worktree='/tmp/wt1'),
-        comms.registry.new_thread(name='fixer', tags=frozenset({'auth'}), worktree='/tmp/wt1', parent=ForkedParent('PR111'), task=GivenThreadText('fix auth')),
+        Thread(name='PR111', tags=frozenset({'base'}), worktree='/tmp/wt1'),
+        Thread(name='fixer', tags=frozenset({'auth'}), worktree='/tmp/wt1', parent=ForkedParent('PR111'), task=GivenThreadText('fix auth')),
     ))
 
 

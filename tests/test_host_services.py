@@ -20,6 +20,7 @@ from agent_comms.installer.backup import StoreBackup
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.locked_store import DocumentChange
+from agent_comms.threads import Thread
 
 
 def test_site_notifies_only_after_successful_start(monkeypatch):
@@ -79,7 +80,7 @@ def test_a_private_home_does_not_discover_the_real_user_service(tmp_path, monkey
 def connector_service(comms, tmp_path, monkeypatch):
     """A real supervisor on a copied bus; only systemd's process control is replaced."""
     for name in ("claude-ai", "worker"):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(comms.root)))
+        comms.registry.declare(Thread(name, frozenset(), str(comms.root)))
     copied = tmp_path / "copied-bus"
     StoreBackup.copy_tree(comms.root, copied)
     home = tmp_path / "home"

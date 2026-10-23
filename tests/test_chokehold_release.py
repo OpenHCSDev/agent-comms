@@ -6,11 +6,12 @@ from agent_comms.commander.vibe_check import ChokeholdAnswer
 from agent_comms.goal_actions import ChokeholdPausedGoalAction, PausedGoalAction
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import invoke_tool
+from agent_comms.threads import Thread
 
 
 def _unit(comms, monkeypatch, name):
     monkeypatch.setenv("AGENT_COMMS_THREAD", name)
-    comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset(), worktree="/wt"))
+    comms.registry.declare(Thread(name=name, tags=frozenset(), worktree="/wt"))
     partial(invoke_tool, caller=ThreadCaller(name))(comms, "comms_set_goal", {"text": "work"})
 
 

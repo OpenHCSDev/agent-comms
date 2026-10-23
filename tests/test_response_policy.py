@@ -1,6 +1,7 @@
 from agent_comms.messages import ConversationRole, Message, InfoKind
 from agent_comms.response_policy import ResponseEligibility, ResponsePolicy
 from agent_comms.routing import ScheduledTurn
+from agent_comms.threads import Thread
 
 
 def test_golden_policy_names():
@@ -56,7 +57,7 @@ def test_autonomous_turns_keep_message_batches_and_delivery_keys_separate(tmp_pa
     assert ScheduledTurn.take_batch([first, second, goal]) == ([first, second], [goal])
     assert ScheduledTurn.take_batch([direct, direct]) == ([direct], [direct])
 
-    owner = thread_registration.new_thread("owner", frozenset(), str(tmp_path))
+    owner = Thread("owner", frozenset(), str(tmp_path))
     dispositions = InputDispositions(tmp_path)
     assert goal.origin.messages() == ()
     assert goal.origin.bus_keys(dispositions, owner) == ()

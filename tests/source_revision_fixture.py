@@ -9,6 +9,7 @@ from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.change_report import FileLine
 from agent_comms.todos import FixScope, FixShape, PullRequestLink
+from fixture_git import IDENTITY
 
 
 class SourceRepository(Repo):
@@ -37,9 +38,15 @@ class SourceRepository(Repo):
         return FixScope(FixShape(parents=(FileLine('owner.py', parent.lineno),), members=()))
 
     @staticmethod
+    def _run(checkout: Path | str, *args: str, timeout: float = 60,
+             input: bytes = b"") -> subprocess.CompletedProcess[bytes]:
+        """Repo's one git subprocess, every command carrying the fixture identity."""
+        return Repo._run(checkout, *IDENTITY, *args, timeout=timeout, input=input)
+
+    @staticmethod
     def git_input(repository: Path, text: str, *arguments: str) -> str:
         return subprocess.run(
-            ('git', '-C', str(repository), *arguments), input=text, text=True,
+            ('git', *IDENTITY, '-C', str(repository), *arguments), input=text, text=True,
             capture_output=True, check=True, timeout=30,
         ).stdout.strip()
 
@@ -58,9 +65,6 @@ class SourceRepository(Repo):
         repository.mkdir(parents=True)
         remote = cls.remote_for(root, name)
         cls.git(repository, 'init', '--initial-branch=main')
-        cls.git(repository, 'config', 'user.name', 'Citation fixture')
-        cls.git(repository, 'config', 'user.email', 'citation@example.invalid')
-        cls.git(repository, 'config', 'commit.gpgsign', 'false')
         cls.git(repository, 'remote', 'add', 'origin', str(remote))
         main_blob = cls.git_input(repository, cls.main_source,
                                   'hash-object', '-w', '--stdin')

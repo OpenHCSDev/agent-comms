@@ -61,7 +61,6 @@ from .thread_identity import ClaimedIdentity
 from .threads import Thread
 from .turn_context import TurnContext, UserFollowupSegment
 from .turn_input_source import AcceptedFollowingInput, OriginalTurnInput
-from .turn_terminal import EndedWithoutResult, TurnTerminal
 from .watched import ChangeSignal, FileSource
 
 if TYPE_CHECKING:
@@ -739,12 +738,12 @@ class InputDrain(InputObservation):
             if state.queued:
                 state.to_turn(SendNow(tuple(InputId(input_id) for input_id in state.queued)))
 
-    async def close(self, terminal: TurnTerminal = EndedWithoutResult()) -> None:
-        """Retire input producers with the shutdown's actual terminal cause."""
+    async def close(self) -> None:
+        """Retire input producers; their turns settle from the runner's owner stop."""
         self.closing = True
         tasks = tuple(task for state in self.drained.values() for task in state.producers())
         for task in tasks:
-            task.cancel(terminal)
+            task.cancel()
         try:
             await join_retirement(asyncio.gather(*tasks, return_exceptions=True))
         finally:

@@ -15,12 +15,13 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.tools import ToolRequest
 from agent_comms.tool_caller import ThreadCaller
+from agent_comms.threads import Thread
 
 
 def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, monkeypatch):
     comms = wire(tmp_path)
     Bus.install(Bus.path_in(comms.root))
-    comms.registry.declare(comms.registry.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
+    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Read fifty files"))
     comms.goals.update_goal(
         "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable
@@ -55,7 +56,7 @@ def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, m
 def test_model_cannot_pause(tmp_path, monkeypatch):
     comms = wire(tmp_path)
     Bus.install(Bus.path_in(comms.root))
-    comms.registry.declare(comms.registry.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
+    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Read fifty files"))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     with pytest.raises(ValueError):

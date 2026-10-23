@@ -47,6 +47,7 @@ requires-dist = [
     { name = "pytest-timeout", marker = "extra == 'dev'", specifier = ">=2.3" },
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.6" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.16.0" },
+    { name = "uv", marker = "extra == 'dev'", specifier = "==0.13.1" },
 ]
 provides-extras = ["dev"]
 
@@ -243,7 +244,7 @@ wheels = [
 [[package]]
 name = "batrachian-toad"
 version = "0.6.20"
-source = { git = "https://github.com/OpenHCSDev/toad.git?branch=main#336cf3ec3074496aac2c0b783d31719ac0da3801" }
+source = { git = "https://github.com/OpenHCSDev/toad.git?branch=main#58f0f8f0b47ead92ca1b94e152cf43739278d027" }
 dependencies = [
     { name = "agent-client-protocol" },
     { name = "agent-comms" },

@@ -11,6 +11,7 @@ from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.native_package import VerifiedNativePackage
+from agent_comms.threads import Thread
 
 
 async def test_fork_runs_selected_python_before_copying_saved_history(tmp_path, monkeypatch, pinned_native, *, thread_registration):
@@ -41,7 +42,7 @@ async def test_fork_runs_selected_python_before_copying_saved_history(tmp_path, 
     parent = create_fresh_private_session(tmp_path / "sessions", worktree=tmp_path)
     original = parent.path.read_bytes()
     copied = await PiNativeBackend.fork(
-        thread_registration.new_thread('parent', tags=frozenset(), worktree=str(tmp_path), session_file=RegistrySessionLocation.from_path(parent.session_file, comms.root)),
+        Thread('parent', tags=frozenset(), worktree=str(tmp_path), session_file=RegistrySessionLocation.from_path(parent.session_file, comms.root)),
         str(package.cli), LaunchRuntime(interpreter),
     )
     assert marker.read_text() == str(selected)

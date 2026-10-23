@@ -41,6 +41,7 @@ dev = [
     "black==26.5.1",
     "ruff==0.16.0",
     "mypy==2.3.0",
+    "uv==0.13.1",
 ]
 
 [project.urls]

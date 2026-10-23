@@ -25,13 +25,13 @@ from agent_comms.coordinator import Coordination
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.notification_progress import HumanReadProgress
 from agent_comms.pi_vocabulary import HighThinkingLevel
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.turn_context import TurnContext
 from bus_history import read_history
 from bus_record_fixture import prepare_native_comms
 from conftest import publish_initial
+from agent_comms.threads import Thread
 
 
 @pytest.fixture
@@ -53,12 +53,11 @@ def _root(
     (root / "runtime").mkdir(mode=0o700)
     comms = prepare_native_comms(wire(root))
     people = [
-        comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
-        comms.registry.new_thread('alpha', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), task=GivenThreadText('release notes; ignore arithmetic tasks'), model=DeclaredModel('openai-codex/gpt-6-sol')),
-        comms.registry.new_thread('beta', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), task=GivenThreadText('arithmetic answers'), model=DeclaredModel('openai-codex/gpt-6-sol'), thinking_level=HighThinkingLevel),
+        Thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
+        Thread('alpha', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), task=GivenThreadText('release notes; ignore arithmetic tasks'), model=DeclaredModel('openai-codex/gpt-6-sol')),
+        Thread('beta', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), task=GivenThreadText('arithmetic answers'), model=DeclaredModel('openai-codex/gpt-6-sol'), thinking_level=HighThinkingLevel),
     ]
-    for person in people:
-        comms.registry.declare(person)
+    people = [comms.registry.declare(person) for person in people]
     root_id = comms.registry.prepare_native_root().namespace
     target = "beta" if direct else "#team"
     body = body if body is not None else ("@beta Compute 17+25." if mentioned else "Compute 17+25.")
@@ -78,8 +77,8 @@ def _root(
 def test_wake_frame_rejects_no_wake_forgery_and_unengaged_full(tmp_path: Path) -> None:
     root, _root_id, comms, initial, people = _root(tmp_path, mentioned=True)
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        alpha_lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
-        beta_lookup = RecordedThreadIncarnation("fixture", people[2].created_at).lookup
+        alpha_lookup = people[1].incarnation.lookup
+        beta_lookup = people[2].incarnation.lookup
         assert sealed_cohort_assignments(store, alpha_lookup) == ()
         selected = sealed_cohort_assignments(store, beta_lookup)[0]
     # A pending FULL claim has no response obligation, and no frame may grant one.
@@ -94,7 +93,7 @@ def test_wake_frame_rejects_no_wake_forgery_and_unengaged_full(tmp_path: Path) -
 def test_triage_frame_is_read_only_and_does_not_promote_message_body(tmp_path: Path) -> None:
     root, _root_id, comms, initial, people = _root(tmp_path)
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
+        lookup = people[1].incarnation.lookup
         assignment = sealed_cohort_assignments(store, lookup)[0]
     frame = TurnContext.render_segments((SelectedWakeSegment.capture(((initial, assignment),), people[1], comms.goals),)).text
     assert f'"source_seq":{initial.message.seq}' in frame
@@ -114,7 +113,7 @@ def test_channel_wake_frame_carries_declared_goal_state(tmp_path: Path) -> None:
         progress="Routing fixed",
     )))
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
+        lookup = people[1].incarnation.lookup
         assignment = sealed_cohort_assignments(store, lookup)[0]
     frame = TurnContext.render_segments((SelectedWakeSegment.capture(
         ((initial, assignment),), comms.registry.require("alpha"), comms.goals,
@@ -135,7 +134,7 @@ def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> No
 
     root, _root_id, _comms, initial, people = _root(tmp_path)
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
+        lookup = people[1].incarnation.lookup
         assignment = sealed_cohort_assignments(store, lookup)[0]
     notification = MessageNotification(
         initial.audience.recipients[0], initial.audience.sender_lookup, HumanReadProgress(),

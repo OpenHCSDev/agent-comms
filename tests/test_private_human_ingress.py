@@ -35,6 +35,7 @@ from agent_comms.read_basis import NamedViewer
 from agent_comms.task_sources import TaskAttachment
 from agent_comms.thread_identity import RecordedThreadIncarnation, UserThreadRole
 from bus_record_fixture import prepare_native_comms
+from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(
     os.name != "posix", reason="private bus requires POSIX owner/directory durability"
@@ -80,7 +81,7 @@ def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
     comms.channels.create_tag("team")
     lookups: dict[str, str] = {}
     for name, created_at in (("alice", 17001.0), ("bob", 17002.0)):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(root), created_at=created_at))
+        comms.registry.declare(Thread(name, frozenset({'team'}), str(root), created_at=created_at))
         lookups[name] = RecordedThreadIncarnation("fixture", created_at).lookup
     store = Coordination(str(CoordinationStore.path_in(root)), clock_ms=lambda: 9999)
     PrivateCoordinatorTable.install(store)

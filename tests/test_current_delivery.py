@@ -11,13 +11,14 @@ from agent_comms.messages import InfoKind, Message
 from agent_comms.read_basis import ConversationCursor, NamedViewer, ReadCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import DeliveryScope
+from agent_comms.threads import Thread
 
 
 @pytest.fixture
 def routed(comms, tmp_path):
     comms.channels.create_tag("team")
     for name in ("sender", "recipient"):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset({"team"}), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
     return comms
 
 
@@ -41,7 +42,7 @@ def test_current_inbox_bulk_and_index_exclude_rebound_history(routed, rebound):
     original = comms.registry.require(rebound)
     comms.registry.unregister(rebound)
     comms.registry.remove(rebound)
-    comms.registry.declare(comms.registry.new_thread(
+    comms.registry.declare(Thread(
         rebound, original.tags, original.worktree,
     ))
     new = comms.messaging.send("sender", "recipient", "current input").message

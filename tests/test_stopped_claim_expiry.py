@@ -13,12 +13,13 @@ from agent_comms.coordination_session import NativeBoundary
 from agent_comms.envelope_claim_transitions import NativeClaim, WakeClaims
 from agent_comms.messages import ClaimNoticeKind
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
+from agent_comms.threads import Thread
 
 
 def test_stopped_incarnation_claims_expire_on_next_transition(comms, tmp_path):
     Bus.install(Bus.path_in(comms.root))
     for name in ("old", "next"):
-        thread = comms.registry.new_thread(name, frozenset(), str(tmp_path))
+        thread = Thread(name, frozenset(), str(tmp_path))
         comms.registry.declare(
             replace(thread, process_identity=ProcessIdentity.capture(os.getpid())),
             RunningThreadStatus(),

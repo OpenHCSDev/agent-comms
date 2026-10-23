@@ -30,6 +30,7 @@ from agent_comms.registration import Registration
 from agent_comms.revision_views import BusSourceView, StoresView
 from agent_comms.transcripts import NativeTranscriptCursor, TranscriptCursor
 from agent_comms.typed_table import RowNotFoundError
+from agent_comms.threads import Thread
 
 
 def channel_bus(root):
@@ -77,7 +78,7 @@ def test_scoped_page_rows_and_edges_share_the_admitted_cut(tmp_path, traversal):
 def test_archived_database_pages_read_only(tmp_path):
     live = channel_bus(tmp_path / "live")
     registry = Registration(RegistryFile.path_in(live.bus.path.parent))
-    registry.declare(registry.new_thread("author", frozenset({"history"}), str(tmp_path)))
+    registry.declare(Thread("author", frozenset({"history"}), str(tmp_path)))
     source = HistoryArchive(Bus.path_in(tmp_path / "reader")).attach(live.bus.path.parent)
     archive = Path(source.root)
     archived = MessageBus(archive, Registration(RegistryFile.path_in(archive)), Publisher)

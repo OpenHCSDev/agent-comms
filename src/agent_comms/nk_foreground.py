@@ -36,6 +36,7 @@ from agent_comms.native_session_files import NativeSessionFiles
 from .native_package import VerifiedNativePackage
 from .selected_result import CoordinatedTurn
 from .thread_text import GivenThreadText
+from .threads import Thread
 
 _MAX_GO_WAIT_SECONDS = 120
 _GO = re.compile(r"GO (0|[1-9][0-9]{0,17})\Z")
@@ -99,7 +100,7 @@ def reserve_foreground_owner(
     worktree = root / "work"
     NativeSessionFiles.require_private_directory(worktree)
     comms = wire(root)
-    owner = comms.registry.new_thread(
+    owner = Thread(
         name, tags, str(worktree), process_identity=ProcessIdentity.capture(os.getpid()), task=GivenThreadText(task),
     )
     # Foreground attempts must reserve a fresh name, never replace an owner
