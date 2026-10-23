@@ -92,6 +92,9 @@ include = [
 [tool.hatch.version]
 path = "src/agent_comms/__init__.py"
 
+[tool.uv]
+cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true } }]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = [".", "src", "tools"]

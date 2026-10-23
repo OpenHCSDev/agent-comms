@@ -91,8 +91,12 @@ class InstalledPackagesProbe(RuntimeProbe[dict[str, PackageRecord]]):
 
         if not Path(agent_comms.__file__).resolve().is_relative_to(Path(sys.prefix).resolve()):
             raise ValueError("Core is editable, not a built runtime package")
-        if STAMP.commit() != self.core:
-            raise ValueError("The wheel stamp does not name the selected source")
+        actual = STAMP.commit()
+        if actual != self.core:
+            raise ValueError(
+                "The wheel stamp does not name the selected source: "
+                f"installed {actual}, requested {self.core}"
+            )
         return {canonicalize_name(dist.metadata["Name"]): PackageRecord(
             version=dist.version,
             source=json.loads(source) if (source := dist.read_text("direct_url.json")) else None,
