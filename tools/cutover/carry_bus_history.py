@@ -970,7 +970,7 @@ class BusHistory(Carry, BusFile):
                 self.root,
                 *(Path(source.root) for source in HistoryArchive(Bus.path_in(self.root)).sources()),
             )
-            stage = Path(tempfile.mkdtemp(prefix=f"{self.name()}-", dir=spill))
+            stage = Path(tempfile.mkdtemp(prefix=f"{self.declared_name}-", dir=spill))
             rewritten = tuple(
                 name
                 for directory in roots

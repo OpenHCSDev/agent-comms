@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import inspect
 import subprocess
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from graphlib import TopologicalSorter
@@ -42,33 +42,19 @@ class Carried:
 
 
 @dataclass(frozen=True)
-class Carry(ABC):
+class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
     """One migration's decoded source, destination and retirement location."""
 
     root: Annotated[Path, PathText]
     original_root: Annotated[Path, PathText]
     spill_dir: Annotated[Path, PathText]
 
-    declared: ClassVar[dict[str, type[Carry]]] = {}
     precedes: ClassVar[tuple[type[Carry], ...]] = ()
     """Steps whose decoders require this step's output, regardless of addition date."""
-    """Every step imported so far, by its module name."""
-
-    def __init_subclass__(cls, **kwargs: object) -> None:
-        super().__init_subclass__(**kwargs)
-        if inspect.isabstract(cls):
-            return
-        if cls.name() in Carry.declared and Carry.declared[cls.name()] is not cls:
-            raise TypeError(f"{cls.name()} declares a second carry step")
-        Carry.declared[cls.name()] = cls
 
     @classmethod
     def module(cls) -> Path:
         return Path(inspect.getfile(cls)).resolve()
-
-    @classmethod
-    def name(cls) -> str:
-        return cls.module().stem
 
     @abstractmethod
     def backup_files(self) -> tuple[Annotated[Path, PathText], ...]:
@@ -124,19 +110,21 @@ class CarryChain:
     def at(cls, tree: Path) -> CarryChain:
         """Import the tree's steps (its ``tools`` is on the path) and order them by the
         first-parent commit that added each file."""
-        directory = (tree / STEPS).resolve()
+        tree = tree.resolve()
+        directory = tree / STEPS
         for path in sorted(directory.glob("*.py")):
             import_module(f"{directory.name}.{path.stem}")
-        steps = [step for step in Carry.declared.values() if step.module().parent == directory]
+        steps = [step for step in Carry.members_with(Carry) if step.module().parent == directory]
         log = subprocess.check_output(
             ["git", "-C", str(tree), "log", "-m", "--first-parent", "--no-renames",
              "--diff-filter=A", "--reverse", "--name-only", "--format=", "HEAD", "--",
              str(STEPS)]).decode().split()
-        added = {Path(path).stem: position for position, path in reversed(list(enumerate(log)))}
-        unordered = sorted(step.name() for step in steps if step.name() not in added)
+        added = {Path(path): position for position, path in reversed(list(enumerate(log)))}
+        unordered = sorted(step.declared_name for step in steps
+                           if step.module().relative_to(tree) not in added)
         if unordered:
             raise ValueError(f"{unordered} are not on the main line, so nothing orders them")
-        ordered = sorted(steps, key=lambda step: added[step.name()])
+        ordered = sorted(steps, key=lambda step: added[step.module().relative_to(tree)])
         dependencies: dict[type[Carry], set[type[Carry]]] = {step: set() for step in ordered}
         for step in ordered:
             for later in step.precedes:

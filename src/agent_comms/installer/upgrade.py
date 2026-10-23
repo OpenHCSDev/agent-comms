@@ -250,7 +250,7 @@ class CarriedPass(Extendable):
     def after_acceptance(self, pending: tuple[Carry, ...], stack: Stack,
                          tree: TargetTree) -> Self:
         return replace(self, retired_inputs=tuple(
-            StepRun(step.name(), stack.call_step(step, tree, RetireInputsOperation()))
+            StepRun(step.declared_name, stack.call_step(step, tree, RetireInputsOperation()))
             for step in pending
         ))
 
@@ -564,7 +564,7 @@ class Stack:
         """Run the step in the target tree with this stack's interpreter."""
         with tempfile.TemporaryDirectory() as scratch:
             result = Path(scratch) / "result.json"
-            self.commands.run(self.python, "-m", step_worker.__name__, step.name(),
+            self.commands.run(self.python, "-m", step_worker.__name__, step.declared_name,
                               json.dumps(FieldCodec.encode(step)),
                               json.dumps(FieldCodec.encode(operation)), result, cwd=tree.path,
                               env=self.environment(*tree.source_paths()))
@@ -763,7 +763,7 @@ class Install[Rehearsed: Rehearsal](ABC):
     def reported(self, rehearsal: Rehearsed) -> RehearsedUpgrade:
         return RehearsedUpgrade(
             self.current, self.target, self.root,
-            tuple(step.name() for step in self.pending), rehearsal,
+            tuple(step.declared_name for step in self.pending), rehearsal,
             commands=tuple(self.staged.commands.ran))
 
     def finished(self, rehearsal: Rehearsed, bridges: SessionBridgeResumes,
@@ -861,7 +861,7 @@ class PreparedMigration(Extendable):
         """One migration sequence for rehearsal and the backed-up live bus."""
         steps = []
         for step in pending:
-            steps.append(StepRun(step.name(), staged.call_step(
+            steps.append(StepRun(step.declared_name, staged.call_step(
                 step, tree, MigrateOperation(apply=True))))
         reconciled = staged.cli(self.root, ReconcileStoresCliCommand)
         steps.append(StepRun(ReconcileStoresCliCommand.declared_name, Carried(
