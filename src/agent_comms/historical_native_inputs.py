@@ -19,7 +19,7 @@ from agent_comms.coordinator import Coordination
 from .cohort_schema import CohortTable
 from agent_comms.native_runtime_input import NativeRuntimeTable
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, Id128Text, WireName
+from .field_codec import WireName
 from .native_input_record import (
     FullNativeExecution,
     NativeInputExecution,
@@ -116,9 +116,6 @@ def read_historical_native_inputs(
     requires a just-settled input in the owner's current input generation.
     """
     with source_reads.borrow():
-        Id128Text.decode(wire_root_id)
-        Id128Text.decode(recipient_lookup)
-        FieldCodec.decode(int, source_seq)
         if source_seq <= 0:
             raise ValueError("historical input requires a positive source sequence")
         if store.session._connection.in_transaction:

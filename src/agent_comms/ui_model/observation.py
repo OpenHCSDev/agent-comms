@@ -146,7 +146,14 @@ class LiveObservationInterest(ObservationInterest):
 
     async def observe(self, service: ObservationService, revision: WireRevision,
                       attempted: set[int]) -> None:
-        for kind, observation in tuple(self.observations.items()):
+        observations = tuple(self.observations.items())
+        for kind, observation in observations:
+            await service.answer_pending(attempted)
+            if self.observations.get(kind) is not observation:
+                continue
+            observation.retire_step(service, revision)
+            await service.answer_pending(attempted)
+        for kind, observation in observations:
             await service.answer_pending(attempted)
             if self.observations.get(kind) is not observation:
                 continue
@@ -176,11 +183,10 @@ class ObservationPending(ObservationStep):
 
 
 class Observation[InterestT: InterestRequest](ObservationLifetime):
-    """A requested view owns its read state and yields between store operations."""
+    """Retire a revision's vanished sources before presenting its observations."""
 
     def __init__(self, request: InterestT):
         self.request = request
-        self.steps: Generator[ObservationStep] = (_ for _ in ())
 
     def for_interest(self, requested: Observation) -> Observation:
         if self.request == requested.request:
@@ -191,6 +197,20 @@ class Observation[InterestT: InterestRequest](ObservationLifetime):
     def continue_from(self, previous: Self) -> Self:
         """A changed interest starts fresh unless its reader can retain useful answers."""
         return self
+
+    def retire_step(self, service: ObservationService, revision: WireRevision) -> None:
+        """Most observations do not retire views."""
+
+    def step(self, service: ObservationService, revision: WireRevision) -> None:
+        """Retirement-only observations have no presentation work."""
+
+
+class ReadingObservation[InterestT: InterestRequest](Observation[InterestT]):
+    """A requested reader yields between store operations in the presentation phase."""
+
+    def __init__(self, request: InterestT):
+        super().__init__(request)
+        self.steps: Generator[ObservationStep] = (_ for _ in ())
 
     def close(self) -> None:
         self.steps.close()
@@ -666,7 +686,7 @@ class RosterSidebarRead(SidebarReadStage):
             reading.sent = NoSidebarSent()
 
 
-class SidebarReading(Observation[ObserveSidebar]):
+class SidebarReading(ReadingObservation[ObserveSidebar]):
     def __init__(self, request: ObserveSidebar):
         super().__init__(request)
         self.stage: SidebarReadStage = RosterSidebarRead()
@@ -760,7 +780,7 @@ class ObserveNotifications(InterestRequest):
         return NotificationReading(self)
 
 
-class NotificationReading(Observation[ObserveNotifications]):
+class NotificationReading(ReadingObservation[ObserveNotifications]):
     def __init__(self, request: ObserveNotifications):
         super().__init__(request)
         self.read_states: dict[ReadNotifications, NotificationsRead] = {}
@@ -799,7 +819,7 @@ class LocatedThreads:
     reads: Mapping[str, Callable[[], ThreadPresentation]]
 
 
-class ThreadReading(Observation[ObserveThreads]):
+class ThreadReading(ReadingObservation[ObserveThreads]):
     def __init__(self, request: ObserveThreads):
         super().__init__(request)
         self.observed = ThreadsObserved(WireRevision.empty(), {}, frozenset(), {})
@@ -869,13 +889,13 @@ class ViewReading(Observation[ObserveViews]):
         super().__init__(request)
         self.revision: ReadState = NoRevision()
 
-    def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
+    def retire_step(self, service: ObservationService, revision: WireRevision) -> None:
         if not self.revision.changed_since(RegistrationsView(), revision):
             return
-        retired = comms.views.retired_views(self.request.threads, self.request.channels)
+        retired = service.comms.views.retired_views(self.request.threads, self.request.channels)
         self.revision = revision
         if retired.threads or retired.channels:
-            yield ViewsRetired(revision, retired)
+            ViewsRetired(revision, retired).publish(service)
 
 
 class ServiceResult(ABC):

@@ -28,15 +28,15 @@ def test_coding_socket_record_keeps_object_arguments_and_strict_fields():
         FieldCodec.decode(CodingToolRequest, {**payload, 'unexpected': True})
 
 
-def test_delivery_uses_declared_overview_and_preserves_current_toad_rows():
+def test_delivery_uses_declared_overview_and_preserves_typed_rows():
     current = UnresolvedInput(4, 'worker', 'retained input', 'input-1', 'unknown')
     historical = HistoricalInput(3, 'worker', 'earlier input', 'input-0', 'unknown',
                                  notice_dismissed=True)
     overview = DeliveryOverview((current,), 1, 2, (historical,), OwnerQueueInputDeliveryScope)
     wire = FieldCodec.encode(overview)
     delivery = InputDelivery.from_wire(wire)
-    assert delivery.inputs == (FieldCodec.encode(current),)
-    assert delivery.historical_inputs == (FieldCodec.encode(historical),)
+    assert delivery.inputs == (current,)
+    assert delivery.historical_inputs == (historical,)
     assert (delivery.historical_count, delivery.dismissed_historical_count) == (1, 2)
     assert delivery.owner_queue and delivery.pending == 'awaiting start'
     assert InputDelivery.from_wire(FieldCodec.encode(

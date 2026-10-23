@@ -133,7 +133,7 @@ class QueuedInput:
             text or prompt or "[image prompt]",
             echo,
             context,
-            Id128Text.mint() if input_id is None else Id128Text.decode(input_id),
+            Id128Text.mint() if input_id is None else input_id,
             prompt,
             images,
             controller,

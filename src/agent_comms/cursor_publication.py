@@ -24,7 +24,6 @@ from .acp_extension import (
 )
 from .agent_backend import InputId
 from .comms import Comms
-from .coordination_errors import ParticipantNotRegistered
 from .coordinator import Coordination
 from .cursor_owner import CommittedCursorOwner, CursorOwner, CursorState
 from .diagnostics import PublicationMeasurements
@@ -150,9 +149,6 @@ class CursorPublication:
             current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
             if defer_busy and current == scope:
                 raise
-            return CursorEnvelope(current, revision, UnavailableCursorObservation())
-        except ParticipantNotRegistered:
-            current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
             return CursorEnvelope(current, revision, UnavailableCursorObservation())
         current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
         if current != scope:

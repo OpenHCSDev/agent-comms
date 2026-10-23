@@ -888,7 +888,6 @@ def read_tracked_input_commitment(
 
     An unreadable or malformed journal is not an uncommitted input and raises.
     """
-    Id128Text.decode(input_id)
     session_file = Path(session_file).absolute()
     from .native_entries import NativeEvidenceRead
 

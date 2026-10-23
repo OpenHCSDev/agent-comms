@@ -20,6 +20,7 @@ from .goal_actions import (
     GoalPrecondition,
     RuntimeInvocable,
     SentBackOrderGoalAction,
+    SetGoalAction,
 )
 from .goal_attempts import Generation, GoalAttemptStore
 from .errors import UnresolvedAttemptError
@@ -52,7 +53,7 @@ from .goal_presentation import (
     GoalWaitTarget,
     IdleGoalExecution,
 )
-from .goals import GoalDeclaration
+from .goals import Goal, GoalDeclaration
 from .input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
     InputDeliveryScope,
@@ -76,6 +77,12 @@ class Goals:
         self.agents = agents
         self.waits = GoalWaits.at(root)
         self.goal_store: GoalAttemptStore | None = None
+
+    def fork_goal(self, parent: Thread, child: Thread) -> Goal:
+        """Create a commander's child goal from its parent's active work."""
+        text = ('\n'.join(goal.text for goal in parent.goal.active())
+                or f'Coordinate assigned work for {parent.name}.')
+        return SetGoalAction(text=text).create(GoalActionContext(self, child))
 
     @cached_property
     def todos(self) -> TodoStore:
