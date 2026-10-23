@@ -27,6 +27,7 @@ from agent_comms.installer.interpreter_operation import (
 )
 from agent_comms.launch_runtime import RestoredRuntime
 from agent_comms.maintenance_barrier import MaintenanceHolder
+from agent_comms.repo import Repo
 
 
 @dataclass(frozen=True)
@@ -158,6 +159,11 @@ class InstallCommands:
             raise UpgradeRefused(f"{command[0]} failed: {completed.stdout.strip()}\n"
                                  f"{completed.stderr.strip()}")
         return completed.stdout
+
+    def git(self, checkout: Path, *args: str) -> str:
+        """Git through the one runner (``Repo.git``), timed like every install command."""
+        with self.timing(f"git -C {checkout} {' '.join(args)}"):
+            return Repo.git(checkout, *args)
 
     @contextmanager
     def exchange(self, encoded: str) -> Iterator[tuple[Path, Path]]:

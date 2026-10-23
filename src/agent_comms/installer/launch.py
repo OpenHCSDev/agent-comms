@@ -126,8 +126,8 @@ class InstallRun:
     def start(cls, command: InstallCliCommand, root: Path) -> InstallRun:
         checkout = command.checkout
         with InstallCommands() as commands:
-            commands.run("git", "-C", checkout, "fetch", "-q", "origin")
-            target = commands.run("git", "-C", checkout, "rev-parse", "--verify",
+            commands.git(checkout, "fetch", "-q", "origin")
+            target = commands.git(checkout, "rev-parse", "--verify",
                                   f"{command.to}^{{commit}}").strip()
         parent = command.installer.scratch(StorageRule.load(root))
         parent.mkdir(mode=0o700, parents=True, exist_ok=True)
