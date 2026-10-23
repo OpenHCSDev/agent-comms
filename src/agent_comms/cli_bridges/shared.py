@@ -1,7 +1,6 @@
 """Shared Core inbox delivery and process lifetime for external CLI adapters."""
 from __future__ import annotations
 
-from agent_comms.wire_models import WireAdapter
 
 import argparse
 import asyncio
@@ -25,8 +24,9 @@ from pathlib import Path
 from typing import Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar
 
 from acp.schema import SessionConfigSelectOption
-from pydantic import Field, TypeAdapter, model_validator
+from pydantic import Field, model_validator
 
+from agent_comms.wire_models import WireAdapter
 from agent_comms import field_codec, messages
 from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesTranscript
 from agent_comms.change_report import NoChangeReport, ReportEvidence

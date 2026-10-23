@@ -6,6 +6,7 @@ from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, TypeAdapter
 from pydantic._internal._model_construction import ModelMetaclass
+from typing_extensions import TypeForm
 
 from .declared_family import DeclaredFamily
 
@@ -33,6 +34,6 @@ class DeclaredWireFamily(DeclaredFamily, BaseModel, metaclass=_WireFamilyMeta):
 class WireAdapter[Value](TypeAdapter[Value]):
     """A wire boundary owns its compiled adapter from its first validation onward."""
 
-    def __init__(self, declaration: object) -> None:
+    def __init__(self, declaration: TypeForm[Value]) -> None:
         # Account for this constructor when Pydantic captures the declaring namespace.
         super().__init__(declaration, config=ConfigDict(defer_build=True), _parent_depth=3)

@@ -1,8 +1,6 @@
 """Declared JSON boundaries shared by Core's CLI and external CLI adapters."""
 from __future__ import annotations
 
-from agent_comms.wire_models import WireAdapter, WireModel
-
 import asyncio
 import builtins
 from abc import ABC, abstractmethod
@@ -14,9 +12,9 @@ from typing import TYPE_CHECKING, Annotated, AsyncIterator, ClassVar, NoReturn, 
 from pydantic import Discriminator, InstanceOf, PlainSerializer, PlainValidator, Tag, computed_field, field_validator, model_validator
 from typing_extensions import TypeForm
 
+from agent_comms import wire_models
 from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily, UnknownFamilyMember
-from agent_comms.wire_models import DeclaredWireFamily
 from .maintenance_barrier import MaintenanceHeldError
 from .messages import Message
 from .field_codec import TimestampText
@@ -35,7 +33,7 @@ async def raise_child_exit(child: AttachedChild, reason: str) -> NoReturn:
     raise ChildProcessError(f'Core watch ended, exit {child.returncode}\n{reason}\n{tail}')
 
 
-class TimestampedWire(WireModel):
+class TimestampedWire(wire_models.WireModel):
     """A source record's original ISO timestamp, decoded before making any events."""
 
     timestamp: float
@@ -53,7 +51,7 @@ class TimestampedWire(WireModel):
         return TimestampText.from_text(value).at.timestamp()
 
 
-class WireHeader(WireModel):
+class WireHeader(wire_models.WireModel):
     type: str
 
 
@@ -62,7 +60,7 @@ class TextWire:
 
 
 
-class TaggedWire(DeclaredWireFamily, WireModel, ABC, affix="", declared_name=None):
+class TaggedWire(wire_models.DeclaredWireFamily, wire_models.WireModel, ABC, affix="", declared_name=None):
     """A JSON type tag supplied by its declared class, not caller policy."""
     header: ClassVar[builtins.type[WireHeader]] = WireHeader
 
@@ -221,4 +219,4 @@ class EarlierItems(WatchLine, TurnItem, declared_name='earlier-items'):
         await bridge.earlier(self)
 
 
-WATCH_LINE = WireAdapter(WatchLine.declared_union())
+WATCH_LINE = wire_models.WireAdapter(WatchLine.declared_union())

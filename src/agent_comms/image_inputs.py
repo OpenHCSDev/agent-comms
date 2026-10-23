@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from agent_comms.wire_models import WireAdapter
 
 import base64
 import binascii
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Annotated, Literal
+from agent_comms.wire_models import WireAdapter
 from agent_comms import field_codec
 from acp.schema import (
     BlobResourceContents,

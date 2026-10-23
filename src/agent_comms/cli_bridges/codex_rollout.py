@@ -5,7 +5,6 @@ decoders produce the same transcript updates.
 """
 from __future__ import annotations
 
-from agent_comms.wire_models import WireAdapter
 
 import hashlib
 import json
@@ -14,10 +13,10 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import BinaryIO, ClassVar
 
-from pydantic import Field, JsonValue, TypeAdapter, field_validator, model_validator
+from pydantic import Field, JsonValue, field_validator, model_validator
 
+from agent_comms.wire_models import WireAdapter, WireModel
 from agent_comms.cli_protocol import OpenWire, TimestampedWire, WireHeader
-from agent_comms.wire_models import WireModel
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import AssistantTranscript, ToolEndTranscript, ToolStartTranscript, UserTranscript
 from agent_comms.turn_context import CodexRolloutProvenance

@@ -9,8 +9,8 @@ from functools import cached_property
 from pathlib import Path
 from typing import AsyncIterator, BinaryIO, Self
 
-from agent_comms.bus import Bus
 from agent_comms.wire_models import WireModel
+from agent_comms.bus import Bus
 from agent_comms.private_path import FileRevision
 from agent_comms.watched import FileSource
 from agent_comms_hooks.session import SessionHook

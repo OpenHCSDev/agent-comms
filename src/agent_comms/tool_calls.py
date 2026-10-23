@@ -15,9 +15,8 @@ from typing import ClassVar
 
 from pydantic import AliasChoices, Field, JsonValue, ValidationError
 
-from agent_comms.wire_models import WireModel
+from agent_comms.wire_models import DeclaredWireFamily, WireModel
 from .declared_family import UniqueExternalSelector
-from agent_comms.wire_models import DeclaredWireFamily
 from .field_codec import FieldCodec, MalformedRecord
 from .native_tools import BashTool, EditTool, GlobTool, GrepTool, ReadTool, WriteTool
 from .tool_declaration import ReplacementEdit, ToolDeclaration

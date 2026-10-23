@@ -16,10 +16,9 @@ from pydantic import (
     ValidateAs,
 )
 
+from agent_comms.wire_models import DeclaredWireFamily, WireModel
 from agent_comms.cli_protocol import TaggedWire, TextWire
-from agent_comms.wire_models import WireModel
 from agent_comms.declared_family import UnknownFamilyMember
-from agent_comms.wire_models import DeclaredWireFamily
 from agent_comms.external_transcript import EarlierPage, NoEarlierPage
 from agent_comms.native_tools import FilePatchTool
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime

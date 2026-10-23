@@ -1,19 +1,17 @@
 """OpenCode's session events drive both input confirmation and live output."""
 from __future__ import annotations
 
-from agent_comms.wire_models import WireAdapter
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
 from itertools import takewhile
 from typing import TYPE_CHECKING, ClassVar, Literal
 
-from pydantic import Field, JsonValue, TypeAdapter
+from pydantic import Field, JsonValue
 
+from agent_comms.wire_models import DeclaredWireFamily, WireAdapter, WireModel
 from agent_comms.cli_protocol import TaggedWire
-from agent_comms.wire_models import WireModel
 from agent_comms.declared_family import UnknownFamilyMember
-from agent_comms.wire_models import DeclaredWireFamily
 from agent_comms.runtime_updates import (
     AllTurnsEnded,
     AppendDraftItem,
