@@ -70,7 +70,7 @@ async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path,
         # The current launch derives its immutable package from the installation;
         # the removed mutable-package override is not a supported input.
         assert owner.process_alive
-        assert isinstance(comms.owners.releases.get("worker"), NoRelease)
+        assert isinstance(comms.owners.releases.read_many(("worker",))["worker"], NoRelease)
         restarted = await Coordination.run_worker(partial(
             comms.owners.restart_owners, OwnersNamed(("worker",)),
             agent_bin=GivenBinary("pi"), agent_args=GivenArguments(()),

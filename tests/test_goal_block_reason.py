@@ -19,7 +19,7 @@ from agent_comms.goal_actions import (
 from agent_comms.goal_states import UnrecordedBlockGoal
 from agent_comms.goal_presentation import PausedExecution, UnrecordedBlockExecution
 from agent_comms.goals import Goal
-from agent_comms.tools import ToolRequest
+from agent_comms.tool_request import ToolRequest
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.threads import Thread
 

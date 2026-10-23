@@ -199,7 +199,7 @@ def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
     snapshot = comms.registry.snapshot()
     assert snapshot.statuses[declared.name].stopped
     assert snapshot.threads[declared.name].process_identity == NoProcess()
-    assert comms.owners.releases.get(declared.name).current(snapshot, declared, generation)
+    assert comms.owners.releases.read_many((declared.name,))[declared.name].current(snapshot, declared, generation)
 
     waiting = comms.registry.declare(Thread('waiting', frozenset(), str(tmp_path)))
     before = comms.registry.snapshot().claim_generation(waiting.name)
@@ -219,7 +219,7 @@ def test_stop_of_crashed_owner_records_exact_release(releasing_owner):
     assert not original.process_alive
     comms.owners.stop("worker")
     snapshot = comms.registry.snapshot()
-    acknowledgement = comms.owners.releases.get("worker")
+    acknowledgement = comms.owners.releases.read_many(("worker",))["worker"]
     assert acknowledgement.current(snapshot, original, acknowledgement.before)
     assert snapshot.statuses["worker"].stopped
 
@@ -245,7 +245,7 @@ def test_released_process_must_exit_before_replacement(releasing_owner, mode):
     assert (comms.root / "released").exists()
     assert not child.alive()
     assert child.reap() == SignaledOutcome(signal.SIGKILL)
-    acknowledgement = comms.owners.releases.get("worker")
+    acknowledgement = comms.owners.releases.read_many(("worker",))["worker"]
     assert acknowledgement.process_identity == original.process_identity
     assert acknowledgement.after > acknowledgement.before
 

@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from .comms import Comms
     from .registration import Registration
     from .threads import Thread
-    from .tools import ToolRequest
+    from .tool_request import ToolRequest
 
 
 @dataclass(frozen=True)

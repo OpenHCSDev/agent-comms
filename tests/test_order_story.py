@@ -17,9 +17,7 @@ from agent_comms.todos import (
     StrikeTodo, TodoConflict, TodoError, UnorderedProblemOrder, WithdrawTodo,
 )
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
-from agent_comms.tools import (
-    CommsChangeProblemTool, CommsFleetStoryTool, CommsOrderStoryTool, CommsTodoCreateTool, CommsOrderTool, CommsVerdictTool,
-)
+from agent_comms.order_tools import CommsChangeProblemTool, CommsFleetStoryTool, CommsOrderStoryTool, CommsTodoCreateTool, CommsOrderTool, CommsVerdictTool
 from agent_comms.installer.backup import StoreBackup
 from test_todos import order
 from source_revision_fixture import SourceRepository

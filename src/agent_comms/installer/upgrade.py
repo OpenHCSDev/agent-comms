@@ -29,7 +29,6 @@ import time
 import tomllib
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
-from concurrent.futures import ThreadPoolExecutor
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
@@ -51,6 +50,7 @@ from agent_comms.cli_commands import (
     StartCliCommand,
     StopCliCommand,
     TargetActionCliCommand,
+    TargetBatchResult,
 )
 from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.cli_protocol import CoreError
@@ -96,6 +96,7 @@ from agent_comms.installer.reporting import (
 )
 from agent_comms.installer.runtime_resolution import RuntimeResolution, StackProject
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
+from agent_comms.lifecycle_capability import Successful
 from agent_comms.locked_store import BusFile, DeclaredFile, UndeclaredFile
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
@@ -593,30 +594,27 @@ class Stack:
         """Use the restart request's receiving declaration in the selected runtime."""
         return self.probe(RunningOwnersProbe(root))
 
-    def stop_owners(self, root: Path, names: list[str]) -> None:
-        """One target batch owns the signal pass and grace period for every owner."""
+    def owners(self, root: Path, command: type[CliCommand], names: list[str]) -> TargetBatchResult:
+        """Run the whole owner selection through the operation's existing CLI batch."""
         if not names:
-            return
-        with OwnersPhase(command=StopCliCommand).running(self.commands.clock):
+            return TargetBatchResult(())
+        with OwnersPhase(command=command).running(self.commands.clock):
             invocation = TargetActionCliCommand.invocation(
-                "--operation", StopCliCommand.declared_name, "--targets", *names)
+                "--operation", command.declared_name, "--targets", *names)
             completed = self.probe(CliCommandProbe(("--root", str(root), *invocation)))
-            if completed.returncode:
-                raise UpgradeRefused(
-                    f"agent-comms {' '.join(invocation)}: {completed.stdout.strip()}")
-
-    def start_owner(self, root: Path, name: str) -> OwnerStart:
-        try:
-            self.cli(root, StartCliCommand, "--name", name)
-        except UpgradeRefused as error:
-            return RefusedOwner(name, str(error))
-        return StartedOwner(name)
+            return FieldCodec.decode(TargetBatchResult, FieldCodec.parse(completed.stdout))
 
     def start(self, root: Path, names: list[str]) -> tuple[OwnerStart, ...]:
-        """Start the captured owner set together; each owner's outcome is its own."""
-        with (OwnersPhase(command=StartCliCommand).running(self.commands.clock),
-              ThreadPoolExecutor(max_workers=max(1, len(names))) as pool):
-            return tuple(pool.map(lambda name: self.start_owner(root, name), names))
+        """One start batch; keep each refusal in the installed or rollback report."""
+        started: list[OwnerStart] = []
+        for outcome in self.owners(root, StartCliCommand, names).outcomes:
+            try:
+                outcome.require(Successful, UpgradeRefused(str(outcome)))
+            except UpgradeRefused as error:
+                started.append(RefusedOwner(outcome.target, str(error)))
+            else:
+                started.append(StartedOwner(outcome.target))
+        return tuple(started)
 
     def start_services(self, stopped: tuple[HostService, ...]) -> tuple[RestartedService, ...]:
         with ServicesPhase("start").running(self.commands.clock):
@@ -996,7 +994,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
             holder.enter_context(held.holding())  # this run's own CLI calls read under its hold
         try:
             try:
-                self.installed.stop_owners(self.root, running)
+                self.installed.owners(self.root, StopCliCommand, running).require_success(UpgradeRefused)
                 with MaintenancePhase("retarget").running(self.staged.commands.clock):
                     held = maintenance.retarget(held, self.staged.runtime)
                     holder.close()
@@ -1153,7 +1151,7 @@ class RetiringInstall(FreshInstall):
 
     def live(self, rehearsal: FreshRehearsal, report: InstallReport) -> RetiredRun:
         running = self.installed.running_owners(self.root)
-        self.installed.stop_owners(self.root, running)
+        self.installed.owners(self.root, StopCliCommand, running).require_success(UpgradeRefused)
         retired = self.root.with_name(f"{self.root.name}.retired-{time.strftime('%Y%m%dT%H%M%S')}")
         self.root.rename(retired)
         return super().live(rehearsal, report).extended(

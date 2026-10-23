@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import shlex
 from contextlib import redirect_stdout
 from dataclasses import dataclass
 from io import StringIO
 
-from agent_comms.installer.interpreter_operation import RuntimeProbe
+from agent_comms.installer.interpreter_operation import ProbePhase, RuntimeProbe
 
 
 @dataclass(frozen=True)
@@ -18,6 +19,9 @@ class CliCommandProbe(RuntimeProbe[CliOutput]):
     """One command-line call, answered by the selected runtime's own command line."""
 
     arguments: tuple[str, ...]
+
+    def install_phase(self) -> ProbePhase:
+        return ProbePhase(shlex.join(self.arguments), probe=type(self))
 
     def run(self) -> CliOutput:
         from agent_comms import cli

@@ -70,7 +70,7 @@ async def make_agent(tmp_path, monkeypatch):
     return agent
 
 
-async def test_routed_image_rejected_before_bus_side_effects(tmp_path, monkeypatch):
+async def test_routed_image_rejected_before_bus_side_effects(tmp_path, monkeypatch, native_runtime_package):
     agent = await make_agent(tmp_path, monkeypatch)
     try:
         with pytest.raises(RequestError):

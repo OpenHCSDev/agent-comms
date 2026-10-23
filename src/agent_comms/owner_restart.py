@@ -223,24 +223,22 @@ class FencedOwnerBatch:
         try:
             # Every original shares one grace period instead of waiting in turn.
             self.lifecycle._stop_processes(self.captured)
-            for (thread, generation), launch in zip(self.captured, self.launches, strict=True):
-                if thread.process_alive:
-                    raise RelationViolationError('Owner survived retirement')
-                self.lifecycle._finish_stopped_owner(thread, generation)
-                # The next original may need this same lock to release itself.
-                # Capture each retired witness, then release before its stop.
-                with self.lifecycle.registry.store.locked():
-                    self.lifecycle._require_same_stop_owner(thread, generation)
-                    snapshot = self.lifecycle.registry.snapshot()
+            if any(thread.process_alive for thread, _ in self.captured):
+                raise RelationViolationError('Owner survived retirement')
+            self.lifecycle._finish_stopped_owners(self.captured)
+            with self.lifecycle.registry.store.locked():
+                snapshot = self.lifecycle.registry.snapshot()
+                releases = self.lifecycle.releases.read_many(
+                    tuple(thread.name for thread, _ in self.captured))
+                for (thread, generation), launch in zip(self.captured, self.launches, strict=True):
+                    releases[thread.name].require_stopping_owner(snapshot, thread, generation)
                     owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)
-                progress = replace(progress, retired=progress.retired + (owner,))
-                # The retired owner has the only proof that its attempted input
-                # cannot keep running. Settle through the execution owner before
-                # a replacement can claim work; an unresolved publication blocks
-                # this cutover rather than granting replay or dropping the pointer.
-                from .attempt_recovery import RecoveryMonitorCapability
+                    progress = replace(progress, retired=progress.retired + (owner,))
+            # Each original's acquired witness excludes its input before any replacement.
+            from .attempt_recovery import RecoveryMonitorCapability
 
-                RecoveryMonitorCapability.settle_stopped_owner(self.lifecycle.root, thread)
+            RecoveryMonitorCapability.settle_stopped_owners(
+                self.lifecycle, tuple(thread for thread, _ in self.captured))
             self.ownership.enter_context(cutover.stopped_resources(self.lifecycle))
             snapshot = self.lifecycle.registry.snapshot()
             owners = progress.retired
