@@ -507,4 +507,4 @@ def parse_target(text: str) -> tuple[str, str]:
             name = parts[0].rstrip(sigils)
             if name and len(parts) == 2 and parts[1].strip():
                 return kind.address(name), parts[1].strip()
-    return AllChannel.declared_name, stripped
+    return AllChannel.address(), stripped

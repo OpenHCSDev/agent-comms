@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import sqlite3
-from dataclasses import dataclass
-from typing import Annotated, Literal
+from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
-from agent_comms.coordination_errors import SchemaVersionError
-from agent_comms.coordination_schema import CoordinatorTable
+from agent_comms.coordination_errors import IdentityConflict, SchemaVersionError
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.participants import OwnerGenerations, OwnerRecord, Participants
-from agent_comms.coordinator import Coordination
-from agent_comms.private_runtime_schema import PrivateRuntimeSchema
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 
+from .audience_manifest import MAX_AUDIENCE_BYTES
+from .coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
 from .field_codec import MalformedRecord, WireName
+from .response_acknowledgement import _canonical
 from .typed_table import (
     Column,
     ColumnGuard,
@@ -29,22 +31,21 @@ from .typed_table import (
     InitialOneWayColumn,
     NoDelete,
     SharedFileTables,
-    SQLiteJournalMode,
     TypedTable,
 )
+
+if TYPE_CHECKING:
+    from .bus_publication import Delivered
+    from .private_registry_guard import RegistryPrivacy
 
 _LOG = logging.getLogger(__name__)
 
 
-class CohortTable(SharedFileTables, DurableTables, PrivateRuntimeSchema):
+class CohortTable(PrivateCoordinatorTable):
     """Mandatory sealed N/K acknowledgement declarations."""
 
     __slots__ = ()
     schema_error = SchemaVersionError
-
-    @classmethod
-    def install(cls, store) -> None:
-        install_private_cohort_schema(store)
 
 
 class AwarenessTable(SharedFileTables, DurableTables):
@@ -52,6 +53,20 @@ class AwarenessTable(SharedFileTables, DurableTables):
 
     __slots__ = ()
     schema_error = SchemaVersionError
+
+    @classmethod
+    def install_optional(cls, db: sqlite3.Connection) -> None:
+        """Optional provenance cannot roll back mandatory native preparation."""
+        db.execute("SAVEPOINT optional_awareness_install")
+        try:
+            if not cls.stored_schema(db):
+                cls.create_schema(db)
+            assert_optional_awareness_schema(db)
+        except (sqlite3.Error, SchemaVersionError, MalformedRecord) as error:
+            db.execute("ROLLBACK TO optional_awareness_install")
+            _LOG.warning("Optional awareness schema unavailable: %r", error, exc_info=error)
+        finally:
+            db.execute("RELEASE optional_awareness_install")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -91,6 +106,8 @@ class ClaimBatchAcknowledgements(
         WHERE d.wire_root_id = OLD.wire_root_id AND d.wire_seq = OLD.wire_seq
         AND d.kind = 'unmentioned_observer')))"""),
     )
+    manifest_format: ClassVar[str] = "audience-v1"
+    decision_domain: ClassVar[bytes] = b"agent-comms:cohort-decisions:v1\0"
 
     wire_root_id: Annotated[
         str,
@@ -119,6 +136,38 @@ class ClaimBatchAcknowledgements(
     accepted_at_ms: Annotated[int, FrozenColumn(check="accepted_at_ms >= 0")]
     sealed: bool = False
     without_rowid = True
+
+    @classmethod
+    def decision_hash(cls, delivery: Delivered) -> str:
+        encoded = _canonical([decision.to_wire() for decision in delivery.decisions])
+        if len(encoded) > MAX_AUDIENCE_BYTES:
+            raise ValueError("Private decision set exceeds its byte bound.")
+        return hashlib.sha256(cls.decision_domain + encoded).hexdigest()
+
+    @classmethod
+    def for_delivery(
+        cls, delivery: Delivered, privacy: RegistryPrivacy, accepted_at_ms: int,
+    ) -> ClaimBatchAcknowledgements:
+        """Native acknowledgement facts derive from the actual delivered value."""
+        return cls(
+            wire_root_id=privacy.namespace,
+            wire_seq=delivery.seq,
+            message_id=delivery.message_id,
+            exact_target=delivery.target,
+            envelope_digest=delivery.audience.wire_envelope_digest,
+            audience_digest=delivery.audience.digest,
+            decisions_digest=cls.decision_hash(delivery),
+            member_count=len(delivery.audience.recipients),
+            claim_count=sum(len(decision.claim_decisions()) for decision in delivery.decisions),
+            manifest_codec=cls.manifest_format,
+            resolver_version=RESOLVER_VERSION,
+            policy_version=POLICY_VERSION,
+            accepted_at_ms=accepted_at_ms,
+        )
+
+    def require_delivery(self, delivery: Delivered, privacy: RegistryPrivacy) -> None:
+        if replace(self, sealed=False) != self.for_delivery(delivery, privacy, self.accepted_at_ms):
+            raise IdentityConflict("sealed cohort acknowledgement conflicts with committed bus")
 
     def require_selected_claim(self, assignment: WakeAssignment) -> None:
         """An awareness contribution borrows this original sealed acknowledgement."""
@@ -266,14 +315,12 @@ class AwarenessClaimGenerations(
     owner_generation: Annotated[int, Column(check="owner_generation > 0")]
 
     def current(self, expected: OwnerGenerations) -> bool:
-        """A historical capture is omitted; a changed current owner refuses."""
+        """Old generations and pre-rename names are historical, never current context."""
         from .wake_candidate_index import ProjectionUnavailableError
 
-        if self.owner_generation < expected.generation:
-            return False
-        if self.owner_identity != expected:
+        if self.owner_lookup != expected.owner_lookup or self.owner_generation > expected.generation:
             raise ProjectionUnavailableError("captured participant owner changed")
-        return True
+        return self.owner_identity == expected
 
     def require_selection(self, assignment: WakeAssignment, acknowledgement: ClaimBatchAcknowledgements) -> None:
         """Verify this immutable acceptance capture against its original claim."""
@@ -324,32 +371,3 @@ class AwarenessClaimGenerations(
 def assert_optional_awareness_schema(db: sqlite3.Connection) -> None:
     if not AwarenessTable.stored_schema(db) or AwarenessTable.schema_differs(db):
         raise SchemaVersionError("optional awareness generation schema is unavailable")
-
-
-def _install_optional_awareness_schema(db: sqlite3.Connection) -> None:
-    if not AwarenessTable.stored_schema(db):
-        AwarenessTable.create_schema(db)
-    assert_optional_awareness_schema(db)
-
-
-def install_private_cohort_schema(store: Coordination) -> None:
-    """Create current acknowledgement tables on a fresh coordinator; no old-schema repair."""
-    with store.session.writing() as db:
-        CoordinatorTable.require_schema(db)
-        if not CohortTable.stored_schema(db):
-            CohortTable.create_schema(db)
-        CohortTable.require_installed(db)
-        if SQLiteJournalMode.read(db.execute("PRAGMA journal_mode")) != [
-            SQLiteJournalMode("delete")
-        ]:
-            raise SchemaVersionError("cohort schema requires rollback-journal mode")
-        # Missing/corrupt optional metadata must not roll back mandatory cohort
-        # creation, and no prior claim is retroactively assigned a generation.
-        db.execute("SAVEPOINT optional_awareness_install")
-        try:
-            _install_optional_awareness_schema(db)
-        except (sqlite3.Error, SchemaVersionError, MalformedRecord) as error:
-            db.execute("ROLLBACK TO optional_awareness_install")
-            _LOG.warning("Optional awareness schema unavailable: %r", error, exc_info=error)
-        finally:
-            db.execute("RELEASE optional_awareness_install")

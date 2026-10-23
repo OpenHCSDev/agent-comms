@@ -78,7 +78,6 @@ def test_phase_owner_is_default_off_and_clear_is_exact(tmp_path: Path) -> None:
 
 def test_only_hold_bound_cutover_may_retire_during_draining(tmp_path: Path) -> None:
     from agent_comms.owner_cutover import MaintainedOwnerCutover, PreserveOwnerRuntime
-    from agent_comms.store_files import _store_lock
 
     class ScratchCutover(MaintainedOwnerCutover):
         def require_selection(self, snapshot, owners):
@@ -91,7 +90,7 @@ def test_only_hold_bound_cutover_may_retire_during_draining(tmp_path: Path) -> N
     hold = comms.owners.maintenance.begin(MaintenanceOperator.current())
     cutover = ScratchCutover()
     cutover.maintenance_hold = hold
-    with _store_lock(comms.root / 'wire'):
+    with comms.registry.store.locked():
         cutover.require_restart_phase(comms.owners)
         from agent_comms.restart_refusals import OwnerMaintenancePendingRefusal
 
@@ -101,21 +100,9 @@ def test_only_hold_bound_cutover_may_retire_during_draining(tmp_path: Path) -> N
 
         assert refused.value.queue_state().items_with(Pending, refused.value)  # Idle reload remains queued, not UNKNOWN.
     comms.owners.maintenance.clear(hold)
-    with _store_lock(comms.root / 'wire'):
+    with comms.registry.store.locked():
         with pytest.raises(RelationViolationError):
             cutover.require_restart_phase(comms.owners)
-
-
-def test_clear_stopped_uses_acquired_wire_descriptor(tmp_path: Path) -> None:
-    gate = MaintenanceBarrier(tmp_path / 'wire' / 'registry.json')
-    hold = gate.begin(MaintenanceOperator.current())
-    with _store_lock(gate.wire_path) as lock:
-        assert gate.clear_stopped(hold, lock.descriptor).phase is ReadyPhase
-    assert gate.read().phase is ReadyPhase
-    with _store_lock(tmp_path / 'unrelated') as other:
-        with pytest.raises(RelationViolationError):
-            next_hold = gate.begin(MaintenanceOperator.current())
-            gate.clear_stopped(next_hold, other.descriptor)
 
 
 def _claim_other_process(registry_path: str, ready: mp.Event, result: mp.Queue) -> None:
@@ -287,7 +274,7 @@ async def test_native_ingress_waits_without_blocking_exclusive_owner(tmp_path: P
             with status.phase.send_running(None, None, "native", "original"):
                 entered.set()
 
-    async with _async_store_lock(root / "wire"):
+    async with _async_store_lock(root / "registry.json"):
         send = asyncio.create_task(native_write())
         try:
             # The original exclusive owner must resume on the same loop while
@@ -333,24 +320,26 @@ def test_phase_change_waits_for_final_native_write_lock(tmp_path: Path) -> None:
     sender.join(5)
     closer.join(5)
     assert changed.is_set()
-    with _store_lock(root / "wire"), pytest.raises(RelationViolationError):
+    with _store_lock(root / "registry.json"), pytest.raises(RelationViolationError):
         gate.assert_open_unlocked()
 
 
 def test_activity_write_is_refused_while_draining(tmp_path: Path, capsys) -> None:
     """Activity is not a publication request and remains refused during a hold."""
     from agent_comms.activity import ActivityStore
+    from agent_comms.bus import Bus
     from agent_comms.cli import main
 
     def cli(*argv: str) -> tuple[int, str]:
         code = main(['--root', str(tmp_path), *argv])
         return code, capsys.readouterr().out
 
+    bus = Bus.install(Bus.path_in(tmp_path))
     for name in ('a', 'b'):
         assert cli('register', '--name', name, '--worktree', '/wt')[0] == 0
-    def written() -> tuple[bytes, ...]:
-        return tuple(path.read_bytes() if path.exists() else b''
-                     for path in (tmp_path / 'bus.jsonl', ActivityStore.path_in(tmp_path)))
+    def written() -> tuple[int, bytes]:
+        activity = ActivityStore.path_in(tmp_path)
+        return bus.revision(), activity.read_bytes() if activity.exists() else b''
 
     before = written()
     gate = MaintenanceBarrier(tmp_path / 'registry.json')
@@ -437,9 +426,7 @@ def test_a_carried_store_write_is_refused_to_all_but_the_maintenance_holder(tmp_
 
 
 def test_every_carried_json_document_writes_through_the_maintenance_gate() -> None:
-    """A durable JSON document gets the gate from its kind, as the registry does, and the
-    runtime projection that running owners rewrite during maintenance does not."""
-    from agent_comms.bus_projection import AppendProjectionStore
+    """A durable JSON document gets the gate from its kind, as the registry does."""
     from agent_comms.catalog_store import ChannelCatalog
     from agent_comms.connector_store import ConnectorStore
     from agent_comms.maintenance_barrier import CarriedDocument
@@ -453,4 +440,3 @@ def test_every_carried_json_document_writes_through_the_maintenance_gate() -> No
     for store in (ChannelCatalog, ConnectorStore, ReadLedger, RegistryStore, RelationshipStore,
                   RuntimeChildrenStore, RuntimeInfoStore, SharedLedger):
         assert issubclass(store, CarriedDocument), store
-    assert not issubclass(AppendProjectionStore, CarriedDocument)

@@ -20,27 +20,27 @@ from pathlib import Path
 from typing import Annotated, ClassVar
 from uuid import uuid4
 
+from agent_comms.bus import Bus
 from agent_comms.change_report import FileLine
 from agent_comms.cli_bridges.shared import DeclaredOptions
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.order import CommanderContext
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec, PathText, Argument
-from agent_comms.goal_actions import SetGoalAction
-from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
+from agent_comms.field_codec import Argument, FieldCodec, PathText
+from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.messages import Message
+from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.plan_phases import RecordPlanePhase
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.storage_rules import StorageRule
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.todos import ReportDelivery, PendingProblemOrder, TriageScope
-from agent_comms.order_runs import MechanicalOrderRun
+from agent_comms.todos import PendingProblemOrder, ReportDelivery, TriageScope
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsHistoryTool, CommsOrderDoneTool, CommsStandingRulesTool
-from agent_comms.wire_watch import WatchSource, WireWatch
+from agent_comms.watched import FileSource
 from agent_comms.work_dispatch import CheckedPhaseTask
 
 
@@ -76,10 +76,7 @@ class ReceivedReply(Reply):
 async def first_reply(comms: Comms, commander: str, unit: str, token: str) -> Message:
     async with asyncio.timeout(180):
         async with aclosing(
-            WireWatch.observations(
-                WatchSource.modified_file(comms.bus.log.path),
-                WatchSource.modified_file(comms.registry.store.path),
-            )
+            comms.bus.bus.watch()
         ) as changes:
             async for _ in changes:
                 observed = Reply.read(comms, commander, unit, token)
@@ -93,9 +90,7 @@ async def first_reply(comms: Comms, commander: str, unit: str, token: str) -> Me
 async def stop_after_turn(comms: Comms, unit: str) -> None:
     async with asyncio.timeout(180):
         async with aclosing(
-            WireWatch.observations(
-                WatchSource.modified_file(comms.registry.store.path),
-            )
+            comms.bus.bus.watch_sources(FileSource(comms.registry.store.path))
         ) as changes:
             async for _ in changes:
                 turn = comms.registry.require(unit).turn_record.read()
@@ -137,7 +132,8 @@ class RunProofCommand(ProofCommand):
         home = root.parent / "home"
         home.mkdir(parents=True)
         comms = Comms(root)
-        comms.messaging.initialize_private_initial_protocol()
+        comms.registry.prepare_native_root()
+        Bus.install(Bus.path_in(comms.root))
         # A fresh interpreter acquires the scratch commander configuration.
         # Keep the actual storage declaration across its isolated HOME.
         (root / "storage.json").write_text(
@@ -153,18 +149,11 @@ class RunProofCommand(ProofCommand):
             ),
             StoppedThreadStatus(),
         )
-        comms.goals.update_goal(
-            commander.name,
-            SetGoalAction(
-                text="Verify one rotation-started native unit on this scratch bus only.",
-                goal_id=uuid4().hex,
-                order=RequestGoalOrder(),
-            ),
-        )
+        comms.goals.todos.add_request(commander.incarnation,
+            'Verify one rotation-started native unit on this scratch bus only.')
         CommanderConfig(
             commander=commander.name,
             root=root,
-            cli=Path(sys.executable).with_name("agent-comms"),
             state=root.parent / "state",
             repos=(),
             worktrees=comms.registry.storage_rule.checkout_base,

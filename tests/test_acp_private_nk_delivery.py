@@ -6,6 +6,9 @@ activate private processing for existing public sessions.
 
 from __future__ import annotations
 
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
+from bus_record_fixture import prepare_native_comms
+
 
 import os
 
@@ -21,7 +24,6 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import ParticipantNotRegistered, PublicationActivationBlocked, StaleRevision
 from agent_comms.coordinator import Coordination
-from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.errors import RelationViolationError
 from test_coordinated_runtime import tmp_path as private_root_fixture
 from agent_comms.thread_model import DeclaredModel
@@ -31,18 +33,18 @@ tmp_path = private_root_fixture
 
 def _private_comms(tmp_path):
     root = tmp_path / "wire"
-    comms = Comms(root)
+    comms = prepare_native_comms(Comms(root))
     comms.registry.declare(
         comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     owner = comms.registry.new_thread('beta', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('test/model'))
     comms.registry.declare(owner)
-    root_id = comms.messaging.initialize_private_initial_protocol()
+    root_id = comms.registry.prepare_native_root().namespace
     with Coordination(str(root / "coordination.sqlite3")) as store:
         store.participants.register(
             RecordedThreadIncarnation("fixture", owner.created_at).lookup, "beta", "beta", committed=True
         )
-        install_native_runtime_schema(store)
+        PrivateCoordinatorTable.install(store)
     return comms, root_id
 
 
@@ -80,9 +82,9 @@ def test_private_owner_rename_during_active_attempt_can_complete(tmp_path, manag
     lookup = RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         before = store.participants.get(lookup)
-        store.executions.create("rename-active", ExecutionOrigin.ACP, lookup, "beta", 1)
-        store.executions.mark_pending("rename-active", expected_revision=1)
-        fence = store.attempts.start(AttemptStart(
+        store.create("rename-active", ExecutionOrigin.ACP, lookup, "beta", 1)
+        store.mark_pending("rename-active", expected_revision=1)
+        fence = store.start(AttemptStart(
             "rename-active", 1, "beta", 1, prepare_fence_token(),
             expected_execution_revision=2, expected_pointer_revision=0,
         )).value.fence
@@ -100,7 +102,7 @@ def test_private_owner_rename_during_active_attempt_can_complete(tmp_path, manag
         with pytest.raises(StaleRevision):
             store.participants.rename_owner(lookup, "wrong", expected_generation=2)
         fence = final_evidence(store, fence)
-        settled = store.attempts.settle_nonpublication(
+        settled = store.settle_nonpublication(
             fence, expected_pointer_revision=1, outcome=SucceededAttempt(),
         ).value
         assert isinstance(settled.attempt.lifecycle, SucceededAttempt)
@@ -116,7 +118,7 @@ def test_private_rename_refuses_mismatched_sql_owner_before_registry_mutation(tm
         comms.threads._rename_thread("beta", "gamma")
     assert comms.registry.require("beta").name == "beta"
     assert "gamma" not in comms.registry
-    assert comms.bus.log.latest_sequence() == 0
+    assert comms.bus.bus.revision() == 0
 
 
 def test_private_rename_of_unregistered_participant_takes_the_plain_path(tmp_path):

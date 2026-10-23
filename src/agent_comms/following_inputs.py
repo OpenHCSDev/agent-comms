@@ -36,7 +36,7 @@ class FollowingInputs:
             ))
             await DeliveredInput.deliver_pending(
                 inputs, session_id, owner, inputs.comms.bus,
-                inputs.effects.configured_root_id, after_seq=after_seq,
+                inputs.comms.owners.require_private_launch().wire_root_id, after_seq=after_seq,
             )
 
     async def open(self, session: TrackedTurnSession) -> None:

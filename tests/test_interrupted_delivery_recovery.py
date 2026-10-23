@@ -37,8 +37,8 @@ async def test_interrupted_following_delivery_recovers_only_before_native_send(
 
     with Coordination(str(store_path)) as store:
         assignments = pending_sealed_assignments(store, lookup, owner.name)
-        with comms.bus.log.checked_read() as source:
-            deliveries = tuple(source.references(tuple(row.source for row in assignments)))
+        deliveries = comms.bus.bus.deliveries_for_references(
+            tuple(row.source for row in assignments))
     # Freeze the original storage operation without placing its live result,
     # representing an owner that died after reservation and before queue handoff.
     reserved = []
@@ -116,8 +116,8 @@ async def test_recovery_without_paused_assignments_is_read_only(tmp_path, monkey
     await _accept_visible_deliveries(comms.bus, root_id, store_path, lookup, 0, owner_name="beta")
     with Coordination(str(store_path)) as store:
         assignments = pending_sealed_assignments(store, lookup, "beta")
-        with comms.bus.log.checked_read() as source:
-            deliveries = tuple(source.references(tuple(row.source for row in assignments)))
+        deliveries = comms.bus.bus.deliveries_for_references(
+            tuple(row.source for row in assignments))
     reserved = []
     await Coordination.run_worker(partial(
         DeliveredInput.reserve_pending, agent.inputs, "beta", root_id,

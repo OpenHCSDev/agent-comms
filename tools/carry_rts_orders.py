@@ -25,6 +25,7 @@ from agent_comms.field_codec import (
     boundary_decoder,
 )
 from agent_comms.goals import OrderCheck
+from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_identity import ThreadIncarnation
 
@@ -191,6 +192,7 @@ def carry(rts: Path, root: Path, apply: bool, retire: bool) -> None:
     if apply:
         comms = Comms(root)
         actor = comms.registry.require("claude-code").incarnation
+        request = NewestOpenRequest().for_order(comms.goals.todos, actor)
         with todos.TodoStore(root).writing() as db:
             existing = {todo.id: todo for todo in todos.Todo.stream(db)}
             for pid, (unit, row, order) in selected.items():
@@ -206,7 +208,9 @@ def carry(rts: Path, root: Path, apply: bool, retire: bool) -> None:
                     repo = Repo.of(Path(order.owner.file).parent)
                     text = problems[pid].text
                     proposed = todos.Assignment.of(owner, actor, generation)
-                    todo = todos.Todo.ordered(pid, repo.github, text, actor, proposed, due, order)
+                    todo = todos.Todo.ordered(
+                        pid, repo.github, text, actor, proposed, due, order, request
+                    )
                 todo = todos.AssignTodo.by(
                     actor,
                     todo.revision,
@@ -214,7 +218,7 @@ def carry(rts: Path, root: Path, apply: bool, retire: bool) -> None:
                     generation,
                     due,
                     row.merged.wrap(order),
-                    todo.goal,
+                    todo.request.require(),
                     todos.NoSourceReference(),
                 ).apply(todo)
                 history = tuple(

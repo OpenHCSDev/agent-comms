@@ -6,6 +6,8 @@ cancels one turn and kills one acquired scratch native child. Never replays inpu
 """
 from __future__ import annotations
 
+from agent_comms.bus import Bus
+
 import argparse
 import asyncio
 from contextlib import asynccontextmanager
@@ -80,7 +82,7 @@ async def journey(arguments):
                       PI_CODING_AGENT_DIR=str(Path.home() / '.pi/agent'))
     env = dict(os.environ)
     comms = Comms(root)
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     name = 'scratch-sleeper'
     comms.registry.declare(replace(comms.registry.new_thread(
         name, frozenset(), str(project), model=DeclaredModel(arguments.model), thinking_level=HighThinkingLevel),
@@ -106,7 +108,7 @@ async def journey(arguments):
                     type='text', text=prompt)]))
                 await until(lambda: marker.exists() and marker.read_text() == 'running', operation)
                 assert target.exists(), 'Pi must acquire and execute write before sleeping'
-                acquired = comms.bus.log.claim_projection()[str(target)]
+                acquired = comms.bus.bus.claim_projection()[str(target)]
                 turn = comms.registry.require(name).require_turn_lease()
                 # The second connection executes Toad's actual initialize/load plan.
                 async with attachment(comms, project, name, env):
@@ -127,7 +129,7 @@ async def journey(arguments):
                     if outcome != 'failed':
                         raise
                 await until(lambda: not comms.registry.require(name).executing)
-                current = comms.bus.log.claim_projection().get(str(target))
+                current = comms.bus.bus.claim_projection().get(str(target))
                 row = dict(outcome=outcome, stop=stop, claim_remaining=current is not None,
                            acquired_seq=acquired.seq, actual_file=target.read_text(),
                            marker=marker.read_text(), turn=turn.turn_id)

@@ -140,6 +140,7 @@ def test_store_backup_restores_wal_rows_and_removes_new_files(tmp_path):
         backup = StoreBackup.take(root, route, (store, created), spill_dir)
         assert isinstance(backup, StoreBackup)
         assert backup.path.parent == spill_dir
+        assert backup.spill_directory(spill_dir) == backup.path
         assert backup.original()
         writer.execute("UPDATE events SET body='changed'")
         writer.commit()
@@ -221,6 +222,7 @@ def test_runtime_only_backup_retains_without_a_spill_directory(tmp_path):
     backup = StoreBackup.take(root, tmp_path / 'no-route.json', (), spill_dir)
 
     assert isinstance(backup, NoBackup)
+    assert backup.spill_directory(spill_dir) == spill_dir
     assert backup.retain(spill_dir) == ()
     assert backup.original()
     backup.restore()

@@ -13,7 +13,7 @@ from typing import ClassVar
 
 from agent_comms.change_report import FileLine
 from agent_comms.child_process import ChildOutcome, ChildResult, ExitedOutcome
-from agent_comms.commander.order import OrderFile
+from agent_comms.commander.order import OrderFile, ProblemVerb
 from agent_comms.commander_parity import ParityComparison
 from agent_comms.commander_parity.lifecycle import LifecycleRun
 from agent_comms.field_codec import FieldCodec
@@ -153,9 +153,8 @@ class DeliveredCommitCase:
             todo.id
             for todo in run.commander.comms.goals.todos.for_commander(run.commander.incarnation)
         }
-        run.commander.problem(
-            str(run.document), run.worker, repository.owner.to_wire()
-        )
+        ProblemVerb(order=str(run.document), to=run.worker,
+                    where=repository.owner.to_wire()).run(run.commander)
         (created,) = (
             todo
             for todo in run.commander.comms.goals.todos.for_commander(run.commander.incarnation)

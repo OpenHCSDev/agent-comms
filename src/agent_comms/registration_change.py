@@ -32,7 +32,7 @@ class RegistrationChange(ABC):
 
     @property
     def claims_owner(self) -> bool:
-        return self.thread.process_identity.claims_owner(self.status) and self.takes_over_owner
+        return self.status.claims_owner(self.thread.process_identity) and self.takes_over_owner
 
     @property
     @abstractmethod

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Annotated
 
 from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordination_schema import CoordinatorTable
+from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.participant_identity import ParticipantIdentity
 from agent_comms.typed_table import (
     Column,
@@ -19,7 +19,6 @@ from agent_comms.typed_table import (
     MonotoneColumns,
     NoDelete,
     NonDecreasing,
-    TypedTable,
 )
 
 
@@ -39,7 +38,7 @@ class OwnerRecord:
 
 
 @dataclass(frozen=True, kw_only=True)
-class Participants(MonotoneColumns, GuardedColumns, NoDelete, CoordinatorTable, TypedTable):
+class Participants(MonotoneColumns, GuardedColumns, NoDelete, CoordinatorRow):
 
     column_orders = (NonDecreasing(('committed',)),)
 
@@ -58,7 +57,7 @@ class Participants(MonotoneColumns, GuardedColumns, NoDelete, CoordinatorTable, 
     committed: bool
 
 @dataclass(frozen=True, kw_only=True)
-class ParticipantAliases(ImmutableRows, CoordinatorTable, TypedTable):
+class ParticipantAliases(ImmutableRows, CoordinatorRow):
     alias: Annotated[str, Column(primary_key=True, check="length(alias) BETWEEN 1 AND 256")]
     participant_lookup: str
     renamed_at_ms: Annotated[int, Column(check="renamed_at_ms >= 0")]
@@ -69,7 +68,7 @@ class ParticipantAliases(ImmutableRows, CoordinatorTable, TypedTable):
 
 @dataclass(frozen=True, kw_only=True)
 class OwnerGenerations(
-    CounterAdvance, NoDelete, ParticipantIdentity, CoordinatorTable, TypedTable
+    CounterAdvance, NoDelete, ParticipantIdentity, CoordinatorRow
 ):
 
     counter_column = 'generation'

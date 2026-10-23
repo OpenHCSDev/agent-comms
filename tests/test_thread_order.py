@@ -1,30 +1,33 @@
 """Sort timestamps must reflect thread events, never attachment or heartbeat."""
 
+from agent_comms.channel_targets import CommandTarget
+
 
 import os
 
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.activity import Activity, ActivityState
 from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
 
 
 def test_sort_metadata_survives_selection_heartbeat_and_rename(tmp_path, monkeypatch):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     comms.registry.declare(comms.registry.new_thread(name='alpha', tags=frozenset(), worktree=str(tmp_path), created_at=100))
     comms.registry.declare(comms.registry.new_thread(name='beta', tags=frozenset(), worktree=str(tmp_path), created_at=200))
     comms.agents.activity.emit(Activity(thread="alpha", state=ActivityState.WORKING, timestamp=300))
     comms.bus.publisher.publish_ordinary(
         Message(
             sender="alpha", target="beta", body="outgoing", type=InfoKind, timestamp=400
-        ), origin=AgentOrigin()
+        ), destination=CommandTarget.named("beta"), origin=AgentOrigin()
     ).message_id
     comms.bus.publisher.publish_ordinary(
         Message(
             sender="beta", target="alpha", body="incoming", type=InfoKind, timestamp=500
-        ), origin=AgentOrigin()
+        ), destination=CommandTarget.named("alpha"), origin=AgentOrigin()
     ).message_id
     with comms.bus.opened_activity() as clocks:
         assert comms.views.last_sent_timestamps(clocks.sent.items(), registry=comms.registry.snapshot()) == {"alpha": 400, "beta": 500}

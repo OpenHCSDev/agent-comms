@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, NoReturn, TextIO
 from pydantic import JsonValue
 
 from agent_comms.lifecycle_capability import Active
-from agent_comms.private_bus_checkpoint import PublicMessages
 from agent_comms.todos import (
     ClaimOrder,
     CorrectCheckTodo,
@@ -39,7 +38,7 @@ from agent_comms.todos import (
 from . import cli as comms_cli
 from .change_report import NoChangeReport, ReportEvidence
 from .channel_management import KeepThreadsTagDisposition, TagAction, TagDisposition
-from .channel_targets import ChannelTarget, CommandTarget
+from agent_comms.channel_targets import ChannelTarget, CommandTarget, NamedTarget
 from .channels import AnyChannel, Channel, SavedView, ViewKind, ViewMatch, ViewPredicate
 from .cli_commands import (
     ArchiveCliCommand,
@@ -75,6 +74,7 @@ from .field_codec import (
     SingleFieldValue,
     SubclassUnion,
     WireChoices,
+    WireForm,
     WireName,
     WireOmitDefault,
     projected,
@@ -135,6 +135,7 @@ from .standing_rules import StandingRule
 from .task_sources import (
     Constraint,
     CurrentTaskScopeSelection,
+    NoTaskAttachment,
     Decision,
     OriginalTaskChange,
     Subtask,
@@ -142,6 +143,11 @@ from .task_sources import (
     TaskChange,
     TaskScopeSelection,
 )
+from .order_story import FleetStory, OrderStory
+from .order_work import OrderWork
+from .pi_vocabulary import ServiceTier, ThinkingLevelField
+from .progress_claims import ProgressClaim
+from .relationships import RelationshipEdit
 from .thread_execution import (
     ArchiveOwnerControl,
     NativeOwnerCommand,
@@ -334,7 +340,7 @@ class TaskPublished(ToolResult):
 class InboxPageRead(ToolResult):
     """One unread page; only its returned references can be acknowledged."""
 
-    messages: tuple[Message, ...]
+    messages: tuple[Annotated[Message, WireForm], ...]
     acknowledged: int
     remaining: int
     unresolved_inputs: tuple[UnresolvedInput, ...]
@@ -478,9 +484,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
         return self.apply(comms, caller)
 
 
-class PublishingToolRequest[Caller: ToolCaller = ToolCaller](
-    HeldBusWrite, ToolRequest[Caller], declared_name=None
-):
+class PublishingTool[Caller: ToolCaller = ToolCaller](HeldBusWrite):
     """A publication waits at the bus owner before any caller or message mutation."""
 
     def apply(self, comms: Comms, caller: Caller) -> ToolResult:
@@ -488,6 +492,12 @@ class PublishingToolRequest[Caller: ToolCaller = ToolCaller](
 
     @abstractmethod
     def publish(self, comms: Comms, caller: Caller) -> ToolResult: ...
+
+
+class PublishingToolRequest[Caller: ToolCaller = ToolCaller](
+    PublishingTool[Caller], ToolRequest[Caller], declared_name=None,
+):
+    """Native declarations using the shared publication capability."""
 
 
 class LiveOwnerTool:
@@ -1093,13 +1103,10 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolReque
         actor = comms.registry.require(caller.name).incarnation
         generation = todo.held().generation
         todo.require_assignee(actor, generation)
-        with comms.bus.log.checked_read() as source:
-            original = PublicMessages.require(
-                source.connection, message_id=todo.latest_message.message_id
-            )
+        original = comms.bus.bus.lookup_message(todo.latest_message.message_id)
         claim = OrderClaim.for_order(
             todo, actor, self.pull_request, self.head, self.report,
-            MessageReference(original.seq, original.message_id),
+            original.reference, store=comms.goals.todos,
         )
         changed = ClaimOrder(
             todo.revision, actor, generation, claim
@@ -1351,7 +1358,7 @@ class CommsSendRefusalsTool(ReadTool, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSendTool(PublishingToolRequest):
+class SendTool(PublishingTool):
     label = "Comms Send"
     description = (
         "Send a message to another thread or channel. Address specific threads with "
@@ -1373,17 +1380,27 @@ class CommsSendTool(PublishingToolRequest):
     ] = NoChangeReport()
 
     def publish(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
+        target = CommandTarget.named(self.target)
         try:
             caller.require_directive(comms, self.body)
-            body = VerdictAudience(self.audience).addressed(self.target, self.body)
-            result = comms.messaging.send(self.sender, self.target, body, self.type,
-                                          report=self.report, origin=caller.origin())
+            body = target.addressed(self.audience, self.body)
+            result = comms.messaging.send(
+                self.sender, target.name, body, self.type, report=self.report,
+                task=self.attachment(comms, target), origin=caller.origin())
         except ToolRefusedError as error:
             # The caller hears the refusal now; the record waits for the wire lock on its own.
             threading.Thread(target=SendRefusal.record,
                              args=(comms.root, self.sender, self.target, error)).start()
             raise
         return MessagePublished.from_send(result)
+
+    def attachment(self, comms: Comms, target: NamedTarget) -> TaskAttachment:
+        """An ordinary send carries no authored task or selected request."""
+        return NoTaskAttachment()
+
+
+class CommsSendTool(SendTool, ToolRequest):
+    """The native send declaration; its fields and publication belong to SendTool."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1541,7 +1558,7 @@ class CommsInboxTool(ToolRequest):
         "already reviewed entries, and excluded owner/other-dependency inputs."
     )
     thread: Annotated[str, *tool_field("Thread name")]
-    target: Annotated[str, *tool_field("Channel or peer conversation")] = AnyChannel.declared_name
+    target: Annotated[str, *tool_field("Channel or peer conversation")] = AnyChannel.address()
     ack: Annotated[bool, *tool_field("Mark exactly the returned messages delivered")] = (
         True
     )
@@ -1559,7 +1576,7 @@ class CommsInboxTool(ToolRequest):
         review = self.standby.review(comms, thread)
         page = comms.bus.inbox_at(
             thread, comms.registry.snapshot(), CommandTarget.named(target),
-            bounds=PageBounds(limit=self.limit, max_bytes=MAX_INLINE_OUTPUT_BYTES // 2),
+            bounds=PageBounds(limit=self.limit),
         )
         messages = page.page.messages
         unresolved = tuple(comms.goals.unresolved_inputs(thread))

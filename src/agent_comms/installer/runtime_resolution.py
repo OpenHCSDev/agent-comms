@@ -12,11 +12,18 @@ from urllib.parse import urlsplit
 
 from packaging.markers import Marker
 from packaging.utils import canonicalize_name
-from pydantic import BaseModel, Field, RootModel, TypeAdapter
+from pydantic import BaseModel, Field
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.interpreter_operation import InstalledPackagesProbe, DistributionVersionsProbe
+from agent_comms.installer.interpreter_operation import (
+    ArchivePin,
+    DistributionVersionsProbe,
+    GitPin,
+    InstalledPackagesProbe,
+    PackagePin,
+    PackageRecord,
+)
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repository_name import RepositoryName
 
@@ -51,65 +58,6 @@ class ToadPackage(RuntimePackage, ConsoleScriptPackage):
 class TextualPackage(RuntimePackage):
     distribution = "textual"
     repository = RepositoryName("OpenHCSDev", "textual")
-
-
-@dataclass(frozen=True)
-class PackagePin:
-    version: str
-
-
-@dataclass(frozen=True)
-class GitPin(PackagePin):
-    commit: str
-
-
-@dataclass(frozen=True)
-class ArchivePin(PackagePin):
-    url: str
-
-
-class CommitRecord(BaseModel):
-    commit_id: str
-
-
-class SourceRecord(BaseModel):
-    url: str
-
-    def revision(self) -> str:
-        raise ValueError("The installed package does not record a Git revision")
-
-
-class ArchiveRecord(SourceRecord):
-    def pin(self, version: str) -> PackagePin:
-        return ArchivePin(version, self.url)
-
-
-class GitRecord(SourceRecord):
-    vcs_info: CommitRecord
-
-    def revision(self) -> str:
-        return self.vcs_info.commit_id
-
-    def pin(self, version: str) -> PackagePin:
-        return GitPin(version, self.vcs_info.commit_id)
-
-
-class RegistryRecord(RootModel[None]):
-    """null is the build record's declared registry-package representation."""
-
-    def revision(self) -> str:
-        raise ValueError("A registry package does not record a Git revision")
-
-    def pin(self, version: str) -> PackagePin:
-        return PackagePin(version)
-
-
-class PackageRecord(BaseModel):
-    version: str
-    source: GitRecord | ArchiveRecord | RegistryRecord
-
-    def pin(self) -> PackagePin:
-        return self.source.pin(self.version)
 
 
 class RegistrySource(BaseModel):
@@ -212,8 +160,7 @@ class RuntimeResolution(BaseModel):
     def capture(cls, python: Path, core: str, commands: InstallCommands) -> RuntimeResolution:
         packages = commands.probe(InstalledPackagesProbe(core), python,
                                   env=LaunchRuntime(python).environment(os.environ))
-        return cls(core_commit=core,
-                   packages=TypeAdapter(dict[str, PackageRecord]).validate_python(packages))
+        return cls(core_commit=core, packages=packages)
 
     def save(self, prefix: Path) -> None:
         path = prefix / self.record_path().name

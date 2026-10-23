@@ -891,9 +891,9 @@ def read_tracked_input_commitment(
     """
     Id128Text.decode(input_id)
     session_file = Path(session_file).absolute()
-    from .native_entries import NativeInputEvidenceRead
+    from .native_entries import NativeEvidenceRead
 
-    with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
+    with NativeEvidenceRead.borrow(session_file, evidence) as evidence:
         evidence.observe()
         try:
             return CommittedInput(evidence.tracked(input_id).message.input_digest.require())

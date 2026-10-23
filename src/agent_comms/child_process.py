@@ -50,7 +50,6 @@ if TYPE_CHECKING:
     from .store_files import LockMode
     from .thread_identity import ThreadIncarnation, ThreadRole
     from .thread_presentation import ThreadOwnerBinding, ThreadPresentation
-    from .thread_status import ThreadStatus
     from .turn_lease import ActiveTurn
 
 STOP_GRACE_SECONDS = 2.0
@@ -81,9 +80,7 @@ class ProcessState(SubclassUnion, affix=""):
     @abstractmethod
     def allows_inactive_stop(self) -> bool: ...
     @abstractmethod
-    def allows_goal_observation(self, status: ThreadStatus) -> bool: ...
-    @abstractmethod
-    def claims_owner(self, status: ThreadStatus) -> bool: ...
+    def claims_owner(self) -> bool: ...
 
     @abstractmethod
     def require_held_by(self, role: type[ThreadRole]) -> None: ...
@@ -137,10 +134,7 @@ class NoProcess(NullMember, ProcessState):
     def allows_inactive_stop(self) -> bool:
         return True
 
-    def allows_goal_observation(self, status: ThreadStatus) -> bool:
-        return False
-
-    def claims_owner(self, status: ThreadStatus) -> bool:
+    def claims_owner(self) -> bool:
         return False
 
     def require_held_by(self, role: type[ThreadRole]) -> None:
@@ -213,11 +207,8 @@ class ProcessIdentity(RecordMember, ProcessState):
     def allows_inactive_stop(self) -> bool:
         return self.runs_here()
 
-    def allows_goal_observation(self, status: ThreadStatus) -> bool:
-        return status.active
-
-    def claims_owner(self, status: ThreadStatus) -> bool:
-        return status.active
+    def claims_owner(self) -> bool:
+        return True
 
     def require_held_by(self, role: type[ThreadRole]) -> None:
         role.require_executable(

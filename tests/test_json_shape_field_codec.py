@@ -2,11 +2,14 @@
 
 from abc import abstractmethod
 from dataclasses import dataclass
+import json
 
 import pytest
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember, MalformedRecord
+from agent_comms.field_codec import (
+    FieldCodec, JsonShapeFamily, JsonShapeMember, MalformedRecord, SingleFieldValue,
+)
 from agent_comms.launch_runtime import ImportPath, NoImportPath, SpecifiedImportPath
 from agent_comms.native_claim_epoch import NativeClaimEpoch, RecordedNativeClaim, UnrecordedNativeClaim
 from agent_comms.selected_triage import (
@@ -79,6 +82,8 @@ def test_external_shape_family_uses_one_codec_for_children_and_new_cases():
     assert isinstance(value.value["details"].value[2], BooleanValue)
     assert isinstance(value.value["details"].value[3], NullValue)
     assert value.render() == (("failure", ("400",), "False", ""),)
+    assert value.to_wire() == raw
+    assert json.loads(json.dumps(value.to_wire())) == raw
     assert FieldCodec.encode(value) == raw
     assert FieldCodec.project(value, "status") == raw
     assert ExternalValue.member_named("text") is TextValue
@@ -98,6 +103,19 @@ def test_external_shape_family_uses_one_codec_for_children_and_new_cases():
     assert FieldCodec.encode(FloatValue(1.5)) == 1.5
     with pytest.raises(ValueError):
         FieldCodec.decode(ExternalValue, float("nan"))
+
+
+def test_one_field_encoding_preserves_distinct_cli_argument_contracts():
+    @dataclass(frozen=True)
+    class ScalarArgument(SingleFieldValue):
+        value: int
+
+    assert ScalarArgument(5).to_wire() == 5
+    assert ScalarArgument.from_wire(5) == ScalarArgument(5)
+    assert ScalarArgument.argument_options() == {"type": int}
+    assert ExternalValue.argument_options() == {}
+    assert ImportPath.argument_options() == {}
+    assert NativeClaimEpoch.argument_options() == {}
 
 
 def test_semantic_members_stay_out_of_shape_selection():
@@ -124,12 +142,13 @@ def test_semantic_members_stay_out_of_shape_selection():
     (NativeClaimEpoch, None, UnrecordedNativeClaim(), "5"),
     (NativeClaimEpoch, 5, RecordedNativeClaim(5), "5"),
     (TriageDecisionRecord, None, AbsentTriageDecisionRecord(), 1),
-    (TriageDecisionRecord, "IGNORE", DecidedTriageRecord(IgnoreSelectedTriage), 1),
+    (TriageDecisionRecord, "ignore", DecidedTriageRecord(IgnoreSelectedTriage), "IGNORE"),
     (ImportPath, None, NoImportPath(), 1),
     (ImportPath, "/opt/lib", SpecifiedImportPath("/opt/lib"), 1),
 ])
 def test_shape_family_decodes_each_member_and_refuses_an_unowned_type(family, wire, expected, refused):
     assert FieldCodec.decode(family, wire) == expected
+    assert expected.to_wire() == wire
     with pytest.raises(MalformedRecord):
         FieldCodec.decode(family, refused)
 

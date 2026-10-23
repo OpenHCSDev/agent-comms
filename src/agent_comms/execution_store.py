@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from agent_comms.reason_codes import GivenReasonCode, NoReasonCode
 from agent_comms.assignment_states import EngagedAssignment
-from agent_comms.assignment_store import AssignmentStore
 from agent_comms.coordination_errors import (
     IdentityConflict,
     StaleRevision,
 )
 from agent_comms.coordination_results import AlreadyApplied, Applied
-from agent_comms.coordination_session import CoordinationSession
 from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
 from agent_comms.coordination_tables.executions import (
@@ -30,20 +27,13 @@ from agent_comms.obligation_states import (
     FailedResponse,
     PendingResponse,
 )
-from agent_comms.participant_store import ParticipantStore
 from agent_comms.recovery_reader import RecoveryReader
 
 if TYPE_CHECKING:
     from agent_comms.selected_source_batch import SelectedSource
 
 
-@dataclass(eq=False, repr=False)
-class ExecutionStore:
-    session: CoordinationSession
-    participants: ParticipantStore
-    assignments: AssignmentStore
-    snapshots: RecoveryReader
-
+class ExecutionStore(RecoveryReader):
     def create(
         self,
         execution_id: str,
@@ -90,7 +80,7 @@ class ExecutionStore:
             raise IdentityConflict("claimless execution cannot bind claims")
         row = ExecutionRecord.one(self.session._connection, execution_id=execution_id)
         if row is not None:
-            snapshot = self.snapshots.get(execution_id)
+            snapshot = self.get(execution_id)
             e = snapshot.execution
             if (
                 e.origin,
@@ -164,13 +154,13 @@ class ExecutionStore:
                 now,
                 1,
             ).insert(db)
-        return Applied(self.snapshots.get(execution_id))
+        return Applied(self.get(execution_id))
 
     def mark_pending(
         self, execution_id: str, *, expected_revision: int
     ) -> Applied[RecoverySnapshot]:
         with self.session.writing() as db:
-            snapshot = self.snapshots.get(execution_id)
+            snapshot = self.get(execution_id)
             if snapshot.execution.revision != expected_revision:
                 raise StaleRevision("execution revision changed")
             if not snapshot.execution.lifecycle.queued:
@@ -183,7 +173,7 @@ class ExecutionStore:
                 revision=expected_revision + 1,
                 updated_at_ms=self.session.now(snapshot.execution.updated_at_ms),
             )
-            return Applied(self.snapshots.get(execution_id))
+            return Applied(self.get(execution_id))
 
     def fail_unstarted(
         self,
@@ -194,7 +184,7 @@ class ExecutionStore:
     ) -> Applied[RecoverySnapshot]:
         """Fail queued/pending work; v2 cannot resume a pre-attempt deferral."""
         with self.session.writing() as db:
-            before = self.snapshots.get(execution_id)
+            before = self.get(execution_id)
             execution = before.execution
             if execution.revision != expected_revision:
                 raise StaleRevision("execution revision changed")
@@ -233,4 +223,4 @@ class ExecutionStore:
                     revision=assignment.revision + 1,
                     updated_at_ms=self.session.now(assignment.updated_at_ms),
                 )
-            return Applied(self.snapshots.get(execution_id))
+            return Applied(self.get(execution_id))

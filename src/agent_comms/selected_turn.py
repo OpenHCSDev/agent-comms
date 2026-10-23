@@ -75,7 +75,7 @@ class SelectedPrompt:
             sent_outcomes=self.sent_outcomes(),
         )
         projection = OptionalAwarenessProjection.for_selected(
-            WakeCandidateIndex(participant.bus.log),
+            WakeCandidateIndex(participant.bus.bus),
             registry=participant.bus._registry,
             through_seq=participant.batch.sources[-1].delivery.message.seq,
             generation=participant.identity.generation,
@@ -115,13 +115,13 @@ class SelectedAttempt:
         if snapshot.execution.execution_id != execution_id:
             raise IdentityConflict("selected attempt differs from its created batch execution")
         if snapshot.execution.lifecycle.queued:
-            snapshot = store.executions.mark_pending(
+            snapshot = store.mark_pending(
                 execution_id,
                 expected_revision=snapshot.execution.revision,
             ).value
         token = prepare_fence_token()
         attempt_ordinal = (snapshot.execution.lifecycle.current_attempt_ordinal or 0) + 1
-        started = store.attempts.start(
+        started = store.start(
             AttemptStart(
                 execution_id,
                 attempt_ordinal,
@@ -132,7 +132,7 @@ class SelectedAttempt:
                 expected_pointer_revision=snapshot.pointer_revision,
             )
         ).value
-        progress = DurableTurn(store.attempts, started.fence, started.snapshot.pointer_revision, "")
+        progress = DurableTurn(store, started.fence, started.snapshot.pointer_revision, "")
         selected = started.snapshot.assignments
         if tuple(row.assignment_id for row in selected) != assignment_ids:
             raise IdentityConflict("full wake lost an original batch assignment")
@@ -255,7 +255,7 @@ class SelectedConsideration:
         participant = self.participant
         if not participant.batch.requires_triage:
             await participant.require_current()
-            created = participant.store.executions.create(
+            created = participant.store.create(
                 participant.batch.execution_id, ExecutionOrigin.WIRE,
                 participant.lookup, participant.owner.thread.name,
                 execution.max_attempts,

@@ -3,27 +3,26 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Iterable, Sequence
-from contextlib import closing
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import ClassVar, Self
 
 from agent_comms.build_identity import RecordedBuildIdentity
-from agent_comms.bus_page_index import BusPageIndex
+from agent_comms.bus import BusReader
 from agent_comms.channel_targets import ThreadTarget
 from agent_comms.commander.config import CommanderConfig
+from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import ReissuedOrderGoalAction
-from agent_comms.goals import Goal
 from agent_comms.message_bus import WatchPass
 from agent_comms.message_page import MessageReadRequest, PageBounds
-from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
 from agent_comms.phase_evidence import PlanReading
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.read_basis import NamedViewer, RepliesDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.standing_rules import (
     DatedStandingRule,
     IndependentStandingRule,
@@ -33,11 +32,11 @@ from agent_comms.standing_rules import (
     UndatedStandingRule,
 )
 from agent_comms.storage_rules import OrderCheckoutWork
+from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.threads import Thread
-from agent_comms.todos import ProgressRead, Todo
+from agent_comms.todos import OwnerRequest, Todo
 from agent_comms.turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
-from agent_comms.ui_model.unit_state import UnitState
-from agent_comms.wire_log import WireSnapshot
+from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
 from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
 
 
@@ -81,43 +80,32 @@ class InstallDue(IndependentStandingRule, UndatedStandingRule):
 
 @dataclass(frozen=True)
 class RequestStalled(IndependentStandingRule, UndatedStandingRule):
-    goal: Goal
+    request: OwnerRequest
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[RequestStalled, ...]:
         thread = comms.registry.require(commander)
-        return tuple(cls(request) for goal in thread.goal.active()
-                     for request, served in goal.order.open_requests(
-                         goal, comms.goals, thread.incarnation)
-                     if not served)
+        store = comms.goals.todos
+        return tuple(cls(request) for request in store.open_requests(thread.incarnation)
+                     if not store.serving_orders(request.id))
 
     def line(self) -> str:
-        return (f"REQUEST STALLED: {self.goal.id} {self.goal.text}"
+        return (f"REQUEST STALLED: {self.request.id.value} {self.request.text}"
                 " -> order its next step or mark it done")
 
 
 @dataclass(frozen=True)
 class AnswersTo(MessageReadRequest[tuple[Message, ...]]):
-    """The first participant's replies that answer a second participant's message, newest
-    first; the page is read newest first, so an answer is seen before what it answers."""
+    """The newest reply to an original from the requested participants."""
 
     scope: RepliesDisplayScope
     since: float
     empty: ClassVar[tuple[Message, ...]] = ()
 
-    def indexed(self, index: BusPageIndex, source: WireSnapshot) -> tuple[Message, ...]:
-        replies: list[Message] = []
-        asked: set[MessageReference] = set()
-        with closing(index.recent_offsets(
-            self.since, predicate=self.scope.index_predicate, before_offset=source.boundary,
-        )) as offsets:
-            for row in self.indexed_records(source, offsets):
-                message = row.message
-                if message.sender in self.scope.first_names:
-                    replies.append(message)
-                else:
-                    asked.add(message.reference)
-        return tuple(reply for reply in replies if asked.intersection(reply.answers))
+    def read_opened(self, source: BusReader) -> tuple[Message, ...]:
+        return source.latest_answer(
+            self.scope, since=self.since,
+        )
 
 
 class PlanRule(IndependentStandingRule, UndatedStandingRule, declared_name=None):
@@ -190,7 +178,7 @@ class PlanStalled(PlanRule):
 
 @dataclass(frozen=True)
 class UnitAskUnanswered(OwedAnswer, UndatedStandingRule):
-    """Per-message gate entries derived from the unit frame, not another unit scan."""
+    """Message debt shares its source read with unit observations."""
 
     unit: str
 
@@ -200,15 +188,17 @@ class UnitAskUnanswered(OwedAnswer, UndatedStandingRule):
         return tuple(cls(message, state.unit.name) for state in observed for message in state.owed)
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        return tuple(cls(message, source.thread.name)
-                     for source in UnitState.observations(comms, commander, ProgressRead())
-                     for message in source.due_questions)
+    def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
+                  held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str,
+                  requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
+        return tuple(cls(message, owner.name)
+                     for owner, questions in UnansweredUnitAsks.for_orders(
+                         source, snapshot, commander, held, time.time(),
+                     ).items()
+                     for message in questions)
 
-    @classmethod
-    def open_messages(cls, comms: Comms, commander: str) -> tuple[Message, ...]:
-        return tuple(message for source in UnitState.observations(comms, commander, ProgressRead())
-                     for message in source.questions)
+    def due(self, now: float) -> bool:
+        return self.message.timestamp <= now - AwaitingCommander.seconds
 
     def line(self) -> str:
         age = max(0, int((time.time() - self.message.timestamp) // 60))

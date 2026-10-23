@@ -195,7 +195,7 @@ class OwnedSend(CodingToolOwner):
                                 operation_id=slot, turn_id=self.turn.value,
                                 input_id=turn.command.input_id)
             return boundary.bus.publisher._publish_acquisition_unlocked(
-                boundary.bus_lock, snapshot, owner, canonical, scope, activity=boundary.activity)
+                snapshot, owner, canonical, scope, activity=boundary.activity)
 
     async def release_resources(self) -> None:
         """The ordinary turn owns its acquisitions through native/tool retirement."""

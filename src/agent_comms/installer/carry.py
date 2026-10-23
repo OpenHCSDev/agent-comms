@@ -4,8 +4,9 @@ A step is one module in ``tools/cutover``, ``carry_<what>.py``, holding one ``Ca
 subclass. Only ``agent-comms install`` runs it, with the target revision's ``src`` and
 ``tools``, so every step runs against the source it is installed with. A step is
 idempotent: data it already carried reports no change, so a step's own dry run is the
-one owner of whether a bus still needs it. Steps run in the order the main line added
-them, from the first whose dry run reports a change. An edited step is judged by what
+one owner of whether a bus still needs it. Declared dependencies constrain the order
+the main line added steps, starting at the first whose dry run reports a change.
+An edited step is judged by what
 it does now, never by its name. A finished step is retired by deleting its file once
 every bus has run it.
 """
@@ -16,14 +17,15 @@ import subprocess
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from graphlib import TopologicalSorter
 from importlib import import_module
 from pathlib import Path
 from typing import Annotated, ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import PathText
 from agent_comms.installer.interpreter_operation import InterpreterOperation
-from agent_comms.errors import RelationViolationError
 
 STEPS = Path("tools/cutover")
 
@@ -38,8 +40,17 @@ class Carried:
     """Files under the bus root this run wrote; every other file stays byte-identical."""
 
 
+@dataclass(frozen=True)
 class Carry(ABC):
+    """One migration's decoded source, destination and retirement location."""
+
+    root: Annotated[Path, PathText]
+    original_root: Annotated[Path, PathText]
+    spill_dir: Annotated[Path, PathText]
+
     declared: ClassVar[dict[str, type[Carry]]] = {}
+    precedes: ClassVar[tuple[type[Carry], ...]] = ()
+    """Steps whose decoders require this step's output, regardless of addition date."""
     """Every step imported so far, by its module name."""
 
     def __init_subclass__(cls, **kwargs: object) -> None:
@@ -58,14 +69,16 @@ class Carry(ABC):
     def name(cls) -> str:
         return cls.module().stem
 
-    @classmethod
-    def backup_files(cls, root: Path) -> tuple[Annotated[Path, PathText], ...]:
-        raise RuntimeError(f'{cls.name()} needs the full agent-comms install operation')
+    def backup_files(self) -> tuple[Annotated[Path, PathText], ...]:
+        raise RuntimeError(f'{self.name()} needs the full agent-comms install operation')
 
-    @classmethod
     @abstractmethod
-    def carry(cls, root: Path, *, apply: bool) -> Carried:
-        """Carry ``root`` with its wire lock held; on a dry run, write nothing."""
+    def carry(self, *, apply: bool) -> Carried:
+        """Carry this root; on a dry run, write nothing."""
+
+    def after_acceptance(self) -> Carried:
+        """Retire obsolete inputs after the installation's rollback window closes."""
+        return Carried(0)
 
     @staticmethod
     def require_confined(root: Path, path: Path) -> None:
@@ -73,29 +86,35 @@ class Carry(ABC):
         if not path.is_relative_to(root) or path.resolve() != path:
             raise RelationViolationError(f"Carry refuses an unconfined path: {path}")
 
-class CarryOperation[Answer](InterpreterOperation[Answer], DeclaredFamily, affix="Operation"):
+class CarryOperation[Answer](InterpreterOperation[Answer, Carry], DeclaredFamily, affix="Operation"):
     """One step invocation, including its arguments and its declared answer type."""
 
     @abstractmethod
-    def run(self, step: type[Carry], root: Path) -> Answer: ...
+    def run(self, step: Carry) -> Answer: ...
 
 @dataclass(frozen=True)
 class BackupFilesOperation(CarryOperation[tuple[Annotated[Path, PathText], ...]]):
-    def run(self, step: type[Carry], root: Path) -> tuple[Annotated[Path, PathText], ...]:
-        return step.backup_files(root)
+    def run(self, step: Carry) -> tuple[Annotated[Path, PathText], ...]:
+        return step.backup_files()
 
 
 @dataclass(frozen=True)
 class MigrateOperation(CarryOperation[Carried]):
     apply: bool
 
-    def run(self, step: type[Carry], root: Path) -> Carried:
-        return step.carry(root, apply=self.apply)
+    def run(self, step: Carry) -> Carried:
+        return step.carry(apply=self.apply)
+
+
+@dataclass(frozen=True)
+class RetireInputsOperation(CarryOperation[Carried]):
+    def run(self, step: Carry) -> Carried:
+        return step.after_acceptance()
 
 
 @dataclass(frozen=True)
 class CarryChain:
-    """Every step a tree declares, in the order the main line added them."""
+    """Every declared step, dependency order first and addition order for independent steps."""
 
     steps: tuple[type[Carry], ...]
 
@@ -115,7 +134,13 @@ class CarryChain:
         unordered = sorted(step.name() for step in steps if step.name() not in added)
         if unordered:
             raise ValueError(f"{unordered} are not on the main line, so nothing orders them")
-        return cls(tuple(sorted(steps, key=lambda step: added[step.name()])))
+        ordered = sorted(steps, key=lambda step: added[step.name()])
+        dependencies: dict[type[Carry], set[type[Carry]]] = {step: set() for step in ordered}
+        for step in ordered:
+            for later in step.precedes:
+                if later in dependencies:
+                    dependencies[later].add(step)
+        return cls(tuple(TopologicalSorter(dependencies).static_order()))
 
     def pending(self, dry_run: Callable[[type[Carry]], Carried]) -> tuple[type[Carry], ...]:
         """Every step from the first whose dry run reports a change. A later step's dry run

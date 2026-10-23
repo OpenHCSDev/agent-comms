@@ -1,5 +1,7 @@
 """Retained Git work protects linked rows through the real watcher and heartbeat."""
 
+from agent_comms.bus import Bus
+
 import json
 import os
 import subprocess
@@ -10,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.candidate_maintenance import drain_candidate_catchup
+from order_scope_fixture import FIX_SCOPE
 from agent_comms.change_report import FileLine
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.standing import (
@@ -27,8 +29,7 @@ from agent_comms.commander_heartbeat import (
 )
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
-from agent_comms.goal_actions import SetGoalAction
-from agent_comms.goals import OrderCheck, RequestGoalOrder
+from agent_comms.goals import OrderCheck
 from agent_comms.installer.practice import practice_copy
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.order_runs import MechanicalOrderRun
@@ -37,7 +38,7 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageDenied, StorageRule, shell_storage_effects
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import CoreWatcherIncarnation
-from agent_comms.todos import GoalRef, PendingProblemOrder, ProgressRead, ReleaseTodo, StrikeReason
+from agent_comms.todos import PendingProblemOrder, ProgressRead, ReleaseTodo, StrikeReason
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.ui_model.unit_state import UnitState, Unreadable
 from agent_comms.work_branches import UnreadableCheckoutRead, WorkBranches
@@ -125,13 +126,14 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
     root = tmp_path / 'seed'
     root.mkdir(mode=0o700)
     (root / 'storage.json').write_text(json.dumps(FieldCodec.encode(rule)))
+    Bus.install(Bus.path_in(root))
     c = Comms(root)
-    c.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(c.root))
     for name in ('lead', 'worker', 'idle'):
         c.registry.declare(c.registry.new_thread(
             name, frozenset(), str(home), execution=ExternalThreadExecution))
-    c.goals.update_goal('lead', SetGoalAction(
-        text='Keep changes with their author', order=RequestGoalOrder(), goal_id='request'))
+    request = c.goals.todos.add_request(
+        c.registry.require('lead').incarnation, 'Keep changes with their author').id
     lead, worker = c.registry.require('lead'), c.registry.require('worker')
     now = time.time()
     order = PendingProblemOrder(
@@ -145,7 +147,7 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
             problem, RepositoryName.from_wire('OpenHCSDev/agent-comms'),
             'Keep changes with their author', creator=lead, assigner=lead.incarnation, owner=worker,
             generation='shared-work', review_at=RecordedEventTime(now + 3600),
-            order=order, goal=GoalRef('lead', lead.created_at, 'request'))
+            order=order, request=request)
     # Both current IDs change, as they do when Core hands work out again.
     for problem in ('P1', 'P2'):
         row = c.goals.todos.get(problem)
@@ -153,12 +155,12 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
             problem, expected_revision=row.revision, owner=worker,
             assigner=lead.incarnation, generation='reissued-work',
             review_at=RecordedEventTime(now + 3600), order=order.reissued(now + 1),
-            goal=GoalRef('lead', lead.created_at, 'request'))
+            request=request)
     c.goals.todos.create(
         'P3', RepositoryName.from_wire('OpenHCSDev/agent-comms'),
         'Keep unrelated work separate', creator=lead, assigner=lead.incarnation, owner=worker,
         generation='other-work', review_at=RecordedEventTime(now + 3600),
-        order=order.reissued(now + 2), goal=GoalRef('lead', lead.created_at, 'request'))
+        order=order.reissued(now + 2), request=request)
     row = c.goals.todos.get('P2')
     assert {related.id for related in c.goals.todos.related_problems(row)} == {'P1', 'P2'}
     c.goals.todos.apply('P2', ReleaseTodo(
@@ -228,7 +230,6 @@ def test_dirty_then_unpushed_then_pushed_linked_checkout(checkout_bus: Comms, tm
             assert assigned.holder == 'idle'
             assert c.registry.require('idle').goal.require().text
             beat()
-        drain_candidate_catchup(root)
         history = subprocess.run(
             (sys.executable, '-m', 'agent_comms.cli', '--root', str(root), 'history',
              '--target', '@commander-heartbeat', '--as', 'lead', '--limit', '10'),

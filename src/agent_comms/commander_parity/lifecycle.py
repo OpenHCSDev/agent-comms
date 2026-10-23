@@ -24,7 +24,7 @@ from agent_comms.change_report import FileLine, MainRevision
 from agent_comms.check_root import CheckRoot
 from agent_comms.child_process import BoundedRun, ChildResult
 from agent_comms.commander.config import CommanderConfig
-from agent_comms.commander.order import Commander, OrderFile
+from agent_comms.commander.order import Commander, OrderFile, ProblemVerb
 from agent_comms.commander.request import RequestAddVerb
 from agent_comms.commander_parity import ParityComparison, UnverifiedParity
 from agent_comms.field_codec import FieldCodec
@@ -208,7 +208,8 @@ class LifecycleRun:
 
     def create(self) -> Todo:
         owner = OrderFile.read(self.document.read_text()).order.owner
-        self.commander.problem(str(self.document), self.worker, owner.to_wire())
+        ProblemVerb(order=str(self.document), to=self.worker,
+                    where=owner.to_wire()).run(self.commander)
         rows = tuple(self.commander.comms.goals.todos.for_commander(self.commander.incarnation))
         if len(rows) != 1:
             raise ValueError(f"A fresh copied workflow must create one problem, got {len(rows)}")
@@ -297,7 +298,7 @@ class AssignOrderCase(CreateProblemCase):
             run.worker, "The copied workflow is released before its next native assignment."
         )
         document = replace(OrderFile.read(run.document.read_text()), problems=(before.id,))
-        run.commander.send(run.worker, document, clean=True)
+        run.commander.send(run.worker, document, clean=True, request=before.request.require())
         return before, run.commander.comms.goals.todos.get(before.id)
 
     @classmethod

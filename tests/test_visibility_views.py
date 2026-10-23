@@ -1,5 +1,7 @@
 """Viewer-only presence flags reveal archived threads without reviving owners."""
 
+from agent_comms.bus import Bus
+
 import pytest
 
 from agent_comms.comms import wire
@@ -16,7 +18,7 @@ from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
 ])
 def test_roster_visibility_selects_threads_and_channel_members(tmp_path, visibility, shown):
     comms = wire(tmp_path)
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     for name in ("active", "stopped", "archived"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path)))
     comms.owners.stop("stopped")

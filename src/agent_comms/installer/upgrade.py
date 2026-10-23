@@ -31,15 +31,16 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import ExitStack, contextmanager
+from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from pydantic import TypeAdapter
 
 from agent_comms import cli
 from agent_comms.active_route import ActiveRoute, active_route_path, route_new_bus
+from agent_comms.bus import Bus
 from agent_comms.cli_bridges.shared import Serve, SessionBridgeResumes
 from agent_comms.cli_commands import (
     BusReadBack,
@@ -58,7 +59,7 @@ from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText
 from agent_comms.host_services import HostService, RestartedService
-from agent_comms.install_choices import InstallerChoice
+from agent_comms.install_choices import InstallerChoice, RunMode
 from agent_comms.installer import publication, step_worker
 from agent_comms.installer.backup import (
     BackupReport,
@@ -78,6 +79,7 @@ from agent_comms.installer.carry import (
     CarryChain,
     CarryOperation,
     MigrateOperation,
+    RetireInputsOperation,
 )
 from agent_comms.installer.practice import (
     PracticeMeasurement,
@@ -88,21 +90,26 @@ from agent_comms.installer.practice import (
 from agent_comms.installer.commands import InstallCommands, TimedCommand
 from agent_comms.installer.interpreter_operation import (
     ClientImportsProbe,
+    InstallReportProbe,
+    InstalledProgram,
     PackageRootProbe,
     PinnedLocationProbe,
     PrepareNativeProbe,
+    ProbeProgram,
+    RetainedProgram,
     RunningOwnersProbe,
     RuntimeProbe,
+    SourceProgram,
 )
 from agent_comms.installer.runtime_resolution import RuntimeResolution
+from agent_comms.installer.reporting import RootWriter, RuntimeWriter, UnpostedWriter
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator, MaintenanceState
-from agent_comms.message_bus import MessageBus
+from agent_comms.locked_store import BusFile, RootFile
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout, ScratchCheckout
 from agent_comms.storage_rules import StorageRule
-from agent_comms.store_files import _store_lock
-from agent_comms.wire_log import WireLog
+from agent_comms.recorded_bus import RecordedBusIdentity
 
 if TYPE_CHECKING:
     from agent_comms.installer.launch import InstallReport
@@ -218,6 +225,7 @@ class InstallRolledBack(UpgradeRefused):
         )
 
 
+@dataclass(frozen=True)
 class Extendable:
     """A record a subclass extends with facts of its own; the shared ones carry over."""
 
@@ -233,6 +241,14 @@ class CarriedPass(Extendable):
     steps: tuple[StepRun, ...]
     files: RehearsalFiles
     read: BusReadBack
+    retired_inputs: tuple[StepRun, ...] = field(default=(), kw_only=True)
+
+    def after_acceptance(self, pending: tuple[Carry, ...], stack: Stack,
+                         tree: TargetTree) -> Self:
+        return replace(self, retired_inputs=tuple(
+            StepRun(step.name(), stack.call_step(step, tree, RetireInputsOperation()))
+            for step in pending
+        ))
 
     def require_read(self, carried_from: BusReadBack) -> None:
         """The bus reads back after its carry what it read before it, or the carry lost
@@ -367,6 +383,8 @@ class RehearsedUpgrade(Upgrade):
     commands: tuple[TimedCommand, ...] = field(kw_only=True)
     """Every command the install ran, in the order each finished, with its time."""
 
+    finished: ClassVar[str] = "Install rehearsed"
+
     def lines(self) -> tuple[str, ...]:
         slowest = sorted(self.commands, key=lambda timed: timed.seconds, reverse=True)[:5]
         return (*super().lines(),
@@ -473,9 +491,10 @@ class Stack:
                 *pytest_arguments, cwd=self.checkout, env=self.environment()), end="")
 
     def probe[Answer](self, probe: RuntimeProbe[Answer], *,
-                      source: tuple[Path, ...] = ()) -> Answer:
-        return self.commands.probe(probe, self.python, cwd=self.checkout,
-                                   env=self.environment(*source))
+                      source: tuple[Path, ...] = (),
+                      program: ProbeProgram = SourceProgram()) -> Answer:
+        return self.commands.probe(probe, self.python, cwd=self.home,
+                                   env=self.environment(*source), program=program)
 
     def imports(self) -> None:
         self.probe(ClientImportsProbe())
@@ -536,21 +555,22 @@ class Stack:
             time.sleep(5)
         raise UpgradeRefused(f"{verb}: still unavailable after 20 minutes: {failure.error}")
 
-    def call_step[Answer](self, step: type[Carry], root: Path, tree: TargetTree,
+    def call_step[Answer](self, step: Carry, tree: TargetTree,
                           operation: CarryOperation[Answer]) -> Answer:
         """Run the step in the target tree with this stack's interpreter."""
         with tempfile.TemporaryDirectory() as scratch:
             result = Path(scratch) / "result.json"
             self.commands.run(self.python, "-m", step_worker.__name__, step.name(),
-                              root, json.dumps(FieldCodec.encode(operation)), result, cwd=tree.path,
+                              json.dumps(FieldCodec.encode(step)),
+                              json.dumps(FieldCodec.encode(operation)), result, cwd=tree.path,
                               env=self.environment(*tree.source_paths()))
             return operation.decode_answer(result.read_text())
 
-    def backup_files(self, root: Path, pending: tuple[type[Carry], ...],
+    def backup_files(self, pending: tuple[Carry, ...],
                      tree: TargetTree) -> tuple[Path, ...]:
         return tuple(sorted({
             path for step in pending
-            for path in self.call_step(step, root, tree, BackupFilesOperation())
+            for path in self.call_step(step, tree, BackupFilesOperation())
         }))
 
     def running_owners(self, root: Path) -> list[str]:
@@ -575,7 +595,7 @@ class Stack:
 
 
 @dataclass(frozen=True)
-class TargetTree:
+class TargetTree(AbstractContextManager):
     """The temporary worktree of the target revision the install runs from."""
 
     repo: Path
@@ -598,6 +618,14 @@ class TargetTree:
         if self.path.is_dir():
             ScratchCheckout(self.path).retire()
 
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *exception: object) -> None:
+        self.close()
+        if self.scratch.exists():
+            shutil.rmtree(self.scratch)
+
 
 @dataclass(frozen=True)
 class PracticeBus:
@@ -610,34 +638,42 @@ class PracticeBus:
     scratch: Path
     copied: Path
     measurement: PracticeMeasurement
+    original_root: Path
+    spill_dir: Path
 
     @classmethod
     @contextmanager
-    def of(cls, root: Path, installer: InstallerChoice) -> Iterator[PracticeBus]:
+    def of(cls, root: Path, installer: InstallerChoice, spill_dir: Path
+           ) -> Iterator[PracticeBus]:
         parent = installer.scratch(StorageRule.load(root))
         parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        spill_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
         with (
             tempfile.TemporaryDirectory(dir=parent, prefix="practice-") as scratch,
+            tempfile.TemporaryDirectory(dir=spill_dir, prefix="practice-carry-") as spill,
             practice_copy(root, Path(scratch) / "bus") as (copied, measurement),
         ):
-            yield cls(Path(scratch), copied, measurement)
+            yield cls(Path(scratch), copied, measurement, root, Path(spill))
 
     def pending(self, chain: CarryChain, staged: Stack,
                 tree: TargetTree) -> tuple[type[Carry], ...]:
         """Each step's dry run with the target's staged stack says what is left."""
         return chain.pending(lambda step: staged.call_step(
-            step, self.copied, tree, MigrateOperation(apply=False)))
+            step(self.copied, self.original_root, self.spill_dir), tree,
+            MigrateOperation(apply=False)))
 
 
-def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice, rehearse_only: bool,
+def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice, mode: RunMode,
             retire: bool, spill_dir: Path, scratch: Path,
             harnesses: Callable[[], InstallResult], report: InstallReport) -> Upgrade:
     """``scratch`` holds the target's worktree the launcher runs this source from; this
     run owns it and removes it. A live run ends by registering the ``harnesses``."""
     commands = InstallCommands()
-    current = commands.run("git", "-C", checkout, "rev-parse", "HEAD").strip()
     tree = TargetTree(checkout, scratch, target)
-    try:
+    bridges = report.bridges
+    with report.running(tree):
+        installed = Stack(checkout, commands)
+        current = commands.run("git", "-C", checkout, "rev-parse", "HEAD").strip()
         ancestry = ["git", "-C", str(checkout), "merge-base", "--is-ancestor", current, target]
         with commands.timing(" ".join(ancestry)):
             answer = subprocess.run(ancestry)
@@ -651,33 +687,16 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
         except ValueError as error:
             raise UpgradeRefused(str(error)) from None
         member = Install.member(root, retire)
-        installed = Stack(checkout, commands)
+        report.starting(mode.destination(member.initial_writer(root, installed)), target)
         installed.require_uv()
         if not installed.python.exists():
             raise UpgradeRefused(f"No installed stack at {installed.python}")
         staged = Stack.build(tree.path, commands)
         install, rehearsal = member.rehearsed(checkout, root, current, target, chain,
                                               installed, staged, tree, installer, spill_dir)
-        names = tuple(step.name() for step in install.pending)
-        if rehearse_only:
-            return RehearsedUpgrade(current, target, root, names, rehearsal,
-                                    commands=tuple(commands.ran))
-        install.announce(report)
-        bridges = SessionBridgeResumes()
-        live_run = install.install(rehearsal, bridges)
-        finished = InstalledUpgrade(current, target, root, names, rehearsal, live_run,
-                                    harnesses(), commands=tuple(commands.ran))
-        result = (finished.extended(UnresumedUpgrade, unresumed=bridges.lines())
-                  if bridges.failures else finished)
-        report.finished(result)
-        bridges.require_resumed()
-        return result
-    except UpgradeRefused as error:
-        report.failed(error)
-        raise
-    finally:
-        tree.close()
-        shutil.rmtree(scratch, ignore_errors=True)
+        result = report.complete(mode.finish(install, rehearsal, bridges, harnesses, report))
+    bridges.require_resumed()
+    return result
 
 
 @dataclass(frozen=True)
@@ -689,23 +708,23 @@ class Install[Rehearsed: Rehearsal](ABC):
     root: Path
     current: str
     target: str
-    pending: tuple[type[Carry], ...]
+    pending: tuple[Carry, ...]
     installed: Stack
     staged: Stack
     tree: TargetTree
     installer: InstallerChoice
     spill_dir: Path
 
-    def announce(self, report: InstallReport) -> None:
-        report.starting(Upgrade(self.current, self.target, self.root,
-                                tuple(step.name() for step in self.pending)))
+    @staticmethod
+    def initial_writer(root: Path, installed: Stack) -> RootWriter:
+        return RuntimeWriter(root, installed, RetainedProgram.of(InstallReportProbe))
 
     @staticmethod
     def member(root: Path, retire: bool) -> type[Install]:
         """What exists at ``root`` decides how much of an install it needs."""
         if retire:
             return RetiringInstall
-        if WireLog(WireLog.path_in(root)).fresh():
+        if BusFile.fresh(root):
             return FreshInstall
         return ExistingBusInstall
 
@@ -716,7 +735,24 @@ class Install[Rehearsed: Rehearsal](ABC):
                   installer: InstallerChoice, spill_dir: Path) -> tuple[Install, Rehearsal]:
         """This member's install, with what is pending, and its rehearsal."""
 
-    def install(self, rehearsal: Rehearsed, bridges: SessionBridgeResumes) -> LiveRun:
+    def reported(self, rehearsal: Rehearsed) -> RehearsedUpgrade:
+        return RehearsedUpgrade(
+            self.current, self.target, self.root,
+            tuple(step.name() for step in self.pending), rehearsal,
+            commands=tuple(self.staged.commands.ran))
+
+    def finished(self, rehearsal: Rehearsed, bridges: SessionBridgeResumes,
+                 harnesses: Callable[[], InstallResult], report: InstallReport) -> InstalledUpgrade:
+        rehearsed = self.reported(rehearsal)
+        live_run = self.install(rehearsal, bridges, report)
+        finished = InstalledUpgrade(
+            rehearsed.source, rehearsed.target, rehearsed.root, rehearsed.pending,
+            rehearsed.rehearsal, live_run, harnesses(), commands=tuple(self.staged.commands.ran))
+        return (finished.extended(UnresumedUpgrade, unresumed=bridges.lines())
+                if bridges.failures else finished)
+
+    def install(self, rehearsal: Rehearsed, bridges: SessionBridgeResumes,
+                report: InstallReport) -> LiveRun:
         """Session bridges close their bus resources before units stop, then exec in place.
 
         Each serve retains its recorded owner's PID and start time after the hook exits.
@@ -724,13 +760,16 @@ class Install[Rehearsed: Rehearsal](ABC):
         installed pointer, not a copied target version, selects its successor.
         """
         with ExitStack() as resources:
-            for bridge in Serve.running(self.installed.home):
-                bridges.pause(bridge, resources)
-            resources.callback(bridges.resume)
-            return self.live(rehearsal)
+            try:
+                for bridge in Serve.running(self.installed.home):
+                    bridges.pause(bridge, resources)
+                return self.live(rehearsal, report)
+            finally:
+                # A later pause may fail; resume captured peers before closing their sockets.
+                bridges.resume()
 
     @abstractmethod
-    def live(self, rehearsal: Rehearsed) -> LiveRun: ...
+    def live(self, rehearsal: Rehearsed, report: InstallReport) -> LiveRun: ...
 
 
 class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
@@ -743,7 +782,7 @@ class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
                   chain: CarryChain, installed: Stack, staged: Stack, tree: TargetTree,
                   installer: InstallerChoice, spill_dir: Path) -> tuple[Install, Rehearsal]:
         if chain.steps or staged.cli(root, PlannedReconcileCliCommand).rewritten:
-            with PracticeBus.of(root, installer) as practice:
+            with PracticeBus.of(root, installer, spill_dir) as practice:
                 install = cls.of(checkout, root, current, target,
                                  practice.pending(chain, staged, tree),
                                  installed, staged, tree, installer, spill_dir)
@@ -760,7 +799,8 @@ class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
         unchanged = not pending and current == target and RuntimeResolution.installed().matches(
             staged.lock, staged.python, target, staged.commands)
         member = (ChangedInstall, UnchangedInstall)[unchanged]
-        return member(checkout, root, current, target, pending, installed, staged,
+        steps = tuple(step(root, root, spill_dir) for step in pending)
+        return member(checkout, root, current, target, steps, installed, staged,
                       tree, installer, spill_dir)
 
     @abstractmethod
@@ -792,14 +832,13 @@ class PreparedMigration(Extendable):
             before = bus_files(root)
             yield cls(hold, before, outgoing.verify(root))
 
-    def carry(self, pending: tuple[type[Carry], ...], staged: Stack,
+    def carry(self, pending: tuple[Carry, ...], staged: Stack,
               tree: TargetTree) -> CarriedPass:
         """One migration sequence for rehearsal and the backed-up live bus."""
         steps = []
         for step in pending:
-            with _store_lock(MessageBus.path_in(self.root)):
-                steps.append(StepRun(step.name(), staged.call_step(
-                    step, self.root, tree, MigrateOperation(apply=True))))
+            steps.append(StepRun(step.name(), staged.call_step(
+                step, tree, MigrateOperation(apply=True))))
         reconciled = staged.cli(self.root, ReconcileStoresCliCommand)
         steps.append(StepRun(ReconcileStoresCliCommand.declared_name, Carried(
             len(reconciled.rewritten), rewritten=reconciled.rewritten)))
@@ -829,27 +868,31 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
         (home / ".claude").symlink_to(Path.home() / ".claude")
         stack = replace(self.staged, home=home)
         stack.prepare_native()
-        for path in stack.backup_files(self.root, self.pending, self.tree):
-            destination = copied / path.relative_to(self.root)
-            if path.exists() and not destination.exists():
+        pending = tuple(replace(step, root=copied, spill_dir=practice.spill_dir)
+                        for step in self.pending)
+        for destination in stack.backup_files(pending, self.tree):
+            source = self.root / destination.relative_to(copied)
+            if source.exists() and not destination.exists():
                 destination.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(path, destination)
+                RootFile.content_owner(source).copy_file(source, destination)
         self.installed.running_owners(copied)
         maintenance = MaintenanceBarrier(RegistryStore.at(copied).path)
         hold = maintenance.begin(MaintenanceOperator.current())
         with hold.holding():
             with PreparedMigration.capture(hold, self.installed) as migration:
                 pass
-            passed = migration.carry(self.pending, stack, self.tree)
+            passed = migration.carry(pending, stack, self.tree)
+            passed = passed.after_acceptance(pending, stack, self.tree)
         maintenance.clear(hold)
         return passed.extended(CarriedRehearsal, copy=practice.measurement)
 
     def uncopied(self) -> UncopiedRehearsal:
         return UncopiedRehearsal()
 
-    def live(self, rehearsal: RehearsedFiles) -> CarriedRun:
+    def live(self, rehearsal: RehearsedFiles, report: InstallReport) -> CarriedRun:
         expected = frozenset(rehearsal.files.names) | frozenset(
-            str(path.relative_to(self.root)) for path in self.staged.backup_files(self.root, self.pending, self.tree))
+            str(path.relative_to(self.root))
+            for path in self.staged.backup_files(self.pending, self.tree))
         selected = tuple(self.root / name for name in sorted(expected))
         restore = RestoreSpace.measure(max(
             rehearsal.files.restore_bytes,
@@ -918,7 +961,14 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                                         runtime=self.installed.runtime) from error
             # Installed: the carries ran and the runtime is published. Starting the owners it
             # stopped is reported per owner and never rolls the install back.
-            started = self.staged.start(self.root, running)
+            report.writer = RuntimeWriter(self.root, self.staged, InstalledProgram())
+            try:
+                retirement = tuple(replace(
+                    step, spill_dir=migration.backup.spill_directory(self.spill_dir),
+                ) for step in self.pending)
+                passed = passed.after_acceptance(retirement, self.staged, self.tree)
+            finally:
+                started = self.staged.start(self.root, running)
             retired_backups = migration.backup.retain(self.spill_dir)
             return passed.extended(CarriedRun, stopped=tuple(running), services=services,
                                    started=started, restore_space=restore, backup=migration.backup.report(),
@@ -937,8 +987,9 @@ class UnchangedInstall(ExistingBusInstall[UnchangedRehearsal]):
     def uncopied(self) -> UnchangedRehearsal:
         return UnchangedRehearsal()
 
-    def live(self, rehearsal: UnchangedRehearsal) -> UnchangedRun:
+    def live(self, rehearsal: UnchangedRehearsal, report: InstallReport) -> UnchangedRun:
         self.installed.publish()
+        report.writer = RuntimeWriter(self.root, self.installed, InstalledProgram())
         return UnchangedRun()
 
 
@@ -955,21 +1006,26 @@ class FreshInstall(Install[FreshRehearsal]):
                       tree, installer, spill_dir)
         return install, install.rehearsal()
 
-    def announce(self, report: InstallReport) -> None:
+    @staticmethod
+    def initial_writer(root: Path, installed: Stack) -> RootWriter:
         """A fresh bus has nowhere to publish a start message yet."""
+        return UnpostedWriter()
 
     def rehearsal(self) -> FreshRehearsal:
         return FreshRehearsal()
 
-    def live(self, rehearsal: FreshRehearsal) -> CreatedRun:
+    def live(self, rehearsal: FreshRehearsal, report: InstallReport) -> CreatedRun:
         self.staged.commands.run("git", "-C", self.checkout, "merge", "--ff-only", "-q",
                                  self.target)
         Checkout(self.checkout).prepare()
         self.staged.prepare_native()
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
-        root_id = Comms(self.root).messaging.initialize_private_initial_protocol()
+        Comms(self.root).registry.prepare_native_root()
+        bus = Bus.install(Bus.path_in(self.root))
+        report.writer = RuntimeWriter(self.root, self.staged, InstalledProgram())
         self.staged.publish()
-        route = route_new_bus(ActiveRoute(self.root.absolute(), root_id), active_route_path())
+        route = route_new_bus(ActiveRoute(
+            self.root.absolute(), RecordedBusIdentity.capture(bus.path)), active_route_path())
         services = HostService.restart_running(self.staged.python)
         return CreatedRun(services, route)
 
@@ -981,9 +1037,10 @@ class RetiringInstall(FreshInstall):
     def rehearsal(self) -> RetiringRehearsal:
         return RetiringRehearsal()
 
-    def live(self, rehearsal: FreshRehearsal) -> RetiredRun:
+    def live(self, rehearsal: FreshRehearsal, report: InstallReport) -> RetiredRun:
         running = self.installed.running_owners(self.root)
         self.installed.owners(self.root, StopCliCommand, running)
         retired = self.root.with_name(f"{self.root.name}.retired-{time.strftime('%Y%m%dT%H%M%S')}")
         self.root.rename(retired)
-        return super().live(rehearsal).extended(RetiredRun, stopped=tuple(running), retired=retired)
+        return super().live(rehearsal, report).extended(
+            RetiredRun, stopped=tuple(running), retired=retired)

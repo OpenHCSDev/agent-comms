@@ -9,6 +9,7 @@ import pytest
 
 import agent_comms.store_files as store_files
 from agent_comms.comms import Comms
+from conftest import installed_comms
 from agent_comms.goal_actions import (
     ClearGoalAction,
     CompletedGoalAction,
@@ -24,7 +25,7 @@ from agent_comms.tool_caller import ThreadCaller
 
 
 def _wire(tmp_path) -> Comms:
-    comms = Comms(tmp_path / "wire")
+    comms = installed_comms(tmp_path / "wire")
     comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path)))
     return comms
 

@@ -1,6 +1,3 @@
-import subprocess
-import sys
-import textwrap
 from abc import abstractmethod
 from dataclasses import dataclass
 
@@ -134,33 +131,3 @@ def test_independent_families_and_inherited_names_are_derived():
 
         class Cross(HTTPReady, CustomCase):
             pass
-
-
-def test_checkpoint_schema_query_stays_local_but_external_names_still_discover():
-    result = subprocess.run(
-        [sys.executable, "-c", textwrap.dedent("""
-            import os, sqlite3, sys, tempfile
-            import agent_comms.private_bus_checkpoint as checkpoint
-            from agent_comms.typed_table import TypedTable
-
-            # A real checkpoint schema can be installed and decoded with only
-            # its owner's declarations, without loading ACP under a bus lock.
-            tables = TypedTable.members_with(checkpoint.CheckpointTable)
-            assert checkpoint.CheckedPrefix in tables
-            with sqlite3.connect(':memory:') as db, tempfile.TemporaryFile() as source:
-                for table in tables:
-                    table.create(db)
-                checked_prefix = checkpoint.CheckedPrefix.capture(
-                    '0' * 32, checkpoint.FileRevision.from_file(source), 0, bytes(32), '0' * 64)
-                checked_prefix.insert(db)
-                assert checkpoint._saved(db) == checked_prefix.witness()
-            assert 'agent_comms.acp' not in sys.modules
-
-            # Schema-report's external-name boundary still acquires the full
-            # distributed family; this change must not hide unloaded tables.
-            row = TypedTable.member_named('native_runtime_input')
-            assert row.declared_name == 'native_runtime_input'
-        """)],
-        capture_output=True, text=True, timeout=30,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr

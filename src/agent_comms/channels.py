@@ -199,11 +199,24 @@ class MembershipChannel:
 
 class BuiltinChannelView(PredicateChannel, MembershipChannel, Channel, declared_name=None):
     @classmethod
+    def address(cls) -> str:
+        """The channel's address, derived from its declared name with the channel sigil."""
+        return ChannelTarget.normalize_name(cls.declared_name)
+
+    @classmethod
+    def addresses(cls) -> tuple[str, ...]:
+        return tuple(member.address() for member in cls.members_with(cls))
+
+    @classmethod
+    def addressed(cls, address: str) -> type[BuiltinChannelView]:
+        return cls.member_named(ChannelTarget.bare_name(address))
+
+    @classmethod
     def target(cls) -> ChannelTarget:
-        return ChannelTarget(cls.declared_name)
+        return ChannelTarget(cls.address())
 
     def validate_declaration(self) -> None:
-        if self.name != self.declared_name:
+        if self.name != self.address():
             raise ValueError("Built-in channel must retain its declaration identity.")
         if self.tags:
             raise ValueError("Built-in channels cannot have tag filters.")
@@ -221,7 +234,7 @@ class BuiltinChannelView(PredicateChannel, MembershipChannel, Channel, declared_
 
     @classmethod
     def history_scope(cls) -> ChannelDisplayScope:
-        return ChannelDisplayScope(cls.declared_name, frozenset((cls.declared_name,)))
+        return ChannelDisplayScope(cls.address(), frozenset((cls.address(),)))
 
     def require_metadata(self) -> None:
         raise ValueError("Built-in channels cannot be grouped or archived.")
@@ -233,7 +246,7 @@ class BuiltinChannelView(PredicateChannel, MembershipChannel, Channel, declared_
         return not existing
 
     def sort_key(self, ordering, view) -> tuple:
-        return not self.pinned, BuiltinChannelView.names().index(self.name), 0, 0, self.name
+        return not self.pinned, BuiltinChannelView.addresses().index(self.name), 0, 0, self.name
 
 
 class NonRoutableChannel:
@@ -248,21 +261,21 @@ class NonRoutableChannel:
         return False
 
 
-class AnyChannel(NonRoutableChannel, BuiltinChannelView, declared_name="#any"):
+class AnyChannel(NonRoutableChannel, BuiltinChannelView):
     history_result_type = EverythingHistoryPageResult
 
     @classmethod
     def history_scope(cls) -> ChannelDisplayScope:
-        return AllChannelDisplayScope(cls.declared_name)
+        return AllChannelDisplayScope(cls.address())
 
 
-class NoneChannel(BuiltinChannelView, declared_name="#none"):
+class NoneChannel(BuiltinChannelView):
     @classmethod
     def matches(cls, tags: frozenset[str]) -> bool:
         return not tags
 
 
-class AllChannel(BuiltinChannelView, declared_name="#all"):
+class AllChannel(BuiltinChannelView):
     pass
 
 

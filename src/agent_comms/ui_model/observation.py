@@ -18,14 +18,13 @@ from __future__ import annotations
 import asyncio
 import itertools
 import multiprocessing
-import os
 import signal
 import sys
 import time
 import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterator, Mapping
-from contextlib import AbstractContextManager, ExitStack
+from contextlib import AbstractContextManager, ExitStack, aclosing
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
@@ -36,14 +35,13 @@ from acp import RequestError
 from agent_comms.acp_extension import TranscriptDraftUpdate, TranscriptSnapshotUpdate
 from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
-from agent_comms.bus_route_counts import RouteIndexRebuilding
 from agent_comms.coordination_errors import (
     CoordinationError,
     CoordinationReadUnavailable,
     ReloadRequired,
     StaleRevision,
 )
-from agent_comms.errors import RelationViolationError
+from agent_comms.errors import RelationViolationError, ToolRefusedError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.presentation import NoRevision, ReadState, WireRevision
 from agent_comms.registry_document import RosterVisibility
@@ -242,8 +240,6 @@ class UnreadableHistory(ValueError):  # noqa: N818 - nominal stored-read state
         """Run a stored read: its value, a read deferred to retry, or unreadable with its cause."""
         try:
             return ReadValue(read())
-        except RouteIndexRebuilding as error:
-            return ReadPreparing(error)
         except cls.DEFERRED_READS as error:
             return ReadDeferred(error)
         except cls.UNREADABLE_READS as error:
@@ -284,10 +280,6 @@ class StoredRead[T](ABC):
     def raised(self) -> T:
         """The value, or the failure raised again for a caller that answers it itself."""
 
-    def continued(self) -> Self:
-        """This outcome, for a reader that runs the next unit of a bounded preparation."""
-        return self
-
 
 @dataclass(frozen=True)
 class ReadValue[T](StoredRead[T]):
@@ -316,14 +308,6 @@ class ReadDeferred[T](StoredRead[T]):
 
 
 @dataclass(frozen=True)
-class ReadPreparing[T](ReadDeferred[T]):
-    """A bounded route index unit finished and runnable work remains."""
-
-    def continued(self) -> Self:
-        raise self.error
-
-
-@dataclass(frozen=True)
 class ReadUnreadable[T](StoredRead[T]):
     error: ValueError
     cause: UnreadableHistory
@@ -346,6 +330,12 @@ class AwaitedRead(ObservationRequest):
 
     root: str
     request_id: int = field(default=0, kw_only=True)
+
+    @property
+    def refusal_errors(self) -> tuple[type[Exception], ...]:
+        return (
+            CoordinationReadUnavailable, RelationViolationError, UnreadableHistory, StaleRevision,
+        )
 
     def require_root(self, comms: Comms) -> None:
         if Path(self.root).expanduser().resolve() != comms.root.resolve():
@@ -378,7 +368,7 @@ class ReadRequest(AwaitedRead):
             except self.deferred_reads:
                 return ReadBusy(self.request_id)
             return ReadAnswered(self.request_id, value)
-        except (CoordinationReadUnavailable, RelationViolationError, UnreadableHistory, StaleRevision) as error:
+        except self.refusal_errors as error:
             return self.refused(error)
 
 
@@ -387,11 +377,18 @@ class OwnerRead(AwaitedRead):
     """A read the live owner of thread incarnation ``owner`` answers over its socket.
 
     Served as it arrives, beside store reads; the owner's reply is decoded
-    here. The owner's refusals and a changed owner identity reach the UI as
-    ValueError, as the UI's owner actions report them.
+    here. Expected owner loss and refusals reach the caller with their original
+    error types, without ending observation or inventing a successful snapshot.
     """
 
     owner: ThreadIncarnation
+
+    @property
+    def refusal_errors(self) -> tuple[type[Exception], ...]:
+        return (
+            *super().refusal_errors,
+            RequestError, CoordinationError, ToolRefusedError, ConnectionError, TimeoutError,
+        )
 
     def receive(self, service: ObservationService) -> None:
         service.owner_reads[self.request_id] = service.tasks.create_task(self.serve(service))
@@ -404,18 +401,18 @@ class OwnerRead(AwaitedRead):
         service.send(answer)
 
     async def answer(self, comms: Comms) -> ReadAnswered | ReadRefused:
-        self.require_root(comms)
         try:
+            self.require_root(comms)
             return ReadAnswered(self.request_id, await self.ask(comms))
-        except (RequestError, CoordinationError) as error:
+        except self.refusal_errors as error:
             return self.refused(error)
 
     def connect(self, comms: Comms) -> RuntimeConnection:
-        from agent_comms.runtime import OwnerReplyConnection, socket_path
+        from agent_comms.runtime import OwnerIdentityChangedError, OwnerReplyConnection, socket_path
 
         owner = comms.registry.require(self.owner.name)
         if owner.incarnation != self.owner:
-            raise ValueError("The owner incarnation changed while preparing the request.")
+            raise OwnerIdentityChangedError("The owner incarnation changed while preparing the request.")
         return OwnerReplyConnection(
             comms, owner.name, socket_path(comms.root, owner.require_process().pid),
         )
@@ -647,7 +644,7 @@ class ObserveSidebar(InterestRequest):
         visibility = RosterVisibility(self.show_stopped, self.show_archived)
         return UnreadableHistory.outcome(lambda: SidebarObserved(
             revision, self, snapshot := read(subject, visibility), SidebarModel.derive(snapshot),
-        )).continued().answer(  # The sidebar runs the next bounded preparation unit itself.
+        )).answer(
             lambda observed: observed, lambda error: SidebarPreparing(revision, self, error),
             lambda error: SidebarUnreadable(revision, self, error))
 
@@ -697,13 +694,7 @@ class SidebarReading(Observation[ObserveSidebar]):
         key = SidebarSent(revision.expiry_period, type(self.stage), revision)
         if not self.sent.changed_since(key):
             return
-        try:
-            result = self.stage.read(self.request, comms, revision)
-        except RouteIndexRebuilding as error:
-            yield from SidebarPreparing(revision, self.request, error).finish_read(self, key)
-            yield ObservationPending()
-            return
-        yield from result.finish_read(self, key)
+        yield from self.stage.read(self.request, comms, revision).finish_read(self, key)
 
     def publish(self, result: SidebarResult, key: SidebarSent) -> Iterator[SidebarResult]:
         self.sent = result.send_state(key)
@@ -1190,15 +1181,14 @@ class ObservationService:
             request.receive(self)
 
     async def watch(self) -> None:
-        from agent_comms.wire_watch import ModifiedWatchSource, WireWatch
+        from agent_comms.watched import FileSource
 
-        paths = tuple(path for group in WireRevision.source_paths(self.comms.views).values()
-                      for path in group)
-        sources = tuple(ModifiedWatchSource(directory, frozenset(
-            os.fsencode(path.name) for path in paths if path.parent == directory))
-            for directory in dict.fromkeys(path.parent for path in paths))
-        async for _ in WireWatch.observations(*sources):
-            self.observe_again()
+        sources = tuple(FileSource(path)
+                        for group in WireRevision.source_paths(self.comms.views).values()
+                        for path in group)
+        async with aclosing(self.comms.bus.bus.watch(*sources)) as changes:
+            async for _ in changes:
+                self.observe_again()
 
     def observe_again(self) -> None:
         if not self.closed:

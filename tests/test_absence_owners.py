@@ -9,12 +9,13 @@ from agent_comms.agent_backend import InputId, SendNow, TurnInbox
 from agent_comms.backend import EventFinishSignal, FinishSignal, InputStartListener, NoFinishSignal, NoInputStartListener
 from agent_comms.change_report import FileLine, NoSourceReference
 from agent_comms.field_codec import FieldCodec
-from agent_comms.input_drain import DrainedSession, NoPrivateObservation
+from agent_comms.input_drain import DrainedSession
 from agent_comms.native_child import NoInputForwarder
 from agent_comms.native_startup import MeasuredSessionLoad, SessionLoad, UnmeasuredSessionLoad
 from agent_comms.native_session_reopen import SessionRetention
 from agent_comms.pi_commands import GetState
 from agent_comms.turn_input_source import SelectedOriginalInput
+from agent_comms.turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
 
 
 def test_drain_lifecycle_keeps_inbox_and_original_in_one_owner():
@@ -28,7 +29,8 @@ def test_drain_lifecycle_keeps_inbox_and_original_in_one_owner():
     assert state.turn_open() and not state.turn_started()
     with pytest.raises(KeyError):
         state.require_first_source()
-    original = SelectedOriginalInput.answering("original input")
+    original = SelectedOriginalInput.answering(
+        "original input", TurnGoalPermission(InactiveGoalPermission()))
     state.capture_first_source(original)
     assert state.turn_started() and state.require_first_source() is original
     item = SendNow((InputId("live"),))
@@ -96,7 +98,6 @@ async def test_native_absence_does_not_admit_a_wait_or_a_forwarding_job():
 
 
 async def test_unobserved_private_state_and_unmeasured_session_have_no_authority(tmp_path):
-    assert not await NoPrivateObservation().coordination_unchanged(None, "session", None)
     state = DrainedSession()
     assert not state.settled()
     await state.turn.finish_original(None)

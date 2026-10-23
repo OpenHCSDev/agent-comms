@@ -8,10 +8,11 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Literal, Annotated
+from typing import TYPE_CHECKING, Any, Literal, Annotated, Self
 
 
 from .child_process import NoProcess, ProcessIdentity
+from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import (
     FieldCodec,
@@ -47,6 +48,7 @@ from .thread_identity import (
 )
 from .thread_presentation import ThreadOwnerBinding
 from .thread_status import (
+    ActiveThreadPresence,
     ArchivedThreadStatus,
     StoppedThreadStatus,
     ThreadStatus,
@@ -59,7 +61,7 @@ if TYPE_CHECKING:
     from .activity import ObservedActivity
     from .agent_activity import AgentActivity
     from .audience_manifest import FrozenRecipient
-    from .bus_publication import CommittedDelivery
+    from .bus_publication import Delivered
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,6 +114,11 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
         return (executor for thread in selected
                 if self.status(thread.name).in_view(visibility)
                 for executor in thread.role.executor(thread))
+
+    def active_threads(self, candidates: Iterable[Thread]) -> Iterator[Thread]:
+        """Select activity-bearing presences from this already acquired registry cut."""
+        return (member for thread in candidates
+                for member in self.status(thread.name).items_with(ActiveThreadPresence, thread))
 
     def channel_audience(self) -> Iterator[Thread]:
         """A channel reaches the default roster: stopped owners receive, archived do not."""
@@ -191,16 +198,31 @@ class ThreadSlice[Value](ABC):
                 return policy.value
         raise TypeError(f"{plan.name} declares no thread slice")
 
-    @staticmethod
-    def required[Document: type](document: Document) -> Document:
+    @classmethod
+    def required[Document: type](cls, document: Document) -> Document:
         """Refuse, at class definition, a document field without a slice kind."""
         for plan in FieldCodec.field_plans(document):
             if plan.declared.init and plan.records:
-                ThreadSlice.of(plan)
+                cls.of(plan)
         return document
 
 
-class OwnRow(ThreadSlice[dict]):
+class SnapshotValue[Value](ThreadSlice[Value]):
+    """A declared registry field owns both editable and snapshot copies."""
+
+    @classmethod
+    @abstractmethod
+    def freeze(cls, value: Value) -> object: ...
+
+    @staticmethod
+    def of(plan: FieldPlan) -> type[SnapshotValue]:
+        policy = ThreadSlice.of(plan)
+        if not issubclass(policy, SnapshotValue):
+            raise TypeError(f"{plan.name} declares no snapshot value policy")
+        return policy
+
+
+class OwnRow(SnapshotValue[dict]):
     """The row under the thread's own name."""
 
     @staticmethod
@@ -208,8 +230,12 @@ class OwnRow(ThreadSlice[dict]):
         return {canonical: raw[canonical]} if canonical in raw else {}
 
     @classmethod
-    def copy(cls, value: dict) -> dict:
+    def copy(cls, value: Mapping) -> dict:
         return dict(value)
+
+    @classmethod
+    def freeze(cls, value: Mapping) -> Mapping:
+        return MappingProxyType(cls.copy(value))
 
 
 class AliasesOf(OwnRow):
@@ -236,16 +262,39 @@ class GenerationOf(ThreadSlice[GenerationCounter]):
         return GenerationCounter(value.counter, dict(value.generations))
 
 
-class WholeDocumentValue(ThreadSlice[int]):
+class WholeDocumentValue[Value](SnapshotValue[Value]):
     """A scalar shared by the whole document and every one-thread view."""
 
     @staticmethod
-    def cut(raw: int, canonical: str) -> int:
+    def cut(raw: Value, canonical: str) -> Value:
         return raw
 
     @classmethod
-    def copy(cls, value: int) -> int:
+    def copy(cls, value: Value) -> Value:
         return value
+
+    @classmethod
+    def freeze(cls, value: Value) -> Value:
+        return cls.copy(value)
+
+
+class RootPurpose(DeclaredFamily, affix="RootPurpose"):
+    """The registry's durable permission to mutate this root."""
+
+    @abstractmethod
+    def require_write(self) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class WorkingRootPurpose(RootPurpose):
+    def require_write(self) -> None:
+        pass
+
+
+@dataclass(frozen=True, slots=True)
+class HistoricalRootPurpose(RootPurpose):
+    def require_write(self) -> None:
+        raise RelationViolationError("Historical roots are read-only")
 
 
 @ThreadSlice.required
@@ -254,6 +303,9 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
     version: Annotated[
         Literal[1], SlicePolicy(WholeDocumentValue), WireRequired()
     ] = 1
+    purpose: Annotated[RootPurpose, SlicePolicy(WholeDocumentValue)] = field(
+        default_factory=WorkingRootPurpose
+    )
     threads: Annotated[dict[str, Thread], SlicePolicy(OwnRow)] = field(
         default_factory=dict
     )
@@ -641,7 +693,9 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         if not turn.may_release(canonical_lease):
             return False, NoFinishedTurn()
         attested = (canonical_lease.can_attest(self.claims.generations[name])
-                    and turn.held_by(canonical_lease) and self.status(name).active)
+                    and turn.held_by(canonical_lease))
+        completion = (self.status(name).completed_turn(canonical_lease)
+                      if attested else NoFinishedTurn())
         keeps_resume = turn.phase.keeps_project_resume
         record.without_claim()
         self.threads[name] = replace(
@@ -650,13 +704,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
             project_resume_due=current.project_resume_due and keeps_resume,
         )
         self.last_seen[name] = time.time()
-        if not attested:
-            return True, NoFinishedTurn()
-        return True, FinishedTurnFence(
-            identity=canonical_lease.identity,
-            turn_id=lease.turn_id,
-            claimed_generation=lease.claimed_generation,
-        )
+        return True, completion
 
 
 @dataclass(frozen=True, slots=True)
@@ -678,11 +726,7 @@ class RegistryEntry:
         return name in self.names
 
     def owned_by(self, owner: OwnerIdentity, process: ProcessIdentity) -> bool:
-        return (
-            self.status.active
-            and self.matches_name(owner.incarnation.name)
-            and owner.owns(self.thread, self.owner_generation, process)
-        )
+        return self.status.owns_entry(self, owner, process)
 
     def require_owner_process(self, owner: OwnerIdentity, process: ProcessIdentity) -> Thread:
         """The exact saved owner lease, current name and process still agree."""
@@ -697,15 +741,40 @@ class RegistryEntry:
         return OwnerIdentity(self.thread.incarnation, self.owner_generation)
 
 
+@SnapshotValue.required
 @dataclass(frozen=True, slots=True)
 class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryProvenance):
-    threads: Mapping[str, Thread]
-    statuses: Mapping[str, ThreadStatus]
-    last_seen: Mapping[str, float]
-    aliases: Mapping[str, str]
-    owner_generations: Mapping[str, int]
-    _claimed_generations: Mapping[str, int] = field(repr=False)
-    by_lookup: Mapping[str, Thread] = field(repr=False, compare=False)
+    purpose: Annotated[RootPurpose, SlicePolicy(WholeDocumentValue)]
+    threads: Annotated[Mapping[str, Thread], SlicePolicy(OwnRow)]
+    statuses: Annotated[Mapping[str, ThreadStatus], SlicePolicy(OwnRow)]
+    last_seen: Annotated[Mapping[str, float], SlicePolicy(OwnRow)]
+    aliases: Annotated[Mapping[str, str], SlicePolicy(OwnRow)]
+    owner_generations: Annotated[Mapping[str, int], SlicePolicy(OwnRow)]
+    _claimed_generations: Annotated[Mapping[str, int], SlicePolicy(OwnRow)] = field(repr=False)
+    by_lookup: Mapping[str, Thread] = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        """Own each copied value and derive the birth index from the frozen threads."""
+        for plan in FieldCodec.field_plans(type(self)):
+            if plan.declared.init:
+                object.__setattr__(
+                    self, plan.name, SnapshotValue.of(plan).freeze(getattr(self, plan.name)),
+                )
+        indexed: dict[str, Thread] = {}
+        for thread in self.threads.values():
+            lookup = thread.incarnation.require_recorded().lookup
+            if lookup in indexed:
+                raise RelationViolationError("Registry creation identities collide.")
+            indexed[lookup] = thread
+        object.__setattr__(self, "by_lookup", MappingProxyType(indexed))
+        super(RegistrySnapshot, self).__post_init__()
+
+    def __reduce__(self) -> tuple[type[Self], tuple[object, ...]]:
+        """Worker restoration preserves scalar policy and re-enters the constructor."""
+        return type(self), tuple(
+            SnapshotValue.of(plan).copy(getattr(self, plan.name))
+            for plan in FieldCodec.field_plans(type(self)) if plan.declared.init
+        )
 
     def claim_generation(self, name: str) -> int:
         """The allocated input generation follows this registry's alias lineage."""
@@ -727,28 +796,21 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
     def idle_after(self, fence: FinishedTurnFence) -> tuple[Thread, ...]:
         return tuple(
             thread
-            for thread in self.threads_for(fence.identity.incarnation.require_recorded())
-            if self.status(thread.name).active
-            and thread.latest_idle_turn(fence, self.claim_generation(thread.name))
+            for thread in self.active_threads(self.threads_for(fence.identity.incarnation.require_recorded()))
+            if thread.latest_idle_turn(fence, self.claim_generation(thread.name))
         )
 
     @classmethod
     def capture(cls, document: RegistryDocument) -> RegistrySnapshot:
         """One live registry cut owns the index and all its source maps."""
-        indexed: dict[str, Thread] = {}
-        for thread in document.threads.values():
-            lookup = thread.incarnation.require_recorded().lookup
-            if lookup in indexed:
-                raise RelationViolationError("Registry creation identities collide.")
-            indexed[lookup] = thread
         return cls(
-            threads=MappingProxyType(dict(document.threads)),
-            statuses=MappingProxyType(dict(document.statuses)),
-            last_seen=MappingProxyType(dict(document.last_seen)),
-            aliases=MappingProxyType(dict(document.aliases)),
-            owner_generations=MappingProxyType(dict(document.owners.generations)),
-            _claimed_generations=MappingProxyType(dict(document.claims.generations)),
-            by_lookup=MappingProxyType(indexed),
+            purpose=document.purpose,
+            threads=document.threads,
+            statuses=document.statuses,
+            last_seen=document.last_seen,
+            aliases=document.aliases,
+            owner_generations=document.owners.generations,
+            _claimed_generations=document.claims.generations,
         )
 
     def observed_activity(
@@ -766,11 +828,16 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
                 observed[name] = DeletedThread(canonical)
         return observed
 
+    def unread_since(
+        self, actor: str, since: float | None, recorded_delivery: bool,
+    ) -> float | None:
+        return self.require(actor).role.unread_since(since, recorded_delivery)
+
     def displayed_recipient_effect(self, reads, message, thread: Thread, *, document=None):
         return thread.role.displayed_recipient_effect(reads, message, thread, self, document)
 
     def recipient(
-        self, recipient: FrozenRecipient, original: CommittedDelivery
+        self, recipient: FrozenRecipient, original: Delivered
     ) -> RegisteredRecipient | RetiredRecipient:
         """A missing live thread was retired only if the original send names it."""
         lookup = recipient.recipient_lookup

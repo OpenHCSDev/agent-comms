@@ -1,5 +1,7 @@
 """The real SessionStart program must leave an installable serve after hook exit."""
 
+from agent_comms.bus import Bus
+
 import asyncio
 import json
 import os
@@ -27,7 +29,7 @@ def test_session_start_hook_exit_preserves_the_recorded_owner_for_install_pause(
     home = bridge_home
     session = 'copied-session'
     comms = Comms(tmp_path / 'bus')
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     comms.registry.declare(comms.registry.new_thread(
         'bridge-copy', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
     transcript = tmp_path / f'{session}.jsonl'
@@ -71,7 +73,7 @@ def test_session_start_hook_exit_preserves_the_recorded_owner_for_install_pause(
             assert line, owner_log.read_text()
             hook_pid = int(line)
             expected = ProcessIdentity.capture(owner.pid)
-            observed = InspectSession().information(claim)
+            observed = InspectSession().information(claim.socket_path)
             assert observed.owner == expected
             assert owner.poll() is None
             assert observed.process.alive()
@@ -82,7 +84,7 @@ def test_session_start_hook_exit_preserves_the_recorded_owner_for_install_pause(
                 expected.require_ancestor_of(observed.process.pid)
             with pytest.raises(ValueError, match='different'):
                 VerifySession(owner=replace(expected, start_time=expected.start_time + 1)).exchange(
-                    claim)
+                    claim.socket_path)
             with pytest.raises(RuntimeError, match='older watch'):
                 Serve.launch(claim, lambda: ProcessIdentity.capture(os.getpid()), transcript)
             assert observed.process.alive()

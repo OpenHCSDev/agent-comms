@@ -374,7 +374,7 @@ class BackVerb(VerdictVerb):
 
     def report(self, ctx: order.Commander, todos: tuple[Todo, ...]) -> None:
         for todo in todos:
-            audience = todo.verdicts[-1].audience.of(todo.held().owner, todo.goal)
+            audience = todo.verdicts[-1].audience.of(todo.held().owner, todo)
             roast(ctx, audience, todo.holder, self.lines, self.roast, self.fix, self.slop())
             line = (f'{time.strftime("%Y-%m-%d %H:%M")} {todo.holder} '
                     f'(strike {todo.strike_count} on {todo.id}; caught by {ctx.actor_name} at review): '

@@ -19,8 +19,8 @@ class RetainedFormat(WireExportFormat):
         return ("# Authored retained context\n"
                 f"# metadata: {self.json_record(metadata)}\n\n").encode()
 
-    def row(self, message: Message, stored: Mapping[str, object]) -> bytes:
-        original = self.segment.original_text_source(message)
+    def row(self, message: Message) -> bytes:
+        original = self.segment.retained.original_text_source(message.reference)
         provenance = dict(declaration=FieldCodec.encode(message.reference),
                           **message.task.original_wording_provenance(original),
                           task=FieldCodec.encode(message.task))

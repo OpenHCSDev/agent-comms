@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.attempt_recovery import RecoveryMonitorCapability, VerifiedOwnerLoss
+from agent_comms.bus import Bus
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.private_path import FileRevision
 from agent_comms.cli import main as cli_main
@@ -53,7 +54,7 @@ async def release_starting_attempt(directory):
             comms, store, root_id, "beta", 0, cursor_delivery=delivery,
         ) as participant:
             assert participant is not None
-            created = store.executions.create(
+            created = store.create(
                 participant.batch.execution_id, ExecutionOrigin.WIRE,
                 participant.lookup, participant.owner.thread.name, 1,
                 sources=participant.batch.sources,
@@ -99,15 +100,15 @@ def recover_starting_owner(released_starting):
     with Coordination(released_starting / "coordination.sqlite3") as store:
         pointer = CurrentExecutions.require(store.session._connection, owner_lookup=owner.incarnation.lookup)
         execution_id = pointer.execution_id.require("fixture must hold a starting attempt")
-        before = store.snapshots.get(execution_id)
+        before = store.get(execution_id)
         assert before.attempt.lifecycle.starting
         assert NativeRuntimeInput.count(store.session._connection) == 0
         inputs = input_evidence(store)
-    bus = (released_starting / "bus.jsonl").read_bytes()
+    bus = Bus(Bus.path_in(released_starting)).revision()
     dispositions = FileRevision.capture(InputDispositions.path_in(released_starting))
     RecoveryMonitorCapability.recover_owner(released_starting, owner)
     with Coordination(released_starting / "coordination.sqlite3") as store:
-        after = store.snapshots.get(execution_id)
+        after = store.get(execution_id)
         after.attempt.lifecycle.require(Failed, ValueError("failure required"))
         assert not after.is_current
         assert after.attempt.reason_code == GivenReasonCode("released_native_unknown")
@@ -118,7 +119,7 @@ def recover_starting_owner(released_starting):
             owner_lookup=owner.incarnation.lookup).unresolved
         assert input_evidence(store) == inputs
         assert NativeRuntimeInput.count(store.session._connection) == 0
-    assert (released_starting / "bus.jsonl").read_bytes() == bus
+    assert Bus(Bus.path_in(released_starting)).revision() == bus
     assert FileRevision.capture(InputDispositions.path_in(released_starting)) == dispositions
 
 
@@ -166,7 +167,7 @@ def test_undispatched_owner_loss_refuses_a_live_native_child(released_starting, 
         with Coordination(released_starting / "coordination.sqlite3") as store:
             pointer = CurrentExecutions.require(store.session._connection, owner_lookup=owner.incarnation.lookup)
             execution_id = pointer.execution_id.require("the live child must keep its attempt unresolved")
-            assert store.snapshots.get(execution_id).attempt.lifecycle.starting
+            assert store.get(execution_id).attempt.lifecycle.starting
             assert NativeRuntimeInput.count(store.session._connection) == 0
     finally:
         child.terminate()
@@ -178,13 +179,13 @@ def test_observed_owner_loss_expires_with_its_boundary(released_starting):
     with Coordination(released_starting / "coordination.sqlite3") as store:
         pointer = CurrentExecutions.require(store.session._connection, owner_lookup=owner.incarnation.lookup)
         execution_id = pointer.execution_id.require("fixture must hold a starting attempt")
-        before = store.snapshots.get(execution_id)
+        before = store.get(execution_id)
         with VerifiedOwnerLoss.observe_native_release(store, execution_id) as proof:
             assert proof.owns(store, before.attempt)
         assert not proof.owns(store, before.attempt)
         with pytest.raises(RecoveryBlocked):
             proof.require_native_exit()
-        assert store.snapshots.get(execution_id) == before
+        assert store.get(execution_id) == before
 
 
 async def test_launch_recovers_before_reserving_replacement_pid(
@@ -210,7 +211,7 @@ async def test_launch_recovers_before_reserving_replacement_pid(
                         assert owner.process_alive
                         await asyncio.sleep(0.02)
                 with Coordination(released_starting / "coordination.sqlite3") as store:
-                    after = store.snapshots.get(execution_id)
+                    after = store.get(execution_id)
                     assert not after.is_current
                     assert after.attempt.reason_code == GivenReasonCode("released_native_unknown")
                     assert NativeRuntimeInput.count(store.session._connection) == 0
@@ -225,7 +226,7 @@ def test_recover_owner_refuses_a_conflicting_input_identity(released_starting, c
     with Coordination(released_starting / "coordination.sqlite3") as store:
         pointer = CurrentExecutions.require(store.session._connection, owner_lookup=owner.incarnation.lookup)
         execution_id = pointer.execution_id.require("fixture must hold a starting attempt")
-        before = store.snapshots.get(execution_id)
+        before = store.get(execution_id)
         with store.session.writing() as db:
             NativeRuntimeInput(
                 input_id="c" * 32, stage=FullNativeExecution,
@@ -241,7 +242,7 @@ def test_recover_owner_refuses_a_conflicting_input_identity(released_starting, c
     assert cli_main(["--root", str(released_starting), "start", "--name", "beta"]) == 1
     assert WATCH_LINE.validate_json(capsys.readouterr().out) == CoreError.from_exception(blocked.value)
     with Coordination(released_starting / "coordination.sqlite3") as store:
-        assert store.snapshots.get(execution_id) == before
+        assert store.get(execution_id) == before
         assert input_evidence(store) == inputs
 
 
@@ -291,20 +292,20 @@ def test_stop_of_previously_released_dead_owner_settles_without_replay(released_
     process, exit_allowed, root, _root_id, execution_id, input_id = released_unknown
     leave(process, exit_allowed)
     comms = Comms(root)
-    before_bus = (root / "bus.jsonl").read_bytes()
+    before_bus = comms.bus.bus.revision()
     with Coordination(str(root / "coordination.sqlite3")) as store:
         before_input = input_evidence(store)
-        assert store.snapshots.get(execution_id).is_current
+        assert store.get(execution_id).is_current
     comms.owners.stop("beta")
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        snapshot = store.snapshots.get(execution_id)
+        snapshot = store.get(execution_id)
         assert not snapshot.is_current
         assert type(snapshot.execution.lifecycle) is FailedExecution
         replay = snapshot.replay.require_assessment()
         assert replay.facts & ReplayFact.UNKNOWN_EFFECTS
         assert not replay.replay_safe
         assert input_evidence(store) == before_input
-    assert (root / "bus.jsonl").read_bytes() == before_bus
+    assert comms.bus.bus.revision() == before_bus
     assert input_id in str(before_input)
 
 
@@ -313,7 +314,7 @@ def test_abandon_refuses_released_but_live_owner(released_unknown):
     with Coordination(str(root / "coordination.sqlite3")) as store:
         with pytest.raises(RecoveryBlocked):
             RecoveryMonitorCapability.abandon_released_native_attempt(store, execution_id)
-        assert store.snapshots.get(execution_id).is_current
+        assert store.get(execution_id).is_current
 
 
 def test_abandon_refuses_live_native_process(released_unknown):
@@ -321,7 +322,7 @@ def test_abandon_refuses_live_native_process(released_unknown):
     leave(process, exit_allowed)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         session_dir = (
-            root / "native-sessions" / store.snapshots.get(execution_id).execution.owner_lookup
+            root / "native-sessions" / store.get(execution_id).execution.owner_lookup
         )
         child = subprocess.Popen(
             [sys.executable, "-c", "import time; time.sleep(30)", "--session-dir", str(session_dir)]
@@ -329,7 +330,7 @@ def test_abandon_refuses_live_native_process(released_unknown):
         try:
             with pytest.raises(RecoveryBlocked):
                 RecoveryMonitorCapability.abandon_released_native_attempt(store, execution_id)
-            assert store.snapshots.get(execution_id).is_current
+            assert store.get(execution_id).is_current
         finally:
             child.terminate()
             child.wait(timeout=5)
@@ -371,7 +372,7 @@ def test_abandon_requires_real_release(released_unknown, damage):
     with Coordination(str(root / "coordination.sqlite3")) as store:
         with pytest.raises(RecoveryBlocked):
             RecoveryMonitorCapability.abandon_released_native_attempt(store, execution_id)
-        assert store.snapshots.get(execution_id).is_current
+        assert store.get(execution_id).is_current
 
 
 def test_dead_original_settles_unknown_beside_a_live_successor(released_unknown):
@@ -379,17 +380,17 @@ def test_dead_original_settles_unknown_beside_a_live_successor(released_unknown)
     leave(process, exit_allowed)
     comms = Comms(root)
     successor = running_successor(comms)
-    before_bus = (root / "bus.jsonl").read_bytes()
+    before_bus = comms.bus.bus.revision()
     with Coordination(root / "coordination.sqlite3") as store:
         before_input = input_evidence(store)
         RecoveryMonitorCapability.abandon_released_native_attempt(store, execution_id)
-        after = store.snapshots.get(execution_id)
+        after = store.get(execution_id)
         assert not after.is_current and isinstance(after.attempt.lifecycle, Failed)
         replay = after.replay.require_assessment()
         assert replay.facts & ReplayFact.UNKNOWN_EFFECTS
         assert not replay.replay_safe
         assert input_evidence(store) == before_input
-    assert (root / "bus.jsonl").read_bytes() == before_bus
+    assert comms.bus.bus.revision() == before_bus
     assert comms.registry.require("beta") == successor
     assert successor.executing
     comms.registry.release_turn(successor.require_turn_lease())
@@ -401,16 +402,16 @@ def test_unknown_settlement_is_atomic_on_existing_store(tmp_path):
 
     with ready(tmp_path / "store.sqlite3") as store:
         _snapshot, fence = started(store)
-        before = store.snapshots.get(fence.execution_id)
+        before = store.get(fence.execution_id)
         for stale_fence, revision, error in (
             (fence, before.pointer_revision + 1, StaleRevision),
             (replace(fence, token="wrong"), before.pointer_revision, StaleFence),
         ):
             with pytest.raises(error):
-                store.attempts.fail_unknown(stale_fence, expected_pointer_revision=revision)
-            assert store.snapshots.get(fence.execution_id) == before
+                store.fail_unknown(stale_fence, expected_pointer_revision=revision)
+            assert store.get(fence.execution_id) == before
 
-        after = store.attempts.fail_unknown(
+        after = store.fail_unknown(
             fence, expected_pointer_revision=before.pointer_revision
         ).value
         assert not after.is_current and not after.can_retry

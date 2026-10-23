@@ -1,15 +1,17 @@
 """Lossless one-way catalog migration and one atomic publication boundary."""
 
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
 
 import pytest
 
+from agent_comms.bus import Bus
 from agent_comms.comms import wire
 from agent_comms.messages import Message, InfoKind
 
 
 def test_independent_writers_merge_under_wire_then_document_lock(tmp_path):
+    Bus.install(Bus.path_in(tmp_path))
+
     def create(index):
         client = wire(tmp_path)
         name = f"tag-{index}"
@@ -31,12 +33,8 @@ def test_independent_writers_merge_under_wire_then_document_lock(tmp_path):
 
 
 def test_message_decode_fields_are_declared_not_a_second_roster():
-    @dataclass(frozen=True, slots=True)
-    class AnnotatedMessage(Message):
-        annotation: str = ""
-
-    original = AnnotatedMessage("alpha", "#api", "hello", InfoKind, annotation="retained")
-    assert AnnotatedMessage.from_wire(original.to_wire()) == original
+    original = Message("alpha", "#api", "hello", InfoKind)
+    assert Message.from_wire(original.to_wire()) == original
     with pytest.raises(ValueError):
         Message.from_wire({**original.to_wire(), "extension": "not supported"})
     with pytest.raises(ValueError):

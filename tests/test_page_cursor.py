@@ -7,17 +7,23 @@ from agent_comms.cli import build_parser
 from agent_comms.cli_commands import CliCommand
 from agent_comms.field_codec import FieldCodec
 from agent_comms.page_traversal import (
-    HistoryCursor, LiveCursor, NewerTraversal, OlderTraversal, PageCursor,
+    HistoryCursor,
+    LiveCursor,
+    NewerTraversal,
+    OlderTraversal,
+    PageCursor,
 )
 
 
 @pytest.mark.parametrize('cursor,wire,source', [
     (LiveCursor(12), 12, None),
-    (HistoryCursor('saved', 12), {'source': 'saved', 'sequence': 12}, 'saved'),
+    (HistoryCursor(source='saved', sequence=12), {'source': 'saved', 'sequence': 12}, 'saved'),
 ])
 def test_cursor_owns_traversal_and_cli_json(cursor, wire, source):
-    assert cursor.older() == OlderTraversal(12, source)
-    assert cursor.newer() == NewerTraversal(12, source)
+    assert cursor.older() == OlderTraversal(cursor)
+    assert cursor.newer() == NewerTraversal(cursor)
+    assert cursor.older().source == source
+    assert cursor.newer().source == source
     assert FieldCodec.encode(cursor) == wire
     assert FieldCodec.decode(PageCursor, wire) == cursor
     args = build_parser().parse_args(['history', '--before', json.dumps(wire)])

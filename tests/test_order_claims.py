@@ -16,10 +16,12 @@ from agent_comms.todos import (
     ClaimedProblemOrder,
     CorrectCheckTodo,
     DoneTodoState,
+    FailedCheckStrike,
     DeliveredProblemOrder,
     PendingProblemOrder,
     SendBackVerdict,
     StrikeReason,
+    StrikeTodo,
     TodoConflict,
     TodoError,
     Todo,
@@ -94,6 +96,30 @@ def test_claim_verdict_family_on_retained_copy(held_commander):
     assert isinstance(delivered.order, DeliveredProblemOrder)
     assert delivered.order.delivery.delivered == sha
     assert not delivered.pending
+
+
+def test_failed_check_strike_releases_at_the_updated_revision(held_commander):
+    ctx = held_commander
+    store = ctx.comms.goals.todos
+    original = store.get("P1")
+    first = store.apply(original.id, StrikeTodo(
+        original.revision, ctx.incarnation, original.held(),
+        "The first review found the original duplicated decision still present.",
+        evidence=(original.order.checked().owner,),
+    ))
+    failure = FailedCheckStrike.make(
+        first, time.time(),
+        "The delivered change still fails the source check that the order explicitly requires.",
+    )
+
+    released = store.apply(first.id, failure)
+    assert released.assignment is None
+    assert released.revision == first.revision + 2
+    assert released.strikes == (*first.strikes, failure)
+    assert released.released[-1].expected_revision == first.revision + 1
+    with pytest.raises(TodoConflict):
+        store.apply(first.id, failure)
+    assert store.get(first.id) == released
 
 
 def claimed_by_worker(ctx) -> Todo:

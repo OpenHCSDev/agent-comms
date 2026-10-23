@@ -23,6 +23,12 @@ def test_the_connector_is_a_declared_service():
     assert SystemdConnectorService in HostService.members_with(HostService)
 
 
+def test_a_private_home_does_not_discover_the_real_user_service(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert not SystemdConnectorService.unit_file().exists()
+    assert SystemdConnectorService.running() == ()
+
+
 @pytest.fixture
 def connector_service(comms, tmp_path, monkeypatch):
     """A real supervisor on a copied bus; only systemd's process control is replaced."""

@@ -1,4 +1,6 @@
 """Commander forks use registered identity and the original Todo assignment."""
+
+from agent_comms.bus import Bus
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import replace
@@ -25,7 +27,8 @@ from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.installer.backup import StoreBackup
-from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceNotHeldError, MaintenanceOperator
+from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
@@ -35,7 +38,7 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.tools import CommsTodoListTool
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.todos import (
-    DeclarationDerivation, GoalRef, PendingProblemOrder, ProblemAllocation, ReleaseTodo,
+    DeclarationDerivation, PendingProblemOrder, ProblemAllocation, ReleaseTodo,
     Slop, StrikeReason, SupersededVerdict, Todo, TodoError,
 )
 
@@ -48,14 +51,16 @@ def fork_bus(tmp_path):
     source.git(source.checkout, 'commit', '-qm', 'Declare shared assignment owner')
     source.git(source.checkout, 'push', 'origin', 'main')
     comms = Comms(tmp_path / 'saved-bus')
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     comms.channels.create_tag('comms')
     for name in ('lead', 'worker', 'other', 'retained'):
         comms.registry.declare(comms.registry.new_thread(
             name, frozenset({'comms'}), str(source.checkout),
             model=DeclaredModel('anthropic/claude-opus-4-6'), execution=ExternalThreadExecution))
     comms.goals.update_goal('lead', SetGoalAction(
-        text='Repair the commander workflow', goal_id='request', order=RequestGoalOrder()))
+        text='Repair the commander workflow', goal_id='request'))
+    request = comms.goals.todos.add_request(
+        comms.registry.require('lead').incarnation, 'Repair the commander workflow')
     core = Repo.of(Path(__file__).parents[1])
     config = Commander.on_machine('lead', (source, core), comms.root, tmp_path)
     config.path_in(comms.root).write_text(config.model_dump_json())
@@ -70,7 +75,7 @@ def fork_bus(tmp_path):
     comms.goals.todos.create('P40', source.github, 'Existing parent problem', creator=lead,
         owner=comms.registry.require('retained'), assigner=lead.incarnation, generation='retained',
         review_at=RecordedEventTime(now + 600), order=replace(order, id='retained-order'),
-        goal=GoalRef('lead', lead.created_at, 'request'))
+        request=request.id)
     copied = tmp_path / 'copied-bus'
     StoreBackup.copy_tree(comms.root, copied)
     return Comms(copied), source, order
@@ -127,7 +132,7 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     fork = comms.registry.require('fork-one')
     saved = store.get('P40')
     assert saved.creator_identity == parent.incarnation
-    assert saved.goal.owner == parent.name
+    assert store.owner_request(saved.request.require()).commander == parent.incarnation
     assert saved.held().parent_identity == fork.incarnation
     assert saved.messages[-1].actor == fork.incarnation
     assert fork.parent.named(parent.name)
@@ -241,9 +246,9 @@ def test_two_commanders_cannot_assign_the_same_unit_concurrently(fork_bus, tmp_p
     print(refused.stderr.strip())
 
 
-def test_a_retained_store_takes_its_declared_schema_on_the_next_write(fork_bus):
-    """The writer's open derives what the declaration says: a missing table and indexes are
-    created, and rows stored under ProblemAllocation's declared earlier name move to it."""
+def test_retained_schema_is_carried_under_maintenance_before_runtime_writes(fork_bus):
+    """Only the installer carries missing objects and declared earlier names;
+    runtime writes refuse a changed schema and resume after that carry."""
     comms, source, order = fork_bus
     store = comms.goals.todos
     retained = store.get('P40')
@@ -251,11 +256,24 @@ def test_a_retained_store_takes_its_declared_schema_on_the_next_write(fork_bus):
         db.execute(f'DROP TABLE "{ProblemAllocation.declared_name}"')
         db.execute(f'DROP INDEX "{Todo.unit_index.name(Todo)}"')
         db.execute(f'DROP INDEX "{Todo.problem_index.name(Todo)}"')
+    with pytest.raises(MaintenanceNotHeldError):
+        store.allocate_problem()
+    barrier = MaintenanceBarrier(comms.registry.store.path)
+    hold = barrier.begin(MaintenanceOperator.current())
+    with hold.holding():
+        assert store.reconcile_at(store.path)
+    barrier.clear(hold)
     assert store.allocate_problem() == 'P41'
     assert store.get('P40') == retained
     with store.writing() as db:
         db.execute(f'ALTER TABLE "{ProblemAllocation.declared_name}" RENAME TO problem_number')
         db.execute(f'DROP INDEX "{Todo.problem_index.name(Todo)}"')
+    with pytest.raises(MaintenanceNotHeldError):
+        store.allocate_problem()
+    hold = barrier.begin(MaintenanceOperator.current())
+    with hold.holding():
+        assert store.reconcile_at(store.path)
+    barrier.clear(hold)
     assert store.allocate_problem() == 'P42'
     with store.snapshot() as db:
         assert [row.number for row in ProblemAllocation.select(db)] == [41, 42]
@@ -270,13 +288,13 @@ def test_created_ids_live_only_on_todos_and_allocation_uses_numeric_index(fork_b
     issued = store.allocate_problem()
     assert issued == 'P41'
     created = store.create(issued, source.github, 'Create a real problem', creator=lead,
-        assigner=lead.incarnation, owner=comms.registry.require('other'), generation='created', goal=retained.goal,
+        assigner=lead.incarnation, owner=comms.registry.require('other'), generation='created', request=retained.request.require(),
         review_at=retained.review_at, order=order)
     with store.snapshot() as db:
         assert ProblemAllocation.select(db) == []
     # Direct creation must affect allocation without copying its key into the allocator.
     store.create('P120', source.github, 'Exercise numeric ordering', creator=lead,
-        assigner=lead.incarnation, owner=comms.registry.require('worker'), generation='direct', goal=retained.goal,
+        assigner=lead.incarnation, owner=comms.registry.require('worker'), generation='direct', request=retained.request.require(),
         review_at=retained.review_at, order=replace(order, id='direct-order'))
     assert store.allocate_problem() == 'P121'
     with store.snapshot() as db:
@@ -308,7 +326,7 @@ def test_fork_superseded_verdict_reads_its_commanders_orders(fork_bus):
     store.create('P41', source.github, 'Replacing parent problem', creator=lead,
         owner=comms.registry.require('worker'), assigner=lead.incarnation, generation='worker',
         review_at=RecordedEventTime(time.time() + 600), order=replace(order, id='replacing-order'),
-        goal=GoalRef('lead', lead.created_at, 'request'))
+        request=store.get('P40').request.require())
     comms.registry.register_commander_child('fork-one', 'lead', comms.goals)
     actor = CommanderForkCaller('fork-one').identity(comms)
     current = store.get('P40')

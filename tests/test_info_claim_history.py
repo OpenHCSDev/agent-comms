@@ -17,7 +17,7 @@ def historical_row():
 
 def test_original_info_claim_round_trips_without_rewriting():
     row = historical_row()
-    message = Message.from_committed_wire(row)
+    message = Message.from_wire(row)
     assert isinstance(message, ClaimMessage)
     assert message.type is InfoKind
     assert message.require_claim_transition().seq == 1477
@@ -27,11 +27,11 @@ def test_original_info_claim_round_trips_without_rewriting():
 
 def test_ordinary_info_still_round_trips():
     message = Message("author", "reader", "Ordinary info", InfoKind, seq=1)
-    assert Message.from_committed_wire(message.to_wire()) == message
+    assert Message.from_wire(message.to_wire()) == message
 
 
 def test_info_claim_decode_does_not_discard_unknown_fields():
     row = historical_row()
     row["claim_transition"]["unexpected"] = "not a declared claim field"
     with pytest.raises(MalformedRecord):
-        Message.from_committed_wire(row)
+        Message.from_wire(row)

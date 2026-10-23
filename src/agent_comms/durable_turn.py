@@ -58,7 +58,7 @@ class DurableTurn(MroDispatch):
     def observe_owned(self, event, handlers, *args, **kwargs):
         """Consume one native observation through joined, worker-owned SQLite."""
         *context, resource = args
-        with self.using_attempts(resource.attempts):
+        with self.using_attempts(resource):
             return self.consume_handlers_sync(event, handlers, *context, **kwargs)
 
     @property

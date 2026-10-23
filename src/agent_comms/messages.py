@@ -5,15 +5,17 @@ from __future__ import annotations
 import builtins
 import hashlib
 import re
+import sqlite3
 import time
+from abc import abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, fields, replace
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Type, cast, Annotated
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self, Type, cast, dataclass_transform
 
-from agent_comms.bus_tables import Addressed, BusCapability
-from agent_comms.response_acknowledgement import _canonical, public_envelope_digest
+from agent_comms.bus_tables import Addressed, BusCapability, BusRow, HeldResources
+from agent_comms.response_policy import InformationalPolicy, ResponseEligibility, ResponsePolicy
 from agent_comms.typed_table import Column
 
 from .change_report import FileLine, NoChangeReport, ReportEvidence
@@ -24,29 +26,26 @@ from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,
     InlineRecord,
-    MalformedRecord,
     NullMember,
-    compile_decoder,
-    projected,
     PublicationExclude,
     WireName,
     WireOmitDefault,
     WireOrder,
+    compile_decoder,
+    projected,
 )
 from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .page_traversal import LiveCursor, PageCursor
-from .response_policy import InformationalPolicy, ResponseEligibility
 from .task_sources import Decision, NoTaskAttachment, TaskAttachment
 from .thread_identity import AgentThreadRole, ThreadRole
 from .ui_model.message_category import InboundCategory, MessageCategory, OtherCategory
 from .wake_policy import BoundedTriageWake, PassiveWake
 
 if TYPE_CHECKING:
-    from .private_bus_checkpoint import ClaimCommits
+    from .historical_views import HistorySource
     from .retained_task_facts import ExactTaskFact
     from .threads import Thread
-    from .typed_table import TypedTable
 
 
 class MessageKind(DeclaredFamily, affix="Kind"):
@@ -58,6 +57,12 @@ class MessageKind(DeclaredFamily, affix="Kind"):
     """
 
     conversation_message: ClassVar[bool] = True
+
+    @classmethod
+    def route_rows(cls, message):
+        from .bus_route_counts import BusRouteCounts
+
+        return (BusRouteCounts.from_message(message),)
 
     @classmethod
     def decode_message(cls, data: Mapping) -> Message:
@@ -81,6 +86,10 @@ class ClaimNoticeKind(MessageKind, declared_name="claim-notice"):
     """A claim-owner record, not a delivery to a reader."""
 
     conversation_message = False
+
+    @classmethod
+    def route_rows(cls, message):
+        return ()
 
     @classmethod
     def decode_message(cls, data: Mapping) -> Message:
@@ -186,6 +195,12 @@ class MessageRoleWire:
 class MessageRole(InlineRecord):
     category: ClassVar[type[MessageCategory]]
 
+    @abstractmethod
+    def response_policy(self, message: Message) -> ResponsePolicy: ...
+
+    @abstractmethod
+    def as_historical(self) -> MessageRole: ...
+
     @classmethod
     def wire_record(cls):
         return MessageRoleWire
@@ -224,6 +239,9 @@ class InformationalMessage:
     def counts_as_conversation(self):
         return False
 
+    def activity_rows(self, message):
+        return ()
+
     def wake_mode(self, target, recipient, mentions, control):
         return PassiveWake()
 
@@ -240,6 +258,11 @@ class ConversationRole(SendableRole):
 
     def counts_as_conversation(self):
         return True
+
+    def activity_rows(self, message):
+        from .bus_activity_index import SentActivity
+
+        return (SentActivity(message.sender, message.timestamp),)
 
     def as_historical(self):
         return HistoricalConversationRole()
@@ -347,7 +370,7 @@ class Message(Addressed, BusCapability):
 
     body: Annotated[str, WireName("text"), WireOrder(6)]
     type: Annotated[builtins.type[MessageKind], WireOrder(5)]
-    timestamp: Annotated[float, WireName("ts"), WireOrder(4)] = (
+    timestamp: Annotated[float, WireName("ts"), WireOrder(4), Column(index=True)] = (
         field(default_factory=time.time)
     )
     seq: Annotated[int, WireOrder(0), PublicationExclude()] = (
@@ -374,6 +397,49 @@ class Message(Addressed, BusCapability):
     answers: Annotated[
         tuple[MessageReference, ...], WireOmitDefault(), WireOrder(14)
     ] = ()
+
+    def projections(self):
+        from .bus_activity_index import BusActivityIndex
+        from .bus_display_index import BusDisplayIndex
+        from .bus_tables import AnsweredSource, MessageIdentitySource
+
+        yield from super().projections()
+        yield BusActivityIndex.from_message(self, target=self.target)
+        participants = {self.sender, *CommandTarget.named(self.target).direct_names,
+                        *(mention.thread for mention in self.mentions)}
+        for participant in participants:
+            yield BusDisplayIndex.from_message(self, participant=participant)
+        yield from self.role.activity_rows(self)
+        yield from self.type.route_rows(self)
+        yield MessageIdentitySource(
+            self.seq, self.message_id, self.sender, type(self.role.response_policy(self)),
+        )
+        for original in self.answers:
+            yield AnsweredSource(original, self.seq)
+
+    @classmethod
+    def from_message(cls, message: Message, **capabilities: object) -> Self:
+        return FieldCodec.construct(cls, {
+            **{item.name: getattr(message, item.name) for item in fields(Message)},
+            **capabilities,
+        })
+
+    @property
+    def sender_lookup(self) -> str:
+        """Public history has no frozen participant incarnation."""
+        return ""
+
+    @property
+    def message(self) -> Self:
+        return self
+
+    @classmethod
+    def envelope_type(cls) -> builtins.type[Message]:
+        """The public message declaration this class's values carry."""
+        return Message
+
+    def messages(self) -> tuple[Self, ...]:
+        return (self,)
 
     @property
     def text_size(self) -> int:
@@ -417,22 +483,13 @@ class Message(Addressed, BusCapability):
         """Retain display facts, never another root's resource-claim authority."""
         return self
 
-    def checkpoint_rows(self, previous_sequence: int):
-        """The envelope declares both publication and optional claim facts."""
-        from .private_bus_checkpoint import ClaimCommits, PublicMessages
-
-        yield PublicMessages(self.seq, previous_sequence, self.sender, self.message_id)
-        yield from self.claim_rows(ClaimCommits)
-
-    def claim_rows(self, table: type[ClaimCommits]) -> tuple[TypedTable, ...]:
-        return ()
-
     def require_claim_transition(self) -> ClaimTransition:
-        raise RelationViolationError("Original wire message has no claim transition")
+        raise RelationViolationError("Message has no claim transition")
 
     def retained_task_facts(self):
-        yield from self.sender_role.user_task_facts(self)
-        yield from self.task.retained_task_facts(self)
+        source = Message.from_message(self)
+        yield from self.sender_role.user_task_facts(source)
+        yield from self.task.retained_task_facts(source)
 
     def __post_init__(self) -> None:
         if not self.sender:
@@ -469,7 +526,9 @@ class Message(Addressed, BusCapability):
         ).hexdigest()[:12]
         return digest
 
-    history_source = None
+    @property
+    def history_source(self) -> HistorySource | None:
+        return None
 
     @property
     def display_metadata(self) -> dict:
@@ -481,38 +540,10 @@ class Message(Addressed, BusCapability):
 
     @classmethod
     def from_wire(cls, data: Mapping) -> Message:
-        from .bus_publication import PRIVATE_WIRE_FIELD
-
-        # ID is derived; private authority is independently validated by the bus.
-        public = {
-            key: value for key, value in data.items() if key not in ("id", PRIVATE_WIRE_FIELD)
-        }
+        # Content identity is derived from the declared message fields.
         plan = FieldCodec.field_plan(Message, 'type')
-        kind = cast(type[MessageKind], plan.value.decode(plan.raw(public)))
-        return kind.decode_message({"ts": 0.0, **public})
-
-    @classmethod
-    def from_committed_wire(cls, record: Mapping) -> Message:
-        """One strict public-envelope boundary for full, indexed and cohort readers."""
-        from .audience_manifest import MAX_WIRE_SEQ
-        from .bus_publication import PRIVATE_WIRE_FIELD
-
-        if not isinstance(record, Mapping):
-            raise MalformedRecord("Bus row is not an object.")
-        public = {key: value for key, value in record.items() if key != PRIVATE_WIRE_FIELD}
-        message = cls.from_wire(public)
-        if _canonical(public) != _canonical(message.to_wire()):
-            raise MalformedRecord("Noncanonical public bus envelope.")
-        if not 0 < message.seq <= MAX_WIRE_SEQ:
-            raise MalformedRecord("Bus sequence is outside the durable range.")
-        public_envelope_digest(public)
-        return message
-
-    def require_retained_claim(self, claimed_after_seq: int) -> None:
-        if self.seq > claimed_after_seq:
-            raise RelationViolationError(
-                "Unattested public initial exceeds the retained history boundary."
-            )
+        kind = cast(builtins.type[MessageKind], plan.value.decode(plan.raw(data)))
+        return kind.decode_message({"ts": 0.0, **data})
 
     def response_eligibility(
         self, audience: Sequence[str], *, aliases: Mapping[str, str] | None = None
@@ -537,16 +568,75 @@ class Message(Addressed, BusCapability):
         return self.sender_role.reply_target(self)
 
 
+@dataclass_transform(frozen_default=True, kw_only_default=True)
+class BusRecord(Message, DeclaredFamily, affix="Record"):
+    """Every record declaration owns its frozen value and derived tables."""
+
+    def append_to(self, db: sqlite3.Connection, seq: int) -> int:
+        """The caller's transaction owns the sequence, including preserved history."""
+        BusRow.insert_values(db, seq=seq, kind=type(self), at=time.time())
+        stored = replace(self, seq=seq)
+        for row in stored.rows():
+            row.insert(db)
+        stored.project_into(db)
+        return stored.seq
+
+    @property
+    def publication_snapshot(self) -> Message:
+        """Delivery capabilities are not message content in a publication intent."""
+        return Message.from_message(self).publication_snapshot
+
+    @classmethod
+    def envelope_type(cls) -> builtins.type[Message]:
+        """A record carries the envelope of the message declaration after it in the MRO."""
+        return super().envelope_type()
+
+    @property
+    def envelope(self) -> Message:
+        public = self.envelope_type()
+        return FieldCodec.construct(public, {item.name: getattr(self, item.name)
+                                             for item in fields(public)})
+
+    def to_wire(self) -> dict:
+        """The public envelope; delivery and publication capabilities stay in their tables."""
+        return self.envelope.to_wire()
+
+    def __init_subclass__(cls) -> None:
+        super().__init_subclass__()
+        dataclass(cls, frozen=True, kw_only=True)
+        cls.tables()
+
+
 @dataclass(frozen=True, kw_only=True)
-class ClaimMessage(Message):
-    """An original claim envelope, distinct from a fresh conversation message."""
+class Claimed(BusCapability):
+    """The transition attesting this row, stored in its append transaction."""
 
     claim_transition: Annotated[ClaimTransition, WireOrder(11)]
 
+    def require_claim_transition(self) -> ClaimTransition:
+        return self.claim_transition
+
+    def replay_claim(self, db: sqlite3.Connection) -> None:
+        """Append and the shared derived rebuild replay this same original transition."""
+        projected = HeldResources.project(db, self.claim_transition)
+        HeldResources.apply(db, self.claim_transition, projected)
+
+    def project_into(self, db: sqlite3.Connection) -> None:
+        super().project_into(db)
+        self.replay_claim(db)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ClaimMessage(Claimed, Message):
+    """A claimed message binds its transition to its public envelope identity."""
+
     @classmethod
-    def of(cls, message: Message, transition: ClaimTransition) -> ClaimMessage:
-        return cls(**{item.name: getattr(message, item.name) for item in fields(Message)},
-                   claim_transition=transition)
+    def envelope_type(cls) -> builtins.type[Message]:
+        return ClaimMessage
+
+    @classmethod
+    def of(cls, message: Message, transition: ClaimTransition) -> Self:
+        return cls.from_message(message, claim_transition=transition)
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -563,16 +653,7 @@ class ClaimMessage(Message):
             "type": ClaimHistoryKind,
         })
 
-    def claim_rows(self, table: type[ClaimCommits]) -> tuple[TypedTable, ...]:
-        return (table(self.claim_transition),)
-
-    def require_claim_transition(self) -> ClaimTransition:
-        return self.claim_transition
-
     def retained_task_facts(self) -> Iterator[ExactTaskFact]:
         from .retained_task_facts import ClaimTaskFact
         yield from super().retained_task_facts()
-        yield ClaimTaskFact(self)
-
-    def require_retained_claim(self, claimed_after_seq: int) -> None:
-        """The envelope carries its own committed claim facts."""
+        yield ClaimTaskFact(ClaimMessage.of(self, self.claim_transition))

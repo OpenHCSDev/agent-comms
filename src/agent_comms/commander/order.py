@@ -54,6 +54,7 @@ from agent_comms.goals import OrderCheck, ProblemGoalOrder
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
 from agent_comms.native_tool_call import SelectedToolDenied
+from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
 from agent_comms.plan_phases import OrderPhase
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.recorded_time import RecordedEventTime
@@ -331,9 +332,8 @@ class OrderFile:
         if busy:
             snapshot = context.comms.registry.snapshot()
             occupied = {todo.holder for todo in held} | {context.commander} | context.parked
-            idle = sorted(thread.name for thread in snapshot.threads.values()
-                          if thread.name not in occupied and thread.role.executor(thread)
-                          and snapshot.status(thread.name).active)
+            idle = sorted(thread.name for thread in snapshot.active_threads(snapshot.threads.values())
+                          if thread.name not in occupied and thread.role.executor(thread))
             problems.append(f'{unit} already holds orders '
                             f'{", ".join(todo.id for todo in busy)}; '
                             f'running units holding no order: {", ".join(idle) or "none"}')
@@ -436,9 +436,8 @@ class OrderFile:
 
     def record(self, context: CommanderContext, unit: str, group: Sequence[str],
                target: OrderedProblems, traced: FileLine | NoSourceReference,
-               review_at: RecordedEventTime) -> None:
+               review_at: RecordedEventTime, request: OwnerRequestId) -> None:
         """The native tools record the typed order; the document supplies no second store."""
-        request = self.order.request(context.comms.registry.require(context.commander), tuple(group))
         target.record(context, self.order, unit, group, traced, request, review_at)
 
     def send_back(self, context: Commander, unit: str, group: Sequence[str],
@@ -497,10 +496,9 @@ class CommanderContext(CommanderConfig):
 
     def post(self, audience: VerdictAudience, body: str,
              answers: tuple[MessageReference, ...] = ()) -> str:
-        target = (audience.threads[0] if len(audience.threads) == 1
-                  else CommsTag.channel())
-        published = self.comms.messaging.send(self.actor_name, target,
-            audience.addressed(target, body), answers=answers)
+        target = audience.target
+        published = self.comms.messaging.send(self.actor_name, target.name,
+            target.addressed(audience.threads, body), answers=answers)
         return published.message.message_id
 
     def call(self, tool):
@@ -580,7 +578,7 @@ class OrderedProblems(ABC):
 
     @abstractmethod
     def record(self, context: CommanderContext, order: PendingProblemOrder, unit: str,
-               group: Sequence[str], traced: FileLine | NoSourceReference, request: str,
+               group: Sequence[str], traced: FileLine | NoSourceReference, request: OwnerRequestId,
                review_at: RecordedEventTime) -> None: ...
 
 
@@ -602,7 +600,7 @@ class NewProblem(OrderedProblems):
         return False
 
     def record(self, context: CommanderContext, order: PendingProblemOrder, unit: str,
-               group: Sequence[str], traced: FileLine | NoSourceReference, request: str,
+               group: Sequence[str], traced: FileLine | NoSourceReference, request: OwnerRequestId,
                review_at: RecordedEventTime) -> None:
         context.call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
             problem=self.problem, repo=Repo.of(Path(order.check.directory)).github,
@@ -626,7 +624,7 @@ class ListedProblems(OrderedProblems):
         return bool(group) and all(pid in listed and listed[pid].holder == unit for pid in group)
 
     def record(self, context: CommanderContext, order: PendingProblemOrder, unit: str,
-               group: Sequence[str], traced: FileLine | NoSourceReference, request: str,
+               group: Sequence[str], traced: FileLine | NoSourceReference, request: OwnerRequestId,
                review_at: RecordedEventTime) -> None:
         for pid in group:
             context.call(CommsOrderTool(owner=unit, order=OrderGoalAction(
@@ -737,7 +735,7 @@ class Commander(CommanderContext):
              reassign: Reassignment = NoReassignment(), target: OrderedProblems = ListedProblems(),
              traced: FileLine | NoSourceReference = NoSourceReference(),
              disk: bool = False, finding: ProblemFinding = UnlocatedProblemFinding(),
-             answers: tuple[MessageReference, ...] = ()) -> None:
+             answers: tuple[MessageReference, ...] = (), *, request: RequestSelection) -> None:
         """Record the decoded order, or report every failed prerequisite before any write."""
         document = document.resolved(self, finding)
         group = target.group(document)
@@ -749,7 +747,8 @@ class Commander(CommanderContext):
         measured = MeasuredReview.read(self.comms.goals.todos)
         review_at = measured.review_at(document.order)
         message = document.message(self, unit, group, replacing, reassign)
-        document.record(self, unit, group, target, traced, review_at)
+        request_id = request.for_order(self.comms.goals.todos, self.incarnation)
+        document.record(self, unit, group, target, traced, review_at, request_id)
         sent = self.post(VerdictAudience((unit,)), message, answers)
         for pid in group:
             self.call(CommsChangeProblemTool(problem=pid, operation=OrderMessage(
@@ -781,20 +780,6 @@ class Commander(CommanderContext):
         body = open(body_file).read()
         refuse(body, *OUTGOING)
         print(self.post(VerdictAudience(tuple(units.split(','))), body.rstrip(), answers))
-
-    def problem(self, order_file: str, unit: str, where: str, disk: bool = False,
-                answers: tuple[MessageReference, ...] = ()) -> None:
-        """A problem is born owned: Core records it with its order in one step, or not at all."""
-        document = OrderFile.read(Path(order_file).read_text())
-        location = FileLine.from_wire(where)
-        checkout = self.repo_directory(document.order.check.directory)
-        if checkout.is_dir():
-            self.comms.goals.todos.require_recurrence_declaration(
-                document.order, location, checkout, document.slop, time.time())
-        pid = self.comms.goals.todos.allocate_problem()
-        self.send(unit, document, target=NewProblem(pid, document.defect),
-                  disk=disk, finding=LocatedProblemFinding(location), answers=answers)
-        print(pid)
 
     def close(self, pid, works, artifact=''):
         """Core owns closing: the installed evidence, the artifact and the no-open-order rule live on the Todo."""
@@ -848,7 +833,7 @@ class Commander(CommanderContext):
         n = struck(todo, unit)
         line = (f'{time.strftime("%Y-%m-%d")} {strike.at.clock()} {unit} (strike {n} on {todo.id}'
                 f'{f", {todo.id} taken away" if n >= 2 else ""}): {strike.reason}')
-        self.on_record(line, 'Strike', VerdictAudience.of(unit, todo.goal), answers)
+        self.on_record(line, 'Strike', VerdictAudience.of(unit, todo), answers)
         print(f'{unit}: {n} strike(s) on {todo.id}' + (f'. Reassign {todo.id} now and freeze its branch.' if n >= 2 else ''))
 
     def done(self, pid: str, delivery: OrderDelivery) -> None:
@@ -900,7 +885,7 @@ class Commander(CommanderContext):
         n = struck(self.comms.goals.todos.get(task), unit)
         line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike voided on {task}, '
                 f'recorded {voided.at.clock()}; {n} strike(s) remain): {why}')
-        self.on_record(line, 'Void', VerdictAudience.of(unit, todo.goal))
+        self.on_record(line, 'Void', VerdictAudience.of(unit, todo))
         print(f'{unit}: {n} strike(s) on {task}')
 
     def withdraw(self, pid: str, why: str, superseded_by: Successor = NoSuccessor()) -> None:
@@ -917,7 +902,7 @@ class Commander(CommanderContext):
         unit = previous.owner
         withdrawal, = self.comms.goals.todos.get(pid).order.withdrawals(todo)
         self.on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {withdrawal}', 'Withdrawal',
-                  VerdictAudience.of(unit, todo.goal))
+                  VerdictAudience.of(unit, todo))
         self.post(VerdictAudience((unit,)),
              f'Withdrawn: {withdrawal}. Stop that work; it counts against no one.')
         print(withdrawal)
@@ -978,28 +963,26 @@ class DirectiveVerb(CommanderVerb):
         ),
     ] = ()
 
-    def named(self, ctx: Commander) -> tuple[Message, ...]:
-        """The named messages still open. A name that is no longer open (answered, or out of
-        the owed set since it was read) needs no answer and is dropped, never refused: the
-        owed set moves while the commander writes, and refusing the whole verb over a closed
-        name livelocked the gate while a chokehold held the fleet (2026-10-21 22:12). A name
-        that is wrong leaves its real message owed, and the gate below refuses that."""
-        return tuple(message for message in OwedAnswer.answerable(ctx.comms, self.who(ctx))
-                     if message.message_id in self.answers)
+    def run(self, ctx: Commander) -> None:
+        """Resolve names and uncovered debt once, then pass the exact references to the action.
 
-    def answer_references(self, ctx: Commander) -> tuple[MessageReference, ...]:
-        return tuple(message.reference for message in self.named(ctx))
-
-    def gate(self, ctx: Commander) -> None:
-        named = self.named(ctx)
-        owed = tuple(rule for rule in OwedAnswer.overdue(ctx.comms, self.who(ctx))
-                     if not rule.answered_by(named))
+        Closed or unknown names are dropped: a stale name must not livelock an otherwise
+        valid answer. A wrong name still leaves its real debt uncovered and refuses the action.
+        """
+        now = time.time()
+        opened = OwedAnswer.opened(ctx.comms, self.who(ctx))
+        named = tuple(rule.message for rule in opened
+                      if rule.message.message_id in self.answers)
+        owed = tuple(rule for rule in opened if rule.due(now) and not rule.answered_by(named))
         if owed:
             lines = '\n'.join(f'{rule.line()}: {rule.message.body[:80]}' for rule in owed)
             sys.exit('REFUSED, nothing recorded: messages owed an answer:\n' + lines
                      + '\nReply to the original message or use --answers MESSAGE_ID. An answer '
                      'that must wait is sent now: "waiting on X, owner Y".')
-        super().gate(ctx)
+        self.respond(ctx, tuple(dict.fromkeys(message.reference for message in named)))
+
+    @abstractmethod
+    def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None: ...
 
 
 class OrderVerb(CommanderVerb):
@@ -1007,7 +990,15 @@ class OrderVerb(CommanderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SendVerb(OrderVerb, DirectiveVerb):
+class RequestedOrderVerb(OrderVerb, DirectiveVerb, declared_name=None):
+    request: Annotated[
+        RequestSelection, Argument(flags=("--request",),
+                                   options={"help": "owner request ID; defaults to newest open"}),
+    ] = NewestOpenRequest()
+
+
+@dataclass(frozen=True, kw_only=True)
+class SendVerb(RequestedOrderVerb):
     help = "record the order in Core and send it"
     unit: Annotated[str, Argument(flags=("unit",))]
     body_file: Annotated[
@@ -1043,10 +1034,10 @@ class SendVerb(OrderVerb, DirectiveVerb):
         ),
     ] = NoSourceReference()
 
-    def run(self, ctx: Commander) -> None:
+    def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None:
         ctx.send(self.unit, OrderFile.read(Path(self.body_file).read_text()), clean=self.clean,
              reassign=self.reassign, traced=self.traced,
-             disk=self.disk, answers=self.answer_references(ctx))
+             disk=self.disk, answers=references, request=self.request)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1069,10 +1060,10 @@ class StrikeVerb(OrderVerb, DirectiveVerb):
         ),
     ] = "review"
 
-    def run(self, ctx: Commander) -> None:
+    def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None:
         ctx.strike(self.unit, self.pid, self.why, self.caught,
                    evidence=(FileLine.from_wire(self.where),),
-                   answers=self.answer_references(ctx))
+                   answers=references)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1273,8 +1264,8 @@ class SayVerb(OrderVerb, DirectiveVerb):
         str, Argument(flags=("body_file",), options={"metavar": "BODYFILE"})
     ]
 
-    def run(self, ctx: Commander) -> None:
-        ctx.say(self.units, self.body_file, self.answer_references(ctx))
+    def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None:
+        ctx.say(self.units, self.body_file, references)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1287,7 +1278,7 @@ class RetireVerb(OrderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ProblemVerb(OrderVerb, DirectiveVerb):
+class ProblemVerb(RequestedOrderVerb):
     help = "Core records the problem with its order, or nothing"
     order: Annotated[
         str, Argument(flags=("order",), options={"metavar": "ORDER.json"})
@@ -1301,9 +1292,18 @@ class ProblemVerb(OrderVerb, DirectiveVerb):
     ]
     disk: Annotated[bool, Argument(flags=("--disk",))] = False
 
-    def run(self, ctx: Commander) -> None:
-        ctx.problem(self.order, self.to, self.where, self.disk,
-                    self.answer_references(ctx))
+    def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None:
+        document = OrderFile.read(Path(self.order).read_text())
+        location = FileLine.from_wire(self.where)
+        checkout = ctx.repo_directory(document.order.check.directory)
+        if checkout.is_dir():
+            ctx.comms.goals.todos.require_recurrence_declaration(
+                document.order, location, checkout, document.slop, time.time())
+        pid = ctx.comms.goals.todos.allocate_problem()
+        ctx.send(self.to, document, target=NewProblem(pid, document.defect), disk=self.disk,
+                 finding=LocatedProblemFinding(location), answers=references,
+                 request=self.request)
+        print(pid)
 
 
 @dataclass(frozen=True, kw_only=True)

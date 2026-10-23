@@ -15,7 +15,7 @@ from agent_comms.coordination_contracts import (
     validate_execution_id,
 )
 from agent_comms.coordination_errors import RecoveryBlocked, StaleFence
-from agent_comms.coordination_schema import CoordinatorTable
+from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.coordination_tables.participants import OwnerGenerations, OwnerRecord
 from agent_comms.field_codec import SnapshotExclude, projected
 from agent_comms.owner_fence import AttemptAuthority
@@ -35,7 +35,6 @@ from agent_comms.typed_table import (
     NonDecreasing,
     NonDecreasingWhenPresent,
     TextStorage,
-    TypedTable,
 )
 
 if TYPE_CHECKING:
@@ -93,8 +92,7 @@ class AttemptRecord(
     OwnerRecord,
     GuardedInserts,
     NoDelete,
-    CoordinatorTable,
-    TypedTable,
+    CoordinatorRow,
     PreviousAttempt,
     declared_name="attempts",
 ):

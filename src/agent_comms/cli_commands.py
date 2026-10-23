@@ -118,8 +118,9 @@ from .field_codec import (
 from .harness_install import Harness
 from .history_result import HistoryPageResult
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
+from .input_origin import InputProvenance
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
-from .install_choices import InstallerChoice, UnnamedInstaller
+from .install_choices import InstallerChoice, LiveMode, RehearsalMode, RunMode, UnnamedInstaller
 from .maintenance_barrier import MaintenanceHeldError
 from .message_page import PageBounds
 from .message_reference import FirstUnreadStart, InboxStart, MessageReference
@@ -181,7 +182,7 @@ from .turn_context import (
     TurnContext,
 )
 from .typed_table import ReconciledFile
-from .wire_log import WireLog
+from .recorded_bus import RecordedBusIdentity
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
 
@@ -539,7 +540,7 @@ class ThreadConfiguredResult(CliResult):
 @dataclass(frozen=True)
 class ConstraintPinnedResult(CliResult):
     pin: MessageReference
-    source: MessageReference
+    source: MessageReference | InputProvenance
 
 
 @dataclass(frozen=True)
@@ -1179,9 +1180,8 @@ class ConfigureCliCommand(
 
     def apply(self, ctx: Comms) -> CliResult:
         thread = ctx.registry.require(self.name)
-        if ctx.registry.status(thread.name).active:
-            raise RelationViolationError(
-                f"{thread.name} is running; change its settings through its session")
+        ctx.registry.status(thread.name).require_inactive(
+            f"{thread.name} is running; change its settings through its session")
         asyncio.run(ConfigOptions.configured().validate(self.configured(thread)))
         updated = ctx.threads.set_thread_configuration(thread, self)
         return ThreadConfiguredResult(updated.name, updated.model, updated.thinking_level,
@@ -1363,7 +1363,7 @@ class ExportRetainedCliCommand(CliCommand, declared_name="export-retained"):
     )
 
     def apply(self, ctx: Comms) -> CliResult:
-        return ctx.bus.log.retained_context(self.thread, ctx.registry).export(
+        return ctx.views.retained_context(self.thread).export(
             self.output, overwrite=self.overwrite)
 
 
@@ -1443,10 +1443,7 @@ class StatusCliCommand(CliCommand):
 
     def apply(self, ctx: Comms) -> CliResult:
         snapshot = ctx.registry.snapshot()
-        running = (
-            thread for name, thread in snapshot.threads.items()
-            if snapshot.status(name).active
-        )
+        running = snapshot.active_threads(snapshot.threads.values())
         activities = ctx.agents.all_activity(running, snapshot=snapshot)
         return ActiveStatusResult(tuple(
             ThreadActivityRow(thread, activity.state, activity.detail, activity.timestamp)
@@ -1458,7 +1455,7 @@ class HistoryCliCommand(CliCommand):
     help = "Newest-first bounded history of a named target"
     target: Annotated[
         str, Argument(flags=("--target",), options={"help": "#channel or @peer"})
-    ] = AnyChannel.declared_name
+    ] = AnyChannel.address()
     me: Annotated[
         DisplayViewer,
         Argument(
@@ -1666,10 +1663,15 @@ class InstallCliCommand(CliCommand):
             options={"help": "The unit running this install; the next install's plan names it"},
         ),
     ] = UnnamedInstaller()
-    rehearse: Annotated[
-        bool,
-        Argument(flags=("--rehearse",), options={"help": "Carry and read a copy of the bus; change nothing"}),
-    ] = False
+    mode: Annotated[
+        RunMode,
+        WireName("rehearse"),
+        Normalize(bool),
+        Argument(flags=("--rehearse",), options={
+            "help": "Carry and read a copy of the bus; change nothing",
+            "action": "store_const", "const": FieldCodec.encode(RehearsalMode()),
+        }),
+    ] = dataclasses.field(default_factory=LiveMode)
     retire: Annotated[
         bool,
         Argument(
@@ -1792,8 +1794,7 @@ class ReadBackCliCommand(CliCommand[BusReadBack], declared_name="read-back"):
         return self.answer(ctx.root)
 
     def execute(self, route: CommsRoute, output: TextIO) -> int:
-        """Opening the bus writes its metadata and checkpoint, and the installer reads back
-        before its carries, after the backup: only the registry is read, never written."""
+        """Before its carries, the installer reads only the existing registry."""
         return self.written(self.answer(route.root), output)
 
 
@@ -1816,6 +1817,10 @@ class StoreReconcileCliCommand(CliCommand[ReconciledStoresResult]):
     def apply(self, ctx: Comms) -> ReconciledStoresResult:
         return self.answer(ctx.root)
 
+    def execute(self, route: CommsRoute, output: TextIO) -> int:
+        """Reconciliation reads its declared files before opening runtime consumers."""
+        return self.written(self.answer(route.root), output)
+
 
 @dataclass(frozen=True, kw_only=True)
 class ReconcileStoresCliCommand(StoreReconcileCliCommand, declared_name="reconcile-stores"):
@@ -1834,14 +1839,9 @@ class PlannedReconcileCliCommand(StoreReconcileCliCommand, declared_name="planne
 
     @staticmethod
     def changes(owner: type[ReconciledFile], path: Path) -> bool:
+        schema = owner.schema_at(path)
         with closing(owner.read_snapshot(path)) as db:
-            return owner.table_schema().schema_differs(db)
-
-    def execute(self, route: CommsRoute, output: TextIO) -> int:
-        """Opening the bus opens stores, and opening a store reconciles its schema: before
-        the backup that write would have no copy, so only the stores themselves are read."""
-        return self.written(self.answer(route.root), output)
-
+            return schema.schema_differs(db)
 
 @dataclass(frozen=True, kw_only=True)
 class CheckpointCliCommand(NameArgument, CliCommand, declared_name="checkpoint"):
@@ -2539,6 +2539,5 @@ class ReplaceRouteCliCommand(CliCommand, declared_name=ActiveRoute.repair_comman
             "the old file is kept beside it")
 
     def apply(self, ctx: Comms) -> CliResult:
-        marker = WireLog(WireLog.path_in(ctx.root)).private_marker_unlocked()
-        route = ActiveRoute(ctx.root, marker.root_id)
+        route = ActiveRoute(ctx.root, RecordedBusIdentity.capture(ctx.bus.bus.path))
         return RouteReplacedResult(str(ctx.root), str(replace_unreadable_active_route(route)))

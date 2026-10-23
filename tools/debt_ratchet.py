@@ -44,7 +44,7 @@ from audit.measures import FamilyFlattened as AuditFamilyFlattened
 from audit.measures import ForeignAbsenceProbe as AuditForeignAbsenceProbe
 
 import agent_comms
-from agent_comms import coordinated_runtime_schema, coordination_schema, field_codec, typed_table
+from agent_comms import coordination_schema, field_codec, typed_table
 from agent_comms.child_process import ForkedProcessPool, SpawnedProcess
 from agent_comms.core_stamp import WheelStamp
 from agent_comms.declared_family import DeclaredFamily
@@ -1462,8 +1462,7 @@ class FamilyFlattened(PerFileMeasure, ast.NodeTransformer):
     mechanism_modules = frozenset((
         *(Path("src", Path(inspect.getfile(module)).relative_to(
             Path(inspect.getfile(agent_comms)).parents[1]))
-          for module in (field_codec, typed_table,
-                         coordination_schema, coordinated_runtime_schema)),
+          for module in (field_codec, typed_table, coordination_schema)),
         *(Path("src", "toad", module) for module in ("agent_schema.py", "db.py")),
     ))
 

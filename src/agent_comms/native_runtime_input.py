@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Annotated
 
 from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import Participants
-from agent_comms.private_runtime_schema import PrivateRuntimeSchema
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
 from .field_codec import FieldCodec, MalformedRecord, NativeContext, WireName
@@ -25,6 +25,7 @@ from .native_input_record import (
     NativeInputLocation,
     NativeInputPosition,
     NativeInputRecord,
+    TriageNativeExecution,
     NativeStageStorage,
     NumberNativeColumn,
     RecordedNativePosition,
@@ -53,6 +54,7 @@ from .typed_table import (
     TypedRow,
     TypedTable,
     WriteOnceColumns,
+    sql_literal,
 )
 
 if TYPE_CHECKING:
@@ -60,24 +62,11 @@ if TYPE_CHECKING:
     from .native_session_reopen import NativeSessionIdentity
 
 
-class NativeRuntimeTable(SharedFileTables, DurableTables, PrivateRuntimeSchema):
+class NativeRuntimeTable(PrivateCoordinatorTable):
     """Capability identifying the native-runtime schema's declared tables."""
 
     __slots__ = ()
     schema_error = PublicationActivationBlocked
-
-    @classmethod
-    def install(cls, store) -> None:
-        from .coordinated_runtime_schema import install_native_runtime_schema
-
-        install_native_runtime_schema(store)
-
-    @classmethod
-    def schema_rows(cls) -> tuple[type[TypedTable], ...]:
-        # Importing it declares the family's last table.
-        from . import triage_native_sources  # noqa: F401
-
-        return super().schema_rows()
 
 
 @dataclass(frozen=True)
@@ -99,6 +88,26 @@ class NativeRuntimeInput(
     NativeRuntimeTable,
     TypedTable,
 ):
+    @classmethod
+    def notification_context_sql(cls) -> str:
+        """Native context evidence for the caller's bounded assignment window ``w``."""
+        triage_stage = sql_literal(TriageNativeExecution)
+        return (
+            "WITH member AS MATERIALIZED (SELECT m.input_id,m.assignment_id,m.ordinal "
+            f"FROM ({cls.source_membership_sql()}) m "
+            "WHERE m.assignment_id IN (SELECT assignment_id FROM w)) "
+            "SELECT w.assignment_id,"
+            f"EXISTS (SELECT 1 FROM {cls.declared_name} n "
+            "JOIN member ON member.input_id=n.input_id "
+            "WHERE member.assignment_id=w.assignment_id "
+            f"AND n.stage={triage_stage} AND n.session_entry_id IS NULL) AS triage_inflight,"
+            f"(SELECT n.committed_at_ms FROM {cls.declared_name} n "
+            "JOIN member ON member.input_id=n.input_id "
+            "WHERE member.assignment_id=w.assignment_id AND n.session_entry_id IS NOT NULL "
+            f"ORDER BY CASE n.stage WHEN {triage_stage} THEN 0 ELSE 1 END,"
+            "member.ordinal,n.input_id LIMIT 1) AS context_committed_at_ms FROM w"
+        )
+
     write_once_columns = ('sent_owner_claimed_generation', 'session_id', 'session_file')
     finalized_column = 'session_entry_id'
     required_update_columns = ('sent_owner_claimed_generation',)

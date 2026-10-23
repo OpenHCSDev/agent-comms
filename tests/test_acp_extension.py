@@ -47,9 +47,9 @@ from agent_comms.turn_context import ContextManifest, NextContextTurn
 
 
 def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
-    from agent_comms.comms import wire
     from agent_comms.threads import Thread
-    comms = wire(tmp_path)
+    from conftest import installed_comms
+    comms = installed_comms(tmp_path)
     comms.registry.declare(comms.registry.new_thread('pilot', frozenset(), str(tmp_path)))
     read = comms.transcripts.capture_page_read("pilot")
     owner = ClaimedIdentity(RecordedThreadIncarnation("pilot", 1.0), 1)

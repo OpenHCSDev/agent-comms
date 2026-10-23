@@ -3,13 +3,16 @@
 0765a002c broke every ``agent-comms install`` without ``--repos``, and install 21
 refused because the target's owner probe asked the outgoing runtime for a method it no
 longer had (fixed in #2419); every required check passed both, because nothing ran the
-installer. This rehearses a real bus through the CLI under test, with the merge base's
-build installed as the outgoing runtime: launch, target tree, staged stack build,
-carried practice copy and the outgoing runtime's owner probe.
+installer. These checks rehearse an already-current bus format through the CLI:
+launch, target tree, staged stack build, carried practice copy and the outgoing
+runtime's owner probe. The outgoing package uses this source; the isolated target
+records a distinct incoming revision while retaining every declared carry dependency.
+The predecessor-history carry has its own real-writer fixture in test_carry_bus_history.
 """
 from __future__ import annotations
 
 import os
+import json
 import sqlite3
 import subprocess
 import sys
@@ -19,19 +22,24 @@ from pathlib import Path
 import pytest
 
 from agent_comms.field_codec import FieldCodec
+from agent_comms.cli_commands import HistoryCliCommand
+from agent_comms.comms import Comms
 from agent_comms.installer.backup import bus_files
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.practice import TestHome
 from agent_comms.installer.upgrade import (
     CarriedRehearsal,
+    CarriedRun,
+    CreatedRun,
+    InstalledUpgrade,
     RehearsedUpgrade,
     Stack,
-    UncopiedRehearsal,
     Upgrade,
 )
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout, ScratchCheckout
+from agent_comms.storage_rules import StorageRule
 from agent_comms.typed_table import ReconciledFile
 from conftest import declare_test_bus, publish_initial
 
@@ -46,7 +54,7 @@ def git(*arguments: str) -> str:
 @pytest.fixture(scope="module")
 def installed_home(tmp_path_factory) -> dict[str, str]:
     """A home holding what an installed machine has: the installer's uv, and as the
-    installed runtime a build of the merge base this change lands on. Both cases share
+    installed runtime a build of this source. Both cases share
     it, so the second reuses the staged runtime the first built, as a second install
     would. Package caches stay shared."""
     home = tmp_path_factory.mktemp("installed-home")
@@ -58,8 +66,7 @@ def installed_home(tmp_path_factory) -> dict[str, str]:
                    "npm_config_cache": str(Path.home() / ".npm")}
     environment.pop("PYTHONPATH", None)
     # The checkout owner adds the tree with its pinned submodules; `git archive` drops them.
-    base = ScratchCheckout.add(REPOSITORY, home / "outgoing-source",
-                               git("merge-base", "HEAD", "origin/main"), "--detach")
+    base = ScratchCheckout.add(REPOSITORY, home / "outgoing-source", git("rev-parse", "HEAD"), "--detach")
     try:
         outgoing = Stack.build(base.path, InstallCommands(), home)
     finally:
@@ -74,10 +81,13 @@ def install_checkout(tmp_path) -> Path:
     checkout = tmp_path / "checkout"
     subprocess.run(["git", "clone", "--shared", "-q", REPOSITORY, checkout], check=True)
     Checkout(checkout).prepare()
+    subprocess.run(["git", "-C", checkout, "-c", "user.name=Installer test",
+                    "-c", "user.email=installer@example.invalid", "commit", "--allow-empty",
+                    "-qm", "Record the incoming installer qualification revision"], check=True)
     return checkout
 
 
-def drop_one_index(root: Path) -> None:
+def drop_one_index(root: Path) -> str:
     """One declared store's schema drifts from both runtimes' declarations."""
     for path in sorted(ReconciledFile.existing_in(root)):
         with closing(sqlite3.connect(path)) as db:
@@ -86,24 +96,25 @@ def drop_one_index(root: Path) -> None:
             if index:
                 db.execute(f'DROP INDEX "{index[0]}"')
                 db.commit()
-                return
+                return str(path.relative_to(root))
     raise AssertionError("No declared store has an index to drop")
 
 
 @pytest.mark.timeout(280)
-@pytest.mark.parametrize("repos, rehearsal", (
-    ((), UncopiedRehearsal), (("--repos",), CarriedRehearsal),
-), ids=("kept-repos-nothing-to-carry", "given-repos-drifted-store"))
+@pytest.mark.parametrize("repos, drifted", (
+    ((), False), (("--repos",), True),
+), ids=("kept-repos-current-stores", "given-repos-drifted-store"))
 def test_install_rehearses_without_changing_the_bus(private_comms, installed_home, install_checkout, tmp_path,
-                                                    repos, rehearsal):
-    """A bus with nothing to carry is rehearsed without a copy; one store whose schema
-    drifted makes the rehearsal copy the bus and carry it. Neither changes the bus."""
+                                                    repos, drifted):
+    """Retained carry steps inspect a practice copy, even when no step is pending.
+
+    Only the deliberately drifted store is rewritten; neither case changes the bus.
+    """
     comms = private_comms
     declare_test_bus(comms, channels=("comms",), threads=(
         comms.registry.new_thread(name="worker", tags=frozenset(), worktree=str(tmp_path)),))
     publish_initial(comms, "worker", "#all", "One message before the install")
-    if rehearsal is CarriedRehearsal:
-        drop_one_index(comms.root)
+    rewritten = (drop_one_index(comms.root),) if drifted else ()
     checkout = install_checkout
     before = bus_files(comms.root)
     given = (*repos, str(checkout)) if repos else ()
@@ -114,7 +125,10 @@ def test_install_rehearses_without_changing_the_bus(private_comms, installed_hom
         capture_output=True, text=True, timeout=270)
     assert installed.returncode == 0, installed.stderr
     result = FieldCodec.decode(Upgrade, FieldCodec.parse(installed.stdout))
-    assert isinstance(result, RehearsedUpgrade) and type(result.rehearsal) is rehearsal
+    assert isinstance(result, RehearsedUpgrade)
+    assert isinstance(result.rehearsal, CarriedRehearsal)
+    assert result.pending == ()
+    assert result.rehearsal.files.names == rewritten
     assert bus_files(comms.root) == before
 
 
@@ -134,14 +148,12 @@ def test_failed_live_migration_restores_data_checkout_and_runtime(
     step = checkout / "tools/cutover/carry_fault.py"
     step.write_text('''from agent_comms.installer.carry import Carry, Carried
 class Fault(Carry):
-    @classmethod
-    def backup_files(cls, root):
-        return (root / "saved",)
-    @classmethod
-    def carry(cls, root, *, apply):
+    def backup_files(self):
+        return (self.root / "saved",)
+    def carry(self, *, apply):
         if apply:
-            (root / "saved").write_text("changed by the worker")
-            if (root / "fail-live").exists():
+            (self.root / "saved").write_text("changed by the worker")
+            if (self.root / "fail-live").exists():
                 raise RuntimeError("intentional failure after writing the resource")
         return Carried(1, rewritten=("saved",))
 ''')
@@ -169,3 +181,37 @@ class Fault(Carry):
     assert subprocess.check_output(["git", "-C", checkout, "rev-parse", "HEAD"], text=True).strip() == current
     MaintenanceBarrier(RegistryStore.at(comms.root).path).read().phase.new_sends.require_open()
     assert comms.registry.require("worker").name == "worker"
+
+
+@pytest.mark.timeout(280)
+@pytest.mark.parametrize("fresh, live_kind", ((False, CarriedRun), (True, CreatedRun)),
+                         ids=("retained-bus", "fresh-bus"))
+def test_installed_entry_reports_completion_after_target_source_retirement(
+        private_comms, installed_home, install_checkout, tmp_path, fresh, live_kind):
+    root = tmp_path / "new-bus" if fresh else private_comms.root
+    if not fresh:
+        declare_test_bus(private_comms, channels=("comms",))
+    scratch = tmp_path / "install-scratch"
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    StorageRule.path_in(root).write_text(json.dumps(FieldCodec.encode(
+        StorageRule(scratch_base=scratch, floor_gib=10))))
+    home = Path(installed_home["HOME"])
+    outgoing = home / ".local/share/agent-comms/current/bin/agent-comms"
+    # The caller and terminal publisher import installed packages. Only InstallRun's
+    # existing target-source child borrows its temporary tree during the operation.
+    completed = subprocess.run(
+        [outgoing, "--root", root, "install", "--checkout", install_checkout,
+         "--to", "HEAD", "--project", install_checkout,
+         "--spill-dir", tmp_path / "backups"],
+        cwd=install_checkout, env=installed_home, capture_output=True, text=True, timeout=270,
+    )
+    assert completed.returncode == 0, completed.stderr
+    result = FieldCodec.decode(Upgrade, FieldCodec.parse(completed.stdout))
+    assert isinstance(result, InstalledUpgrade) and type(result.live) is live_kind
+    history = tuple(reversed(HistoryCliCommand(target="#comms").apply(Comms(root)).messages))
+    assert len(history) == (1 if fresh else 2)
+    assert history[-1].sender == "installer"
+    assert history[-1].body.startswith("Install finished")
+    if not fresh:
+        assert history[0].body.startswith("Install starting")
+    assert scratch.is_dir() and not tuple(scratch.iterdir())
