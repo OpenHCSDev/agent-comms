@@ -37,6 +37,7 @@ from contextlib import (
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any, ClassVar, NoReturn
 
 from .declared_family import DeclaredFamily
@@ -429,7 +430,22 @@ class Platform(DeclaredFamily, affix="Platform"):
     def is_private(self, info: os.stat_result, permissions: int) -> bool: ...
 
     @abstractmethod
+    def is_owned(self, info: os.stat_result) -> bool: ...
+
+    @abstractmethod
     def make_private(self, path: Path, permissions: int) -> None: ...
+
+    @abstractmethod
+    def make_private_descriptor(self, descriptor: int, permissions: int) -> None: ...
+
+    @contextmanager
+    def socket_address(self, path: Path, descriptor: int) -> Generator[Path, None, None]:
+        with TemporaryDirectory(prefix="ac-socket-", dir="/tmp") as directory:
+            parent = Path(directory) / "d"
+            parent.symlink_to(path.parent, target_is_directory=True)
+            if not os.path.samestat(os.stat(parent), os.fstat(descriptor)):
+                raise ValueError("Socket directory changed during address acquisition")
+            yield parent / path.name
 
     @abstractmethod
     def try_store_lock(self, descriptor: int, *, mode: LockMode) -> None:
@@ -507,12 +523,19 @@ class PosixPlatform(Platform):
             os.close(descriptor)
 
     def is_private(self, info: os.stat_result, permissions: int) -> bool:
-        return stat.S_IMODE(info.st_mode) == permissions and info.st_uid == os.geteuid()
+        return stat.S_IMODE(info.st_mode) == permissions and self.is_owned(info)
+
+    def is_owned(self, info: os.stat_result) -> bool:
+        return info.st_uid == os.geteuid()
 
     def make_private(self, path: Path, permissions: int) -> None:
         with suppress(FileNotFoundError):
             if stat.S_IMODE(path.lstat().st_mode) != permissions:
                 os.chmod(path, permissions, follow_symlinks=False)
+
+    def make_private_descriptor(self, descriptor: int, permissions: int) -> None:
+        if stat.S_IMODE(os.fstat(descriptor).st_mode) != permissions:
+            os.fchmod(descriptor, permissions)
 
     def acquire_store_lock(self, descriptor: int, *, mode: LockMode, blocking: bool) -> None:
         import fcntl
@@ -559,6 +582,10 @@ class LinuxProcessRecord:
 
 
 class LinuxPlatform(NamespaceContainment, PidfdHandles, PosixPlatform):
+    @contextmanager
+    def socket_address(self, path: Path, descriptor: int) -> Generator[Path, None, None]:
+        yield Path(f"/proc/{os.getpid()}/fd/{descriptor}") / path.name
+
     def parent_death_binding(self) -> int:
         """The exec gate arms PR_SET_PDEATHSIG and binds to this launcher's PID."""
         return os.getpid()
@@ -728,7 +755,13 @@ class Win32Platform(Platform):
         # NTFS ACLs, not POSIX mode bits, determine privacy.
         return True
 
+    def is_owned(self, info: os.stat_result) -> bool:
+        return True
+
     def make_private(self, path: Path, permissions: int) -> None:
+        pass
+
+    def make_private_descriptor(self, descriptor: int, permissions: int) -> None:
         pass
 
     def try_store_lock(self, descriptor: int, *, mode: LockMode) -> None:

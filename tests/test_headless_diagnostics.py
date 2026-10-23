@@ -4,6 +4,7 @@ import json
 import os
 
 from agent_comms.diagnostics import record_terminal_failure
+from agent_comms.turn_failure import NativePreflightTimeout
 
 
 def test_terminal_diagnostic_excludes_untrusted_payloads(tmp_path):
@@ -12,22 +13,18 @@ def test_terminal_diagnostic_excludes_untrusted_payloads(tmp_path):
         turn_id="a" * 32,
         thread="worker",
         sequences=(6943,),
-        event={
-            "reason_code": "native_preflight_timeout",
-            "text": "SECRET stderr data:image/png;base64,ABC123",
-            "prompt": "private user text",
-            "diagnostic": {
-                "wait_ms": 5000,
-                "session_bytes": 88255627,
-                "exit_code": -15,
-                "token": "SECRET",
-                "spawn_ms": "SECRET",
-            },
+        failure=NativePreflightTimeout,
+        measurements={
+            "wait_ms": 5000,
+            "session_bytes": 88255627,
+            "exit_code": -15,
+            "token": "SECRET",
+            "spawn_ms": "SECRET",
         },
     )
     raw = path.read_text()
     value = json.loads(raw)
-    assert value["reason"] == "native_preflight_timeout"
+    assert value["failure"] == NativePreflightTimeout.declared_name
     assert value["measurements"] == {"wait_ms": 5000, "session_bytes": 88255627, "exit_code": -15}
     assert value["sequences"] == [6943]
     assert all(fragment not in raw for fragment in ("SECRET", "private user", "base64"))
