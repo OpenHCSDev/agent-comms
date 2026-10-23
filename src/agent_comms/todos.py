@@ -2581,8 +2581,15 @@ class TodoCommand(Command, DeclaredFamily, affix="TodoOperation"):
     def require_unit(self, db: sqlite3.Connection, current: Todo) -> None:
         """Only assignment operations compete for a unit."""
 
+    def apply(self, current: Todo) -> Todo:
+        self.require_current(current)
+        return self.changed(current)
+
+    def require_current(self, current: Todo) -> None:
+        current.require_revision(self.expected_revision)
+
     @abstractmethod
-    def apply(self, current: Todo) -> Todo: ...
+    def changed(self, current: Todo) -> Todo: ...
 
 
 class TodoOperation(TodoCommand, declared_name=None):
@@ -2624,13 +2631,15 @@ class AssignTodo(TodoOperation):
         if (current.assignment, current.review_at, current.order, current.goal) == (
                 proposed, self.review_at, self.order, self.goal):
             return current
-        current.require_revision(self.expected_revision)
+        return super(AssignTodo, replace(self, proposed=proposed)).apply(current)
+
+    def changed(self, current: Todo) -> Todo:
         self.actor.require_may_change(current)
         if self.order != current.order:
             self.order.require_wording()
             self.order.require_writable()
-        assigned = (current if current.assignment == proposed
-                    else current.state.assign(current, proposed, self.traced))
+        assigned = (current if current.assignment == self.proposed
+                    else current.state.assign(current, self.proposed, self.traced))
         return replace(assigned, review_at=self.review_at,
                        order=self.order, prior_orders=current.orders_before(self.order),
                        goal=self.goal,
@@ -2659,8 +2668,7 @@ class StrikeTodo(CitedStrike, StoryEvent):
     reason: str
     at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()))
 
-    def apply(self, current: Todo) -> Todo:
-        current.require_revision(self.expected_revision)
+    def changed(self, current: Todo) -> Todo:
         self.actor.require_may_change(current)
         current.require_assignment(self.previous)
         _text(self.reason, "Strike reason", 2000)
@@ -2706,8 +2714,8 @@ class FailedCheckStrike(StrikeTodo):
     def repeats(self, recorded: StrikeTodo) -> bool:
         return recorded.matches_failed_check(self)
 
-    def apply(self, current: Todo) -> Todo:
-        struck = super().apply(current)
+    def changed(self, current: Todo) -> Todo:
+        struck = super().changed(current)
         if struck != current and struck.struck_out(self.previous.owner):
             return ReleaseTodo(struck.revision, self.actor, self.previous,
                                StrikeReason(self.reason), self.at).apply(struck)
@@ -2769,10 +2777,12 @@ class OrderVerdict(TodoCommand, StoryEvent, declared_name=None):
     @abstractmethod
     def line(self) -> str: ...
 
-    def apply(self, current: Todo) -> Todo:
+    def require_current(self, current: Todo) -> None:
         # A verdict's time bounds which edits it judges, so the write refuses one it cannot date.
         self.at.require_recorded("A verdict")
-        current.require_revision(self.expected_revision)
+        super().require_current(current)
+
+    def changed(self, current: Todo) -> Todo:
         current.require_assignment(self.previous)
         judged = self.judged(current)
         return replace(judged, verdicts=(*judged.verdicts, self), revision=current.revision + 1)
@@ -2788,10 +2798,10 @@ class ToolCallVerdict(OrderVerdict, TodoOperation, declared_name=None):
     def story_text(self) -> str:
         return f"{super().story_text()}; tool call {self.tool_call_id}"
 
-    def apply(self, current: Todo) -> Todo:
+    def require_current(self, current: Todo) -> None:
         current.require_commander(self.actor)
         _text(self.tool_call_id, "Judged tool call ID", 200)
-        return super().apply(current)
+        super().require_current(current)
 
 
 @dataclass(frozen=True)
@@ -2982,8 +2992,7 @@ class VoidStrikeTodo(TodoOperation, StoryEvent):
         return (f"{self.actor.name} voided a strike against {self.strike.previous.owner}: "
                 f"{self.reason}")
 
-    def apply(self, current: Todo) -> Todo:
-        current.require_revision(self.expected_revision)
+    def changed(self, current: Todo) -> Todo:
         current.require_commander(self.actor)
         if self.strike not in current.live_strikes(self.strike.previous.owner):
             raise TodoConflict(current)
@@ -3013,8 +3022,7 @@ class ReleaseTodo(TodoOperation, StoryEvent, TodoHolder):
     reason: StrikeReason
     at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()))
 
-    def apply(self, current: Todo) -> Todo:
-        current.require_revision(self.expected_revision)
+    def changed(self, current: Todo) -> Todo:
         self.actor.require_may_change(current)
         current.require_assignment(self.previous)
         return replace(current, assignment=None, released=(*current.released, self),
@@ -3032,8 +3040,7 @@ class CorrectCheckTodo(TodoOperation):
     reason: str
     at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()))
 
-    def apply(self, current: Todo) -> Todo:
-        current.require_revision(self.expected_revision)
+    def changed(self, current: Todo) -> Todo:
         current.require_commander(self.actor)
         current.state.require_open(current)
         _text(self.reason, "Check correction reason", 2000)
@@ -3050,8 +3057,7 @@ class WordingCorrection(TodoOperation):
     def authored_by(self, actor: ThreadIncarnation) -> Self:
         return self
 
-    def apply(self, current: Todo) -> Todo:
-        current.require_revision(self.expected_revision)
+    def changed(self, current: Todo) -> Todo:
         corrections = (*current.corrections, self)
         return replace(current, corrections=corrections, revision=current.revision + 1)
 
@@ -3062,8 +3068,7 @@ class OrderMessage(TodoOperation):
     actor: ThreadIncarnation
     message_id: str
 
-    def apply(self, current: Todo) -> Todo:
-        current.require_revision(self.expected_revision)
+    def changed(self, current: Todo) -> Todo:
         current.require_commander(self.actor)
         _text(self.message_id, "Order message ID", 200)
         return replace(current, messages=(*current.messages, self), revision=current.revision + 1)
@@ -3075,8 +3080,7 @@ class RecordPullRequest(TodoCommand):
     link: PullRequestLink
     generation: str
 
-    def apply(self, current: Todo) -> Todo:
-        current.require_revision(self.expected_revision)
+    def changed(self, current: Todo) -> Todo:
         current.require_actor(self.actor, self.generation)
         if self.link.repo != current.repo:
             raise TodoError("A recorded pull request must belong to the todo's repository.")
@@ -3093,8 +3097,7 @@ class ServeTodo(TodoOperation):
     actor: ThreadIncarnation
     serves: type[OrderPhase]
 
-    def apply(self, current: Todo) -> Todo:
-        current.require_revision(self.expected_revision)
+    def changed(self, current: Todo) -> Todo:
         current.require_commander(self.actor)
         return replace(current, order=current.order.for_phase(self.serves),
                        revision=current.revision + 1)
@@ -3108,8 +3111,7 @@ class ClaimOrder(TodoCommand):
     generation: str
     claim: OrderClaim
 
-    def apply(self, current: Todo) -> Todo:
-        current.require_revision(self.expected_revision)
+    def changed(self, current: Todo) -> Todo:
         current.state.require_open(current)
         current.require_assignee(self.actor, self.generation)
         order = current.order.checked().claimed(self.claim)
@@ -3130,11 +3132,14 @@ class DeliverTodo(TodoOperation, declared_name=None):
         default_factory=dict, kw_only=True, repr=False, compare=False,
     )
 
-    def prepare(self, goals, current):
-        current.require_revision(self.expected_revision)
+    def require_current(self, current: Todo) -> None:
+        super().require_current(current)
         current.require_commander(self.actor)
         current.state.require_open(current)
         current.order.require_delivery(self.order_id)
+
+    def prepare(self, goals, current):
+        self.require_current(current)
         verified = self.delivery.verified(current, goals.registry, self.verified_claims)
         try:
             delivered = asyncio.run(verified)
@@ -3143,11 +3148,7 @@ class DeliverTodo(TodoOperation, declared_name=None):
             raise
         return replace(self, delivery=delivered)
 
-    def apply(self, current):
-        current.require_revision(self.expected_revision)
-        current.require_commander(self.actor)
-        current.state.require_open(current)
-        current.order.require_delivery(self.order_id)
+    def changed(self, current):
         self.delivery.at.require_delivery()
         return current.order.checked().scope.completed(current, self.delivery)
 
@@ -3160,9 +3161,11 @@ class CloseOrderTodo(TodoOperation, declared_name=None):
     @abstractmethod
     def closed(self, current: Todo) -> ProblemOrder: ...
 
-    def apply(self, current):
-        current.require_revision(self.expected_revision)
+    def require_current(self, current: Todo) -> None:
+        super().require_current(current)
         current.require_commander(self.actor)
+
+    def changed(self, current):
         return DoneTodoState.closed(current, self.closed(current))
 
 
@@ -3172,8 +3175,7 @@ class InstallTodo(CloseOrderTodo):
     artifact: str
 
     def prepare(self, goals: Goals, current: Todo) -> InstallTodo:
-        current.require_revision(self.expected_revision)
-        current.require_commander(self.actor)
+        self.require_current(current)
         current.order.require_installation()
         return self
 
@@ -3208,8 +3210,7 @@ class ChangeTodoState(TodoOperation):
         self.state.prepare_change(goals, current)
         return self
 
-    def apply(self, current):
-        current.require_revision(self.expected_revision)
+    def changed(self, current):
         return current.state.change(current, self)
 
 
