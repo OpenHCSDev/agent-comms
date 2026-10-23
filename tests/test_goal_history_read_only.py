@@ -28,7 +28,7 @@ def test_pending_rows_remain_pending_and_original_bytes_unchanged(tmp_path):
     registry = authored_history(tmp_path / 'authored')
     source = registry.require('author')
     store = GoalHistoryStore(registry.store.path)
-    sequence = store.begin(source.created_at, source.goal, replace(source.goal, revision=1))
+    sequence = store.begin(source.incarnation.wire_birth, source.goal, replace(source.goal, revision=1))
     before = preserved_files(registry.store.path.parent)
     with registry.store.reading():
         rows = GoalHistoryStore.acquire_read_only(registry.store.path)

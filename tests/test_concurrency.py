@@ -18,7 +18,6 @@ from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.message_page import PageBounds
 from agent_comms.pi_counts import PiCount
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from bus_history import read_history
 from conftest import installed_comms
 from agent_comms.thread_model import DeclaredModel
@@ -90,9 +89,9 @@ class TestConcurrentWire:
         ctx = multiprocessing.get_context("spawn")
         _run_concurrently(ctx, _register_thread_same_tick, [(str(root), name) for name in names])
         stored = wire(root).registry
-        times = [stored.require(name).created_at for name in names]
-        assert len(set(times)) == len(names)
-        assert len({RecordedThreadIncarnation("fixture", created_at).lookup for created_at in times}) == len(names)
+        births = [stored.require(name).incarnation.require_recorded() for name in names]
+        assert len({birth.wire_birth for birth in births}) == len(names)
+        assert len({birth.lookup for birth in births}) == len(names)
 
     def test_concurrent_senders_preserve_every_message_and_sequence(self, tmp_path: Path) -> None:
         root = tmp_path / "wire"
