@@ -409,12 +409,23 @@ class HistoryArchive(DurableFile):
 
     @classmethod
     def files_in(cls, root: Path) -> frozenset[Path]:
+        """Archived roots are found by where attach puts them, never by decoding the
+        catalogue: a copy of a root in an older shape must copy before any carry reads it."""
         declared = super().files_in(root)
-        for source in cls(Bus.path_in(root)).sources():
-            archived = Path(source.root)
-            if archived.is_relative_to(root):
-                declared |= RootFile.paths_in(archived)
+        for archived in cls.archived_roots(root):
+            declared |= RootFile.paths_in(archived)
         return declared
+
+    @staticmethod
+    def archive_directory(root: Path) -> Path:
+        return root / "history"
+
+    @classmethod
+    def archived_roots(cls, directory: Path) -> tuple[Path, ...]:
+        archives = cls.archive_directory(directory)
+        if not archives.is_dir():
+            return ()
+        return tuple(sorted(path for path in archives.iterdir() if path.is_dir()))
 
     def sources(self) -> tuple[HistorySource, ...]:
         with self.read_sources() as sources:
@@ -463,7 +474,7 @@ class HistoryArchive(DurableFile):
             existing = next((s for s in sources if s.original_root == str(source_root)), None)
             if existing is not None:
                 return existing
-            parent = self.bus_path.parent / "history"
+            parent = self.archive_directory(self.bus_path.parent)
             parent.mkdir(mode=0o700, exist_ok=True)
             stage = Path(tempfile.mkdtemp(prefix="source-", dir=parent))
             try:
