@@ -306,14 +306,19 @@ class InspectSession(SessionRequest[SessionInformation], declared_name='inspect'
     def information(self, endpoint: Path) -> SessionInformation:
         return self.exchange(endpoint)
 
-    def awaited(self, claim: WatchClaim) -> SessionInformation:
+    def awaited(
+        self, claim: WatchClaim, swapping: Callable[[WatchClaim], None],
+    ) -> SessionInformation:
         """An install swaps the endpoint; the claim's state says whether an absent socket is
         that gap or gone."""
+        named = False
         while True:
             try:
                 return self.information(claim.socket_path)
             except (FileNotFoundError, ConnectionRefusedError) as absent:
-                claim.state().await_socket(claim, absent)
+                state = claim.state()
+                named = named or state.name_wait(lambda: swapping(claim))
+                state.await_socket(claim, absent)
 
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
         return SessionInformation(
@@ -385,8 +390,11 @@ class MonitorService:
             path.unlink(missing_ok=True)
 
 
-async def read_monitor(claim: WatchClaim, announce: Callable[[WatchClaim], None]) -> None:
-    session = await asyncio.to_thread(InspectSession().awaited, claim)
+async def read_monitor(
+    claim: WatchClaim, announce: Callable[[WatchClaim], None],
+    swapping: Callable[[WatchClaim], None],
+) -> None:
+    session = await asyncio.to_thread(InspectSession().awaited, claim, swapping)
     announced = False
     with claim.reader_held():
         while session.owner.alive():
