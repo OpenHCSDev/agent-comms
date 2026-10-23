@@ -66,7 +66,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     with pytest.raises(ValueError):
         report.invoke(comms, args, caller=ThreadCaller("worker"))
     before = ledger.path.read_bytes()
-    messages = comms.bus.inbox("worker")
+    messages = comms.bus.inbox("worker").page.messages
     comms.messaging.acknowledge("worker", tuple(message.reference for message in messages))
     result = inbox.invoke(comms, {"thread": "worker", "standby": {"goal_id": goal.id, "wait_for": ["parent"]}}, caller=ThreadCaller("worker"))
     assert result["messages"] == []  # Display ACK is not handling evidence.

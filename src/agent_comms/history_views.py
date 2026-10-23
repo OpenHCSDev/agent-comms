@@ -429,10 +429,12 @@ class HistoryViews:
         return WireRevision.capture(self, expiry_tick=int(time.time()))
 
     def who(self) -> tuple[ThreadView, ...]:
-        """Presence records; their owner supplies the wire representation."""
-        views = self._presence_views()
-        pending = CountedRead().counts(self.bus, tuple(view.thread.name for view in views))
-        return tuple(replace(view, pending=pending[view.thread.name]) for view in views)
+        """Who is here: live presences, with no unread scan that grows with history."""
+        snapshot = self.registry.snapshot()
+        live = tuple(thread.name for thread in snapshot.active_threads(snapshot.threads.values()))
+        return tuple(sorted(
+            ThreadView.roster(snapshot, self.agents, self.goals, DEFAULT_ROSTER, names=live),
+            key=lambda view: view.thread.name))
 
     def presence(self) -> tuple[ThreadView, ...]:
         """Presence records without viewer-specific unread scans."""
@@ -462,5 +464,5 @@ class HistoryViews:
         """One-shot status snapshot: self state plus inbox."""
         name = target.thread(self.registry).name
         peers = tuple(view for view in self._presence_views() if view.thread.name != name)
-        return ThreadPoll(self.thread_detail(name, CountedRead()), tuple(self.bus.inbox(name)),
+        return ThreadPoll(self.thread_detail(name, CountedRead()), self.bus.inbox(name).page.messages,
                           self.ledger.read(), peers)

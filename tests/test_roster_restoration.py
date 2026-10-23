@@ -50,7 +50,7 @@ def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity
     assert after.aliases["former-name"] == "missing"
     assert current.bus.bus.revision() == bus
     assert old.bus.bus.revision() == old_bus
-    assert not current.bus.inbox("missing")
+    assert not current.bus.inbox("missing").page.messages
     first = current.registry.store.path.read_bytes()
     assert current.registry.restore_stopped(source, ("live", "missing")) == ()
     assert current.registry.store.path.read_bytes() == first

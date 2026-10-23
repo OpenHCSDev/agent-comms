@@ -90,7 +90,7 @@ async def test_parts_require_complete_exact_body_then_reopen(bridge, emitted_del
     for number in (6, 1, 3, 1, 5, 2):
         for update in record_factory(lines[number], record_id=f'record-{number}').updates(ClaudeSession()):
             await update.observed(bridge)
-    assert [item.reference for item in bridge.comms.bus.inbox(binding.bus)] == [message.reference]
+    assert [item.reference for item in bridge.comms.bus.inbox(binding.bus).page.messages] == [message.reference]
     assert DeliveryRow.select(bridge.db)[0].outcome is EmittedOutcome
     bridge.db.close()
     with Binding.open(state) as db:
@@ -98,11 +98,11 @@ async def test_parts_require_complete_exact_body_then_reopen(bridge, emitted_del
         for number in (0, 4):
             for update in record_factory(lines[number], record_id=f'record-{number}').updates(ClaudeSession()):
                 await update.observed(reopened)
-        assert reopened.comms.bus.inbox(binding.bus) == []
+        assert reopened.comms.bus.inbox(binding.bus).page.messages == ()
         for line in lines:
             for update in record_factory(line, record_id='later-overlap').updates(ClaudeSession()):
                 await update.observed(reopened)
-        assert reopened.comms.bus.inbox(binding.bus) == []
+        assert reopened.comms.bus.inbox(binding.bus).page.messages == ()
         # Confirmation can beat the final socket-drain emission report.
         confirmed, = DeliveryRow.select(db, id=message.message_id)
         await confirmed.finish(reopened, EmittedOutcome)
@@ -220,9 +220,9 @@ async def test_explicit_watch_does_not_mark_streamed_messages_read(wired):
             if not pending.done():
                 pending.cancel()
                 await asyncio.gather(pending,return_exceptions=True)
-    assert {m.reference for m in wired.bus.inbox('fixer')}=={first.reference,second.reference}
+    assert {m.reference for m in wired.bus.inbox('fixer').page.messages}=={first.reference,second.reference}
     assert wired.messaging.acknowledge('fixer',(first.reference,))==1
-    assert [m.reference for m in wired.bus.inbox('fixer')]==[second.reference]
+    assert [m.reference for m in wired.bus.inbox('fixer').page.messages]==[second.reference]
 
 
 # delivery.sqlite3 as bridges wrote it before the sequence index was declared:
