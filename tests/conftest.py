@@ -17,6 +17,8 @@ from pathlib import Path
 import pytest
 from xdist import is_xdist_worker
 
+# First: importing it removes the caller's repository from the environment before any git runs.
+import fixture_git  # noqa: F401
 import goal_owner_fixture
 from agent_comms.bus import Bus
 from agent_comms.bus_publication import AgentOrigin
@@ -138,20 +140,6 @@ def publish_initial(comms, sender, target, body, type=InfoKind, *, role=Conversa
         Message(sender=sender, target=target, body=body, type=type, role=role),
         destination=CommandTarget.named(target), origin=AgentOrigin(),
     )
-
-def _without_caller_repository() -> None:
-    """A caller's git selects no repository for any test git call.
-
-    ``git bisect run`` from a linked worktree exports GIT_DIR, and a fixture's
-    ``git -C tmp init`` then re-initialised the caller's checkout as bare instead of
-    creating its own. Removed at import, before session start's own git call and before
-    xdist workers inherit the environment."""
-    for name in tuple(name for name in os.environ if name.startswith("GIT_")):
-        del os.environ[name]
-
-
-_without_caller_repository()
-
 
 def pytest_sessionstart(session):
     """The controller populates this checkout's pinned submodules before any worker runs,

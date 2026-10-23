@@ -193,6 +193,7 @@ def test_projection_digest_tracks_producing_source(
 
 # Mechanisms that decode, store and dispatch rows; their edits never change row content.
 PROJECTION_MECHANISM_MODULES = frozenset({
+    "agent_comms.class_fact",
     "agent_comms.core_stamp",
     "agent_comms.declared_family",
     "agent_comms.field_codec",
