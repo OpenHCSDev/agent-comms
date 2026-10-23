@@ -618,16 +618,8 @@ class Stack:
               ThreadPoolExecutor(max_workers=max(1, len(names))) as pool):
             return tuple(pool.map(lambda name: self.start_owner(root, name), names))
 
-    def restart_services(self) -> tuple[RestartedService, ...]:
-        """Every running host service moves onto this runtime, which owns the root and so
-        proves each one serves it."""
-        with ServicesPhase("restart").running(self.commands.clock):
-            services = HostService.restart_running(self.python)
-            self.probe(ServingProbe())
-            return services
-
     def start_services(self, stopped: tuple[HostService, ...]) -> tuple[RestartedService, ...]:
-        with ServicesPhase("recover").running(self.commands.clock):
+        with ServicesPhase("start").running(self.commands.clock):
             services = tuple(service.start_onto(self.python) for service in stopped)
             self.probe(ServingProbe())
             return services
@@ -994,6 +986,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
         running = self.installed.running_owners(self.root)
         with MaintenancePhase("begin").running(self.staged.commands.clock):
             maintenance = MaintenanceBarrier(RegistryStore.at(self.root).path)
+            services = HostService.stop_running()
             held = maintenance.begin(MaintenanceOperator.current())
             holder = ExitStack()
             holder.enter_context(held.holding())  # this run's own CLI calls read under its hold
@@ -1017,6 +1010,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                     holder.close()
                     maintenance.clear(held)
                 started = self.installed.start(self.root, running)
+                self.installed.start_services(services)
                 print(f"install: aborted before the backup ({type(error).__name__}: {error}); "
                       f"maintenance cleared; owners: {started}", file=sys.stderr)
                 raise
@@ -1030,13 +1024,14 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                 with MaintenancePhase("clear").running(self.staged.commands.clock):
                     holder.close()
                     maintenance.clear(held)
-                services = self.staged.restart_services()
+                restarted_services = self.staged.start_services(services)
             except BaseException as error:
                 print(f"install: install failed ({type(error).__name__}: {error}); "
                       "restoring original installation", file=sys.stderr)
                 # A running service writes the root (the connector its passes), so none may
                 # run while the backup is restored; they start again on the original runtime.
-                stopped = HostService.stop_running()
+                for service in services:
+                    service.stop()
                 state = maintenance.read()
                 recovery = state.phase.hold_for(maintenance, state, MaintenanceOperator.current())
                 holder.close()
@@ -1055,7 +1050,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                 self.installed.publish(self.root)
                 holder.close()
                 maintenance.clear(restored_hold)
-                self.installed.start_services(stopped)
+                self.installed.start_services(services)
                 started = self.installed.start(self.root, running)
                 print(f"install: restored after failure ({type(error).__name__}: {error}); "
                       f"original runtime selected; owners: {started}; "
@@ -1075,7 +1070,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                 started = self.staged.start(self.root, running)
             with BackupRetirePhase().running(self.staged.commands.clock):
                 retired_backups = migration.backup.retain(self.spill_dir)
-            return passed.extended(CarriedRun, stopped=tuple(running), services=services,
+            return passed.extended(CarriedRun, stopped=tuple(running), services=restarted_services,
                                    started=started, restore_space=restore, backup=migration.backup.report(),
                                    retired_backups=retired_backups)
         finally:
@@ -1129,12 +1124,16 @@ class FreshInstall(Install[FreshRehearsal]):
         wire(self.root).registry.prepare_native_root()
         report.writer = RuntimeWriter(self.root, self.staged)
         backup, selected_route = self.backed_up(())
+        stopped = HostService.stop_running()
         try:
             route = self.publish(backup, selected_route)
-            services = self.staged.restart_services()
+            services = self.staged.start_services(stopped)
         except BaseException:
+            for service in stopped:
+                service.stop()
             backup.restore_route()
             self.installed.publish(self.root)
+            self.installed.start_services(stopped)
             raise
         with BackupRetirePhase().running(self.staged.commands.clock):
             backup.retain(self.spill_dir)
