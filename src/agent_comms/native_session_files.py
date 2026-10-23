@@ -13,7 +13,7 @@ from functools import partial
 from pathlib import Path
 from typing import Self
 
-from agent_comms.child_process import Platform
+from agent_comms.child_process import Platform, ProcessIdentity
 from agent_comms.field_codec import Id128Text
 from agent_comms.locked_store import DurableFile, PatternFile, SQLiteFile
 from agent_comms.native_session_reopen import NativeSessionIdentity
@@ -65,18 +65,19 @@ class SessionFiles:
         return tuple(
             int(entry.name)
             for entry in os.scandir("/proc")
-            if entry.name.isdigit() and self._referenced_by(entry.path)
+            if entry.name.isdigit() and self._referenced_by(int(entry.name))
         )
 
-    def _referenced_by(self, process: str) -> bool:
+    def _referenced_by(self, pid: int) -> bool:
         members = {str(path) for path in self.members}
-        needle = str(self.session).encode()
+        needle = str(self.session)
         try:
-            for name in ("cmdline", "environ"):
-                with open(f"{process}/{name}", "rb") as stream:
-                    if needle in stream.read():
-                        return True
-            for descriptor in os.scandir(f"{process}/fd"):
+            process = ProcessIdentity.capture(pid)
+            if any(needle in argument for argument in process.arguments()):
+                return True
+            if any(needle in f"{name}={value}" for name, value in process.environment().items()):
+                return True
+            for descriptor in os.scandir(f"/proc/{pid}/fd"):
                 try:
                     target = os.readlink(descriptor.path)
                 except FileNotFoundError:

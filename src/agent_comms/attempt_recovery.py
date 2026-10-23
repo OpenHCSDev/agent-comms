@@ -4,6 +4,7 @@ from __future__ import annotations
 
 
 from agent_comms.native_session_files import NativeSessionFiles
+from agent_comms.child_process import ProcessIdentity
 from .native_failures import NativePiUnavailable
 
 import os
@@ -149,17 +150,17 @@ class VerifiedOwnerLoss(ABC):
             try:
                 if entry.stat().st_uid != os.getuid():
                     continue
-                args = (entry / "cmdline").read_bytes().split(b"\0")
+                args = ProcessIdentity.capture(int(entry.name)).arguments()
             except (FileNotFoundError, ProcessLookupError):
                 continue
             except PermissionError as error:
                 raise RecoveryBlocked("native process observation was denied") from error
             for index, argument in enumerate(args[:-1]):
-                selected = argument == b"--session" and any(
-                    args[index + 1] == os.fsencode(path) for path in session_files
+                selected = argument == "--session" and any(
+                    args[index + 1] == str(path) for path in session_files
                 )
                 allocated = (
-                    argument == b"--session-dir" and args[index + 1] == os.fsencode(session_dir)
+                    argument == "--session-dir" and args[index + 1] == str(session_dir)
                 )
                 if selected or allocated:
                     raise RecoveryBlocked("native session subprocess is still running")
