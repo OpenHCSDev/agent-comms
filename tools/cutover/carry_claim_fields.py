@@ -49,8 +49,6 @@ class ClaimFields(RetiredClaimFields, Carry):
         documents.update((path, QueuedRestart) for path in (root / DIRECTORY).rglob("*.json"))
         return documents
 
-
-
     def carry(self, *, apply: bool) -> Carried:
         if apply:
             HeldBusFile(RegistryFile, RegistryFile.path_in(self.root)).require()

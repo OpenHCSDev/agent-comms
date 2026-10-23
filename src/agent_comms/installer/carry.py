@@ -69,7 +69,6 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
     def module(cls) -> Path:
         return Path(inspect.getfile(cls)).resolve()
 
-
     @abstractmethod
     def carry(self, *, apply: bool) -> Carried:
         """Carry this root; on a dry run, write nothing."""
@@ -83,6 +82,7 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
         """A carry must never follow a copied path or alias into the source bus."""
         if not path.is_relative_to(root) or path.resolve() != path:
             raise RelationViolationError(f"Carry refuses an unconfined path: {path}")
+
 
 class ArchivedInputs:
     """Apply one carry input declaration to its retained snapshot roots as well."""

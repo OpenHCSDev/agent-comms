@@ -706,8 +706,14 @@ class TargetTree(AbstractContextManager):
 
 @dataclass(frozen=True)
 class PracticeBus:
-    """Pending selection reads source snapshots before copying. Apply runs use the
-    selected practice inputs, then the backed-up live root under maintenance."""
+    """Pending selection dry-runs every step on the live root before maintenance holds
+    it, so nothing is copied to choose: a dry run reads the live stores under their own
+    locks and writes no store data, because every carry writes only when applying.
+    Taking a store's lock creates its lock file, and that file's directory, when it
+    does not exist yet; live writers wait while a dry run holds a lock. Reading a WAL
+    database updates its shared-memory index (``-shm``), as every SQLite reader does,
+    and creates the index when it is missing. Apply runs use the selected practice
+    inputs, then the backed-up live root under maintenance."""
 
     scratch: Path
     copy: PracticeCopy

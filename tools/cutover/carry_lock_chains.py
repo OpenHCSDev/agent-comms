@@ -19,6 +19,9 @@ from agent_comms.threads import ThreadCatalog
 
 
 class LockChains(Carry):
+    opened_files = ()
+    """No declared file owns a lock of a lock; its inputs are the chains it finds."""
+
     def chained(self) -> tuple[Path, ...]:
         paths = tuple(sorted(
             path for path in self.root.glob(str(ThreadCatalog.pattern().parent / "*"))
@@ -28,7 +31,7 @@ class LockChains(Carry):
             self.require_confined(self.root, path)
         return paths
 
-    def backup_files(self) -> tuple[Path, ...]:
+    def input_files(self) -> tuple[Path, ...]:
         return self.chained()
 
     def carry(self, *, apply: bool) -> Carried:
