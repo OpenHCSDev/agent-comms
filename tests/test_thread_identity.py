@@ -7,6 +7,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.channel_targets import ThreadTarget
 from agent_comms.session_file import SavedSessionFile
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.comms import wire
@@ -248,7 +249,7 @@ def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):
     comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     message = comms.messaging.send("owner", viewer, "already painted").message
-    page = comms.views.dm_display_page("owner", worktree=str(tmp_path))
+    page = comms.views.dm_display_page(ThreadTarget("owner"), worktree=str(tmp_path))
     comms.views.mark_page_read(page, worktree=str(tmp_path))
     path = comms.bus.reads.path
     document = FieldCodec.decode(ReadDocument, json.loads(path.read_text()))
@@ -262,7 +263,7 @@ def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):
     conversation = reopened.bus.reads.conversation(message, snapshot)
     assert message.seq in reopened.bus.reads.cursor(viewer, snapshot).for_conversation(conversation)
     next_message = reopened.messaging.send("owner", viewer, "new paint").message
-    page = reopened.views.dm_display_page("owner", worktree=str(tmp_path))
+    page = reopened.views.dm_display_page(ThreadTarget("owner"), worktree=str(tmp_path))
     reopened.views.mark_page_read(page, worktree=str(tmp_path))
     seen = reopened.bus.reads.cursor(viewer, reopened.registry.snapshot()).for_conversation(conversation)
     assert all(sequence in seen for sequence in (message.seq, next_message.seq))

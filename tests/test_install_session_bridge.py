@@ -23,6 +23,7 @@ from agent_comms.cli_bridges.shared import (
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.root_runtime import RootRuntime
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms_hooks.session import started
 from agent_comms_hooks.watch import LapsedWatch, LiveWatch, WatchClaim, WatchRecord
@@ -32,9 +33,12 @@ SERVE_FROM_SOURCE = (sys.executable, '-c', 'from agent_comms.cli_bridges.claude 
 
 
 @contextmanager
-def session_bridge(tmp_path, home, program=SERVE_FROM_SOURCE, *, state_directory=None):
+def session_bridge(tmp_path, home, program=SERVE_FROM_SOURCE, *, state_directory=None,
+                   runtime=LaunchRuntime.running()):
+    """``runtime`` serves ``program`` and so owns the bus it attaches to."""
     comms = wire(tmp_path / 'bus')
     Bus.install(Bus.path_in(comms.root))
+    RootRuntime.publish(comms.root, runtime)
     comms.registry.declare(comms.registry.new_thread(
         'bridge-copy', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
     transcript = tmp_path / 'copied-session.jsonl'
@@ -140,7 +144,7 @@ def test_installer_pause_closes_the_real_bridge_and_eof_never_replays_or_relaunc
         (bridge,) = Serve.running(home)
         assert bridge.observed.process == observed.process
         with ExitStack() as resources:
-            (paused,) = bridge.pause(resources)
+            paused = bridge.pause(resources)
             assert paused.bridge == bridge
             assert child.poll() is None
             # The paused process keeps the claim; no session hook sees it lapse.
@@ -165,7 +169,7 @@ def test_installer_discovers_the_live_claim_independent_of_state_directory(
         assert bridge.claim == claim
         assert bridge.observed.process == observed.process
         with ExitStack() as resources:
-            (paused,) = bridge.pause(resources)
+            paused = bridge.pause(resources)
             assert paused.bridge == bridge
             assert isinstance(claim.state(), LiveWatch)
         assert child.wait(timeout=15) == 0, log.read_text()
@@ -202,11 +206,13 @@ def bridges_serving(state):
 def test_install_swap_keeps_the_claim_and_resumes_the_same_process_on_the_new_runtime(
         tmp_path, bridge_home, monkeypatch):
     old, new = (SourcePrograms.create(tmp_path / name) for name in ('old', 'new'))
-    with session_bridge(tmp_path, bridge_home, (str(old.script(claude.main)),)) as (
+    with session_bridge(tmp_path, bridge_home, (str(old.script(claude.main)),), runtime=old.runtime) as (
             home, claim, observed, child, log):
         current = home / LaunchRuntime.current_pointer().relative_to(Path.home())
         current.parent.mkdir(parents=True)
         current.symlink_to(new.prefix.absolute(), target_is_directory=True)
+        # Publication hands the bus to the installed runtime, as the installer's does.
+        RootRuntime.publish(tmp_path / 'bus', new.runtime)
         monkeypatch.setenv('HOME', str(home))
         assert observed.runtime.prefix == old.prefix.resolve()
         env = {**os.environ, 'HOME': str(home)}

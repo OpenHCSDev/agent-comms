@@ -26,6 +26,7 @@ from agent_comms.coordination_errors import CoordinationError
 from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText
 from agent_comms.installer.interpreter_operation import RouteSelection
 from agent_comms.locked_store import DeclaredFile, LockedStore, RootFile, RuntimeFile, UndeclaredFile
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.private_path import FileObservation, FileRevision, MissingFile
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import AtomicFile
@@ -198,6 +199,21 @@ class StoreBackup(ResourceBackup):
             ), reverse=True)
         )
         return tuple(backup for backup in backups if not backup.original())
+
+    @classmethod
+    def complete_interrupted(cls, root: Path, spill_dir: Path) -> tuple[Path, ...]:
+        """Finish every restore a killed install left unfinished, before anything reads
+        the bus: take its abandoned maintenance hold, restore, release, then retire the
+        backup so the next install never meets it again."""
+        retired = []
+        for backup in cls.interrupted(root, spill_dir):
+            maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
+            hold = maintenance.begin(MaintenanceOperator.current())
+            with hold.holding():
+                backup.restore()
+            maintenance.clear(hold)
+            retired.append(backup.retire())
+        return tuple(retired)
 
     def retire(self) -> Path:
         archived = self.path.with_name(f'{self.path.name}.restored-{time.time_ns()}')
