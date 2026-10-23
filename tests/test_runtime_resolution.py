@@ -40,6 +40,16 @@ def manifest(core="core", toad="toad", wheel="old-wheel"):
     )
 
 
+def test_installed_package_probe_transports_the_declared_records_and_source_cases():
+    original = manifest().packages
+    probe = InstalledPackagesProbe("core")
+    decoded = probe.decode_answer(probe.encode_answer(original))
+    assert decoded == original
+    assert {name: record.pin() for name, record in decoded.items()} == {
+        name: record.pin() for name, record in original.items()
+    }
+
+
 def lock():
     return ResolvedLock.model_validate(
         {

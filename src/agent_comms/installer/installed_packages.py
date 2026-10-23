@@ -6,9 +6,11 @@ import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Self
 
 from pydantic import BaseModel, RootModel
 
+from agent_comms.field_codec import WireValue
 from agent_comms.installer.interpreter_operation import RuntimeProbe, main
 
 
@@ -71,12 +73,23 @@ class RegistryRecord(RootModel[None]):
         return PackagePin(version)
 
 
-class PackageRecord(BaseModel):
+class PackageRecord(BaseModel, WireValue):
     version: str
     source: GitRecord | ArchiveRecord | RegistryRecord
 
     def pin(self) -> PackagePin:
         return self.source.pin(self.version)
+
+    def to_wire(self) -> dict[str, object]:
+        return self.model_dump(mode="json")
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        return cls.model_validate(data)
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return cls.model_json_schema()
 
 
 @dataclass(frozen=True)
