@@ -120,6 +120,10 @@ class RuntimeProbe[Answer](
 ):
     """A declared operation handled by the install's selected interpreter worker."""
 
+    @property
+    def label(self) -> str:
+        return type(self).__name__
+
 
 @dataclass(frozen=True)
 class ProbeRequest:

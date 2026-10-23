@@ -178,7 +178,7 @@ class InstallCommands:
                       program: ProbeProgram = SourceProgram()) -> Answer:
         key = InterpreterWorkerKey(python, tuple(map(str, program.entry())), cwd.absolute(),
                                    tuple(sorted(MaintenanceHolder.outside(env).items())))
-        with self.timing(f"{python} {type(probe).__name__}"):
+        with self.timing(f"{python} {probe.label}"):
             with self.worker_lock:
                 if key not in self.workers:
                     # Linux binds a child's lifetime to its launching thread. Keep that

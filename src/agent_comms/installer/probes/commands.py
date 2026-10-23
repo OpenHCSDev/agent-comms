@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shlex
 from contextlib import redirect_stdout
 from dataclasses import dataclass
 from io import StringIO
@@ -18,6 +19,10 @@ class CliCommandProbe(RuntimeProbe[CliOutput]):
     """One command-line call, answered by the selected runtime's own command line."""
 
     arguments: tuple[str, ...]
+
+    @property
+    def label(self) -> str:
+        return f"{super().label} {shlex.join(self.arguments)}"
 
     def run(self) -> CliOutput:
         from agent_comms import cli
