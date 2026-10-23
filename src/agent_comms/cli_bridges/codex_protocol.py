@@ -127,7 +127,8 @@ class RequestParams(WireModel):
     method: ClassVar[str]
 
 
-class TurnInput(RequestParams, declared_name='turn/start'):
+class TurnInput(RequestParams):
+    method = 'turn/start'
     threadId: str
     clientUserMessageId: str
 
@@ -172,12 +173,14 @@ class Capabilities(WireModel):
     optOutNotificationMethods: tuple[str, ...] = ()
 
 
-class Initialize(RequestParams, declared_name='initialize'):
+class Initialize(RequestParams):
+    method = 'initialize'
     clientInfo: ClientInfo = Field(default_factory=ClientInfo)
     capabilities: Capabilities = Field(default_factory=Capabilities)
 
 
-class ResumeThread(RequestParams, declared_name='thread/resume'):
+class ResumeThread(RequestParams):
+    method = 'thread/resume'
     threadId: str
     excludeTurns: bool = True
 
@@ -695,7 +698,8 @@ class AgentActivityItem(Item):
 CodexItem = Item.declared_union()
 
 
-class ItemsList(RequestParams, declared_name='thread/items/list'):
+class ItemsList(RequestParams):
+    method = 'thread/items/list'
     threadId: str
     limit: int = 20
     sortDirection: Literal['desc'] = 'desc'
