@@ -26,6 +26,7 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.installer.interpreter_operation import InterpreterOperation
+from agent_comms.locked_store import JsonDocument, RootFile
 
 STEPS = Path("tools/cutover")
 
@@ -51,6 +52,23 @@ class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
 
     precedes: ClassVar[tuple[type[Carry], ...]] = ()
     """Steps whose decoders require this step's output, regardless of addition date."""
+
+    opened_files: ClassVar[tuple[type[RootFile] | type[JsonDocument], ...]]
+    pending_files: ClassVar[tuple[type[RootFile] | type[JsonDocument], ...]]
+
+    def roots(self) -> tuple[Path, ...]:
+        return (self.root,)
+
+    def input_files(self, owners: tuple[type[RootFile] | type[JsonDocument], ...]) -> tuple[Path, ...]:
+        """Enumerate declared inputs without opening any store with the staged runtime."""
+        paths = set()
+        for root in self.roots():
+            for owner, directory in RootFile.declarations_in(root):
+                if issubclass(owner, owners):
+                    paths.update(owner.matching_in(directory))
+        for path in paths:
+            self.require_confined(self.root, path)
+        return tuple(sorted(paths))
 
     @classmethod
     def module(cls) -> Path:
@@ -91,6 +109,14 @@ class CarryOperation[Answer](InterpreterOperation[Answer, Carry], DeclaredFamily
 class BackupFilesOperation(CarryOperation[tuple[Annotated[Path, PathText], ...]]):
     def run(self, step: Carry) -> tuple[Annotated[Path, PathText], ...]:
         return step.backup_files()
+
+
+@dataclass(frozen=True)
+class InputFilesOperation(CarryOperation[tuple[Annotated[Path, PathText], ...]]):
+    pending: bool
+
+    def run(self, step: Carry) -> tuple[Annotated[Path, PathText], ...]:
+        return step.input_files(step.pending_files if self.pending else step.opened_files)
 
 
 @dataclass(frozen=True)
