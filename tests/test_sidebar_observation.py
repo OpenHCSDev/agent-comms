@@ -95,6 +95,7 @@ def test_current_reference_resolves_original_birth_after_registry_rename(comms, 
     assert current.name == "renamed"
     assert current.incarnation == original.incarnation
     assert current.current_in(references)
+    assert references.find(f"@{original.name}")[0].reference == current
 
 
 def test_recreated_thread_reference_resolves_new_birth_not_same_name(comms, declare_reference):

@@ -151,9 +151,7 @@ class DisplayReferences(RootedReferences):
     def recorded(root, source) -> DisplayReferences:
         registry = source.provenance
         targets = {name: HistoricalDisplayReference(str(root), thread.incarnation, source.key)
-                   for name, thread in registry.threads.items()}
-        targets.update((alias, targets[name]) for alias, name in registry.aliases.items()
-                       if name in targets)
+                   for name, thread in registry.named_members()}
         return DisplayReferences(str(root), targets)
 
     def for_source(self, source) -> DisplayReferences:
@@ -199,9 +197,7 @@ class CurrentDisplayReferences(DisplayReferences):
 
     def __post_init__(self) -> None:
         targets = {name: ThreadDisplayReference(self.root, thread.incarnation)
-                   for name, thread in self.registry.threads.items()}
-        targets.update((alias, targets[name]) for alias, name in self.registry.aliases.items()
-                       if name in targets)
+                   for name, thread in self.registry.named_members()}
         targets.update((name, ChannelDisplayReference(self.root, name)) for name in self.channels)
         object.__setattr__(self, "targets", MappingProxyType(targets))
 
