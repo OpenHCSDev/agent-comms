@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
+from .errors import StaleAttemptError
 import asyncio
 from abc import ABC, abstractmethod
 from contextlib import suppress
 from typing import TYPE_CHECKING
 
-from .diagnostics import FailureReason, terminal_failure_reason
+from .turn_failure import BackendFailed, TurnFailure
 from .goal_failure_observation import FailedTurnObservation
-from .goal_attempts import StaleAttemptError
 
 if TYPE_CHECKING:
     from .agent_events import Done
@@ -25,15 +25,6 @@ class TurnInterruption(ABC):
 
 class TurnTerminal(TurnInterruption):
     """Own interruption and settlement policy, never a nullable result flag."""
-
-    @staticmethod
-    def from_cancellation(error: asyncio.CancelledError) -> TurnTerminal:
-        # asyncio's cancellation-message boundary: our stop paths send the
-        # terminal itself; a bare cancellation has no reported backend result.
-        (terminal,) = error.args or (EndedWithoutResult(),)
-        if not isinstance(terminal, TurnTerminal):
-            raise TypeError("Turn cancellation requires a declared terminal")
-        return terminal
 
     def interrupting(self, prior: TurnTerminal) -> TurnTerminal:
         return prior
@@ -77,12 +68,12 @@ class FailedGoalTurn(TurnTerminal):
             claim_scope=account.lease.claimed_generation,
             current_owner=snapshot.threads.get(account.thread_name),
             current_claim=snapshot.claim_generation(account.thread_name),
-            reason=self.failure_reason,
+            failure=self.failure_kind,
         )
 
     @property
     @abstractmethod
-    def failure_reason(self) -> FailureReason: ...
+    def failure_kind(self) -> type[TurnFailure]: ...
 
     def settle_launched(self, account, permit, store, captured, current) -> None:
         if permit.has_verified_progress(store):
@@ -90,15 +81,15 @@ class FailedGoalTurn(TurnTerminal):
         observation = self.failure_observation(account, permit, captured)
         with suppress(StaleAttemptError):
             permit.reservation.fail(
-                store, self.failure_reason.value,
+                store, self.failure_kind.declared_name,
                 observation=observation,
             )
 
 
 class EndedWithoutResult(FailedGoalTurn):
     @property
-    def failure_reason(self) -> FailureReason:
-        return terminal_failure_reason({})
+    def failure_kind(self) -> type[TurnFailure]:
+        return BackendFailed
 
 
 class OperatorStopped(TurnTerminal):
@@ -111,9 +102,6 @@ class OperatorStopped(TurnTerminal):
     def settle_origin(self, account, permit, store, goal_id, current) -> None:
         if any(current.matching(goal_id).active()):
             permit.stop(store)
-
-    async def prepare_publication(self, progress: TurnProgress) -> Done:
-        raise asyncio.CancelledError(self)
 
 
 class OwnerStop(asyncio.Future[TurnTerminal], TurnInterruption):

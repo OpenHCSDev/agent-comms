@@ -23,7 +23,7 @@ from .field_codec import (
     WireOmitDefault,
     WireRequired,
 )
-from agent_comms.typed_table import Column, DerivedStore, TypedTable
+from agent_comms.typed_table import StoreRows, Column, DerivedStore, TypedTable
 from .thread_identity import OwnerIdentity
 from .thread_owned_state import ThreadOwnedState
 from .thread_presentation import (
@@ -332,8 +332,12 @@ class ObservedActivity(ActivityData):
         return self.readiness.presentation(self.ordinary_presentation(title))
 
 
+class ActivityStoreRows(StoreRows):
+    """The tables of ActivityStore; each row declares itself one."""
+
+
 @dataclass(frozen=True)
-class ActivityRow(TypedTable, Activity):
+class ActivityRow(ActivityStoreRows, TypedTable, Activity):
     """Current activity, with storage derived from the Activity declaration."""
 
     thread: Annotated[str, Column(primary_key=True)]
@@ -346,7 +350,7 @@ class ActivityRow(TypedTable, Activity):
 class ActivityStore(ThreadOwnedState, DerivedStore):
     """One current row per thread; no event history or parallel projection."""
 
-    rows = (ActivityRow,)
+    tables = ActivityStoreRows
 
     def __init__(self, store_path: Path, stale_after: float = 120.0):
         self.root = store_path.parent

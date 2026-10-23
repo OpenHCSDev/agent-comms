@@ -1,7 +1,7 @@
 """Default-off private registry durability gate; never a public wire acknowledgement.
 
-This two-slot file must be created and directory-fsynced before the private
-marker. It is read only while the registry's process lock is held. A corrupt
+This two-slot file owns the native namespace and the registry's committed
+bytes. It is read only while the registry's process lock is held. A corrupt
 slot, or a pending slot whose replacement may be visible, is deliberately NOT
 repaired or skipped: an atomic replacement may already be visible even when
 its directory fsync failed.
@@ -17,27 +17,34 @@ next write reuses the abandoned slot.
 from __future__ import annotations
 
 import hashlib
-import json
 import os
+import sqlite3
 import stat
 import struct
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
-from dataclasses import dataclass, replace
+from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
-from typing import Annotated, TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn
 
-
+from .child_process import Platform
 from . import store_files
 from .coordination_database import CoordinationStore
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, Id128Text, MalformedRecord, WireName
+from .field_codec import Id128Text, MalformedRecord
 from .locked_store import DurableFile, WireWakeFile
-from .private_path import fsync_directory
+from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
+from .private_path import PrivateFileRole
 
 if TYPE_CHECKING:
+    from .acp_extension import CursorAdvancedUpdate, CursorScope
+    from .bus_publication import Delivered
+    from .cursor_publication import CursorPublication
+    from .notification_assignment import NotificationAssignmentRead
+    from .private_nk_entrypoint import RootLaunch
+    from .registry_document import RegistrySnapshot
     from .threads import Thread
+    from .typed_table import TableSchema
 
 _MAGIC = b"ACRG"
 _VERSION = 1
@@ -50,27 +57,20 @@ _SIZE = _HEADER.size + 32
 _EMPTY = hashlib.sha256(b"absent\0").digest()
 
 
-def _reject(detail: str) -> None:
-    from .errors import RelationViolationError
-
+def _reject(detail: str) -> NoReturn:
     raise RelationViolationError(f"Private registry guard {detail}")
 
 
 def registry_digest(path: Path) -> bytes:
     """Hash the exact owned registry bytes, distinguishing absence from empty."""
     try:
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        fd = PrivateFileRole.read(
+            path, RelationViolationError("Private registry guard registry is not a bounded owner-only regular file"))
     except FileNotFoundError:
         return _EMPTY
     try:
         info = os.fstat(fd)
-        if (
-            not stat.S_ISREG(info.st_mode)
-            or info.st_uid != os.geteuid()
-            or stat.S_IMODE(info.st_mode) != 0o600
-            or info.st_nlink != 1
-            or info.st_size > _MAX_REGISTRY
-        ):
+        if info.st_size > _MAX_REGISTRY:
             _reject("registry is not a bounded owner-only regular file")
         digest = hashlib.sha256(b"present\0")
         total = 0
@@ -112,23 +112,163 @@ def _decode(data: bytes, root_id: bytes) -> tuple[int, int, bytes]:
 class RegistryPrivacy(ABC):
     """What a registry root's protocol marker decides, selected by the registry store."""
 
+
+
+    @staticmethod
+    def capture(root: Path) -> RegistryPrivacy:
+        """Read original privacy authority under its registry's existing lock."""
+        from .registry_store import RegistryStore
+        from .store_files import SharedLock
+
+        registry = RegistryStore.at(root)
+        with registry.locked(mode=SharedLock()):
+            return registry.private_guard_unlocked()
+
+    @abstractmethod
+    def cursor_scope(
+        self, snapshot: RegistrySnapshot, thread_name: str, session_id: str,
+    ) -> CursorScope: ...
+
+    @abstractmethod
+    async def cursor_metadata(
+        self, publication: CursorPublication, thread_name: str, session_id: str,
+    ) -> tuple[CursorAdvancedUpdate, ...]: ...
+
+    @property
+    @abstractmethod
+    def namespace(self) -> str:
+        """Require the original native namespace; a public registry has none."""
+
     @abstractmethod
     def write(self, registry_path: Path, text: str) -> None: ...
 
     @abstractmethod
     def register_restored(self, threads: Iterable[Thread]) -> None: ...
 
+    @abstractmethod
+    def launch(self, root: Path) -> RootLaunch: ...
+
+    @abstractmethod
+    def prepare_native(self, registry_path: Path) -> PrivateRegistryGuard: ...
+
+    @abstractmethod
+    def require_root(self, root_id: str, error: Exception) -> None: ...
+
+    @abstractmethod
+    def notification_context_sql(self, connection: sqlite3.Connection) -> str:
+        """Context evidence for every row in the captured assignment window ``w``."""
+
+    @abstractmethod
+    def missing_notification_assignments(
+        self, sources: Sequence[Delivered],
+    ) -> NotificationAssignmentRead: ...
+
+    @abstractmethod
+    def coordinator_schema(self) -> type[TableSchema]:
+        """The complete schema this root's authority requires during reconciliation."""
+
+    @abstractmethod
+    def publication_connection(self, connection: sqlite3.Connection) -> sqlite3.Connection | None:
+        """This root's recorded native publications, or no private publication source."""
+
+
 
 class PublicRegistry(RegistryPrivacy):
+
+    def publication_connection(self, connection: sqlite3.Connection) -> None:
+        """Public attached history has no private native publication relations."""
+
+    def coordinator_schema(self) -> type[TableSchema]:
+        from .coordination_schema import CoordinatorTable
+
+        CoordinatorTable.declarations()
+        return CoordinatorTable
+
+    def notification_context_sql(self, connection: sqlite3.Connection) -> str:
+        return (
+            "SELECT assignment_id,0 AS triage_inflight,"
+            "NULL AS context_committed_at_ms FROM w"
+        )
+
+    def missing_notification_assignments(
+        self, sources: Sequence[Delivered],
+    ) -> NotificationAssignmentRead:
+        from .notification_assignment import NotificationAssignmentRead
+
+        return NotificationAssignmentRead(tuple(sources), ())
+
+    def cursor_scope(
+        self, snapshot: RegistrySnapshot, thread_name: str, session_id: str,
+    ) -> CursorScope:
+        from .acp_extension import NoCursorScope
+
+        return NoCursorScope()
+
+    async def cursor_metadata(
+        self, publication: CursorPublication, thread_name: str, session_id: str,
+    ) -> tuple[CursorAdvancedUpdate, ...]:
+        return ()
+
+    @property
+    def namespace(self) -> str:
+        _reject("native namespace requires the original registry guard")
+
     def write(self, registry_path: Path, text: str) -> None:
-        store_files._atomic_write_text(registry_path, text, fsync_parent=True)
+        store_files.AtomicFile(registry_path).write_text(text)
 
     def register_restored(self, threads: Iterable[Thread]) -> None:
         """A public bus has no coordinator identities for restored threads."""
 
+    def launch(self, root: Path) -> RootLaunch:
+        from .private_nk_entrypoint import SharedRootLaunch
+
+        return SharedRootLaunch(root)
+
+    def prepare_native(self, registry_path: Path) -> PrivateRegistryGuard:
+        guard = PrivateRegistryGuard(registry_path, Id128Text.mint())
+        guard.create_pending()
+        guard.commit_initial()
+        return guard
+
+    def require_root(self, root_id: str, error: Exception) -> None:
+        raise error
+
 
 class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
+
+
     filename = ".registry-owner-guard"
+
+    def publication_connection(self, connection: sqlite3.Connection) -> sqlite3.Connection:
+        from .coordination_response import ResponseTable
+
+        NativeRuntimeTable.require_installed(connection)
+        ResponseTable.require_installed(connection)
+        return connection
+
+    def coordinator_schema(self) -> type[TableSchema]:
+        from .private_runtime_schema import PrivateCoordinatorSchema, PrivateCoordinatorTable
+
+        PrivateCoordinatorTable.declarations()
+        return PrivateCoordinatorSchema
+
+    def prepare_runtime(self) -> None:
+        from .private_runtime_schema import PrivateCoordinatorTable
+
+        PrivateCoordinatorTable.declarations()
+        with Coordination(str(CoordinationStore.path_in(self.registry_path.parent))) as store:
+            PrivateCoordinatorTable.install(store)
+
+    def notification_context_sql(self, connection: sqlite3.Connection) -> str:
+        NativeRuntimeTable.require_installed(connection)
+        return NativeRuntimeInput.notification_context_sql()
+
+    def missing_notification_assignments(
+        self, sources: Sequence[Delivered],
+    ) -> NotificationAssignmentRead:
+        from .coordination_errors import PublicationActivationBlocked
+
+        raise PublicationActivationBlocked("Private notification coordinator is missing")
 
     def __init__(self, registry_path: Path, wire_root_id: str):
         try:
@@ -139,11 +279,68 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
         self.path = self.path_in(registry_path.parent)
         self.root_id = bytes.fromhex(wire_root_id)
 
+    @classmethod
+    def load(cls, registry_path: Path) -> PrivateRegistryGuard:
+        """Read this guard's namespace; both slots and the registry must corroborate it."""
+        descriptor = PrivateFileRole.read(cls.path_in(registry_path.parent),
+            RelationViolationError("Private registry guard file is not a fixed owner-only regular file"))
+        try:
+            raw = os.pread(descriptor, _SIZE, 0)
+        finally:
+            os.close(descriptor)
+        if len(raw) != _SIZE:
+            _reject("slot has an invalid length")
+        _, _, root_id, _, _, _ = _HEADER.unpack(raw[:_HEADER.size])
+        _decode(raw, root_id)
+        guard = cls(registry_path, root_id.hex())
+        guard.verify()
+        return guard
+
+    @property
+    def namespace(self) -> str:
+        """The existing native protocol namespace, never the SQLite bus identity."""
+        return self.root_id.hex()
+
+    def cursor_scope(
+        self, snapshot: RegistrySnapshot, thread_name: str, session_id: str,
+    ) -> CursorScope:
+        from .acp_extension import LiveCursorScope, NoCursorScope
+        from .native_input_owner import RegistryOwner
+        from .thread_identity import ClaimedIdentity
+
+        try:
+            owner = RegistryOwner.capture_local(snapshot, thread_name)
+        except RelationViolationError:
+            return NoCursorScope()
+        return LiveCursorScope(
+            session_id=session_id, wire_root_id=self.namespace,
+            claimed_identity=ClaimedIdentity(owner.thread.incarnation, owner.claimed_generation),
+            owner=owner.thread.require_process(),
+        )
+
+    async def cursor_metadata(
+        self, publication: CursorPublication, thread_name: str, session_id: str,
+    ) -> tuple[CursorAdvancedUpdate, ...]:
+        return await publication.observed_metadata(thread_name, session_id)
+
+    def launch(self, root: Path) -> RootLaunch:
+        from .private_nk_entrypoint import PrivateNkLaunch
+
+        return PrivateNkLaunch.installed(root, self.namespace)
+
+    def prepare_native(self, registry_path: Path) -> PrivateRegistryGuard:
+        if registry_path != self.registry_path:
+            _reject("belongs to another registry")
+        self.verify()
+        return self
+
+    def require_root(self, root_id: str, error: Exception) -> None:
+        if root_id != self.namespace:
+            raise error
+
     def _trusted_root(self) -> None:
-        if os.name != "posix" or not all(
-            hasattr(os, name) for name in ("O_DIRECTORY", "O_NOFOLLOW", "pread", "pwrite")
-        ):
-            _reject("requires POSIX directory and fixed-slot durability")
+        Platform.current().require_pinned_paths(RelationViolationError(
+            "Private registry guard requires POSIX directory and fixed-slot durability"))
         if ".." in self.registry_path.parts:
             _reject("has an ambiguous root path")
         root = self.registry_path.parent.absolute()
@@ -168,21 +365,15 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
                 return
             cursor = cursor.parent
 
-    def _open(self, *, writable: bool = True) -> int:
+    def _open(self, opening: Callable[[str | Path, Exception], int]) -> int:
         self._trusted_root()
         try:
-            flags = os.O_RDWR if writable else os.O_RDONLY
-            fd = os.open(self.path, flags | os.O_NOFOLLOW)
+            fd = opening(self.path, RelationViolationError(
+                "Private registry guard file is not a fixed owner-only regular file"))
         except FileNotFoundError as error:
             _reject(f"file is missing: {error.__class__.__name__}")
         info = os.fstat(fd)
-        if (
-            not stat.S_ISREG(info.st_mode)
-            or info.st_uid != os.geteuid()
-            or stat.S_IMODE(info.st_mode) != 0o600
-            or info.st_nlink != 1
-            or info.st_size != 2 * _SIZE
-        ):
+        if info.st_size != 2 * _SIZE:
             os.close(fd)
             _reject("file is not a fixed owner-only regular file")
         return fd
@@ -227,7 +418,7 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
     def verify(self) -> tuple[int, bytes]:
         # A read-only check must not emit IN_CLOSE_WRITE and wake the wire
         # watcher again; private ACP drains verify this guard on every wake.
-        fd = self._open(writable=False)
+        fd = self._open(PrivateFileRole.read)
         try:
             seq, digest, _ = self._authority(fd)
             return seq, digest
@@ -235,7 +426,7 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
             os.close(fd)
 
     def prepare(self, new_digest: bytes) -> tuple[int, int]:
-        fd = self._open()
+        fd = self._open(PrivateFileRole.update)
         try:
             seq, _, index = self._authority(fd)
             if seq >= _MAX_SEQ:
@@ -246,7 +437,7 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
             os.close(fd)
 
     def commit(self, seq: int, index: int, new_digest: bytes) -> None:
-        fd = self._open()
+        fd = self._open(PrivateFileRole.update)
         try:
             current = self._slots(fd)[index]
             if current != (seq, _PENDING, new_digest):
@@ -261,7 +452,7 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
         # A pending guard after any failed write MUST remain fail-closed.
         digest = hashlib.sha256(b"present\0" + text.encode("utf-8")).digest()
         sequence, slot = self.prepare(digest)
-        store_files._atomic_write_text(registry_path, text, fsync_parent=True)
+        store_files.AtomicFile(registry_path).write_text(text)
         self.commit(sequence, slot, digest)
 
     def register_restored(self, threads: Iterable[Thread]) -> None:
@@ -270,51 +461,37 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
         with Coordination(str(CoordinationStore.path_in(self.registry_path.parent))) as store:
             for thread in threads:
                 store.participants.register(
-                    thread.incarnation.require_recorded().lookup, thread.name, thread.name,
+                    thread.incarnation.require_recorded().lookup,
                     committed=True)
 
     def create_pending(self) -> None:
-        """Caller holds bus then registry locks; no marker may exist yet."""
+        """The registry lock covers explicit native preparation before coordinator setup."""
         self._trusted_root()
         if self.path.exists() or self.path.is_symlink():
             _reject("already exists before initialization")
         digest = registry_digest(self.registry_path)
         if digest != _EMPTY:
-            registry_fd = os.open(self.registry_path, os.O_RDONLY | os.O_NOFOLLOW)
+            registry_fd = PrivateFileRole.read(self.registry_path, RelationViolationError(
+                "Private registry guard registry is not a bounded owner-only regular file"))
             try:
                 os.fsync(registry_fd)
             finally:
                 os.close(registry_fd)
-        directory_fd = os.open(
-            self.registry_path.parent, os.O_RDONLY | os.O_DIRECTORY
-        )
+        Platform.current().sync_directory(self.registry_path.parent)
+        fd = PrivateFileRole.create(self.path, RelationViolationError(
+            "Private registry guard file is not a fixed owner-only regular file"))
         try:
-            os.fsync(directory_fd)  # baseline registry name and existing root
-            fd = os.open(
-                self.path,
-                os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                0o600,
-            )
-            try:
-                if (
-                    os.pwrite(
-                        fd,
-                        _record(self.root_id, 0, _COMMITTED, digest) * 2,
-                        0,
-                    )
-                    != 2 * _SIZE
-                ):
-                    _reject("initial slots were incomplete")
-                os.fsync(fd)
-                os.fsync(directory_fd)  # guard name is durable before marker
-                self._write(fd, 1, _record(self.root_id, 1, _PENDING, digest))
-            finally:
-                os.close(fd)
+            if os.pwrite(fd, _record(self.root_id, 0, _COMMITTED, digest) * 2, 0) != 2 * _SIZE:
+                _reject("initial slots were incomplete")
+            os.fsync(fd)
+            Platform.current().sync_directory(self.registry_path.parent)
+            self._write(fd, 1, _record(self.root_id, 1, _PENDING, digest))
         finally:
-            os.close(directory_fd)
+            os.close(fd)
+
 
     def commit_initial(self) -> None:
-        fd = self._open()
+        fd = self._open(PrivateFileRole.update)
         try:
             first, second = self._slots(fd)
             if first != (0, _COMMITTED, registry_digest(self.registry_path)) or second != (
@@ -326,38 +503,3 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
             self._write(fd, 1, _record(self.root_id, 1, _COMMITTED, first[2]))
         finally:
             os.close(fd)
-
-
-@dataclass(frozen=True, kw_only=True)
-class PrivateOwnerRenameIntent(DurableFile):
-    """Written before a private owner rename changes either store; while it exists, private
-    publication and selected execution stay blocked."""
-
-    filename = ".private-owner-rename.pending"
-
-    lookup: str
-    old: str
-    new: str
-    generation: int
-    wire_root_id: Annotated[str, WireName("wireRootId")]
-    version: int = 1
-    completed: bool = False
-
-    def write(self, root: Path) -> None:
-        store_files._atomic_write_text(self.path_in(root),
-                           json.dumps(FieldCodec.encode(self), sort_keys=True), fsync_parent=True)
-
-    @classmethod
-    def complete(cls, root: Path) -> None:
-        """A completed record proves a finished transition if the unlink is uncertain."""
-        intent = cls.path_in(root)
-        replace(FieldCodec.decode(cls, json.loads(intent.read_text())), completed=True).write(root)
-        intent.unlink()
-        fsync_directory(root)
-
-
-def _require_no_private_owner_rename(root: Path) -> None:
-    """A crashed cross-store rename cannot publish or run a selected input."""
-    intent = PrivateOwnerRenameIntent.path_in(root)
-    if intent.exists() or intent.is_symlink():
-        raise RelationViolationError("Private owner rename is pending; inspect both authorities.")

@@ -30,7 +30,6 @@ class TurnOutput:
         default_factory=UnrecordedFailureSource, init=False, repr=False)
     final_assistant_stop: bool = False
     diagnostic: dict[str, int] = field(default_factory=dict)
-    preflight_failure: str | None = None
     # The live turn owns the one privacy-safe decoded retry result. Completion
     # and failure presentation retain this immutable value; they do not decode it.
     retry_result: ProviderRetryResult | None = None
@@ -123,11 +122,10 @@ class TurnOutput:
         terminal = events.Done(
             text=self.terminal_text(success, stderr, session.native.proc.returncode),
             ok=success and session.native.attestation.trustworthy,
-            reason_code=self.failure.code if self.failure else None,
+            failure=self.declared_failure if self.failure else None,
             retry_result=self.retry_result,
             diagnostic={
                 **self.diagnostic,
-                **({"reason": self.preflight_failure} if self.preflight_failure else {}),
                 **(
                     {"exit_code": session.native.proc.returncode}
                     if session.native.proc.returncode is not None
@@ -143,11 +141,7 @@ class TurnOutput:
         yield terminal
 
     def settle(self, session: TurnSession, transport_ok: bool) -> None:
-        for cause in sorted(
-            failures.TurnFailure.members_with(failures.TerminalFailure),
-            key=lambda member: member.precedence,
-            reverse=True,
-        ):
+        for cause in failures.TurnFailure.members_with(failures.TerminalFailure):
             if cause.detected(session, transport_ok):
                 self.record_failure(cause(cause.explanation(self)))
 

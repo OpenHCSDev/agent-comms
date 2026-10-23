@@ -9,7 +9,9 @@ from conftest import publish_initial
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.field_codec import MalformedRecord
+from conftest import installed_comms
+from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.goal_presentation import GoalExecution
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     GoalPrecondition,
@@ -23,6 +25,7 @@ from agent_comms.tools import CommsInboxTool, ToolRequest
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.read_basis import NamedViewer
 from stored_inputs import stored_inputs
+from agent_comms.threads import Thread
 
 
 def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path, monkeypatch):
@@ -30,9 +33,8 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     comms = wire(tmp_path / "wire")
     for name in ("worker", "parent", "other"):
         comms.registry.declare(
-            comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+            Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
-    comms.messaging.initialize_private_initial_protocol()
     comms.agents.begin_turn("parent", "parent-delegation-in-flight")
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Delegate and wait"))
     messages = [
@@ -64,7 +66,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     with pytest.raises(ValueError):
         report.invoke(comms, args, caller=ThreadCaller("worker"))
     before = ledger.path.read_bytes()
-    messages = comms.bus.inbox("worker")
+    messages = comms.bus.inbox("worker").page.messages
     comms.messaging.acknowledge("worker", tuple(message.reference for message in messages))
     result = inbox.invoke(comms, {"thread": "worker", "standby": {"goal_id": goal.id, "wait_for": ["parent"]}}, caller=ThreadCaller("worker"))
     assert result["messages"] == []  # Display ACK is not handling evidence.
@@ -92,10 +94,8 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     assert list(scoped.reviewed_inputs) == keys and len(scoped.excluded_inputs) == 2
     with pytest.raises(ValueError):
         report.invoke(comms, {**args, "reviewed_inputs": [*keys, f"bus:{unrelated.seq}"]}, caller=ThreadCaller("worker"))
-    assert (
-        report.invoke(comms, {**args, "reviewed_inputs": keys}, caller=ThreadCaller("worker"))["goal_execution"]["state"]
-        == "standby"
-    )
+    result = report.invoke(comms, {**args, "reviewed_inputs": keys}, caller=ThreadCaller("worker"))
+    assert FieldCodec.decode(GoalExecution, result["goal_execution"]).standby()
     again = comms.goals.goal_input_review("worker", goal.id, ["parent"])
     assert again.reviewed_inputs == ()
     assert [row.input_id for row in again.already_reviewed_inputs] == keys
@@ -105,7 +105,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
         assert row.accepts_reservation
         assert not hasattr(row, "native_id") and not hasattr(row, "turn_id")
         assert row.source_text == message.body and not hasattr(row, "sent_text")
-        assert row.claim_scope == claim_scope and row.reviewed_for_goal(goal.id)
+        assert row.claim_generation == claim_scope and row.reviewed_for_goal(goal.id)
     assert not stored_inputs(ledger.root).rows["acp:owner-input"].goal_reviews
     generation = comms.goals.open_goal_store().snapshot(goal.id)
     assert generation is not None and generation.lifecycle.ready
@@ -129,16 +129,16 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
 
 @pytest.mark.parametrize("rebound", ["worker", "parent"])
 def test_standby_excludes_retained_rebound_history_but_retains_rename(tmp_path, rebound):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     for name in ("worker", "parent"):
         comms.registry.declare(
-            comms.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+            Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
     old = comms.messaging.send("parent", "worker", "Old incarnation").message
     comms.registry.unregister(rebound)
     comms.registry.remove(rebound)
     comms.registry.declare(
-        comms.registry.new_thread(rebound, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+        Thread(rebound, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     comms.agents.begin_turn("parent", "new-turn")
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Current goal"))

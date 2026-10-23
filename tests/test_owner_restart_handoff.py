@@ -15,9 +15,11 @@ from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SetVariable, UnsetVariable
 from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.owner_restart import OwnerRestartHandoff, RetiredOwnerLaunch
-from agent_comms.registry_document import RegistrySnapshot
-from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
+from agent_comms.registry_document import RegistryDocument, RegistrySnapshot
+from agent_comms.thread_identity import GenerationCounter
+from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.native_arguments import ConfiguredBinary, InheritedArguments
+from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize("source", [{}, {"PYTHONPATH": ""}, {"PYTHONPATH": "/source"}])
@@ -52,14 +54,14 @@ def test_runtime_path_is_idempotent_and_keeps_other_search_entries(inherited, ex
 
 def stopped(registry):
     # A declared absent synthetic process, never a borrowed original identity.
-    thread = registry.new_thread("authored", frozenset(), "/authored",
+    thread = Thread("authored", frozenset(), "/authored",
                     process_identity=ProcessIdentity(2147483647, 1), created_at=1.0)
-    snapshot = RegistrySnapshot(
+    snapshot = RegistrySnapshot.capture(RegistryDocument(
         threads={thread.name: thread}, statuses={thread.name: StoppedThreadStatus()},
-        last_seen={thread.name: 1.0}, aliases={},
-        owner_generations={thread.name: 4}, _claimed_generations={thread.name: 5},
-        by_lookup={thread.incarnation.lookup: thread},
-    )
+        last_seen={thread.name: 1.0},
+        owners=GenerationCounter(4, {thread.name: 4}),
+        claims=GenerationCounter(5, {thread.name: 5}),
+    ))
     return thread, snapshot
 
 
@@ -69,14 +71,15 @@ def test_retired_witness_cannot_borrow_live_or_replaced_claim(*, thread_registra
                                  {"AGENT_COMMS_AGENT_BIN": "/authored/pi"})
     owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)
     assert owner.require_current(snapshot) is thread
-    selection = OwnerRestartSelection(owner.owner, launch.process, owner.claim_scope.claimed_generation,
-                                      launch.interpreter)
+    selection = OwnerRestartSelection(
+        owner.authority.owner, launch.process, owner.authority.claim.claimed_generation,
+        launch.interpreter,
+    )
     with pytest.raises(RelationViolationError):
         selection.require_current(snapshot)
     changed = (
         replace(snapshot, owner_generations={thread.name: 6}),
         replace(snapshot, _claimed_generations={thread.name: 6}),
-        replace(snapshot, statuses={thread.name: RunningThreadStatus()}),
         replace(snapshot, threads={thread.name: replace(thread, created_at=2.0)}),
         replace(snapshot, threads={thread.name: replace(
             thread, process_identity=ProcessIdentity(2147483646, 1))}),
@@ -100,7 +103,6 @@ def test_handoff_codec_preserves_complete_stopped_witness_and_original_launch(*,
     runtime = RestartEnvironment.inherit(environment)
     original = OwnerRestartHandoff("/authored", (owner,), runtime, ConfiguredBinary(), InheritedArguments(), LaunchRuntime(Path("/target/bin/python")))
     encoded = FieldCodec.encode(original)
-    assert set(encoded["owners"][0]) == {"owner", "admission", "launch"}
     decoded = FieldCodec.decode(OwnerRestartHandoff, encoded)
     assert decoded == original
     assert decoded.owners[0].require_current(snapshot) is thread

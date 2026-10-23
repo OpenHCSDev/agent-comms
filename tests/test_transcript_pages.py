@@ -1,12 +1,12 @@
 from conftest import transcript_records
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.coordination_errors import TranscriptChanged
 import json
 from dataclasses import replace
 
 import pytest
 
-from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.threads import Thread
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.transcripts import NativeTranscriptCursor, WireTranscriptCursor
@@ -30,8 +30,8 @@ def transcript(path, count):
 def test_pages_reach_beginning_and_return_to_tail_without_duplicates(tmp_path):
     path = tmp_path / "session.jsonl"
     transcript(path, 105)
-    comms = wire(tmp_path / "wire")
-    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=SavedSessionFile(str(path))))
+    comms = installed_comms(tmp_path / "wire")
+    comms.registry.declare(Thread('worker', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), comms.root)))
     page = comms.transcripts.thread_transcript_page("worker", max_messages=10)
     through = page.after
     seen = [event.text for event in page.events]
@@ -64,13 +64,13 @@ def test_oversized_message_and_file_identity(tmp_path):
     path.write_text(
         json.dumps(transcript_records.message({"role": "assistant", "content": [{"type": "text", "text": text}]})) + "\n"
     )
-    comms = wire(tmp_path / "wire")
-    thread = comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=SavedSessionFile(str(path)))
+    comms = installed_comms(tmp_path / "wire")
+    thread = Thread('worker', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), comms.root))
     comms.registry.declare(thread)
     page = comms.transcripts.thread_transcript_page("worker", max_bytes=100)
     assert page.events[0].text == text
     assert not page.has_older
-    comms.registry.declare(replace(thread, session_file=SavedSessionFile(str(tmp_path / "other.jsonl"))))
+    comms.registry.declare(replace(thread, session_file=RegistrySessionLocation.from_path(str(tmp_path / "other.jsonl"), comms.root)))
     with pytest.raises(TranscriptChanged):
         comms.transcripts.thread_transcript_page("worker", before=page.before)
     with pytest.raises(ValueError):
@@ -80,8 +80,8 @@ def test_oversized_message_and_file_identity(tmp_path):
 
 
 def test_empty_transcript_and_non_message_records(tmp_path):
-    comms = wire(tmp_path / "wire")
-    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path)))
+    comms = installed_comms(tmp_path / "wire")
+    comms.registry.declare(Thread('worker', frozenset(), str(tmp_path)))
     page = comms.transcripts.thread_transcript_page("worker")
     assert not page.events and not page.has_older and not page.has_newer
 
@@ -89,12 +89,12 @@ def test_empty_transcript_and_non_message_records(tmp_path):
 def test_new_fork_projects_parent_history_and_instruction_until_own_session_exists(tmp_path):
     parent_path = tmp_path / "parent.jsonl"
     transcript(parent_path, 3)
-    comms = wire(tmp_path / "wire")
+    comms = installed_comms(tmp_path / "wire")
     comms.registry.declare(
-        comms.registry.new_thread('parent', frozenset(), str(tmp_path), session_file=SavedSessionFile(str(parent_path)))
+        Thread('parent', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(parent_path), comms.root))
     )
     comms.registry.declare(
-        comms.registry.new_thread('child', frozenset(), str(tmp_path), parent=ForkedParent('parent'), task=GivenThreadText('Inspect the renderer'))
+        Thread('child', frozenset(), str(tmp_path), parent=ForkedParent('parent'), task=GivenThreadText('Inspect the renderer'))
     )
 
     page = comms.transcripts.thread_transcript_page("child")
@@ -123,12 +123,12 @@ def test_new_fork_projects_parent_history_and_instruction_until_own_session_exis
 def test_inherited_scroll_window_survives_child_session_persistence(tmp_path):
     parent_path = tmp_path / "parent.jsonl"
     transcript(parent_path, 35)
-    comms = wire(tmp_path / "wire")
+    comms = installed_comms(tmp_path / "wire")
     comms.registry.declare(
-        comms.registry.new_thread('parent', frozenset(), str(tmp_path), session_file=SavedSessionFile(str(parent_path)))
+        Thread('parent', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(parent_path), comms.root))
     )
     comms.registry.declare(
-        comms.registry.new_thread('child', frozenset(), str(tmp_path), parent=ForkedParent('parent'), task=GivenThreadText('Child task'))
+        Thread('child', frozenset(), str(tmp_path), parent=ForkedParent('parent'), task=GivenThreadText('Child task'))
     )
     page = comms.transcripts.thread_transcript_page("child", max_messages=5)
     through = page.after
@@ -171,9 +171,9 @@ def test_never_started_native_child_keeps_no_native_cursor_and_no_read_mark(tmp_
 
     path = tmp_path / "parent.jsonl"
     transcript(path, 3)
-    comms = wire(tmp_path / "wire")
-    comms.registry.declare(comms.registry.new_thread(
-        "parent", frozenset(), str(tmp_path), session_file=SavedSessionFile(str(path)),
+    comms = installed_comms(tmp_path / "wire")
+    comms.registry.declare(Thread(
+        "parent", frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), comms.root),
         execution=NativeThreadExecution,
     ))
     RegisterCliCommand(name="child", worktree=str(tmp_path), parent=ForkedParent("parent"),

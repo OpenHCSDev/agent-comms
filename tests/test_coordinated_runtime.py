@@ -2,22 +2,18 @@
 
 from __future__ import annotations
 
-from bus_history import read_history
-from conftest import publish_initial
-from agent_comms.pi_vocabulary import HighThinkingLevel
-import os
+
 import json
+import os
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import Comms
-from agent_comms.notification_progress import HumanReadProgress
+from agent_comms.comms import wire
+from agent_comms.context_segments.wake import SelectedWakeSegment
 from agent_comms.coordinated_runtime import SelectedExecution, SessionSetupFailed
-from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
 from agent_comms.coordination_errors import (
@@ -25,14 +21,17 @@ from agent_comms.coordination_errors import (
     PublicationActivationBlocked,
 )
 from agent_comms.coordinator import Coordination
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.native_failures import NativePiUnavailable
-from agent_comms.wake_candidate_index import (
-    WakeCandidateIndex, RebuildIndex,
-)
-from agent_comms.context_segments.wake import SelectedWakeSegment
-from agent_comms.turn_context import TurnContext
-from agent_comms.thread_text import GivenThreadText
+from agent_comms.notification_progress import HumanReadProgress
+from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.thread_model import DeclaredModel
+from agent_comms.thread_text import GivenThreadText
+from agent_comms.turn_context import TurnContext
+from bus_history import read_history
+from bus_record_fixture import prepare_native_comms
+from conftest import publish_initial
+from agent_comms.threads import Thread
 
 
 @pytest.fixture
@@ -52,40 +51,34 @@ def _root(
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     (root / "runtime").mkdir(mode=0o700)
-    comms = Comms(root)
+    comms = prepare_native_comms(wire(root))
     people = [
-        comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
-        comms.registry.new_thread('alpha', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), task=GivenThreadText('release notes; ignore arithmetic tasks'), model=DeclaredModel('openai-codex/gpt-6-sol')),
-        comms.registry.new_thread('beta', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), task=GivenThreadText('arithmetic answers'), model=DeclaredModel('openai-codex/gpt-6-sol'), thinking_level=HighThinkingLevel),
+        Thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
+        Thread('alpha', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), task=GivenThreadText('release notes; ignore arithmetic tasks'), model=DeclaredModel('openai-codex/gpt-6-sol')),
+        Thread('beta', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), task=GivenThreadText('arithmetic answers'), model=DeclaredModel('openai-codex/gpt-6-sol'), thinking_level=HighThinkingLevel),
     ]
-    for person in people:
-        comms.registry.declare(person)
-    root_id = comms.messaging.initialize_private_initial_protocol()
+    people = [comms.registry.declare(person) for person in people]
+    root_id = comms.registry.prepare_native_root().namespace
     target = "beta" if direct else "#team"
     body = body if body is not None else ("@beta Compute 17+25." if mentioned else "Compute 17+25.")
     message = publish_initial(comms, "sender", target, body)
-    initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
+    initial = comms.bus.bus.delivery(message.seq)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         for recipient in initial.audience.recipients:
             store.participants.register(
                 recipient.recipient_lookup,
-                recipient.canonical_thread,
-                recipient.canonical_thread,
                 committed=True,
             )
         accepted = accept_delivery_cohort(comms.bus, root_id, message.seq, store)
         assert accepted.value.member_count == len(initial.audience.recipients)
-    # The global fixture deliberately disables background candidate workers.
-    # Tests that consume selected awareness own their deterministic projection.
-    assert WakeCandidateIndex(comms.bus.log).maintain(start=RebuildIndex())
     return root, root_id, comms, initial, people
 
 
 def test_wake_frame_rejects_no_wake_forgery_and_unengaged_full(tmp_path: Path) -> None:
     root, _root_id, comms, initial, people = _root(tmp_path, mentioned=True)
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        alpha_lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
-        beta_lookup = RecordedThreadIncarnation("fixture", people[2].created_at).lookup
+        alpha_lookup = people[1].incarnation.lookup
+        beta_lookup = people[2].incarnation.lookup
         assert sealed_cohort_assignments(store, alpha_lookup) == ()
         selected = sealed_cohort_assignments(store, beta_lookup)[0]
     # A pending FULL claim has no response obligation, and no frame may grant one.
@@ -100,7 +93,7 @@ def test_wake_frame_rejects_no_wake_forgery_and_unengaged_full(tmp_path: Path) -
 def test_triage_frame_is_read_only_and_does_not_promote_message_body(tmp_path: Path) -> None:
     root, _root_id, comms, initial, people = _root(tmp_path)
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
+        lookup = people[1].incarnation.lookup
         assignment = sealed_cohort_assignments(store, lookup)[0]
     frame = TurnContext.render_segments((SelectedWakeSegment.capture(((initial, assignment),), people[1], comms.goals),)).text
     assert f'"source_seq":{initial.message.seq}' in frame
@@ -120,7 +113,7 @@ def test_channel_wake_frame_carries_declared_goal_state(tmp_path: Path) -> None:
         progress="Routing fixed",
     )))
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
+        lookup = people[1].incarnation.lookup
         assignment = sealed_cohort_assignments(store, lookup)[0]
     frame = TurnContext.render_segments((SelectedWakeSegment.capture(
         ((initial, assignment),), comms.registry.require("alpha"), comms.goals,
@@ -141,7 +134,7 @@ def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> No
 
     root, _root_id, _comms, initial, people = _root(tmp_path)
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
+        lookup = people[1].incarnation.lookup
         assignment = sealed_cohort_assignments(store, lookup)[0]
     notification = MessageNotification(
         initial.audience.recipients[0], initial.audience.sender_lookup, HumanReadProgress(),
@@ -157,17 +150,9 @@ def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> No
     assert replace(notification, changed=False).sent_outcome() is None
 
 
-def test_native_runtime_schema_explicit_install_and_drift_fail_closed(tmp_path: Path) -> None:
-    path = tmp_path / "fresh.sqlite3"
+def test_native_runtime_schema_drift_fails_closed(private_comms) -> None:
+    path = CoordinationStore.path_in(private_comms.root)
     with Coordination(str(path)) as store:
-        assert (
-            store.session._connection.execute(
-                "SELECT 1 FROM sqlite_master WHERE name='native_runtime_input'"
-            ).fetchone()
-            is None
-        )
-        install_native_runtime_schema(store)
-        install_native_runtime_schema(store)
         NativeRuntimeTable.require_installed(store.session._connection)
         trigger = next(iter(NativeRuntimeInput.triggers()))
         store.session._connection.execute(f'DROP TRIGGER "{trigger}"')
@@ -189,5 +174,3 @@ async def test_untrusted_pi_fails_before_any_bus_or_sql_mutation(tmp_path: Path,
         ).run()
     assert isinstance(failure.value.__cause__, NativePiUnavailable)
     assert not list(root.iterdir())
-
-

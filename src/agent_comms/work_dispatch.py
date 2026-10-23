@@ -8,7 +8,6 @@ acceptance check. Failed startup state stays retained for explicit disposition.
 from __future__ import annotations
 
 import math
-import subprocess
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -20,21 +19,23 @@ from agent_comms.goal_actions import (
     OrderGoalAction,
     ProblemOrderGoalAction,
 )
+from agent_comms.owner_requests import NewestOpenRequest
 
 from .native_settings import NativeThreadDefaults
 from .phase_tasks import PhaseTask
 from .recorded_time import RecordedEventTime
-from .repo import Checkout
+from .repo import Checkout, Repo
 from .repository_name import RepositoryName
 from .storage_rules import CheckoutStorageEffect, StorageProjection
 from .thread_status import StoppedThreadStatus
-from .thread_text import SavedSessionFile
+from .session_file import RegistrySessionLocation
+
+from .threads import Thread
 
 if TYPE_CHECKING:
     from .comms import Comms
     from .phase_evidence import PlanReading
     from .plan_phases import PlanPhase
-    from .threads import Thread
     from .todos import PendingProblemOrder
 
 
@@ -60,31 +61,28 @@ class WorkDispatch:
         name = self.name
         storage = comms.registry.storage_rule
         checkout = storage.order_checkout(name, self.action.problem)
-        candidate = comms.registry.new_thread(
+        candidate = Thread(
             name,
             frozenset(),
             str(checkout),
             model=defaults.model,
             thinking_level=defaults.thinking_level,
         )
-        self.action.request_ref(GoalActionContext(comms.goals, candidate))
+        self.action.require_ready(GoalActionContext(comms.goals, candidate))
         comms.registry.require_declaration_available(candidate, StoppedThreadStatus())
         CheckoutStorageEffect(checkout, Path(self.action.order.check.directory)).check(
             StorageProjection(storage, candidate)
         )
-        subprocess.run(
-            ("git", "-C", self.action.order.check.directory, "fetch", "origin", "main"),
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
+        Repo.git(self.action.order.check.directory, "fetch", "origin", "main")
         Checkout.add(
             self.action.order.check.directory, checkout, "origin/main", "-b", f"auto/{name}"
         )
         location = candidate.runtime.new_location(comms.root, checkout)
         child = comms.registry.declare(
-            replace(candidate, session_file=SavedSessionFile(location.read_key)),
+            replace(
+                candidate,
+                session_file=RegistrySessionLocation.from_path(location.read_key, comms.root),
+            ),
             StoppedThreadStatus(),
         )
         # A failed publication leaves a stopped unit and its checkout, not an
@@ -147,7 +145,7 @@ class CheckedPhaseTask(PhaseTask):
             repo=self.repo,
             text=self.text,
             order=order,
-            request=order.request(commander, (self.problem,)),
+            request=NewestOpenRequest().for_order(comms.goals.todos, commander.incarnation),
             commander=commander.name,
             assigner=commander.incarnation,
             review_at=RecordedEventTime(now + self.review_seconds),

@@ -6,25 +6,21 @@ import asyncio
 import os
 import re
 import stat
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
-from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import TYPE_CHECKING, Self
 from uuid import uuid4
 
-from agent_comms.coordination_contracts import MAX_IDENTIFIER_CHARS
-from agent_comms.coordination_errors import CoordinationError, ParticipantNotRegistered
+from agent_comms.coordination_errors import CoordinationError
 
 from .child_process import NO_PROCESS, ProcessIdentity, ProcessState
 from .cli_result import CliResult
-from .coordination_database import CoordinationStore
 from .native_entries import ImportedSessionWriter
 from .registration import Registration
 from .thread_status import StoppedThreadStatus
-from .tool_result import ToolResult
 
 if TYPE_CHECKING:
     from .cli_bridges.history import History
@@ -34,9 +30,8 @@ from .agent_backend import RuntimeLocation
 from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
 from .errors import RelationViolationError
+from .field_codec import DeclaredWireType, FieldCodec, NullMember, RecordMember, SingleFieldValue, SubclassUnion
 from .importing import ImportLimits, ImportSnapshot, ThreadImported
-from .input_disposition import InputDispositions
-from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from .launch_runtime import LaunchRuntime, TagListText
 from .message_bus import MessageBus
 from .native_arguments import ConfiguredBinary
@@ -44,51 +39,50 @@ from .native_settings import NativeThreadDefaults
 from .owner_lifecycle import LaunchInput, OwnerLifecycle, TaskLaunchInput
 from .pi_vocabulary import NoThinkingOverride, ThinkingChoice, ThinkingLevelField
 from .private_registry_guard import (
-    PrivateOwnerRenameIntent,
-    PrivateRegistryGuard,
-    PublicRegistry,
     RegistryPrivacy,
-    _require_no_private_owner_rename,
 )
 from .registry_document import RegistrySnapshot
 from .registry_provenance import RegistryNames
-from .store_files import _atomic_write_text, _store_lock
+from .session_file import RegistrySessionLocation
+from .store_files import AtomicFile
 from .thread_identity import AgentThreadRole, ThreadRole
-from .thread_text import ForkedParent, GivenThreadText, NoThreadText, SavedSessionFile, ThreadText
 from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 from .thread_owned_state import ThreadOwnedState
+from .thread_text import ForkedParent, GivenThreadText, NoThreadText, ThreadText
+from .tool_result import ToolResult
 from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread, current_thread
 
 
-class TagChoice(SubclassUnion, affix="Tags"):
-    """The tags a new thread takes: the ones given, or a fork's parent's."""
+@dataclass(frozen=True, slots=True)
+class RenameThreadResult(ToolResult):
+    previous: str
+    current: str
+    changed: bool
 
-    @abstractmethod
-    def for_new(self) -> frozenset[str]: ...
+
+class TagChoice(SubclassUnion, affix="Tags"):
+    """Select explicit, inherited or changed tags from an existing set."""
+
+    def for_new(self) -> frozenset[str]:
+        return self.for_child(frozenset())
 
     @abstractmethod
     def for_child(self, parent: frozenset[str]) -> frozenset[str]: ...
 
 
 @dataclass(frozen=True, slots=True)
-class GivenTags(TagChoice):
+class GivenTags(DeclaredWireType, TagChoice):
     """Tags spelled as comma-separated text on the command line, in the editor and in tools."""
 
+    wire_type = str
     tags: frozenset[str]
 
     @classmethod
     def from_wire(cls, data: object) -> Self:
-        return cls(TagListText.from_text(FieldCodec.decode(str, data)))
+        return cls(TagListText.from_text(FieldCodec.decode(cls.wire_type, data)))
 
     def to_wire(self) -> str:
         return TagListText.encode(self.tags)
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        return FieldCodec.value_schema(str)
-
-    def for_new(self) -> frozenset[str]:
-        return self.tags
 
     def for_child(self, parent: frozenset[str]) -> frozenset[str]:
         return self.tags
@@ -96,11 +90,17 @@ class GivenTags(TagChoice):
 
 @dataclass(frozen=True, slots=True)
 class InheritedTags(NullMember, TagChoice):
-    def for_new(self) -> frozenset[str]:
-        return frozenset()
-
     def for_child(self, parent: frozenset[str]) -> frozenset[str]:
         return parent
+
+
+@dataclass(frozen=True, slots=True)
+class ChangedTags(RecordMember, TagChoice):
+    add: frozenset[str]
+    remove: frozenset[str]
+
+    def for_child(self, parent: frozenset[str]) -> frozenset[str]:
+        return (parent | self.add) - self.remove
 
 
 class ImportDirectory(SubclassUnion, affix="Directory"):
@@ -136,7 +136,7 @@ class SourceDirectory(NullMember, ImportDirectory):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class NewThreadSpec:
-    """Prepares the session outside the wire lock, then registers the thread under it."""
+    """Prepare the session, then register the thread under its registry lock."""
 
     name: str
     project: str
@@ -150,7 +150,7 @@ class NewThreadSpec:
         return cls(task=TaskLaunchInput(task) if task else LaunchInput(), **values)
 
     def declaration(self, project: str, registry: Registration) -> Thread:
-        return registry.new_thread(name=self.name, task=self.task.thread_text(), tags=self.tags.for_new(),
+        return Thread(name=self.name, task=self.task.thread_text(), tags=self.tags.for_new(),
                       worktree=project, model=self.model, thinking_level=self.thinking_level)
 
     @contextmanager
@@ -159,8 +159,9 @@ class NewThreadSpec:
         thread = self.declaration(str(project), threads.registry)
         threads.registry.require_declaration_available(thread)
         location = thread.runtime.new_location(threads.root, project)
-        with _store_lock(threads._wire_lock_path):
-            yield replace(thread, session_file=SavedSessionFile(location.read_key))
+        with threads.registry.store.locked():
+            saved = RegistrySessionLocation.from_path(location.read_key, threads.root)
+            yield replace(thread, session_file=saved)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -175,25 +176,26 @@ class ForkSpec(NewThreadSpec):
         parent.runtime.require_forkable()
         return parent
 
-    def child(self, parent: Thread, runtime: RuntimeLocation, registry: Registration) -> Thread:
-        return replace(self.declaration(self.project, registry), parent=ForkedParent(parent.name),
-                       tags=self.tags.for_child(parent.tags),
-                       backend=parent.backend, session_file=SavedSessionFile(runtime.read_key))
+    def child(self, parent: Thread, runtime: RuntimeLocation, threads: ThreadManagement) -> Thread:
+        saved = RegistrySessionLocation.from_path(runtime.read_key, threads.root)
+        return replace(self.declaration(self.project, threads.registry),
+                       parent=ForkedParent(parent.name), tags=self.tags.for_child(parent.tags),
+                       backend=parent.backend, session_file=saved)
 
     @contextmanager
     def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
-        # Copy saved history outside the wire lock, retaining writer→wire order.
+        # Copy saved history before locking the registry for its declaration.
         parent = self._parent(threads)
-        threads.registry.require_declaration_available(self.child(parent, parent.runtime, threads.registry))
+        threads.registry.require_declaration_available(self.child(parent, parent.runtime, threads))
         location = asyncio.run(parent.backend.fork(parent, pi_bin, runtime))
-        with _store_lock(threads._wire_lock_path):
+        with threads.registry.store.locked():
             current = self._parent(threads)
             if current.incarnation != parent.incarnation or current.runtime != parent.runtime:
                 raise RelationViolationError(
                     f"Parent thread {self.parent!r} changed its saved session during the fork; "
                     f"the created fork {location} was not registered."
                 )
-            yield self.child(current, location, threads.registry)
+            yield self.child(current, location, threads)
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,11 +205,6 @@ class ThreadDeleted(CliResult):
     detached_children: tuple[str, ...]
 
 
-@dataclass(frozen=True, slots=True)
-class RenameThreadResult(ToolResult):
-    previous: str
-    current: str
-    changed: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -228,10 +225,6 @@ class ThreadManagement:
     owners: OwnerLifecycle
     ledger: CollaborationLedger
 
-    @property
-    def _wire_lock_path(self) -> Path:
-        return self.root / "wire"
-
     def import_thread(
         self,
         history: History,
@@ -251,14 +244,14 @@ class ThreadManagement:
         if not project.is_dir():
             raise ValueError("The imported project does not exist locally; supply --worktree.")
         session_path = ImportedSessionWriter.path_in(self.root, session_id=uuid4().hex)
-        thread = model.configured(self.registry.new_thread(
+        thread = model.configured(Thread(
             name,
             tags,
             str(project),
-            session_file=SavedSessionFile(str(session_path)),
+            session_file=RegistrySessionLocation.from_path(session_path, self.root),
             title=snapshot.title,
         ))
-        with _store_lock(self._wire_lock_path):
+        with self.registry.store.locked():
             if self.registry.snapshot().taken(name):
                 raise ValueError(f"Thread name {name!r} is already reserved.")
             self.registry.require_declaration_available(thread, StoppedThreadStatus())
@@ -271,10 +264,10 @@ class ThreadManagement:
                 or stat.S_IMODE(info.st_mode) != 0o700
             ):
                 raise ValueError("Imported session directory is not owner-controlled.")
-            _atomic_write_text(session_path, snapshot.pi_session(project))
+            AtomicFile(session_path).write_text(snapshot.pi_session(project))
             try:
                 self.registry._declare_unlocked(thread, StoppedThreadStatus())
-                self.bus.mark_delivered_through(name, self.bus.log.latest_sequence())
+                self.bus.mark_delivered_through(name, self.bus.bus.revision())
             except (OSError, ValueError, CoordinationError):
                 if name in self.registry:
                     self.registry.remove(name)
@@ -301,13 +294,13 @@ class ThreadManagement:
         without replacing existing owners or importing historical delivery state.
         """
         selected = tuple(dict.fromkeys(names))
-        with _store_lock(self._wire_lock_path):
+        with self.registry.store.locked():
             restored = self.registry.restore_stopped(source, selected)
             self._privacy().register_restored(self.registry.require(name) for name in selected)
             return restored
 
     def _privacy(self) -> RegistryPrivacy:
-        with _store_lock(self.registry.store.path):
+        with self.registry.store.locked():
             return self.registry.store.private_guard_unlocked()
 
     def claim_thread(
@@ -323,22 +316,21 @@ class ThreadManagement:
         role: type[ThreadRole] = AgentThreadRole,
     ) -> Thread:
         """Atomically register a unique thread; its inbox starts at its creation."""
-        with _store_lock(self._wire_lock_path):
-            thread = self.registry.new_thread(
-                name=RegistryNames.thread_slug(wanted),
-                tags=tags,
-                worktree=worktree,
-                process_identity=process,
-                model=model,
-                thinking_level=thinking_level,
-                auto_title_pending=auto_title_pending,
-                role=role,
-            )
-            return self.registry._claim_unlocked(thread)
+        thread = Thread(
+            name=RegistryNames.thread_slug(wanted),
+            tags=tags,
+            worktree=worktree,
+            process_identity=process,
+            model=model,
+            thinking_level=thinking_level,
+            auto_title_pending=auto_title_pending,
+            role=role,
+        )
+        return self.registry._claim_unlocked(thread)
 
     def rename_self(self, new_name: str, *, caller: ThreadCaller) -> RenameThreadResult:
         """Rename the bound caller's own thread, retaining its old aliases."""
-        with _store_lock(self._wire_lock_path):
+        with self.registry.store.locked():
             if self.registry.require(caller.name).auto_title_pending and (
                 len(new_name) > 48 or len(re.split(r"[-_]+", new_name)) > 6
             ):
@@ -351,7 +343,7 @@ class ThreadManagement:
         """Move one thread's project, preserving its owner and conversation."""
         if not path.strip():
             raise ValueError("Project path cannot be empty.")
-        with _store_lock(self._wire_lock_path):
+        with self.registry.store.locked():
             thread = self.registry.require(name)
             target = Path(path).expanduser()
             if not target.is_absolute():
@@ -372,14 +364,14 @@ class ThreadManagement:
             return ProjectChangeResult(thread.name, previous, current, True)
 
     def rename_managed_thread(
-        self, name: str, display_name: str, *, owner_pid: int
+        self, name: str, display_name: str, *, owner: ProcessIdentity
     ) -> RenameThreadResult:
         """Rename a locally managed running thread after proving process ownership."""
-        with _store_lock(self._wire_lock_path):
+        with self.registry.store.locked():
             thread = self.registry.require(name)
-            if owner_pid <= 0 or thread.process_identity != ProcessIdentity.capture(owner_pid):
+            if thread.process_identity != owner:
                 raise RelationViolationError(
-                    f"Process {owner_pid} does not own thread {thread.name!r}."
+                    f"Process {owner.pid} does not own thread {thread.name!r}."
                 )
             new_name = self.registry.snapshot().claim_name(display_name, owner=thread.name)
             return self._rename_thread_unlocked(thread.name, new_name, title=GivenThreadText(display_name))
@@ -387,19 +379,29 @@ class ThreadManagement:
     def _rename_thread(
         self, name: str, new_name: str, *, title: ThreadText = NoThreadText()
     ) -> RenameThreadResult:
-        # Keep direct callers under the same wire lock as public self/managed
-        # rename. Private owner migration and ordinary publication share it.
-        with _store_lock(self._wire_lock_path):
+        # Every rename checks and changes the same current registry declaration.
+        with self.registry.store.locked():
             return self._rename_thread_unlocked(name, new_name, title=title)
 
     def _rename_thread_unlocked(
         self, name: str, new_name: str, *, title: ThreadText = NoThreadText()
     ) -> RenameThreadResult:
-        return ThreadRename.chosen(self, self.registry.require(name), new_name).applied(title)
+        previous, current = self.registry.rename(name, new_name)
+        thread = self.registry.require(current)
+        titled = replace(thread, auto_title_pending=False, title=title.applied(thread.title))
+        if titled != thread:
+            self.registry.register(titled, self.registry.status(current))
+        changed = previous != current
+        if changed:
+            self.agents.activity.rename_thread(previous, current)
+            self.agents.runtime_info.rename_thread(previous, current)
+            self.ledger.rename_thread(previous, current)
+            with self.catalog.editing() as document:
+                document.rename_thread(previous, current)
+        return RenameThreadResult(previous, current, changed)
 
     def heartbeat(self, name: str) -> None:
-        with _store_lock(self._wire_lock_path):
-            self.registry.heartbeat(name)
+        self.registry.heartbeat(name)
 
     def set_thread_configuration(
         self, original: Thread, configuration: NextTurnConfiguration,
@@ -410,7 +412,7 @@ class ThreadManagement:
         or project invalidates the native settings result acquired by the caller.
         """
         Thread.require_declaration(original)
-        with _store_lock(self._wire_lock_path):
+        with self.registry.store.locked():
             thread = self.registry.require(original.name)
             thread.require_original_model_configuration(original)
             thread.execution.require_native()
@@ -423,7 +425,7 @@ class ThreadManagement:
         self, name: str, *, model: ThreadModel, thinking_level: type[ThinkingChoice],
     ) -> Thread:
         """Persist one first-known producer observation through its declaration."""
-        with _store_lock(self._wire_lock_path):
+        with self.registry.store.locked():
             thread = self.registry.require(name)
             updated = thread.initialized_native_configuration(
                 model=model, thinking_level=thinking_level,
@@ -442,11 +444,11 @@ class ThreadManagement:
     def attach_session(
         self, original: Thread, source_path: str, *, process: ProcessState,
     ) -> Thread:
-        """Attach Pi state and retain its model once, outside the wire lock."""
+        """Read Pi state first, then publish its model under the registry lock."""
         path = Path(source_path).expanduser().resolve()
         location = original.backend.location_type(str(path))
         saved_model = ThreadModel.from_choice(location.model_choice) if path.is_file() else UndeclaredModel()
-        with _store_lock(self._wire_lock_path):
+        with self.registry.store.locked():
             current = self.registry.require(original.name)
             if current != original:
                 raise RelationViolationError("Original thread changed before native source publication")
@@ -455,14 +457,14 @@ class ThreadManagement:
                     model=saved_model, thinking_level=NoThinkingOverride,
                 ),
                 process_identity=process,
-                session_file=SavedSessionFile(location.read_key),
+                session_file=RegistrySessionLocation.from_path(location.read_key, self.root),
             )
             self.registry.register(attached)
             return attached
 
     def archive(self, name: str) -> None:
         """Hide a stopped participant from presence while retaining messages."""
-        with _store_lock(self._wire_lock_path):
+        with self.registry.store.locked():
             self._archive_unlocked((self.registry.require(name),))
 
     def _archive_unlocked(self, originals: Sequence[Thread]) -> None:
@@ -492,7 +494,7 @@ class ThreadManagement:
 
     def delete(self, name: str) -> ThreadDeleted:
         """Permanently delete one stopped or archived thread."""
-        with _store_lock(self._wire_lock_path):
+        with self.registry.store.locked():
             return self._delete_unlocked((self.registry.require(name),))[0]
 
     def _delete_unlocked(self, originals: Sequence[Thread]) -> tuple[ThreadDeleted, ...]:
@@ -530,137 +532,13 @@ class ThreadManagement:
         runtime = LaunchRuntime.running()
         with spec.prepared(self, resolved_bin, runtime) as child:
             child = self.registry._declare_unlocked(child)
-            try:
-                owned = self.owners._launch_owner_unlocked(
-                    child, resolved_bin, initial_input=spec.task, launch_runtime=runtime,
-                )
-                spec.task.record_first_input(
-                    partial(InputDispositions(self.root).record, owner=owned.name, target=owned.name,
-                        claim_scope=self.registry.snapshot().claim_generation(owned.name),
-                    ))
-                return owned
-            except OSError:
-                self.registry.remove(spec.name)
-                raise
+        # A failed launch cannot erase a declaration another starter reserved,
+        # nor erase the first input if reservation committed before the failure.
+        return self.owners._launch_owner(
+            child, resolved_bin, initial_input=spec.task, launch_runtime=runtime,
+        )
 
     def adopt_current(self) -> Thread:
         """Declare and register the current process's thread from env."""
         thread = current_thread(self.registry)
         return self.registry.declare(thread)
-
-
-@dataclass(frozen=True, slots=True)
-class ThreadRename(ABC):
-    """One rename, its kind derived from the registry's privacy."""
-
-    privacy: ClassVar[type[RegistryPrivacy]]
-    kinds: ClassVar[dict[type[RegistryPrivacy], type[ThreadRename]]] = {}
-    threads: ThreadManagement
-    before: Thread
-    new_name: str
-    registry_privacy: RegistryPrivacy
-
-    def __init_subclass__(cls, **kwargs):
-        # slots=True rebuilds the class; its final declaration replaces the first.
-        super(ThreadRename, cls).__init_subclass__(**kwargs)
-        cls.kinds[cls.privacy] = cls
-
-    @classmethod
-    def chosen(cls, threads: ThreadManagement, before: Thread, new_name: str) -> ThreadRename:
-        privacy = threads._privacy()
-        return cls.kinds[type(privacy)](threads, before, new_name, privacy)
-
-    @abstractmethod
-    def renamed(self) -> tuple[str, str]:
-        """Move the registry name, after whatever this kind's owner stores need first."""
-
-    def registry_renamed(self) -> tuple[str, str]:
-        return self.threads.registry.rename(self.before.name, self.new_name)
-
-    def applied(self, title: ThreadText) -> RenameThreadResult:
-        previous, current = self.renamed()
-        threads = self.threads
-        thread = threads.registry.require(current)
-        titled = replace(thread, auto_title_pending=False, title=title.applied(thread.title))
-        if titled != thread:
-            threads.registry.register(titled, threads.registry.status(current))
-        if previous == current:
-            return RenameThreadResult(previous, current, False)
-        threads.agents.activity.rename_thread(previous, current)
-        threads.agents.runtime_info.rename_thread(previous, current)
-        threads.ledger.rename_thread(previous, current)
-        with threads.catalog.editing() as document:
-            document.rename_thread(previous, current)
-        return RenameThreadResult(previous, current, True)
-
-
-class PlainRename(ThreadRename):
-    privacy = PublicRegistry
-
-    def renamed(self) -> tuple[str, str]:
-        return self.registry_renamed()
-
-
-@dataclass(frozen=True, slots=True)
-class PrivateOwnerRename(ThreadRename):
-    """Moves a committed coordinator owner under a durable intent, so a crash between the two
-    stores fails closed instead of turning an old attempt into a new send."""
-
-    privacy = PrivateRegistryGuard
-    registry_privacy: PrivateRegistryGuard
-
-    def renamed(self) -> tuple[str, str]:
-        from .coordinator import Coordination
-
-        root, registry = self.threads.root, self.threads.registry
-        before, new_name = self.before, self.new_name
-        _require_no_private_owner_rename(root)
-        coordinator = CoordinationStore.path_in(root)
-        if not coordinator.exists() or before.name == new_name:
-            return self.registry_renamed()
-        # Validate registry/SQL name refusals before renaming the private owner.
-        # The wire lock excludes cooperating sends until both agree.
-        registry.status(before.name).require_self_rename()
-        if registry.snapshot().taken(new_name, owner=before.name):
-            raise RelationViolationError(f"Thread name {new_name!r} is already in use.")
-        Thread.require_name(new_name)
-        if len(new_name) > MAX_IDENTIFIER_CHARS:
-            raise ValueError("Private coordinator owner name exceeds its bound.")
-        with Coordination(str(coordinator)) as store:
-            try:
-                person = store.participants.get(before.incarnation.require_recorded().lookup)
-            except ParticipantNotRegistered:
-                return self.registry_renamed()
-            if not person.committed or person.owner_identity.owner_thread != before.name:
-                raise RelationViolationError(
-                    "Private coordinator owner differs from the registered owner.")
-            generation = person.owner_identity.generation
-            PrivateOwnerRenameIntent(lookup=person.lookup, old=before.name, new=new_name,
-                                     generation=generation,
-                                     wire_root_id=self.registry_privacy.root_id.hex(),
-                                     ).write(root)
-            store.participants.rename_owner(
-                person.lookup, new_name, expected_generation=generation)
-            try:
-                return self.registry_renamed()
-            except BaseException as error:
-                # Registry persistence can fail after the SQL CAS. If its atomic snapshot still
-                # names the old owner, restore that name without revoking its active attempt.
-                uncertain = RelationViolationError(
-                    "Private owner rename is uncertain; inspect both authorities.")
-                try:
-                    if registry.require(before.name).name == before.name:
-                        store.participants.rename_owner(
-                            person.lookup, before.name, expected_generation=generation)
-                except BaseException as compensation:
-                    # Ambiguous dual-store failure: the inspection needs both failures.
-                    raise uncertain from compensation
-                raise uncertain from error
-
-    def applied(self, title: ThreadText) -> RenameThreadResult:
-        result = ThreadRename.applied(self, title)
-        # The wire lock and the check in renamed() make a present intent this rename's own;
-        # it completes only after both authorities and the ancillary stores agree.
-        if PrivateOwnerRenameIntent.path_in(self.threads.root).exists():
-            PrivateOwnerRenameIntent.complete(self.threads.root)
-        return result

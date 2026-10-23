@@ -16,24 +16,24 @@ from agent_comms.todos import (
     ClaimedProblemOrder,
     CorrectCheckTodo,
     DoneTodoState,
+    FailedCheckStrike,
     DeliveredProblemOrder,
     PendingProblemOrder,
     SendBackVerdict,
     StrikeReason,
+    StrikeTodo,
     TodoConflict,
     TodoError,
     Todo,
 )
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import (
-    CommsHistoryTool, CommsOrderDeliverTool, CommsVerdictTool, TodoChanged,
+    CommsHistoryTool, CommsHudTool, CommsOrderDeliverTool, CommsVerdictTool, TodoChanged,
 )
-from test_held_problem_orders import (  # noqa: F401 - shared copied-bus fixture family
-    held_commander,
-    pr_commander,
-)
-from test_proof_build import proof_build_checkouts  # noqa: F401 - shared copied-bus fixture
+from test_held_problem_orders import merge_two_commit_fix
 from test_todos import order, thread
+
+pytest_plugins = ("test_held_problem_orders",)
 
 
 def test_claim_verdict_family_on_retained_copy(held_commander):
@@ -66,7 +66,7 @@ def test_claim_verdict_family_on_retained_copy(held_commander):
                 if message.message_id == claimed.order.claim.message.message_id)
     assert sent.sender == "worker" and sent.target == ctx.commander
     assert sent.answers and sent.answers == claimed.order.claim.message.answers
-    assert "Claimed by the unit" in ctx.board_text()
+    assert "Claimed by the unit" in "\n".join(ctx.call(CommsHudTool()).frame)
     with pytest.raises(TodoError, match="Only a pending order"):
         ThreadCaller("worker").invoke(request, comms)
     assert comms.goals.todos.get("P1") == claimed
@@ -89,11 +89,66 @@ def test_claim_verdict_family_on_retained_copy(held_commander):
     response = CommsOrderDeliverTool.invoke(comms, request.arguments, caller=ThreadCaller("worker"))
     assert isinstance(FieldCodec.decode(TodoChanged, response).todo.order, ClaimedProblemOrder)
     with chdir(ctx.repos[0].checkout):
-        main(["done", "worker", "P1", "--sha", sha], ctx)
+        main(["done", "worker", "P1"], ctx)
     delivered = comms.goals.todos.get("P1")
     assert isinstance(delivered.order, DeliveredProblemOrder)
-    assert delivered.order.delivery.delivered == sha
+    assert delivered.order.delivery.delivered == delivered.order.delivery.commit
     assert not delivered.pending
+
+
+def test_claimed_check_correction_reads_the_base_the_fix_was_built_on(
+    held_commander, cited_source, tmp_path,
+):
+    """Once the claimed PR merges, current main passes every correct check; the claim's own
+    branch point still holds the defect, so a correct check is accepted and done records it."""
+    ctx = held_commander
+    comms = ctx.comms
+    base, first, merge = merge_two_commit_fix(cited_source, tmp_path / "bin", 4)
+    original = comms.goals.todos.get("P1")
+    comms.goals.update_goal("worker", SetGoalAction(
+        text=ProblemGoalOrder.text, order=ProblemGoalOrder(),
+        goal_id=original.held().generation,
+    ))
+    head = cited_source.git(cited_source.checkout, "rev-parse", "fix/4").strip()
+    ThreadCaller("worker").invoke(CommsOrderDeliverTool(
+        problem="P1", pull_request=4, head=head,
+        report="The count fix is merged; check the merged tree.",
+    ), comms)
+    claimed = comms.goals.todos.get("P1")
+    assert claimed.order.check_base(cited_source.checkout) == base
+    with chdir(cited_source.checkout):
+        main(["check", "P1", "--check", f"{cited_source.checkout} :: cat count.txt -> 0",
+              "--why", "The old check counted a legitimate use outside the fixed file"], ctx)
+        main(["done", "worker", "P1"], ctx)
+    delivered = comms.goals.todos.get("P1")
+    assert isinstance(delivered.order, DeliveredProblemOrder)
+    assert delivered.order.check.command == "cat count.txt"
+    assert (delivered.order.delivery.delivered, delivered.order.delivery.commit) == (first, merge)
+    assert delivered.strike_count == claimed.strike_count
+
+
+def test_failed_check_strike_releases_at_the_updated_revision(held_commander):
+    ctx = held_commander
+    store = ctx.comms.goals.todos
+    original = store.get("P1")
+    first = store.apply(original.id, StrikeTodo(
+        original.revision, ctx.incarnation, original.held(),
+        "The first review found the original duplicated decision still present.",
+        evidence=(original.order.checked().owner,),
+    ))
+    failure = FailedCheckStrike.make(
+        first, time.time(),
+        "The delivered change still fails the source check that the order explicitly requires.",
+    )
+
+    released = store.apply(first.id, failure)
+    assert released.assignment is None
+    assert released.revision == first.revision + 2
+    assert released.strikes == (*first.strikes, failure)
+    assert released.released[-1].expected_revision == first.revision + 1
+    with pytest.raises(TodoConflict):
+        store.apply(first.id, failure)
+    assert store.get(first.id) == released
 
 
 def claimed_by_worker(ctx) -> Todo:
@@ -112,12 +167,12 @@ def claimed_by_worker(ctx) -> Todo:
     return claimed
 
 
-def corrected_order_file(ctx) -> str:
+def corrected_order_file(ctx, source) -> str:
     marker = ctx.root / "duplicated-decision"
     marker.touch()
     now = time.time()
     document = OrderFile(
-        replace(order(ctx.repos[0]), id="corrected-order",
+        replace(order(source), id="corrected-order",
                 check=OrderCheck(str(ctx.repos[0].checkout), f"test ! -e {shlex.quote(str(marker))}"),
                 at=RecordedEventTime(now), first_call_deadline=RecordedEventTime(now + 120)),
         "The claimed change keeps the duplicated decision the order told the unit to delete",
@@ -130,10 +185,10 @@ def corrected_order_file(ctx) -> str:
     return str(path)
 
 
-def test_corrected_order_to_the_claimant_replaces_its_claim(held_commander):
+def test_corrected_order_to_the_claimant_replaces_its_claim(held_commander, cited_source):
     ctx = held_commander
     claimed = claimed_by_worker(ctx)
-    main(["send", "worker", corrected_order_file(ctx), "--clean"], ctx)
+    main(["send", "worker", corrected_order_file(ctx, cited_source), "--clean"], ctx)
     corrected = ctx.comms.goals.todos.get("P1")
     assert isinstance(corrected.order, PendingProblemOrder)
     assert corrected.order.id != claimed.order.id
@@ -142,12 +197,12 @@ def test_corrected_order_to_the_claimant_replaces_its_claim(held_commander):
     assert corrected.strike_count == claimed.strike_count
 
 
-def test_claimed_order_to_another_unit_is_refused_and_writes_nothing(held_commander):
+def test_claimed_order_to_another_unit_is_refused_and_writes_nothing(held_commander, cited_source):
     ctx = held_commander
     ctx.comms.registry.register(thread("other", ctx.root, 3.0))
     claimed = claimed_by_worker(ctx)
     with pytest.raises(TodoError, match="Only an undelivered order can change owner"):
-        main(["send", "other", corrected_order_file(ctx), "--clean", "--reassign",
+        main(["send", "other", corrected_order_file(ctx, cited_source), "--clean", "--reassign",
               "the claimant reported the delivery, so moving it would discard that claim"], ctx)
     assert ctx.comms.goals.todos.get("P1") == claimed
 

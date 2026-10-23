@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal, NoReturn, Annotated
 if TYPE_CHECKING:
     from acp import RequestError
 
+    from .controller import SessionUpdateSink
     from .agent_events import Done, Error
     from .input_disposition import InputDocument
     from .turn_failure import TurnFailure
@@ -173,7 +174,6 @@ class NoRetry(NullMember, ProviderRetryResult):
 class ACPFailure(DeliveryFailure):
     code: int | None
     detail: str
-    classification_priority: ClassVar[int] = 0
     input_state: type[InputAttempt] | None = None
     diagnostics: tuple[PiDiagnostic, ...] = ()
     # Public failed-outcome projection of the turn-owned immutable result.
@@ -224,11 +224,7 @@ class ACPFailure(DeliveryFailure):
         detail = detail or "ACP request failed"
         owner = next(
             member
-            for member in sorted(
-                cls.members_with(ACPFailure),
-                key=lambda member: member.classification_priority,
-                reverse=True,
-            )
+            for member in cls.members_with(ACPFailure)
             if member.matches(code, detail, diagnostics)
         )
         return owner(code, detail, diagnostics=diagnostics)
@@ -263,7 +259,7 @@ class NativeTurnOutcome(ABC):
     """Resolved completion owns failure presentation and notification delivery."""
 
     @abstractmethod
-    async def publish(self, client, session_id: str) -> NativeTurnOutcome: ...
+    async def publish(self, client: SessionUpdateSink, session_id: str) -> NativeTurnOutcome: ...
 
     @abstractmethod
     def raise_if_failed(self) -> None: ...
@@ -276,7 +272,7 @@ class NativeTurnOutcome(ABC):
 
 @dataclass(frozen=True)
 class UnresolvedNativeTurnOutcome(NativeTurnOutcome):
-    async def publish(self, client, session_id: str) -> NativeTurnOutcome:
+    async def publish(self, client: SessionUpdateSink, session_id: str) -> NativeTurnOutcome:
         raise RuntimeError("Native completion has not been resolved at its input boundary")
 
     def raise_if_failed(self) -> None:
@@ -285,7 +281,7 @@ class UnresolvedNativeTurnOutcome(NativeTurnOutcome):
 
 @dataclass(frozen=True)
 class SuccessfulNativeTurnOutcome(NativeTurnOutcome):
-    async def publish(self, client, session_id: str) -> NativeTurnOutcome:
+    async def publish(self, client: SessionUpdateSink, session_id: str) -> NativeTurnOutcome:
         return self
 
     def raise_if_failed(self) -> None:
@@ -316,14 +312,14 @@ class FailedNativeTurnOutcome(NativeTurnOutcome):
                                if not document.all_started(original.notice_keys) else None),
         )
 
-    async def publish(self, client, session_id: str) -> NativeTurnOutcome:
+    async def publish(self, client: SessionUpdateSink, session_id: str) -> NativeTurnOutcome:
         from acp.schema import AgentMessageChunk, TextContentBlock
         from .acp_extension import (
             InputFailedUpdate, RequestFailedUpdate, TextRouteUpdate, encode_updates,
         )
 
         failure = self.request.failure
-        accepted = await client.session_update(
+        accepted = await client.publish_update(
             session_id=session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
@@ -335,9 +331,7 @@ class FailedNativeTurnOutcome(NativeTurnOutcome):
                 ),
             ),
         )
-        # ACP SDK clients return None after acknowledgement; Core's transport
-        # returns False when nobody accepted the notification.
-        return replace(self, request=replace(self.request, notification_published=accepted is not False))
+        return replace(self, request=replace(self.request, notification_published=accepted))
 
     def raise_fault(self, cause: Exception) -> NoReturn:
         raise NativeTurnError(self.request) from cause
@@ -346,46 +340,7 @@ class FailedNativeTurnOutcome(NativeTurnOutcome):
         raise NativeTurnError(self.request)
 
 
-class RequestACPFailure(ACPFailure):
-    @classmethod
-    def matches(
-        cls, code: int | None, detail: str, diagnostics: tuple[PiDiagnostic, ...] = ()
-    ) -> bool:
-        return True
-
-    @property
-    def title(self) -> str:
-        return "Request failed"
-
-
-class ProviderQuotaFailure(ACPFailure):
-    classification_priority = 100
-    display_pattern = re.compile(
-        r"usage limit|quota|insufficient credits|credit balance|rate.limit|too many requests",
-        re.I,
-    )
-
-    @classmethod
-    def matches(
-        cls, code: int | None, detail: str, diagnostics: tuple[PiDiagnostic, ...] = ()
-    ) -> bool:
-        return cls.display_pattern.search(detail) is not None
-
-    @property
-    def title(self) -> str:
-        return "Provider usage limit reached"
-
-    @property
-    def next_step(self) -> str:
-        return (
-            "Wait for the provider limit to reset or restore credits, "
-            "then inspect input delivery before any explicit resend."
-        )
-
-
 class ProviderConnectionFailure(ACPFailure):
-    classification_priority = 150
-
     @classmethod
     def matches(cls, code, detail, diagnostics=()) -> bool:
         return any(diagnostic.provider_connection_failure for diagnostic in diagnostics)
@@ -409,6 +364,42 @@ class ProviderConnectionFailure(ACPFailure):
             "The provider connection failed. Inspect the response and input delivery "
             "before choosing whether to send a new message."
         )
+
+
+class ProviderQuotaFailure(ACPFailure):
+    display_pattern = re.compile(
+        r"usage limit|quota|insufficient credits|credit balance|rate.limit|too many requests",
+        re.I,
+    )
+
+    @classmethod
+    def matches(
+        cls, code: int | None, detail: str, diagnostics: tuple[PiDiagnostic, ...] = ()
+    ) -> bool:
+        return cls.display_pattern.search(detail) is not None
+
+    @property
+    def title(self) -> str:
+        return "Provider usage limit reached"
+
+    @property
+    def next_step(self) -> str:
+        return (
+            "Wait for the provider limit to reset or restore credits, "
+            "then inspect input delivery before any explicit resend."
+        )
+
+
+class RequestACPFailure(ACPFailure):
+    @classmethod
+    def matches(
+        cls, code: int | None, detail: str, diagnostics: tuple[PiDiagnostic, ...] = ()
+    ) -> bool:
+        return True
+
+    @property
+    def title(self) -> str:
+        return "Request failed"
 
 
 class ErrorValue(DeclaredFamily, JsonShapeFamily, affix="ErrorValue"):

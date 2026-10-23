@@ -6,7 +6,10 @@ from typing import Annotated, ClassVar
 
 import pytest
 
+from conftest import maintenance_held
+
 from agent_comms.coordination_database import CoordinationStore
+from agent_comms.locked_store import SQLiteFile
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
@@ -189,7 +192,7 @@ class ReferencedRow(WriteOnceColumns, FirstValueState, RequiredColumn, TypedTabl
 
 @pytest.fixture
 def db():
-    with closing(CoordinationStore.writer(":memory:", isolation_level=None)) as connection:
+    with closing(SQLiteFile.writer(":memory:", isolation_level=None)) as connection:
         for row in (OrderedRow, ComputedRow, SealedRow, FrozenRow, GuardedRow, PhasedRow, ChangingRow,
                     ReferencedRow, InsertCheckedRow, RelatedGuardRow, AfterWriteRow, ValidatedRow,
                     OrdinalRow, ProofRow, PointerRow):
@@ -338,10 +341,10 @@ def test_declared_insert_validator_receives_the_field_values(db):
 
 
 def test_owner_counter_refuses_skipping_a_generation():
-    with closing(CoordinationStore.writer(":memory:", isolation_level=None)) as connection:
+    with closing(SQLiteFile.writer(":memory:", isolation_level=None)) as connection:
         CoordinatorTable.create_schema(connection)
-        Participants(participant_lookup="owner", display_name="owner", committed=True).insert(connection)
-        OwnerGenerations(owner_lookup="owner", owner_thread="owner", generation=1).insert(connection)
+        Participants(participant_lookup="owner", committed=True).insert(connection)
+        OwnerGenerations(owner_lookup="owner",  generation=1).insert(connection)
         with pytest.raises(sqlite3.IntegrityError):
             OwnerGenerations.update(connection, where="owner_lookup='owner'", generation=3)
         OwnerGenerations.update(connection, where="owner_lookup='owner'", generation=2)
@@ -351,7 +354,7 @@ def test_normal_writer_replaces_old_guards_without_rewriting_rows(tmp_path):
     path = tmp_path / CoordinationStore.filename
     with closing(CoordinationStore(path)) as store:
         connection = store._connection
-        Participants(participant_lookup="owner", display_name="owner", committed=True).insert(
+        Participants(participant_lookup="owner", committed=True).insert(
             connection
         )
         before = Participants.select(connection)
@@ -362,7 +365,7 @@ def test_normal_writer_replaces_old_guards_without_rewriting_rows(tmp_path):
             "BEGIN SELECT RAISE(ABORT, 'frozen'); END"
         )
         assert CoordinatorTable.schema_differs(connection)
-    with closing(CoordinationStore(path)) as store:
+    with maintenance_held(tmp_path), closing(CoordinationStore(path)) as store:
         connection = store._connection
         CoordinatorTable.require_installed(connection)
         assert Participants.select(connection) == before

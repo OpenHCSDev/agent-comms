@@ -33,7 +33,7 @@ def test_same_name_can_take_a_previous_birth_only_with_current_registry_evidence
     scope = NativeClaim(owner_claimed_generation=1, operation_id="c" * 32,
                         turn_id="turn-owner", input_id="input-owner")
     held = WakeClaims("owner", "1.0", 1, "msg-1", claims=(resource,),
-                      generation=G1, claim_scope=scope).project(ClaimProjection())
+                      generation=G1, resource_scope=scope).project(ClaimProjection())
     original = held[resource]
     assert not original.live(registry)
     original.require_holder("owner", "1.0")
@@ -41,7 +41,7 @@ def test_same_name_can_take_a_previous_birth_only_with_current_registry_evidence
         with pytest.raises(ClaimConflict):
             original.require_holder(owner, incarnation)
     successor = WakeClaims("owner", "2.0", 2, "msg-2", claims=(resource,),
-                           generation=G2, claim_scope=scope)
+                           generation=G2, resource_scope=scope)
     saved = FieldCodec.decode(ClaimTransition, FieldCodec.encode(successor))
     moved = saved.apply(held, registry)
     assert moved[resource].incarnation == "2.0" and moved[resource].generation == G2
@@ -65,20 +65,20 @@ def test_selected_wake_binding_survives_claim_projection(tmp_path):
         attempt_ordinal=1,
     )
     claimed = WakeClaims("owner", "epoch-1", 8, "msg-8", claims=(resource,),
-                         generation=G1, claim_scope=claim_scope)
+                         generation=G1, resource_scope=claim_scope)
     raw = FieldCodec.encode(claimed)
     decoded = FieldCodec.decode(ClaimTransition, raw)
     assert decoded == claimed
-    assert decoded.project(ClaimProjection())[resource].claim_scope == claim_scope
+    assert decoded.project(ClaimProjection())[resource].resource_scope == claim_scope
     message = Message("owner", "owner", "Claim file", ClaimNoticeKind, seq=8, timestamp=1.0)
     bound = ClaimMessage.of(message, replace(claimed, message_id=message.message_id))
     assert Message.from_wire(bound.to_wire()) == bound
-    admission_key = FieldCodec.record_key(WakeClaims, "claim_scope")
-    invalid = {**raw, admission_key: {**raw[admission_key], "version": 99}}
+    scope_key = FieldCodec.record_key(WakeClaims, "resource_scope")
+    invalid = {**raw, scope_key: {**raw[scope_key], "version": 99}}
     with pytest.raises(ValueError):
         FieldCodec.decode(ClaimTransition, invalid)
     null_claim = raw.copy()
-    null_claim[admission_key] = None
+    null_claim[scope_key] = None
     with pytest.raises(ValueError):
         FieldCodec.decode(ClaimTransition, null_claim)
 
@@ -187,8 +187,6 @@ def test_exact_incarnation_and_generation_fence_releases(tmp_path):
     assert new[a].owner == "peer" and new[a].seq == 3
     with pytest.raises(ClaimTransitionError):
         ClaimProjection(0, {a: new[a]})
-    with pytest.raises(MalformedRecord):
-        ClaimProjection(1, [])
     with pytest.raises(ClaimTransitionError):
         transition(4, releases=(ClaimRelease(a, G1),)).project(new)
 

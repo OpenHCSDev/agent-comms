@@ -18,7 +18,6 @@ from typing import TYPE_CHECKING, Annotated
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordinator import Coordination
-from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
 from .cohort_schema import CohortTable
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
@@ -34,11 +33,12 @@ from .reservation_rules import ReservationViolationError
 from .threads import Thread
 from .typed_table import (
     Column,
+    DurableTables,
     ImmutableRows,
     IntegerStorage,
     TextStorage,
     TypedRow,
-    TypedTable,
+    WithoutRowid,
 )
 
 if TYPE_CHECKING:
@@ -52,13 +52,9 @@ def binding_store_path(store: Coordination) -> Path:
 
 @dataclass(frozen=True, slots=True)
 class PromptBinding(
-    ImmutableRows, DurableFile, SQLiteFile, NativeInputRecord, TypedTable, PrivateRuntimeSchema
+    ImmutableRows, DurableFile, SQLiteFile, NativeInputRecord, WithoutRowid, DurableTables
 ):
     filename = "native_prompt_bindings.sqlite3"
-
-    @classmethod
-    def install(cls, store) -> None:
-        install_prompt_binding_schema(store)
 
     input_id: Annotated[
         str,
@@ -68,7 +64,6 @@ class PromptBinding(
     execution_id: Annotated[NativeColumn, Column(storage=TextStorage, nullable=True)]
     attempt_ordinal: Annotated[NativeColumn, Column(storage=IntegerStorage, nullable=True)]
     owner_lookup: str
-    owner_thread: str
     owner_generation: Annotated[int, Column(check="owner_generation>0")]
     wire_root_id: str
     expected_prompt_digest: str
@@ -85,11 +80,10 @@ class PromptBinding(
         except MalformedRecord as error:
             raise IdentityConflict("Prompt binding execution columns conflict with their stage") from error
 
-    without_rowid = True
     checks = (
         "(stage='triage' AND execution_id IS NULL AND attempt_ordinal IS NULL) OR "
         "(stage='full' AND execution_id IS NOT NULL AND attempt_ordinal>0)",
-        "length(owner_lookup)=32 AND owner_thread<>'' AND length(wire_root_id)=32 "
+        "length(owner_lookup)=32 AND length(wire_root_id)=32 "
         "AND wire_root_id NOT GLOB '*[^0-9a-f]*' "
         "AND length(expected_prompt_digest)=64 AND expected_prompt_digest NOT GLOB '*[^0-9a-f]*'",
     )
@@ -97,11 +91,6 @@ class PromptBinding(
 @dataclass(frozen=True)
 class _BindingRoot(TypedRow):
     wire_root_id: str
-
-
-def install_prompt_binding_schema(store: Coordination) -> None:
-    """Explicit fresh-root install; ordinary callers may rely on _ensure."""
-    _ensure_binding_schema(store)
 
 
 def _ensure_binding_schema(store: Coordination) -> None:
@@ -173,7 +162,6 @@ def bind_expected_prompt(
                 stage=type(stage.execution),
                 **stage.execution.binding_fields(),
                 owner_lookup=stage.recipient_lookup,
-                owner_thread=owner.name,
                 owner_generation=generation,
                 wire_root_id=wire_root_id,
                 expected_prompt_digest=digest,
@@ -204,7 +192,7 @@ def _binding_wire_root(store: Coordination, assignment: WakeAssignment) -> str:
 
 @contextmanager
 def expected_prompt_bindings(
-    store: Coordination, input_ids, *, blocking: bool = True
+    store: Coordination, input_ids
 ) -> Iterator[dict[str, PromptBinding]]:
     """Keep one immutable binding snapshot open while validating input."""
     input_ids = tuple(input_ids)
@@ -214,7 +202,7 @@ def expected_prompt_bindings(
     if not input_ids or (not path.exists() and not path.is_symlink()):
         yield {}
         return
-    with sidecar_connection(path, PromptBinding, blocking=blocking, read_only=True) as db:
+    with sidecar_connection(path, PromptBinding, read_only=True) as db:
         yield {row.input_id: row for row in PromptBinding.select(
             db, where=f"input_id IN ({','.join('?' for _ in input_ids)})", parameters=input_ids,
         )}

@@ -12,11 +12,13 @@ from agent_comms.goals import Goal
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.turn_lease import RecordedGeneration
+from agent_comms.turn_phase import PreparingPhase
+from agent_comms.threads import Thread
 
 
 def registered(root):
     comms = wire(root)
-    comms.registry.register(comms.registry.new_thread('owner', frozenset({'team'}), str(root), process_identity=ProcessIdentity.capture(os.getpid()), goal=Goal('task', 'g', published_seq=0)))
+    comms.registry.register(Thread('owner', frozenset({'team'}), str(root), process_identity=ProcessIdentity.capture(os.getpid()), goal=Goal('task', 'g', published_seq=0)))
     return comms.registry
 
 
@@ -77,3 +79,16 @@ def test_live_owner_read_rejects_raw_stale_turn_witness(tmp_path):
         edit.commit()
     with pytest.raises(RelationViolationError):
         registry.live_owner_with_claim('owner')
+
+
+def test_a_superseded_generation_is_deleted_and_its_late_transition_changes_nothing(tmp_path):
+    registry = registered(tmp_path)
+    registry.live_owner_with_claim('owner')
+    first, _ = registry.lease_local_turn('owner', 'first')
+    stale = first.turn_lease
+    assert registry.release_turn(stale)[0]
+    second, _ = registry.lease_local_turn('owner', 'second')
+    assert not stale.record.path.exists() and second.turn_record.path.exists()
+    assert stale.record.transition(stale, PreparingPhase()) == ()
+    assert stale.record.observe_native_phase(stale, PreparingPhase()) == ()
+    assert second.turn_record.read().id == 'second'

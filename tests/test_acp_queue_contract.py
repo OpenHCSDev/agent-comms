@@ -7,13 +7,14 @@ from pathlib import Path
 
 import pytest
 from acp import RequestError
+from acp.schema import TextContentBlock
 
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import (
     InputDeliveryChangedUpdate,
-    QueueChangedUpdate,
     LiveCursorScope,
     LiveQueueScope,
+    QueueChangedUpdate,
     QueuePromptRequest,
     SteerPromptRequest,
     UnavailableQueueProjection,
@@ -22,23 +23,23 @@ from agent_comms.acp_extension import (
     encode_updates,
 )
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.comms import Comms
 from agent_comms.queued_input import QueuedInput, QueuedInputContext
 from agent_comms.runtime import present_session
-from agent_comms.thread_identity import ClaimedIdentity
-from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.thread_identity import ClaimedIdentity, RecordedThreadIncarnation
+from agent_comms.threads import Thread
+from bus_record_fixture import prepare_native_comms
 from stored_inputs import stored_inputs
 
-
-def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, float, int]:
-    comms = Comms(tmp_path / "wire")
-    thread = comms.registry.new_thread('beta', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, RecordedThreadIncarnation, int]:
+    comms = prepare_native_comms(wire(tmp_path / "wire"))
+    thread = Thread('beta', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(thread)
     agent = CommsAgent(comms)
     agent.sessions.bindings["beta"] = "beta"
     owner, claimed_generation = comms.registry.live_owner_with_claim("beta")
-    return comms, agent, owner.created_at, claimed_generation
+    return comms, agent, owner.incarnation.require_recorded(), claimed_generation
 
 
 async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp_path):
@@ -47,7 +48,7 @@ async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp
     inbox = agent.inputs.state('beta').open_inbox()
     response = await agent.prompt(
         "beta",
-        [{"type": "text", "text": "valid task"}],
+        [TextContentBlock(type="text", text="valid task")],
         field_meta=encode_request(QueuePromptRequest("\ud800", True)),
     )
     exact = inbox.get_nowait().input_id.value
@@ -61,7 +62,7 @@ async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp
         for f in decode_updates((await agent.sessions.metadata("beta", session_id="beta")))
         if isinstance(f, QueueChangedUpdate)
     )
-    assert state.scope.claim_scope.incarnation.name == "beta"
+    assert state.scope.claimed_identity.incarnation.name == "beta"
     assert isinstance(state.projection, UnavailableQueueProjection)
     assert exact in agent.inputs.state("beta").queued
 
@@ -73,7 +74,7 @@ async def test_request_identity_tracks_equal_queue_and_immediate_inputs_without_
     requests = [QueuePromptRequest("same"), SteerPromptRequest("same")]
     for request in requests:
         response = await agent.prompt(
-            "beta", [{"type": "text", "text": "same"}], field_meta=encode_request(request)
+            "beta", [TextContentBlock(type="text", text="same")], field_meta=encode_request(request)
         )
         acknowledgement = next(f for f in decode_updates(response.field_meta) if isinstance(f, InputDeliveryChangedUpdate))
         assert acknowledgement.input_id == request.input_id
@@ -84,7 +85,9 @@ async def test_request_identity_tracks_equal_queue_and_immediate_inputs_without_
     before = inbox.qsize()
     with pytest.raises(RelationViolationError):
         await agent.prompt(
-            "beta", [{"type": "text", "text": "same"}], field_meta=encode_request(requests[0])
+            "beta",
+            [TextContentBlock(type="text", text="same")],
+            field_meta=encode_request(requests[0]),
         )
     assert inbox.qsize() == before
     assert len(stored_inputs(agent.inputs.dispositions.root).rows) == 2
@@ -110,7 +113,9 @@ async def test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue(tm
     metadata = encode_request(QueuePromptRequest("valid", True))
     metadata["agentComms"]["request"]["user_text"] = user_text
     with pytest.raises(RequestError) as error:
-        await agent.prompt("beta", [{"type": "text", "text": "valid task"}], field_meta=metadata)
+        await agent.prompt(
+            "beta", [TextContentBlock(type="text", text="valid task")], field_meta=metadata
+        )
     assert error.value.code == -32602
     assert inbox.empty()
     assert not agent.inputs.state("beta").queued
@@ -125,12 +130,12 @@ async def test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue(tm
     ],
 )
 async def test_unavailable_projection_never_drops_or_replays_owned_rows(tmp_path, rows):
-    _, agent, created, generation = _owner(tmp_path)
+    _, agent, incarnation, generation = _owner(tmp_path)
     agent.inputs.state("beta").queued = {
         key: QueuedInput(
             text,
             True,
-            QueuedInputContext(ClaimedIdentity(RecordedThreadIncarnation("beta", created), generation)),
+            QueuedInputContext(ClaimedIdentity(incarnation, generation)),
             key,
             text,
         )
@@ -147,7 +152,7 @@ async def test_alias_maps_only_attachment_session_id(tmp_path):
     state = await agent.inputs.queue_state("beta")
     (rebased,) = decode_updates(present_session(encode_updates(state), "alias"))
     assert rebased.scope.session_id == "alias"
-    assert rebased.scope.claim_scope == state.scope.claim_scope
+    assert rebased.scope.claimed_identity == state.scope.claimed_identity
     assert rebased.projection is not None and rebased.projection == state.projection
     assert state.scope.session_id == "beta"
 
@@ -156,22 +161,29 @@ def test_attachment_routing_rename_preserves_exact_executor_fences():
     from dataclasses import replace
     original = ClaimedIdentity(RecordedThreadIncarnation("old-route", 1000.0), 7)
     renamed = replace(original, incarnation=replace(original.incarnation, name="new-route"))
-    scopes = (LiveQueueScope("official-acp-id", original, 123),
-              LiveCursorScope("official-acp-id", "a" * 32, original, 123))
+    scopes = (
+        LiveQueueScope(
+            session_id="official-acp-id", claimed_identity=original, owner=ProcessIdentity(123, 1),
+        ),
+        LiveCursorScope(
+            session_id="official-acp-id", wire_root_id="a" * 32,
+            claimed_identity=original, owner=ProcessIdentity(123, 1),
+        ),
+    )
     for scope in scopes:
-        assert scope.relation(replace(scope, claim_scope=renamed)).current
+        assert scope.relation(replace(scope, claimed_identity=renamed)).current
         assert scope.relation(replace(scope, session_id="new-route")).foreign
-        assert scope.relation(replace(scope, owner_pid=124)).ambiguous
-        assert scope.relation(replace(scope, claim_scope=replace(original, incarnation=replace(original.incarnation, created_at=1001.0)))).ambiguous
-        assert scope.relation(replace(scope, claim_scope=replace(original, claimed_generation=8))).newer
-        assert scope.relation(replace(scope, claim_scope=replace(original, claimed_generation=6))).older
+        assert scope.relation(replace(scope, owner=ProcessIdentity(124, 1))).ambiguous
+        assert scope.relation(replace(scope, claimed_identity=replace(original, incarnation=replace(original.incarnation, created_at=1001.0)))).ambiguous
+        assert scope.relation(replace(scope, claimed_identity=replace(original, claimed_generation=8))).newer
+        assert scope.relation(replace(scope, claimed_identity=replace(original, claimed_generation=6))).older
     assert scopes[1].relation(replace(scopes[1], wire_root_id="b" * 32)).foreign
     assert original == renamed  # Birth owns identity; a name is only its route.
     assert original.incarnation.name != renamed.incarnation.name
 
 
 async def test_ending_a_drained_session_leaves_no_state_for_it(tmp_path):
-    comms, agent, _created, _generation = _owner(tmp_path)
+    comms, agent, _incarnation, _generation = _owner(tmp_path)
     await agent.inputs.queue_state("beta")
     agent.inputs.bind_native_turn("beta", comms.registry.require("beta"))
     agent.inputs.ensure_live_drain("beta")

@@ -3,7 +3,7 @@
 from typing import Annotated
 from dataclasses import dataclass, replace
 
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms import field_codec
 from agent_comms.comms import wire
 from agent_comms.pi_vocabulary import HighThinkingLevel
@@ -14,11 +14,12 @@ from agent_comms.thread_model import DeclaredModel
 from agent_comms.turn_lease import NoTurnLease
 
 
-def test_unchanged_registration_retains_generated_creation_marker(*, thread_registration):
-    incoming = thread_registration.new_thread('fresh', frozenset(), '/wt')
-    assert incoming._generated_created_at
+def test_unchanged_registration_retains_creation_allocation(*, thread_registration):
+    incoming = Thread('fresh', frozenset(), '/wt')
     assert incoming.for_registration("fresh", None) is incoming
-    assert incoming._generated_created_at
+    renamed = incoming.for_claim("allocated")
+    assert renamed.created_at is incoming.created_at
+    assert renamed.created_at.distinct_from({incoming.created_at}) > incoming.created_at
 
 
 def test_declared_new_inheritance_case_needs_no_registration_consumer_edit(thread_registration):
@@ -31,7 +32,8 @@ def test_declared_new_inheritance_case_needs_no_registration_consumer_edit(threa
     class CountedThread(Thread):
         count: Annotated[int, field_codec.RegistrationPolicy(InheritUnsetCount)] = -1
 
-    previous = thread_registration.new_thread('owner', frozenset(), '/wt', kind=CountedThread, created_at=42.0, count=9)
+    previous = CountedThread('owner', frozenset(), '/wt', created_at=42.0, count=9,
+                             storage_roots=thread_registration.storage_rule.initial_roots('owner'))
     omitted = replace(previous, count=-1)
     assert omitted.for_registration("owner", previous) == previous
     explicit = replace(previous, count=0)
@@ -40,19 +42,19 @@ def test_declared_new_inheritance_case_needs_no_registration_consumer_edit(threa
 
 def test_registry_redeclaration_inherits_metadata_but_respects_explicit_values(tmp_path):
     comms = wire(tmp_path)
-    initial = comms.registry.new_thread(
+    initial = Thread(
         "owner",
         frozenset({"team"}),
         '/old',
-        session_file=SavedSessionFile(str(tmp_path / "session.jsonl")),
+        session_file=RegistrySessionLocation.from_path(str(tmp_path / "session.jsonl"), comms.root),
         model=DeclaredModel('provider/model'),
         thinking_level=HighThinkingLevel,
         auto_title_pending=True,
         title=GivenThreadText("retained"),
     )
     initial = replace(initial, worktree=str(tmp_path))
-    comms.registry.declare(initial)
-    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path)))
+    initial = comms.registry.declare(initial)
+    comms.registry.declare(Thread('owner', frozenset(), str(tmp_path)))
     restored = comms.registry.require("owner")
     assert restored == initial
     assert restored.incarnation == initial.incarnation
@@ -67,9 +69,9 @@ def test_registry_redeclaration_inherits_metadata_but_respects_explicit_values(t
 
 def test_operational_alias_redeclaration_returns_preserved_current_owner(tmp_path):
     comms = wire(tmp_path)
-    first = comms.registry.declare(comms.registry.new_thread('before', frozenset({'team'}), str(tmp_path)))
+    first = comms.registry.declare(Thread('before', frozenset({'team'}), str(tmp_path)))
     comms.registry.rename("before", "after")
-    returned = comms.registry.declare(comms.registry.new_thread('before', frozenset(), str(tmp_path), title=GivenThreadText('new')))
+    returned = comms.registry.declare(Thread('before', frozenset(), str(tmp_path), title=GivenThreadText('new')))
     assert returned == comms.registry.require("after")
     assert returned.incarnation.created_at == first.created_at
     assert returned.name == "after" and returned.tags == first.tags
@@ -81,7 +83,7 @@ def test_project_round_trip_excludes_current_project_from_history(tmp_path):
     first.mkdir()
     second.mkdir()
     comms = wire(tmp_path / 'wire')
-    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(first)))
+    comms.registry.declare(Thread('owner', frozenset(), str(first)))
     comms.threads.set_project('owner', str(second))
     comms.threads.set_project('owner', str(first))
     current = comms.registry.require('owner')
@@ -102,7 +104,7 @@ def test_project_change_retains_executing_source_but_refuses_another_input(tmp_p
     old.mkdir()
     new.mkdir()
     comms = wire(tmp_path / 'wire')
-    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(old), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.declare(Thread('owner', frozenset(), str(old), process_identity=ProcessIdentity.capture(os.getpid())))
     original = comms.agents.begin_turn('owner', 'original-turn')
     try:
         comms.threads.set_project('owner', str(new))
@@ -112,7 +114,7 @@ def test_project_change_retains_executing_source_but_refuses_another_input(tmp_p
         observed = comms.registry.attach_native_session(original, saved)
         current = comms.registry.require('owner')
         assert current.worktree == str(new) and current.earlier_projects == (old,)
-        assert current.session_file == observed.thread.session_file == SavedSessionFile(saved)
+        assert current.session_file == observed.thread.session_file == RegistrySessionLocation.from_path(saved, comms.root)
         assert observed.thread.worktree == str(old)
         assert observed.turn_lease == original.turn_lease == current.turn_lease
         # Later native observations use the same source and preserve old -> new.
@@ -137,7 +139,7 @@ def test_source_publication_refuses_unrecorded_project_replacement(tmp_path):
     from agent_comms.coordination_errors import StaleFence
 
     comms = wire(tmp_path)
-    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path / 'old'), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.declare(Thread('owner', frozenset(), str(tmp_path / 'old'), process_identity=ProcessIdentity.capture(os.getpid())))
     original = comms.agents.begin_turn('owner', 'original-turn')
     current = comms.registry.require('owner')
     comms.registry.register(replace(current, worktree=str(tmp_path / 'other')))

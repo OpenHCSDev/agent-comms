@@ -15,14 +15,43 @@ import time
 from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar, Self
+from typing import Annotated, ClassVar, Self
+
+from aiohttp.web import TCPSite
 
 from ..declared_family import DeclaredFamily
+from ..field_codec import PathText
 from ..launch_runtime import LaunchRuntime
 
 
 class ServiceNotServingError(RuntimeError):
     """A restarted service did not serve its installed runtime's contract."""
+
+
+class SystemdSite(TCPSite):
+    """The listening site notifies its supervisor only after binding succeeds."""
+
+    notify_variable: ClassVar[str] = "NOTIFY_SOCKET"  # systemd's supervisor socket
+
+    async def start(self) -> None:
+        await super().start()
+        address = os.environ[self.notify_variable]
+        target = "\0" + address[1:] if address.startswith("@") else address
+        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as notify:
+            notify.connect(target)
+            notify.sendall(b"READY=1")
+
+
+@dataclass(frozen=True)
+class RestartedService:
+    """One host service an install restarted, in its own words, and the runtime it now
+    serves from."""
+
+    service: str
+    runtime: Annotated[Path, PathText]
+
+    def line(self) -> str:
+        return f"{self.service} restarted onto {self.runtime}"
 
 
 class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
@@ -41,32 +70,61 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
         """Stop this instance and start it again from its own launcher."""
 
     @abstractmethod
+    def stop(self) -> None:
+        """Stop this instance; its launcher stays installed."""
+
+    @abstractmethod
+    def start(self) -> None:
+        """Start this stopped instance from its own launcher."""
+
+    @abstractmethod
     def runtime(self) -> Path:
         """The interpreter this instance runs."""
 
     @abstractmethod
     def serves(self) -> None:
-        """Prove the service answers; raise ServiceNotServingError naming a failure."""
+        """Prove the service answers; raise ServiceNotServingError naming a failure.
+
+        The proof reads the root, which admits only the root's owning runtime, so it runs
+        in that runtime (``ServingProbe``), never in an installer of another version."""
+
+    @abstractmethod
+    def described(self) -> str:
+        """This instance in the words an install's report and its failures use."""
 
     @classmethod
-    def restart_running(cls, installed: Path) -> tuple[str, ...]:
-        """Restart every declared service running on this host onto ``installed``."""
-        return tuple(
-            instance.restart_onto(installed)
-            for member in cls.members_with(cls)
-            for instance in member.running()
-        )
+    def instances(cls) -> tuple[HostService, ...]:
+        return tuple(instance for member in cls.members_with(cls) for instance in member.running())
 
-    def restart_onto(self, installed: Path) -> str:
+    @classmethod
+    def restart_running(cls, installed: Path) -> tuple[RestartedService, ...]:
+        """Restart every declared service running on this host onto ``installed``."""
+        return tuple(instance.restart_onto(installed) for instance in cls.instances())
+
+    @classmethod
+    def stop_running(cls) -> tuple[HostService, ...]:
+        """Stop every running service, so nothing writes the root while it is restored."""
+        stopped = cls.instances()
+        for instance in stopped:
+            instance.stop()
+        return stopped
+
+    def restart_onto(self, installed: Path) -> RestartedService:
         self.restart()
-        failure = f"{self} did not serve again within {self.patience}s"
+        return self.running_on(installed)
+
+    def start_onto(self, installed: Path) -> RestartedService:
+        self.start()
+        return self.running_on(installed)
+
+    def running_on(self, installed: Path) -> RestartedService:
+        failure = f"{self.described()} did not run again within {self.patience}s"
         for _ in range(self.patience):
             for instance in type(self).running():
                 runtime = instance.runtime()
                 if runtime == installed:
-                    instance.serves()
-                    return f"{instance} restarted onto {installed}"
-                failure = f"{instance} runs {runtime}, not the installed {installed}"
+                    return RestartedService(instance.described(), installed)
+                failure = f"{instance.described()} runs {runtime}, not the installed {installed}"
             time.sleep(1)
         raise ServiceNotServingError(failure)
 
@@ -82,24 +140,9 @@ class SystemdUserService(HostService, declared_name=None):
 
     program: ClassVar[str]
     unit: ClassVar[str]
-    notify_variable: ClassVar[str] = "NOTIFY_SOCKET"  # systemd's spelling of the supervisor socket
-
     @classmethod
-    def ready(cls) -> None:
-        """Tell the supervisor this process serves.
-
-        Every launch has one: systemd for the installed unit, ``tests/connector_readiness.py``
-        for a test. A launch without NOTIFY_SOCKET has nobody to tell and fails here, loudly.
-        """
-        address = os.environ[cls.notify_variable]
-        target = "\0" + address[1:] if address.startswith("@") else address
-        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as notify:
-            notify.connect(target)
-            notify.sendall(b"READY=1")
-
-    @property
-    def unit_file(self) -> Path:
-        return Path.home() / ".config/systemd/user" / self.unit
+    def unit_file(cls) -> Path:
+        return Path.home() / ".config/systemd/user" / cls.unit
 
     def unit_text(self, arguments: tuple[str, ...]) -> str:
         executable = LaunchRuntime.current_pointer() / "bin" / self.program
@@ -116,13 +159,27 @@ class SystemdUserService(HostService, declared_name=None):
         )
 
     def install(self, arguments: tuple[str, ...]) -> None:
-        self.unit_file.parent.mkdir(parents=True, exist_ok=True)
-        self.unit_file.write_text(self.unit_text(arguments), encoding="utf-8")
+        self.unit_file().parent.mkdir(parents=True, exist_ok=True)
+        self.unit_file().write_text(self.unit_text(arguments), encoding="utf-8")
         subprocess.run(("systemctl", "--user", "daemon-reload"), check=True)
         subprocess.run(("systemctl", "--user", "enable", self.unit), check=True)
 
     @classmethod
     def pid(cls) -> int:
+        """Only the unit loaded from this home's owned definition belongs to it.
+
+        The user manager belongs to the UID, not HOME; a private install must not
+        discover or restart the real home's service through that shared manager.
+        """
+        unit = cls.unit_file()
+        if not unit.is_file():
+            return 0
+        loaded = subprocess.check_output(
+            ("systemctl", "--user", "show", "-p", "FragmentPath", "--value", cls.unit),
+            text=True,
+        ).strip()
+        if Path(loaded).resolve() != unit.resolve():
+            return 0
         return int(subprocess.check_output(
             ("systemctl", "--user", "show", "-p", "MainPID", "--value", cls.unit),
             text=True,
@@ -151,3 +208,9 @@ class SystemdUserService(HostService, declared_name=None):
 
     def restart(self) -> None:
         subprocess.run(("systemctl", "--user", "restart", self.unit), check=True)
+
+    def stop(self) -> None:
+        subprocess.run(("systemctl", "--user", "stop", self.unit), check=True)
+
+    def start(self) -> None:
+        subprocess.run(("systemctl", "--user", "start", self.unit), check=True)

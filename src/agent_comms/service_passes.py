@@ -6,7 +6,8 @@ import time
 from dataclasses import dataclass, field, replace
 from typing import ClassVar
 
-from .locked_store import LockedStore, RuntimeFile
+from .locked_store import DocumentChange, LockedStore, RuntimeFile
+from .store_files import DependentStateTier
 
 
 @dataclass(frozen=True)
@@ -23,7 +24,7 @@ class ServicePasses:
 
 
 @dataclass(frozen=True, slots=True)
-class ServicePassStore(RuntimeFile, LockedStore[ServicePasses]):
+class ServicePassStore(RuntimeFile, LockedStore[ServicePasses], DependentStateTier):
     """The connector's log reaches nobody; the commander's standing rules read this file."""
 
     filename: ClassVar[str] = "service_passes.json"
@@ -33,10 +34,10 @@ class ServicePassStore(RuntimeFile, LockedStore[ServicePasses]):
         return ServicePasses()
 
     def failed(self, watch: str, error: BaseException) -> None:
-        def change(passes: ServicePasses) -> ServicePasses:
+        def change(passes: ServicePasses) -> DocumentChange[ServicePasses, ServicePasses]:
             since = passes.failing.get(watch, FailingPass(time.time(), "")).since
             failing = FailingPass(since, f"{type(error).__name__}: {error}")
-            return replace(passes, failing=passes.failing | {watch: failing})
+            return DocumentChange.to(replace(passes, failing=passes.failing | {watch: failing}))
 
         self.update(change)
 
@@ -44,10 +45,10 @@ class ServicePassStore(RuntimeFile, LockedStore[ServicePasses]):
         """A pass that succeeds ends its failure; an unfailed watch writes nothing."""
         if watch in self.read().failing:
             self.update(
-                lambda passes: replace(
+                lambda passes: DocumentChange.to(replace(
                     passes,
                     failing={
                         name: failing for name, failing in passes.failing.items() if name != watch
                     },
-                )
+                ))
             )

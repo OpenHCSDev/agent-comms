@@ -1,4 +1,6 @@
 """Acquired original native fixture shared by pytest and installed drivers."""
+
+
 from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.native_arguments import NativeArguments
 
@@ -12,8 +14,8 @@ from unittest.mock import patch
 
 import agent_comms.agent_events as events
 import agent_comms.backend as backend
-from agent_comms.agent_backend import InputContent, InputId, InputRequest, TurnInbox, WhenBusy
-from agent_comms.comms import Comms
+from agent_comms.agent_backend import InputContent, InputId, InputRequest, TurnInbox, SteerInputPolicy
+from agent_comms.comms import wire
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.child_process import BoundedRun, join_retirement
 from agent_comms.coordinator import Coordination
@@ -29,6 +31,7 @@ from agent_comms.native_arguments import GivenArguments, GivenBinary
 from delivery_owner_fixture import canonical_agent
 from compaction_loopback import LoopbackProvider
 from native_proof_cases import read_proof_rows
+from agent_comms.threads import Thread
 
 
 async def wait_for(predicate):
@@ -41,7 +44,7 @@ class NativeBackendFixture:
     @staticmethod
     def participant_at(root: Path, project: Path) -> RecordedThreadIncarnation:
         """The real thread incarnation used by a direct native turn on this bus."""
-        return Comms(root).registry.new_thread(
+        return Thread(
             'direct-native', frozenset(), str(project),
         ).incarnation.require_recorded()
 
@@ -111,7 +114,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
                          native_options=("--no-tools",), client=None):
         """Acquire the real saved ACP owner and attested idle native child."""
         agent = canonical_agent(
-            Comms(self.root), auto_wake=auto_wake, runtime_enabled=runtime_enabled, agent_bin=GivenBinary("pi"),
+            wire(self.root), auto_wake=auto_wake, runtime_enabled=runtime_enabled, agent_bin=GivenBinary("pi"),
             agent_args=GivenArguments(tuple(self.native_arguments(native_options))),
         )
         agent.on_connect(client)
@@ -184,7 +187,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
                     queue.put_nowait(InputRequest(
                         input_id=InputId("queued"),
                         content=InputContent(text=followup),
-                        when_busy=WhenBusy.STEER,
+                        when_busy=SteerInputPolicy,
                     ))
                     followup = None
         return result
@@ -259,7 +262,7 @@ async def native_backend_fixture(tmp_path, *, package: VerifiedNativePackage,
     (root / "storage.json").write_text(json.dumps(FieldCodec.encode(
         StorageRule(scratch_base=project.parent),
     )))
-    Comms(root).messaging.initialize_private_initial_protocol()
+    wire(root)
     environment = {
         NativeArguments.binary_key: NativeArguments.default_binary,
         "AGENT_COMMS_ROOT": str(root),
@@ -279,27 +282,25 @@ async def native_backend_fixture(tmp_path, *, package: VerifiedNativePackage,
                 await asyncio.gather(*connections, return_exceptions=True)
 
             async def retire_all():
-                try:
-                    async with AsyncExitStack() as retirement:
-                        retirement.push_async_callback(close_server)
-                        for child in owner.children:
-                            retirement.push_async_callback(child.shutdown)
-                        retirement.push_async_callback(owner.persistent.close)
-                finally:
-                    assert all(child.retired for child in owner.children)
-                    print(json.dumps({
-                        "saved_native_fixture": str(root),
-                        "localhost_posts": provider.posts,
-                        "native_input_proofs": sum(
-                            len(read_proof_rows(files))
-                            for files in {
-                                child.key[0].session.files(child.key[0].root)
-                                for child in owner.children
-                            }
-                            if files.input_proof.is_file()
-                        ),
-                        "children": [FieldCodec.encode(child.proc.identity) for child in owner.children],
-                        "children_retired": True,
-                    }))
+                async with AsyncExitStack() as retirement:
+                    retirement.push_async_callback(close_server)
+                    for child in owner.children:
+                        retirement.push_async_callback(child.shutdown)
+                    retirement.push_async_callback(owner.persistent.close)
+                assert all(child.retired or child.release_failure is not None for child in owner.children)
+                print(json.dumps({
+                    "saved_native_fixture": str(root),
+                    "localhost_posts": provider.posts,
+                    "native_input_proofs": sum(
+                        len(read_proof_rows(files))
+                        for files in {
+                            child.key[0].session.files(child.key[0].root)
+                            for child in owner.children
+                        }
+                        if files.input_proof.is_file()
+                    ),
+                    "children": [FieldCodec.encode(child.proc.identity) for child in owner.children],
+                    "children_retired": all(child.retired for child in owner.children),
+                }))
 
             await join_retirement(asyncio.create_task(retire_all()))

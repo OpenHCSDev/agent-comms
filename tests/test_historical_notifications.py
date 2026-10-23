@@ -1,6 +1,8 @@
 """Authored archived deliveries use recorded owners, not live availability."""
 
-from agent_comms.wire_log import WireLog
+
+from agent_comms.bus import Bus
+from bus_record_fixture import prepare_native_comms
 
 from conftest import publish_initial
 from dataclasses import replace
@@ -15,24 +17,25 @@ from agent_comms.assignment_states import (
     DeliveredAssignment,
     EngagedAssignment,
 )
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.coordination_errors import DMScopeChanged, SchemaVersionError
 from agent_comms.read_basis import HistoricalDisplay, ReadCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
 from agent_comms.wake_policy import FullWake
+from agent_comms.threads import Thread
 
 SENDER = "sender"  # the notification carries its sender's lookup; these tests read progress only
 
 
 @pytest.fixture
 def archived_notification(tmp_path, *, thread_registration):
-    old, live = Comms(tmp_path / "old"), Comms(tmp_path / "live")
+    old, live = (prepare_native_comms(wire(tmp_path / name)) for name in ("old", "live"))
     for comms in (old, live):
-        comms.registry.declare(thread_registration.new_thread('sender', frozenset(), str(tmp_path), created_at=10.0))
-        comms.registry.declare(thread_registration.new_thread('reader', frozenset(), str(tmp_path), created_at=11.0, role=AgentThreadRole if comms is old else UserThreadRole))
-        comms.registry.declare(thread_registration.new_thread('agent', frozenset(), str(tmp_path), created_at=12.0 if comms is old else 212.0))
-    root_id = old.messaging.initialize_private_initial_protocol()
+        comms.registry.declare(Thread('sender', frozenset(), str(tmp_path), created_at=10.0))
+        comms.registry.declare(Thread('reader', frozenset(), str(tmp_path), created_at=11.0, role=AgentThreadRole if comms is old else UserThreadRole))
+        comms.registry.declare(Thread('agent', frozenset(), str(tmp_path), created_at=12.0 if comms is old else 212.0))
+    root_id = old.registry.prepare_native_root().namespace
     messages = (
         publish_initial(old, "sender", "agent", "authored pending delivery"),
         publish_initial(old, "sender", "reader", "painted historical delivery"),
@@ -45,10 +48,9 @@ def archived_notification(tmp_path, *, thread_registration):
 def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification):
     _old, live, source, messages, _root_id = archived_notification
     document = live.bus.reads.read()
-    with WireLog(Path(source.root) / 'bus.jsonl').opened_wire_snapshot() as opened:
-        basis = opened.query_page_index(lambda index: live.bus.reads.capture_indexed(
-            'reader', messages[1:], live.registry.snapshot(), opened, index,
-            document=document, conversation_snapshot=source.provenance))
+    basis = live.bus.reads.capture(
+        'reader', messages[1:], live.registry.snapshot(), Bus(Bus.path_in(Path(source.root))),
+        document=document, conversation_snapshot=source.provenance)
     HistoricalDisplay(source, basis.select((messages[1].seq,))).acknowledge(live.bus.history, live.registry)
     with live.bus.history.read_sources() as sources:
         results = source.notification_references(sources, tuple(message.reference for message in messages[1:]))
@@ -112,7 +114,7 @@ def test_recorded_assignment_schema_refusal_is_read_only(archived_notification):
 
 def test_recorded_engagement_is_not_an_active_turn(archived_notification):
     old, _live, _source, messages, root_id = archived_notification
-    recipient, = old.bus.log.read_delivery_cohort(root_id, messages[0].seq).audience.recipients
+    recipient, = old.bus.bus.delivery(messages[0].seq).audience.recipients
     assignment = EngagedAssignment.build(FullWake(), "authored-execution", "sender")
     from agent_comms.notification_assignment import (
         AssignmentActivity,
@@ -151,9 +153,7 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
 
 def test_sent_recipient_progresses_through_durable_read_and_answer(archived_notification):
     old, _live, _source, messages, root_id = archived_notification
-    recipient, = old.bus.log.read_delivery_cohort(
-        root_id, messages[0].seq
-    ).audience.recipients
+    recipient, = old.bus.bus.delivery(messages[0].seq).audience.recipients
     from agent_comms.message_reference import MessageReference
     from agent_comms.notification_assignment import (
         AnsweredResponse,
@@ -362,7 +362,7 @@ def test_live_cli_ack_does_not_become_archived_ack(archived_notification):
 
     old, live, source, messages, _root_id = archived_notification
     old.registry.declare(replace(old.registry.require("agent"), execution=ExternalThreadExecution))
-    unread = old.bus.inbox("agent")
+    unread = old.bus.inbox("agent").page.messages
     assert old.bus.mark_delivered(
         "agent", tuple(message.reference for message in unread)
     ) == 1

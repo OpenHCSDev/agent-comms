@@ -3,6 +3,7 @@
 import ast
 import json
 import os
+import socket
 import subprocess
 import sys
 import time
@@ -14,12 +15,15 @@ import pytest
 
 from agent_comms.child_process import ObservedProcess, SpawnedProcess
 from agent_comms.field_codec import FieldCodec
+from fixture_git import IDENTITY
 from process_tree_fixture import TREE, identities
 
 from tools.debt_ratchet import (
+    AUDIT_SCRIPTS,
     BannedVocabulary,
     BroadExceptDefault,
     BroadSwallow,
+    ContentCache,
     ForeignFieldSpellings,
     FrozenFieldWrite,
     FunctionLocalImport,
@@ -61,17 +65,76 @@ def test_string_field_metadata_resolves_imports_and_refuses_opaque_keys(source, 
     assert StringFieldMetadata.count(source.encode(), "example.py") == expected
 
 
+SOURCE = Path(__file__).resolve().parents[2]
+
+
+def ratchet_environment() -> dict[str, str]:
+    """The command's environment: this checkout's src before the inherited path."""
+    return {**os.environ, "PYTHONPATH": os.pathsep.join(
+        (str(SOURCE / "src"), os.environ["PYTHONPATH"]))}
+
+
+class RatchetServer:
+    """The ratchet's command line served by one interpreter per test worker (ratchet_server.py).
+
+    Each comparison still forks its own measuring pool; it no longer pays the interpreter's
+    start. The command's own process tree and log are proven by the tests that launch it.
+    """
+
+    script = Path(__file__).with_name("ratchet_server.py")
+
+    def __init__(self, directory: Path):
+        self.directory = directory
+        self.socket = directory / "ratchet.sock"
+        self.child = self.launch()
+
+    def launch(self) -> SpawnedProcess:
+        self.socket.unlink(missing_ok=True)
+        child = SpawnedProcess.launch((sys.executable, str(self.script), str(self.socket)),
+                                      env=ratchet_environment(), output=subprocess.PIPE)
+        assert child.process.stdout.readline() == b"ready\n", child.process.communicate()
+        return child
+
+    def run(self, cwd: Path, argv: tuple[str, ...], *,
+            timeout: float) -> subprocess.CompletedProcess[str]:
+        stdout, stderr = self.directory / "stdout", self.directory / "stderr"
+        request = dict(cwd=str(cwd), argv=list(argv), env=ratchet_environment(),
+                       stdout=str(stdout), stderr=str(stderr))
+        try:
+            with socket.socket(socket.AF_UNIX) as connection:
+                connection.settimeout(timeout)
+                connection.connect(str(self.socket))
+                connection.sendall(json.dumps(request).encode() + b"\n")
+                reply = json.loads(connection.makefile("rb").readline())
+        except Exception:
+            # A comparison still running would answer the next test's request late.
+            self.close()
+            self.child = self.launch()
+            raise
+        return subprocess.CompletedProcess(argv, reply["returncode"],
+                                           stdout.read_text(), stderr.read_text())
+
+    def close(self) -> None:
+        self.child.close()
+
+
+@pytest.fixture(scope="module")
+def ratchet(tmp_path_factory) -> Iterator[RatchetServer]:
+    server = RatchetServer(tmp_path_factory.mktemp("ratchet-server"))
+    yield server
+    server.close()
+
+
 class Repository:
-    def __init__(self, path: Path, root: str):
+    def __init__(self, path: Path, root: str, ratchet: RatchetServer):
         self.path = path
         self.root = root
+        self.ratchet = ratchet
         self.git("init", "-q")
-        self.git("config", "user.email", "ratchet@example.invalid")
-        self.git("config", "user.name", "Ratchet test")
 
     def git(self, *args: str) -> str:
         return subprocess.check_output(
-            ["git", "-C", str(self.path), *args], text=True, timeout=10
+            ["git", *IDENTITY, "-C", str(self.path), *args], text=True, timeout=10
         ).strip()
 
     def commit(self, files: dict[str, str | None]) -> str:
@@ -83,33 +146,30 @@ class Repository:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(source)
         self.git("add", "--all")
-        self.git("-c", "commit.gpgsign=false", "commit", "-qm", "test", "--allow-empty")
+        self.git("commit", "-qm", "test", "--allow-empty")
         return self.git("rev-parse", "HEAD")
+
+    def arguments(self, base: str, head: str) -> tuple[str, ...]:
+        # pytest-xdist runs these comparisons side by side; each keeps a narrow pool.
+        return ("--root", self.root, "--base", base, "--head", head, "--workers", "2")
 
     @contextmanager
     def comparing(self, base: str, head: str) -> Iterator[SpawnedProcess]:
-        source = Path(__file__).resolve().parents[2]
-        command = (
-            sys.executable, str(source / "tools/debt_ratchet.py"),
-            "--root", self.root, "--base", base, "--head", head,
-            # pytest-xdist runs these comparisons side by side; each keeps a narrow pool.
-            "--workers", "2",
-        )
-        environment = {**os.environ, "PYTHONPATH": os.pathsep.join(
-            (str(source / "src"), os.environ["PYTHONPATH"]))}
-        with SpawnedProcess.launch(command, cwd=self.path, env=environment,
+        """The command launched as its own process, for the tests of its process tree."""
+        command = (sys.executable, str(SOURCE / "tools/debt_ratchet.py"),
+                   *self.arguments(base, head))
+        with SpawnedProcess.launch(command, cwd=self.path, env=ratchet_environment(),
                                    output=subprocess.PIPE) as child:
             yield child
 
     def compare(self, base: str, head: str, *, timeout: float = 120) -> tuple[int, dict]:
-        with self.comparing(base, head) as child:
-            result = child.collect(timeout=timeout)
+        result = self.ratchet.run(self.path, self.arguments(base, head), timeout=timeout)
         assert result.returncode in (0, 1), result.stderr[-2000:]
         return result.returncode, json.loads(result.stdout)
 
 
-def test_compare_timeout_retires_pool_probe_and_defiant_grandchild(tmp_path: Path) -> None:
-    repo = Repository(tmp_path, "src/sample")
+def test_compare_timeout_retires_pool_probe_and_defiant_grandchild(tmp_path: Path, ratchet) -> None:
+    repo = Repository(tmp_path, "src/sample", ratchet)
     announcement = tmp_path / "probe-tree.json"
     declaration = (
         "from dataclasses import dataclass\nfrom typing import ClassVar\n"
@@ -155,8 +215,8 @@ def test_compare_timeout_retires_pool_probe_and_defiant_grandchild(tmp_path: Pat
 
 
 @pytest.fixture(params=["src/agent_comms", "src/toad"])
-def repo(tmp_path: Path, request) -> Repository:
-    return Repository(tmp_path, request.param)
+def repo(tmp_path: Path, request, ratchet) -> Repository:
+    return Repository(tmp_path, request.param, ratchet)
 
 
 def test_batch_sources_keep_exact_git_bytes_and_path_names(repo: Repository, monkeypatch) -> None:
@@ -191,8 +251,8 @@ def test_batch_sources_keep_exact_git_bytes_and_path_names(repo: Repository, mon
         GitMeasure.sources(repo.path, revision, selected | {f'{repo.root}/missing.py'})
 
 
-def test_format_probe_keeps_parent_dependencies_and_reads_archived_source(tmp_path, monkeypatch):
-    repo = Repository(tmp_path, "src/agent_comms")
+def test_format_probe_keeps_parent_dependencies_and_reads_archived_source(tmp_path, monkeypatch, ratchet):
+    repo = Repository(tmp_path, "src/agent_comms", ratchet)
     source = subprocess.check_output(
         ["git", "archive", "HEAD", "--", "src/agent_comms"], timeout=20
     )
@@ -330,7 +390,7 @@ def test_other_source_root_does_not_enter_report(repo: Repository) -> None:
 
 def test_builtin_handler_measure_uses_shared_collector_and_rejects_growth(repo: Repository) -> None:
     from tools.debt_ratchet import BuiltinHandlerTypeSwitch
-    from refactor_audit.handler_declarations import BuiltinHandlerDeclarations
+    from audit.handler_declarations import BuiltinHandlerDeclarations
 
     assert issubclass(BuiltinHandlerTypeSwitch, BuiltinHandlerDeclarations)
     source = """from .mro_dispatch import MroDispatch, handles as cases
@@ -368,13 +428,21 @@ def owner(name: str, lines: int, indent: str = "") -> str:
     )
 
 
+def module(*owners: str) -> str:
+    """The owners as one module in Black's form, so the formatting ratchet counts nothing and
+    each comparison measures only the classes."""
+    import black
+
+    return black.format_str("".join(owners), mode=black.Mode())
+
+
 @pytest.mark.parametrize("root", ["src/agent_comms", "src/toad", "src/textual"])
 def test_family_flattening_cannot_offset_another_file_or_admit_a_named_facade(
-    tmp_path: Path, root: str
+    tmp_path: Path, root: str, ratchet
 ):
-    repo = Repository(tmp_path, root)
+    repo = Repository(tmp_path, root, ratchet)
     from tools.debt_ratchet import FamilyFlattened
-    from refactor_audit.measures import FamilyFlattened as AuditFamilyFlattened
+    from audit.measures import FamilyFlattened as AuditFamilyFlattened
 
     original = "def carry(value):\n    return (value.declared_name, value.family_name)\n"
     base = repo.commit({"first.py": original, "second.py": "value = 1\n"})
@@ -451,7 +519,7 @@ def test_family_name_owner_reads_and_codec_detours(source: str, expected: int):
 
 def test_small_owners_stay_within_the_class_threshold(repo: Repository) -> None:
     base = repo.commit({"owners.py": owner("Small", 2)})
-    head = repo.commit({"owners.py": owner("Small", 500) + owner("New", 500)})
+    head = repo.commit({"owners.py": module(owner("Small", 500), owner("New", 500))})
     status, report = repo.compare(base, head)
     assert status == 0
     assert report["delta"][f"GodClassExcess:{repo.root}/owners.py::Small"] == 0
@@ -459,8 +527,8 @@ def test_small_owners_stay_within_the_class_threshold(repo: Repository) -> None:
 
 
 def test_class_growth_cannot_be_cancelled_by_another_class(repo: Repository) -> None:
-    base = repo.commit({"classes.py": owner("Growing", 501) + owner("Shrinking", 600)})
-    head = repo.commit({"classes.py": owner("Growing", 502) + owner("Shrinking", 500)})
+    base = repo.commit({"classes.py": module(owner("Growing", 501), owner("Shrinking", 600))})
+    head = repo.commit({"classes.py": module(owner("Growing", 502), owner("Shrinking", 500))})
     status, report = repo.compare(base, head)
     assert status == 1
     assert report["delta"][f"GodClassExcess:{repo.root}/classes.py::Growing"] == 1
@@ -479,13 +547,13 @@ def test_new_or_crossing_god_class_is_refused(repo: Repository, before: int) -> 
 
 def test_class_move_keeps_baseline_and_new_small_owner_has_no_class_debt(repo: Repository) -> None:
     base = repo.commit({"old.py": owner("Existing", 501)})
-    moved = repo.commit({"old.py": None, "new.py": owner("Existing", 501) + owner("NewOwner", 25)})
+    moved = repo.commit({"old.py": None, "new.py": module(owner("Existing", 501), owner("NewOwner", 25))})
     status, report = repo.compare(base, moved)
     assert status == 0
     assert report["base"][f"GodClassExcess:{repo.root}/new.py::Existing"] == 1
     assert report["delta"][f"GodClassExcess:{repo.root}/new.py::Existing"] == 0
     assert report["delta"][f"GodClassExcess:{repo.root}/new.py::NewOwner"] == 0
-    grown = repo.commit({"new.py": owner("Existing", 502) + owner("NewOwner", 26)})
+    grown = repo.commit({"new.py": module(owner("Existing", 502), owner("NewOwner", 26))})
     assert repo.compare(moved, grown)[0] == 1
 
 
@@ -602,7 +670,9 @@ async def second(value):
             "TypeSwitch",
             "def decide(x):\n    return isinstance(x, A) or isinstance(x, B) or isinstance(x, C)\n",
         ),
-        ("AnyAnnotation", "from typing import Any\ndef read(value: Any) -> None: ...\n"),
+        ("AnyName", "from typing import Any\ndef read(value: Any) -> None: ...\n"),
+        ("AnyName", "from typing import Any\nvalue = Any\n"),
+        ("UnannotatedParameter", "def read(value): ...\n"),
         ("Unformatted", "value=1\n"),
         ("LintFindings", "import os\n"),
         ("TypeErrors", 'value: int = "text"\n'),
@@ -792,7 +862,7 @@ ANY_DECLARATIONS = (
     + "\n"
 )
 
-# Each line names a type or a value without declaring ``Any`` as a type.
+# Loaded Any references count even outside a declaration; literal strings do not.
 ANY_NON_DECLARATIONS = (
     "\n".join(
         [
@@ -811,10 +881,10 @@ ANY_NON_DECLARATIONS = (
 )
 
 
-def test_any_is_counted_wherever_a_type_is_declared(repo: Repository) -> None:
-    from tools.debt_ratchet import AnyAnnotation
+def test_any_is_counted_once_in_declarations_and_values(repo: Repository) -> None:
+    from tools.debt_ratchet import AnyName
 
-    uses = AnyAnnotation.uses(ANY_DECLARATIONS.encode(), "declarations.py")
+    uses = AnyName.uses(ANY_DECLARATIONS.encode(), "declarations.py")
     assert sorted((use.site, use.owner) for use in uses) == [
         ("alias", ""),
         ("alias", ""),
@@ -827,14 +897,14 @@ def test_any_is_counted_wherever_a_type_is_declared(repo: Repository) -> None:
         ("return", "Plain.read"),
         ("variable", "Plain.read"),
     ]
-    assert AnyAnnotation.count(ANY_NON_DECLARATIONS.encode(), "values.py") == 0
+    assert AnyName.count(ANY_NON_DECLARATIONS.encode(), "values.py") == 3
 
     base = repo.commit({"declarations.py": "", "values.py": ""})
     head = repo.commit({"declarations.py": ANY_DECLARATIONS, "values.py": ANY_NON_DECLARATIONS})
     status, report = repo.compare(base, head)
     assert status == 1
-    assert report["delta"][f"AnyAnnotation:{repo.root}/declarations.py"] == len(uses)
-    assert report["delta"][f"AnyAnnotation:{repo.root}/values.py"] == 0
+    assert report["delta"][f"AnyName:{repo.root}/declarations.py"] == len(uses)
+    assert report["delta"][f"AnyName:{repo.root}/values.py"] == 3
 
 
 def test_stating_a_type_lowers_the_any_count_and_passes(repo: Repository) -> None:
@@ -844,18 +914,22 @@ def test_stating_a_type_lowers_the_any_count_and_passes(repo: Repository) -> Non
     )
     status, report = repo.compare(base, head)
     assert status == 0
-    assert report["delta"][f"AnyAnnotation:{repo.root}/declarations.py"] == -1
+    assert report["delta"][f"AnyName:{repo.root}/declarations.py"] == -1
 
 
 @pytest.mark.parametrize(
-    ("measure", "source"),
+    ("measure", "deleted", "source"),
     [
-        (FrozenFieldWrite, 'object.__setattr__(self, "value", 1)\n'),
-        (BannedVocabulary, "pending_receipt = 1\n"),
+        (FrozenFieldWrite, 'object.__setattr__(self, "old", 1)\n',
+         'object.__setattr__(self, "value", 1)\n'),
+        (BannedVocabulary, "old_receipt = 1\n", "pending_receipt = 1\n"),
     ],
 )
-def test_clean_changed_lines_cannot_be_offset_with_a_deletion(repo, measure, source):
-    base = repo.commit({"old.py": source, "new.py": ""})
+def test_clean_changed_lines_cannot_be_offset_with_a_deletion(repo, measure, deleted, source):
+    """Deleting one occurrence never pays for writing a different one; the same occurrence
+    leaving one module for another is a move
+    (test_an_absence_moved_with_its_class_to_another_module_is_not_written)."""
+    base = repo.commit({"old.py": deleted, "new.py": ""})
     head = repo.commit({"old.py": None, "new.py": source})
     status, report = repo.compare(base, head)
     identity = f"{measure.__name__}:{repo.root}/new.py"
@@ -1219,14 +1293,35 @@ def test_growth_lines_end_the_merged_log(repo: Repository) -> None:
     report is flushed first, so what grew is what a reader without the job log sees."""
     base = repo.commit({"check.py": 'value = row["a"]\n'})
     head = repo.commit({"check.py": "value = type(x) is int\n"})
-    source = Path(__file__).resolve().parents[2]
-    environment = {**os.environ, "PYTHONPATH": os.pathsep.join(
-        (str(source / "src"), os.environ["PYTHONPATH"]))}
     merged = subprocess.run(
-        (sys.executable, str(source / "tools/debt_ratchet.py"),
+        (sys.executable, str(SOURCE / "tools/debt_ratchet.py"),
          "--root", repo.root, "--base", base, "--head", head),
-        cwd=repo.path, env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        cwd=repo.path, env=ratchet_environment(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, timeout=120,
     )
     assert merged.returncode == 1
     assert merged.stdout.rstrip().splitlines()[-1].startswith(("grew ", "introduced "))
+
+
+def test_content_cache_digest_covers_a_module_only_loaded_indirectly():
+    """The ratchet never imports coordination_tables.attempts by name; agent_comms loads it
+    through its own imports. Its source is still one of the ratchet's measuring code, so a
+    change to it is a different cache key."""
+    indirect = Path(sys.modules["agent_comms.coordination_tables.attempts"].__file__).resolve()
+    assert indirect in ContentCache.sources()
+    assert (AUDIT_SCRIPTS / "audit" / "findings.py").resolve() in ContentCache.sources()
+    assert indirect.is_relative_to(Path(__file__).resolve().parents[2] / "src")
+
+
+def test_content_cache_prunes_entries_unused_for_the_retention_period(tmp_path, monkeypatch):
+    """An entry read after it aged survives the prune; one neither written nor read does not."""
+    monkeypatch.setattr(ContentCache, "directory", tmp_path / "debt-ratchet")
+    ContentCache.store(1, "read")
+    ContentCache.store(2, "unused")
+    old = time.time() - (ContentCache.retention_days + 1) * 86400
+    for name in ("read", "unused"):
+        os.utime(ContentCache.path(name), (old, old))
+    assert ContentCache.stored("read") == (1,)
+    ContentCache.prune()
+    assert ContentCache.stored("read") == (1,)
+    assert ContentCache.stored("unused") == ()

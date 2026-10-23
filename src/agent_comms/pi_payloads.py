@@ -6,6 +6,8 @@ records retain no raw wire mirror. FieldCodec is the sole primitive validator.
 
 from __future__ import annotations
 
+from asyncio import Future
+
 import re
 import typing
 from abc import abstractmethod
@@ -23,6 +25,7 @@ from uuid import uuid4
 
 from pydantic import JsonValue
 
+from .annotation_disclosure import PublicInstructionAnnotations, WithheldAnnotations
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import (
     ExternalField,
@@ -32,10 +35,14 @@ from .field_codec import (
     Id128Text,
     MalformedRecord,
     NullMember,
+    PresentMember,
+    RecordProblems,
     SingleFieldValue,
+    SingleExternalMember,
     TextRepresentation,
     ValidatedScalar,
     WireName,
+    WireNullDefault,
     WireOmitDefault,
     WireRequired,
     WireValue,
@@ -65,7 +72,8 @@ if TYPE_CHECKING:
     from .agent_events import AgentEvent, ProviderUsage
     from .backend import TurnSession
     from .pending_requests import PendingRequests
-    from .pi_events import AutoRetryEnd
+    from .pi_commands import PiCommand
+    from .pi_events import AutoRetryEnd, Response
     from .turn_goal_permission import TurnGoalPermission
     from .turn_phase import TurnPhase
     from .turn_usage import UsageAccount
@@ -111,9 +119,6 @@ class PiOmitted(NullMember):
     def value_or[D](self, default: D) -> D:
         return default
 
-    def present(self) -> tuple[()]:
-        return ()
-
     def text_or[D](self, default: D) -> D:
         return default
 
@@ -147,13 +152,17 @@ class RequestId(PiReported[str]):
 
     value: str
 
-    def track_in(self, pending: PendingRequests, owner: type, command: object) -> object:
+    def track_in(
+        self, pending: PendingRequests, owner: type[PiCommand], command: PiCommand,
+    ) -> Future[Response]:
         return pending.add(owner, self.value, request=command)
 
-    def release_from(self, pending: PendingRequests, owner: type) -> None:
+    def release_from(self, pending: PendingRequests, owner: type[PiCommand]) -> None:
         pending.discard(owner, self.value)
 
-    def take_from(self, pending: PendingRequests, owner: type, response: object) -> object:
+    def take_from(
+        self, pending: PendingRequests, owner: type[PiCommand], response: Response,
+    ) -> PiCommand | None:
         return pending.take(owner, self.value, response)
 
 
@@ -161,13 +170,17 @@ class RequestId(PiReported[str]):
 class AnonymousRequest(PiOmitted):
     """The record carried no id; its response is matched by command family alone."""
 
-    def track_in(self, pending: PendingRequests, owner: type, command: object) -> object:
+    def track_in(
+        self, pending: PendingRequests, owner: type[PiCommand], command: PiCommand,
+    ) -> Future[Response]:
         return pending.add(owner, uuid4().hex, request=command)
 
-    def release_from(self, pending: PendingRequests, owner: type) -> None:
+    def release_from(self, pending: PendingRequests, owner: type[PiCommand]) -> None:
         """The anonymous entry is keyed by a private token nobody else holds."""
 
-    def take_from(self, pending: PendingRequests, owner: type, response: object) -> object:
+    def take_from(
+        self, pending: PendingRequests, owner: type[PiCommand], response: Response,
+    ) -> PiCommand | None:
         return pending.take_anonymous(owner, response)
 
     def require(self) -> str:
@@ -197,12 +210,19 @@ class PiPayload(ExternalField):
         cls, value: dict[str, JsonValue], decoded: dict[str, object],
     ) -> dict[str, object]:
         hints = FieldCodec._types(cls)
+        problems: dict[str, str] = {}
         for f, key in FieldCodec.record_fields(cls):
             if f.name in decoded:
                 decoded[f.name] = FieldCodec.decode_resolved(hints[f.name], decoded[f.name])
-            # Native null means omitted where the declaration names its not-reported member.
-            elif key in value and not (value[key] is None and isinstance(f.default, PiPayload)):
-                decoded[f.name] = FieldCodec.decode_external(hints[f.name], value[key], value)
+                continue
+            plan = FieldCodec.field_plan(cls, f.name)
+            with plan.locating(problems):
+                captured = plan.decoded_external(value)
+                if f.name not in captured and (plan.constructor_required or plan.required):
+                    raise MalformedRecord(f"Missing required field {key}")
+                decoded.update(captured)
+        if problems:
+            raise RecordProblems(problems)
         return decoded
 
     @classmethod
@@ -210,11 +230,9 @@ class PiPayload(ExternalField):
         return FieldCodec.decode_external(cls, value, {})
 
     def to_wire(self):
-        data = FieldCodec.encode(self)
-        if isinstance(self, DeclaredFamily):
-            data.pop("kind")
-            if self.wire_tag is not None:
-                data[self.wire_tag] = self.wire_discriminator()
+        data = FieldCodec.encode_fields(self)
+        if self.wire_tag is not None and DeclaredFamily.record_tag(self):
+            data[self.wire_tag] = self.wire_discriminator()
         return data
 
     def wire_discriminator(self):
@@ -416,7 +434,7 @@ class PiUsage(PiPayload):
     total_tokens: Annotated[
         PiField[TotalPiCount], WireName("totalTokens")
     ] = UnreportedCount()
-    cost: PiField[PiCost] = (
+    cost: Annotated[PiField[PiCost], WireNullDefault()] = (
         PiCost()
     )
     reasoning: PiField[NonnegativePiCount] = UnreportedCount()
@@ -437,7 +455,14 @@ class UnreportedUsage(PiUsage):
 
 
 @dataclass(frozen=True)
-class PiContent(OpenPayload, affix="Content"):
+class PiContent(PresentMember, OpenPayload, affix="Content"):
+    def text_parts(self) -> tuple[str, ...]:
+        return ()
+
+    def with_display_text(self, text: str) -> PiContent | PiOmitted:
+        """Keep non-text content beside the message's replacement display block."""
+        return self
+
     def tool_calls(self) -> tuple[ToolCallContent, ...]:
         return ()
 
@@ -463,6 +488,13 @@ class PiContent(OpenPayload, affix="Content"):
 
 @dataclass(frozen=True)
 class TextContent(PiContent):
+    def text_parts(self) -> tuple[str, ...]:
+        return (self.text,)
+
+    def with_display_text(self, text: str) -> PiOmitted:
+        """The message places the display text once, replacing every original block."""
+        return PiOmitted()
+
     def user_transcript(self, position: int, timestamp: float):
         from .transcript_events import UserTranscript
 
@@ -744,12 +776,7 @@ class UnknownDiagnostic(UnknownPayload, PiDiagnostic):
 
 
 @dataclass(frozen=True)
-class PiMessage(ExternalNull, OpenPayload, affix="Message"):
-    def annotation_disclosure(self):
-        from .working_memory_disclosure import WithheldDisclosure
-
-        return WithheldDisclosure()
-
+class PiMessage(WithheldAnnotations, ExternalNull, OpenPayload, affix="Message"):
     @property
     def parts(self) -> tuple[PiContent, ...]:
         return (TextContent(self.content),) if isinstance(self.content, str) else self.content or ()
@@ -774,7 +801,7 @@ class PiMessage(ExternalNull, OpenPayload, affix="Message"):
     user: ClassVar[bool] = False
     final_reply: ClassVar[bool] = False
     content: tuple[PiContent, ...] | str | None = None
-    usage: PiField[PiUsage] = UnreportedUsage()
+    usage: Annotated[PiField[PiUsage], WireNullDefault()] = UnreportedUsage()
     input_id: Annotated[PiField[ReportedText | PiOmitted], WireName("inputId")] = PiOmitted()
     input_digest: Annotated[
         PiField[ReportedText | PiOmitted], WireName("inputDigest")
@@ -836,12 +863,7 @@ class AbsentMessage(ExternalNullMember, PiMessage):
 
 
 @dataclass(frozen=True)
-class AssistantMessage(PiMessage):
-    def annotation_disclosure(self):
-        from .working_memory_disclosure import PublicInstructionDisclosure
-
-        return PublicInstructionDisclosure()
-
+class AssistantMessage(PublicInstructionAnnotations, PiMessage):
     # Pi's assistant record always carries an array, including failed terminals.
     content: Annotated[tuple[PiContent, ...], WireRequired()] = ()
     # Original Pi completion metadata. These are observations, not registry
@@ -903,21 +925,14 @@ class AssistantMessage(PiMessage):
         return bool(self.text.strip() or self.error_notice)
 
     def transcript_events(self, context, timestamp: float):
-        from .transcript_events import AssistantTranscript, NoticeTranscript
+        from .transcript_events import NoticeTranscript
 
         if notice := self.error_notice:
             return [NoticeTranscript(f"[agent error] {notice}", position=context.position, timestamp=timestamp)]
         events = []
         for part in self.parts:
             for event in part.assistant_transcript(context.position, timestamp):
-                if (
-                    isinstance(event, AssistantTranscript)
-                    and events
-                    and isinstance(events[-1], AssistantTranscript)
-                ):
-                    events[-1] = replace(events[-1], text=events[-1].text + event.text)
-                else:
-                    events.append(event)
+                event.append_to(events)
         return [replace(event, routing=context.routing if context else None) for event in events]
 
 
@@ -939,7 +954,7 @@ class UserMessage(PiMessage):
 
         routing, display = context.routing, context.input_display
         # Preserve exact separators, including empty text blocks, for provenance.
-        raw_text = "\n".join(part.text for part in self.parts if isinstance(part, TextContent))
+        raw_text = "\n".join(text for part in self.parts for text in part.text_parts())
         if display is not None and display.sent_text_digest is not None:
             if self.content is not None and display.matches(raw_text):
                 routing = display.routing
@@ -954,7 +969,8 @@ class UserMessage(PiMessage):
                 return events
             parts = (
                 TextContent(display.text),
-                *(part for part in parts if not isinstance(part, TextContent)),
+                *(retained for part in parts
+                  for retained in part.with_display_text(display.text).present()),
             )
         for part in parts:
             events.extend(part.user_transcript(context.position, timestamp))
@@ -982,7 +998,7 @@ class ToolResultMessage(PiMessage, declared_name="toolResult"):
 
         if not self.parts:
             return []
-        output = "\n".join(part.text for part in self.parts if isinstance(part, TextContent))
+        output = "\n".join(text for part in self.parts for text in part.text_parts())
         result = ProvidedToolResult(content=self.parts, details=self.details)
         events = [
             ToolEndTranscript(
@@ -1070,12 +1086,8 @@ class UnknownDelta(UnknownPayload, PiDelta):
 
 
 @dataclass(frozen=True)
-class PiModel(ExternalNull, PiPayload, DeclaredFamily, affix="Model"):
+class PiModel(SingleExternalMember, PiPayload, DeclaredFamily, affix="Model"):
     context_window: ClassVar[PiCount] = UnreportedCount()
-
-    @classmethod
-    def wire_member(cls, value):
-        return ReportedModel
 
     def thread_model(self) -> ThreadModel:
         return UndeclaredModel()
@@ -1273,7 +1285,7 @@ class ThinkingLevelsData(PiResponseData):
 @dataclass(frozen=True)
 class CompactionData(PiResponseData):
     summary: str | None = None
-    usage: PiField[PiUsage] = UnreportedUsage()
+    usage: Annotated[PiField[PiUsage], WireNullDefault()] = UnreportedUsage()
     first_kept_entry_id: Annotated[
         PiField[ReportedText | PiOmitted], WireName("firstKeptEntryId")
     ] = PiOmitted()
@@ -1307,11 +1319,7 @@ class UnknownData(Opaque, PiResponseData):
 
 
 @dataclass(frozen=True)
-class PiToolResult(ExternalNull, PiPayload, DeclaredFamily, affix="ToolResult"):
-    @classmethod
-    def wire_member(cls, value):
-        return ProvidedToolResult
-
+class PiToolResult(SingleExternalMember, PiPayload, DeclaredFamily, affix="ToolResult"):
     @abstractmethod
     def text(self, limit=4000): ...
 

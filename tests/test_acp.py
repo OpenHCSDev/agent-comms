@@ -1,8 +1,9 @@
 """ACP server tests against the official agent-client-protocol library.
 
 Exercises the agent the way real clients (Toad, Zed) do: through
-``acp.run_agent`` over real stdio pipes, plus direct handler-level tests.
+Core's ACP connection over real stdio pipes, plus direct handler-level tests.
 """
+from agent_comms.controller import SessionUpdateSink
 
 import asyncio
 import json
@@ -14,10 +15,10 @@ from pathlib import Path
 
 import pytest
 from acp import RequestError
+from acp.schema import TextContentBlock
 
 import agent_comms.agent_events as ae
 import agent_comms.backend as backend
-from agent_comms.channel_targets import CommandTarget
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import (
     CoordinationChangedUpdate,
@@ -25,18 +26,19 @@ from agent_comms.acp_extension import (
     decode_updates,
 )
 from agent_comms.activity import ActivityState
+from agent_comms.channel_targets import CommandTarget
+from agent_comms.channels import AnyChannel
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.context_reading import ContextUsage, UnmeasuredContext
-from agent_comms.channels import AnyChannel
 from agent_comms.errors import UnregisteredThreadError
+from agent_comms.native_arguments import GivenArguments
 from agent_comms.pi_counts import PiCount
 from agent_comms.read_basis import NamedViewer
-from agent_comms.native_arguments import GivenArguments
-from delivery_owner_fixture import canonical_agent
 from agent_comms.thread_model import DeclaredModel
-
-
+from agent_comms.threads import Thread
+from conftest import installed_comms
+from delivery_owner_fixture import canonical_agent
 
 def facts(metadata, kind):
     return tuple((f for f in decode_updates(metadata) if isinstance(f, kind)))
@@ -70,7 +72,6 @@ class TestHandlers:
         thread = agent._comms.registry.require("my-project")
         assert thread.worktree == "/home/me/my-project"
         assert thread.tags == frozenset({"acp"})
-
 
     async def test_attach_metadata_restores_saved_context_without_reading_transcript(
         self, tmp_path
@@ -112,11 +113,10 @@ class TestHandlers:
         assert backend.compaction_summary(summary) == summary
         assert "\x1b" not in backend.compaction_summary("\x1b[2J\nSafe")
 
-
     @pytest.mark.parametrize("renamed", [False, True])
     async def test_snapshot_capability_replays_one_bounded_update(self, tmp_path, renamed):
         agent = self._agent(tmp_path)
-        await agent.initialize(1, {})
+        await agent.initialize(1)
         await agent.new_session("/wt/proj")
         path = tmp_path / "history.jsonl"
         records = [
@@ -137,12 +137,13 @@ class TestHandlers:
         path.write_text("".join(json.dumps(record) + "\n" for record in records))
         agent._comms.threads.attach_session((attachment_owner := agent._comms.registry.require("proj")), str(path), process=attachment_owner.process_identity)
         if renamed:
-            agent._comms.threads.rename_managed_thread("proj", "renamed", owner_pid=os.getpid())
+            agent._comms.threads.rename_managed_thread("proj", "renamed", owner=ProcessIdentity.capture(os.getpid()))
         sent = []
 
-        class Client:
-            async def session_update(self, **kwargs):
+        class Client(SessionUpdateSink):
+            async def publish_update(self, **kwargs):
                 sent.append(kwargs["update"])
+                return True
 
         try:
             await agent.sessions.transcript.replay("proj", client=Client())
@@ -160,12 +161,12 @@ class TestHandlers:
 
     async def test_new_session_starts_after_existing_wire_history(self, tmp_path):
         agent = canonical_agent(wire(tmp_path / "wire"))
-        agent._comms.registry.declare(agent._comms.registry.new_thread(name='peer', tags=frozenset(), worktree='/wt'))
+        agent._comms.registry.declare(Thread(name='peer', tags=frozenset(), worktree='/wt'))
         agent._comms.messaging.send("peer", "#all", "old message").message.message_id
         response = await agent.new_session(cwd="/wt/proj", mcp_servers=[])
-        assert agent._comms.bus.inbox(response.session_id) == []
+        assert agent._comms.bus.inbox(response.session_id).page.messages == ()
         agent._comms.messaging.send("peer", "#all", "new message").message.message_id
-        assert [message.body for message in agent._comms.bus.inbox(response.session_id)] == [
+        assert [message.body for message in agent._comms.bus.inbox(response.session_id).page.messages] == [
             "new message"
         ]
 
@@ -233,12 +234,13 @@ class TestHandlers:
         assert first._comms.registry.status("proj").declared_name == "stopped"
         second = self._agent(tmp_path)
 
-        class FakeClient:
+        class FakeClient(SessionUpdateSink):
             def __init__(self):
                 self.updates = []
 
-            async def session_update(self, session_id=None, update=None, **kwargs):
+            async def publish_update(self, session_id=None, update=None, **kwargs):
                 self.updates.append(update)
+                return True
 
         client = FakeClient()
         second.sessions.client = client
@@ -263,7 +265,7 @@ class TestHandlers:
         agent = canonical_agent(wire(tmp_path / "wire"))
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         response = await agent.prompt(
-            session_id="proj", prompt=[{"type": "text", "text": "!relay hello all"}]
+            session_id="proj", prompt=[TextContentBlock(type="text", text="!relay hello all")]
         )
         assert response.stop_reason == "end_turn"
         assert not agent.turns.turn_state("proj").active.phase.busy
@@ -274,7 +276,7 @@ class TestHandlers:
 
         agent = self._agent(tmp_path)
         with pytest.raises(RequestError):
-            await agent.prompt(session_id="nope", prompt=[{"type": "text", "text": "x"}])
+            await agent.prompt(session_id="nope", prompt=[TextContentBlock(type="text", text="x")])
 
     async def test_cwd_leaf_sanitized_for_thread_name(self, tmp_path):
         agent = self._agent(tmp_path)
@@ -284,7 +286,7 @@ class TestHandlers:
     async def test_cancel_preserves_unbound_inbox(self, tmp_path):
         agent = self._agent(tmp_path)
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
-        agent._comms.registry.declare(agent._comms.registry.new_thread(name='peer', tags=frozenset(), worktree='/wt'))
+        agent._comms.registry.declare(Thread(name='peer', tags=frozenset(), worktree='/wt'))
         agent._comms.messaging.send("peer", "proj", "hello").message.message_id
         await agent.cancel(session_id="proj")
         assert agent._comms.bus.pending_count("proj") == 1
@@ -302,7 +304,6 @@ class TestWireProtocol:
         (tmp_path / "proj").mkdir()
         root = tmp_path / "wire"
         comms = wire(root)
-        comms.messaging.initialize_private_initial_protocol()
         env = dict(
             __import__("os").environ,
             AGENT_COMMS_ROOT=str(root),
@@ -397,7 +398,9 @@ class TestLiveDrain:
     async def test_cancel_keeps_background_drain_live(self, tmp_path):
         agent = canonical_agent(wire(tmp_path / "wire"))
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        await agent.prompt(session_id="proj", prompt=[{"type": "text", "text": "!relay hi"}])
+        await agent.prompt(
+            session_id="proj", prompt=[TextContentBlock(type="text", text="!relay hi")]
+        )
         assert agent.inputs.state("proj").drain_task is not None
         await agent.cancel(session_id="proj")
         await asyncio.sleep(0.05)
@@ -408,11 +411,9 @@ class TestLiveDrain:
 
 class TestFullHistory:
     def test_full_history_is_everything_in_order(self, tmp_path):
-        from agent_comms.comms import wire
-
-        comms = wire(tmp_path / "wire")
-        comms.registry.declare(comms.registry.new_thread(name='a', tags=frozenset({'x'}), worktree='/wt'))
-        comms.registry.declare(comms.registry.new_thread(name='b', tags=frozenset(), worktree='/wt'))
+        comms = installed_comms(tmp_path / "wire")
+        comms.registry.declare(Thread(name='a', tags=frozenset({'x'}), worktree='/wt'))
+        comms.registry.declare(Thread(name='b', tags=frozenset(), worktree='/wt'))
         comms.messaging.send("a", "#all", "one").message.message_id
         comms.messaging.send("a", "b", "dm").message.message_id
         comms.messaging.send("b", "#x", "tagged").message.message_id
@@ -426,7 +427,7 @@ class TestActivityLayer:
         from agent_comms.presentation import WireRevision
         from agent_comms.turn_phase import ToolRunningPhase
 
-        wired.registry.declare(wired.registry.new_thread(
+        wired.registry.declare(Thread(
             "activity-owner", frozenset(), str(wired.root),
             process_identity=ProcessIdentity.capture(os.getpid()),
         ))
@@ -506,13 +507,11 @@ class TestTargetPrefix:
 
     async def test_dm_prompt_reaches_only_target(self, wired):
         agent = canonical_agent(wired)
-        wired.registry.declare(wired.registry.new_thread(name='peer', tags=frozenset(), worktree='/wt'))
+        wired.registry.declare(Thread(name='peer', tags=frozenset(), worktree='/wt'))
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
-        await agent.prompt(session_id="proj", prompt=[{"type": "text", "text": "@peer hi peer"}])
+        await agent.prompt(
+            session_id="proj", prompt=[TextContentBlock(type="text", text="@peer hi peer")]
+        )
         assert wired.bus.pending_count("peer") == 1
         assert wired.bus.pending_count("PR111") == 0
         assert [m.body for m in list(wired.views.history_page(CommandTarget.named("peer"), viewer=NamedViewer("proj")).messages)] == ["hi peer"]
-
-
-
-

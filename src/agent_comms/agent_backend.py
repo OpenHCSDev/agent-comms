@@ -6,10 +6,10 @@ size, compaction, history, forks, model choice and crash recovery -- and only
 ever sees the records declared here. A backend converts its runtime's own
 types to these records; no consumer outside a backend reads runtime types.
 
-Capabilities are mixin roles composed through the MRO. A backend that serves
-threads must implement every role in ``THREAD_CAPABILITIES``; the abstract
-methods enforce the signatures, and :meth:`AgentBackend.seal` checks the rest
-once every backend module is declared, then freezes the registry.
+Capabilities are mixin roles composed through the MRO. Thread-serving backends
+inherit ``ThreadServingBackend``; new-thread selection uses ``NewThreadBackend``.
+Their inherited abstract methods enforce the required behavior. Sealing binds
+each concrete backend to its location and freezes the registry.
 
 This module is deliberately light: it is imported by ``threads`` and must not
 import any runtime implementation at module level.
@@ -19,27 +19,29 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
-from enum import Enum
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, ClassVar, Protocol, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from .declared_family import DeclaredFamily
 from .pi_counts import PiCount
-from .pi_vocabulary import ThinkingLevelField
+from .pi_vocabulary import CompactionReason, ThinkingLevelField
 from .send_outcome import SendBoundary
 from .tool_result import DeclaredReply
+from .turn_outcome import TurnOutcome
 
 if TYPE_CHECKING:
     from .agent_events import AgentEvent
     from .image_inputs import ImageInput
     from .launch_runtime import LaunchRuntime
     from .native_tool_call import NativeToolMode
+    from .pi_events import DialogUiRequest, ExtensionUiChoice
     from .thread_model import ThreadModel
     from .threads import Thread
     from .transcript_sources import TranscriptSource
     from .turn_context import InputContributionCoordinates
+    from .turn_runner import TurnRunner
 
 
 class BackendDeclarationError(TypeError):
@@ -82,7 +84,7 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
     def external_records(self, root, incarnation):
         raise ValueError("A native session cannot publish an external transcript")
 
-    def select_session(self, directory, execution, source_reads, *, root, thread):
+    def select_session(self, directory, execution, source_reads, *, participant):
         raise BackendDeclarationError('Runtime cannot select native sessions')
 
     @abstractmethod
@@ -119,12 +121,34 @@ class InputId:
             raise ValueError("An input ID must be a nonempty string")
 
 
-class WhenBusy(Enum):
+class BusyInputPolicy(DeclaredFamily, affix="InputPolicy"):
     """What the backend does with an input that arrives while a run is going."""
 
-    FOLLOW_UP = "follow_up"  # run it after the current run ends
-    STEER = "steer"  # place it at the next boundary of the current run
-    REJECT = "reject"  # refuse it
+    @classmethod
+    @abstractmethod
+    def streaming(cls) -> type[StreamingInputPolicy]: ...
+
+
+class StreamingInputPolicy(BusyInputPolicy, declared_name=None):
+    """The busy policies Pi's streamingBehavior protocol accepts."""
+
+    @classmethod
+    def streaming(cls) -> type[StreamingInputPolicy]:
+        return cls
+
+
+class FollowUpInputPolicy(StreamingInputPolicy, declared_name="followUp"):
+    """Run after the current run ends; preserve Pi's exact followUp spelling."""
+
+
+class SteerInputPolicy(StreamingInputPolicy):
+    """Place the input at the next boundary of the current run."""
+
+
+class RejectInputPolicy(BusyInputPolicy):
+    @classmethod
+    def streaming(cls) -> type[StreamingInputPolicy]:
+        raise ValueError("Pi cannot reject a prompt through streamingBehavior.")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -136,23 +160,25 @@ class InputContent:
     contributions: tuple[InputContributionCoordinates, ...] = ()
 
 
-class TurnInboxReceiver(Protocol):
-    """What a running turn does with each record its inbox carries."""
+class TurnInboxItem(ABC):
+    """An inbox item carries its input identities; the forwarding owner dispatches it."""
 
-    def place(self, turn: object, item: InputRequest) -> Awaitable[bool]: ...
-    def send_now(self, turn: object, item: SendNow) -> Awaitable[bool]: ...
-    def use_settings(self, turn: object, item: UseSettings) -> Awaitable[bool]: ...
-    def clear_queue(self, turn: object, item: ClearQueue) -> Awaitable[bool]: ...
+    @property
+    def carried_inputs(self) -> tuple[InputId, ...]:
+        return ()
+
+    def refuse(self, inputs, turn):
+        inputs.refuse(turn, self.carried_inputs)
 
 
-class TurnInbox(asyncio.Queue):
+class TurnInbox(asyncio.Queue[TurnInboxItem]):
     """The live inbox parks its head until the existing observer sees READY."""
     def __init__(self):
         super().__init__()
         self.ready = asyncio.Event()
         self.ready.set()
 
-    async def get(self):
+    async def get(self) -> TurnInboxItem:
         await self.ready.wait()
         return await super().get()
 
@@ -165,28 +191,14 @@ class TurnInbox(asyncio.Queue):
     def all_written_started(self):
         return not any(item.carried_inputs for item in self._queue)
 
-    def begin(self, item):
+    def begin(self, item: TurnInboxItem) -> None:
         self._queue.appendleft(item)
         self._wakeup_next(self._getters)
 
-    def hold(self, item):
+    def hold(self, item: TurnInboxItem) -> None:
         # Park under the shared wire lock, before READY can be published.
         self.ready.clear()
         self.begin(item)
-
-
-class TurnInboxItem(ABC):
-    """An inbox item owns its carried inputs and delivery to a running turn."""
-
-    @property
-    def carried_inputs(self) -> tuple[InputId, ...]:
-        return ()
-
-    def refuse(self, inputs, turn):
-        inputs.refuse(turn, self.carried_inputs)
-
-    @abstractmethod
-    def deliver_to(self, receiver: TurnInboxReceiver, turn: object) -> Awaitable[bool]: ...
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -198,15 +210,12 @@ class InputRequest(TurnInboxItem):
 
     input_id: InputId
     content: InputContent
-    when_busy: WhenBusy
+    when_busy: type[BusyInputPolicy]
 
     @property
     def carried_inputs(self) -> tuple[InputId, ...]:
         return (self.input_id,)
 
-    def deliver_to(self, receiver: TurnInboxReceiver, turn: object) -> Awaitable[bool]:
-        """Hand this input to the running turn's receiver; False ends forwarding."""
-        return receiver.place(turn, self)
 
 
 @dataclass(frozen=True)
@@ -218,8 +227,6 @@ class SendNow(TurnInboxItem):
 
     input_ids: tuple[InputId, ...]
 
-    def deliver_to(self, receiver: TurnInboxReceiver, turn: object) -> Awaitable[bool]:
-        return receiver.send_now(turn, self)
 
 
 @dataclass(frozen=True)
@@ -233,8 +240,6 @@ class UseSettings(TurnInboxItem):
     model: ThreadModel
     thinking_level: ThinkingLevelField
 
-    def deliver_to(self, receiver: TurnInboxReceiver, turn: object) -> Awaitable[bool]:
-        return receiver.use_settings(turn, self)
 
 
 @dataclass(frozen=True)
@@ -243,12 +248,13 @@ class ClearQueue(TurnInboxItem):
 
     input_ids: tuple[InputId, ...]
 
-    def deliver_to(self, receiver: TurnInboxReceiver, turn: object) -> Awaitable[bool]:
-        return receiver.clear_queue(turn, self)
 
 
-class CompactionOutcome(DeclaredFamily, DeclaredReply, affix="Compaction"):
+class CompactionOutcome(DeclaredFamily, DeclaredReply, TurnOutcome, affix="Compaction"):
     """The result of one requested compaction."""
+
+    def completion_event[T](self, event: Callable[..., T], reason: type[CompactionReason]) -> T:
+        return event(reason=reason, aborted=True)
 
 
 @dataclass(frozen=True)
@@ -258,6 +264,9 @@ class PlacedCompaction(CompactionOutcome):
     summary: str
     first_kept: str | None
     tokens_before: PiCount
+
+    def completion_event[T](self, event: Callable[..., T], reason: type[CompactionReason]) -> T:
+        return event(reason=reason, aborted=False, summary=self.summary)
 
 
 @dataclass(frozen=True)
@@ -302,7 +311,7 @@ class TurnDelivery:
     interrupt_boundary: SendBoundary
     input_started: Callable[..., bool]
     request_progress: Callable[..., None]
-    ui_request: Callable[..., Awaitable[Any]]
+    ui_request: Callable[[DialogUiRequest], Awaitable[ExtensionUiChoice]]
     tool_mode: NativeToolMode
 
 
@@ -319,7 +328,7 @@ class RunsTurns(ABC):
         """Run ``content`` as ``thread``'s next input and yield its events."""
 
     @abstractmethod
-    async def abort(self, owner: asyncio.Task[Any]) -> None:
+    async def abort[Result](self, owner: asyncio.Task[Result]) -> None:
         """Stop the runtime work owned by this turn task."""
 
     @abstractmethod
@@ -328,7 +337,7 @@ class RunsTurns(ABC):
 
 
 class Steers(RunsTurns):
-    """Accepts :class:`InputRequest` with ``WhenBusy.STEER`` while a run is going."""
+    """Accepts :class:`InputRequest` with ``SteerInputPolicy`` while a run is going."""
 
 
 class Interrupts(Steers):
@@ -355,12 +364,6 @@ class Forks(ABC):
         """
 
 
-THREAD_CAPABILITIES: tuple[type, ...] = (
-    Steers,
-    Compacts,
-)
-
-
 # ---------------------------------------------------------------------------
 # The family.
 # ---------------------------------------------------------------------------
@@ -369,33 +372,29 @@ THREAD_CAPABILITIES: tuple[type, ...] = (
 class AgentBackend(DeclaredFamily, affix="Backend"):
     """One agent runtime, keyed by ``declared_name`` ("pi_native", ...).
 
-    A backend declares its location type, whether it serves threads, whether
-    new threads get it, and the event kinds its runtime protocol emits. One
+    A backend declares its location type, capabilities through inheritance,
+    and the event kinds its runtime protocol emits. One
     instance holds one thread session's runtime process.
     """
 
     location_type: ClassVar[type[RuntimeLocation]]
-    unstarted_type: ClassVar[type[RuntimeLocation]]
-    serves_threads: ClassVar[bool] = True
-    serves_new_threads: ClassVar[bool] = False
     event_kinds: ClassVar[frozenset[str]]
     _sealed: ClassVar[bool] = False
 
     async def context_for_input(self, thread, context):
         return context
 
-    def __init_subclass__(cls, **options: Any) -> None:
+    def __init_subclass__(cls, **options: str | None) -> None:
         if AgentBackend._sealed:
             raise BackendDeclarationError(
                 f"{cls.__name__}: the AgentBackend registry is sealed; declare backends "
                 "before the Thread backend lookup seals its declarations."
             )
         super().__init_subclass__(**options)
-        cls.location_type._backend = cls
 
     @classmethod
     @abstractmethod
-    def for_worker(cls, runner: Any, session_id: str) -> Self:
+    def for_worker(cls, runner: TurnRunner, session_id: str) -> Self:
         """An instance holding this runtime for one thread session in this worker."""
 
     @classmethod
@@ -403,15 +402,21 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
     def new_location(cls, root, worktree) -> RuntimeLocation: ...
 
     @classmethod
-    def for_new_threads(cls) -> type[AgentBackend]:
-        """The backend a newly declared thread gets."""
-        (member,) = (m for m in AgentBackend.members_with(AgentBackend) if m.serves_new_threads)
-        return member
-
-    @classmethod
     def seal(cls) -> None:
-        """Validate every declared backend and freeze the registry."""
-        validate_backends(dict(AgentBackend.__registry__).values())
+        """Bind concrete locations after validating all declaration relationships."""
+        NewThreadBackend.selected()
+        owners: dict[type[RuntimeLocation], type[AgentBackend]] = {}
+        for member in cls.members_with(cls):
+            location = member.location_type
+            if not issubclass(location, RuntimeLocation):
+                raise BackendDeclarationError(f"{member.__name__} declares no RuntimeLocation type")
+            if previous := owners.get(location):
+                raise BackendDeclarationError(
+                    f"location type {location.__name__} belongs to several backends "
+                    f"{previous.__name__}, {member.__name__}")
+            owners[location] = member
+        for location, owner in owners.items():
+            location._backend = owner
         AgentBackend.__registry__ = MappingProxyType(dict(AgentBackend.__registry__))  # type: ignore[assignment]
         AgentBackend._sealed = True
 
@@ -437,33 +442,23 @@ def _event_family_problems(backend: type, family: type[DeclaredFamily]) -> list[
     return problems
 
 
-def validate_backends(members: Iterable[type]) -> None:
-    """Check backend declarations; raise once, naming every missing piece."""
-    members = tuple(members)
-    problems: list[str] = []
-    owners: dict[type, list[str]] = {}
-    for member in members:
-        name = member.__name__
-        location = getattr(member, "location_type", None)
-        if not (isinstance(location, type) and issubclass(location, RuntimeLocation)):
-            problems.append(f"{name} declares no RuntimeLocation type")
-        else:
-            owners.setdefault(location, []).append(name)
-        if not isinstance(getattr(member, "event_kinds", None), frozenset):
-            problems.append(f"{name} declares no event_kinds")
-        if member.serves_threads:
-            missing = [role.__name__ for role in THREAD_CAPABILITIES if not issubclass(member, role)]
-            if missing:
-                problems.append(f"{name} serves threads but lacks roles {missing}")
-        unimplemented = sorted(getattr(member, "__abstractmethods__", ()))
-        if unimplemented:
-            problems.append(f"{name} leaves methods abstract {unimplemented}")
-    for location, names in owners.items():
-        if len(names) > 1:
-            problems.append(f"location type {location.__name__} belongs to several backends {names}")
-    new_thread_backends = [member.__name__ for member in members if member.serves_new_threads]
-    if len(new_thread_backends) != 1:
-        problems.append(f"exactly one backend must serve new threads, found {new_thread_backends}")
-    if problems:
-        raise BackendDeclarationError("; ".join(problems))
+class ThreadServingBackend(Steers, Compacts, AgentBackend, declared_name=None):
+    """A thread backend implements steering, turn lifecycle and compaction together.
+
+    The capability bases precede AgentBackend so its non-thread turn refusal
+    cannot satisfy the abstract turn contract.
+    """
+
+
+class NewThreadBackend(ThreadServingBackend, declared_name=None):
+    """The complete thread backend selected for newly registered threads."""
+
+    @classmethod
+    def selected(cls) -> type[Self]:
+        members = cls.members_with(cls)
+        if len(members) != 1:
+            raise BackendDeclarationError(
+                f"exactly one backend must serve new threads, found "
+                f"{[member.__name__ for member in members]}")
+        return members[0]
 

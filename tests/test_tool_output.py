@@ -19,13 +19,14 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.text_digest import TextDigest
 from stored_inputs import insert_inputs, stored_inputs
 from agent_comms.goal_waits import RecordedGoalWait
+from agent_comms.threads import Thread
 
 
 def seed_unknown(comms, count, text):
     dispositions = InputDispositions(comms.root)
     rows = {
         f"bus:{index}": FieldCodec.encode(BoundUnknownInput(
-            key=f"bus:{index}", sequence=index, owner="b", claim_scope=index,
+            key=f"bus:{index}", sequence=index, owner="b", claim_generation=index,
             target="b", source_text=f"{index}: {text}", turn_id="private-turn",
             native_id="f" * 32, sent_digest=TextDigest.of("private-native-prompt"),
         ))
@@ -41,18 +42,21 @@ def inbox_comms(root):
 
     comms = canonical_goal_wire(root)
     for name in ("a", "b"):
-        comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset(), worktree='/wt'))
+        comms.registry.declare(Thread(name=name, tags=frozenset(), worktree='/wt'))
     return comms
 
 
-@pytest.mark.parametrize("count,text", [(930, "historical input " * 65), (1, "🧪漢" * 40_000)])
+@pytest.mark.parametrize("count,text", [
+    pytest.param(930, "historical input " * 65, id="many-inputs"),
+    pytest.param(1, "🧪漢" * 40_000, id="large-unicode"),
+])
 def test_large_uncertain_inputs_do_not_stop_the_message_page_draining(inbox_comms, count, text):
     comms = inbox_comms
     ledger = seed_unknown(comms, count, text)
     comms.messaging.send("a", "b", "An unread new message").message.message_id
     authority_before = ledger.path.read_bytes()
     expected = {
-        "messages": [message.to_wire() for message in comms.bus.inbox("b")],
+        "messages": [message.to_wire() for message in comms.bus.inbox("b").page.messages],
         "acknowledged": 1,
         "remaining": 0,
         "unresolved_inputs": FieldCodec.encode(comms.goals.unresolved_inputs("b")),
@@ -74,7 +78,7 @@ def test_small_inbox_keeps_existing_contract(inbox_comms, ack):
     ledger = seed_unknown(comms, 1, "Earlier unresolved message")
     comms.messaging.send("a", "b", "hello").message.message_id
     expected = {
-        "messages": [message.to_wire() for message in comms.bus.inbox("b")],
+        "messages": [message.to_wire() for message in comms.bus.inbox("b").page.messages],
         "acknowledged": int(ack),
         "remaining": int(not ack),
         "unresolved_inputs": FieldCodec.encode(comms.goals.unresolved_inputs("b")),
@@ -261,12 +265,11 @@ def test_dependency_review_and_ack_survive_large_excluded_history(
     assert not stored_inputs(dispositions.root).rows.get("acp:owner-0").goal_reviews
 
 
-def test_inbox_byte_budget_and_no_ack_keep_the_next_page_unread(inbox_comms):
+def test_inbox_page_bound_and_no_ack_keep_the_next_page_unread(inbox_comms):
     comms = inbox_comms
     expected = [comms.messaging.send("a", "b", str(index)).message for index in range(5)]
-    page = comms.bus.inbox_at("b", comms.registry.snapshot(), bounds=PageBounds(limit=4, max_bytes=280))
+    page = comms.bus.inbox_at("b", comms.registry.snapshot(), bounds=PageBounds(limit=2))
     assert page.page.messages == tuple(expected[:2])
-    assert page.page.bytes_read <= 280
     assert page.remaining == 3
     for _ in range(2):
         result = invoke_tool(
@@ -275,19 +278,6 @@ def test_inbox_byte_budget_and_no_ack_keep_the_next_page_unread(inbox_comms):
         assert result["messages"] == [message.to_wire() for message in expected[:2]]
         assert result["acknowledged"] == 0 and result["remaining"] == 5
         assert comms.bus.pending_count("b") == 5
-
-
-def test_one_oversized_message_makes_progress_without_a_snapshot(inbox_comms):
-    comms = inbox_comms
-    first = comms.messaging.send("a", "b", "🧪" * 40_000).message
-    second = comms.messaging.send("a", "b", "next page").message
-    result = invoke_tool(comms, "comms_inbox", {"thread": "b"}, caller=NoThreadCaller())
-    assert result["messages"] == [first.to_wire()]
-    assert result["acknowledged"] == result["remaining"] == 1
-    result = invoke_tool(comms, "comms_inbox", {"thread": "b"}, caller=NoThreadCaller())
-    assert result["messages"] == [second.to_wire()]
-    assert result["acknowledged"] == 1 and result["remaining"] == 0
-    assert not (comms.root / "tool-output").exists()
 
 
 @pytest.mark.asyncio

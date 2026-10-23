@@ -8,19 +8,18 @@ import secrets
 import select
 import socket
 import sys
-import time
 from abc import abstractmethod
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
-
-from pydantic import TypeAdapter, ValidationError
+from types import get_original_bases
+from typing import TYPE_CHECKING, Annotated, ClassVar, NoReturn, get_args, get_origin
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.cli_protocol import Outcome, TaggedWire
-from agent_comms.field_codec import FieldCodec
+from agent_comms.cli_protocol import Outcome
+from agent_comms.declared_family import DeclaredFamily
+from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.messages import Message
 from agent_comms_hooks.watch import HeldClaim, SessionRefusedError, WatchClaim, WatchRecord
@@ -61,7 +60,7 @@ class ClaimedReplacement(BridgeReplacement):
     def finish(self, operation: Serve, record: WatchRecord) -> None:
         self.peer.setblocking(True)
         with self.peer, self.peer.makefile("rwb", buffering=0) as stream:
-            stream.write((SessionReady().model_dump_json() + "\n").encode())
+            stream.write((FieldCodec.compact(FieldCodec.encode(SessionReady())) + "\n").encode())
             while operation.owner.alive():
                 if select.select((self.peer,), (), (), 1)[0]:
                     break
@@ -116,9 +115,7 @@ class ReaderState:
         """Only an attached reader has a flow-control window."""
 
     async def attach(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
-        return SessionRefused.model_validate(
-            dict(error="This session already has a Monitor reader")
-        )
+        return SessionRefused(error="This session already has a Monitor reader")
 
 
 class NoReader(ReaderState):
@@ -128,7 +125,7 @@ class NoReader(ReaderState):
         async with bridge.reader_changed:
             bridge.reader = UnreadyReader(attachment)
         try:
-            await peer.write(SessionReady().model_dump_json())
+            await SessionReady().publish(peer)
             await peer.write(attachment.probe.model_dump_json())
             await peer.reader.read()
             return PeerGone()
@@ -192,14 +189,15 @@ class AttachedReader(UnreadyReader):
         return await bridge.deliver_to(self.attachment, message)
 
 
-class SessionReply(TaggedWire):
-    __registry_config__ = TaggedWire.family_registry()
+@dataclass(frozen=True)
+class SessionReply(DeclaredFamily, affix=""):
+    family_discriminator: ClassVar[str] = "type"
 
     def require(self) -> None:
         """Successful replies carry no refusal."""
 
     async def publish(self, peer: MonitorPeer) -> None:
-        await peer.write(self.model_dump_json())
+        await peer.write(FieldCodec.compact(FieldCodec.encode(self)))
 
     def end_session(self, service: MonitorService) -> None:
         """A refusal cannot stop the service."""
@@ -209,8 +207,8 @@ class SessionReply(TaggedWire):
         return self
 
 
-class SessionReady(SessionReply):
-    wire_tag = "ready"
+@dataclass(frozen=True)
+class SessionReady(SessionReply, declared_name='ready'):
 
     def end_session(self, service: MonitorService) -> None:
         asyncio.get_running_loop().call_soon(service.stop)
@@ -224,94 +222,98 @@ class SessionReady(SessionReply):
         return PeerGone()
 
 
-class SessionInformation(SessionReply):
-    wire_tag = "information"
+@dataclass(frozen=True)
+class SessionInformation(SessionReply, declared_name='information'):
     owner: ProcessIdentity
     process: ProcessIdentity
     runtime: LaunchRuntime
-    transcript: Path
+    transcript: Annotated[Path, PathText]
 
 
-class SessionRefused(SessionReply):
-    wire_tag = "refused"
+@dataclass(frozen=True)
+class SessionRefused(SessionReply, declared_name='refused'):
     error: str
 
-    def require(self) -> None:
+    def require(self) -> NoReturn:
         raise SessionRefusedError(self.error)
 
 
-class PeerGone(SessionReply):
-    wire_tag = "gone"
+@dataclass(frozen=True)
+class PeerGone(SessionReply, declared_name='gone'):
 
     async def publish(self, peer: MonitorPeer) -> None:
         """The stream already ended; there is no reply to send."""
 
 
-REPLIES = TypeAdapter(SessionReply.declared_union())
+@dataclass(frozen=True)
+class SessionRequest[Reply: SessionReply](DeclaredFamily, affix=""):
+    family_discriminator: ClassVar[str] = "type"
+    reply_class: ClassVar[type[SessionReply]]
 
-
-class SessionRequest(TaggedWire):
-    __registry_config__ = TaggedWire.family_registry()
+    def __init_subclass__(cls, **options):
+        super().__init_subclass__(**options)
+        cls.reply_class = next(
+            get_args(base)[0]
+            for owner in cls.__mro__
+            for base in get_original_bases(owner)
+            if get_origin(base) is SessionRequest
+        )
 
     @contextmanager
-    def connection(self, claim: WatchClaim) -> Iterator[socket.socket]:
+    def connection(self, endpoint: Path) -> Iterator[socket.socket]:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as peer:
             peer.settimeout(30)
-            peer.connect(str(claim.socket_path))
-            peer.sendall((self.model_dump_json() + "\n").encode())
+            peer.connect(str(endpoint))
+            peer.sendall((FieldCodec.compact(FieldCodec.encode(self)) + "\n").encode())
             yield peer
 
-    def exchange(self, claim: WatchClaim) -> SessionReply:
-        with self.connection(claim) as peer, peer.makefile("rb") as stream:
+    def exchange(self, endpoint: Path) -> Reply:
+        with self.connection(endpoint) as peer, peer.makefile("rb") as stream:
             raw = stream.readline(4096)
             if not raw:
                 raise ConnectionResetError('Session bridge closed before replying')
-            reply = REPLIES.validate_json(raw)
-            reply.require()
-            return reply
+            return self.decode_reply(raw)
+
+    def decode_reply(self, raw: bytes) -> Reply:
+        reply = FieldCodec.decode(self.reply_class | SessionRefused, FieldCodec.parse(raw))
+        reply.require()
+        return reply
 
     @abstractmethod
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply: ...
 
 
-class AttachMonitor(SessionRequest):
-    wire_tag = "attach"
+@dataclass(frozen=True)
+class AttachMonitor(SessionRequest[SessionReady], declared_name='attach'):
 
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
         return await service.bridge.reader.attach(service, peer)
 
 
-class VerifySession(SessionRequest):
-    wire_tag = "verify"
+@dataclass(frozen=True)
+class VerifySession(SessionRequest[SessionReady], declared_name='verify'):
     owner: ProcessIdentity
 
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
         if self.owner != service.owner or not service.owner.alive():
-            return SessionRefused.model_validate(
-                dict(error="This bridge belongs to a different or exited Claude process incarnation")
-            )
+            return SessionRefused(error="This bridge belongs to a different or exited Claude process incarnation")
         return SessionReady()
 
 
-class InspectSession(SessionRequest):
-    wire_tag = "inspect"
+@dataclass(frozen=True)
+class InspectSession(SessionRequest[SessionInformation], declared_name='inspect'):
 
-    def information(self, claim: WatchClaim) -> SessionInformation:
-        reply = self.exchange(claim)
-        if not isinstance(reply, SessionInformation):
-            raise ValueError("Session bridge did not report its process and runtime")
-        return reply
+    def information(self, endpoint: Path) -> SessionInformation:
+        return self.exchange(endpoint)
 
-    def awaited(self, claim: WatchClaim, seconds: float = 30) -> SessionInformation:
-        """An install swaps the endpoint; its socket is absent for that gap, not gone."""
-        deadline = time.monotonic() + seconds
+    def awaited(self, claim: WatchClaim) -> SessionInformation:
+        """An install swaps the endpoint; the claim's state says whether an absent socket is
+        that gap or gone."""
         while True:
             try:
-                return self.information(claim)
-            except (FileNotFoundError, ConnectionRefusedError):
-                if time.monotonic() >= deadline:
-                    raise
-                time.sleep(.05)
+                return self.information(claim.socket_path)
+            except (FileNotFoundError, ConnectionRefusedError) as absent:
+                claim.state().await_socket(claim, absent)
 
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
         return SessionInformation(
@@ -321,8 +323,8 @@ class InspectSession(SessionRequest):
         )
 
 
-class PauseSession(VerifySession):
-    wire_tag = "pause"
+@dataclass(frozen=True)
+class PauseSession(VerifySession, declared_name='pause'):
     process: ProcessIdentity
 
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
@@ -331,16 +333,13 @@ class PauseSession(VerifySession):
         return reply.pause_session(service, peer, self.process)
 
 
-class EndSession(VerifySession):
-    wire_tag = "end"
+@dataclass(frozen=True)
+class EndSession(VerifySession, declared_name='end'):
 
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
         reply = await super().handle(service, peer)
         reply.end_session(service)
         return reply
-
-
-REQUESTS = TypeAdapter(SessionRequest.declared_union())
 
 
 @dataclass
@@ -355,9 +354,9 @@ class MonitorService:
             try:
                 reply: SessionReply
                 try:
-                    request = REQUESTS.validate_json(await reader.readline())
-                except ValidationError as error:
-                    reply = SessionRefused.model_validate(dict(error=str(error)))
+                    request = FieldCodec.decode(SessionRequest, FieldCodec.parse(await reader.readline()))
+                except MalformedRecord as error:
+                    reply = SessionRefused(error=str(error))
                 else:
                     reply = await request.handle(self, peer)
                 await reply.publish(peer)
@@ -386,26 +385,31 @@ class MonitorService:
             path.unlink(missing_ok=True)
 
 
-async def read_monitor(claim: WatchClaim) -> None:
+async def read_monitor(claim: WatchClaim, announce: Callable[[WatchClaim], None]) -> None:
     session = await asyncio.to_thread(InspectSession().awaited, claim)
+    announced = False
     with claim.reader_held():
         while session.owner.alive():
             try:
-                current = await asyncio.to_thread(InspectSession().information, claim)
+                current = await asyncio.to_thread(InspectSession().information, claim.socket_path)
                 if current.owner != session.owner:
                     raise ValueError('The session bridge now belongs to a different owner')
                 reader, writer = await asyncio.open_unix_connection(str(claim.socket_path))
                 peer = MonitorPeer(reader, writer)
                 try:
-                    await peer.write(AttachMonitor().model_dump_json())
-                    REPLIES.validate_json(await reader.readline()).require()
+                    request = AttachMonitor()
+                    await peer.write(FieldCodec.compact(FieldCodec.encode(request)))
+                    request.decode_reply(await reader.readline())
+                    announced = False
                     async for line in reader:
                         sys.stdout.write(line.decode())
                         sys.stdout.flush()
                 finally:
                     await peer.close()
             except (FileNotFoundError, ConnectionRefusedError, ConnectionResetError):
-                pass
-            # Retirement drops the old connection; the same owner can publish a
-            # fresh endpoint. Keep the reader lease and require its fresh probe.
+                # Retirement drops the old connection; the same owner can publish a
+                # fresh endpoint, and this reader keeps its lease for it. A stopped
+                # bridge is still an outage, so the claim's state decides whether to say so.
+                announced = announced or claim.state().announce_absence(
+                    lambda: announce(claim))
             await asyncio.sleep(.05)

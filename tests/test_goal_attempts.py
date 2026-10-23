@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.errors import StaleAttemptError
 import multiprocessing
 import os
 import sqlite3
@@ -23,17 +24,8 @@ from agent_comms.field_codec import MalformedRecord
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_attempt_phase import ClaimedAttempt, FailedAttempt, SucceededAttempt
 from agent_comms.goal_failure_observation import FailedTurnEvidence
-from agent_comms.goal_attempts import (
-    AttemptRecord,
-    Generation,
-    GoalAttemptStore,
-    GoalWorkDecision,
-    ProviderUsageTotal,
-    ReservationConflictError,
-    StaleAttemptError,
-    StorageUncertainError,
-    UnresolvedAttemptError,
-)
+from agent_comms.goal_attempts import AttemptRecord, Generation, GoalAttemptStore, GoalWorkDecision, ProviderUsageTotal, ReservationConflictError, StorageUncertainError
+from agent_comms.errors import UnresolvedAttemptError
 from agent_comms.goal_generation import (
     BlockedGeneration,
     CancelledGeneration,
@@ -43,6 +35,7 @@ from agent_comms.goal_generation import (
 )
 from agent_comms.pi_counts import PiCount, UnreportedCount
 from agent_comms.pi_payloads import PiUsage
+from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(
     os.name != "posix", reason="POSIX fork and directory fsync crash instrumentation."
@@ -438,7 +431,7 @@ def claimed_owner(comms):
         [sys.executable, "-c", "import time; time.sleep(300)"], start_new_session=True,
     )
     try:
-        owner = comms.registry.new_thread(
+        owner = Thread(
             "stopped-goal", frozenset(), str(comms.root),
             process_identity=ProcessIdentity.capture(child.pid),
         )

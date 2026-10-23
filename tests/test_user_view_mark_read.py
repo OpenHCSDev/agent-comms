@@ -1,6 +1,6 @@
 """Explicit human Mark read never acknowledges a persistent agent's inbox."""
 
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.read_basis import NamedViewer
 import json
@@ -8,9 +8,11 @@ import json
 import pytest
 
 from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.ui_model.unread import ReplyUnread
 from native_unread_fixture import completed_snapshot
+from agent_comms.threads import Thread
 
 
 def answer(path, text):
@@ -22,12 +24,12 @@ def answer(path, text):
 
 
 def test_mark_read_clears_thread_dm_and_channel_views_without_agent_delivery(tmp_path):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     source = tmp_path / "sender.jsonl"
     source.touch()
     answer(source, "Saved reply")
-    comms.registry.declare(comms.registry.new_thread('sender', frozenset({'ci'}), str(tmp_path), session_file=SavedSessionFile(str(source))))
-    comms.registry.declare(comms.registry.new_thread('receiver', frozenset({'ci'}), str(tmp_path)))
+    comms.registry.declare(Thread('sender', frozenset({'ci'}), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
+    comms.registry.declare(Thread('receiver', frozenset({'ci'}), str(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("sender", "receiver", "Agent inbox remains unread").message.message_id
     comms.messaging.send("sender", viewer, "Human DM").message.message_id
@@ -70,8 +72,8 @@ def test_mark_read_clears_thread_dm_and_channel_views_without_agent_delivery(tmp
 
 
 def test_sessionless_cli_painted_tail_and_explicit_inbox_read_share_bus_marks(tmp_path):
-    comms = wire(tmp_path)
-    comms.registry.declare(comms.registry.new_thread(
+    comms = installed_comms(tmp_path)
+    comms.registry.declare(Thread(
         'cli', frozenset(), str(tmp_path), execution=ExternalThreadExecution,
     ))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
@@ -93,9 +95,9 @@ def bytes_read() -> int:
 
 
 def test_mark_read_reads_the_marked_messages_not_the_whole_log(tmp_path):
-    comms = wire(tmp_path)
-    comms.registry.declare(comms.registry.new_thread('sender', frozenset({'ci'}), str(tmp_path)))
-    comms.registry.declare(comms.registry.new_thread('archivist', frozenset({'bulk'}), str(tmp_path)))
+    comms = installed_comms(tmp_path)
+    comms.registry.declare(Thread('sender', frozenset({'ci'}), str(tmp_path)))
+    comms.registry.declare(Thread('archivist', frozenset({'bulk'}), str(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     for _ in range(20):
         comms.messaging.send("archivist", "#bulk", "x" * 200_000).message.message_id
@@ -106,7 +108,7 @@ def test_mark_read_reads_the_marked_messages_not_the_whole_log(tmp_path):
     comms.views.presentation.channel_page("#ci", viewer=NamedViewer(viewer))
     comms.messaging.send("sender", viewer, "Later human DM").message.message_id
     comms.messaging.send("sender", "#ci", "Later channel message").message.message_id
-    log_size = comms.bus.log.path.stat().st_size
+    log_size = comms.bus.bus.path.stat().st_size
     assert log_size > 4_000_000
 
     for target in ("sender", "#ci"):

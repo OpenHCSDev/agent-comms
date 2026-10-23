@@ -10,22 +10,23 @@ from __future__ import annotations
 import asyncio
 import json
 from abc import abstractmethod
-from dataclasses import dataclass, field
+from collections.abc import AsyncIterator, Awaitable
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from functools import partial
-from typing import TYPE_CHECKING, ClassVar, Literal, Self, Annotated
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
-from acp.schema import PromptResponse, SetSessionConfigOptionResponse
+from acp.schema import PromptRequest, PromptResponse, SetSessionConfigOptionResponse
 from pydantic import BaseModel, JsonValue
-
 
 from .agent_event_updates import AcpEventConsumer
 from .command import Command
-from .errors import RelationViolationError
 from .context_store import ContextManifestReference
 from .coordination_database import CoordinationStore
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, NullMember, WireValue, WireName
+from .errors import RelationViolationError
+from .field_codec import FieldCodec, NullMember, WireName, WireValue
 from .goal_actions import GoalAction
 from .goal_history import RecordedGoalRevision
 from .goals import Goal
@@ -65,16 +66,16 @@ class RuntimeRequestContext:
 
 
 @dataclass(frozen=True, kw_only=True)
-class RuntimeRequest(DeclaredFamily, Command, affix="RuntimeRequest"):
+class RuntimeRequest(
+    DeclaredFamily, Command[RuntimeRequestContext, Awaitable[None]], affix="RuntimeRequest"
+):
     thread: str
 
     @classmethod
     def from_wire(cls, payload: object) -> Self:
-        if not isinstance(payload, dict):
-            raise ValueError("Expected a runtime request object.")
-        if "kind" in payload:
+        values = FieldCodec.decode(dict[str, JsonValue], payload)
+        if "kind" in values:
             raise ValueError("Unknown runtime request field: kind")
-        values = dict(payload)
         values["kind"] = values.pop("action", None)
         return cls.from_payload(values)
 
@@ -143,12 +144,12 @@ class AcpResponseReply(DeclaredReply, WireValue):
     response_type: ClassVar[type[BaseModel]]
     response: BaseModel
 
-    def to_wire(self) -> dict[str, JsonValue]:
-        return self.response.model_dump(by_alias=True, exclude_none=True)
+    def to_wire(self) -> JsonValue:
+        return FieldCodec.encode(self.response)
 
     @classmethod
     def from_wire(cls, data: dict[str, JsonValue]) -> Self:
-        return cls(cls.response_type.model_validate(data))
+        return cls(FieldCodec.decode(cls.response_type, data))
 
 
 class PromptReply(AcpResponseReply):
@@ -216,24 +217,47 @@ class ProjectRuntimeRequest(ResultRuntimeRequest):
 
 @dataclass(frozen=True, kw_only=True)
 class SubscribeRuntimeRequest(RuntimeRequest):
+    @asynccontextmanager
+    async def observing(self, ctx: RuntimeRequestContext) -> AsyncIterator[None]:
+        agent = ctx.server.agent
+        ctx.server.clients.setdefault(ctx.session_id, set()).add(ctx.client)
+        await agent.emit_session_identity(ctx.session_id, ctx.name, client=ctx.client)
+        async with agent.sessions.transcript.subscribe(self.thread, client=ctx.client):
+            await agent.turns.publish_turn_state(
+                AcpEventConsumer(agent, ctx.session_id, ctx.client)
+            )
+            await agent.inputs.emit_input_delivery_changed(ctx.session_id, client=ctx.client)
+            yield
+
+    async def ready(self, ctx: RuntimeRequestContext) -> None:
+        await ctx.send(OwnerReady(
+            ready=await ctx.server.agent.sessions.metadata(ctx.name),
+            controller_token=ctx.client.token,
+        ))
+
+    @asynccontextmanager
+    async def subscribed(self, ctx: RuntimeRequestContext) -> AsyncIterator[None]:
+        """A load replays history before its response, under its already-known ID."""
+        async with self.observing(ctx):
+            await self.ready(ctx)
+            yield
+
     async def apply(self, ctx: RuntimeRequestContext) -> None:
         agent = ctx.server.agent
         await ctx.send(OwnerAnnouncement())
-        ctx.server.clients.setdefault(ctx.session_id, set()).add(ctx.client)
-        await agent.emit_session_identity(ctx.session_id, ctx.name, client=ctx.client)
-        await agent.sessions.transcript.subscribe(self.thread, client=ctx.client)
-        await agent.turns.publish_turn_state(AcpEventConsumer(agent, ctx.session_id, ctx.client))
-        await agent.inputs.emit_input_delivery_changed(ctx.session_id, client=ctx.client)
-        metadata = await agent.sessions.metadata(ctx.name)
-        await ctx.send(
-            OwnerReady(
-                ready=metadata,
-                controller_token=ctx.client.token,
-            )
-        )
-        await agent.sessions.config.observe_configuration(ctx.session_id, ctx.client)
-        while line := await ctx.reader.readline():
-            ClientLine.read(line).answer(ctx.client)
+        async with self.subscribed(ctx):
+            async with agent.sessions.config.observe_configuration(ctx.session_id, ctx.client):
+                while line := await ctx.reader.readline():
+                    ClientLine.read(line).answer(ctx.client)
+
+
+class FreshSubscribeRuntimeRequest(SubscribeRuntimeRequest):
+    @asynccontextmanager
+    async def subscribed(self, ctx: RuntimeRequestContext) -> AsyncIterator[None]:
+        """A new ID is announced before its first publication can reach the ACP attachment."""
+        await self.ready(ctx)
+        async with self.observing(ctx):
+            yield
 
 
 @dataclass(frozen=True, slots=True)
@@ -243,8 +267,7 @@ class NoControllerToken(NullMember):
 
 @dataclass(frozen=True, kw_only=True)
 class PromptRuntimeRequest(ResultRuntimeRequest):
-    prompt: list[dict[str, object]]
-    meta: dict[str, object] | None = None
+    request: PromptRequest
     controller_token: Annotated[str | NoControllerToken, WireName("controllerToken")] = (
         NoControllerToken()
     )
@@ -268,8 +291,8 @@ class PromptRuntimeRequest(ResultRuntimeRequest):
         )
         token = ctx.server.controller.set(controller)
         try:
-            result = await ctx.server.agent.prompt(
-                ctx.session_id, self.prompt, field_meta=self.meta or {}
+            result = await ctx.server.agent.receive_prompt(
+                self.request.model_copy(update={"session_id": ctx.session_id})
             )
         finally:
             ctx.server.controller.reset(token)

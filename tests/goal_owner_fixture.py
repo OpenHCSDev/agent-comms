@@ -5,13 +5,12 @@ import shutil
 
 import pytest
 
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 
 
 def canonical_goal_wire(root):
     """Create an empty real checked source for goal/wait fixture operations."""
-    comms = Comms(root)
-    comms.messaging.initialize_private_initial_protocol()
+    comms = wire(root)
     return comms
 
 
@@ -20,6 +19,6 @@ def copied_goal_bus(tmp_path):
     source = canonical_goal_wire(tmp_path / "source")
     target = tmp_path / "copy"
     shutil.copytree(source.root, target)
-    return Comms(target)
+    return wire(target)
 
 

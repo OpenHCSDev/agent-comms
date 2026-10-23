@@ -1,19 +1,22 @@
 """Retained native execution, refusal, and canonical headless/runtime behavior."""
 
-from bus_history import read_history
+
 import asyncio
 import os
 import sys
 from pathlib import Path
 
 import pytest
+from acp.schema import TextContentBlock
 
 import agent_comms.agent_events as events
+from agent_comms.acp_extension import CoordinationChangedUpdate, decode_updates
 from agent_comms.child_process import BoundedRun
 from agent_comms.launch_root import LaunchRoot
-from agent_comms.acp_extension import CoordinationChangedUpdate, decode_updates
+from agent_comms.threads import Thread
+from bus_history import read_history
+from bus_record_fixture import prepare_native_comms
 from pi_session_turn import one_turn_events
-
 
 @pytest.mark.parametrize("arguments,code", [(('--help',), 0), (('tools',), 2), ((), 1)])
 def test_headless_discovery_cannot_admit_an_unnamed_owner(tmp_path, arguments, code):
@@ -30,20 +33,21 @@ def test_headless_discovery_cannot_admit_an_unnamed_owner(tmp_path, arguments, c
     assert not root.exists()
 
 
-async def test_unvalidated_configuration_refuses_before_child(tmp_path):
+async def test_unvalidated_configuration_refuses_before_child(tmp_path, pinned_native):
     missing = tmp_path / "missing-native"
     with pytest.raises(FileNotFoundError) as caught:
-        [item async for item in one_turn_events(str(missing), (), "must not send", str(tmp_path))]
+        [item async for item in one_turn_events(
+            str(missing), (), "must not send", str(tmp_path), package=pinned_native)]
     assert caught.value.filename == str(missing)
 
 
 async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, native_runtime_package):
-    from agent_comms.acp import CommsClient
-    from agent_comms.comms import Comms
-    from agent_comms.runtime import socket_path
-
     # The real private boundary disallows volatile or symlinked roots.
     import tempfile
+
+    from agent_comms.acp import CommsClient
+    from agent_comms.comms import wire
+    from agent_comms.runtime import socket_path
 
     with tempfile.TemporaryDirectory(prefix="l0b-headless-", dir="/var/tmp") as owned:
         base = Path(owned)
@@ -51,9 +55,9 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
         caller_project = base / "caller-project"
         project.mkdir()
         caller_project.mkdir()
-        comms = Comms(base / "wire")
-        comms.messaging.initialize_private_initial_protocol()
-        comms.registry.declare(comms.registry.new_thread('headless', frozenset(), str(project)))
+        # Headless execution requires a private bus root (worker.py); its owner prepares one.
+        comms = prepare_native_comms(wire(base / "wire"))
+        comms.registry.declare(Thread('headless', frozenset(), str(project)))
         env = dict(
             os.environ,
             AGENT_COMMS_ROOT=str(comms.root),
@@ -90,7 +94,8 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
                 assert configuration.thread == registered.incarnation
                 assert configuration.wire_root == str(comms.root)
                 response = await client.prompt(
-                    "headless", [{"type": "text", "text": "!relay #all headless native route"}]
+                    "headless",
+                    [TextContentBlock(type="text", text="!relay #all headless native route")],
                 )
                 assert response.stop_reason == "end_turn"
                 assert [m.body for m in read_history(comms, "#all")] == [

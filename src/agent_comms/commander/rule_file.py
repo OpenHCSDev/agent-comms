@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, Self
 
-from agent_comms.commander.config import CommanderConfig
+from agent_comms.commander.package import CommanderPackage
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, boundary_decoder
 
@@ -89,7 +89,7 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
     def packaged(cls) -> tuple[Self, ...]:
         return tuple(
             sorted(
-                (cls.read(path) for path in CommanderConfig.packaged_rules_files()),
+                (cls.read(path) for path in CommanderPackage.rules_files()),
                 key=lambda rule: (cls.kinds().index(type(rule)), rule.name),
             )
         )
@@ -115,14 +115,9 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
         """The reminder hook's one-line tells, one declared by each packaged rule."""
         return tuple(rule.drift for rule in cls.packaged())
 
-    @abstractmethod
-    def review_rules(self) -> tuple[str, ...]: ...
-
 
 class FeedbackRuleFile(RuleFile):
-
-    def review_rules(self) -> tuple[str, ...]:
-        return (self.summary,)
+    """A rule that supplies feedback in the commander's instructions."""
 
 
 class HardRuleFile(FeedbackRuleFile, declared_name="hard-rule"):
@@ -130,6 +125,4 @@ class HardRuleFile(FeedbackRuleFile, declared_name="hard-rule"):
 
 
 class ReferenceRuleFile(RuleFile):
-
-    def review_rules(self) -> tuple[str, ...]:
-        return ()
+    """Supporting instructions read alongside the feedback rules."""

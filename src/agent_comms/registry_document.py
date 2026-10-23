@@ -2,23 +2,23 @@
 
 from __future__ import annotations
 
-import math
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass, field, replace
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Literal, Annotated
+from typing import TYPE_CHECKING, Literal, Annotated, Self
 
 
 from .child_process import NoProcess, ProcessIdentity
+from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import (
     FieldCodec,
     MalformedRecord,
     FieldPlan,
     SlicePolicy,
-    WireName,
+    WireOmitDefault,
     WireRequired,
 )
 from .registration_change import (
@@ -26,6 +26,7 @@ from .registration_change import (
     RegistrationChange,
     UpdatedRegistration,
 )
+from .repo import Repo, RepositorySelection
 from .registry_provenance import (
     DeletedThread,
     RegisteredRecipient,
@@ -41,25 +42,29 @@ from .restart_refusals import (
 from .thread_identity import (
     ClaimedIdentity,
     GenerationCounter,
+    OfferedTools,
     OwnerIdentity,
     RecordedThreadIncarnation,
+    ThreadIncarnation,
+    ThreadAuthority,
     TurnIdentity,
 )
 from .thread_presentation import ThreadOwnerBinding
 from .thread_status import (
+    ActiveThreadPresence,
     ArchivedThreadStatus,
     StoppedThreadStatus,
     ThreadStatus,
 )
 from .thread_text import ForkedParent, NoParent
-from .threads import Thread
-from .turn_lease import FinishedTurnFence, NoFinishedTurn, TurnCompletion, TurnLeaseFence
+from .threads import Thread, ThreadWorkState
+from .turn_lease import FinishedTurn, FinishedTurnFence, NoFinishedTurn, TurnCompletion, TurnLeaseFence
 
 if TYPE_CHECKING:
     from .activity import ObservedActivity
     from .agent_activity import AgentActivity
     from .audience_manifest import FrozenRecipient
-    from .bus_publication import CommittedDelivery
+    from .bus_publication import Delivered
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,7 +91,7 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
 
     def status(self, name: str) -> ThreadStatus:
         thread = self.require(name)
-        return self.statuses[thread.name].registered(thread)
+        return self.statuses[thread.name].registered(thread, self.last_seen[thread.name])
 
     def receiving(self, name: str) -> bool:
         """Whether a message sent now is read now; an unregistered name reads nothing."""
@@ -112,6 +117,11 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
         return (executor for thread in selected
                 if self.status(thread.name).in_view(visibility)
                 for executor in thread.role.executor(thread))
+
+    def active_threads(self, candidates: Iterable[Thread]) -> Iterator[Thread]:
+        """Select activity-bearing presences from this already acquired registry cut."""
+        return (member for thread in candidates
+                for member in self.status(thread.name).items_with(ActiveThreadPresence, thread))
 
     def channel_audience(self) -> Iterator[Thread]:
         """A channel reaches the default roster: stopped owners receive, archived do not."""
@@ -191,16 +201,31 @@ class ThreadSlice[Value](ABC):
                 return policy.value
         raise TypeError(f"{plan.name} declares no thread slice")
 
-    @staticmethod
-    def required[Document: type](document: Document) -> Document:
+    @classmethod
+    def required[Document: type](cls, document: Document) -> Document:
         """Refuse, at class definition, a document field without a slice kind."""
         for plan in FieldCodec.field_plans(document):
             if plan.declared.init and plan.records:
-                ThreadSlice.of(plan)
+                cls.of(plan)
         return document
 
 
-class OwnRow(ThreadSlice[dict]):
+class SnapshotValue[Value](ThreadSlice[Value]):
+    """A declared registry field owns both editable and snapshot copies."""
+
+    @classmethod
+    @abstractmethod
+    def freeze(cls, value: Value) -> object: ...
+
+    @staticmethod
+    def of(plan: FieldPlan) -> type[SnapshotValue]:
+        policy = ThreadSlice.of(plan)
+        if not issubclass(policy, SnapshotValue):
+            raise TypeError(f"{plan.name} declares no snapshot value policy")
+        return policy
+
+
+class OwnRow(SnapshotValue[dict]):
     """The row under the thread's own name."""
 
     @staticmethod
@@ -208,8 +233,53 @@ class OwnRow(ThreadSlice[dict]):
         return {canonical: raw[canonical]} if canonical in raw else {}
 
     @classmethod
-    def copy(cls, value: dict) -> dict:
+    def copy(cls, value: Mapping) -> dict:
         return dict(value)
+
+    @classmethod
+    def freeze(cls, value: Mapping) -> Mapping:
+        return MappingProxyType(cls.copy(value))
+
+
+@dataclass(frozen=True)
+class ThreadSection:
+    """A document field holding one row per thread name. Its field plan owns both the
+    wire key and the attribute, so a revision reuses unchanged rows without naming them."""
+
+    plan: FieldPlan
+
+    def rows(self, raw: Mapping[str, object]) -> dict[str, object]:
+        rows = raw.get(self.plan.key)
+        if not isinstance(rows, dict):
+            raise MalformedRecord(f"registry section {self.plan.key} must be an object")
+        return rows
+
+    def decoded(self, document: object) -> MutableMapping[str, object]:
+        rows = self.plan.current(document)
+        if not isinstance(rows, MutableMapping):
+            raise TypeError(f"{self.plan.name} does not hold one row per thread")
+        return rows
+
+    def kept(self, raw: Mapping[str, object], earlier_raw: Mapping[str, object],
+             earlier: object) -> frozenset[str]:
+        """Names whose row equals the earlier revision's, so their decoded value is reused."""
+        held, before = self.decoded(earlier), self.rows(earlier_raw)
+        return frozenset(
+            name for name, row in self.rows(raw).items()
+            if name in held and name in before and before[name] == row
+        )
+
+    def changed_rows(self, raw: Mapping[str, object], kept: frozenset[str]) -> dict[str, object]:
+        return {name: row for name, row in self.rows(raw).items() if name not in kept}
+
+    def reuse(self, raw: Mapping[str, object], kept: frozenset[str], earlier: object,
+              changed: object) -> None:
+        """Fill ``changed``'s own rows, in wire order, with the earlier decoded value of
+        every kept name; ``changed`` decoded only the rows that differ."""
+        reused, fresh = self.decoded(earlier), self.decoded(changed)
+        merged = {name: (reused if name in kept else fresh)[name] for name in self.rows(raw)}
+        fresh.clear()
+        fresh.update(merged)
 
 
 class AliasesOf(OwnRow):
@@ -236,16 +306,95 @@ class GenerationOf(ThreadSlice[GenerationCounter]):
         return GenerationCounter(value.counter, dict(value.generations))
 
 
-class WholeDocumentValue(ThreadSlice[int]):
+class WholeDocumentValue[Value](SnapshotValue[Value]):
     """A scalar shared by the whole document and every one-thread view."""
 
     @staticmethod
-    def cut(raw: int, canonical: str) -> int:
+    def cut(raw: Value, canonical: str) -> Value:
         return raw
 
     @classmethod
-    def copy(cls, value: int) -> int:
+    def copy(cls, value: Value) -> Value:
         return value
+
+    @classmethod
+    def freeze(cls, value: Value) -> Value:
+        return cls.copy(value)
+
+
+class RootPurpose(DeclaredFamily, affix="RootPurpose"):
+    """The registry's durable permission to mutate this root."""
+
+    @abstractmethod
+    def require_write(self) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class WorkingRootPurpose(RootPurpose):
+    def require_write(self) -> None:
+        pass
+
+
+@dataclass(frozen=True, slots=True)
+class HistoricalRootPurpose(RootPurpose):
+    def require_write(self) -> None:
+        raise RelationViolationError("Historical roots are read-only")
+
+
+@dataclass(frozen=True)
+class CommanderProject(DeclaredFamily, affix="CommanderProject"):
+    """This bus's commander declaration; identity resolves through the registry lookup."""
+
+    @abstractmethod
+    def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]: ...
+
+    @abstractmethod
+    def require(self) -> RegisteredCommanderProject: ...
+
+    @abstractmethod
+    def named(self, commander: ThreadIncarnation,
+              repositories: RepositorySelection) -> RegisteredCommanderProject: ...
+
+    @abstractmethod
+    def reconfigured(self, repositories: RepositorySelection) -> CommanderProject: ...
+
+
+class NoCommanderProject(CommanderProject):
+    def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        return ()
+
+    def require(self) -> RegisteredCommanderProject:
+        raise RelationViolationError("This bus has no registered commander project.")
+
+    def named(self, commander: ThreadIncarnation,
+              repositories: RepositorySelection) -> RegisteredCommanderProject:
+        return RegisteredCommanderProject(commander, repositories.founding(commander.name))
+
+    def reconfigured(self, repositories: RepositorySelection) -> CommanderProject:
+        repositories.without_commander()
+        return self
+
+
+@dataclass(frozen=True)
+class RegisteredCommanderProject(CommanderProject):
+    commander: ThreadIncarnation
+    repos: tuple[Repo, ...]
+
+    def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        selected = snapshot.threads_for(self.commander.require_recorded())
+        if not selected:
+            raise RelationViolationError("The registered commander thread no longer exists.")
+        return selected
+
+    def require(self) -> RegisteredCommanderProject:
+        return self
+
+    def named(self, commander: ThreadIncarnation,
+              repositories: RepositorySelection) -> RegisteredCommanderProject:
+        return RegisteredCommanderProject(commander, repositories.applied(self.repos))
+
+    def reconfigured(self, repositories: RepositorySelection) -> CommanderProject:
+        return replace(self, repos=repositories.applied(self.repos))
 
 
 @ThreadSlice.required
@@ -254,6 +403,12 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
     version: Annotated[
         Literal[1], SlicePolicy(WholeDocumentValue), WireRequired()
     ] = 1
+    purpose: Annotated[RootPurpose, SlicePolicy(WholeDocumentValue)] = field(
+        default_factory=WorkingRootPurpose
+    )
+    commander_project: Annotated[
+        CommanderProject, SlicePolicy(WholeDocumentValue), WireOmitDefault()
+    ] = field(default_factory=NoCommanderProject)
     threads: Annotated[dict[str, Thread], SlicePolicy(OwnRow)] = field(
         default_factory=dict
     )
@@ -270,7 +425,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         default_factory=GenerationCounter
     )
     claims: Annotated[
-        GenerationCounter, WireName("admissions"), SlicePolicy(GenerationOf)
+        GenerationCounter, SlicePolicy(GenerationOf)
     ] = field(default_factory=GenerationCounter)
 
     _human: UserThreadLookup[str] = field(init=False, repr=False, compare=False)
@@ -341,17 +496,18 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
             ]
             canonical = name
             for kind, key in keyed:
-                canonical = kind.canonical(raw[key], canonical)
-            restricted = {key: kind.cut(raw[key], canonical) for kind, key in keyed}
+                if key in raw:
+                    canonical = kind.canonical(raw[key], canonical)
+            restricted = {key: kind.cut(raw[key], canonical) for kind, key in keyed if key in raw}
         except (AttributeError, KeyError, TypeError) as error:
             raise RelationViolationError(f"Invalid registry document: {error!r}") from error
         return cls.from_wire(restricted).entry(name)
 
     @classmethod
-    def thread_rows(cls) -> tuple[str, ...]:
+    def thread_sections(cls) -> tuple[ThreadSection, ...]:
         """The sections that hold one row per thread name."""
         return tuple(
-            plan.name
+            ThreadSection(plan)
             for plan in FieldCodec.field_plans(cls)
             if plan.declared.init and plan.records and ThreadSlice.of(plan) is OwnRow
         )
@@ -372,33 +528,19 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
                 document = FieldCodec.decode(cls, raw)
             else:
                 earlier_raw, decoded = earlier
-                thread_rows = cls.thread_rows()
-                if not isinstance(raw, dict) or any(
-                    not isinstance(raw.get(section), dict) for section in thread_rows
-                ):
-                    raise MalformedRecord("registry thread sections must be objects")
-                kept = {
-                    section: {
-                        name for name, row in raw[section].items()
-                        if name in getattr(decoded, section)
-                        and name in earlier_raw[section] and earlier_raw[section][name] == row
-                    }
-                    for section in thread_rows
-                }
+                if not isinstance(raw, dict):
+                    raise MalformedRecord("registry document must be an object")
+                kept = tuple(
+                    (section, section.kept(raw, earlier_raw, decoded))
+                    for section in cls.thread_sections()
+                )
                 changed = FieldCodec.decode(cls, {**raw, **{
-                    section: {name: row for name, row in raw[section].items()
-                              if name not in kept[section]}
-                    for section in thread_rows
+                    section.plan.key: section.changed_rows(raw, same) for section, same in kept
                 }})
-                reused: dict[str, Any] = {
-                    section: {
-                        name: (getattr(decoded, section) if name in kept[section]
-                               else getattr(changed, section))[name]
-                        for name in raw[section]
-                    }
-                    for section in thread_rows
-                }
-                document = replace(changed, **reused)
+                for section, same in kept:
+                    section.reuse(raw, same, decoded, changed)
+                # Construct again so derived state (the user thread) covers every row.
+                document = replace(changed)
             names = set(document.threads)
             if names != set(document.statuses) or names != set(document.last_seen):
                 raise MalformedRecord("thread presence does not match declarations")
@@ -415,6 +557,30 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
             return document
         except MalformedRecord as error:
             raise RelationViolationError(f"Invalid registry document: {error}") from error
+
+    def observe_offered_tools(self, identity: ThreadIncarnation, offered: OfferedTools) -> Thread:
+        current = self.require(identity.name)
+        if current.incarnation != identity:
+            raise RelationViolationError("Tool observation belongs to a replaced thread.")
+        updated = current.observing_tools(offered)
+        self.threads[current.name] = updated
+        return updated
+
+    def set_work_state(self, name: str, state: ThreadWorkState) -> Thread:
+        """Change order availability without replacing the thread's owner or presence."""
+        current = self.require(name)
+        if not current.work_state.may_become(state):
+            raise RelationViolationError("Invalid thread work-state transition.")
+        updated = replace(current, work_state=state)
+        self.threads[current.name] = updated
+        return updated
+
+    def set_commander_project(self, project: CommanderProject) -> CommanderProject:
+        """Publish a project only for its current registered commander identity."""
+        for thread in project.commanders(RegistrySnapshot.capture(self)):
+            thread.require_commander()
+        self.commander_project = project
+        return project
 
     def prepare_declaration(self, thread: Thread, status: ThreadStatus) -> RegistrationChange:
         canonical = self.canonical_name(thread.name)
@@ -442,20 +608,8 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
                 previous_status=self.status(thread.name),
             )
             return change.restarted() if new_owner else change
-        if any(existing.created_at == thread.created_at for existing in self.threads.values()):
-            # The Windows wall clock can return the same value for six
-            # independent default-constructed threads. Allocate a distinct
-            # identity under this store lock, but never rewrite an explicit
-            # caller-supplied creation identity or alias someone else's claim.
-            if not thread._generated_created_at:
-                raise RelationViolationError("Registry creation identities collide.")
-            used = {existing.created_at for existing in self.threads.values()}
-            candidate = float(thread.created_at)
-            while candidate in used:
-                candidate = math.nextafter(candidate, math.inf)
-            if not math.isfinite(candidate):
-                raise RelationViolationError("Registry creation identities collide.")
-            thread = replace(thread, created_at=candidate)
+        used = {existing.created_at for existing in self.threads.values()}
+        thread = replace(thread, created_at=thread.created_at.distinct_from(used))
 
         change = InitialRegistration(thread=thread, status=status)
         return change.restarted() if new_owner else change
@@ -550,8 +704,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
 
     def unregister(self, name: str) -> None:
         name = self.require(name).name
-        if self.status(name).active:
-            self.owners.advance(name)
+        self.status(name).withdraw_owner(self.owners, name)
         thread = self.threads[name]
         self.set_status(name, thread.execution.registered_status(thread, StoppedThreadStatus()))
         self.advance_claim(name)
@@ -559,8 +712,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
 
     def archive(self, name: str) -> None:
         name = self.require(name).name
-        if self.status(name).active:
-            self.owners.advance(name)
+        self.status(name).withdraw_owner(self.owners, name)
         self.set_status(name, ArchivedThreadStatus())
         self.advance_claim(name)
 
@@ -609,8 +761,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         )
         for child_name in detached:
             self.threads[child_name] = replace(self.threads[child_name], parent=NoParent())
-        if self.status(name).active:
-            self.owners.advance(name)
+        self.status(name).withdraw_owner(self.owners, name)
         self.advance_claim(name)
         del self.threads[name]
         self.statuses.pop(name, None)
@@ -638,28 +789,24 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         record = current.turn_record
         if record != canonical_lease.record:
             return False, NoFinishedTurn()
-        if TurnIdentity(current.incarnation, current.turn_generation) != canonical_lease.identity:
+        if current.turn_identity != canonical_lease.identity:
             return False, NoFinishedTurn()
         turn = record.read().require_active()
         if not turn.may_release(canonical_lease):
             return False, NoFinishedTurn()
         attested = (canonical_lease.can_attest(self.claims.generations[name])
-                    and turn.held_by(canonical_lease) and self.status(name).active)
+                    and turn.held_by(canonical_lease))
+        completion = (self.status(name).completed_turn(canonical_lease)
+                      if attested else NoFinishedTurn())
         keeps_resume = turn.phase.keeps_project_resume
         record.without_claim()
         self.threads[name] = replace(
-            current.without_turn(),
-            last_finished_turn_id=(lease.turn_id if current.turn_generation else None),
+            current,
+            turn_record=FinishedTurn(lease.turn_id),
             project_resume_due=current.project_resume_due and keeps_resume,
         )
         self.last_seen[name] = time.time()
-        if not attested:
-            return True, NoFinishedTurn()
-        return True, FinishedTurnFence(
-            identity=canonical_lease.identity,
-            turn_id=lease.turn_id,
-            claimed_generation=lease.claimed_generation,
-        )
+        return True, completion
 
 
 @dataclass(frozen=True, slots=True)
@@ -681,11 +828,7 @@ class RegistryEntry:
         return name in self.names
 
     def owned_by(self, owner: OwnerIdentity, process: ProcessIdentity) -> bool:
-        return (
-            self.status.active
-            and self.matches_name(owner.incarnation.name)
-            and owner.owns(self.thread, self.owner_generation, process)
-        )
+        return self.status.owns_entry(self, owner, process)
 
     def require_owner_process(self, owner: OwnerIdentity, process: ProcessIdentity) -> Thread:
         """The exact saved owner lease, current name and process still agree."""
@@ -700,15 +843,43 @@ class RegistryEntry:
         return OwnerIdentity(self.thread.incarnation, self.owner_generation)
 
 
+@SnapshotValue.required
 @dataclass(frozen=True, slots=True)
 class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryProvenance):
-    threads: Mapping[str, Thread]
-    statuses: Mapping[str, ThreadStatus]
-    last_seen: Mapping[str, float]
-    aliases: Mapping[str, str]
-    owner_generations: Mapping[str, int]
-    _claimed_generations: Mapping[str, int] = field(repr=False)
-    by_lookup: Mapping[str, Thread] = field(repr=False, compare=False)
+    purpose: Annotated[RootPurpose, SlicePolicy(WholeDocumentValue)]
+    threads: Annotated[Mapping[str, Thread], SlicePolicy(OwnRow)]
+    statuses: Annotated[Mapping[str, ThreadStatus], SlicePolicy(OwnRow)]
+    last_seen: Annotated[Mapping[str, float], SlicePolicy(OwnRow)]
+    aliases: Annotated[Mapping[str, str], SlicePolicy(OwnRow)]
+    owner_generations: Annotated[Mapping[str, int], SlicePolicy(OwnRow)]
+    _claimed_generations: Annotated[Mapping[str, int], SlicePolicy(OwnRow)] = field(repr=False)
+    commander_project: Annotated[CommanderProject, SlicePolicy(WholeDocumentValue)] = field(
+        default_factory=NoCommanderProject
+    )
+    by_lookup: Mapping[str, Thread] = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        """Own each copied value and derive the birth index from the frozen threads."""
+        for plan in FieldCodec.field_plans(type(self)):
+            if plan.declared.init:
+                object.__setattr__(
+                    self, plan.name, SnapshotValue.of(plan).freeze(getattr(self, plan.name)),
+                )
+        indexed: dict[str, Thread] = {}
+        for thread in self.threads.values():
+            lookup = thread.incarnation.require_recorded().lookup
+            if lookup in indexed:
+                raise RelationViolationError("Registry creation identities collide.")
+            indexed[lookup] = thread
+        object.__setattr__(self, "by_lookup", MappingProxyType(indexed))
+        super(RegistrySnapshot, self).__post_init__()
+
+    def __reduce__(self) -> tuple[type[Self], tuple[object, ...]]:
+        """Worker restoration preserves scalar policy and re-enters the constructor."""
+        return type(self), tuple(
+            SnapshotValue.of(plan).copy(getattr(self, plan.name))
+            for plan in FieldCodec.field_plans(type(self)) if plan.declared.init
+        )
 
     def claim_generation(self, name: str) -> int:
         """The allocated input generation follows this registry's alias lineage."""
@@ -727,31 +898,30 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
     def threads_for(self, incarnation: RecordedThreadIncarnation) -> tuple[Thread, ...]:
         return tuple(self.by_lookup[key] for key in (incarnation.lookup,) if key in self.by_lookup)
 
+    def holds_turn(self, identity: TurnIdentity) -> bool:
+        """Whether its thread still names this turn generation; a superseded lease does not."""
+        return any(thread.turn_identity == identity
+                   for thread in self.threads_for(identity.incarnation.require_recorded()))
+
     def idle_after(self, fence: FinishedTurnFence) -> tuple[Thread, ...]:
         return tuple(
             thread
-            for thread in self.threads_for(fence.identity.incarnation.require_recorded())
-            if self.status(thread.name).active
-            and thread.latest_idle_turn(fence, self.claim_generation(thread.name))
+            for thread in self.active_threads(self.threads_for(fence.identity.incarnation.require_recorded()))
+            if thread.latest_idle_turn(fence, self.claim_generation(thread.name))
         )
 
     @classmethod
     def capture(cls, document: RegistryDocument) -> RegistrySnapshot:
         """One live registry cut owns the index and all its source maps."""
-        indexed: dict[str, Thread] = {}
-        for thread in document.threads.values():
-            lookup = thread.incarnation.require_recorded().lookup
-            if lookup in indexed:
-                raise RelationViolationError("Registry creation identities collide.")
-            indexed[lookup] = thread
         return cls(
-            threads=MappingProxyType(dict(document.threads)),
-            statuses=MappingProxyType(dict(document.statuses)),
-            last_seen=MappingProxyType(dict(document.last_seen)),
-            aliases=MappingProxyType(dict(document.aliases)),
-            owner_generations=MappingProxyType(dict(document.owners.generations)),
-            _claimed_generations=MappingProxyType(dict(document.claims.generations)),
-            by_lookup=MappingProxyType(indexed),
+            purpose=document.purpose,
+            threads=document.threads,
+            statuses=document.statuses,
+            last_seen=document.last_seen,
+            aliases=document.aliases,
+            owner_generations=document.owners.generations,
+            _claimed_generations=document.claims.generations,
+            commander_project=document.commander_project,
         )
 
     def observed_activity(
@@ -769,11 +939,16 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
                 observed[name] = DeletedThread(canonical)
         return observed
 
+    def unread_since(
+        self, actor: str, since: float | None, recorded_delivery: bool,
+    ) -> float | None:
+        return self.require(actor).role.unread_since(since, recorded_delivery)
+
     def displayed_recipient_effect(self, reads, message, thread: Thread, *, document=None):
         return thread.role.displayed_recipient_effect(reads, message, thread, self, document)
 
     def recipient(
-        self, recipient: FrozenRecipient, original: CommittedDelivery
+        self, recipient: FrozenRecipient, original: Delivered
     ) -> RegisteredRecipient | RetiredRecipient:
         """A missing live thread was retired only if the original send names it."""
         lookup = recipient.recipient_lookup
@@ -810,6 +985,19 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
     def claimed_identity(self, name: str) -> ClaimedIdentity:
         canonical = self.canonical_name(name)
         return ClaimedIdentity(self.threads[canonical].incarnation, self.claim_generation(canonical))
+
+    def same_authority(self, name: str, other: RegistrySnapshot, other_name: str) -> bool:
+        """One participant retains its owner, input claim and registered presence.
+
+        Titles, aliases and unrelated rows do not allocate or revoke authority.
+        """
+        return (
+            self.authority(name) == other.authority(other_name)
+            and self.status(name) == other.status(other_name)
+        )
+
+    def authority(self, name: str) -> ThreadAuthority:
+        return ThreadAuthority(self.owner_identity(name), self.claimed_identity(name))
 
     def owner_binding(self, name: str) -> ThreadOwnerBinding:
         canonical = self.canonical_name(name)

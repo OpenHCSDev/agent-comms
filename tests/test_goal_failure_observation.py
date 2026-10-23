@@ -1,5 +1,6 @@
 """Failure evidence is passive; only its fenced attempt owns terminal writes."""
 
+from agent_comms.errors import StaleAttemptError
 import json
 import os
 import sqlite3
@@ -8,18 +9,15 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.diagnostics import FailureReason
-from agent_comms.goal_attempts import (
-    AttemptRecord,
-    GoalAttemptStore,
-    StaleAttemptError,
-    UnresolvedAttemptError,
-)
+from agent_comms.turn_failure import BackendFailed, FinalStopMissing
+from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore
+from agent_comms.errors import UnresolvedAttemptError
 from agent_comms.goal_failure_observation import FailedTurnObservation, NoFailedTurnEvidence
 from agent_comms.goal_generation import BlockedGeneration
 from agent_comms.goals import Goal
 from agent_comms.thread_identity import RecordedThreadIncarnation, TurnIdentity
-from agent_comms.turn_lease import StoredTurnRecord, TurnLeaseFence
+from agent_comms.turn_lease import FinishedTurn, StoredTurnRecord, TurnLeaseFence
+from agent_comms.threads import Thread
 
 
 @pytest.fixture
@@ -28,10 +26,10 @@ def bound(tmp_path, *, thread_registration):
     root.mkdir(mode=0o700)
     store = GoalAttemptStore.initialize(root)
     goal = Goal("private goal prose", "goal", published_seq=0, revision=2)
-    owner = thread_registration.new_thread(
+    owner = Thread(
         'owner', frozenset(), '/private-worktree',
         process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0,
-        goal=goal, turn_generation=7, last_finished_turn_id='a' * 32,
+        goal=goal, turn_generation=7, turn_record=FinishedTurn('a' * 32),
     )
     store.create_goal(goal.id)
     permit = store.claim_launch(store.reserve(goal.id, 1))
@@ -43,7 +41,7 @@ def bound(tmp_path, *, thread_registration):
     observation = FailedTurnObservation.from_terminal(
         permit.reservation, owner=owner, goal=goal, lease=lease,
         turn_id=lease.turn_id, claim_scope=3, current_owner=owner, current_claim=3,
-        reason=FailureReason.FINAL_STOP_MISSING,
+        failure=FinalStopMissing,
     )
     assert observation is not None
     return store, owner, lease, observation
@@ -81,7 +79,7 @@ def test_mismatched_turn_lease_is_not_bound(bound, mutation):
     rejected = FailedTurnObservation.from_terminal(
         observation.reservation, owner=owner, goal=owner.goal,
         lease=replace(lease, **mutation), turn_id=lease.turn_id, claim_scope=3,
-        current_owner=owner, current_claim=3, reason=FailureReason.BACKEND_FAILED,
+        current_owner=owner, current_claim=3, failure=BackendFailed,
     )
     assert rejected is None
     observation.reservation.fail(store, "failed anyway", observation=rejected)

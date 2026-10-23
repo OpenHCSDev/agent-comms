@@ -15,6 +15,7 @@ from agent_comms.native_transcript import NativeTranscript
 from agent_comms.native_pi import NativeContextJournal, NativeContextProof, PrivateEvidenceRead
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.coordinator import Coordination
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.store_files import StoreLockContention, _store_lock
 from test_native_pi import INPUT_ID, _evidence
 
@@ -138,13 +139,13 @@ def test_physical_lock_budget_closes_refused_descriptor(tmp_path):
         # Reentrancy is intentional; a separate execution must contend.
         def compete():
             with pytest.raises(BlockingIOError):
-                with _store_lock(lock_target, blocking=False, contention=StoreLockContention(.025)):
+                with _store_lock(lock_target, contention=StoreLockContention(.025)):
                     pytest.fail("A competing descriptor acquired exclusive ownership")
         with ThreadPoolExecutor(max_workers=1) as worker:
             worker.submit(compete).result(timeout=1)
     # The original and the refused scope both closed: immediate new acquisition
     # succeeds without any leaked earlier lock or replacement of its evidence.
-    with _store_lock(lock_target, blocking=False):
+    with _store_lock(lock_target, contention=StoreLockContention(0)):
         pass
 
 
@@ -152,23 +153,23 @@ def test_consumer_work_cannot_spend_physical_lock_resource(tmp_path):
     import time
     from agent_comms.store_files import StoreLockContention, _store_lock
     resource = StoreLockContention(.025)
-    with _store_lock(tmp_path / "first", blocking=False, contention=resource):
+    with _store_lock(tmp_path / "first", contention=resource):
         time.sleep(.04)
-    with _store_lock(tmp_path / "second", blocking=False, contention=resource):
+    with _store_lock(tmp_path / "second", contention=resource):
         assert resource.remaining == .025
 
 
 @pytest.mark.asyncio
-async def test_joined_worker_retains_original_evidence_and_owns_sqlite_until_cancelled_join(tmp_path):
+async def test_joined_worker_retains_original_evidence_and_owns_sqlite_until_cancelled_join(
+        tmp_path, private_comms):
     """Cancellation cannot retire borrowed source before its SQL worker closes."""
     files = _evidence(tmp_path)
     session = files.session
     _header, input_record = NativeTranscript(session).forward(0, session.stat().st_size)
     before = session.read_bytes(), files.input_proof.read_bytes()
-    path = tmp_path / 'coordination.sqlite3'
+    path = CoordinationStore.path_in(private_comms.root)
     with Coordination(str(path), clock_ms=lambda: 1234) as original:
-        original.install_private_runtime()
-        original.participants.register('original', 'owner', 'owner', committed=True)
+        original.participants.register('original', committed=True)
         original_connection = original.session._connection
         entered, release = threading.Event(), threading.Event()
         worker_connections = []
@@ -178,7 +179,7 @@ async def test_joined_worker_retains_original_evidence_and_owns_sqlite_until_can
                 assert store.session.now() == original.session.now()
                 worker_connections.append(store.session._connection)
                 with store.session.read():
-                    assert store.participants.get('original').owner_thread == 'owner'
+                    assert store.participants.get('original').owner_identity.owner_lookup == 'original'
                     NativeContextProof.read_evidence(files, INPUT_ID, evidence=evidence,
                                                      session_entry_start=input_record.start)
                     entered.set()
@@ -203,7 +204,7 @@ async def test_joined_worker_retains_original_evidence_and_owns_sqlite_until_can
                 with pytest.raises(sqlite3.ProgrammingError):
                     _ = worker_connections[0].in_transaction
                 with original.session.read():
-                    assert original.participants.get('original').owner_thread == 'owner'
+                    assert original.participants.get('original').owner_identity.owner_lookup == 'original'
             finally:
                 release.set()
                 if not pending.done():
@@ -211,5 +212,3 @@ async def test_joined_worker_retains_original_evidence_and_owns_sqlite_until_can
                 await asyncio.gather(pending, return_exceptions=True)
     assert evidence.source.stream.closed
     assert (session.read_bytes(), files.input_proof.read_bytes()) == before
-
-

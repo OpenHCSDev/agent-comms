@@ -21,7 +21,7 @@ from .agent_backend import (
     RuntimeLocation,
 )
 from .agent_events import Error
-from .coordination_database import CoordinationStore
+from .locked_store import SQLiteFile
 from .external_transcript import ExternalCut
 from .native_child import PiChild
 from .native_entries import StoredEntry
@@ -37,7 +37,6 @@ from .pi_events import AutoRetryEnd, DurablePiEvent, RetryEnd
 from .pi_payloads import PiOmitted, PiResponseData
 from .pi_vocabulary import ThinkingLevelField
 from .transcript_sources import TranscriptSource
-from .unstarted_runtime import UnstartedRuntime
 
 
 @dataclass(frozen=True)
@@ -64,7 +63,7 @@ class DurableDatabase(SessionFiles, RuntimeLocation):
 
     @property
     def members(self):
-        return (*CoordinationStore.files(self.session), self.writer_lock)
+        return (*SQLiteFile.files(self.session), self.writer_lock)
 
     def storage_files(self):
         return (self,)
@@ -206,9 +205,7 @@ class CompactDurable(ExactResponse, Compact):
 
 
 class PiDurableBackend(AgentBackend, Compacts):
-    serves_threads = False
     location_type = DurableDatabase
-    unstarted_type = UnstartedRuntime
     event_kinds = frozenset(kind for member in DurablePiEvent.members_with(DurablePiEvent) for kind in member.known_kinds())
 
     def __init__(self):
@@ -226,10 +223,10 @@ class PiDurableBackend(AgentBackend, Compacts):
     async def open(self, thread):
         async with self.lock:
             if self.child is None:
-                path = Path(thread.runtime.path)
+                path = Path(thread.writable_runtime.path)
                 path.parent.mkdir(parents=True, exist_ok=True)
                 with ExitStack() as resources:
-                    lock = resources.enter_context(thread.runtime.writer_lock.open('a+b'))
+                    lock = resources.enter_context(thread.writable_runtime.writer_lock.open('a+b'))
                     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
                     child = await PiChild.start_command(('node', str(Path(__file__).with_name('pi_durable_host.mjs'))),
                         cwd=thread.worktree, pass_fds=(lock.fileno(),), event_type=DurablePiEvent, resources=resources.pop_all())

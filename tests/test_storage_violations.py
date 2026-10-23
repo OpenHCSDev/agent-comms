@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 import json
 import shutil
 import subprocess
@@ -11,12 +12,12 @@ from types import CodeType
 
 import pytest
 
-from order_scope_fixture import FIX_SCOPE
-
 from agent_comms.change_report import FileLine
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import OrderCheck
+from agent_comms.heartbeat_frame import HeartbeatFrame
+from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import StandingRule
@@ -27,9 +28,11 @@ from agent_comms.storage_rules import (
     StorageViolation,
     UnitStorage,
 )
-from agent_comms.todos import GoalRef, PendingProblemOrder, PresentCheckout, PullRequests
-from agent_comms.order_runs import MechanicalOrderRun
+from agent_comms.todos import PendingProblemOrder, PresentCheckout, ProgressRead
 from agent_comms.ui_model.unit_state import UnitState
+from order_scope_fixture import FIX_SCOPE
+from agent_comms.order_runs import MechanicalOrderRun
+from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize(
@@ -46,6 +49,7 @@ from agent_comms.ui_model.unit_state import UnitState
 )
 def test_storage_family_reads_once_and_renders_each_broken_fact(
     tmp_path: Path,
+    configured_repository,
     has_home: bool,
     extra_count: int,
     expected: set[type[StorageViolation]],
@@ -91,10 +95,11 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
     (root / "storage.json").write_text(
         json.dumps(FieldCodec.encode(StorageRule(checkout_base=base)))
     )
-    comms = Comms(root)
-    lead = comms.registry.declare(comms.registry.new_thread("lead", frozenset(), str(repository)))
+    comms = wire(root)
+    lead = comms.registry.declare(Thread("lead", frozenset(), str(repository)))
+    configured_repository(comms)
     worker = comms.registry.declare(
-        comms.registry.new_thread("worker", frozenset(), str(home))
+        Thread("worker", frozenset(), str(home))
     )
     comms.goals.todos.create(
         "P1",
@@ -104,7 +109,7 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
         owner=worker,
         generation="storage-case",
         review_at=RecordedEventTime(1000),
-        goal=GoalRef("lead", lead.created_at, "storage-case"),
+        request=comms.goals.todos.add_request(lead.incarnation, "Fix the filesystem paths").id,
         order=PendingProblemOrder(
             id="storage-case-order", scope=FIX_SCOPE,
             owner=FileLine(__file__, 1),
@@ -130,8 +135,10 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
         monitoring.set_local_events(
             monitoring.PROFILER_ID, UnitStorage.read.__func__.__code__, monitoring.events.PY_RETURN
         )
+        pulls = ProgressRead()
         found = StorageViolation.broken(
-            comms, "lead", observed=UnitState.current(comms, "lead", PullRequests()))
+            comms, "lead", observed=UnitState.current(comms, "lead", pulls),
+            frame=HeartbeatFrame.read(comms, "lead", pulls))
     finally:
         monitoring.free_tool_id(monitoring.PROFILER_ID)
     assert {type(violation) for violation in found} == expected

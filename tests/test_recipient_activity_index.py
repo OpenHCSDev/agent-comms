@@ -1,12 +1,13 @@
 """Registry snapshots own recipient lookup; activity reads own their requested set."""
 
+
 from dataclasses import replace
 
 import pytest
 
 from agent_comms.activity import Activity, ActivityState, ActivityStore
 from agent_comms.audience_manifest import FrozenRecipient
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.presentation import AllOutcomes, MessageNotification, OwnerOutcomes
@@ -19,12 +20,13 @@ from agent_comms.thread_identity import (
     UnrecordedThreadIncarnation,
 )
 from goal_owner_fixture import canonical_goal_wire
+from agent_comms.threads import Thread
 
 
 def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_owner(tmp_path):
-    comms = Comms(tmp_path / "bus")
+    comms = wire(tmp_path / "bus")
     for name, birth in (("old", 1700.0), ("second", 1701.0)):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path), created_at=birth))
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path), created_at=birth))
     source = comms.registry.snapshot()
     with pytest.raises(RelationViolationError):
         RegistrySnapshot.capture(replace(comms.registry.store.read(), threads={
@@ -77,10 +79,9 @@ def test_activity_store_selects_only_requested_threads(tmp_path):
 def test_viewer_selects_the_outcomes_of_a_delivery_window(tmp_path, viewer_of, seen):
     comms = canonical_goal_wire(tmp_path / "bus")
     for name in ("sender", "peer-a", "peer-b"):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset({"ci"}), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset({"ci"}), str(tmp_path)))
     sent = comms.messaging.send("sender", "#ci", "channel outcome").message
-    with comms.bus.log.checked_read() as source:
-        original = source.delivery(sent.seq)
+    original = comms.bus.bus.delivery(sent.seq)
     lookups = {name: thread.incarnation.lookup
                for name, thread in comms.registry.snapshot().threads.items()}
     window = MessageNotification.delivery_window(

@@ -24,6 +24,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.thread_identity import TurnId
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from stored_inputs import insert_inputs, stored_inputs
+from agent_comms.threads import Thread
 
 
 def test_original_batch_publication_preserves_prior_rows_and_reserves_only_new_inputs(tmp_path):
@@ -88,7 +89,7 @@ def test_saved_discriminator_and_optional_notices_roundtrip_without_replay(tmp_p
     from agent_comms.text_digest import TextDigest
 
     saved = FieldCodec.encode(BoundUnknownInput(
-        key="acp:old", sequence=None, owner="worker", claim_scope=1,
+        key="acp:old", sequence=None, owner="worker", claim_generation=1,
         target="worker", source_text="Retain me", turn_id="turn", native_id="a" * 32,
         sent_digest=TextDigest.of("Exact sent text"), notice_dismissed=True,
         goal_reviews={"goal": GoalInputDecision(goal_revision=7, turn_id="review")},
@@ -115,7 +116,7 @@ def test_original_native_user_receipts_include_group_and_corrected_final_only(tm
     from agent_comms.registration import Registration
 
     registry = Registration(tmp_path / "registry.json")
-    registry.register(registry.new_thread('worker', frozenset(), str(tmp_path), created_at=123.0, process_identity=ProcessIdentity.capture(os.getpid())))
+    registry.register(Thread('worker', frozenset(), str(tmp_path), created_at=123.0, process_identity=ProcessIdentity.capture(os.getpid())))
     registry.lease_local_turn("worker", "turn")
     lease = registry.require("worker").turn_lease
     claim_scope = lease.claimed_generation
@@ -174,7 +175,7 @@ def test_original_native_user_receipts_include_group_and_corrected_final_only(tm
     registry.release_turn(lease)
     registry.unregister("renamed")
     registry.remove("renamed")
-    registry.register(registry.new_thread('renamed', frozenset(), str(tmp_path), created_at=321.0, process_identity=ProcessIdentity.capture(os.getpid())))
+    registry.register(Thread('renamed', frozenset(), str(tmp_path), created_at=321.0, process_identity=ProcessIdentity.capture(os.getpid())))
     assert not document.started_for_native(
         lease, "b" * 32, "Actual corrected native user", snapshot=registry.snapshot()
     )

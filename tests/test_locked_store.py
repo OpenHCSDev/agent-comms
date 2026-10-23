@@ -10,10 +10,10 @@ from dataclasses import dataclass, replace
 
 import pytest
 
-from agent_comms.locked_store import LockedStore
+from agent_comms.locked_store import DocumentChange, LockedStore
 from agent_comms.pi_counts import PiCount
 from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoDocument, RuntimeInfoStore
-from agent_comms.store_files import ExclusiveLock, SharedLock, _store_lock
+from agent_comms.store_files import ExclusiveLock, SharedLock, StoreLockContention, _store_lock
 
 
 def observation(thread="goal"):
@@ -21,22 +21,21 @@ def observation(thread="goal"):
 
 
 def record(store, value):
-    store.update(lambda document: RuntimeInfoDocument({**document.observations, value.thread: value}))
+    store.update(lambda document: DocumentChange.to(
+        RuntimeInfoDocument({**document.observations, value.thread: value})
+    ))
 
 
 def clear(store, thread, *, timestamp=None):
-    removed = False
-
     def change(document):
-        nonlocal removed
         current = document.observations.get(thread)
         if current is None or (timestamp is not None and current.timestamp != timestamp):
-            return document
-        removed = True
-        return RuntimeInfoDocument({key: row for key, row in document.observations.items() if key != thread})
+            return DocumentChange(document, False)
+        return DocumentChange(RuntimeInfoDocument(
+            {key: row for key, row in document.observations.items() if key != thread}
+        ), True)
 
-    store.update(change)
-    return removed
+    return store.update(change)
 
 
 def _hold_lock(path, mode, ready, release):
@@ -92,7 +91,7 @@ def event():
 
 
 def _writer_refused(path):
-    with pytest.raises(BlockingIOError), _store_lock(path, blocking=False):
+    with pytest.raises(BlockingIOError), _store_lock(path, contention=StoreLockContention(0)):
         pytest.fail("writer entered during reader")
 
 
@@ -240,7 +239,7 @@ def test_shared_readers_overlap_and_exclude_writer(tmp_path):
             started, done = event(), event()
             with process(_read, path, started, done):
                 assert done.wait(5), "snapshot did not share the held read locks"
-            with pytest.raises(BlockingIOError), _store_lock(path, blocking=False):
+            with pytest.raises(BlockingIOError), _store_lock(path, contention=StoreLockContention(0)):
                 pass
         finally:
             release.set()
@@ -256,7 +255,7 @@ def test_exclusive_writer_blocks_snapshot_and_other_writer(tmp_path):
             with process(_read, path, started, done):
                 assert started.wait(5)
                 assert not done.wait(0.2)
-                with pytest.raises(BlockingIOError), _store_lock(path, blocking=False):
+                with pytest.raises(BlockingIOError), _store_lock(path, contention=StoreLockContention(0)):
                     pass
                 release.set()
                 assert done.wait(5)

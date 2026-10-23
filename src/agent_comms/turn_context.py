@@ -10,9 +10,12 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, ClassVar, Self, Annotated
+from typing import TYPE_CHECKING, ClassVar, Self, Annotated
+
+from pydantic import JsonValue
 
 
+from .annotation_disclosure import PublicInstructionAnnotations, WithheldAnnotations
 from .cli_result import CliResult
 from .declared_family import DeclaredFamily
 from .field_codec import (
@@ -67,6 +70,10 @@ class Provenance(DeclaredFamily, affix="Provenance"):
         return (self,)
 
     def entry_membership(self) -> tuple[Provenance, ...]:
+        return ()
+
+    def bus_references(self) -> tuple[MessageReference, ...]:
+        """Only a wire coordinate names a committed bus message."""
         return ()
 
     def require_human_input(self):
@@ -139,8 +146,11 @@ class WireProvenance(Provenance):
         return f"Wire message {self.source.seq} · {self.source.message_id}"
 
     def public_text(self, comms) -> str:
-        (original,) = comms.bus.log.messages_for_references((self.source,))
+        (original,) = comms.bus.bus.messages_for_references((self.source,))
         return original.body
+
+    def bus_references(self) -> tuple[MessageReference, ...]:
+        return (self.source,)
 
 
 @dataclass(frozen=True)
@@ -323,6 +333,11 @@ class SegmentManifest:
     @property
     def sources(self) -> ContextSources:
         return ContextSources(self.provenance)
+
+    def wire_sources(self) -> tuple[MessageReference, ...]:
+        """The committed bus messages a wake in this input recorded: its selected originals
+        and the owner's own sent outcomes."""
+        return self.kind.wire_sources(self)
 
     async def public_text(self, read_reference) -> str:
         if self.public_text_recorded:
@@ -638,7 +653,7 @@ class PreviouslyRecordedSegment(SegmentRecording):
 
 @dataclass(frozen=True, kw_only=True)
 class ContextSegment(
-    DeclaredFamily, affix="Segment", discovery_package="agent_comms.context_segments"
+    WithheldAnnotations, DeclaredFamily, affix="Segment", discovery_package="agent_comms.context_segments"
 ):
     provenance: tuple[Provenance, ...]
 
@@ -662,6 +677,11 @@ class ContextSegment(
     @classmethod
     def remember_received(cls, child, provenance):
         pass
+
+    @classmethod
+    def wire_sources(cls, original: SegmentManifest) -> tuple[MessageReference, ...]:
+        """Only a wake records bus messages; any other segment answers through its contributors."""
+        return tuple(source for child in original.contributors for source in child.wire_sources())
 
     def contributor_manifests(self) -> tuple[SegmentManifest, ...]:
         return ()
@@ -696,11 +716,6 @@ class ContextSegment(
         return tuple(ContextSpan(digest, sentence)
                      for source in self.source_ranges()
                      for sentence in source.sentences(text))
-
-    def disclosure_for(self, span: ContextSpan):
-        from .working_memory_disclosure import WithheldDisclosure
-
-        return WithheldDisclosure()
 
     def render_into(self, prompt_parts, provider):
         prompt_parts.append(self.text())
@@ -818,7 +833,7 @@ class MeasuredNativeSegment(ContextSegment):
     def render_into(self, prompt_parts, provider): ...
 
     def text(self):
-        return json.dumps(self.provider_value(), ensure_ascii=False, separators=(",", ":"))
+        return FieldCodec.compact(self.provider_value(), ensure_ascii=False)
 
     def measured_manifest(self):
         # The SDK measures/hashes its exact original JSON representation.
@@ -848,17 +863,8 @@ class MeasuredNativeSegment(ContextSegment):
         return self.contributors
 
 
-class PublicInstructionSegment:
-    """Instruction-bearing context discloses its wording as public instruction."""
-
-    def disclosure_for(self, span: ContextSpan):
-        from .working_memory_disclosure import PublicInstructionDisclosure
-
-        return PublicInstructionDisclosure()
-
-
 @dataclass(frozen=True, kw_only=True)
-class SystemLayerSegment(PublicInstructionSegment, MeasuredNativeSegment):
+class SystemLayerSegment(PublicInstructionAnnotations, MeasuredNativeSegment):
     content: str
     tokens: int
     sha256: str
@@ -912,7 +918,7 @@ class SystemLayerSegment(PublicInstructionSegment, MeasuredNativeSegment):
 class NativeMessages:
     # These are the SDK's exact *provider* messages, including opaque extension
     # and provider fields. Core does not decode them as its event/message subset.
-    messages: tuple[dict[str, Any], ...]
+    messages: tuple[dict[str, JsonValue], ...]
     tokens: int
     sha256: str
     utf8_bytes: int
@@ -946,20 +952,24 @@ class NativeMessages:
             offset += len(text.encode("utf-8")) + 1
         return tuple(ranges)
 
+    def render_into(self, prompt_parts, provider):
+        provider.setdefault("messages", []).extend(self.messages)
+
+
+class NativeAnnotations(NativeMessages):
+    """A transcript span keeps the disclosure policy of its original native message."""
+
     def disclosure_for(self, span: ContextSpan):
         from .pi_payloads import PiMessage
 
         for source, message in zip(self.source_ranges(), self.messages, strict=True):
             if source.contains(span.coordinates):
-                return PiMessage.from_wire(message).annotation_disclosure()
+                return PiMessage.from_wire(message).disclosure_for(span)
         raise ValueError("Annotation names no original native message")
-
-    def render_into(self, prompt_parts, provider):
-        provider.setdefault("messages", []).extend(self.messages)
 
 
 @dataclass(frozen=True, kw_only=True)
-class TranscriptSegment(NativeMessages, MeasuredNativeSegment):
+class TranscriptSegment(NativeAnnotations, MeasuredNativeSegment):
     keyframe_interval: ClassVar[int] = 32
 
     @classmethod
@@ -983,18 +993,18 @@ class TranscriptSegment(NativeMessages, MeasuredNativeSegment):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CompactionSummarySegment(PublicInstructionSegment, NativeMessages, MeasuredNativeSegment):
+class CompactionSummarySegment(PublicInstructionAnnotations, NativeMessages, MeasuredNativeSegment):
     pass
 
 
 @dataclass(frozen=True, kw_only=True)
-class InjectionMessageSegment(NativeMessages, MeasuredNativeSegment):
+class InjectionMessageSegment(NativeAnnotations, MeasuredNativeSegment):
     pass
 
 
 @dataclass(frozen=True, kw_only=True)
 class ToolCatalogSegment(MeasuredNativeSegment):
-    tools: tuple[dict[str, Any], ...]
+    tools: tuple[dict[str, JsonValue], ...]
     tokens: int
     sha256: str
     utf8_bytes: int
@@ -1006,7 +1016,7 @@ class ToolCatalogSegment(MeasuredNativeSegment):
         offset = 1
         spans = []
         for tool in self.tools:
-            text = json.dumps(tool, ensure_ascii=False, separators=(",", ":"))
+            text = FieldCodec.compact(tool, ensure_ascii=False)
             coordinates = ContributionCoordinates.capture(type(self), self.provenance, offset, text)
             spans.append(ContextSpan(self.sha256, coordinates))
             offset += coordinates.length + 1
@@ -1017,7 +1027,7 @@ class ToolCatalogSegment(MeasuredNativeSegment):
 
 
 @dataclass(frozen=True, kw_only=True)
-class InstructionSegment(PublicInstructionSegment, ContextSegment):
+class InstructionSegment(PublicInstructionAnnotations, ContextSegment):
     instruction: InstructionFile
 
     @classmethod
@@ -1117,7 +1127,7 @@ class CoordinationSegment(InstructionSegment):
             name=self.owner.name,
             parent=self.parent,
             project=self.project,
-            peers=json.dumps(FieldCodec.encode(self.peers), separators=(",", ":")),
+            peers=FieldCodec.compact(FieldCodec.encode(self.peers)),
         )
 
 
@@ -1157,7 +1167,7 @@ class ReplyRouteSegment(InstructionSegment):
 @dataclass(frozen=True)
 class RenderedInput:
     text: str
-    provider: dict[str, Any]
+    provider: dict[str, JsonValue]
     contributions: tuple[InputContributionCoordinates, ...] = ()
 
 
@@ -1373,7 +1383,7 @@ class TurnContext(DeclaredReply):
         """
         relations = comms.relationships.context_relations(owner.name)
         context = cls.for_owner(owner, NextContextTurn(), "", comms.views.thread_views(), relations, comms.goals)
-        return context.with_goal(owner, comms.goals).with_awareness(comms, owner, relations, blocking=True)
+        return context.with_goal(owner, comms.goals).with_awareness(comms, owner, relations)
 
     def with_goal(self, owner: Thread, goals) -> TurnContext:
         return owner.goal.active().add_context(self, owner, goals)
@@ -1382,7 +1392,7 @@ class TurnContext(DeclaredReply):
         return self.prepend(GoalSegment.capture(owner, goal, goals))
 
     def with_awareness(
-        self, comms, owner: Thread, relations: tuple[PeerRelation, ...], *, blocking: bool = False
+        self, comms, owner: Thread, relations: tuple[PeerRelation, ...]
     ) -> TurnContext:
         """Append what the owner should know without being asked.
 
@@ -1394,7 +1404,7 @@ class TurnContext(DeclaredReply):
         context = self
         for segment in (
             *RelationshipsSegment.capture(owner, relations),
-            *comms.bus.awareness_segments(owner, relations, blocking=blocking),
+            *comms.bus.awareness_segments(owner, relations),
             *PartnerActivitySegment.capture(owner, relations, comms.goals),
         ):
             context = context.append(segment)
@@ -1460,7 +1470,7 @@ class TurnContext(DeclaredReply):
     @staticmethod
     def render_segments(segments: tuple[ContextSegment, ...], *, images=()) -> RenderedInput:
         prompt_parts: list[str] = []
-        provider: dict[str, object] = {}
+        provider: dict[str, JsonValue] = {}
         contributions: list[InputContributionCoordinates] = []
         offset = 0
         for segment in segments:

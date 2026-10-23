@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from .message_reference import MessageReference
+from typing import TYPE_CHECKING, ClassVar
+
+from agent_comms.coordination_errors import DrainUnavailable
+from agent_comms.message_reference import MessageReference
+
+if TYPE_CHECKING:
+    from agent_comms.messages import BusRecord
 
 
 class ToolRefusedError(ValueError):
@@ -17,8 +23,22 @@ class UnknownChannelError(ToolRefusedError):
     """A target is absent from the catalog and current thread tags."""
 
 
-class RelationViolationError(ValueError):
+class RouteChangedError(ValueError):
+    """The selected Comms route was replaced; reopen against the current one."""
+
+    reader_sentence = "On another Comms route; reopen this view"
+
+
+class RelationViolationError(ValueError, DrainUnavailable):
     """A required relation between declarations cannot be proved."""
+
+
+class UnclaimedError(RelationViolationError):
+    """The requested bus sequence has no committed claim transition."""
+
+    def __init__(self, seq: int) -> None:
+        self.seq = seq
+        super().__init__(f"Bus row {seq} has no committed claim transition")
 
 
 class MessageAcknowledgmentError(RelationViolationError):
@@ -48,16 +68,21 @@ class HumanSendError(RelationViolationError):
     """A human send Core did not complete; delivery_failure decodes each member for the sender."""
 
 
-class HumanInitialUnknownError(HumanSendError):
-    """A private USER initial may be committed; inspect its ID, never retry."""
+class HumanSendRefusedError(ToolRefusedError, HumanSendError):
+    """The send transaction rolled back; the human's message was not sent."""
 
-    def __init__(self, wire_root_id: str, wire_seq: int, message_id: str) -> None:
-        self.wire_root_id = wire_root_id
-        self.wire_seq = wire_seq
-        self.message_id = message_id
+    def __init__(self, cause: Exception) -> None:
+        self.cause = cause
+        super().__init__(f"Message was not sent: {cause}")
+
+
+class CommittedMessageError(RuntimeError):
+    """The message was sent; signalling or connection retirement then failed."""
+
+    def __init__(self, record: BusRecord) -> None:
+        self.record = record
         super().__init__(
-            "Private human send outcome UNKNOWN; inspect the committed bus by "
-            f"root/seq/id ({wire_root_id}/{wire_seq}/{message_id}); do not retry."
+            f"Message {record.seq}/{record.message_id} was sent, but write completion failed."
         )
 
 
@@ -67,3 +92,23 @@ class HumanClaimBlockedError(HumanSendError):
 
 class CheckpointNeedsRepairError(Exception):
     """A shared source requires exclusive checkpoint repair before it can open."""
+
+
+class GoalAttemptError(RuntimeError):
+    """A goal attempt cannot proceed as requested."""
+
+    diagnostic_text: ClassVar[str] = "Goal launch grant unavailable; explicit Retry required."
+
+    def diagnostic(self) -> str:
+        return self.diagnostic_text
+
+
+class UnresolvedAttemptError(GoalAttemptError):
+    """A blocked or in-flight attempt needs an explicit resolution."""
+
+    diagnostic_text = "Goal attempt unresolved; inspect diagnostics before Retry."
+
+
+class StaleAttemptError(GoalAttemptError):
+    """A late outcome cannot modify the current goal generation."""
+

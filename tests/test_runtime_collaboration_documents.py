@@ -5,9 +5,12 @@ from unittest.mock import patch
 
 import pytest
 
+from agent_comms.field_codec import FieldCodec
+from agent_comms.locked_store import DocumentChange
 from agent_comms.runtime_info import RuntimeInfoStore
 from agent_comms.shared_ledger import SharedLedger
 from test_locked_store import assert_writer_excluded
+from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize("store_type", [RuntimeInfoStore, SharedLedger])
@@ -16,7 +19,7 @@ def test_document_readers_share_lock_and_exclude_updates(tmp_path, store_type):
     with store.reading() as first:
         assert first == store_type(store.path).read() == store.empty()
         assert_writer_excluded(store.path)
-    store.update(lambda document: document)
+    store.update(DocumentChange.to)
     assert store.read() == store.empty()
 
 
@@ -39,7 +42,7 @@ def test_saved_runtime_dates_and_fields_survive_rename_and_reopen(tmp_path, *, t
     assert RuntimeInfoStore(store.path).read().observations["new"].timestamp == 456.25
     assert json.loads(store.path.read_text()) == {"new": {**saved["old"], "thread": "new"}}
     before = store.path.stat()
-    store.remove_threads((thread_registration.new_thread('absent', frozenset(), str(tmp_path)),))
+    store.remove_threads((Thread('absent', frozenset(), str(tmp_path)),))
     assert store.path.stat() == before
 
 
@@ -65,12 +68,15 @@ def test_free_form_ledger_has_no_retained_mutable_mirror(tmp_path, *, thread_reg
     }
     store.path.write_text(json.dumps(saved))
     snapshot = store.read()
-    snapshot.entries["nested"].clear()
-    assert SharedLedger(store.path).read().entries == saved
+    snapshot.value["nested"].value.clear()
+    assert FieldCodec.encode(SharedLedger(store.path).read()) == saved
     SharedLedger(store.path).merge({"other": [1, 2]}, "other")
     assert store.rename_thread("old", "new") == 2
-    assert store.read().entries["nested"] == {"new": ["new", None, True, 9, {"free": "old is prose"}]}
-    store.remove_threads((thread_registration.new_thread('new', frozenset(), str(tmp_path)),))
-    assert store.read().entries == {**saved, "nested": {}, "other": [1, 2], "last_updated_by": "other"}
+    assert FieldCodec.encode(store.read())["nested"] == {"new": ["new", None, True, 9, {"free": "old is prose"}]}
+    store.remove_threads((Thread('new', frozenset(), str(tmp_path)),))
+    assert FieldCodec.encode(store.read()) == {**saved, "nested": {}, "other": [1, 2], "last_updated_by": "other"}
+    unchanged = store.path.stat()
+    store.remove_threads((Thread('absent', frozenset(), str(tmp_path)),))
+    assert store.path.stat() == unchanged
 
 

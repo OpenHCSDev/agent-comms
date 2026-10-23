@@ -73,7 +73,7 @@ async def compact_context(
         if await Coordination.run_worker(partial(runner.session_busy, session_id)):
             return FailedCompaction("Wait for the current response before compacting.")
         thread = await Coordination.run_worker(partial(runner.comms.registry.require, thread_name))
-        return await thread.runtime.compact(partial(
+        return await thread.writable_runtime.compact(partial(
             _compact_started, runner, session_id, thread_name, instructions,
         ))
 
@@ -100,14 +100,10 @@ async def _compact_started(runner, session_id, thread_name, instructions):
                 owner.thread, instructions.strip() if instructions else None,
             )
         finally:
-            placed = isinstance(outcome, PlacedCompaction)
-            await consumer.dispatch(events.CompactionEnd(
-                reason=ManualCompactionReason,
-                aborted=not placed,
-                summary=outcome.summary if placed else None,
-            ))
-        if placed:
-            await runner.runtime.session_update(
+            completion = outcome.completion_event(events.CompactionEnd, ManualCompactionReason)
+            await consumer.dispatch(completion)
+        if not completion.aborted:
+            await runner.runtime.publish_update(
                 session_id=session_id,
                 update=AgentMessageChunk(
                     session_update="agent_message_chunk",

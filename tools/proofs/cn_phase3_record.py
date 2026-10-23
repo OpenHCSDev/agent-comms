@@ -6,6 +6,8 @@ session path. All observations below are CLI tool results, not hand-constructed 
 
 from __future__ import annotations
 
+
+
 import argparse
 import os
 import shutil
@@ -16,9 +18,10 @@ from pathlib import Path
 
 from agent_comms.change_report import FileLine, MainRevision
 from agent_comms.repo import Repo
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
-from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
+from agent_comms.goals import CountCheckResult, OrderCheck
+from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.progress_claims import MergedClaim
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
@@ -32,6 +35,7 @@ from agent_comms.todos import (
     VoidStrikeTodo,
 )
 from agent_comms.order_runs import MechanicalOrderRun
+from agent_comms.threads import Thread
 from agent_comms.tool_caller import ToolCaller
 from agent_comms.tools import (
     CommsChangeProblemTool,
@@ -68,20 +72,13 @@ def cli[Caller: ToolCaller](caller: str, tool: ToolRequest[Caller]) -> str:
 def setup() -> None:
     if ROOT.exists():
         raise RuntimeError(f"Refusing to reuse an existing proof root: {ROOT}")
-    comms = Comms(ROOT)
-    comms.messaging.initialize_private_initial_protocol()
+    comms = wire(ROOT)
     for name in ("record-lead", "record-worker"):
         comms.registry.declare(
-            comms.registry.new_thread(name, frozenset(), str(CHECKOUT), created_at=time.time())
+            Thread(name, frozenset(), str(CHECKOUT), created_at=time.time())
         )
-    comms.goals.update_goal(
-        "record-lead",
-        SetGoalAction(
-            text="Confirm the order record through the actual Core tools on this isolated bus",
-            goal_id="record-request",
-            order=RequestGoalOrder(),
-        ),
-    )
+    comms.goals.todos.add_request(comms.registry.require('record-lead').incarnation,
+        'Confirm the order record through the actual Core tools on this isolated bus')
     comms.goals.update_goal(
         "record-worker",
         SetGoalAction(
@@ -95,6 +92,9 @@ def setup() -> None:
 def create_order(problem: str = "P1") -> None:
     now = time.time()
     repo = Repo.of(CHECKOUT)
+    comms = wire(ROOT)
+    request = NewestOpenRequest().for_order(
+        comms.goals.todos, comms.registry.require('record-lead').incarnation)
     cli(
         "record-lead",
         CommsTodoCreateTool(
@@ -103,9 +103,9 @@ def create_order(problem: str = "P1") -> None:
                 problem=problem,
                 repo=repo.github,
                 text="Show the real verdict and strike records without a second source",
-                request="record-request",
+                request=request,
                 commander="record-lead",
-                assigner=Comms(ROOT).registry.require("record-lead").incarnation,
+                assigner=wire(ROOT).registry.require("record-lead").incarnation,
                 review_at=RecordedEventTime(now + 3600),
                 order=PendingProblemOrder(
                     id=f"record-order-{problem}",
@@ -131,7 +131,7 @@ def create_order(problem: str = "P1") -> None:
 def record(session: Path) -> None:
     retained = ROOT / "record-worker.jsonl"
     shutil.copy2(session, retained)
-    comms = Comms(ROOT)
+    comms = wire(ROOT)
     worker = comms.registry.require("record-worker")
     comms.registry.register(
         replace(worker, session_file=str(retained)), comms.registry.status(worker.name)

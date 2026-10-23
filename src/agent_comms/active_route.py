@@ -9,25 +9,28 @@ from __future__ import annotations
 import fcntl
 import json
 import os
-import stat
-import sys
 import time
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
+from .child_process import Platform
+from .coordination_errors import CoordinationError
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, Id128Text, MalformedRecord, PathText
+from .field_codec import FieldCodec, MalformedRecord, PathText
 from .launch_root import LaunchRoot
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
+from .private_path import ObservedPath, OwnedDirectoryRole, PrivateDirectoryRole, PrivateFileRole
+from .recorded_bus import RecordedBusIdentity
+from .store_files import UNBOUNDED_CONTENTION, SharedLock, StoreLockContention
 
 if TYPE_CHECKING:
-    from .wire_log import WireLog
+    from .installer.reporting import RootWriter
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,9 +59,9 @@ class CommsRoute(ABC):
         Independent private roots do not participate in default publication.
         Refuse a publication in progress rather than park a half-open client.
         """
-        current_root = CommsRoute.current().root
+        current_root = RouteFile.read(active_route_path()).launch_root()
         if self.root.resolve() == current_root.resolve():
-            with guard_default_route_write(self.root, blocking=False):
+            with guard_default_route_write(self.root, StoreLockContention(0)):
                 yield
         else:
             yield
@@ -99,9 +102,9 @@ class AbsoluteRoutePathText(PathText):
 class ActiveRoute(CommsRoute):
     """The default private root; each installation launches its own pinned native package."""
     root: Annotated[Path, AbsoluteRoutePathText]
-    wire_root_id: Annotated[str, Id128Text]
+    bus_identity: RecordedBusIdentity
     # The file format: the writer stamps it and the reader refuses any other before decoding.
-    version: ClassVar[int] = 2
+    version: ClassVar[int] = 3
     # The CLI command that replaces a file this reader refuses; it registers under this name.
     repair_command: ClassVar[str] = "replace-route"
 
@@ -121,13 +124,25 @@ class ActiveRoute(CommsRoute):
     def to_record(self) -> dict[str, object]:
         return {"version": self.version, **FieldCodec.encode(self)}
 
+    def encoded(self) -> bytes:
+        """The route file's bytes for this route."""
+        return (json.dumps(self.to_record(), sort_keys=True) + "\n").encode()
+
+    def rebound(self) -> ActiveRoute:
+        """This route naming the bus its root holds now. A restore that copies the bus
+        back gives it a new file identity, so the restored route names that one."""
+        from .bus import Bus
+
+        return replace(self, bus_identity=RecordedBusIdentity.capture(Bus.path_in(self.root)))
+
     @classmethod
     def from_record(cls, value: object, path: Path) -> ActiveRoute:
+        value = FieldCodec.decode(dict[str, object], value)
         match value:
             case {"version": int(found), **record} if found == cls.version:
                 pass
             case _:
-                stamped = value.get("version") if isinstance(value, dict) else None
+                stamped = value.get("version")
                 raise MalformedRecord(
                     f"active comms route {path} is version {stamped!r}; "
                     f"this installation reads version {cls.version}. "
@@ -139,33 +154,24 @@ class ActiveRoute(CommsRoute):
             raise MalformedRecord(f"active comms route {path} is invalid: {error}") from error
         return route
 
-    def wire_log(self) -> WireLog:
-        from .wire_log import WireLog  # the wire log's module imports this one
-
-        return WireLog(WireLog.path_in(self.root))
-
     def selects_its_root(self) -> bool:
-        """Whether the root still exists and carries the marker this route was published for."""
-        return self.root.is_dir() and (
-            self.wire_log().read_metadata_unlocked().root_id == self.wire_root_id)
+        """A route selects the database observed when it was published."""
+        from .bus import Bus
+
+        return self.root.is_dir() and self.bus_identity.matches(
+            ObservedPath.at(Bus.path_in(self.root)))
 
     def observe_root(self) -> Path:
-        # The writer atomically replaces this marker. Reuse its owner/mode,
-        # ancestry and protocol decoder, without taking the mutation/durability
-        # barrier or interpreting registry/history merely to observe identity.
-        marker = self.wire_log().private_marker_unlocked()
-        if marker.root_id != self.wire_root_id:
-            raise RelationViolationError("private route root ID changed")
+        if not self.selects_its_root():
+            raise RelationViolationError("route bus was replaced")
         return super(ActiveRoute, self).observe_root()
 
     def launch(self) -> PrivateNkLaunch:
-        return PrivateNkLaunch.installed(self.root, self.wire_root_id)
+        return RootLaunch.derive(self).require_private()
 
 
-def resolve_comms_route(root: CommsRoute | Path | str | None = None) -> CommsRoute:
+def resolve_comms_route(root: Path | str | None = None) -> CommsRoute:
     """Resolve one current selection without creating stores or reading registry."""
-    if isinstance(root, CommsRoute):
-        return root
     if root is not None:
         return LocalRoute(Path(root).expanduser().absolute())
     return LocalRoute(LaunchRoot.current().path)
@@ -180,40 +186,35 @@ def guard_original_root_write(root: Path) -> Iterator[None]:
     """Fence a cooperating write through the historical root after migration."""
     original_root = LocalRoute.default().root
     if root.expanduser().resolve() == original_root.resolve():
-        with guard_default_route_write(original_root):
+        with guard_default_route_write(original_root, UNBOUNDED_CONTENTION):
             yield
     else:
         yield
 
 
 def active_route_path() -> Path:
-    return Path.home() / ".local/state/agent-comms/active-route.json"
+    return Path.home() / ".local/state/agent-comms" / RouteFile.filename
+
+
+class RouteFileNotPrivate(ValueError):
+    def __init__(self) -> None:
+        super().__init__("active comms route must be one owner-only regular file")
 
 
 def read_active_route(path: Path | None = None) -> ActiveRoute | None:
     """Decode the one trusted default route; explicit roots bypass this file."""
     path = active_route_path() if path is None else path
+    refusal = RouteFileNotPrivate()
     try:
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        fd = PrivateFileRole.read(path, refusal)
     except FileNotFoundError:
         return None
     try:
-        parent = path.parent.lstat()
-        if (
-            not stat.S_ISDIR(parent.st_mode)
-            or parent.st_uid != os.geteuid()
-            or stat.S_IMODE(parent.st_mode) != 0o700
-        ):
-            raise ValueError("active comms route directory must be owner-only")
+        PrivateDirectoryRole.require(
+            path.parent.lstat(), ValueError("active comms route directory must be owner-only"))
         info = os.fstat(fd)
-        if (
-            not stat.S_ISREG(info.st_mode)
-            or info.st_uid != os.geteuid()
-            or stat.S_IMODE(info.st_mode) != 0o600
-            or info.st_nlink != 1
-            or not 0 < info.st_size <= 4096
-        ):
-            raise ValueError("active comms route must be one owner-only regular file")
+        if not 0 < info.st_size <= 4096:
+            raise refusal
         raw = os.read(fd, 4097)
     finally:
         os.close(fd)
@@ -236,7 +237,9 @@ def read_active_route(path: Path | None = None) -> ActiveRoute | None:
 
 
 @contextmanager
-def guard_default_route_write(expected_root: Path, *, blocking: bool = True) -> Iterator[None]:
+def guard_default_route_write(
+    expected_root: Path, contention: StoreLockContention,
+) -> Iterator[None]:
     """Keep a default-root write on its selected root through publication.
 
     Callers must enter this guard before the mutating operation, including any
@@ -245,19 +248,12 @@ def guard_default_route_write(expected_root: Path, *, blocking: bool = True) -> 
     """
     path = active_route_path()
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    refusal = ValueError("active comms route directory changed or is not owned")
+    directory = OwnedDirectoryRole.read(path.parent, refusal)
     try:
-        fcntl.flock(directory, fcntl.LOCK_SH | (0 if blocking else fcntl.LOCK_NB))
-        info = os.fstat(directory)
-        parent = path.parent.lstat()
-        if (
-            not stat.S_ISDIR(info.st_mode)
-            or info.st_uid != os.geteuid()
-            or (parent.st_dev, parent.st_ino) != (info.st_dev, info.st_ino)
-        ):
-            raise ValueError("active comms route directory changed or is not owned")
-        if stat.S_IMODE(info.st_mode) != 0o700:
-            os.fchmod(directory, 0o700)
+        contention.acquire(directory, Platform.current(), mode=SharedLock())
+        OwnedDirectoryRole.held(directory, path.parent, refusal)
+        Platform.current().make_private_descriptor(directory, 0o700)
         route = CommsRoute.current(path)
         # Local roots may be created under this guard. ActiveRoute owns the
         # stronger observation of an already published root and its identity.
@@ -336,19 +332,20 @@ def route_lock_holders(directory: int) -> tuple[RouteLockHolder, ...]:
     return tuple(holders)
 
 
+class RouteReadersHold(CoordinationError):
+    """A client still reads the default route; a route change never waits for it."""
+
+
 def acquire_exclusive_route_lock(directory: int) -> None:
-    """Name current readers, then wait for the kernel to release their locks."""
+    """Take route EX now, or refuse naming every reader the owner must close."""
     try:
         fcntl.flock(directory, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        holders = route_lock_holders(directory)
-        detail = '; '.join(holder.describe() for holder in holders)
-        print(
-            f'Waiting for default-route readers: '
-            f'{detail or "unknown (lock changed during inspection)"}',
-            file=sys.stderr, flush=True,
-        )
-        fcntl.flock(directory, fcntl.LOCK_EX)
+    except BlockingIOError as error:
+        detail = '; '.join(holder.describe() for holder in route_lock_holders(directory))
+        raise RouteReadersHold(
+            f'default-route readers hold the route: '
+            f'{detail or "unknown (lock changed during inspection)"}; close them and rerun'
+        ) from error
 
 
 def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:
@@ -362,23 +359,42 @@ def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:
         _publish_active_route_locked(route, path, directory)
 
 
-def replace_unreadable_active_route(route: ActiveRoute, path: Path | None = None) -> Path:
-    """The owner's explicit repair of a route file that selects no bus. The old file is kept
-    beside the new one under a backup name, so a live route is still only ever installed once."""
-    with _route_directory(route, path) as (path, directory):
-        return RouteFile.read(path).replace(route, path, directory)
-
-
 def route_new_bus(route: ActiveRoute, path: Path) -> str:
-    """Install's route to a bus it just created."""
+    """Route to this bus unless the file already selects one: install's answer and the
+    owner's repair. A replaced file is kept beside the new one under a backup name, so a
+    live route is still only ever installed once."""
     with _route_directory(route, path) as (path, directory):
         return RouteFile.read(path).route_new_bus(route, path, directory)
+
+
+class RouteFileSelection(DeclaredFamily, affix="Selection", declared_name=None):
+    """The outgoing reader's validated choice owns whether this bus may be published."""
+
+    def publish(self, route: ActiveRoute, path: Path, directory: int) -> str:
+        return RouteFile.read(path).route_new_bus(route, path, directory)
+
+
+@dataclass(frozen=True)
+class NoRouteSelection(RouteFileSelection):
+    """No route selects an existing bus; the installer may publish this one."""
+
+
+@dataclass(frozen=True)
+class PublishedRouteSelection(RouteFileSelection):
+    root: Annotated[Path, PathText]
+
+    def publish(self, route: ActiveRoute, path: Path, directory: int) -> str:
+        if self.root.resolve() != route.root.resolve():
+            return f"kept {path}: it selects {self.root}"
+        return super().publish(route, path, directory)
 
 
 class RouteFile(ABC):
     """What the default route file holds when install or the owner's repair reads it. A file
     that selects no bus (unreadable, an old version, or naming a root gone or replaced) is
     replaced by both; every other state owns its own answer."""
+
+    filename: ClassVar[str] = "active-route.json"
 
     @staticmethod
     def read(path: Path) -> RouteFile:
@@ -393,27 +409,39 @@ class RouteFile(ABC):
                 return ReplaceableRoute()
         return AbsentRoute()
 
+    def selection(self) -> RouteFileSelection:
+        return NoRouteSelection()
+
     def launch_root(self) -> Path:
         """Where install runs: the default root, where it creates a bus."""
         return LocalRoute.default().root
 
     def replace(self, route: ActiveRoute, path: Path, directory: int) -> Path:
-        backup = path.with_name(f"active-route.{time.strftime('%Y%m%dT%H%M%S')}.bak.json")
+        name = Path(self.filename)
+        backup = path.with_name(
+            f"{name.stem}.{time.strftime('%Y%m%dT%H%M%S')}-{uuid.uuid4().hex}.bak{name.suffix}")
         _publish_active_route_locked(route, path, directory, backup=backup)
         return backup
 
     def route_new_bus(self, route: ActiveRoute, path: Path, directory: int) -> str:
         return f"replaced {path}; old route kept at {self.replace(route, path, directory)}"
 
+    def outgoing_writer(self, outgoing: RootWriter, unposted: RootWriter) -> RootWriter:
+        """Who posts install reports before install routes to its bus: the outgoing runtime,
+        which borrows this file like every client."""
+        return outgoing
+
 
 class ReplaceableRoute(RouteFile):
     """Selects no bus: install and the repair both replace it."""
 
+    def outgoing_writer(self, outgoing: RootWriter, unposted: RootWriter) -> RootWriter:
+        """Every borrower of the default root refuses this file, the outgoing runtime
+        included, so nothing posts until install's route step replaces it."""
+        return unposted
+
 
 class AbsentRoute(RouteFile):
-    def replace(self, route: ActiveRoute, path: Path, directory: int) -> Path:
-        raise ValueError(f"active comms route {path} is absent; nothing to replace")
-
     def route_new_bus(self, route: ActiveRoute, path: Path, directory: int) -> str:
         _publish_active_route_locked(route, path, directory)
         return f"published {path}"
@@ -425,12 +453,11 @@ class SelectingRoute(RouteFile):
 
     current: ActiveRoute
 
+    def selection(self) -> RouteFileSelection:
+        return PublishedRouteSelection(self.current.observe_root())
+
     def launch_root(self) -> Path:
         return self.current.root
-
-    def replace(self, route: ActiveRoute, path: Path, directory: int) -> Path:
-        raise ValueError(f"active comms route {path} is readable and selects "
-                         f"{self.current.root}; it is not replaced")
 
     def route_new_bus(self, route: ActiveRoute, path: Path, directory: int) -> str:
         return f"kept {path}: it selects {self.current.root}"
@@ -440,15 +467,25 @@ class SelectingRoute(RouteFile):
 def _route_directory(route: ActiveRoute, path: Path | None) -> Iterator[tuple[Path, int]]:
     """The checked route path and its directory FD, held with route EX."""
     path = active_route_path() if path is None else path
-    if path.name != "active-route.json" or not path.is_absolute():
+    if path.name != RouteFile.filename or not path.is_absolute():
         raise ValueError("active comms route requires its absolute route path")
     FieldCodec.encode(route)
     route.launch().validate()
+    with route_directory(path) as directory:
+        yield path, directory
+
+
+@contextmanager
+def route_directory(path: Path) -> Iterator[int]:
+    """Hold the existing publication lock for one route snapshot or mutation."""
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    refusal = ValueError("active comms route directory changed or is not owned")
+    directory = OwnedDirectoryRole.read(path.parent, refusal)
     try:
         acquire_exclusive_route_lock(directory)
-        yield path, directory
+        OwnedDirectoryRole.held(directory, path.parent, refusal)
+        Platform.current().make_private_descriptor(directory, 0o700)
+        yield directory
     finally:
         os.close(directory)
 
@@ -464,26 +501,17 @@ def _publish_active_route_locked(
     or move an unreadable one to ``backup`` and replace it."""
     temporary: str | None = None
     try:
+        refusal = ValueError("active comms route directory changed or is not owned")
+        OwnedDirectoryRole.held(directory, path.parent, refusal)
         info = os.fstat(directory)
-        parent = path.parent.lstat()
-        if (
-            not stat.S_ISDIR(info.st_mode)
-            or info.st_uid != os.geteuid()
-            or parent.st_dev != info.st_dev
-            or parent.st_ino != info.st_ino
-        ):
-            raise ValueError("active comms route directory changed or is not owned")
-        os.fchmod(directory, 0o700)
+        Platform.current().make_private_descriptor(directory, 0o700)
         if backup is None and read_active_route(path) is not None:
             raise ValueError("active comms route is already installed")
-        payload = (json.dumps(route.to_record(), sort_keys=True) + "\n").encode()
+        payload = route.encoded()
         temporary = f".active-route-{uuid.uuid4().hex}.tmp"
-        fd = os.open(
-            temporary,
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-            0o600,
-            dir_fd=directory,
-        )
+        fd = PrivateFileRole.create(
+            temporary, RouteFileNotPrivate(),
+            dir_fd=directory)
         try:
             view = memoryview(payload)
             while view:

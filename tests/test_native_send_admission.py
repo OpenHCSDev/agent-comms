@@ -20,50 +20,61 @@ if sys.platform == "linux":
     import fcntl
     import termios
 
+from agent_comms.bus import Bus
 from agent_comms.child_process import AttachedChild, ProcessIdentity
 from agent_comms.comms import Comms
-from agent_comms.coordination_database import StoreBusy
+from agent_comms.locked_store import StoreBusy
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordinator import Coordination
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.diagnostics import PublicationMeasurements
+from agent_comms.locked_store import RegistryFile
+from agent_comms.errors import RelationViolationError
 from agent_comms.native_prompt_send import (
     PromptSendNotWritten,
     PromptSendUnknown,
     _write_fenced,
     send_fenced_prompt,
 )
+from agent_comms.store_files import store_lock_path
+from conftest import installed_comms
 from test_coordinated_runtime import tmp_path as private_root_fixture
+from agent_comms.threads import Thread
 
 tmp_path = private_root_fixture
 
 
 _PROBE = r"""
 import fcntl, json, sqlite3, sys
-from pathlib import Path
-root = Path(sys.argv[1])
+locks, databases = json.loads(sys.argv[1])
 held = []
-for name in ('wire', 'bus.jsonl', 'registry.json'):
-    with open(root / ('.' + name + '.lock'), 'a+b') as f:
+for path in locks:
+    with open(path, 'a+b') as f:
         try:
             fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            held.append(name)
-db = sqlite3.connect(root / 'coordination.sqlite3', timeout=0)
-try:
-    db.execute('BEGIN IMMEDIATE')
-except sqlite3.OperationalError as e:
-    if 'locked' not in str(e):
-        raise
-    held.append('sql')
-finally:
-    db.close()
+            held.append(path)
+for path in databases:
+    db = sqlite3.connect(path, timeout=0)
+    try:
+        db.execute('BEGIN IMMEDIATE')
+    except sqlite3.OperationalError as e:
+        if 'locked' not in str(e):
+            raise
+        held.append(path)
+    finally:
+        db.close()
 print(json.dumps(held))
 """
 
 
 def _held(root):
+    stores = (Bus.path_in(root), RegistryFile.path_in(root))
+    databases = (Bus.path_in(root), CoordinationStore.path_in(root))
+    probed = json.dumps(([str(store_lock_path(store)) for store in stores],
+                         [str(database) for database in databases]))
     result = subprocess.run(
-        [sys.executable, "-c", _PROBE, str(root)],
+        [sys.executable, "-c", _PROBE, probed],
         capture_output=True, text=True, check=True, timeout=10,
     )
     return json.loads(result.stdout)
@@ -105,7 +116,8 @@ class LifecycleWriteCase(PromptWriteCase):
         # A normal synchronous callback on the SAME loop must finish while
         # the independent writer is waiting for the child's pipe capacity.
         comms.registry.unregister("owner")
-        assert not comms.registry.status("owner").active
+        with pytest.raises(RelationViolationError):
+            comms.registry.status("owner").require_active()
 
 
 class CancelWriteCase(PromptWriteCase):
@@ -132,7 +144,8 @@ class PreflightDrainWriteCase(PromptWriteCase):
 
     async def interrupt(self, pending, stdin, comms):
         comms.registry.unregister("owner")
-        assert not comms.registry.status("owner").active
+        with pytest.raises(RelationViolationError):
+            comms.registry.status("owner").require_active()
 
     def check(self, stdin, entered, payload):
         assert entered == []
@@ -141,8 +154,8 @@ class PreflightDrainWriteCase(PromptWriteCase):
 
 async def _same_loop_backpressure_case(directory: Path, case_name: str):
     case = PromptWriteCase.member_named(case_name)()
-    comms = Comms(directory / "wire")
-    comms.registry.declare(comms.registry.new_thread(
+    comms = installed_comms(directory / "wire")
+    comms.registry.declare(Thread(
         "owner", frozenset(), str(directory),
         process_identity=ProcessIdentity.capture(os.getpid()),
     ))
@@ -213,7 +226,7 @@ def test_transaction_excludes_late_reader_before_irreversible_write(tmp_path):
     """A transaction which admits the pipe write owns its complete commit lifetime."""
     path = tmp_path / "coordinator.sqlite3"
     with Coordination(path, contention=StoreBusy()) as store:
-        store.participants.register("owner", "owner", "owner", committed=True)
+        store.participants.register("owner", committed=True)
         reader = sqlite3.connect(path, isolation_level=None, timeout=0)
         read_fd, write_fd = os.pipe2(os.O_NONBLOCK)
         entered = []

@@ -15,18 +15,12 @@ from agent_comms.coordination_errors import (
     StaleRevision,
 )
 from agent_comms.coordination_results import AlreadyApplied, Applied
-from agent_comms.coordination_session import CoordinationSession, NativeBoundary
+from agent_comms.coordination_session import NativeBoundary
 from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayFact
-from agent_comms.coordination_tables.recovery import (
-    ACPClientConnectivity,
-    ConnectivityFacet,
-    OwnerConnectivity,
-    RecoveryAudit,
-)
+from agent_comms.coordination_tables.recovery import RecoveryAudit
 from agent_comms.owner_fence import OwnerFence
-from agent_comms.participant_store import ParticipantStore
 from agent_comms.turn_failure import TurnFailure
 from agent_comms.recovery_reader import RecoveryReader
 from agent_comms.recovery_states import RecoveryCondition
@@ -41,19 +35,9 @@ class StartResult:
 MAX_LEASE_RENEWAL_MS = 300_000
 
 
-class AttemptStore:
-    def __init__(
-        self,
-        session: CoordinationSession,
-        participants: ParticipantStore,
-        snapshots: RecoveryReader,
-    ) -> None:
-        self.session = session
-        self.participants = participants
-        self.snapshots = snapshots
-
+class AttemptStore(RecoveryReader):
     def require_fence(self, fence: OwnerFence) -> tuple[RecoverySnapshot, AttemptRecord]:
-        snapshot = self.snapshots.get(fence.execution_id)
+        snapshot = self.get(fence.execution_id)
         attempt = snapshot.require_current_attempt()
         if (
             attempt.authority != fence.authority
@@ -68,7 +52,7 @@ class AttemptStore:
     def start(self, request: AttemptStart) -> Applied[StartResult] | AlreadyApplied[StartResult]:
         digest = request.digest
         with self.session.writing() as db:
-            snapshot = self.snapshots.get(request.execution_id)
+            snapshot = self.get(request.execution_id)
             old = AttemptRecord.one(
                 db, execution_id=request.execution_id, owner_token_digest=digest
             )
@@ -79,7 +63,7 @@ class AttemptStore:
             request.validate(snapshot, self.participants.get(snapshot.execution.owner_lookup))
             request.activate(self.session, snapshot)
             self._resume_retry(snapshot, request)
-            return Applied(StartResult(self.snapshots.get(request.execution_id), request.fence(1)))
+            return Applied(StartResult(self.get(request.execution_id), request.fence(1)))
 
     def _resume_retry(self, snapshot: RecoverySnapshot, request: AttemptStart) -> None:
         """Revoke prior replay proof and reengage coupled response/claim state atomically."""
@@ -125,7 +109,7 @@ class AttemptStore:
                 revision=attempt.revision + 1,
                 updated_at_ms=self.session.now(attempt.updated_at_ms),
             )
-            after = self.snapshots.get(fence.execution_id)
+            after = self.get(fence.execution_id)
             assert after.attempt is not None
             return Applied(StartResult(after, replace(fence, revision=after.attempt.revision)))
 
@@ -156,7 +140,7 @@ class AttemptStore:
                 progress=progress,
                 reason_code=reason_code,
             )
-            after = self.snapshots.get(fence.execution_id)
+            after = self.get(fence.execution_id)
             return Applied(
                 StartResult(after, replace(fence, revision=after.require_attempt().revision))
             )
@@ -185,7 +169,7 @@ class AttemptStore:
                 replay_safe=replay_safe, side_effects_possible=side_effects_possible,
             ):
                 return AlreadyApplied(snapshot)
-            return Applied(self.snapshots.get(fence.execution_id))
+            return Applied(self.get(fence.execution_id))
 
     def fail_unknown(
         self,
@@ -214,38 +198,10 @@ class AttemptStore:
                     progress=False,
                     reason_code=GivenReasonCode("native_unknown"),
                 )
-            self.snapshots.get(fence.execution_id).settle(
+            self.get(fence.execution_id).settle(
                 self.session, UnknownOutcomeAttempt(), GivenReasonCode("native_unknown"), acquired
             )
-            return Applied(self.snapshots.get(fence.execution_id))
-
-    def observe_connectivity(
-        self,
-        fence: OwnerFence,
-        *,
-        expected_pointer_revision: int,
-        expected_revision: int | None,
-        owner: OwnerConnectivity,
-        acp_client: ACPClientConnectivity,
-    ) -> Applied[RecoverySnapshot]:
-        owner, acp_client = OwnerConnectivity(owner), ACPClientConnectivity(acp_client)
-        with self.session.writing() as db:
-            snapshot, _ = self.require_fence(fence)
-            before = snapshot.connectivity
-            if (
-                snapshot.pointer_revision != expected_pointer_revision
-                or (before.revision if before else None) != expected_revision
-            ):
-                raise StaleRevision("connectivity or pointer revision changed")
-            now = self.session.now(before.observed_at_ms if before else 0)
-            ConnectivityFacet(
-                fence.execution_id,
-                owner,
-                acp_client,
-                before.revision + 1 if before else 1,
-                now,
-            ).upsert(db)
-            return Applied(self.snapshots.get(fence.execution_id))
+            return Applied(self.get(fence.execution_id))
 
     def append_recovery_audit(
         self,
@@ -273,7 +229,7 @@ class AttemptStore:
                 elapsed_ms=elapsed_ms,
                 observed_at_ms=self.session.now(attempt.updated_at_ms),
             ).insert(db)
-            return Applied(self.snapshots.get(fence.execution_id))
+            return Applied(self.get(fence.execution_id))
 
     def settle_nonpublication(
         self,
@@ -284,8 +240,6 @@ class AttemptStore:
         reason_code: ReasonCode = NoReasonCode(),
         failure: TurnFailure | None = None,
     ) -> Applied[RecoverySnapshot]:
-        if not isinstance(outcome, TerminalAttempt):
-            raise ValueError("settlement requires a terminal attempt outcome")
         with self.session.settlement() as acquired:
             snapshot, _ = self.require_fence(fence)
             if snapshot.pointer_revision != expected_pointer_revision:
@@ -296,4 +250,4 @@ class AttemptStore:
                 )
                 snapshot, _ = self.require_fence(fence)
             snapshot.settle(self.session, outcome, reason_code, acquired)
-            return Applied(self.snapshots.get(fence.execution_id))
+            return Applied(self.get(fence.execution_id))

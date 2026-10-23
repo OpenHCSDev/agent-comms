@@ -18,19 +18,18 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.pi_payloads import PiOmitted
 
 from .agent_backend import (
-    AgentBackend,
     CompactionOutcome,
-    Compacts,
     FailedCompaction,
     Forks,
     InputContent,
     Interrupts,
     NothingToCompaction,
+    NewThreadBackend,
     PlacedCompaction,
     RuntimeLocation,
     TurnDelivery,
@@ -42,7 +41,6 @@ from agent_comms.native_session_files import NativeSessionLocks
 from .native_session_reopen import NativeSessionIdentity
 from .native_transcript import NativeTranscript
 from .selected_session import SavedSelectedSession
-from .unstarted_runtime import UnstartedRuntime
 
 if TYPE_CHECKING:
     from .agent_events import AgentEvent, AgentInfo
@@ -52,6 +50,7 @@ if TYPE_CHECKING:
     from .native_session_reopen import NativeSessionIdentity
     from .pi_payloads import StateData
     from .threads import Thread
+    from .turn_runner import TurnRunner
 
 
 # The event kinds Pi 0.85.1 writes to RPC stdout, as built for Core. Sources,
@@ -84,7 +83,7 @@ class PiSessionFile(RuntimeLocation):
 
     path: str
 
-    def select_session(self, directory, execution, source_reads, *, root, thread):
+    def select_session(self, directory, execution, source_reads, *, participant):
         path = Path(self.path).absolute()
         retained = execution.retained_source(path)
         identity = (retained.identity if retained is not None else
@@ -92,7 +91,7 @@ class PiSessionFile(RuntimeLocation):
                         source_reads.for_source(path)
                     ))
         return SavedSelectedSession(directory, identity=identity,
-                                    owner=thread.incarnation.require_recorded())
+                                    owner=participant.owner.thread.incarnation.require_recorded())
 
     def history_source(self, root, incarnation):
         return NativeTranscript(Path(self.path))
@@ -179,9 +178,8 @@ class PersistentPiSession:
 class PiNativeBackend(
     PersistentPiSession,
     Interrupts,
-    Compacts,
     Forks,
-    AgentBackend,
+    NewThreadBackend,
 ):
     """Pi 0.85.1 over RPC: one retained child per thread session in this worker.
 
@@ -191,8 +189,6 @@ class PiNativeBackend(
     """
 
     location_type: ClassVar[type[RuntimeLocation]] = PiSessionFile
-    unstarted_type: ClassVar[type[RuntimeLocation]] = UnstartedRuntime
-    serves_new_threads: ClassVar[bool] = True
     event_kinds: ClassVar[frozenset[str]] = PI_0_85_1_EVENT_KINDS
 
     def __init__(
@@ -207,7 +203,7 @@ class PiNativeBackend(
         self.observe = observe
 
     @classmethod
-    def for_worker(cls, runner: Any, session_id: str) -> Self:
+    def for_worker(cls, runner: TurnRunner, session_id: str) -> Self:
         return cls(
             runner.agent_bin, runner.agent_args, runner.comms,
             partial(runner.observe_selected_preparation, session_id),
@@ -247,7 +243,7 @@ class PiNativeBackend(
             owner=thread.incarnation.require_recorded(),
             session_directory=thread.native_session_directory(self.comms.root),
             environment=environment,
-            session_file=thread.runtime.read_key,
+            session_file=thread.writable_runtime.read_key,
             observe=partial(self.observe, thread),
         )
 
@@ -273,7 +269,7 @@ class PiNativeBackend(
             delivery.environment,
             **images,
             context_contributions=content.contributions,
-            **thread.runtime.arguments(),
+            **thread.writable_runtime.arguments(),
             steering_queue=delivery.inbox,
             finish_event=delivery.finish_event,
             send_boundary=delivery.send_boundary,
@@ -290,7 +286,7 @@ class PiNativeBackend(
         ):
             yield event
 
-    async def abort(self, owner: asyncio.Task[Any]) -> None:
+    async def abort[Result](self, owner: asyncio.Task[Result]) -> None:
         from . import backend
 
         await backend.terminate_task_process(owner)

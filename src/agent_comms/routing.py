@@ -2,21 +2,44 @@
 
 from __future__ import annotations
 
+from . import turn_origin
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from typing import Annotated, TYPE_CHECKING
 
 
 from .channel_targets import CommandTarget
-from .field_codec import FieldCodec, WireOmitDefault
+from .field_codec import FieldCodec, NullMember, WireOmitDefault
 from .message_reference import MessageReference
-from .messages import Message
 from .read_basis import DMDisplayScope, MessageDisplayScope, ReadCursor
 
 if TYPE_CHECKING:
     from .catalog_document import CatalogDocument
     from .registry_provenance import RegistryProvenance
     from .thread_identity import ThreadIncarnation
+    from .input_disposition import InputDispositions
+    from .messages import Message
+    from .threads import Thread
+
+
+class NoTurnOrigin(NullMember, turn_origin.TurnOrigin):
+    """An autonomous turn has no message, delivery key or reply destination."""
+
+    separate_turn = False
+    autonomous = True
+
+    def messages(self) -> tuple[Message, ...]:
+        return ()
+
+    @property
+    def batch_target(self) -> NoTurnOrigin:
+        return self
+
+    def bus_keys(self, dispositions: InputDispositions, owner: Thread) -> tuple[str, ...]:
+        return ()
+
+
+NO_TURN_ORIGIN = NoTurnOrigin()
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,13 +111,13 @@ class TurnRouting:
 @dataclass(frozen=True, slots=True)
 class ScheduledTurn:
     prompt: str
-    origin: Message | None = None
+    origin: turn_origin.TurnOrigin = NO_TURN_ORIGIN
     goal_id: str | None = None
     goal_wait_id: str | None = None
 
     @property
     def autonomous_goal(self) -> bool:
-        return self.goal_id is not None and self.origin is None
+        return self.goal_id is not None and self.origin.autonomous
 
     @classmethod
     def resuming_in_project(cls, project: str) -> ScheduledTurn:
@@ -109,10 +132,6 @@ class ScheduledTurn:
         """Only dependency launches use standby refusal settlement."""
         if self.goal_wait_id is None:
             raise error
-
-    @property
-    def origins(self) -> tuple[Message, ...]:
-        return (self.origin,) if self.origin is not None else ()
 
     @classmethod
     def incoming(
@@ -131,15 +150,14 @@ class ScheduledTurn:
         """Combine channel turns sharing a route, keeping each direct input separate."""
         if not pending:
             return [], []
-        if pending[0].origin and pending[0].origin.role.response_policy(pending[0].origin).separate_turn:
+        if pending[0].origin.separate_turn:
             return pending[:1], pending[1:]
         boundary = next(
             (
                 index
                 for index, turn in enumerate(pending)
-                if (turn.origin.exact_reply_target if turn.origin else None)
-                != (pending[0].origin.exact_reply_target if pending[0].origin else None)
-                or (turn.origin and turn.origin.role.response_policy(turn.origin).separate_turn)
+                if (turn.origin.batch_target != pending[0].origin.batch_target
+                    or turn.origin.separate_turn)
             ),
             len(pending),
         )
@@ -152,13 +170,6 @@ class DeliveryMessage:
 
     message: Message
     sender_lookup: str = ""
-
-    @classmethod
-    def from_wire(cls, record: Mapping, root_id: str | None):
-        from .wire_record import WireRecord
-
-        verified = WireRecord.from_wire(record, root_id)
-        yield from verified.delivery_messages()
 
 
 @dataclass(frozen=True, slots=True)
@@ -228,7 +239,7 @@ class DeliveryScope(MessageDisplayScope):
         incarnation = source.incarnation
         if sender_lookup not in self.sender_lookups(incarnation, incarnation.require_recorded):
             return None
-        return max(source.created_at, snapshot.threads[self.actor].created_at)
+        return max(source.incarnation.wire_birth, snapshot.threads[self.actor].incarnation.wire_birth)
 
     def unread(
         self, delivery: DeliveryMessage, snapshot: RegistryProvenance, seen: ReadCursor

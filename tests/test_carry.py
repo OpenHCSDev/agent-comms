@@ -1,41 +1,49 @@
 """The carry family: one chain of idempotent steps whose dry runs say what a bus still needs."""
 
+
 import os
 import sqlite3
 import subprocess
-import sys
 from contextlib import closing
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from tools.debt_ratchet import UncarriedRecordFormat, git
 
-from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.thread_execution import ExternalThreadExecution
-from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
-from agent_comms.installer.carry import (
-    STEPS, Carried, CarryChain,
-)
-from agent_comms.installer.backup import (
-    StoreBackup, UpgradeRefused, bus_files, transcripts_held,
-)
+from agent_comms.cli_commands import ArchiveCliCommand
+from agent_comms.installer.backup import StoreBackup, bus_files
+from agent_comms.installer.refusals import UpgradeRefused
+from agent_comms.installer.carry import STEPS
+from agent_comms.installer.probes.carry import Carried, Carry, MigrateOperation
+from agent_comms.installer.commands import InstallCommands
+from agent_comms.installer.interpreter_operation import TargetProgram
 from agent_comms.installer.upgrade import (
+    BackedUpMigration,
+    PreparedMigration,
     RehearsalFiles,
     Stack,
     StepRun,
+    TargetTree,
     carried,
 )
-from tools.debt_ratchet import UncarriedRecordFormat, git
+from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.registry_store import RegistryStore
+from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
+from agent_comms.threads import Thread
+from fixture_git import IDENTITY
 
 REPO = Path(__file__).resolve().parents[1]
 
 
 def step_source() -> str:
     return (
-        "from agent_comms.installer.carry import Carried, Carry\n\n"
+        "from agent_comms.installer.probes.carry import Carried, Carry\n\n"
         "class Step(Carry):\n"
-        "    @classmethod\n    def carry(cls, root, *, apply):\n        return Carried(0)\n"
+        "    opened_files = ()\n"
+        "    def carry(self, *, apply):\n        return Carried(0)\n"
     )
 
 
@@ -43,11 +51,9 @@ class Repository:
     def __init__(self, path: Path):
         self.path = path
         self.git("init", "-q")
-        self.git("config", "user.email", "carry@example.invalid")
-        self.git("config", "user.name", "Carry test")
 
     def git(self, *args: str) -> str:
-        return subprocess.check_output(["git", "-C", str(self.path), *args], text=True, timeout=10).strip()
+        return subprocess.check_output(["git", *IDENTITY, "-C", str(self.path), *args], text=True, timeout=10).strip()
 
     def commit(self, steps: dict[str, str | None]) -> str:
         """One commit per step, in order, as the main line adds steps one at a time."""
@@ -64,23 +70,7 @@ class Repository:
         return self.git("rev-parse", "HEAD")
 
 
-def test_pending_is_every_step_from_the_first_whose_dry_run_reports_a_change():
-    """A step's dry run, not a record of its name, says whether the bus needs it, so a step
-    edited after a bus ran it is judged by what it does now. A later step's dry run is
-    not asked before the earlier pending ones have run."""
-    chain = CarryChain.at(REPO)
-    assert sorted(step.name() for step in chain.steps) == sorted(
-        path.stem for path in (REPO / STEPS).glob("carry_*.py"))
-    assert chain.pending(lambda step: Carried(0)) == ()
-    edited = chain.steps[len(chain.steps) // 2]
-    asked = []
 
-    def dry_run(step):
-        asked.append(step)
-        return Carried(int(step is edited))
-
-    assert chain.pending(dry_run) == chain.steps[chain.steps.index(edited):]
-    assert asked == list(chain.steps[:chain.steps.index(edited) + 1])
 
 
 def record_source(version: int, fields: str) -> str:
@@ -140,17 +130,97 @@ def test_a_store_compares_by_its_rows_and_not_by_its_companion_files(tmp_path):
 
 @pytest.fixture
 def stack(tmp_path):
-    """Use the test interpreter, not an unrelated installed runtime under HOME."""
-    return Stack(REPO, home=tmp_path, runtime=LaunchRuntime.running())
+    """CLI children keep the test's source path rather than an editable install's checkout."""
+    with InstallCommands() as commands:
+        yield Stack(REPO, commands, home=tmp_path,
+                    runtime=RestoredRuntime(LaunchRuntime.running().interpreter))
+
+
+@pytest.fixture(scope="module")
+def noisy_step(tmp_path_factory):
+    tree = TargetTree(REPO, tmp_path_factory.mktemp("noisy-step"), "noisy-step")
+    (tree.path / "tools" / "cutover").mkdir(parents=True)
+    (tree.path / "tools" / "cutover" / "__init__.py").touch()
+    (tree.path / "src").symlink_to(REPO / "src", target_is_directory=True)
+    module = tree.path / "tools" / "cutover" / "carry_noisy.py"
+    module.write_text(
+        "from pathlib import Path\n"
+        "from agent_comms.installer.probes.carry import Carry, Carried\n"
+        "class Noisy(Carry):\n"
+        "    opened_files = ()\n"
+        "    def carry(self, *, apply):\n"
+        "        import atexit\n"
+        "        atexit.register(print, 'diagnostic after the answer')\n"
+        "        if apply:\n"
+        "            (self.root / 'saved').write_text('migrated')\n"
+        "            if (self.root / 'fail').exists():\n"
+        "                raise RuntimeError('failed after changing the saved file')\n"
+        "        return Carried(1, {'applied': apply}, (Path('saved'),))\n"
+    )
+    # The parent needs only the selected step's identity; its implementation is loaded
+    # by the worker from the target tree.
+    class Noisy(Carry):
+        @classmethod
+        def module(cls):
+            return module
+
+        opened_files = ()
+
+        def carry(self, *, apply):
+            raise AssertionError("The selected interpreter executes the carry, never its caller")
+
+    return tree, Noisy
+
+
+@pytest.fixture
+def staged(stack, noisy_step):
+    """The runtime built from the noisy tree takes its carry steps from that tree."""
+    tree, _ = noisy_step
+    return replace(stack, program=TargetProgram(tree.steps_package))
+
+
+def test_step_answers_are_separate_from_diagnostics_and_keep_their_types(
+        staged, tmp_path, noisy_step):
+    """Every invocation crosses the real worker process, including a noisy migration."""
+    _, step = noisy_step
+    root = tmp_path / "bus"
+    root.mkdir()
+    request = step(root, root, tmp_path / "spill")
+    assert staged.call_steps((request,), MigrateOperation(False)) == (
+        Carried(1, {"applied": False}, (Path("saved"),)),)
+    assert not (root / "saved").exists()
+    assert staged.call_steps((request,), MigrateOperation(True)) == (
+        Carried(1, {"applied": True}, (Path("saved"),)),)
+    assert (root / "saved").read_text() == "migrated"
+
+
+def test_backed_up_migration_restores_a_real_worker_failure(comms, staged, noisy_step):
+    _, step = noisy_step
+    saved = comms.root / "saved"
+    saved.write_text("original")
+    (comms.root / "fail").touch()
+    maintenance = MaintenanceBarrier(RegistryStore.at(comms.root).path)
+    hold = maintenance.begin(MaintenanceOperator.current())
+    with hold.holding():
+        migration = PreparedMigration.capture(hold, staged).extended(
+            BackedUpMigration, backup=StoreBackup.take(
+                comms.root, comms.root / "no-route", (saved,), comms.root.parent / "spill"))
+        with pytest.raises(UpgradeRefused, match="failed after changing the saved file"):
+            migration.carry((step(comms.root, comms.root, comms.root.parent / "spill"),), staged)
+        assert saved.read_text() == "migrated"
+        migration.restore()
+        assert saved.read_text() == "original"
+        assert staged.verify(comms.root) == migration.read
+    maintenance.clear(hold)
 
 
 def test_restart_selection_uses_receiving_declaration_with_connected_cli_inbox(comms, stack):
     from agent_comms.child_process import ProcessIdentity
 
     process = ProcessIdentity.capture(os.getpid())
-    native = comms.registry.declare(replace(comms.registry.new_thread(
+    native = comms.registry.declare(replace(Thread(
         'native-copy', frozenset(), str(comms.root)), process_identity=process))
-    external = comms.registry.declare(comms.registry.new_thread(
+    external = comms.registry.declare(Thread(
         'cli-inbox-copy', frozenset(), str(comms.root), execution=ExternalThreadExecution))
     with comms.registry.external_process(external.name, process):
         assert stack.running_owners(comms.root) == [native.name]
@@ -160,17 +230,16 @@ def test_restart_selection_uses_receiving_declaration_with_connected_cli_inbox(c
 
 
 def test_owner_request_failure_joins_the_entire_set_before_propagating(comms, stack):
-    comms.messaging.initialize_private_initial_protocol()
     names = ["failed", "other", "last"]
     for name in names[1:]:
         comms.registry.declare(
-            comms.registry.new_thread(name, frozenset(), str(comms.root)), StoppedThreadStatus()
+            Thread(name, frozenset(), str(comms.root)), StoppedThreadStatus()
         )
 
     # The first real CLI request fails; both other children must finish their writes
     # before owners propagates that failure. No replacement Stack.cli is involved.
     with pytest.raises(UpgradeRefused, match="failed"):
-        stack.owners(comms.root, "archive", names)
+        stack.owners(comms.root, ArchiveCliCommand, names)
     saved = comms.registry.snapshot()
     assert tuple(saved.status(name) for name in names[1:]) == (ArchivedThreadStatus(),) * 2
 
@@ -180,37 +249,4 @@ def test_upgrade_refuses_at_start_without_its_own_uv(stack):
     assert not stack.uv.exists()
     with pytest.raises(UpgradeRefused):
         stack.require_uv()
-
-
-def test_upgrade_transcript_hold_covers_selected_snapshot(comms):
-    """A bridge publishes from its own process, and the upgrade reads the store's files raw
-    for the backup and its digests. The bridge may not write while those are read, nor into
-    the failed bus a restore keeps as evidence."""
-    unit = comms.registry.declare(comms.registry.new_thread(
-        "hold-unit", frozenset({"hold"}), str(comms.root), execution=ExternalThreadExecution))
-    transcript = ExternalTranscript(comms.root, unit.incarnation)
-    with transcript.writing():
-        pass
-
-    def bridge_publishes(bus: Path) -> str:
-        writer = ("import sqlite3, sys\n"
-                  "db = sqlite3.connect(sys.argv[1], timeout=0.2, isolation_level=None)\n"
-                  "db.execute('BEGIN IMMEDIATE'); db.execute('COMMIT'); print('wrote')")
-        result = subprocess.run([sys.executable, "-c", writer, ExternalTranscript.path_in(bus)],
-                                capture_output=True, text=True, timeout=60)
-        return result.stdout.strip() or result.stderr.strip().splitlines()[-1]
-
-    with transcripts_held(comms.root):
-        before = bus_files(comms.root)
-        path = ExternalTranscript.path_in(comms.root)
-        backup = StoreBackup.take(comms.root, comms.root.parent / "no-route.json",
-                                  (path,), comms.root.parent / 'spill')
-        assert isinstance(backup, StoreBackup)
-        assert bridge_publishes(comms.root).endswith("database is locked")
-        assert carried(comms.root, before, [], RehearsalFiles.declared([])) == (
-            RehearsalFiles(len(before), 0, (), 0))
-        assert backup.original()
-    assert bridge_publishes(comms.root) == "wrote"
-    assert tuple(backup.files()) == (str(path.relative_to(comms.root)),)
-
 

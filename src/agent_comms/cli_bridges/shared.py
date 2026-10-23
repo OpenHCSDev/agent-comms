@@ -9,11 +9,12 @@ import json
 import os
 import signal
 import socket
+import sqlite3
 import sys
 import time
 import traceback
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager, suppress
 from dataclasses import dataclass, field, replace
 from datetime import datetime
@@ -22,16 +23,20 @@ from pathlib import Path
 from typing import Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar
 
 from acp.schema import SessionConfigSelectOption
-from metaclass_registry import RegistryConfig
-from pydantic import Field, TypeAdapter, model_validator
+from pydantic import Field, model_validator
 
 from agent_comms import field_codec, messages
 from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesTranscript
 from agent_comms.change_report import NoChangeReport, ReportEvidence
 from agent_comms.child_process import (
-    AttachedChild, OutlivesLauncherLifetime, ProcessIdentity, SpawnedProcess, StreamingChildStdio,
+    AttachedChild,
+    OutlivesLauncherLifetime,
+    ProcessIdentity,
+    SpawnedProcess,
+    StreamingChildStdio,
 )
 from agent_comms.cli_protocol import (
+    CliArguments,
     DeliveredOutcome,
     EmittedOutcome,
     FilteredOutcome,
@@ -41,23 +46,29 @@ from agent_comms.cli_protocol import (
     WatchLine,
     raise_child_exit,
 )
-from agent_comms.comms import Comms
+from agent_comms.comms import Comms, wire
 from agent_comms.config_options import CatalogConfigOption, CatalogSelection, ConfigOptions
-from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.declared_verb import DeclaredOptions
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.message_reference import AfterMessageStart, FirstUnreadStart, InboxStart
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
-from agent_comms.typed_table import Column, DurableTables, ExpressionIndex, TypedTable
+from agent_comms.typed_table import (
+    Column,
+    DurableTables,
+    ExpressionIndex,
+    TypedTable,
+    WriterOwnedFile,
+)
+from agent_comms.wire_models import WireModel
 from agent_comms_hooks.watch import HeldClaim, WatchClaim, WatchRecord
 
 from ..locked_store import RegistryFile, SQLiteFile
 from .monitor import (
-    REPLIES,
     BridgeExit,
     InspectSession,
     MonitorAttachment,
@@ -73,49 +84,12 @@ from .monitor import (
 )
 
 
-class DeclaredOptions:
-    """The CLI adapter consumes FieldCodec's existing field plans."""
-    help: ClassVar[str]
-
-    @classmethod
-    def add_parser[P: argparse.ArgumentParser](
-            cls, subparsers: argparse._SubParsersAction[P]) -> None:
-        cls.add_arguments(subparsers.add_parser(FieldCodec.encode(cls), help=cls.help))
-
-    @classmethod
-    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
-        FieldCodec.add_arguments(cls, parser)
-
-    @classmethod
-    def from_arguments(cls, args: argparse.Namespace) -> Self:
-        return FieldCodec.decode_arguments(cls, args)
-
-
-class DeclaredVerb(DeclaredOptions, DeclaredFamily, affix="Verb"):
-    """A command family parses the options declared by its members."""
-
-    @classmethod
-    def tool(cls) -> str:
-        return cls.__module__.rpartition('.')[2].replace('_', '-')
-
-    @classmethod
-    def parse(cls, argv: Sequence[str]) -> Self:
-        parser = argparse.ArgumentParser(
-            prog=cls.tool(), description=sys.modules[cls.__module__].__doc__,
-            formatter_class=argparse.RawDescriptionHelpFormatter,
-        )
-        verbs = parser.add_subparsers(dest="command", required=True)
-        for member in cls.members_with(cls):
-            member.add_parser(verbs)
-        args = parser.parse_args(argv)
-        return cls.member_named(args.command).from_arguments(args)
-
-
 class BridgeStateTable(DurableTables):
     """The bridge's delivery.sqlite3: its binding and every delivery attempt.
 
     The bus holds the messages, not whether this harness was sent them, so
-    nothing rebuilds these rows: a stored schema that differs is refused.
+    nothing rebuilds these rows: a stored schema that differs is carried onto the
+    declaration where it says how, keeping every row, and refused where it cannot.
     """
 
     __slots__ = ()
@@ -126,18 +100,31 @@ class BindingRequest(ABC):
     """What the command line asks of the state directory's one binding."""
 
     @abstractmethod
-    def bind(self, db: CoordinationStore) -> Binding: ...
+    def bind(self, db: sqlite3.Connection) -> Binding: ...
 
 
 @dataclass(frozen=True)
 class StoredBinding(BindingRequest):
     """No binding given: the directory's own, read without taking the writer."""
 
-    def bind(self, db: CoordinationStore) -> Binding:
+    def bind(self, db: sqlite3.Connection) -> Binding:
         rows = Binding.select(db)
         if len(rows) != 1:
             raise ValueError('Supply one complete Core/CLI binding for this state directory')
         return rows[0]
+
+
+@dataclass(frozen=True)
+class GivenBinding(BindingRequest):
+    """Some binding fields given: each overrides the stored binding's field, and a field
+    missing from both is refused by name when the merged fields decode."""
+
+    given: dict[str, str]
+
+    def bind(self, db: sqlite3.Connection) -> Binding:
+        stored = tuple(FieldCodec.encode(row) for row in Binding.select(db))
+        requested = FieldCodec.decode(Binding, {**(stored[0] if stored else {}), **self.given})
+        return requested.bind(db)
 
 
 @dataclass(frozen=True)
@@ -148,7 +135,8 @@ class Binding(BridgeStateTable, TypedTable, BindingRequest):
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
-        group = parser.add_argument_group('Core/CLI binding (all or none)')
+        group = parser.add_argument_group(
+            'Core/CLI binding (each given field overrides the stored binding)')
         for _, key in FieldCodec.record_fields(cls):
             group.add_argument('--' + key.replace('_', '-'))
 
@@ -156,21 +144,18 @@ class Binding(BridgeStateTable, TypedTable, BindingRequest):
     def from_arguments(cls, arguments: argparse.Namespace) -> BindingRequest:
         values = {key: vars(arguments)[key] for _, key in FieldCodec.record_fields(cls)
                   if vars(arguments)[key] is not None}
-        return FieldCodec.decode(cls, {cls.family_discriminator: cls.declared_name, **values}) if values else StoredBinding()
+        return GivenBinding({cls.family_discriminator: cls.declared_name, **values}) if values else StoredBinding()
 
     @classmethod
     @contextmanager
     def open(cls, state: Path):
         state.mkdir(parents=True, exist_ok=True, mode=0o700)
-        with closing(CoordinationStore.writer(state / BridgeStateTable.filename)) as db:
+        with closing(SQLiteFile.writer(state / BridgeStateTable.filename)) as db:
             db.execute('PRAGMA synchronous=FULL')
-            with SQLiteFile.write_transaction(db):
-                if not BridgeStateTable.stored_schema(db):
-                    BridgeStateTable.create_schema(db)
-            BridgeStateTable.reconcile_schema(db)
+            BridgeStateTable.install_schema(db, WriterOwnedFile())
             yield db
 
-    def bind(self, db: CoordinationStore) -> Binding:
+    def bind(self, db: sqlite3.Connection) -> Binding:
         """The first binding claims the directory; a later one must be the same."""
         with SQLiteFile.write_transaction(db):
             if not Binding.select(db):
@@ -195,10 +180,12 @@ class Options:
         parser = argparse.ArgumentParser(description=description)
         commands = parser.add_subparsers(required=True)
         for operation in Operation.offered(bridge_type):
-            command = commands.add_parser(operation.__name__.lower(), parents=[common])
+            command = commands.add_parser(
+                operation.__name__.lower(), parents=[common],
+                help=operation.help, description=operation.help)
             operation.add_arguments(command)
             command.set_defaults(operation=operation)
-        arguments = parser.parse_args(namespace=SendArguments())
+        arguments = parser.parse_args(namespace=CliArguments())
         arguments.operation = arguments.operation.from_arguments(arguments)
         arguments.binding = arguments.operation.binding(arguments)
         return cls(**{declared.name: vars(arguments)[key]
@@ -272,7 +259,7 @@ class DeliveryRow(BridgeStateTable, TypedTable):
     indexes = (ExpressionIndex((sequence_sql,)),)
 
     @classmethod
-    def resume_after(cls, db: CoordinationStore) -> InboxStart:
+    def resume_after(cls, db: sqlite3.Connection) -> InboxStart:
         """The existing journal owns attempted progress, including uncertain emissions."""
         latest = cls.read(db.execute(
             f'SELECT {cls._column_list(tuple(cls.column_projection()))} FROM "{cls.declared_name}" '
@@ -299,6 +286,9 @@ OperationBridge = TypeVar("OperationBridge", bound="CliBridge")
 @dataclass(frozen=True)
 class Operation(DeclaredOptions, ABC, Generic[OperationBridge]):
     """A decoded CLI command owns its execution."""
+
+    help: ClassVar[str]
+    """The one line `--help` shows; every offered command declares it."""
 
     def binding(self, arguments: argparse.Namespace) -> BindingRequest:
         return Binding.from_arguments(arguments)
@@ -431,10 +421,6 @@ class CatalogTargetField(ChoiceTargetField):
                 'configuration': FieldCodec.encode(self.catalog)}
 
 
-class SendArguments(argparse.Namespace):
-    command: str
-
-
 @dataclass(frozen=True, kw_only=True)
 class SendRequest(DeclaredOptions):
     help = "Send to a thread (DM), #channel, or #all"
@@ -473,6 +459,7 @@ class Send(SendRequest, Operation[OperationBridge]):
 
 
 class Inbox(Operation[OperationBridge]):
+    help = "Deliver this binding's bus messages to its harness until stopped"
     @classmethod
     def serves(cls, bridge: type[CliBridge]) -> bool:
         """Delivery alone, without the transcript that confirms it on some bridges."""
@@ -493,6 +480,7 @@ class Inbox(Operation[OperationBridge]):
 
 
 class Watch(Inbox):
+    help = "Deliver this binding's bus messages and publish its harness transcript to the bus"
     @classmethod
     def serves(cls, bridge: type[CliBridge]) -> bool:
         return issubclass(bridge, PublishesTranscript)
@@ -507,6 +495,7 @@ class Watch(Inbox):
 
 @dataclass(frozen=True, kw_only=True)
 class Serve(Watch):
+    help = "The session bridge process that connect and the SessionStart hook launch; not run by hand"
     owner: Annotated[
         ProcessIdentity,
         field_codec.Argument(flags=("--owner",), options={"type": FieldCodec.parse}),
@@ -558,7 +547,7 @@ class Serve(Watch):
         deadline = time.monotonic() + 30
         while child.alive() and time.monotonic() < deadline:
             try:
-                request.exchange(claim)
+                request.exchange(claim.socket_path)
                 return
             except (FileNotFoundError, ConnectionRefusedError):
                 time.sleep(.05)
@@ -569,18 +558,18 @@ class Serve(Watch):
 
     @staticmethod
     def running(home: Path) -> tuple[SessionBridge, ...]:
-        claims = set()
-        for state in sorted(WatchClaim.directory(home).parent.glob('*-bridge-*')):
-            journal = state / BridgeStateTable.filename
-            if not journal.is_file():
+        bridges = []
+        for endpoint in WatchClaim.endpoints(home):
+            try:
+                observed = InspectSession().information(endpoint)
+            except (FileNotFoundError, ConnectionRefusedError):
+                # A bridge may exit after enumeration, leaving its old socket behind.
                 continue
-            with closing(CoordinationStore.read_snapshot(journal)) as db:
-                bindings = Binding.select(db)
-            for binding in bindings:
-                claim = WatchClaim(binding.thread, home)
-                claims.update(claim.state().serving_claims())
-        return tuple(SessionBridge(claim, InspectSession().information(claim))
-                     for claim in sorted(claims, key=lambda claim: claim.thread))
+            claim = WatchClaim(observed.transcript.stem, home)
+            if claim.socket_path != endpoint:
+                raise ValueError('Session endpoint reported a different claim identity')
+            bridges.append(SessionBridge(claim, observed))
+        return tuple(sorted(bridges, key=lambda bridge: bridge.claim.thread))
 
     def retired(self, bridge: LineMonitorBridge) -> None:
         bridge.retirement.finish(self, bridge.watch_record())
@@ -600,6 +589,8 @@ class Serve(Watch):
 class ResumedServe(Serve):
     """A serve exec'd in place by an install: it adopts the claim its predecessor kept."""
 
+    help = "A session bridge an install resumes in place, adopting its predecessor's claim"
+
     claim: Annotated[int, field_codec.Argument(flags=("--claim",), options={"type": int})]
 
     def arguments(self) -> tuple[str, ...]:
@@ -610,6 +601,71 @@ class ResumedServe(Serve):
         return claim.adopted(self.claim, record)
 
 
+class ResumableBridge(ABC):
+    @abstractmethod
+    def resume(self) -> BridgeResume: ...
+
+
+@dataclass(frozen=True)
+class BridgeResume(ResumableBridge, DeclaredFamily, affix="Bridge"):
+    name: str
+
+    def resume(self) -> Self:
+        return self
+
+    def failures(self) -> tuple[UnresumedBridge, ...]:
+        """A bridge that came back, or whose owner left, fails nothing."""
+        return ()
+
+    @abstractmethod
+    def lines(self) -> tuple[str, ...]: ...
+
+
+class UnresumedBridge(BridgeResume, ValueError):
+    """A bridge that should have come back on the new runtime and did not."""
+
+    def failures(self) -> tuple[UnresumedBridge, ...]:
+        return (self,)
+
+    def __str__(self) -> str:
+        return "\n".join(self.lines())
+
+
+@dataclass(frozen=True)
+class ResumedBridge(BridgeResume):
+    from_runtime: LaunchRuntime
+    to_runtime: LaunchRuntime
+
+    def lines(self) -> tuple[str, ...]:
+        return (f"Session bridge {self.name}: {self.from_runtime.prefix} -> "
+                f"{self.to_runtime.prefix}",)
+
+
+@dataclass(frozen=True)
+class OwnerExitedBridge(BridgeResume):
+    def lines(self) -> tuple[str, ...]:
+        return (f"Session bridge {self.name}: owner exited; left stopped",)
+
+
+@dataclass(frozen=True)
+class ReplacedBridge(UnresumedBridge):
+    observed: ProcessIdentity
+    current: ProcessIdentity
+
+    def lines(self) -> tuple[str, ...]:
+        return (f"Session bridge {self.name}: process or owner changed "
+                f"({self.observed} -> {self.current}); re-arm this bridge",)
+
+
+@dataclass(frozen=True)
+class UnobservedBridge(UnresumedBridge):
+    reason: str
+
+    def lines(self) -> tuple[str, ...]:
+        return (f"Session bridge {self.name}: new runtime was not observed "
+                f"({self.reason}); re-arm this bridge",)
+
+
 @dataclass(frozen=True)
 class SessionBridge:
     """A live endpoint's own description, captured before install stops anything."""
@@ -617,89 +673,95 @@ class SessionBridge:
     claim: WatchClaim
     observed: SessionInformation
 
-    def pause(self, resources: ExitStack) -> tuple[PausedSessionBridge, ...]:
+    def pause(self, resources: ExitStack) -> ResumableBridge:
         if not self.observed.owner.alive():
             if self.observed.process.alive():
                 self.observed.process.signal(signal.SIGTERM)
-            print(f'Session bridge {self.claim.thread}: owner exited; left stopped', file=sys.stderr)
-            return ()
+            return OwnerExitedBridge(self.claim.thread)
         self.observed.owner.require_alive()
-        peer = resources.enter_context(PauseSession(
-            owner=self.observed.owner, process=self.observed.process).connection(self.claim))
+        request = PauseSession(owner=self.observed.owner, process=self.observed.process)
+        peer = resources.enter_context(request.connection(self.claim.socket_path))
         stream = resources.enter_context(peer.makefile('rb'))
-        REPLIES.validate_json(stream.readline(4096)).require()
-        return (PausedSessionBridge(self, peer),)
-
-
-class SessionBridgeResumeError(ValueError):
-    """A paused session bridge did not come back as the same process on the new runtime."""
+        request.decode_reply(stream.readline(4096))
+        return PausedSessionBridge(self, peer)
 
 
 @dataclass
 class SessionBridgeResumes:
     """Every bridge an install paused. One failed resume cancels neither another resume nor
-    the install steps after it: each failure is reported, then the install exits non-zero."""
+    the install steps after it: each outcome is reported, then the install exits non-zero."""
 
-    paused: list[PausedSessionBridge] = field(default_factory=list)
-    failures: list[SessionBridgeResumeError] = field(default_factory=list)
+    paused: list[ResumableBridge] = field(default_factory=list)
+    outcomes: list[BridgeResume] = field(default_factory=list)
 
     def pause(self, bridge: SessionBridge, resources: ExitStack) -> None:
-        self.paused.extend(bridge.pause(resources))
+        self.paused.append(bridge.pause(resources))
 
     def resume(self) -> None:
-        for paused in self.paused:
-            try:
-                paused.resume()
-            except SessionBridgeResumeError as error:
-                self.failures.append(error)
+        self.outcomes.extend(paused.resume() for paused in self.paused)
+
+    @property
+    def failures(self) -> tuple[UnresumedBridge, ...]:
+        return tuple(error for outcome in self.outcomes for error in outcome.failures())
 
     def lines(self) -> tuple[str, ...]:
-        return tuple(f'Not resumed: {error}' for error in self.failures)
+        return tuple(line for outcome in self.outcomes for line in outcome.lines())
 
     def require_resumed(self) -> None:
-        if self.failures:
-            raise ExceptionGroup('Session bridges not resumed', self.failures)
+        failures = self.failures
+        if failures:
+            raise ExceptionGroup('Session bridges not resumed', failures)
 
 
 @dataclass(frozen=True)
-class PausedSessionBridge:
+class PausedSessionBridge(ResumableBridge):
     bridge: SessionBridge
     peer: socket.socket
 
-    def resume(self) -> str:
+    def resume(self) -> BridgeResume:
         runtime = LaunchRuntime.installed()
         observed = self.bridge.observed
         name = self.bridge.claim.thread
         if not observed.owner.alive():
-            print(f'Session bridge {name}: owner exited; left stopped', file=sys.stderr)
-            return f'{name}: owner exited; left stopped'
-        self.peer.sendall((json.dumps(FieldCodec.encode(runtime)) + '\n').encode())
+            return OwnerExitedBridge(name)
+        try:
+            self.peer.sendall((json.dumps(FieldCodec.encode(runtime)) + '\n').encode())
+        except OSError as error:
+            return UnobservedBridge(name, f"{type(error).__name__}: {error}")
         deadline = time.monotonic() + 30
         while observed.process.alive() and time.monotonic() < deadline:
             try:
-                current = InspectSession().information(self.bridge.claim)
+                current = InspectSession().information(self.bridge.claim.socket_path)
             except (FileNotFoundError, ConnectionRefusedError):
                 time.sleep(.05)
                 continue
+            except OSError as error:
+                return UnobservedBridge(name, f"{type(error).__name__}: {error}")
             if current.process != observed.process or current.owner != observed.owner:
-                raise SessionBridgeResumeError(f'Session bridge {name}: process or owner changed')
+                return ReplacedBridge(name, observed.process, current.process)
             if current.runtime.prefix != runtime.prefix:
-                raise SessionBridgeResumeError(
-                    f'Session bridge {name}: wrong runtime {current.runtime.prefix}')
-            print(f'Session bridge {name}: {observed.runtime.prefix} -> {current.runtime.prefix}',
-                  file=sys.stderr)
-            return name
-        raise SessionBridgeResumeError(f'Session bridge {name}: successor runtime was not observed')
+                return UnobservedBridge(
+                    name, f"observed {current.runtime.prefix}, expected {runtime.prefix}")
+            return ResumedBridge(name, observed.runtime, current.runtime)
+        return UnobservedBridge(name, f"process exited or resume deadline expired for {runtime.prefix}")
 
 
 class Enrol(Operation):
+    help = "Record this session's binding without starting its bridge; the next SessionStart starts it"
+    reported: ClassVar[str] = (
+        'Session binding enrolled; the next SessionStart starts the bridge. Monitor runs watch.')
+
     @classmethod
     def serves(cls, bridge: type[CliBridge]) -> bool:
         return issubclass(bridge, LineMonitorBridge)
 
     async def execute(self, bridge: LineMonitorBridge) -> None:
         WatchClaim(bridge.binding.thread).enrol(bridge.watch_record())
-        print('Session binding enrolled; SessionStart owns the bridge. Monitor runs watch.', flush=True)
+        self.begin(bridge)
+        print(self.reported, flush=True)
+
+    def begin(self, bridge: LineMonitorBridge) -> None:
+        """Enrolment alone starts nothing."""
 
 
 @dataclass(frozen=True)
@@ -744,11 +806,11 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
 
     options: BridgeOptions
     binding: Binding
-    db: CoordinationStore
+    db: sqlite3.Connection
 
     @cached_property
     def comms(self) -> Comms:
-        return Comms(Path(self.binding.root))
+        return wire(Path(self.binding.root))
 
     def watch_record(self) -> WatchRecord:
         return WatchRecord(self.binding.bus, self.binding.root,
@@ -795,7 +857,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
     async def accept(self, message: messages.Message) -> None:
         conversation = message.type.conversation_message
         outcome = UnconfirmedOutcome if conversation else FilteredOutcome
-        delivery = DeliveryRow(message.message_id, json.dumps(message.to_wire(), separators=(',', ':')) + '\n', outcome)
+        delivery = DeliveryRow(message.message_id, FieldCodec.compact(message.to_wire()) + '\n', outcome)
         with self.db:
             first = delivery.insert_if_absent(self.db).rowcount
         if not first:
@@ -885,18 +947,19 @@ class TranscriptBridge(PublishesTranscript, CliBridge[BridgeOptions]):
                 await comms.bus.when_open(partial(output.publish_batch, pending))
 
 
-class MonitorFrame(TaggedWire, ABC):
+class MonitorFrame(TaggedWire, ABC, affix=""):
     """Our line protocol inside the harness's task-notification envelope."""
-    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
     @abstractmethod
     async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None: ...
 
 
-class MonitorProbe(MonitorFrame):
-    wire_tag = 'probe'
+class MonitorProtocolFrame(MonitorFrame, declared_name=None):
+    """A line the monitor writes itself; the transcript scan knows it by its protocol prefix."""
     protocol: Literal['agent-comms-monitor'] = 'agent-comms-monitor'
     wire_prefix: ClassVar[str] = '{"protocol":' + json.dumps(protocol) + ','
+
+
+class MonitorProbe(MonitorProtocolFrame, declared_name='probe'):
     session: str
     token: str
 
@@ -904,8 +967,25 @@ class MonitorProbe(MonitorFrame):
         await bridge.confirm_probe(self)
 
 
-class MonitorPart(MonitorFrame):
-    wire_tag = 'part'
+class MonitorBridgeStopped(MonitorProtocolFrame, declared_name='bridge-stopped'):
+    """The reader's notice that no bridge holds its claim, so nothing is delivered until one starts."""
+    notice: str
+
+    @classmethod
+    def announce(cls, claim: WatchClaim) -> None:
+        """One Monitor event: the bridge is gone, so nothing arrives until it starts again."""
+        stopped = cls(notice=(
+            'Comms bridge stopped: no messages are delivered until it starts again. '
+            f'{claim.path.with_suffix(".log")} names why; '
+            'agent-comms-claude-bridge connect restarts it and this Monitor resumes.'))
+        sys.stdout.write(stopped.model_dump_json() + '\n')
+        sys.stdout.flush()
+
+    async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None:
+        """A notice carries no delivery to confirm."""
+
+
+class MonitorPart(MonitorFrame, declared_name='part'):
     id: str
     sender: str
     number: int = Field(ge=1)
@@ -923,15 +1003,14 @@ class MonitorPart(MonitorFrame):
             await delivery.monitor.confirm(bridge, delivery, self, record)
 
 
-class ForeignMonitorFrame(MonitorFrame):
-    wire_tag = 'foreign'
+class ForeignMonitorFrame(MonitorFrame, declared_name='foreign'):
     text: str
 
     async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None:
         """Another monitor's output is not comms delivery evidence."""
 
 
-MONITOR_FRAME = TypeAdapter(MonitorFrame.declared_union())
+MONITOR_FRAME = WireModel.adapter(MonitorFrame.declared_union())
 
 
 @dataclass(frozen=True)
@@ -962,7 +1041,7 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
     incoming_frame: ClassVar[type[MonitorIncomingFrame]]
     window_bytes: ClassVar[int]
 
-    def __init__(self, options: Options, binding: Binding, db: CoordinationStore) -> None:
+    def __init__(self, options: Options, binding: Binding, db: sqlite3.Connection) -> None:
         super().__init__(options, binding, db)
         self.reader: ReaderState = NoReader()
         self.reader_changed = asyncio.Condition()
@@ -974,7 +1053,7 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         return WatchRecord(self.binding.bus, self.binding.root, command)
 
     async def watch_operation(self, operation: Watch) -> None:
-        await read_monitor(WatchClaim(self.binding.thread))
+        await read_monitor(WatchClaim(self.binding.thread), MonitorBridgeStopped.announce)
 
     async def accept(self, message: messages.Message) -> None:
         # Wait before recording an attempt. Detachment never creates

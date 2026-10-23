@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 import os
 import subprocess
 from collections.abc import Iterator, Sequence
@@ -12,10 +13,10 @@ from pathlib import Path
 from typing import ClassVar
 
 from .attempt_recovery import RecoveryMonitorCapability
-from .candidate_maintenance import drain_candidate_catchup
+from .bus import Bus
 from .child_process import NoProcess
 from .cli_result import CliResult
-from .comms import Comms
+from .comms import Comms, wire
 from .fresh_private_session import create_fresh_private_session
 from .native_session_files import CheckSession
 from .goals import NoGoal
@@ -25,9 +26,11 @@ from .native_entries import ImportedSessionWriter, NativeEntry
 from .read_basis import MemberActivityDisplayScope
 from .registry_document import RosterVisibility
 from .storage_rules import StorageRoots
-from .thread_text import NoThreadText, SavedSessionFile
+from .thread_text import NoThreadText
+from .session_file import RegistrySessionLocation
 from .threads import Thread
 from .transcript_routes import TranscriptRoutes
+from .turn_lease import NoTurnRecord
 
 
 @dataclass(frozen=True)
@@ -68,7 +71,7 @@ class CheckRoot:
             raise ValueError("A check root cannot be inside its source")
         root.mkdir(mode=0o700, parents=True)  # Refuse an existing directory, including a symlink.
         try:
-            copied = Comms(root)
+            copied = wire(root)
             self._populate(copied)
             try:
                 yield copied
@@ -78,7 +81,6 @@ class CheckRoot:
                 ):
                     copied.owners.stop(thread.name)
         finally:
-            drain_candidate_catchup(root)
             RecoveryMonitorCapability.retire_check_root(root)
 
     def _populate(self, copied: Comms) -> None:
@@ -91,22 +93,11 @@ class CheckRoot:
             target for name in names for target in catalog.targets_for(snapshot.require(name).tags)
         )
         scope = MemberActivityDisplayScope("#check", targets, participant_names=selected | aliases)
-        with self.source.bus.log.opened_wire_snapshot() as source:
-            messages = tuple(
-                reversed(
-                    tuple(
-                        islice(
-                            (
-                                message
-                                for message in source.newest_messages(self.max_bytes)
-                                if scope.includes(message)
-                            ),
-                            self.max_records,
-                        )
-                    )
-                )
-            )
-        copied.messaging.initialize_private_initial_protocol(history=messages)
+        with self.source.bus.bus.reading() as source:
+            messages = tuple(reversed(scope.records(
+                source, descending=True, limit=self.max_records)))
+        copied.registry.prepare_native_root()
+        Bus.install(Bus.path_in(copied.root), history=messages)
         copied.channels.catalog.replace(catalog)
         declarations = {}
         for name in names:
@@ -116,18 +107,18 @@ class CheckRoot:
             project.mkdir(parents=True, mode=0o700)
             session = self._session(original, copied.root, slot, project)
             declarations[name] = replace(
-                original.without_turn(),
+                original,
+                turn_record=NoTurnRecord(),
                 worktree=str(project),
                 parent=original.parent.kept_in(selected),
                 task=NoThreadText(),
                 goal=NoGoal(),
                 process_identity=NoProcess(),
-                session_file=SavedSessionFile(session),
+                session_file=RegistrySessionLocation.from_path(session, copied.root),
                 earlier_projects=(),
                 project_resume_due=False,
                 storage_roots=StorageRoots(copied.root / "scratch" / slot),
                 turn_generation=0,
-                last_finished_turn_id=None,
             )
         with copied.registry.store.editing() as edit:
             edit.document.restore_stopped(snapshot, names)

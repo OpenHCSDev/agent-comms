@@ -1,9 +1,10 @@
 """Installed snapshot values, original notification evidences and real sidebar rows."""
+
+
 from conftest import publish_initial
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.read_basis import NamedViewer
-from agent_comms.presentation import ReadThrough
 import argparse
 import asyncio
 from importlib.resources import files
@@ -21,7 +22,7 @@ parser.add_argument('--private-root', type=Path, required=True)
 args = parser.parse_args()
 sys.path.insert(0, str(args.toad_tests))
 from runtime_fixture import ToadApp, wait_channel_roster
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.presentation import MessageNotification
 from agent_comms.registry_document import RosterVisibility
 from agent_comms.threads import Thread
@@ -38,13 +39,12 @@ async def main():
     root.mkdir(mode=0o700, parents=True, exist_ok=False)
     os.environ.update(XDG_CONFIG_HOME=str(root / 'config'), XDG_STATE_HOME=str(root / 'state'),
                       XDG_DATA_HOME=str(root / 'data'), AGENT_COMMS_ROOT=str(root / 'wire'))
-    comms = Comms(root / 'wire')
-    comms.messaging.initialize_private_initial_protocol()
+    comms = wire(root / 'wire')
     owner = root.name
     for name in (owner, 'stopped', 'archived'):
         source = root / (name + '.jsonl')
         source.touch()
-        comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(root), session_file=SavedSessionFile(str(source))))
+        comms.registry.declare(Thread(name, frozenset({'team'}), str(root), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
     comms.owners.stop('stopped')
     comms.owners.stop('archived')
     comms.threads.archive('archived')

@@ -3,7 +3,6 @@
 from agent_comms.lifecycle_capability import Terminal
 
 
-import pytest
 
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.goal_generation import (
@@ -14,13 +13,6 @@ from agent_comms.goals import Goal, ReportedTurn
 from agent_comms.thread_identity import TurnId
 from agent_comms.turn_goal_account import OriginGoalSettlement, VerifiedGoalSettlement
 
-
-
-@pytest.fixture
-def comms(comms):
-    """Turn acquisition launches an owner on the declared private protocol."""
-    comms.messaging.initialize_private_initial_protocol()
-    return comms
 
 
 def test_goal_settlement_and_new_state_subclass_use_same_durable_owner(tmp_path):

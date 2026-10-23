@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 import json
 import sys
 import urllib.request
@@ -35,6 +36,9 @@ class ConnectorService:
     launch: LaunchRoot = field(default_factory=ActiveRoute.published_launch)
     store: ConnectorStore = field(default_factory=ConnectorStore.owned)
     port: int = PORT
+
+    def described(self) -> str:
+        return f"Connector on port {self.port} for {self.launch.path}"
 
     @property
     def result(self) -> RoundTripResult:
@@ -96,7 +100,7 @@ class InstallServiceVerb(ConnectorOptions, declared_name="install-service"):
             launch=LaunchRoot.from_path(self.root), store=ctx, port=self.port,
         )
         service.install(service.exec_arguments(self.issuer))
-        print(service.unit_file)
+        print(service.unit_file())
         return 0
 
 

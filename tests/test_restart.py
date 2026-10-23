@@ -4,14 +4,16 @@ import asyncio
 
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.pi_counts import PiCount
 from agent_comms.runtime import socket_path
 from agent_comms.native_arguments import GivenBinary
 from agent_comms.restart_scope import OwnersNamed
 from agent_comms.thread_model import DeclaredModel
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import RegistrySessionLocation
 from native_backend_fixture import native_backend_fixture
+from agent_comms.threads import Thread
 
 
 async def test_real_idle_owner_is_replaced_without_losing_session(
@@ -21,8 +23,8 @@ async def test_real_idle_owner_is_replaced_without_losing_session(
         monkeypatch.setenv('AGENT_COMMS_AGENT_MODELS', 'response-local/fixture')
         comms = wire(native.root)
         with LaunchRoot.from_path(comms.root).selected():
-            comms.registry.declare(comms.registry.new_thread(
-                'worker', frozenset(), str(native.project), session_file=SavedSessionFile(str(native.session))))
+            comms.registry.declare(Thread(
+                'worker', frozenset(), str(native.project), session_file=RegistrySessionLocation.from_path(str(native.session), comms.root)))
             comms.agents.observe_runtime_info('worker', ContextUsageObservation(
                 context_used=PiCount.from_wire(23)))
             comms.agents.observe_runtime_info('worker', AgentInfo(
@@ -47,13 +49,13 @@ async def test_real_idle_owner_is_replaced_without_losing_session(
                 assert results[0].pid != process.pid
                 assert not owner.process_alive
                 await ready(results[0].pid)
-                assert comms.registry.require('worker').session_file == SavedSessionFile(str(native.session))
+                assert comms.registry.require('worker').session_file == RegistrySessionLocation.from_path(str(native.session), comms.root)
                 assert not comms.registry.require('worker').executing
                 assert comms.agents.runtime_info.path.read_bytes() == metadata
                 assert comms.ledger.path.read_bytes() == collaboration
                 reopened = wire(comms.root)
                 assert reopened.agents.agent_info_of('worker').context_used == PiCount.from_wire(23)
-                assert reopened.ledger.read().entries['saved'] == {'worker': ['work remains', 23]}
+                assert FieldCodec.encode(reopened.ledger.read())['saved'] == {'worker': ['work remains', 23]}
                 assert native.provider.posts == 0
             finally:
                 await asyncio.to_thread(comms.owners.stop, 'worker')

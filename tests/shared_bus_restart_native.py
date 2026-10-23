@@ -3,9 +3,15 @@
 Only the localhost provider is controlled. Worker, registry, bus, selected
 claim_scope, native process, source proof and response publication remain real.
 """
+from agent_comms.controller import SessionUpdateSink
 
+from agent_comms.channel_targets import CommandTarget
+from agent_comms.restart_scope import OwnersNamed
+
+from bus_record_fixture import prepare_native_comms
 from agent_comms.lifecycle_capability import Complete
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.coordination_session import NativeBoundary
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.native_entries import NativeEvidenceScope
 from conftest import publish_initial
 from agent_comms.pi_vocabulary import OffThinkingLevel
@@ -24,14 +30,12 @@ import subprocess
 import threading
 
 from compaction_loopback import LoopbackProvider
-from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.acp import CommsAgent, CommsClient
 from agent_comms.acp_extension import decode_updates
 from agent_comms.messages import Message, InfoKind
 from agent_comms.owner_cutover import StoppedOwnerInstallation
 from agent_comms.runtime import RuntimeProxy, socket_path
-from agent_comms.threads import Thread
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.bus_publication import HumanOrigin, AgentOrigin
 from agent_comms.coordination_tables.assignments import WakeAssignment
@@ -50,6 +54,7 @@ from agent_comms.native_arguments import GivenArguments
 from bus_history import read_history
 from agent_comms.thread_text import ForkedParent, GivenThreadText
 from agent_comms.thread_model import DeclaredModel
+from agent_comms.threads import Thread
 
 
 def configured_stage(arguments, configured, snapshot, *, continue_existing=False):
@@ -83,12 +88,8 @@ def configured_stage(arguments, configured, snapshot, *, continue_existing=False
             source_hashes[str(original)] = hashlib.sha256(original.read_bytes()).hexdigest()
     if not continue_existing:
         (project/'batch-values.txt').write_text('PUBLIC_VALUE=17\n')
-    service = Comms(stage/'wire')
-    if continue_existing:
-        with service.bus.log.locked():
-            root_id = service.bus.log.private_marker_unlocked().root_id
-    else:
-        root_id = service.messaging.initialize_private_initial_protocol()
+    service = prepare_native_comms(wire(stage/'wire'))
+    root_id = service.registry.prepare_native_root().namespace
     binary = Path(sys.executable).with_name('pi-comms-native')
     environment.update(AGENT_COMMS_ROOT=str(service.root),
         AGENT_COMMS_AGENT_BIN=str(binary),
@@ -150,7 +151,7 @@ async def configured_pure_channel(arguments):
         assert hashlib.sha256(original.read_bytes()).hexdigest() == before
         source_hashes[str(original)] = before
         name = f'purechannel-owner-{index}'
-        child = service.registry.new_thread(name, source.tags, source.worktree, parent=ForkedParent(source.name), task=source.task, session_file=SavedSessionFile(fork.session_file), model=source.model, thinking_level=source.thinking_level, execution=source.execution)
+        child = Thread(name, source.tags, source.worktree, parent=ForkedParent(source.name), task=source.task, session_file=RegistrySessionLocation.from_path(fork.session_file, service.root), model=source.model, thinking_level=source.thinking_level, execution=source.execution)
         service.registry.declare(child)
         names.append(name)
         settings.append({'source_owner':source.name, 'private_owner':name,
@@ -160,22 +161,24 @@ async def configured_pure_channel(arguments):
             'source_session_file': str(original),
             'source_session_sha256':before, 'owned_fork':fork.session_file,
             'original_task_sha256':hashlib.sha256((source.task or '').encode()).hexdigest()})
-    service.registry.declare(service.registry.new_thread('human', frozenset(), str(project), role=UserThreadRole))
+    service.registry.declare(Thread('human', frozenset(), str(project), role=UserThreadRole))
     if arguments.busy_reader:
-        service.registry.declare(service.registry.new_thread('history-sender', frozenset(), str(project)))
-        service.registry.declare(service.registry.new_thread('history-recipient', frozenset(), str(project)))
+        service.registry.declare(Thread('history-sender', frozenset(), str(project)))
+        service.registry.declare(Thread('history-recipient', frozenset(), str(project)))
         for index in range(arguments.history):
             publish_initial(service, 'history-sender', 'history-recipient',
                 f'Original private retained history {index}: ' + 'history ' * 400)
     packets, timeline, compaction_events = [], [], []
     class Observation:
-        async def session_update(self, **kwargs):
+        async def publish_update(self, **kwargs):
+            kwargs = {**kwargs, "update": kwargs["update"].model_dump(mode="json", by_alias=True, exclude_none=True)}
             packets.append(kwargs)
             from agent_comms.acp_extension import CompactionChangedUpdate
             for item in decode_updates(kwargs['update'].get('_meta')):
                 if isinstance(item, CompactionChangedUpdate):
                     compaction_events.append({'elapsed_seconds': time.perf_counter()-begun,
                         'phase': item.event.phase})
+            return True
     attachment = CommsClient(service, runtime_enabled=True,
         )
     attachment.on_connect(Observation())
@@ -205,7 +208,7 @@ async def configured_pure_channel(arguments):
                 'please answer here with the value of 10+2. This is a fresh question, '
                 'not continuation or retry of any previous input. No project edits are requested.',
                 InfoKind),
-                origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))
+                destination=CommandTarget.named('#openhcs'), origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))
                 for ordinal in range(arguments.wave_size)]
         assert originals and len({row.message_id for row in originals}) == arguments.wave_size
         # All originals exist before dispatch. No coalescing timer or forced FULL
@@ -240,14 +243,14 @@ async def configured_pure_channel(arguments):
                         if service.registry.require(name).executing)
                     observed = {'elapsed_seconds':time.perf_counter()-begun,
                             'active_owners':active,
-                            'dispatched_unproven_inputs':[{'owner':row.owner_thread,
+                            'dispatched_unproven_inputs':[{'owner':service.registry.snapshot().by_lookup[row.owner_lookup].name,
                                 'stage':row.reference_stage.declared_name,'input_id':row.input_id}
                                 for row in dispatched],
                             'claims':[{'owner':row.recipient,'revision':row.revision,
                                 'disposition':row.lifecycle.declared_name} for row in claims]}
                     if not timeline or observed['dispatched_unproven_inputs'] != timeline[-1]['dispatched_unproven_inputs'] or observed['claims'] != timeline[-1]['claims']:
                         timeline.append(observed)
-                    overlap |= len({row.owner_thread for row in dispatched}) == len(names)
+                    overlap |= len({service.registry.snapshot().by_lookup[row.owner_lookup].name for row in dispatched}) == len(names)
                     triage = [row for row in inputs if row.reference_stage is TriageNativeExecution]
                     full = [row for row in inputs if row.reference_stage is FullNativeExecution]
                     if len(claims) == len(names)*len(originals) and all(bool(row.lifecycle.items_with(Complete, True)) for row in claims) and not active:
@@ -257,7 +260,7 @@ async def configured_pure_channel(arguments):
                         assert all(len({row.accepted_at_ms for row in claims if row.wire_seq == original.seq}) == 1
                                    for original in originals)
                         for native in inputs:
-                            expected = tuple(row.assignment_id for row in claims if row.recipient == native.owner_thread)
+                            expected = tuple(row.assignment_id for row in claims if row.recipient_lookup == native.owner_lookup)
                             assert membership[native.input_id] == expected, "Native input did not capture the complete ordered wave"
                             with NativeEntry.open_evidence(Path(native.session_file)) as evidence:
                                 evidence.observe()
@@ -268,16 +271,16 @@ async def configured_pure_channel(arguments):
                         assert all(row.lifecycle.mode.triage for row in claims)
                         receipts = []
                         for original in originals:
-                            initial = service.bus.log.read_delivery_cohort(root_id,original.seq)
-                            with store.session.read():
-                                sealed = _claim_record(db,initial)
+                            with NativeBoundary(service.bus) as boundary, store.session.read():
+                                initial = service.bus.bus.delivery(original.seq)
+                                sealed = _claim_record(db, initial, boundary.privacy)
                             assert {row.assignment_id for row in sealed.assignments} == {
                                 row.assignment_id for row in claims if row.wire_seq == original.seq}
                         for claim in claims:
                             rows = PublicationEvidence.select(db, where='execution_id=?',
                                 parameters=(claim.lifecycle.execution_id,))
                             assert len(rows) == 1 and rows[0].exact_target == '#openhcs'
-                            reply, = service.bus.log.messages_for_references((rows[0].reference,))
+                            reply, = service.bus.bus.messages_for_references((rows[0].reference,))
                             assert reply.sender == claim.recipient and '12' in reply.body
                             receipts.extend(rows)
                             history = read_historical_native_inputs(
@@ -297,14 +300,14 @@ async def configured_pure_channel(arguments):
                                 if (isinstance(fact, CursorAdvancedUpdate)
                                         and isinstance(fact.envelope.observation, VerifiedCursorObservation)):
                                     cursor = fact.envelope.observation.cursor
-                                    if cursor.owner_thread in names and cursor.covered_seq >= originals[-1].seq:
+                                    if cursor.recipient_lookup in {service.registry.require(name).incarnation.lookup for name in names} and cursor.covered_seq >= originals[-1].seq:
                                         native = recorded_inputs[cursor.input_id]
                                         assert cursor.owner_identity == native.owner_identity
                                         assert cursor.reference == native.reference
                                         assert native.sent_owner_claimed_generation.matches(cursor.owner_claimed_generation)
                                         assert cursor.injected_seq >= originals[-1].seq
-                                        assert fact.envelope.scope.owner_pid == service.registry.require(native.owner_thread).pid
-                                        published_coverage[native.owner_thread] = fact.envelope
+                                        assert fact.envelope.scope.owner == service.registry.snapshot().by_lookup[native.owner_lookup].require_process()
+                                        published_coverage[service.registry.snapshot().by_lookup[native.owner_lookup].name] = fact.envelope
                         # Original completion and informational ACP publication
                         # are separate asynchronous boundaries. Await the actual
                         # installed publisher within the existing journey budget;
@@ -376,7 +379,7 @@ async def configured_pure_channel(arguments):
                 'all_owned_workers_retired':all(not service.registry.require(name).process_alive for name in names),
                 'configured_sources_unchanged':all(hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest
                     for path,digest in source_hashes.items()),
-                'bus_reads': read_spans, 'retained_bus_bytes': service.bus.log.path.stat().st_size}
+                'bus_reads': read_spans, 'retained_bus_bytes': service.bus.bus.path.stat().st_size}
             acknowledgement['compaction_events'] = compaction_events
             (stage/'acknowledgement.json').write_text(json.dumps(acknowledgement,indent=2)+'\n')
             print(json.dumps(acknowledgement,indent=2),flush=True)
@@ -396,7 +399,7 @@ async def configured_cancel_continue(arguments, service, attachment, name, sende
                 f'{stage.name} {label}: Fresh isolated acceptance question, not a retry. '
                 'Please answer here with 10+2 only; do not resume inherited work or edit files.',
                 InfoKind),
-                origin=HumanOrigin(sender.name, sender.created_at, sender.worktree))
+                destination=CommandTarget.named('#openhcs'), origin=HumanOrigin(sender.name, sender.created_at, sender.worktree))
 
     def observe(original):
         with Coordination(str(service.root/'coordination.sqlite3')) as store:
@@ -440,7 +443,7 @@ async def configured_cancel_continue(arguments, service, attachment, name, sende
                 full = tuple(row for row in inputs if row.reference_stage is FullNativeExecution)
                 assert len(full) == 1 and full[0].reference.recorded
                 assert len(receipts) == 1 and receipts[0].exact_target == '#openhcs'
-                reply, = service.bus.log.messages_for_references((receipts[0].reference,))
+                reply, = service.bus.bus.messages_for_references((receipts[0].reference,))
                 assert reply.sender == name and '12' in reply.body
                 break
             await asyncio.sleep(.1)
@@ -483,20 +486,22 @@ async def configured_mixed_routes(arguments):
     assert configured.model, "Configured owner has no selected model"
     stage, project, service, root_id, source_hashes = configured_stage(arguments, configured, snapshot)
     name = 'batch-receiver'
-    service.registry.declare(service.registry.new_thread('human', frozenset(), str(project), role=UserThreadRole))
-    service.registry.declare(service.registry.new_thread(name, frozenset({'team'}), str(project), model=configured.model, thinking_level=configured.thinking_level, task=GivenThreadText('Answer each original route accurately once; do not expose direct-message content to a channel.')))
+    service.registry.declare(Thread('human', frozenset(), str(project), role=UserThreadRole))
+    service.registry.declare(Thread(name, frozenset({'team'}), str(project), model=configured.model, thinking_level=configured.thinking_level, task=GivenThreadText('Answer each original route accurately once; do not expose direct-message content to a channel.')))
     sender = service.registry.require('human')
     with _store_lock(service._wire_lock_path):
         originals = [service.bus.publisher.publish_ordinary(Message(sender.name, target, body,
-            InfoKind), origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))
+            InfoKind), destination=CommandTarget.named(target), origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))
             for target, body in (
                 ('#team', f'{stage.name}: @{name} Read batch-values.txt with the normal read tool and report PUBLIC_VALUE.'),
                 ('#team', f'{stage.name}: @{name} Also compute 10+2. Combine this with the other channel request.'),
                 (name, f'{stage.name}: Direct/private only: compute 7+8 and include PRIVATE_ROUTE_490 in this direct reply only.'))]
     packets = []
     class Observation:
-        async def session_update(self, **kwargs):
+        async def publish_update(self, **kwargs):
+            kwargs = {**kwargs, "update": kwargs["update"].model_dump(mode="json", by_alias=True, exclude_none=True)}
             packets.append(kwargs)
+            return True
     attachment = CommsClient(service,runtime_enabled=True,
         )
     attachment.on_connect(Observation())
@@ -523,7 +528,7 @@ async def configured_mixed_routes(arguments):
                         with _store_lock(service._wire_lock_path):
                             late = service.bus.publisher.publish_ordinary(Message(sender.name,name,
                                 f'{stage.name}: Separate late batch: compute 20+3; reply directly and once.',InfoKind),
-                                origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))
+                                destination=CommandTarget.named(name), origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))
                         print('ORIGINAL_WAVE_RESERVED_LATE_BATCH_PUBLISHED',flush=True)
                     assignments = WakeAssignment.select(db,order_by=('wire_seq',))
                     cursors = CurrentNativeCursor.select(db,where='input_id IS NOT NULL')
@@ -538,7 +543,7 @@ async def configured_mixed_routes(arguments):
                         first_execution = execution_ids.pop()
                         receipts = PublicationEvidence.select(db,where='execution_id=?',parameters=(first_execution,))
                         assert {row.exact_target for row in receipts} == {'#team','human'}
-                        replies = service.bus.log.messages_for_references(tuple(row.reference for row in receipts))
+                        replies = service.bus.bus.messages_for_references(tuple(row.reference for row in receipts))
                         channel = next(row for row in replies if row.target == '#team')
                         direct = next(row for row in replies if row.target == 'human')
                         assert '17' in channel.body and '12' in channel.body
@@ -548,8 +553,8 @@ async def configured_mixed_routes(arguments):
                         late_receipts = PublicationEvidence.select(db,where='execution_id=?',
                             parameters=(late_assignment.lifecycle.execution_id,))
                         assert len(late_receipts) == 1 and late_receipts[0].exact_target == 'human'
-                        assert '23' in service.bus.log.messages_for_references((late_receipts[0].reference,))[0].body
-                        lookup = RecordedThreadIncarnation("fixture", service.registry.require(name).created_at).lookup
+                        assert '23' in service.bus.bus.messages_for_references((late_receipts[0].reference,))[0].body
+                        lookup = service.registry.require(name).incarnation.lookup
                         for original in (*originals,late):
                             history = read_historical_native_inputs(
                                 store,
@@ -609,24 +614,9 @@ async def retained_owner():
     from agent_comms.coordinated_runtime import SelectedExecution
     from agent_comms.active_route import resolve_comms_route
     from agent_comms.private_nk_entrypoint import RootLaunch
-    from agent_comms.native_source_cursor import NativeSourceCursor
-    import traceback
-    original_advance = NativeSourceCursor._advance_proven
-    def observe_advance(*args, **kwargs):
-        begun = time.perf_counter_ns()
-        try:
-            value = original_advance(*args, **kwargs)
-        except BaseException as error:
-            print(json.dumps({'cursor_probe_ms':(time.perf_counter_ns()-begun)/1e6,
-                'error':type(error).__name__, 'site':traceback.extract_tb(error.__traceback__)[-1].name}), flush=True)
-            raise
-        print(json.dumps({'cursor_probe_ms':(time.perf_counter_ns()-begun)/1e6,
-                         'result':'original_completed'}), flush=True)
-        return value
-    NativeSourceCursor._advance_proven = observe_advance
     launch = RootLaunch.derive(resolve_comms_route(os.environ['AGENT_COMMS_ROOT'])).require_private()
     launch.validate()
-    service = Comms(launch.validated_root)
+    service = wire(launch.validated_root)
     name = os.environ['AGENT_COMMS_THREAD']
     agent = CommsAgent(service, runtime_enabled=True,
         )
@@ -667,7 +657,7 @@ class WireReadContention(ClaimContention, declared_name='wire'):
     @classmethod
     @contextmanager
     def ownership(cls, service, owners):
-        with service.bus.log.checked_read():
+        with service.bus.bus.reading():
             yield True
 
 
@@ -723,11 +713,11 @@ class PublishOriginalsAtStoppedBatch(StoppedOwnerInstallation):
                         f'Batch wave original {index}: compute 10+{index}.'
                         if self.wave_size > 1 else 'New collective channel original: test',
                         InfoKind),
-                origin=HumanOrigin(sender.name, sender.created_at, sender.worktree))
+                destination=CommandTarget.named('#team'), origin=HumanOrigin(sender.name, sender.created_at, sender.worktree))
                 for index in range(self.wave_size)]
             return
-        self.originals = [self.service.bus.publisher.publish_initial_cohort(Message(
-            'fixture-sender', name, f'Unique new inbox input for {name}: reply ONCE.', InfoKind), origin=AgentOrigin())
+        self.originals = [self.service.bus.publisher.publish_ordinary(Message(
+            'fixture-sender', name, f'Unique new inbox input for {name}: reply ONCE.', InfoKind), destination=CommandTarget.named(name), origin=AgentOrigin())
             for name in self.names]
 
     def publish_cancel_and_pending(self):
@@ -739,7 +729,7 @@ class PublishOriginalsAtStoppedBatch(StoppedOwnerInstallation):
             sender = self.service.registry.require('human')
             self.originals = [self.service.bus.publisher.publish_ordinary(
                 Message(sender.name, '#team', body, InfoKind),
-                origin=HumanOrigin(sender.name, sender.created_at, sender.worktree))
+                destination=CommandTarget.named('#team'), origin=HumanOrigin(sender.name, sender.created_at, sender.worktree))
                 for body in ('Cancel THIS original before grant.',
                              'Independent saved channel original: reply ONCE.')]
 
@@ -817,8 +807,8 @@ async def run(arguments):
         'type': 'api_key', 'key': 'local-only'}}))
     (config/'settings.json').write_text(json.dumps({'compaction':{'enabled':False},
         'retry':{'enabled':False,'maxRetries':0,'provider':{'maxRetries':0}}}))
-    service = Comms(stage/'wire')
-    root_id = service.messaging.initialize_private_initial_protocol()
+    service = prepare_native_comms(wire(stage/'wire'))
+    root_id = service.registry.prepare_native_root().namespace
     env = dict(os.environ, AGENT_COMMS_ROOT=str(service.root),
         AGENT_COMMS_NATIVE_CONFIG_DIR=str(config), PI_CODING_AGENT_DIR=str(config),
         AGENT_COMMS_AGENT_MODELS='restart-local/fixture')
@@ -827,18 +817,18 @@ async def run(arguments):
         env.pop(key, None)
     os.environ.clear();os.environ.update(env)
     names = [f'restart-worker-{index}' for index in range(arguments.owners)]
-    service.registry.declare(service.registry.new_thread('fixture-sender', frozenset(), str(project)))
-    service.registry.declare(service.registry.new_thread('history-recipient', frozenset(), str(project)))
+    service.registry.declare(Thread('fixture-sender', frozenset(), str(project)))
+    service.registry.declare(Thread('history-recipient', frozenset(), str(project)))
     if arguments.collective:
-        service.registry.declare(service.registry.new_thread('human', frozenset(), str(project), role=UserThreadRole))
+        service.registry.declare(Thread('human', frozenset(), str(project), role=UserThreadRole))
     for index in range(arguments.registry_size):
-        service.registry.declare(service.registry.new_thread(f'unrelated-{index}', frozenset(), str(project)))
+        service.registry.declare(Thread(f'unrelated-{index}', frozenset(), str(project)))
     for name in names:
-        service.registry.declare(service.registry.new_thread(name, frozenset({'team'} if arguments.collective else ()), str(project), model=DeclaredModel('restart-local/fixture'), thinking_level=OffThinkingLevel, task=GivenThreadText('Provider-free isolated restart acceptance; reply to each original once')))
+        service.registry.declare(Thread(name, frozenset({'team'} if arguments.collective else ()), str(project), model=DeclaredModel('restart-local/fixture'), thinking_level=OffThinkingLevel, task=GivenThreadText('Provider-free isolated restart acceptance; reply to each original once')))
     if arguments.saved_source:
         for name in names:
             owner = service.registry.require(name)
-            directory = service.root/'native-sessions'/RecordedThreadIncarnation("fixture", owner.created_at).lookup
+            directory = service.root/'native-sessions'/owner.incarnation.lookup
             directory.mkdir(mode=0o700, parents=True)
             saved = directory/'retained.jsonl'
             shutil.copyfile(arguments.saved_source, saved); saved.chmod(0o600)
@@ -847,16 +837,18 @@ async def run(arguments):
                 with closing(sqlite3.connect(str(saved)+'.input-proof')) as copied:
                     original.backup(copied)
             Path(str(saved)+'.input-proof').chmod(0o600)
-            service.registry.register(replace(owner, session_file=SavedSessionFile(str(saved))))
+            service.registry.register(replace(owner, session_file=RegistrySessionLocation.from_path(str(saved), service.root)))
     for index in range(arguments.history):
         publish_initial(service, 'fixture-sender','history-recipient',
             f'Retained unrelated canonical source {index}: ' + 'history '*250)
     started = time.perf_counter()
     failure = None
     packets = []
-    class Observation:
-        async def session_update(self, **kwargs):
+    class Observation(SessionUpdateSink):
+        async def publish_update(self, **kwargs):
+            kwargs = {**kwargs, "update": kwargs["update"].model_dump(mode="json", by_alias=True, exclude_none=True)}
             packets.append(kwargs)
+            return True
     attachment = CommsClient(service, runtime_enabled=True,
         )
     attachment.on_connect(Observation())
@@ -980,16 +972,16 @@ async def run(arguments):
                 cutover.originals = [service.bus.publisher.publish_ordinary(
                     Message(sender.name, '#team',
                         'New isolated retained-source triage: ignore THIS original once.', InfoKind),
-                    origin=HumanOrigin(sender.name, sender.created_at, sender.worktree))]
+                    destination=CommandTarget.named('#team'), origin=HumanOrigin(sender.name, sender.created_at, sender.worktree))]
             from agent_comms.coordination_cohort import accept_delivery_cohort
-            initial = service.bus.log.read_delivery_cohort(root_id, cutover.originals[0].seq)
+            initial = service.bus.bus.delivery(cutover.originals[0].seq)
             with Coordination(str(service.root/'coordination.sqlite3')) as store:
                 for audience in initial.audience.recipients:
-                    store.participants.register(audience.recipient_lookup,
-                        audience.canonical_thread, audience.canonical_thread, committed=True)
+                    store.participants.register(audience.recipient_lookup, committed=True)
                 accept_delivery_cohort(service.bus, root_id, cutover.originals[0].seq, store)
         else:
-            result = await asyncio.to_thread(service.owners.restart_owners,names,cutover=cutover)
+            result = await asyncio.to_thread(
+                service.owners.restart_owners, OwnersNamed(tuple(names)), cutover=cutover)
             assert len(result)==len(names)
             assert all(not owner.process_alive for owner in originals)
         if not arguments.contention or arguments.cancel_before_grant:
@@ -1051,7 +1043,7 @@ async def run(arguments):
                     sender = service.registry.require('human')
                     late_original = service.bus.publisher.publish_ordinary(Message(
                         sender.name, '#team', 'Batch wave late original: compute 20+3.', InfoKind),
-                        origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))
+                        destination=CommandTarget.named('#team'), origin=HumanOrigin(sender.name,sender.created_at,sender.worktree))
                     concurrent_native = True
                     provider.response_gate.set()
                 if provider.posts == expected_posts:
@@ -1060,7 +1052,7 @@ async def run(arguments):
                                    for name in names)
                         concurrent_native = True
                         provider.response_gate.set()
-                    replies = service.bus.inbox('fixture-sender')
+                    replies = service.bus.inbox('fixture-sender').page.messages
                     completed = len(replies)==len(names)
                     if arguments.collective:
                         with closing(sqlite3.connect(
@@ -1111,7 +1103,7 @@ async def run(arguments):
                 f'10+{index}={10+index}' for index in range(arguments.wave_size)) + '.'
             assert replies[1].body == 'Separate late-wave answer: 20+3=23.'
             assert provider.posts == 4
-            lookup = RecordedThreadIncarnation("fixture", service.registry.require(names[0]).created_at).lookup
+            lookup = service.registry.require(names[0]).incarnation.lookup
             with Coordination(str(service.root/'coordination.sqlite3')) as store, NativeEvidenceScope() as source_reads:
                 inputs = NativeRuntimeInput.select(store.session._connection)
                 assert len(inputs) == 4

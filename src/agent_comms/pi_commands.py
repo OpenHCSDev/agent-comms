@@ -8,9 +8,12 @@ from collections.abc import Iterable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal
+from typing import TYPE_CHECKING, Annotated, ClassVar
 from uuid import uuid4
 
+from pydantic import JsonValue
+
+from .agent_backend import StreamingInputPolicy
 from . import agent_events as events
 from . import turn_phase as phases
 from .declared_family import DeclaredFamily, UnknownFamilyMember
@@ -86,36 +89,33 @@ class PiCommand(DeclaredFamily):
         return False
 
     @asynccontextmanager
-    async def pending_response(self, channel, writer):
-        future = channel.track(self)
+    async def pending_response(self, child):
+        channel = child.reader
+        future = child.send(self)
         try:
-            writer.write(channel.command_bytes(self))
-            await writer.drain()
+            await child.drain()
             yield future
         finally:
             self.id.release_from(channel.pending, type(self))
             future.cancel()
 
-    async def exchange(self, channel, writer, *, strict=False, max_bytes=None, on_event=lambda event: None):
-        from .pi_events import Response
-        async with self.pending_response(channel, writer) as future:
+    async def exchange(self, child, *, strict=False, max_bytes=None, on_event=lambda event: None):
+        channel = child.reader
+        async with self.pending_response(child) as future:
             while not future.done():
                 event = await channel.receive(strict=strict, max_bytes=max_bytes)
                 if event is None:
                     raise EOFError('Pi RPC ended before the requested response')
-                if isinstance(event, Response):
-                    channel.correlate(event)
-                else:
-                    on_event(event)
+                event.correlate_or_deliver(channel, on_event)
             return future.result()
 
-    def to_rpc(self) -> dict[str, Any]:
+    def to_rpc(self) -> dict[str, JsonValue]:
         data = FieldCodec.encode(self)
         data["type"] = data.pop("kind")
         return data
 
     @classmethod
-    def from_wire(cls, value: dict[str, Any]) -> PiCommand:
+    def from_wire(cls, value: dict[str, JsonValue]) -> PiCommand:
         data = dict(value)
         kind = data.pop("type", None)
         try:
@@ -162,9 +162,9 @@ class ExactResponse:
 @dataclass(frozen=True, kw_only=True)
 class UnknownCommand(PiCommand):
     response_payload = UnknownData
-    wire: dict[str, Any]
+    wire: dict[str, JsonValue]
 
-    def to_rpc(self) -> dict[str, Any]:
+    def to_rpc(self) -> dict[str, JsonValue]:
         return dict(self.wire)
 
 
@@ -183,7 +183,7 @@ class Prompt(PiCommand):
     ] = ()
     owner_tools: Annotated[OwnerToolConnection, WireName("ownerTools")]
     streaming_behavior: Annotated[
-        Literal[None, "steer", "followUp"],
+        type[StreamingInputPolicy] | None,
         WireOmitDefault(),
         WireName("streamingBehavior"),
     ] = None
@@ -261,6 +261,7 @@ class CatalogQuery(NativeQuery):
         from .child_process import BoundedRun
         from .native_pi import NativePiRpcLaunch
         from .pi_rpc import PiRpcChannel
+        from .native_child import PiChild
 
         try:
             launch = await asyncio.to_thread(
@@ -274,7 +275,7 @@ class CatalogQuery(NativeQuery):
             async with BoundedRun.session(
                 launch.argv, cwd=launch.cwd, env=launch.env, timeout=CATALOG_TIMEOUT
             ) as child:
-                yield PiRpcChannel(child.stdout), child.stdin
+                yield PiChild(child, PiRpcChannel(child.stdout))
         except TimeoutError as error:
             raise NativePiUnavailable(
                 f"Native catalog discovery timed out: no catalog reply from {agent_bin!r} "
@@ -287,8 +288,8 @@ class CatalogQuery(NativeQuery):
         self, agent_bin: str, arguments: Sequence[str], root: Path | str | None = None,
         *, package: VerifiedNativePackage,
     ) -> PiResponseData:
-        async with self.catalog(agent_bin, arguments, root=root, package=package) as (channel, writer):
-            response = await self.exchange(channel, writer)
+        async with self.catalog(agent_bin, arguments, root=root, package=package) as child:
+            response = await self.exchange(child)
             if response.succeeded:
                 return response.data.require_payload()
             raise NativePiUnavailable(response.error.text_or("Native catalog query was refused"))
@@ -342,11 +343,11 @@ class SettingCommand(CatalogQuery):
         semantics cannot change a running turn, a saved transcript or its budget.
         """
         catalog = self.catalog(agent_bin, arguments, package=package, worktree=worktree, root=root)
-        async with catalog as (channel, writer):
-            response = await self.exchange(channel, writer)
+        async with catalog as child:
+            response = await self.exchange(child)
             if not response.succeeded:
                 raise NativePiUnavailable(response.error.text_or(self.error_message))
-            state = await GetState().exchange(channel, writer)
+            state = await GetState().exchange(child)
             if not state.succeeded:
                 raise NativePiUnavailable(
                     state.error.text_or("Native configuration was not reported")

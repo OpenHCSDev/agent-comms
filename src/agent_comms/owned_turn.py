@@ -7,7 +7,9 @@ from contextlib import AsyncExitStack, ExitStack, aclosing
 from dataclasses import replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, NoReturn
+from typing import TYPE_CHECKING, NoReturn
+
+from .image_inputs import ImageInput
 
 from acp import RequestError
 
@@ -27,8 +29,7 @@ from .native_input_owner import RegistryOwner
 from .native_failures import NativeRequestFailure
 from .coordinator import Coordination
 from .routing import MessageRoute, ScheduledTurn, TurnRouting
-from .runtime import UNBOUND_CONTROLLER
-from .store_files import _store_lock
+from .controller import UNBOUND_CONTROLLER
 from .thread_identity import TurnId
 from .turn_goal_account import TurnGoalAccount
 from .turn_goal_permission import (
@@ -84,7 +85,7 @@ class OwnedTurn:
         task: str,
         *,
         origins: tuple[Message, ...] = (),
-        images: tuple[Any, ...] = (),
+        images: tuple[ImageInput, ...] = (),
         original_keys: tuple[str, ...] = (),
         initial_display_text: str | None = None,
         autonomous_goal: bool = False,
@@ -160,21 +161,21 @@ class OwnedTurn:
         self.input_cleanup.push_async_callback(Coordination.run_worker, self.settle_unbound)
         self.bus_origins = tuple(origin for origin in self.origins if origin.seq > 0)
         if self.bus_origins:
-            with _store_lock(self.runner.comms._wire_lock_path):
+            with self.runner.comms.registry.store.locked():
+                privacy = self.runner.comms.registry.store.private_guard_unlocked()
                 snapshot = self.runner.comms.registry.snapshot()
-                metadata = self.runner.comms.bus.log.read_metadata_unlocked()
                 originals = tuple(
                     ReservedInput(
                         key=self.runner.inputs.dispositions.bus_key(origin, self.thread),
                         sequence=origin.seq,
                         owner=self.thread_name,
-                        claim_scope=snapshot.claim_generation(self.thread_name),
+                        claim_generation=snapshot.claim_generation(self.thread_name),
                         target=origin.target,
                         source_text=ScheduledTurn.incoming(
                             origin, aliases=snapshot.aliases
                         ).prompt,
                         origin=WireInputOrigin(
-                            metadata.root_id,
+                            privacy.namespace,
                             origin.reference,
                         ),
                     )
@@ -265,7 +266,7 @@ class OwnedTurn:
             ),
             batch=batch,
         )
-        with _store_lock(self.runner.comms._wire_lock_path), ExitStack() as reservation:
+        with ExitStack() as reservation:
             self.original = original.reserve(
                 self.runner.inputs.dispositions,
                 self.thread,
@@ -346,7 +347,7 @@ class OwnedTurn:
             session_id=self.session_id,
             thread=self.thread,
             turn=TurnId(self.turn_id),
-            claim_scope=self.turn_lease.claimed_generation,
+            claim_generation=self.turn_lease.claimed_generation,
             goal_permit=self.goal_permit,
             original=replace(self.original, prompt=rendered.text),
         )
@@ -399,20 +400,14 @@ class OwnedTurn:
     async def run(self) -> None:
         async with AsyncExitStack() as resources:
             async with AsyncExitStack() as permit_cleanup:
-                try:
-                    if not await self.acquire(resources, permit_cleanup):
-                        return
-                    await self.run_native()
-                except asyncio.CancelledError as error:
-                    cancelled = TurnTerminal.from_cancellation(error)
-                    self.terminal = cancelled.interrupting(self.terminal)
-                    raise
+                if not await self.acquire(resources, permit_cleanup):
+                    return
+                await self.run_native()
 
     def settle_unbound(self):
-        """Close the actual input batch and observe its result under one wire cut."""
-        with _store_lock(self.runner.comms._wire_lock_path):
-            document = self.runner.inputs.dispositions.settle_unbound(self.original_keys)
-            return document.shared_state(self.original_keys)
+        """Read the result of the input owner's exact retirement transaction."""
+        document = self.runner.inputs.dispositions.settle_unbound(self.original_keys)
+        return document.shared_state(self.original_keys)
 
     async def fail(self, failure: Exception, cause: Exception) -> NoReturn:
         """Settle and report once, retaining the exception that actually failed the turn."""

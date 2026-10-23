@@ -1,18 +1,20 @@
 """Native stories use one copied Todo record, including a resent send-back."""
+
+
 from agent_comms.repository_name import RepositoryName
 
 from dataclasses import replace
 
 import pytest
 
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
-from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction, SetGoalAction
-from agent_comms.goals import RequestGoalOrder
+from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
 from agent_comms.order_story import FleetStory, OrderStory
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
-    AcceptedVerdict, OrderMessage, SendBackVerdict, StrikeReason, StrikeTodo, TodoError, UnorderedProblemOrder,
+    AcceptedVerdict, DoneTodoState, OrderMessage, ReleaseTodo, SendBackVerdict, StrikeReason,
+    StrikeTodo, TodoConflict, TodoError, UnorderedProblemOrder, WithdrawTodo,
 )
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.tools import (
@@ -21,19 +23,19 @@ from agent_comms.tools import (
 from agent_comms.installer.backup import StoreBackup
 from test_todos import order
 from source_revision_fixture import SourceRepository
+from agent_comms.threads import Thread
 
 
 def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     source = SourceRepository.create(tmp_path / 'source')
-    comms.messaging.initialize_private_initial_protocol()
     for name in ("lead", "worker"):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
-    comms.goals.update_goal("lead", SetGoalAction(
-        text="Repair the worker", goal_id="request", order=RequestGoalOrder()))
+        comms.registry.declare(Thread(name, frozenset({"comms"}), str(tmp_path)))
+    request = comms.goals.todos.add_request(
+        comms.registry.require('lead').incarnation, 'Repair the worker').id
     caller = ThreadCaller("lead")
     caller.invoke(CommsTodoCreateTool(owner="worker", order=CreateProblemGoalAction(
         problem="P1", order=replace(order(source), edits=("Repair the existing record owner",)),
-        request="request", review_at=RecordedEventTime(1000),
+        request=request, review_at=RecordedEventTime(1000),
         commander="lead", assigner=comms.registry.require('lead').incarnation,
         repo=RepositoryName.from_wire("org/repo"), text="Repair the worker")), comms)
     todo = comms.goals.todos.get("P1")
@@ -46,13 +48,22 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     caller.invoke(CommsVerdictTool(problem="P1", operation=AcceptedVerdict(
         todo.revision, actor, todo.held(), "accepted-call", quote="Repair the existing record owner")), comms)
     todo = comms.goals.todos.get("P1")
-    caller.invoke(CommsVerdictTool(problem="P1", operation=SendBackVerdict(
+    sent_back = SendBackVerdict(
         todo.revision, actor, todo.held(), "bad-call", StrikeReason(reason),
-        evidence=(todo.order.checked().owner,))), comms)
+        evidence=(todo.order.checked().owner,))
+    before_send_back = comms.bus.bus.revision()
+    caller.invoke(CommsVerdictTool(problem="P1", operation=sent_back), comms)
+    assert comms.bus.bus.revision() == before_send_back + 1
+    published = comms.bus.bus.lookup(before_send_back + 1)
+    assert published.target == "#comms" and published.body.count(reason) == 1
+    assert published.audience.includes_lookup(comms.registry.require("worker").incarnation.lookup)
+    with pytest.raises(TodoConflict):
+        caller.invoke(CommsVerdictTool(problem="P1", operation=sent_back), comms)
+    assert comms.bus.bus.revision() == before_send_back + 1
     todo = comms.goals.todos.get("P1")
     caller.invoke(CommsOrderTool(owner="worker", order=OrderGoalAction(
         problem="P1", expected_revision=todo.revision, assigner=actor, commander="lead",
-        request="request", review_at=RecordedEventTime(2000),
+        request=request, review_at=RecordedEventTime(2000),
         order=replace(order(source), id="resent-order"))), comms)
     current = comms.goals.todos.get("P1")
     with pytest.raises(ValueError):
@@ -64,7 +75,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
         assert current.latest_message.message_id == message_id
     copied_root = tmp_path / "copy"
     StoreBackup.copy_tree(comms.root, copied_root)
-    copied = Comms(copied_root)
+    copied = wire(copied_root)
     saved = copied.goals.todos.get("P1")
     stored_at = copied.goals.todos.path.stat().st_mtime_ns
     result = CommsOrderStoryTool.invoke(copied, {"order_id": "resent-order"}, caller=NoThreadCaller())
@@ -77,7 +88,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     assert CommsOrderStoryTool.invoke(copied, {"order_id": "resent-order"}, caller=caller) == result
     fleet = FieldCodec.decode(FleetStory, CommsFleetStoryTool.invoke(
         copied, {"thread": "lead"}, caller=NoThreadCaller()))
-    assert fleet.lines == (story.line,)
+    assert fleet.lines == (f"P1 worker: {saved.order.line}",)
     assert copied.goals.todos.get("P1") == saved == comms.goals.todos.get("P1")
     assert copied.goals.todos.path.stat().st_mtime_ns == stored_at
     with copied.goals.todos.writing() as db:
@@ -92,6 +103,20 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     assert linked.line.count(reason) == linked.line.count(standalone) == 1
     linked_fleet = FieldCodec.decode(FleetStory, CommsFleetStoryTool.invoke(
         copied, {"thread": "lead"}, caller=caller))
-    assert linked_fleet.lines == (linked.line,)
+    assert linked_fleet.lines == (
+        *fleet.lines, f"P2 worker: {copied.goals.todos.get('P2').order.line}")
+    current = copied.goals.todos.get(saved.id)
+    previous = current.held()
+    released = copied.goals.todos.apply(current.id, ReleaseTodo(
+        current.revision, actor, previous,
+        StrikeReason("The copied order is released so its original public history can be checked."),
+    ))
+    withdrawn = copied.goals.todos.apply(current.id, WithdrawTodo(
+        released.revision, actor, previous,
+        "This copied order is withdrawn after checking its original recorded public events.",
+    ))
+    assert withdrawn.state is DoneTodoState
+    assert FieldCodec.decode(FleetStory, CommsFleetStoryTool.invoke(
+        copied, {"thread": "lead"}, caller=caller)).lines == linked_fleet.lines[1:]
     with pytest.raises(TodoError):
         CommsOrderStoryTool.invoke(copied, {"order_id": "absent-order"}, caller=caller)

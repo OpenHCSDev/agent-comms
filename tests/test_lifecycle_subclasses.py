@@ -27,7 +27,7 @@ from agent_comms.attempt_states import (
 )
 from agent_comms.attempt_recovery import MonitorEvidence
 from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayFact
-from agent_comms.coordination_tables.executions import CurrentExecutions, ExecutionOrigin, ExecutionRecord
+from agent_comms.coordination_tables.executions import CurrentExecutions, ExecutionProvenance, ExecutionRecord, AcpOrigin
 from agent_comms.execution_states import DeferredExecution, FailedExecution
 from agent_comms.owner_fence import prepare_fence_token
 from test_coordination_store import final_evidence, ready, started
@@ -64,22 +64,22 @@ def test_attempt_transition_table_expands_declared_failure_subclasses():
 
 @pytest.mark.parametrize("authorized", [False, True])
 def test_unknown_settles_failed_in_current_store(tmp_path, authorized):
-    with ready(tmp_path / "coordination.sqlite3", origin=ExecutionOrigin.ACP) as store:
+    with ready(tmp_path / "coordination.sqlite3", origin=AcpOrigin) as store:
         _, fence = started(store)
         if authorized:
-            store.attempts.observe_replay(
+            store.observe_replay(
                 fence, expected_pointer_revision=1, expected_replay_revision=None,
                 facts=ReplayFact.NONE, replay_safe=True, side_effects_possible=False,
             )
-            final = store.attempts.advance(
+            final = store.advance(
                 fence, PromptStartingAttempt, expected_pointer_revision=1,
                 backend_done=True, process_dead=True,
             ).value
-            outcome = store.attempts.settle_nonpublication(
+            outcome = store.settle_nonpublication(
                 final.fence, expected_pointer_revision=1, outcome=UnknownOutcomeAttempt(),
             ).value
         else:
-            outcome = store.attempts.fail_unknown(fence, expected_pointer_revision=1).value
+            outcome = store.fail_unknown(fence, expected_pointer_revision=1).value
         assert type(outcome.attempt.lifecycle) is UnknownOutcomeAttempt
         assert type(outcome.execution.lifecycle) is FailedExecution
         assert outcome.replay.require_assessment().facts & ReplayFact.UNKNOWN_EFFECTS
@@ -101,14 +101,14 @@ def test_monitor_evidence_preserves_its_outcome_and_owned_replay_contribution(ou
 
 @pytest.mark.parametrize("predecessor", [AttemptFailedAttempt, UnknownOutcomeAttempt])
 def test_sql_retry_predecessor_is_not_every_unsuccessful_outcome(tmp_path, predecessor):
-    with ready(tmp_path / "coordination.sqlite3", origin=ExecutionOrigin.ACP) as store:
+    with ready(tmp_path / "coordination.sqlite3", origin=AcpOrigin) as store:
         _, fence = started(store)
-        store.attempts.observe_replay(
+        store.observe_replay(
             fence, expected_pointer_revision=1, expected_replay_revision=None,
             facts=ReplayFact.NONE, replay_safe=True, side_effects_possible=False,
         )
         final_evidence(store, fence)
-        snapshot = store.snapshots.get("exec")
+        snapshot = store.get("exec")
         attempt = snapshot.require_attempt()
         with store.session.writing() as db:
             # Deliberately preserve otherwise-valid retry authority to verify
@@ -125,7 +125,7 @@ def test_sql_retry_predecessor_is_not_every_unsuccessful_outcome(tmp_path, prede
                 db, where="owner_lookup=?", parameters=("owner",),
                 execution_id=NoPointedExecution(), attempt_ordinal=NoPointedAttempt(), pointer_revision=snapshot.pointer_revision + 1,
             )
-        store.participants.advance_generation("owner", "thread", expected_generation=1)
+        store.participants.advance_generation("owner", expected_generation=1)
         next_attempt = replace(
             attempt, attempt_ordinal=2, owner_generation=2,
             owner_token_digest=prepare_fence_token(), lifecycle=PromptStartingAttempt(1000),

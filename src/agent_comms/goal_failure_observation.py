@@ -12,8 +12,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated
 
-from .diagnostics import FailureReason
-from .field_codec import Id128Text, WireName
+from .turn_failure import TurnFailure
+from .field_codec import Id128Text
 from .goal_attempt_identity import GoalAttemptIdentity
 from .thread_identity import (
     ClaimedIdentity,
@@ -56,26 +56,24 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable, GoalFailureEvidence):
     owner: str
     owner_created_at: float
     worktree: str
-    claim_scope: Annotated[
-        int, WireName("admission"), Column(record_key=True, check="{claim_scope}>0")
+    claim_generation: Annotated[
+        int, Column(record_key=True, check="{claim_generation}>0")
     ]
     turn_generation: Annotated[int, Column(check="turn_generation>0")]
     goal_revision: Annotated[int, Column(check="goal_revision>=0")]
     turn_id: Annotated[str, Column(unique=True, check="length(turn_id)=32")]
-    reason: FailureReason
+    failure: type[TurnFailure]
 
     def __post_init__(self) -> None:
         # These are the durable observation's constraints, independent of any
         # caller's authority. SQL/FieldCodec remains the single stored decoder.
-        if type(self.claim_scope) is not int or self.claim_scope <= 0:
+        if type(self.claim_generation) is not int or self.claim_generation <= 0:
             raise ValueError("Observation claim_scope must be positive")
         if type(self.turn_generation) is not int or self.turn_generation <= 0:
             raise ValueError("Observation turn generation must be positive")
         if not math.isfinite(self.owner_created_at):
             raise ValueError("Observation incarnation must be finite")
         Id128Text.from_text(self.turn_id)
-        if not isinstance(self.reason, FailureReason):
-            raise ValueError("Observation reason must be decoded")
 
     def execution(self, goal_id: str) -> GoalExecution:
         from .goal_presentation import AttemptFailedExecution
@@ -91,11 +89,11 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable, GoalFailureEvidence):
 
     @property
     def claimed_identity(self) -> ClaimedIdentity:
-        return ClaimedIdentity(self.incarnation, self.claim_scope)
+        return ClaimedIdentity(self.incarnation, self.claim_generation)
 
     @property
     def turn(self) -> TurnFence:
-        return TurnFence(TurnIdentity(self.incarnation, self.turn_generation), self.turn_id, self.claim_scope)
+        return TurnFence(TurnIdentity(self.incarnation, self.turn_generation), self.turn_id, self.claim_generation)
 
     def matches_owner(self, owner: Thread, claim_scope: int | None) -> bool:
         if claim_scope is None:
@@ -112,7 +110,7 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable, GoalFailureEvidence):
     def references(cls):
         from .goal_attempts import AttemptRecord
 
-        return (ForeignKey(("attempt_id",), AttemptRecord, ("attempt_id",)),)
+        return (ForeignKey(columns=("attempt_id",), target=AttemptRecord, target_columns=("attempt_id",)),)
 
 
 @dataclass(frozen=True)
@@ -132,15 +130,15 @@ class FailedTurnObservation:
         claim_scope: int,
         current_owner: Thread | None,
         current_claim: int | None,
-        reason: FailureReason,
+        failure: type[TurnFailure],
     ) -> FailedTurnObservation | None:
         # Observation is passive: a changed owner, goal or lease yields no
         # observation. The evidence is built from already-trusted values, so a
         # construction error is a defect and raises.
         evidence = FailedTurnEvidence(
             reservation.attempt_id, reservation.goal_id, reservation.generation,
-            owner.name, owner.created_at, owner.worktree, claim_scope,
-            lease.identity.generation, goal.revision, turn_id, reason,
+            owner.name, owner.incarnation.wire_birth, owner.worktree, claim_scope,
+            lease.identity.generation, goal.revision, turn_id, failure,
         )
         if owner.goal != goal or reservation.goal_id != goal.id:
             return None

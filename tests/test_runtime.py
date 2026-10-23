@@ -1,4 +1,5 @@
 """Single-owner attachment and idle wakeup through real processes and sockets."""
+from agent_comms.controller import SessionUpdateSink
 
 import asyncio
 import json
@@ -7,6 +8,9 @@ from contextlib import ExitStack
 from dataclasses import replace
 
 import pytest
+from acp.schema import (
+    ConfigOptionUpdate, SessionConfigOptionSelect, SessionConfigSelectOption, SessionInfoUpdate,
+)
 
 from agent_comms.acp_extension import (
     CoordinationChangedUpdate,
@@ -17,12 +21,15 @@ from agent_comms.acp_extension import (
 from agent_comms.child_process import ProcessIdentity, SpawnedProcess
 from agent_comms.comms import wire
 from agent_comms.owner_protocol import OwnerAnnouncement, OwnerReady, OwnerResult, OwnerUpdate
-from agent_comms.runtime import RuntimeProxy, present_session, socket_path
+from agent_comms.runtime import (
+    OwnerReplyLostError, RuntimeConnection, RuntimeProxy, present_session, socket_path,
+)
 from agent_comms.private_path import PrivateSocketRole
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.native_arguments import GivenBinary
 from delivery_owner_fixture import canonical_agent
+from agent_comms.threads import Thread
 
 
 @pytest.fixture
@@ -41,6 +48,36 @@ def runtime_processes():
             child.stop_sync()
 
 
+async def test_dispatched_request_without_a_reply_remains_unknown_and_is_not_replayed(comms):
+    process = ProcessIdentity.capture(os.getpid())
+    comms.registry.declare(Thread(
+        "reply-loss", frozenset(), str(comms.root.parent), process_identity=process,
+    ))
+    path = socket_path(comms.root, process.pid)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    received = []
+
+    async def disconnect_after_request(reader, writer):
+        received.append(json.loads(await reader.readline()))
+        writer.close()
+        await writer.wait_closed()
+
+    with PrivateSocketRole.address(path) as address:
+        server = await asyncio.start_unix_server(disconnect_after_request, path=address)
+        connection = RuntimeConnection(comms, "reply-loss", path)
+        try:
+            with pytest.raises(OwnerReplyLostError) as lost:
+                await connection.request("cancel")
+            assert isinstance(lost.value, RuntimeError)
+            assert isinstance(lost.value, ConnectionError)
+            assert [request["action"] for request in received] == ["cancel"]
+        finally:
+            await connection.close()
+            server.close()
+            await server.wait_closed()
+            path.unlink(missing_ok=True)
+
+
 def test_owner_cursor_scope_rebases_only_attachment_session_alias():
     from agent_comms.acp_extension import (
         CursorAdvancedUpdate,
@@ -55,10 +92,10 @@ def test_owner_cursor_scope_rebases_only_attachment_session_alias():
     fact = CursorAdvancedUpdate(
         CursorEnvelope(
             LiveCursorScope(
-                "canonical",
-                "a" * 32,
-                ClaimedIdentity(RecordedThreadIncarnation("canonical", 1000.0), 3),
-                1234,
+                session_id="canonical",
+                wire_root_id="a" * 32,
+                claimed_identity=ClaimedIdentity(RecordedThreadIncarnation("canonical", 1000.0), 3),
+                owner=ProcessIdentity(1234, 1),
             ),
             7,
             EmptyCursorObservation(),
@@ -72,19 +109,20 @@ def test_owner_cursor_scope_rebases_only_attachment_session_alias():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("request_original", [False, True])
-async def test_subscription_replay_uses_requested_alias(tmp_path, request_original):
+async def test_subscription_replay_uses_requested_alias(tmp_path, request_original, private_comms):
     from agent_comms.coordinator import Coordination
     from agent_comms.launch_root import LaunchRoot
 
-    comms = wire(tmp_path / "wire")
+    comms = private_comms
     LaunchRoot.from_path(comms.root).install()
     owner = canonical_agent(comms, runtime_enabled=True, auto_wake=False)
     client = canonical_agent(comms, auto_wake=False)
     updates = []
 
     class Client:
-        async def session_update(self, session_id, update):
-            updates.append((session_id, update))
+        async def publish_update(self, session_id, update):
+            updates.append((session_id, update.model_dump(mode="json", by_alias=True, exclude_none=True)))
+            return True
 
     client.on_connect(Client())
     proxy = None
@@ -101,10 +139,9 @@ async def test_subscription_replay_uses_requested_alias(tmp_path, request_origin
         )))
         thread = comms.registry.require(original)
         with Coordination(str(comms.root / "coordination.sqlite3")) as store:
-            store.install_private_runtime()
-            store.participants.register(thread.incarnation.lookup, original, original, committed=True)
+            store.participants.register(thread.incarnation.lookup, committed=True)
         comms.threads.attach_session(thread, str(journal), process=thread.process_identity)
-        comms.threads.rename_managed_thread(original, "renamed", owner_pid=os.getpid())
+        comms.threads.rename_managed_thread(original, "renamed", owner=ProcessIdentity.capture(os.getpid()))
         requested = original if request_original else "renamed"
         proxy = RuntimeProxy(client, requested, socket_path(comms.root, os.getpid()))
         await proxy.subscribe()
@@ -145,13 +182,14 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
     comms = wire(tmp_path / "wire")
     old, new = runtime_processes
     old_pid, new_pid = old.pid, new.pid
-    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), process_identity=old))
+    comms.registry.declare(Thread('worker', frozenset(), str(tmp_path), process_identity=old))
     client = canonical_agent(comms)
     updates = []
 
-    class Client:
-        async def session_update(self, *, session_id, update):
-            updates.append((session_id, update))
+    class Client(SessionUpdateSink):
+        async def publish_update(self, *, session_id, update):
+            updates.append((session_id, update.model_dump(mode="json", by_alias=True, exclude_none=True)))
+            return True
 
     client.on_connect(Client())
     old_path = socket_path(comms.root, old_pid)
@@ -159,6 +197,15 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
     old_path.parent.mkdir(parents=True, exist_ok=True)
     connections = []
     calls = []
+
+    def model_menu(owner):
+        return ConfigOptionUpdate(
+            session_update="config_option_update",
+            config_options=[SessionConfigOptionSelect(
+                type="select", id="model", name="Model", current_value=owner,
+                options=[SessionConfigSelectOption(value=owner, name=owner)],
+            )],
+        )
 
     def handler(owner):
         async def receive(reader, writer):
@@ -173,11 +220,11 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
                         controller_token="a" * 64,
                     ).wire()
                 )
-                writer.write(OwnerUpdate(update={
-                    'sessionUpdate': 'config_option_update',
-                    'configOptions': [{'id': 'model', 'currentValue': owner}],
-                }).wire())
-                writer.write(OwnerUpdate(update={"owner": owner}).wire())
+                writer.write(OwnerUpdate.of(model_menu(owner)).wire())
+                writer.write(OwnerUpdate.of(SessionInfoUpdate(
+                    session_update="session_info_update", title=owner,
+                    field_meta={"owner": owner},
+                )).wire())
                 await writer.drain()
                 await reader.read()
             else:
@@ -197,15 +244,15 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
         await proxy.subscribe()
         await until(
             lambda: any(
-                session == "worker" and data.get("owner") == "old" for session, data in updates
+                session == "worker" and data.get("_meta", {}).get("owner") == "old" for session, data in updates
             )
         )
         # Session metadata may be filled in after initial owner attachment.
         comms.registry.register(
-            replace(comms.registry.require("worker"), session_file=SavedSessionFile(str(tmp_path / "session.jsonl")))
+            replace(comms.registry.require("worker"), session_file=RegistrySessionLocation.from_path(str(tmp_path / "session.jsonl"), comms.root))
         )
         assert await proxy.request("cancel") == {"owner": "old"}
-        comms.threads.rename_managed_thread("worker", "renamed", owner_pid=old_pid)
+        comms.threads.rename_managed_thread("worker", "renamed", owner=old)
         comms.registry.register(replace(comms.registry.require("renamed"), process_identity=new))
         old_server.close()
         for writer in connections:
@@ -219,7 +266,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
         assert await asyncio.wait_for(request, 3) == {"owner": "new"}
         await until(
             lambda: any(
-                session == "worker" and data.get("owner") == "new" for session, data in updates
+                session == "worker" and data.get("_meta", {}).get("owner") == "new" for session, data in updates
             )
         )
         await until(
@@ -227,8 +274,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
                 (
                     "worker",
                     {
-                        "sessionUpdate": "config_option_update",
-                        "configOptions": [{"id": "model", "currentValue": "new"}],
+                        **model_menu("new").model_dump(mode="json", by_alias=True, exclude_none=True),
                         "_meta": encode_updates(),
                     },
                 )
@@ -244,7 +290,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
         comms.registry.begin_delete("renamed")
         comms.registry.remove("renamed")
         comms.registry.declare(
-            comms.registry.new_thread('worker', frozenset(), str(tmp_path), process_identity=ProcessIdentity(901003, 1))
+            Thread('worker', frozenset(), str(tmp_path), process_identity=ProcessIdentity(901003, 1))
         )
         with pytest.raises(RuntimeError):
             await proxy.request("cancel")
@@ -284,9 +330,3 @@ async def test_new_session_metadata_has_a_display_title_before_first_switch(tmp_
         )
     finally:
         await agent.shutdown()
-
-
-
-
-
-

@@ -3,25 +3,30 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from .bus_publication import CommittedDelivery
+from .bus import BusReader
+from .bus_publication import Delivered
 from .declared_family import DeclaredFamily
+from .errors import UnregisteredThreadError
 from .field_codec import NullMember
 from .goal_presentation import GoalExecution, GoalExecutionSource, GoalWaitTarget, StandbyExecution
 from .goals import Goal, GoalDeclaration
 from .input_attempt import StoredInput, UnresolvedInput
 from .locked_store import WireWakeFile
+from .store_files import SharedLock
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
-from .typed_table import Column, DurableStore, ForeignKey, Index, TypedTable
-from .wire_log import WireLog
+from .turn_lease import TurnLease
+from .typed_table import Column, DurableStore, ForeignKey, Index, StoreRows, TypedTable
 
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity
+    from .goal_management import Goals
     from .registry_document import RegistrySnapshot
     from .threads import Thread
 
@@ -50,7 +55,7 @@ class GoalWait(ABC):
     def owner_matches(self, owner: RecordedThreadIncarnation) -> bool:
         return False
 
-    def matches(self, original: CommittedDelivery, owner: RecordedThreadIncarnation) -> bool:
+    def matches(self, original: Delivered, owner: RecordedThreadIncarnation) -> bool:
         return False
 
     def review_after_seq(
@@ -61,7 +66,13 @@ class GoalWait(ABC):
     def consume_dependency(self, comms, canonical: str) -> bool:
         return True
 
-    def consume_reply(self, waits: GoalWaits, goal_id: str) -> bool:
+    def clear(self, waits: GoalWaits) -> bool:
+        return False
+
+    def current_for(self, goal: Goal, owner: RecordedThreadIncarnation) -> bool:
+        return False
+
+    def has_reply(self, bus: BusReader, owner: RecordedThreadIncarnation) -> bool:
         return False
 
     @abstractmethod
@@ -144,8 +155,8 @@ class RecordedGoalWait(GoalWait):
     def consume_dependency(self, comms, canonical: str) -> bool:
         return comms.goals.consume_goal_wait(canonical, self.wait_id)
 
-    def consume_reply(self, waits: GoalWaits, goal_id: str) -> bool:
-        return waits.clear(goal_id, wait_id=self.wait_id)
+    def clear(self, waits: GoalWaits) -> bool:
+        return waits.clear(self.goal_id, wait_id=self.wait_id)
 
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
         targets = tuple(
@@ -169,7 +180,7 @@ class RecordedGoalWait(GoalWait):
             self.goal_id, self.revision
         )
 
-    def matches(self, original: CommittedDelivery, owner: RecordedThreadIncarnation) -> bool:
+    def matches(self, original: Delivered, owner: RecordedThreadIncarnation) -> bool:
         """Join original sender and the actual addressed owner through its source."""
         if not self.owner_matches(owner):
             return False
@@ -186,12 +197,15 @@ class RecordedGoalWait(GoalWait):
             return self.after_seq
         return super().review_after_seq(goal, owner, targets)
 
-    def has_reply(self, bus: WireLog, owner: RecordedThreadIncarnation) -> bool:
+    def has_reply(self, bus: BusReader, owner: RecordedThreadIncarnation) -> bool:
         if not self.owner_matches(owner):
             return False
         return any(
             self.matches(original, owner)
-            for original in bus.addressed_sources(owner.lookup, self.after_seq)
+            for original in bus.direct_replies(
+                owner.lookup, after=self.after_seq, limit=1, descending=False,
+                sender_lookups=tuple(target.incarnation.lookup for target in self.targets),
+            )
         )
 
 
@@ -237,14 +251,119 @@ class StandbyReview:
 
 
 @dataclass(frozen=True, slots=True)
-class GoalInputReview:
-    """Ephemeral dependency review projection derived from bus and input authority."""
+class GoalWaitReview:
+    """The existing registry, turn and wait observed before reading reply history."""
 
-    goal_id: str
+    snapshot: RegistrySnapshot
+    owner: Thread
+    wait: GoalWait
+    turn: TurnLease
+
+    @staticmethod
+    def capture(goals: Goals, incarnation: RecordedThreadIncarnation) -> GoalWaitReview:
+        with goals.registry.store.locked(mode=SharedLock()):
+            snapshot = goals.registry.store.read_snapshot_unlocked()
+            for owner in snapshot.threads_for(incarnation):
+                return GoalWaitReview(
+                    snapshot, owner, goals.waits.resolve(owner.goal), owner.turn_lease,
+                )
+            raise UnregisteredThreadError("The reviewed thread incarnation was removed.")
+
+    def current_for(self, goals: Goals) -> bool:
+        """Caller holds the publication lock; no reply decoding belongs in this check."""
+        snapshot = goals.registry.snapshot()
+        return any(
+            self._current_goal(owner)
+            and owner.turn_lease == self.turn
+            and goals.waits.resolve(owner.goal) == self.wait
+            for owner in snapshot.threads_for(self.owner.incarnation.require_recorded())
+            if self._same_thread(snapshot, owner, self.owner)
+        )
+
+    def _current_goal(self, owner: Thread) -> bool:
+        """A retained wait follows edits of its active goal, not a frozen goal value."""
+        return any(
+            self.wait.current_for(goal, owner.incarnation.require_recorded())
+            for goal in owner.goal.active()
+        )
+
+    def _same_thread(self, snapshot: RegistrySnapshot, actual: Thread, expected: Thread) -> bool:
+        """Ignore display metadata, but retain the original process and input/turn epochs."""
+        return (
+            actual.same_launch(expected)
+            and actual.same_turn(expected)
+            and snapshot.same_authority(actual.name, self.snapshot, expected.name)
+        )
+
+    def require_current(self, goals: Goals, owner: Thread) -> None:
+        if owner.incarnation != self.owner.incarnation or not self.current_for(goals):
+            raise ValueError(
+                "Goal, dependency or wait changed during reply review; inspect it again."
+            )
+
+    @contextmanager
+    def publishing_unanswered(self, goals: Goals) -> Iterator[bool]:
+        """Read without EX; hold it only after this owner's received cut still agrees."""
+        owner = self.owner.incarnation.require_recorded()
+        review = self
+        while True:
+            with goals.bus.bus.reading() as source:
+                replied = self.wait.has_reply(source, owner)
+                through_seq = source.revision()
+            if replied:
+                yield False
+                return
+            with goals.registry.store.locked():
+                if not review.current_for(goals):
+                    try:
+                        review = GoalWaitReview.capture(goals, owner)
+                    except UnregisteredThreadError:
+                        yield False
+                        return
+                    if review.wait != self.wait or not review._current_goal(review.owner):
+                        yield False
+                        return
+                    # A new owner/turn fence needs a fresh silence read for this
+                    # same wait. Re-evaluate here; a terminal callback runs once.
+                    continue
+                # The existing indexed sequence query reads at most one metadata row.
+                # Any new candidate needs another unlocked policy read, not a stale release.
+                if goals.bus.bus.received_after(owner.lookup, through_seq):
+                    continue
+                yield True
+                return
+
+    @property
+    def goal_id(self) -> str:
+        return self.owner.goal.require().id
+
+    @property
+    def owners(self) -> frozenset[str]:
+        return self.snapshot.names_for(self.owner.name)
+
+
+@dataclass(frozen=True, slots=True)
+class GoalInputReview(GoalWaitReview):
+    """Reply eligibility and the exact bus cut inspected before publication."""
+
+    through_seq: int
     targets: tuple[GoalWaitTarget, ...]
-    owners: frozenset[str]
     unknown: tuple[StoredInput, ...]
     eligible_keys: frozenset[str]
+
+    def _current_goal(self, owner: Thread) -> bool:
+        """Publishing an input review still requires the exact prepared goal."""
+        return owner.goal == self.owner.goal
+
+    def current_for(self, goals: Goals) -> bool:
+        if not super(GoalInputReview, self).current_for(goals):
+            return False
+        snapshot = goals.registry.snapshot()
+        before = self.snapshot
+        return all(any(
+            self._same_thread(snapshot, actual, before.require(target.incarnation.name))
+            for actual in snapshot.threads_for(target.incarnation)
+        ) for target in self.targets)
 
     def standby_review(self) -> StandbyReview:
         eligible: list[UnresolvedInput] = []
@@ -269,14 +388,18 @@ class GoalInputReview:
         )
 
 
+class GoalWaitsRows(StoreRows):
+    """The tables of GoalWaits; each row declares itself one."""
+
+
 @dataclass(frozen=True, slots=True)
-class StoredGoalWaitRow(TypedTable):
+class StoredGoalWaitRow(GoalWaitsRows, TypedTable):
     goal_id: Annotated[str, Column(primary_key=True)]
     wait: RecordedGoalWait
 
 
 @dataclass(frozen=True, slots=True)
-class GoalWaitTargetRow(TypedTable):
+class GoalWaitTargetRow(GoalWaitsRows, TypedTable):
     goal_id: Annotated[str, Column(primary_key=True)]
     position: Annotated[int, Column(primary_key=True)]
     target_lookup: str
@@ -284,14 +407,14 @@ class GoalWaitTargetRow(TypedTable):
 
     @classmethod
     def references(cls) -> tuple[ForeignKey, ...]:
-        return (ForeignKey(("goal_id",), StoredGoalWaitRow, ("goal_id",), on_delete="CASCADE"),)
+        return (ForeignKey(columns=("goal_id",), target=StoredGoalWaitRow, target_columns=("goal_id",), on_delete="CASCADE"),)
 
 
 @dataclass(frozen=True, slots=True)
 class GoalWaits(ThreadOwnedState, DurableStore, WireWakeFile):
     path: Path = field()
     filename: ClassVar[str] = "goal_waits.sqlite3"
-    rows: ClassVar[tuple[type[TypedTable], ...]] = (StoredGoalWaitRow, GoalWaitTargetRow)
+    tables = GoalWaitsRows
 
     def read(self) -> dict[str, RecordedGoalWait]:
         with self.snapshot() as db:
@@ -349,7 +472,12 @@ class GoalWaits(ThreadOwnedState, DurableStore, WireWakeFile):
             ).rowcount > 0
 
     def resolve(self, goal: GoalDeclaration) -> GoalWait:
-        return self.for_goal(goal, self.read())
+        with self.snapshot() as db:
+            for row in StoredGoalWaitRow.select(
+                db, where="{goal_id} = ?", parameters=(goal.active().reported_id(),),
+            ):
+                return row.wait
+        return NoGoalWait()
 
     @staticmethod
     def for_goal(goal: GoalDeclaration, rows: dict[str, RecordedGoalWait]) -> GoalWait:

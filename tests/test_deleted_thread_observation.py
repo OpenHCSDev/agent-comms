@@ -1,4 +1,5 @@
 """A stale open view is a registry-owned deletion result, not observer failure."""
+
 import asyncio
 import pickle
 from dataclasses import replace
@@ -14,12 +15,12 @@ from agent_comms.ui_model.observation import (
 from agent_comms.ui_model.status import OpenThreadStatus
 from test_observer_death import readable
 from agent_comms.thread_text import GivenThreadText
+from agent_comms.threads import Thread
 
 
 def declare(comms, *names):
     for name in names:
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(comms.root.parent)))
-    comms.messaging.initialize_private_initial_protocol()
+        comms.registry.declare(Thread(name, frozenset(), str(comms.root.parent)))
 
 
 def observe(reading, comms):

@@ -2,28 +2,36 @@
 
 from __future__ import annotations
 
+
 import asyncio
 import json
 import os
 import secrets
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 import agent_comms.selected_tool_broker as broker
 from agent_comms.channel_coding_tools import CodingToolSocket
-from agent_comms.comms import Comms
-from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordinator import Coordination
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.envelope_claim_transitions import WakeClaim
 from agent_comms.native_tool_call import (
     DuplicateToolCallIdentity,
     OwnerToolConnection,
-    SelectedToolDenied,
 )
+from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import ToolCallContent
+from agent_comms.native_runtime_input import AcknowledgedSlot, ConsumedSlot, SelectedToolSlot
+
+
+@pytest.fixture
+def slot_store(private_comms):
+    with Coordination(str(CoordinationStore.path_in(private_comms.root))) as store:
+        yield store
 
 
 def _wire(token: str, **changes: object) -> bytes:
@@ -70,29 +78,26 @@ def test_pre_turn_intent_is_distinct_from_owner_bound_mode() -> None:
         broker.SelectedToolMode(None)  # type: ignore[arg-type]
 
 
-@pytest.mark.skipif(sys.platform != "linux", reason="selected tool storage requires POSIX dirfd")
-def test_consumption_is_once_only_and_terminal_is_separate(tmp_path: Path) -> None:
-    tmp_path.chmod(0o700)
+def test_consumption_is_once_only_and_terminal_is_separate(slot_store) -> None:
     input_id = secrets.token_hex(16)
-    broker.consume_selected_slot(tmp_path, input_id, "call_1")
-    ledger = tmp_path / "selected-tool-ledger"
-    assert (ledger / input_id).read_text() == "call_1\n"
-    assert not (ledger / (input_id + ".done")).exists()
+    broker.consume_selected_slot(slot_store, input_id, "call_1")
+    row = SelectedToolSlot.require(slot_store.session._connection, input_id=input_id)
+    assert row.call_id == "call_1"
+    assert row.state is ConsumedSlot
     with pytest.raises(SelectedToolDenied):
-        broker.consume_selected_slot(tmp_path, input_id, "call_2")
-    broker.record_selected_terminal(tmp_path, input_id, "call_1")
+        broker.verify_selected_terminal(slot_store.session.path, input_id, "call_1")
     with pytest.raises(SelectedToolDenied):
-        broker.record_selected_terminal(tmp_path, input_id, "call_1")
+        broker.consume_selected_slot(slot_store, input_id, "call_2")
+    broker.record_selected_terminal(slot_store.session.path, input_id, "call_1")
+    broker.verify_selected_terminal(slot_store.session.path, input_id, "call_1")
+    assert SelectedToolSlot.require(slot_store.session._connection, input_id=input_id).state is AcknowledgedSlot
+    with pytest.raises(SelectedToolDenied):
+        broker.record_selected_terminal(slot_store.session.path, input_id, "call_1")
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="selected tool storage requires POSIX dirfd")
-def test_owner_mode_denies_unreserved_input_before_consuming_ledger(tmp_path: Path) -> None:
-    tmp_path.chmod(0o700)
-    root = tmp_path / "wire"
-    root.mkdir(mode=0o700)
-    session_dir = tmp_path / "session"
-    session_dir.mkdir(mode=0o700)
-    comms = Comms(root)
+def test_owner_mode_denies_unreserved_input_before_consuming_ledger(private_comms) -> None:
+    comms = private_comms
     claim_scope = WakeClaim(
         wire_root_id="a" * 32,
         source_seq=1,
@@ -107,11 +112,10 @@ def test_owner_mode_denies_unreserved_input_before_consuming_ledger(tmp_path: Pa
         participant_generation=1,
         attempt_ordinal=1,
     )
-    with Coordination(str(root / "coordination.sqlite3")) as store:
-        install_native_runtime_schema(store)
+    with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
         input_id = secrets.token_hex(16)
         mode = broker.selected_tool_mode_for_owner(
-            comms, store, claim_scope, "owner", session_dir, input_id
+            comms, store, claim_scope, "owner", input_id
         )
         with pytest.raises(SelectedToolDenied):
             mode.action(
@@ -119,7 +123,7 @@ def test_owner_mode_denies_unreserved_input_before_consuming_ledger(tmp_path: Pa
                     "call_1", broker.SelectedWriteArguments("notes.txt", "write")
                 )
             )
-        assert not (session_dir / "selected-tool-ledger").exists()
+        assert SelectedToolSlot.count(store.session._connection) == 0
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="selected tool socket requires SO_PEERCRED")
@@ -196,10 +200,11 @@ def test_fake_socket_requires_pid_token_matching_emitted_call(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("abandoned", (False, True))
-async def test_listener_isolated_from_previous_turn_and_keeps_session_ledger(
+async def test_listener_isolated_from_previous_turn_and_keeps_consumed_slot(
     tmp_path: Path,
     tool_listener,
     abandoned: bool,
+    slot_store,
 ) -> None:
     tmp_path.chmod(0o700)
     previous = tool_listener(tmp_path, secrets.token_hex(32))
@@ -212,11 +217,13 @@ async def test_listener_isolated_from_previous_turn_and_keeps_session_ledger(
     observed: list[broker.SelectedToolRequest] = []
 
     def accept(request: broker.SelectedToolRequest) -> None:
-        broker.consume_selected_slot(tmp_path, input_id, request.call_id)
-        broker.record_selected_terminal(tmp_path, input_id, request.call_id)
+        with Coordination(slot_store.session.path) as store:
+            broker.consume_selected_slot(store, input_id, request.call_id)
+            broker.record_selected_terminal(store.session.path, input_id, request.call_id)
         observed.append(request)
 
     server = broker.SelectedToolSocket(tool_listener(tmp_path, token), accept, pid=os.getpid())
+    server.turn = SimpleNamespace(launch=SimpleNamespace(root=Path(slot_store.session.path).parent))
     assert server.listener.path != previous.path
     assert server.listener.path.parent.stat().st_mode & 0o777 == 0o700
     await server.start()
@@ -254,7 +261,7 @@ async def test_listener_isolated_from_previous_turn_and_keeps_session_ledger(
                 broker.SelectedWriteArguments("notes.txt", "é"),
             )
         ]
-        assert (tmp_path / "selected-tool-ledger" / (input_id + ".done")).exists()
+        assert SelectedToolSlot.require(slot_store.session._connection, input_id=input_id).state is AcknowledgedSlot
     finally:
         await server.close()
     assert not server.listener.path.exists()

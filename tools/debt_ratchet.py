@@ -7,7 +7,9 @@ import argparse
 import ast
 import dataclasses
 import enum
+import hashlib
 import importlib
+import importlib.metadata
 import inspect
 import importlib.resources
 import importlib.util
@@ -15,14 +17,17 @@ import io
 import itertools
 import json
 import os
+import pickle
 import re
 import subprocess
 import sys
 import tempfile
+import time
 import tokenize
 import tomllib
 import types
 import typing
+import typing_extensions
 from typing import Annotated
 from abc import abstractmethod
 from collections import Counter
@@ -32,26 +37,7 @@ from dataclasses import dataclass
 from functools import cache, cached_property, partial
 from pathlib import Path
 
-sys.path.insert(
-    0,
-    str(
-        Path(__file__).resolve().parents[1]
-        / subprocess.check_output(
-            [
-                "git",
-                "config",
-                "--file",
-                str(Path(__file__).resolve().parents[1] / ".gitmodules"),
-                "--get",
-                "submodule.src/agent_comms/skills/refactor-audit.path",
-            ],
-            text=True,
-        ).strip()
-        / "scripts"
-    ),
-)
-
-import audit
+from agent_comms.pinned_audit import audit
 from audit.findings import Package as AuditPackage, ParsedModule as AuditModule, RawShape
 from audit.repository import Repository as AuditRepository
 from audit.handler_declarations import BuiltinHandlerDeclarations
@@ -59,7 +45,7 @@ from audit.measures import FamilyFlattened as AuditFamilyFlattened
 from audit.measures import ForeignAbsenceProbe as AuditForeignAbsenceProbe
 
 import agent_comms
-from agent_comms import coordinated_runtime_schema, coordination_schema, field_codec, typed_table
+from agent_comms import coordination_schema, field_codec, typed_table
 from agent_comms.child_process import ForkedProcessPool, SpawnedProcess
 from agent_comms.core_stamp import WheelStamp
 from agent_comms.declared_family import DeclaredFamily
@@ -69,6 +55,81 @@ from agent_comms.field_codec import FieldCodec, boundary_decoder, projected
 from agent_comms.mro_dispatch import MroDispatch, handles
 
 AUDIT_SCRIPTS = Path(audit.__path__[0]).parent
+REPOSITORY = Path(__file__).resolve().parents[1]
+
+
+class ContentCache:
+    """Results that are pure functions of content, stored under a digest of that content, of
+    this ratchet's own code and of the checkers it runs. The key is the content, so an entry
+    never goes stale: any change to what produced it is a different key."""
+
+    directory: typing.ClassVar[Path] = Path.home() / ".cache/agent-comms/debt-ratchet"
+    checkers: typing.ClassVar[tuple[str, ...]] = ("black", "ruff", "mypy")
+    retention_days: typing.ClassVar[int] = 14
+
+    @staticmethod
+    def sources() -> tuple[Path, ...]:
+        """Every module loaded in this process under this repository's tools/ or src/, plus the
+        audit package: measuring subprocesses import it from AUDIT_SCRIPTS, so sys.modules
+        alone would miss a change to it. Sorted."""
+        roots = (REPOSITORY / "tools", REPOSITORY / "src")
+        origins = (Path(origin).resolve() for module in list(sys.modules.values())
+                   if isinstance(module, types.ModuleType)
+                   and (origin := module.__dict__.get("__file__")))
+        loaded = {path for path in origins if any(path.is_relative_to(root) for root in roots)}
+        audited = {path.resolve() for path in (AUDIT_SCRIPTS / "audit").rglob("*.py")}
+        return tuple(sorted(loaded | audited))
+
+    @staticmethod
+    @cache
+    def code() -> bytes:
+        """This ratchet's measuring code (see sources), and each checker's version. Computed
+        once, at the first key, after the measures' imports, so the set is the one that ran."""
+        digest = hashlib.sha256(f"{sys.version}\0{__name__}".encode())
+        for name in ContentCache.checkers:
+            digest.update(f"\0{name}={importlib.metadata.version(name)}".encode())
+        for path in ContentCache.sources():
+            digest.update(b"\0" + str(path).encode() + b"\0" + path.read_bytes())
+        return digest.digest()
+
+    @classmethod
+    def path(cls, *parts: str) -> Path:
+        key = hashlib.sha256(b"\0".join((cls.code(), *(part.encode() for part in parts))))
+        identity = key.hexdigest()
+        return cls.directory / identity[:2] / identity
+
+    @classmethod
+    def stored(cls, *parts: str) -> tuple[object, ...]:
+        """The stored result for these parts, as a one-item tuple, or an empty one."""
+        path = cls.path(*parts)
+        if not path.is_file():
+            return ()
+        os.utime(path)  # the mtime records the last use, which is what pruning reads
+        return (pickle.loads(path.read_bytes()),)
+
+    @classmethod
+    def prune(cls) -> None:
+        """Delete the entries neither written nor read for retention_days."""
+        horizon = time.time() - cls.retention_days * 86400
+        for path in cls.directory.glob("*/*"):
+            if path.stat().st_mtime < horizon:
+                path.unlink(missing_ok=True)
+
+    @classmethod
+    def store[Value](cls, value: Value, *parts: str) -> Value:
+        path = cls.path(*parts)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as staged:
+            staged.write(pickle.dumps(value))
+        os.replace(staged.name, path)
+        return value
+
+    @classmethod
+    def memo[Value](cls, compute: Callable[[], Value], *parts: str) -> Value:
+        for value in cls.stored(*parts):
+            return typing.cast(Value, value)
+        return cls.store(compute(), *parts)
+
 
 
 class Side(enum.Enum):
@@ -92,8 +153,10 @@ class Measure(DeclaredFamily, affix="Measure"):
     @staticmethod
     def source_paths(root: str, tree: Path) -> tuple[str, ...]:
         """Where a revision extracted to the tree imports from: the measured root's directory,
-        then its ``src`` (``agent-comms install`` runs tools with it), never the installed one."""
-        return tuple(dict.fromkeys(str(tree / directory) for directory in (Path(root).parts[0], "src")))
+        then its ``src`` (``agent-comms install`` runs tools with it), never the installed one,
+        then the pinned audit's scripts, a submodule no ``git archive`` of the tree carries."""
+        return (*dict.fromkeys(str(tree / directory) for directory in (Path(root).parts[0], "src")),
+                str(AUDIT_SCRIPTS))
 
     @classmethod
     @abstractmethod
@@ -181,7 +244,24 @@ class InventoryMeasure[Reading](Measure):
         """This revision's measurements from its files' readings, in path order."""
 
     @classmethod
+    def context(cls, repo: Path, ref: str) -> str:
+        """What a file's reading depends on besides the file itself."""
+        return ""
+
+    @classmethod
     def read(cls, repo: Path, ref: str, paths: list[str]) -> dict[str, Reading]:
+        """Each file's reading, computed once per blob and context."""
+        identities = GitMeasure.blobs(repo, ref, set(paths))
+        context = cls.context(repo, ref)
+        parts = {path: (cls.__name__, context, path, identities[path]) for path in paths}
+        readings = {path: typing.cast(Reading, stored)
+                    for path in paths for stored in ContentCache.stored(*parts[path])}
+        fresh = cls.read_fresh(repo, ref, sorted(set(paths) - readings.keys()))
+        return {**readings, **{path: ContentCache.store(reading, *parts[path])
+                               for path, reading in fresh.items()}}
+
+    @classmethod
+    def read_fresh(cls, repo: Path, ref: str, paths: list[str]) -> dict[str, Reading]:
         return {path: cls.reading(path, source)
                 for path, source in GitMeasure.sources(repo, ref, set(paths))}
 
@@ -214,10 +294,10 @@ class GitMeasure(RevisionMeasure):
         """Measure the selected source declarations."""
 
     @staticmethod
-    def sources(repo: Path, ref: str, selected: set[str]) -> list[tuple[str, bytes]]:
-        """Read the selected Git blobs with one batch command."""
+    def blobs(repo: Path, ref: str, selected: set[str]) -> dict[str, str]:
+        """Each selected path's blob identity at the revision."""
         if not selected:
-            return []
+            return {}
         tree = git(repo, "--literal-pathspecs", "ls-tree", "-rz", ref, "--", *sorted(selected))
         identities = {}
         for entry in tree.split(b"\0"):
@@ -226,9 +306,18 @@ class GitMeasure(RevisionMeasure):
                 _, kind, identity = metadata.split()
                 if kind != b"blob":
                     raise ValueError(f"Expected a source blob at {path!r}")
-                identities[path.decode()] = identity
+                identities[path.decode()] = identity.decode()
         if identities.keys() != selected:
             raise ValueError("Git omitted a selected path")
+        return identities
+
+    @staticmethod
+    def sources(repo: Path, ref: str, selected: set[str]) -> list[tuple[str, bytes]]:
+        """Read the selected Git blobs with one batch command."""
+        if not selected:
+            return []
+        identities = {path: identity.encode()
+                      for path, identity in GitMeasure.blobs(repo, ref, selected).items()}
         objects = dict.fromkeys(identities.values())
         stream = io.BytesIO(git(repo, "cat-file", "--batch", input=b"\n".join(objects) + b"\n"))
         blobs = {}
@@ -330,9 +419,10 @@ class StringFieldMetadata(PerFileOccurrenceMeasure):
 
     @staticmethod
     def occurrences(node: ast.AST) -> int:
-        metadata = typing.cast(
-            types.MemberDescriptorType, typing.cast(typing.Any, dataclasses.Field).metadata
-        ).__name__
+        descriptor: types.MemberDescriptorType = inspect.getattr_static(
+            dataclasses.Field, "metadata"
+        )
+        metadata = descriptor.__name__
         return sum(
             typing.cast(int, MetadataKeys().visit(keyword.value))
             for keyword in typing.cast(ast.Call, node).keywords
@@ -363,9 +453,29 @@ class CheckedRevision(Measure):
         subprocess.run(["tar", "-x", "-C", scratch], input=git(repo, "archive", ref), check=True,
                        timeout=60)
 
+    @staticmethod
+    def configuration(repo: Path, ref: str) -> str:
+        """The revision's checker configuration blob; a revision without one has none."""
+        listed = git(repo, "ls-tree", "--name-only", ref, "--", "pyproject.toml")
+        return git(repo, "rev-parse", f"{ref}:pyproject.toml").decode().strip() if listed else ""
+
+    @classmethod
+    def inputs(cls, repo: Path, ref: str, head: str, root: str, selected: list[str]) -> str:
+        """What the findings on the selected files depend on: the revision's whole tree, which
+        a checker following imports reads, and the head's configuration."""
+        tree = git(repo, "rev-parse", f"{ref}^{{tree}}").decode().strip()
+        return f"{tree} {cls.configuration(repo, head)}"
+
     @classmethod
     def findings(cls, repo: Path, ref: str, head: str, root: str, selected: list[str],
                  side: Side) -> tuple[Side, Counter[str]]:
+        return side, ContentCache.memo(
+            partial(cls.checked, repo, ref, head, root, selected, side),
+            cls.__name__, root, cls.inputs(repo, ref, head, root, selected), *selected)
+
+    @classmethod
+    def checked(cls, repo: Path, ref: str, head: str, root: str, selected: list[str],
+                side: Side) -> Counter[str]:
         # A missing checker exits 1 like a finding run, so importing it first fails loud instead.
         importlib.import_module(cls.command(Path(), [], side)[0])
         with tempfile.TemporaryDirectory(prefix="debt-ratchet-check-") as scratch:
@@ -385,8 +495,8 @@ class CheckedRevision(Measure):
         # it; mypy also reports the modules it follows outside the tree, which are not measured.
         output = (result.stdout + result.stderr).decode()
         reported = (Path(tree, match[1]) for match in cls.finding.finditer(output))
-        return side, Counter(path.relative_to(tree).as_posix()
-                             for path in reported if path.is_relative_to(tree))
+        return Counter(path.relative_to(tree).as_posix()
+                       for path in reported if path.is_relative_to(tree))
 
     @classmethod
     def parts(cls, repo: Path, base: str, head: str, changed: set[str],
@@ -413,8 +523,14 @@ class Unformatted(CheckedRevision):
     finding = re.compile(r"^would reformat (.+)$", re.MULTILINE)
 
     @staticmethod
+    def black(*arguments: str) -> list[str]:
+        """Black's arguments after `python -m`. Every Black run here is already one of the
+        ratchet's pool workers, so Black starts no process pool of its own."""
+        return ["black", "--workers", "1", *arguments]
+
+    @staticmethod
     def batches(selected: list[str]) -> list[list[str]]:
-        # One process per file runs the files at once without Black starting its own workers.
+        # One run per file spreads the files across the ratchet's pool.
         return [[path] for path in selected]
 
     @staticmethod
@@ -426,7 +542,13 @@ class Unformatted(CheckedRevision):
 
     @staticmethod
     def command(tree: Path, selected: list[str], side: Side) -> list[str]:
-        return ["black", "--check", *selected]
+        return Unformatted.black("--check", *selected)
+
+    @classmethod
+    def inputs(cls, repo: Path, ref: str, head: str, root: str, selected: list[str]) -> str:
+        """Black reads only the file and the configuration."""
+        return " ".join((*GitMeasure.blobs(repo, ref, set(selected)).values(),
+                         cls.configuration(repo, head)))
 
 
 class LintFindings(CheckedRevision):
@@ -459,8 +581,7 @@ class TypeErrors(CheckedRevision):
     @staticmethod
     def environment(root: str, tree: Path) -> dict[str, str]:
         """Module names start at the source directory, as they do when the package is installed."""
-        return {**os.environ, "MYPYPATH": os.pathsep.join(
-            (*Measure.source_paths(root, tree), str(AUDIT_SCRIPTS)))}
+        return {**os.environ, "MYPYPATH": os.pathsep.join(Measure.source_paths(root, tree))}
 
 
 @dataclass(frozen=True)
@@ -1349,8 +1470,7 @@ class FamilyFlattened(PerFileMeasure, ast.NodeTransformer):
     mechanism_modules = frozenset((
         *(Path("src", Path(inspect.getfile(module)).relative_to(
             Path(inspect.getfile(agent_comms)).parents[1]))
-          for module in (field_codec, typed_table,
-                         coordination_schema, coordinated_runtime_schema)),
+          for module in (field_codec, typed_table, coordination_schema)),
         *(Path("src", "toad", module) for module in ("agent_schema.py", "db.py")),
     ))
 
@@ -1512,7 +1632,12 @@ class GodClassExcess(InventoryMeasure[dict[str, int]]):
         return python_paths(repo, ref, root)
 
     @classmethod
-    def read(cls, repo: Path, ref: str, paths: list[str]) -> dict[str, dict[str, int]]:
+    def context(cls, repo: Path, ref: str) -> str:
+        """Black formats each file under the revision's own configuration."""
+        return CheckedRevision.configuration(repo, ref)
+
+    @classmethod
+    def read_fresh(cls, repo: Path, ref: str, paths: list[str]) -> dict[str, dict[str, int]]:
         if not paths:
             return {}
         with tempfile.TemporaryDirectory(prefix="debt-ratchet-layout-") as scratch:
@@ -1520,8 +1645,12 @@ class GodClassExcess(InventoryMeasure[dict[str, int]]):
             Unformatted.extract(repo, ref, tree, paths)
             if git(repo, "ls-tree", "--name-only", ref, "--", "pyproject.toml"):
                 (tree / "pyproject.toml").write_bytes(git(repo, "show", f"{ref}:pyproject.toml"))
-            subprocess.run((sys.executable, "-m", "black", "-q", *paths), cwd=tree, check=True,
-                           timeout=600)
+            subprocess.run(
+                (sys.executable, "-m", *Unformatted.black("-q", *paths)),
+                cwd=tree,
+                check=True,
+                timeout=600,
+            )
             return {path: cls.reading(path, (tree / path).read_bytes()) for path in paths}
 
     @classmethod
@@ -1649,6 +1778,10 @@ class TypingImports(MroDispatch):
     bindings conservatively disqualify a name rather than inferring its flow.
     """
 
+    typing_modules: typing.ClassVar[dict[str, types.ModuleType]] = {
+        module.__name__: module for module in (typing, typing_extensions)
+    }
+
     def __init__(self, declarations: set[ast.AST]) -> None:
         self.declarations = declarations
         self.values: dict[str, object] = {}
@@ -1663,14 +1796,15 @@ class TypingImports(MroDispatch):
     def modules(self, node: ast.Import) -> None:
         for item in node.names:
             self.bind(node, item.asname or item.name.split(".")[0],
-                      typing if item.name == typing.__name__ else None)
+                      self.typing_modules.get(item.name))
 
     @handles(ast.ImportFrom)
     def members(self, node: ast.ImportFrom) -> None:
         for item in node.names:
             declaration = None
-            if node.level == 0 and node.module == typing.__name__:
-                declaration = vars(typing).get(item.name)
+            module = self.typing_modules.get(node.module) if node.level == 0 else None
+            if module is not None:
+                declaration = vars(module).get(item.name)
             self.bind(node, item.asname or item.name, declaration)
 
     @handles(ast.Name)
@@ -1735,6 +1869,10 @@ class TypingReference(MroDispatch):
         self.imports = imports
         self.value: object = None
 
+    @property
+    def is_any(self) -> bool:
+        return self.value is typing.Any
+
     @handles(ast.Name)
     def name(self, node: ast.Name) -> None:
         self.value = self.imports.get(node.id)
@@ -1743,8 +1881,9 @@ class TypingReference(MroDispatch):
     def member(self, node: ast.Attribute) -> None:
         parent = TypingReference(self.imports)
         parent.dispatch_sync(node.value)
-        if parent.value is typing:
-            self.value = vars(typing).get(node.attr)
+        for module in TypingImports.typing_modules.values():
+            if parent.value is module:
+                self.value = vars(module).get(node.attr)
 
     def raw_access_count(self) -> int:
         """Typing declarations contribute no raw-record operation; unknowns do."""
@@ -1784,7 +1923,11 @@ class AnyInTypeExpression(MroDispatch):
     def __init__(self, imports: dict[str, object], quoted: bool) -> None:
         self.imports = imports
         self.quoted = quoted
-        self.found = 0
+        self.references: list[ast.expr] = []
+
+    @property
+    def found(self) -> int:
+        return len(self.references)
 
     def resolved(self, node: ast.AST) -> object:
         reference = TypingReference(self.imports)
@@ -1793,7 +1936,10 @@ class AnyInTypeExpression(MroDispatch):
 
     @handles(ast.Name, ast.Attribute)
     def reference(self, node: ast.expr) -> None:
-        self.found += int(self.resolved(node) is typing.Any)
+        reference = TypingReference(self.imports)
+        reference.dispatch_sync(node)
+        if reference.is_any:
+            self.references.append(node)
 
     @handles(ast.Subscript)
     def parameterised(self, node: ast.Subscript) -> None:
@@ -1829,7 +1975,7 @@ class AnyInTypeExpression(MroDispatch):
 
 @dataclass(frozen=True)
 class AnyUse:
-    """One written ``typing.Any`` where a file declares a type."""
+    """One written ``typing.Any`` and the declaration or reference owning it."""
 
     line: int
     site: str
@@ -1837,11 +1983,12 @@ class AnyUse:
 
 
 class DeclaredTypeSites(MroDispatch):
-    """Every place a file declares a type; each handler names one kind of place."""
+    """Written Any references, with declaration-owned quoted type parsing."""
 
     def __init__(self, imports: dict[str, object]) -> None:
         self.imports = imports
         self.uses: list[AnyUse] = []
+        self.counted: set[ast.AST] = set()
 
     def read(self, tree: ast.Module) -> None:
         pending: list[tuple[ast.AST, tuple[ast.AST, ...]]] = [(tree, ())]
@@ -1859,7 +2006,19 @@ class DeclaredTypeSites(MroDispatch):
         counted = AnyInTypeExpression(self.imports, quoted)
         counted.dispatch_sync(expression)
         owner = ".".join(enclosing.name for enclosing in scope)
+        self.counted.update(counted.references)
         self.uses.extend([AnyUse(expression.lineno, site, owner)] * counted.found)
+
+    @handles(ast.Name, ast.Attribute)
+    def reference(self, node: ast.Name | ast.Attribute, scope: tuple[ast.AST, ...]) -> None:
+        if not isinstance(node.ctx, ast.Load) or node in self.counted:
+            return
+        reference = TypingReference(self.imports)
+        reference.dispatch_sync(node)
+        if reference.is_any:
+            self.counted.add(node)
+            owner = ".".join(enclosing.name for enclosing in scope)
+            self.uses.append(AnyUse(node.lineno, "reference", owner))
 
     @staticmethod
     def record_class(scope: tuple[ast.AST, ...]) -> bool:
@@ -1905,14 +2064,8 @@ class DeclaredTypeSites(MroDispatch):
             self.declare("alias", node.value, scope)
 
 
-class AnyAnnotation(PerFileMeasure):
-    """``typing.Any`` written where a type is declared.
-
-    A declared type is what a consumer turns into a form control, a parameter
-    description or an array conversion; ``Any`` is the answer that is missing.
-    Counted: parameters, returns, annotated assignments and type aliases,
-    including nested (``dict[str, Any]``) and quoted uses.
-    """
+class AnyName(PerFileMeasure):
+    """Every written Any, including quoted declarations and loaded runtime references."""
 
     @classmethod
     def uses(cls, source: bytes, filename: str) -> tuple[AnyUse, ...]:
@@ -1925,6 +2078,22 @@ class AnyAnnotation(PerFileMeasure):
     def count(cls, source: bytes, filename: str) -> int:
         return len(cls.uses(source, filename))
 
+
+class UnannotatedParameter(PerFileOccurrenceMeasure):
+    """Every function parameter declares its type; self and cls name their owner."""
+
+    @staticmethod
+    def occurrences(node: ast.AST) -> int:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return 0
+        arguments = node.args
+        return sum(
+            argument.annotation is None and argument.arg not in ("self", "cls")
+            for argument in (
+                *arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs,
+                *filter(None, (arguments.vararg, arguments.kwarg)),
+            )
+        )
 
 
 class UncarriedRecordFormat(ChangeMeasure):
@@ -1960,7 +2129,14 @@ class UncarriedRecordFormat(ChangeMeasure):
 
     @classmethod
     def formats(cls, repo: Path, ref: str, root: str, changed: set[str]) -> dict[str, StoredForm]:
-        """Each versioned record in the changed modules, measured by that revision's own code."""
+        """Each versioned record in the changed modules, measured by that revision's own code;
+        the commit fixes every input, its stamp included."""
+        return ContentCache.memo(partial(cls.measured_formats, repo, ref, root, changed),
+                                 cls.__name__, revision(repo, ref), root, *sorted(changed))
+
+    @classmethod
+    def measured_formats(cls, repo: Path, ref: str, root: str,
+                         changed: set[str]) -> dict[str, StoredForm]:
         package = Path(root)
         while git(repo, "ls-tree", "--name-only", ref, "--", str(package / "__init__.py")):
             package = package.parent
@@ -2102,6 +2278,7 @@ def compare(repo: Path, base: str, head: str, root: str, workers: int) -> Compar
 
 
 def main() -> int:
+    ContentCache.prune()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", required=True, help="Repository-relative production source directory")
     parser.add_argument("--base", required=True)

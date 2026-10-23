@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from agent_comms.comms import Comms
+from conftest import installed_comms
 from agent_comms.context_segments.partner_activity import PartnerActivitySegment
 from agent_comms.goal_actions import CompletedGoalAction, GoalPrecondition, SetGoalAction
 from agent_comms.goal_states import ActiveGoal, CompletedGoal
@@ -26,10 +26,10 @@ from agent_comms.turn_context import CoordinationSegment, NextContextTurn, TurnC
 
 
 def _wire(tmp_path, *threads):
-    comms = Comms(tmp_path / "wire")
+    comms = installed_comms(tmp_path / "wire")
     for created, (name, tags) in enumerate(threads, start=1):
         comms.registry.declare(
-            comms.registry.new_thread(name, frozenset(tags), str(tmp_path), created_at=20000.0 + created)
+            Thread(name, frozenset(tags), str(tmp_path), created_at=20000.0 + created)
         )
     return comms
 
@@ -78,7 +78,7 @@ def test_a_thread_reusing_a_deleted_name_inherits_no_relevance(tmp_path):
     comms.relationships.edit("owner", RelationshipEdit.member_named("add"), "partner", "Old work")
     comms.owners.stop("partner")
     comms.registry.remove("partner")
-    comms.registry.declare(comms.registry.new_thread('partner', frozenset(), str(tmp_path), created_at=30000.0))
+    comms.registry.declare(Thread('partner', frozenset(), str(tmp_path), created_at=30000.0))
     assert comms.relationships.relevance("owner", "partner") is StrangerRelevance
 
 
@@ -146,8 +146,7 @@ def test_a_collaborators_goal_change_reaches_its_partner_as_a_typed_item_without
     shown = json.loads(_partner_activity(comms, "owner")[0].text().splitlines()[-1])
     assert shown[0]["peer"] == "partner" and shown[0]["state"] == "completed"
     # The change is read at the partner's next turn: nothing was sent and nobody was woken.
-    with comms.bus.log.opened_wire_snapshot() as source:
-        assert tuple(source.public_records()) == ()
+    assert comms.bus.bus.revision() == 0
     assert comms.bus.pending_counts_all(["owner", "partner", "mate"]) == dict.fromkeys(
         ("owner", "partner", "mate"), 0
     )
@@ -155,9 +154,9 @@ def test_a_collaborators_goal_change_reaches_its_partner_as_a_typed_item_without
 
 
 def test_awareness_shows_a_related_peers_messages_first_within_the_same_window(tmp_path):
-    from test_private_bus_checkpoint import _root
+    from bus_record_fixture import context_comms
 
-    comms, _ = _root(tmp_path)
+    comms = context_comms(tmp_path)
     earlier = publish_initial(comms, "outsider", "Alice", "From a stranger")
     later = publish_initial(comms, "Bob", "Alice", "From a partner")
     owner = comms.registry.require("Alice")
@@ -207,23 +206,23 @@ def test_context_shows_each_relation_with_its_author_time_note_and_history(tmp_p
 
 
 def test_recent_direct_work_stays_addressable_without_bare_peer_inventory(tmp_path):
-    from test_private_bus_checkpoint import _root
+    from bus_record_fixture import context_comms
 
-    comms, _ = _root(tmp_path)
+    comms = context_comms(tmp_path)
     original = publish_initial(comms, "Bob", "Alice", "Current work")
     assert [r.peer.name for r in comms.relationships.context_relations("Alice")] == ["Bob"]
     assert _peers(comms, "Alice") == ()
     comms.owners.stop("Bob")
     assert [r.peer.name for r in comms.relationships.context_relations("Alice")] == ["Bob"]
     comms.registry.remove("Bob")
-    comms.registry.declare(comms.registry.new_thread('Bob', frozenset(), str(tmp_path), created_at=original.timestamp + 1))
+    comms.registry.declare(Thread('Bob', frozenset(), str(tmp_path), created_at=original.timestamp + 1))
     assert _peers(comms, "Alice") == ()
     assert comms.relationships.context_relations("Alice") == ()
 
 
 def test_parent_binding_remains_without_bare_parent_inventory(tmp_path):
     comms = _wire(tmp_path, ("parent", ()), ("unrelated", ()))
-    comms.registry.declare(comms.registry.new_thread('child', frozenset(), str(tmp_path), parent=ForkedParent('parent')))
+    comms.registry.declare(Thread('child', frozenset(), str(tmp_path), parent=ForkedParent('parent')))
     context = TurnContext.for_inspection(comms, comms.registry.require("child"))
     segment = next(s for s in context.segments if isinstance(s, CoordinationSegment))
     assert (segment.parent, segment.peers) == ("parent", ())

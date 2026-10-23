@@ -15,7 +15,6 @@ arbitrary code running as the same uid, nor protection from a malicious filesyst
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import secrets
 import sqlite3
@@ -25,17 +24,24 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import TYPE_CHECKING
 
-from agent_comms.coordination_database import CoordinationStore
+from agent_comms.locked_store import SQLiteFile
 from agent_comms.coordination_errors import IdentityConflict
 
-from .private_path import ObservedPath
+from .field_codec import FieldCodec
+from .child_process import Platform
+
+if TYPE_CHECKING:
+    from .agent_backend import StreamingInputPolicy
+
+from .private_path import ObservedPath, PrivateFileRole, TrustedAncestorRole
 from .store_files import StoreOwner
 from .typed_table import (
     AllObjectsTables,
-    Column,
     ImmutableRows,
+    SingletonRow,
+    SQLiteDatabase,
     SQLiteForeignKeys,
     SQLiteSchemaObject,
     TypedRow,
@@ -45,22 +51,17 @@ from .typed_table import (
 _MAX_SIDECAR_BYTES = 32 * 1024 * 1024
 
 
+class UnprivateSidecarFile(IdentityConflict):
+    def __init__(self) -> None:
+        super().__init__("Private sidecar file must be regular, owner-only and unaliased.")
+
+
 class SidecarCommitUnknown(IdentityConflict):
     """No successful durability acknowledgement; callers must not send or retry input."""
 
 
 def _identity(info: os.stat_result) -> tuple[int, int]:
     return info.st_dev, info.st_ino
-
-
-def _require_file(info: os.stat_result) -> None:
-    if (
-        not stat.S_ISREG(info.st_mode)
-        or info.st_uid != os.geteuid()
-        or stat.S_IMODE(info.st_mode) != 0o600
-        or info.st_nlink != 1
-    ):
-        raise IdentityConflict("Private sidecar file must be regular, owner-only and unaliased.")
 
 
 @dataclass
@@ -87,7 +88,7 @@ class _PinnedDirectory:
             locked = self.stat(self.lock_name)
             if locked is None or _identity(locked) != self.lock_identity:
                 raise IdentityConflict("Private sidecar lock identity changed.")
-            _require_file(locked)
+            PrivateFileRole.require(locked, UnprivateSidecarFile())
 
     def stat(self, name: str) -> os.stat_result | None:
         try:
@@ -104,7 +105,7 @@ class _PinnedDirectory:
         elif actual is None or _identity(actual) != _identity(expected):
             raise IdentityConflict("Private sidecar inode changed.")
         else:
-            _require_file(actual)
+            PrivateFileRole.require(actual, UnprivateSidecarFile())
             if (actual.st_size, actual.st_mtime_ns, actual.st_ctime_ns) != (
                 expected.st_size,
                 expected.st_mtime_ns,
@@ -114,22 +115,22 @@ class _PinnedDirectory:
 
 
 @contextmanager
-def _locked_directory(path: Path, *, blocking: bool = True) -> Iterator[_PinnedDirectory]:
-    if os.name != "posix" or not hasattr(os, "O_NOFOLLOW"):
-        raise IdentityConflict("Private sidecar snapshots require POSIX no-follow descriptors.")
+def _locked_directory(path: Path) -> Iterator[_PinnedDirectory]:
+    Platform.current().require_pinned_paths(IdentityConflict(
+        "Private sidecar snapshots require POSIX no-follow descriptors."))
     import fcntl
 
     path = path.absolute()
     if ".." in path.parts or not path.name:
         raise IdentityConflict("Private sidecar path must be lexical.")
-    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
     with ExitStack() as stack:
-        fd = os.open(path.anchor, flags)
+        refusal = IdentityConflict("Private sidecar snapshots require a trusted directory.")
+        fd = TrustedAncestorRole.read(path.anchor, refusal)
         stack.callback(os.close, fd)
         current = Path(path.anchor)
         ancestors = [(current, _identity(os.fstat(fd)))]
         for part in path.parent.parts[1:]:
-            fd = os.open(part, flags, dir_fd=fd)
+            fd = TrustedAncestorRole.read(part, refusal, dir_fd=fd)
             stack.callback(os.close, fd)
             current /= part
             ancestors.append((current, _identity(os.fstat(fd))))
@@ -143,8 +144,8 @@ def _locked_directory(path: Path, *, blocking: bool = True) -> Iterator[_PinnedD
             dir_fd=fd,
         )
         stack.callback(os.close, lock)
-        _require_file(os.fstat(lock))
-        fcntl.flock(lock, fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
+        PrivateFileRole.require(os.fstat(lock), UnprivateSidecarFile())
+        fcntl.flock(lock, fcntl.LOCK_EX)
         stack.callback(fcntl.flock, lock, fcntl.LOCK_UN)
         directory.unchanged(lock_name, os.fstat(lock))
         directory.lock_name = lock_name
@@ -162,12 +163,11 @@ def _locked_directory(path: Path, *, blocking: bool = True) -> Iterator[_PinnedD
 def _read_snapshot(directory: _PinnedDirectory, name: str) -> tuple[bytes, os.stat_result] | None:
     # O_NONBLOCK ensures a FIFO substitution cannot hang before fstat rejects it.
     try:
-        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory.fd)
+        fd = PrivateFileRole.read(name, UnprivateSidecarFile(), dir_fd=directory.fd)
     except FileNotFoundError:
         return None
     try:
         info = os.fstat(fd)
-        _require_file(info)
         if not 100 <= info.st_size <= _MAX_SIDECAR_BYTES:
             raise IdentityConflict("Private sidecar snapshot is empty or oversized.")
         directory.unchanged(name, info)
@@ -189,7 +189,7 @@ def _read_snapshot(directory: _PinnedDirectory, name: str) -> tuple[bytes, os.st
 
 
 def _connect(raw: bytes | None) -> sqlite3.Connection:
-    connection = CoordinationStore.writer(":memory:", isolation_level=None)
+    connection = SQLiteFile.writer(":memory:", isolation_level=None)
     try:
         if raw is not None:
             connection.deserialize(raw)
@@ -203,16 +203,8 @@ def _connect(raw: bytes | None) -> sqlite3.Connection:
 
 
 @dataclass(frozen=True)
-class SnapshotMeta(ImmutableRows, TypedTable):
-    singleton: Annotated[Literal[1], Column(primary_key=True)]
+class SnapshotMeta(ImmutableRows, SingletonRow):
     ddl_digest: str
-
-@dataclass(frozen=True)
-class _Database(TypedRow):
-    seq: int
-    name: str
-    file: str
-
 
 @dataclass(frozen=True)
 class _QuickCheck(TypedRow):
@@ -224,7 +216,7 @@ def _schema(row_type: type[TypedTable]) -> dict[str, str]:
 
 
 def _digest(row_type: type[TypedTable]) -> str:
-    return hashlib.sha256(json.dumps(_schema(row_type), separators=(",", ":")).encode()).hexdigest()
+    return hashlib.sha256(FieldCodec.compact(_schema(row_type)).encode()).hexdigest()
 
 
 def _verify_schema(connection: sqlite3.Connection, row_type: type[TypedTable]) -> None:
@@ -237,7 +229,7 @@ def _verify_schema(connection: sqlite3.Connection, row_type: type[TypedTable]) -
         raise IdentityConflict("Sidecar schema objects have drifted.")
     if SnapshotMeta.select(connection) != [SnapshotMeta(1, _digest(row_type))]:
         raise IdentityConflict("Sidecar schema declaration differs.")
-    databases = _Database.read(connection.execute("PRAGMA database_list"))
+    databases = SQLiteDatabase.read(connection.execute("PRAGMA database_list"))
     if not databases or any(
         row.name not in {"main", "temp"} or row.file != "" for row in databases
     ):
@@ -271,9 +263,7 @@ def _publish(
     # explicit diagnosis, never replay of a reserved input or a guessed rollback.
     begun = False
     try:
-        marker = os.open(
-            intent, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=directory.fd
-        )
+        marker = PrivateFileRole.create(intent, UnprivateSidecarFile(), dir_fd=directory.fd)
         begun = True
         try:
             _write_all(marker, b"sidecar-snapshot-v1\n")
@@ -281,17 +271,11 @@ def _publish(
         finally:
             os.close(marker)
         os.fsync(directory.fd)
-        fd = os.open(
-            staging,
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-            0o600,
-            dir_fd=directory.fd,
-        )
+        fd = PrivateFileRole.create(staging, UnprivateSidecarFile(), dir_fd=directory.fd)
         try:
             _write_all(fd, raw)
             os.fsync(fd)
             staged = os.fstat(fd)
-            _require_file(staged)
         finally:
             os.close(fd)
         directory.unchanged(name, expected)
@@ -303,7 +287,7 @@ def _publish(
         actual = directory.stat(name)
         if actual is None or _identity(actual) != _identity(staged):
             raise IdentityConflict("Private sidecar replacement identity changed.")
-        _require_file(actual)
+        PrivateFileRole.require(actual, UnprivateSidecarFile())
         os.unlink(intent, dir_fd=directory.fd)
         os.fsync(directory.fd)
     except BaseException as error:
@@ -342,14 +326,14 @@ def create_sidecar_file(path: Path, row_type: type[TypedTable]) -> None:
 
 @contextmanager
 def sidecar_connection(
-    path: Path, row_type: type[TypedTable], *, blocking: bool = True, read_only: bool = False
+    path: Path, row_type: type[TypedTable], *, read_only: bool = False
 ) -> Iterator[sqlite3.Connection]:
     """Verify and use one exact snapshot, committing only on successful scope exit.
 
     Callers must check rowcount/readback for their own exact inserted identities.
     SQL COMMIT alone is not a durable acknowledgement: the scope must also exit normally.
     """
-    with _locked_directory(path, blocking=blocking) as directory:
+    with _locked_directory(path) as directory:
         snapshot = _read_snapshot(directory, path.name)
         if snapshot is None:
             raise IdentityConflict("Sidecar store is not installed.")
@@ -371,23 +355,21 @@ def sidecar_connection(
             connection.close()
 
 
-def encode_request(text: str, *, streaming_behavior: str | None = None) -> str:
+def encode_request(text: str, *, streaming_behavior: type[StreamingInputPolicy] | None = None) -> str:
     """JSON-encode like the pinned native ``_claimNativeInput`` request."""
-    return json.dumps(
+    return FieldCodec.compact(
         {
             "kind": "prompt",
             "text": text,
             "images": None,
-            "streamingBehavior": streaming_behavior,
+            "streamingBehavior": FieldCodec.encode(streaming_behavior),
             "expandPromptTemplates": True,
             "source": "rpc",
-        },
-        separators=(",", ":"),
-        ensure_ascii=False,
+        }, ensure_ascii=False,
     )
 
 
-def native_request_digest(text: str, *, streaming_behavior: str | None = None) -> str:
+def native_request_digest(text: str, *, streaming_behavior: type[StreamingInputPolicy] | None = None) -> str:
     """sha256 over the pinned native request envelope, not the bare text."""
     return hashlib.sha256(
         ("pi-input-request-v1\n" + encode_request(text, streaming_behavior=streaming_behavior)).encode("utf-8")

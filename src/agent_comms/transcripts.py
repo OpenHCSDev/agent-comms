@@ -4,37 +4,35 @@ from __future__ import annotations
 
 import logging
 from abc import abstractmethod
-from collections.abc import Awaitable, Sequence
+from collections.abc import Awaitable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from functools import partial
 from pathlib import Path
-from typing import Annotated, Callable, ClassVar
-
+from typing import TYPE_CHECKING, Annotated, Callable, ClassVar, NoReturn
 
 from .agent_backend import RuntimeLocation
-from .bus_publication import CommittedDelivery
-from agent_comms.native_runtime_input import NativeRuntimeTable
+from .bus import Bus
+from .bus_publication import Delivered
 from .coordination_database import CoordinationStore
 from .coordination_errors import CoordinationReadUnavailable, StaleRevision, TranscriptChanged
-from .coordination_response import ResponseTable
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .external_transcript import ExternalTranscript
-from .field_codec import FieldCodec, projected, ContentExclude, WireName
+from .field_codec import ContentExclude, FieldCodec, WireName, projected
 from .historical_views import HistorySource
 from .message_bus import MessageBus
 from .message_reference import MessageReference
-from .messages import Message
 from .messaging import Messaging
 from .native_runtime_input import PublishedReplyRevision
 from .native_transcript import NativeTranscript, RecordsCut
 from .presentation import MessageNotification
 from .private_path import FileObservation, FileRevision
+from .private_registry_guard import RegistryPrivacy
+from .recorded_bus import RecordedBusIdentity
 from .registration import Registration
 from .routing import TurnRouting
-from .thread_identity import ThreadProvenance
-from .threads import Thread
+from .threads import Thread, ThreadProvenance
 from .transcript_events import ForkOriginTranscript, ForkTaskTranscript, TranscriptEvent
 from .transcript_routes import TranscriptRoutes
 from .transcript_sources import (
@@ -50,7 +48,16 @@ from .transcript_sources import (
 )
 from .turn_digests import ThreadTurns, TurnBound, TurnDigestRead
 from .turn_lease import TurnLeaseFence
-from .wire_log import WireLog
+
+if TYPE_CHECKING:
+    from sqlite3 import Connection
+
+    from .coordination_database import InvalidStore, MissingStore
+    from .registry_document import RegistrySnapshot
+    from .registry_provenance import RegistryProvenance
+    from .thread_identity import ThreadIncarnation
+    from .thread_text import ThreadParent, ThreadText
+    from .view_unread import TranscriptReadState
 
 _LOG = logging.getLogger(__name__)
 
@@ -75,7 +82,7 @@ class TranscriptCursor(DeclaredFamily, affix="TranscriptCursor"):
     def with_frontier(self, frontier: WireFrontier) -> TranscriptCursor: ...
 
     @abstractmethod
-    def mark_read(self, reads, viewer, runtime: RuntimeLocation) -> None: ...
+    def mark_read(self, reads: TranscriptReadState, viewer: str, runtime: RuntimeLocation) -> None: ...
 
     def contains(self, other: TranscriptCursor) -> bool:
         return other.within(self)
@@ -146,7 +153,7 @@ class UnreadTranscriptCursor(TranscriptCursor):
     def with_frontier(self, frontier: WireFrontier) -> TranscriptCursor:
         return self
 
-    def mark_read(self, reads: object, viewer: object, runtime: RuntimeLocation) -> None:
+    def mark_read(self, reads: TranscriptReadState, viewer: str, runtime: RuntimeLocation) -> None:
         """Nothing has been drawn, so there is nothing to acknowledge."""
 
 
@@ -159,13 +166,13 @@ class NoNativeTranscriptCursor(TranscriptCursor):
     wire: WireFrontier = field(default_factory=NoWireFrontier)
 
     @property
-    def session_file(self):
+    def session_file(self) -> str | None:
         return self.source.read_key
 
     def with_frontier(self, frontier: WireFrontier) -> TranscriptCursor:
         return replace(self, wire=frontier)
 
-    def mark_read(self, reads, viewer, runtime: RuntimeLocation) -> None:
+    def mark_read(self, reads: TranscriptReadState, viewer: str, runtime: RuntimeLocation) -> None:
         """There is no painted native transcript to acknowledge."""
 
 
@@ -183,7 +190,7 @@ class NativeTranscriptCursor(TranscriptCursor):
     def with_frontier(self, frontier: WireFrontier) -> TranscriptCursor:
         return frontier.cursor(self.session_file, self.offset)
 
-    def mark_read(self, reads, viewer, runtime: RuntimeLocation) -> None:
+    def mark_read(self, reads: TranscriptReadState, viewer: str, runtime: RuntimeLocation) -> None:
         if self.session_file != runtime.read_key:
             raise TranscriptChanged()
         for key in runtime.read_keys():
@@ -221,7 +228,7 @@ class PageSource:
     runtime: Annotated[RuntimeLocation, WireName("session_file")]
     inherited: bool
     root: Path
-    log: WireLog
+    bus: Bus
     routes: TranscriptRoutes
     records: TranscriptSource
     identity: Callable[..., TranscriptReadIdentity]
@@ -238,7 +245,8 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     runtime: RuntimeLocation
     records_cut: Annotated[RecordsCut, ContentExclude()]
     route_revision: FileObservation
-    bus_revision: Annotated[FileObservation, ContentExclude()]
+    bus_revision: Annotated[int, ContentExclude()]
+    bus_identity: RecordedBusIdentity
     coordination_revision: Annotated[FileObservation, ContentExclude()]
     reply_revision: PublishedReplyRevision
     read_revision: Annotated[FileObservation, ContentExclude()]
@@ -247,8 +255,18 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     after: TranscriptCursor | None
     through: TranscriptCursor | None
 
+    def __post_init__(self) -> None:
+        # A decoded witness reads its transcript under the root that published its thread.
+        bound = self.thread.session_file.bound_to(self.transcript_root)
+        if bound is not self.thread.session_file:
+            object.__setattr__(self, "thread", replace(self.thread, session_file=bound))
+
+    @property
+    def transcript_root(self) -> Path:
+        return Path(self.root)
+
     @projected(view="content", name="thread")
-    def content_thread(self):
+    def content_thread(self) -> ThreadIncarnation:
         return self.thread.incarnation
 
     @property
@@ -257,20 +275,20 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
 
     @classmethod
     @abstractmethod
-    def resolve_source(cls, owner, name, source_runtime, historical_source) -> PageSource:
+    def resolve_source(cls, owner: Transcripts, name: str, source_runtime: str | None, historical_source: str | None) -> PageSource:
         """Acquire this member's namespace, stores and identity constructor."""
 
     @abstractmethod
-    def namespace(self, owner):
+    def namespace(self, owner: Transcripts) -> RegistryProvenance:
         """Reacquire this exact source without substituting a live namespace."""
 
     def publish_turn(self, publish: Callable[[str, Thread], None]) -> None:
         """Recorded evidence cannot settle a turn or permit new input."""
 
-    def recapture(self, owner) -> TranscriptReadIdentity:
+    def recapture(self, owner: Transcripts) -> TranscriptReadIdentity:
         return owner.recapture_page_identity(self)
 
-    def require_binding(self, owner, name) -> None:
+    def require_binding(self, owner: Transcripts, name: str) -> None:
         registry = self.namespace(owner)
         requested = registry.threads.get(registry.canonical_name(name))
         if requested is None:
@@ -279,10 +297,10 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
             raise StaleRevision("Transcript witness belongs to another original thread")
 
     @projected(view="content", name="bus")
-    def content_bus(self):
+    def content_bus(self) -> RecordedBusIdentity:
         # Appends beyond this page's assigned messages do not change its content.
         # Replacing the bus file does.
-        return self.bus_revision.file_identity()
+        return self.bus_identity
 
     @property
     def page_bound(self) -> TranscriptCursor:
@@ -319,21 +337,21 @@ class LiveTranscriptReadIdentity(TranscriptReadIdentity):
     thread: Annotated[Thread, ContentExclude()]
 
     @projected(view="content", name="thread")
-    def content_thread(self):
+    def content_thread(self) -> tuple[ThreadIncarnation, ThreadParent, ThreadText]:
         return self.thread.incarnation, self.thread.parent, self.thread.task
 
     @classmethod
-    def resolve_source(cls, owner, name, source_runtime, historical_source):
+    def resolve_source(cls, owner: Transcripts, name: str, source_runtime: str | None, historical_source: str | None) -> PageSource:
         registry = owner.registry.snapshot()
         thread, runtime, inherited = owner._thread_transcript_source(
             name, source_runtime, registry=registry,
         )
         records = runtime.history_source(owner.root, thread.incarnation)
         return PageSource(thread, runtime, inherited,
-                          owner.root, owner.bus.log, owner.routes, records, cls,
-                          LiveAssignedTranscriptSource.for_thread(owner.root, thread, owner.bus.log))
+                          owner.root, owner.bus.bus, owner.routes, records, cls,
+                          LiveAssignedTranscriptSource.for_thread(owner.root, thread, owner.bus.bus))
 
-    def namespace(self, owner):
+    def namespace(self, owner: Transcripts) -> RegistryProvenance:
         return owner.registry.snapshot()
 
     def publish_turn(self, publish: Callable[[str, Thread], None]) -> None:
@@ -345,37 +363,41 @@ class RecordedTranscriptReadIdentity(TranscriptReadIdentity):
     source: Annotated[HistorySource, ContentExclude()] = field(kw_only=True)
 
     @property
+    def transcript_root(self) -> Path:
+        return Path(self.source.original_root)
+
+    @property
     def historical_source(self) -> str:
         return self.source.key
 
     @projected(view="content", name="source")
-    def content_source(self):
-        return (self.source.key, self.source.original_root, self.source.wire_root_id,
-                self.source.bus_identity, self.source.size,
-                self.source.snapshot_bus_revision, self.source.snapshot_registry_revision)
+    def content_source(self) -> tuple[str, str, RecordedBusIdentity, RecordedBusIdentity, int, FileObservation]:
+        return (self.source.key, self.source.original_root, self.source.bus_identity,
+                self.source.snapshot_bus_identity, self.source.snapshot_bus_revision,
+                self.source.snapshot_registry_revision)
 
     @classmethod
-    def resolve_source(cls, owner, name, source_runtime, historical_source):
+    def resolve_source(cls, owner: Transcripts, name: str, source_runtime: str | None, historical_source: str | None) -> PageSource:
         source = HistorySource.require(owner.bus.history.sources(), historical_source)
         thread = source.provenance.require(name)
         runtime = thread.runtime
         if source_runtime is not None and source_runtime != runtime.read_key:
             raise TranscriptChanged()
         root = Path(source.root)
-        log = WireLog(WireLog.path_in(root))
+        bus = Bus(Bus.path_in(root))
         records = runtime.history_source(root, thread.incarnation)
         return PageSource(thread, runtime, False, root,
-                          log, TranscriptRoutes(root), records,
+                          bus, TranscriptRoutes(root), records,
                           partial(cls, source=source),
-                          AssignedTranscriptSource.for_recorded(root, thread, log, records))
+                          AssignedTranscriptSource.for_recorded(root, thread, bus, records))
 
-    def namespace(self, owner):
+    def namespace(self, owner: Transcripts) -> RegistryProvenance:
         current = HistorySource.require(owner.bus.history.sources(), self.source.key)
         if current != self.source:
             raise StaleRevision("Transcript witness belongs to another recorded source")
         return current.provenance
 
-    def recapture(self, owner) -> TranscriptReadIdentity:
+    def recapture(self, owner: Transcripts) -> TranscriptReadIdentity:
         self.namespace(owner)
         return TranscriptReadIdentity.recapture(self, owner)
 
@@ -393,22 +415,21 @@ class TranscriptRead:
 
     @classmethod
     @contextmanager
-    def publication_source(cls, root):
-        with CoordinationStore.observed(CoordinationStore.path_in(root)).observing(cls) as db:
+    def publication_source(cls, root: Path) -> Iterator[Connection | None]:
+        privacy = RegistryPrivacy.capture(root)
+        with CoordinationStore.observed(CoordinationStore.path_in(root)).observing(cls, privacy) as db:
             yield db
 
     @classmethod
-    def capture(cls, db):
-        NativeRuntimeTable.require_installed(db)
-        ResponseTable.require_installed(db)
-        return db
+    def capture(cls, db: Connection, privacy: RegistryPrivacy) -> Connection | None:
+        return privacy.publication_connection(db)
 
     @classmethod
-    def missing_store(cls, store):
+    def missing_store(cls, store: MissingStore, privacy: RegistryPrivacy) -> None:
         return None
 
     @classmethod
-    def invalid_store(cls, store):
+    def invalid_store(cls, store: InvalidStore, privacy: RegistryPrivacy) -> NoReturn:
         raise RelationViolationError("Native reply source has an invalid coordinator")
 
     def current(self) -> bool:
@@ -457,8 +478,8 @@ class TranscriptSourceWindow:
     """One transcript read and its same-cut conversation source windows."""
 
     read: TranscriptRead
-    sources: tuple[CommittedDelivery, ...]
-    sent_sources: tuple[CommittedDelivery, ...]
+    sources: tuple[Delivered, ...]
+    sent_sources: tuple[Delivered, ...]
 
 
 class Transcripts:
@@ -571,7 +592,8 @@ class Transcripts:
             page.runtime,
             records_cut,
             page.routes.revision(),
-            FileRevision.capture(page.log.path),
+            page.bus.revision(),
+            RecordedBusIdentity.capture(page.bus.path),
             FileRevision.capture(CoordinationStore.source_paths(root)[0]),
             page.projection.reply_revision(records),
             FileRevision.capture(root / self.bus.reads.path.name),
@@ -589,7 +611,7 @@ class Transcripts:
         page = self._page_source(name, None, None)
         return page.runtime.external_records(page.root, page.thread.incarnation)
 
-    def _page_source(self, name, through, historical_source):
+    def _page_source(self, name: str, through: TranscriptCursor | None, historical_source: str | None) -> PageSource:
         member = (LiveTranscriptReadIdentity if historical_source is None
                   else RecordedTranscriptReadIdentity)
         return member.resolve_source(
@@ -597,7 +619,7 @@ class Transcripts:
         )
 
     def _thread_transcript_source(
-        self, name: str, source_runtime: str | None = None, *, registry
+        self, name: str, source_runtime: str | None = None, *, registry: RegistrySnapshot
     ) -> tuple[Thread, RuntimeLocation, bool]:
         """Resolve a temporary inherited view without changing runtime ownership."""
         thread = registry.require(name)
@@ -611,8 +633,8 @@ class Transcripts:
         return tuple(
             event for parent in thread.parent.names() for event in (
                 ForkOriginTranscript(f"Forked from @{parent}. This thread started with:",
-                                     timestamp=thread.created_at),
-                *(ForkTaskTranscript(task, timestamp=thread.created_at)
+                                     timestamp=thread.incarnation.wire_birth),
+                *(ForkTaskTranscript(task, timestamp=thread.incarnation.wire_birth)
                   for task in thread.task.texts()),
             )
         )
@@ -713,7 +735,7 @@ class Transcripts:
         thread = registry.require(name)
         with thread.runtime.history_source(self.root, thread.incarnation).reading() as source:
             offset = source.cut().offset
-        frontier = AssignedTranscriptSource.for_thread(self.root, thread, self.bus.log).frontier
+        frontier = AssignedTranscriptSource.for_thread(self.root, thread, self.bus.bus).frontier
         return thread.runtime.transcript_cursor(frontier, offset, source=thread.runtime)
 
     def record_turn_publication(
@@ -722,5 +744,5 @@ class Transcripts:
     ) -> None:
         """Publish original native/wire relations before this exact turn retires."""
         self.routes.record_turn_publication(
-            self.registry, self.bus.log, lease, checkpoint, routing, published
+            self.registry, self.bus.bus, lease, checkpoint, routing, published
         )

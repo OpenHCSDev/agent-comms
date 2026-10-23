@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from agent_comms.assignment_store import AssignmentStore
 from agent_comms.coordination_errors import (
     IdentityConflict,
@@ -20,15 +18,11 @@ from agent_comms.coordination_tables.publications import (
     PublicationIntents,
     PublicationEvidence,
 )
-from agent_comms.coordination_tables.recovery import (
-    ConnectivityFacet,
-    RecoveryAudit,
-)
+from agent_comms.coordination_tables.recovery import RecoveryAudit
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.participant_store import ParticipantStore
 
 
-@dataclass(eq=False, repr=False)
 class RecoveryReader:
     session: CoordinationSession
     participants: ParticipantStore
@@ -60,7 +54,6 @@ class RecoveryReader:
                 parameters=(execution_id,), order_by=("exact_target",)))
             evidence = tuple(PublicationEvidence.select(db, where="execution_id=?",
                 parameters=(execution_id,), order_by=("exact_target",)))
-            connectivity = ConnectivityFacet.one(db, execution_id=execution_id)
             audit = next(
                 iter(
                     RecoveryAudit.read(
@@ -83,7 +76,6 @@ class RecoveryReader:
                 obligations,
                 intents,
                 evidence,
-                connectivity,
                 audit,
                 pointer.execution_id,
                 pointer.attempt_ordinal,

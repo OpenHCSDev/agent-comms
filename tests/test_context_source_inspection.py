@@ -8,20 +8,20 @@ import json
 
 import pytest
 
-from agent_comms.thread_text import NoSessionFile
+from agent_comms.session_file import NoSessionFile
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_turn_context import NativeContextData, NativeContextManifestData
 from agent_comms.runtime_requests import (RuntimeRequest, ContextRecordedSegmentRuntimeRequest,
     ContextCoreRuntimeRequest, ContextCoreSourceRuntimeRequest)
 from agent_comms.thread_identity import TurnId, TurnIdentity
-from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.thread_identity import RecordedThreadIncarnation, ReportedTools
 from agent_comms.turn_context import ObservedDispatchRequest, UnobservedDispatchRequest
 from agent_comms.turn_context import (
     ContextManifest, ContextSourceText, FileProvenance, JournalProvenance,
     NativeProvenance, PreviewProvenance, RecordedContextTurn, SystemLayerSegment, TranscriptSegment, TurnContext,
 )
-from test_private_bus_checkpoint import _root
+from bus_record_fixture import context_comms
 
 
 def system(provenance, content="Original instruction π"):
@@ -69,7 +69,7 @@ def test_current_native89_shape_and_authenticated_file_read(tmp_path):
 
 
 def test_current_core_context_is_independent_and_source_selection_is_current(tmp_path):
-    comms, _ = _root(tmp_path)
+    comms = context_comms(tmp_path)
     owner = comms.registry.require("Alice")
     context = TurnContext.for_inspection(comms, owner)
     assert FieldCodec.decode(TurnContext, FieldCodec.encode(context)) == context
@@ -133,6 +133,7 @@ def test_captured_sdk_value_is_original_and_public_only(tmp_path):
     value = TranscriptSegment(provenance=(source,), messages=messages, tokens=7,
                               sha256=hashlib.sha256(raw).hexdigest(), utf8_bytes=len(raw))
     observed = NativeContextManifestData("pi.estimateTokens", (value.measured_manifest(),),
+                                        offered_tools=ReportedTools("fixture-pi", frozenset()),
                                         request_id=ObservedDispatchRequest("request-one"), values=(value,))
     original = recorded(())
     captured = observed.for_turn(original.thread, original.turn)
@@ -156,7 +157,7 @@ async def test_recorded_child_reads_exact_value_not_root_or_other_request(tmp_pa
     sibling = replace(child, sha256="b" * 64, captured_text=("Sibling text",))
     root = replace(child, sha256="c" * 64, contributors=(child, sibling))
     original = recorded((root,))
-    comms, _ = _root(tmp_path)
+    comms = context_comms(tmp_path)
     owner = comms.registry.require('Alice')
     original = replace(original, thread=owner.incarnation,
         turn=replace(original.turn, occurrence=replace(original.turn.occurrence,
@@ -264,7 +265,7 @@ async def test_mixed_recorded_root_merges_capture_and_verified_parts_once(tmp_pa
 
 
 def test_original_context_wire_captures_are_indexed_not_public_messages(tmp_path):
-    comms, _ = _root(tmp_path)
+    comms = context_comms(tmp_path)
     owner = comms.registry.require("Alice")
     captured = replace(recorded((system((NativeProvenance(identity(tmp_path), 1, "a" * 64),))
                                  .measured_manifest(),)), thread=owner.incarnation)
@@ -274,7 +275,7 @@ def test_original_context_wire_captures_are_indexed_not_public_messages(tmp_path
     page = comms.contexts.page(owner.name, comms.registry)
     assert tuple(resource.value for resource in page.resources) == (captured,)
     assert read_history(comms) == []
-    assert comms.bus.log.latest_sequence() == 0
+    assert comms.bus.bus.revision() == 0
     assert captured.public_text_recorded
     assert not replace(captured, segments=(replace(captured.segments[0], captured_text=()),))\
         .public_text_recorded

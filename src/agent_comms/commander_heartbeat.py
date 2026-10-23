@@ -5,19 +5,20 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.message_bus import WatchPass
 from agent_comms.registration import Registration
 from agent_comms.service_sender import ServiceSender
 from agent_comms.standing_rules import StandingRule
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.threads import Thread
-from agent_comms.todos import PullRequests
+from agent_comms.todos import ProgressRead
 from agent_comms.ui_model.unit_state import UnitState
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.goal_management import Goals
-    from agent_comms.todos import Todo
+    from agent_comms.todos import OwnerRequest, Todo
 
 
 @dataclass
@@ -68,10 +69,13 @@ class CommanderObservation:
     states: tuple[UnitState, ...]
 
     @classmethod
-    def read(cls, comms: Comms, thread: Thread) -> CommanderObservation:
-        pulls = PullRequests(StandingRule.todos(comms, thread.name))
+    def read(cls, comms: Comms, thread: Thread,
+             reading: type[ProgressRead] = ProgressRead) -> CommanderObservation:
+        """One frame's progress facts come from ``reading``; Core reads the live forge and Git."""
+        pulls = reading(StandingRule.todos(comms, thread.name))
         states = UnitState.current(comms, thread.name, pulls)
-        rules = StandingRule.broken(comms, thread.name, observed=states)
+        frame = HeartbeatFrame.read(comms, thread.name, pulls)
+        rules = StandingRule.broken(comms, thread.name, observed=states, frame=frame)
         merged = tuple(todo for state in states for todo in state.merged_orders(comms, pulls))
         return cls(thread, merged, rules, states)
 
@@ -82,15 +86,18 @@ class CommanderHeartbeat(ServiceSender, WatchPass[tuple[CommanderObservation, ..
     reviews: dict[ThreadIncarnation, CommanderReview] = field(default_factory=dict)
 
     @classmethod
+    def requested_by(cls, thread: Thread, goals: Goals) -> tuple[OwnerRequest, ...]:
+        """The oldest open request makes a live holder owed service, even before its first beat."""
+        return (goals.todos.open_requests(thread.incarnation, limit=1, descending=False)
+                if thread.process_alive else ())
+
+    @classmethod
     def commanders(cls, registry: Registration, goals: Goals) -> tuple[Thread, ...]:
         """The live request holders whose current incarnation owns commander work."""
         return tuple(
             thread
             for thread in registry.all_threads().values()
-            if thread.process_alive
-            and any(
-                goal.order.open_requests(goal, goals, thread.incarnation) for goal in thread.goal
-            )
+            if cls.requested_by(thread, goals)
         )
 
     def observe(self, comms: Comms) -> tuple[CommanderObservation, ...]:

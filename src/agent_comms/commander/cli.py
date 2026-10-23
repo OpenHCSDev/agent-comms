@@ -3,9 +3,12 @@ import argparse
 import pkgutil
 import sys
 from importlib import import_module
+from pathlib import Path
 
 import agent_comms.commander as package
+from agent_comms.active_route import ActiveRoute, resolve_comms_route
 from agent_comms.errors import ToolRefusedError
+from agent_comms.launch_root import LaunchRoot
 
 from .order import Commander
 
@@ -17,17 +20,22 @@ def tool_name(module: str) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(add_help=False)
-    selection = parser.add_mutually_exclusive_group()
-    selection.add_argument('--config', dest='config', type=Commander.read,
-                           default=str(Commander.path()), metavar='JSON')
-    selection.add_argument('--root', dest='config', type=Commander.read_root,
-                           default=argparse.SUPPRESS, metavar='ROOT')
+    parser.add_argument('--root', type=Path, metavar='ROOT')
     options, argv = parser.parse_known_args(sys.argv[1:])
     modules = (import_module(f'{package.__name__}.{m.name}') for m in pkgutil.iter_modules(package.__path__) if m.name != 'cli')
     tools = {tool_name(module.__name__): module for module in modules if hasattr(module, 'main')}
     if not argv or argv[0] not in tools:
-        sys.exit(f'usage: agent-comms-commander {{{",".join(sorted(tools))}}} ARGS...')
+        lines = [f'usage: agent-comms-commander {{{",".join(sorted(tools))}}} ARGS...', '']
+        lines += [f'  {name:<11} {tools[name].__doc__.splitlines()[0]}'
+                  for name in sorted(tools)]
+        asked = argv[:1] in (['-h'], ['--help'])
+        print('\n'.join(lines), file=sys.stdout if asked else sys.stderr)
+        sys.exit(0 if asked else 2)
     try:
-        tools[argv[0]].main(argv[1:], options.config)
+        # Every comms process selects its root once at startup, as the comms CLI does.
+        LaunchRoot.startup(argv, lambda: (LaunchRoot.from_path(options.root) if options.root
+                                          else ActiveRoute.published_launch()))
+        context = Commander.read_root(resolve_comms_route(options.root).root)
+        tools[argv[0]].main(argv[1:], context)
     except ToolRefusedError as refused:
         sys.exit(f'Refused: {refused}')

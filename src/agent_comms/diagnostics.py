@@ -7,16 +7,21 @@ import json
 import os
 import time
 from contextlib import contextmanager
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
-from enum import StrEnum
 from pathlib import Path
 from traceback import TracebackException
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from .field_codec import FieldCodec, Id128Text, MalformedRecord
+
+from .child_process import Platform
+from .field_codec import FieldCodec, Id128Text
 from .locked_store import DurableFile, PatternFile
-from .store_files import _atomic_write_text
+from .native_failures import NativeRequestFailure
+from .mro_dispatch import MroDispatch, handles
+from .store_files import AtomicFile
+from .turn_failure import TurnFailure
 
 if TYPE_CHECKING:
     from .activity import DrainDiagnostic
@@ -24,36 +29,27 @@ if TYPE_CHECKING:
     from .threads import Thread
 
 
-@contextmanager
-def owner_process_output(root: Path, thread: Thread):
-    """Retain a detached owner's startup traceback in the existing diagnostics.
+class OwnerProcessOutput(DurableFile, PatternFile):
+    """Startup output retained by the owner launcher."""
 
-    The child inherits this descriptor; closing the parent's copy does not end
-    capture. Each launch gets its own private file, without changing thread or
-    input disposition state.
-    """
-    directory = root / "diagnostics"
-    directory.mkdir(mode=0o700, exist_ok=True)
-    path = directory / f"owner-{thread.incarnation.lookup}-{uuid4().hex}.log"
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(descriptor, "w") as output:
-        output.write(f"Owner launch: {thread.name}\n")
-        output.flush()
-        yield output
+    filename = "diagnostics/owner-{lookup}-{id}.log"
 
+    @classmethod
+    @contextmanager
+    def open(cls, root: Path, thread: Thread):
+        """Retain a detached owner's startup traceback in the existing diagnostics.
 
-class FailureReason(StrEnum):
-    BACKEND_FAILED = "backend_failed"
-    PREFLIGHT_TIMEOUT = "native_preflight_timeout"
-    PREFLIGHT_EXIT = "native_preflight_exit"
-    INPUT_ID_UNAVAILABLE = "pi_input_id_unavailable"
-    IDENTITY_UNCERTAIN = "session_identity_uncertain"
-    AUTHORITY_CHANGED = "input_authority_changed"
-    FOLLOWUP_UNRECOGNIZED = "unrecognized_followup_input"
-    INPUT_MISSING = "current_prompt_input_missing"
-    MODEL_REQUEST_FAILED = "model_request_failed"
-    FINAL_STOP_MISSING = "assistant_final_stop_missing"
-    QUEUED_INPUT_MISSING = "queued_input_start_missing"
+        The child inherits this descriptor; closing the parent's copy does not end
+        capture. Each launch gets its own private file, without changing thread or
+        input disposition state.
+        """
+        path = cls.path_in(root, lookup=thread.incarnation.lookup, id=uuid4().hex)
+        path.parent.mkdir(mode=0o700, exist_ok=True)
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "w") as output:
+            output.write(f"Owner launch: {thread.name}\n")
+            output.flush()
+            yield output
 
 
 @dataclass
@@ -132,34 +128,20 @@ class RequestObservations(DurableFile, PatternFile):
             output.write(json.dumps(record) + "\n")
 
 
-def terminal_failure_reason(event: dict) -> FailureReason:
-    """Allowlisted backend terminal classification; never diagnostic prose."""
-    measurements = event.get("diagnostic", {})
-    if not isinstance(measurements, dict):
-        measurements = {}
-    try:
-        reason = measurements.get("reason") or event.get("reason_code")
-        return FieldCodec.decode(FailureReason, reason)
-    except MalformedRecord:
-        return FailureReason.BACKEND_FAILED
-
-
 def record_terminal_failure(
     root: Path,
     *,
     turn_id: str,
     thread: str,
-    event: dict,
+    failure: type[TurnFailure],
     sequences: tuple[int, ...],
+    measurements: Mapping[str, object] | None = None,
     native_response: Response | None = None,
     source_error: BaseException | None = None,
 ) -> Path:
     """Persist before publishing the failure notice; this record grants no retry authority."""
     Id128Text.decode(turn_id)
-    measurements = event.get("diagnostic", {})
-    if not isinstance(measurements, dict):
-        measurements = {}
-    reason = terminal_failure_reason(event)
+    measurements = measurements or {}
     safe = {
         key: value
         for key in (
@@ -175,49 +157,15 @@ def record_terminal_failure(
         "version": 1,
         "turn_id": turn_id,
         "thread": thread,
-        "reason": reason.value,
+        "failure": failure.declared_name,
         "sequences": list(sequences),
         "measurements": safe,
         "outcome": "failed; inputs must not be replayed automatically",
     }
     if native_response is not None:
         document["native_response"] = native_response.rejection_details()
-    document.update(_source_error_evidence(source_error))
+    document.update(DiagnosticDocument.source_error_evidence(source_error))
     return DiagnosticDocument.write(root, turn_id, document)
-
-
-@dataclass(frozen=True)
-class NativeTerminalFailureRecord:
-    """The document ``record_terminal_failure`` writes for a native terminal failure.
-
-    Core writes it only after verifying the failed input's live context.
-    """
-
-    version: Literal[1]
-    turn_id: str
-    thread: str
-    reason: FailureReason
-    sequences: tuple[int, ...]
-    measurements: dict[str, int]
-    outcome: str
-    source_error: str
-    native: dict[str, str]
-
-    @classmethod
-    def read(cls, root: Path, input_id: str) -> NativeTerminalFailureRecord:
-        path = DiagnosticDocument.path_in(root, name=input_id)
-        record = FieldCodec.decode(cls, json.loads(path.read_text()))
-        if record.turn_id != input_id or not record.raised.startswith(
-            "agent_comms.native_pi.NativePiTerminalFailure: "
-        ):
-            raise ValueError("Diagnostic does not record a native terminal failure for this input")
-        return record
-
-    @property
-    def raised(self) -> str:
-        """The first unindented line of the last traceback is the raised exception."""
-        final = self.source_error.rpartition("Traceback (most recent call last):\n")[2]
-        return next((line for line in final.splitlines() if not line.startswith(" ")), "")
 
 
 def record_drain_failure(
@@ -240,7 +188,7 @@ def record_drain_failure(
             replace(diagnostic, reason=str(source_error)), "artifact"
         ),
         "outcome": "inbox observation failed; this record grants no retry authority",
-        **_source_error_evidence(source_error),
+        **DiagnosticDocument.source_error_evidence(source_error),
     }
     digest = hashlib.sha256(json.dumps(document, sort_keys=True).encode()).hexdigest()
     path = DiagnosticDocument.path_in(root, name=f"drain-{digest}")
@@ -253,33 +201,35 @@ def record_drain_failure(
     return path.resolve()
 
 
-def _source_error_evidence(source_error: BaseException | None) -> dict:
-    if source_error is None:
-        return {}
-    document = {"source_error": "".join(
-        TracebackException.from_exception(source_error, capture_locals=False).format(chain=True)
-    )}
-    from .native_failures import NativePiUnavailable
-
-    if isinstance(source_error, NativePiUnavailable):
-        document["native"] = source_error.diagnostic_evidence
-    return document
-
-
-class DiagnosticDocument(DurableFile, PatternFile):
+class DiagnosticDocument(DurableFile, PatternFile, MroDispatch):
     """Publish diagnostic documents through their single declared location."""
 
     filename = "diagnostics/{name}.json"
 
     @classmethod
+    def source_error_evidence(cls, source_error: BaseException | None) -> dict:
+        if source_error is None:
+            return {}
+        document = {"source_error": "".join(
+            TracebackException.from_exception(source_error, capture_locals=False).format(chain=True)
+        )}
+        document.update(cls.handler_for(type(source_error))(source_error))
+        return document
+
+    @handles(NativeRequestFailure)
+    @staticmethod
+    def native_evidence(error: NativeRequestFailure) -> dict:
+        return {"native": error.diagnostic_evidence()}
+
+    @handles(BaseException)
+    @staticmethod
+    def ordinary_evidence(error: BaseException) -> dict:
+        return {}
+
+    @classmethod
     def write(cls, root: Path, name: str, document: dict) -> Path:
         path = cls.path_in(root, name=name)
         path.parent.mkdir(mode=0o700, exist_ok=True)
-        if os.name == "posix":
-            fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
-            try:
-                os.fsync(fd)
-            finally:
-                os.close(fd)
-        _atomic_write_text(path, json.dumps(document, indent=2) + "\n", fsync_parent=True)
+        Platform.current().sync_directory(root)
+        AtomicFile(path).write_text(json.dumps(document, indent=2) + "\n")
         return path.resolve()

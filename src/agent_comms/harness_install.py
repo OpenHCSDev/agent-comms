@@ -14,15 +14,12 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 from agent_comms_hooks import ClaudeHookProgram
 
+from .child_process import Platform
 from .declared_family import DeclaredFamily
-from .thread_execution import ExternalThreadExecution
-
-if TYPE_CHECKING:
-    from .comms import Comms
 
 
 def replace_link(link: Path, target: Path) -> None:
@@ -34,11 +31,7 @@ def replace_link(link: Path, target: Path) -> None:
     try:
         temporary.symlink_to(target)
         os.replace(temporary, link)
-        directory = os.open(link.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
+        Platform.current().sync_directory(link.parent)
     finally:
         temporary.unlink(missing_ok=True)
 
@@ -76,15 +69,6 @@ class Harness(DeclaredFamily, affix="Harness"):
     @abstractmethod
     def configure(self) -> tuple[Path, ...]:
         """Write this harness's own config in its own format; returns the files written."""
-
-    def register(self, comms: Comms, project: Path) -> tuple[str, ...]:
-        """Declare this harness's bus threads; publication already linked and configured it."""
-        names = comms.registry.snapshot()
-        registered = tuple(name for name in self.bus_threads if not names.taken(name))
-        for name in registered:
-            comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset(), worktree=str(project),
-                                                                execution=ExternalThreadExecution))
-        return registered
 
     @classmethod
     def published_links(cls, home: Path) -> dict[Path, Path]:

@@ -23,7 +23,9 @@ from .child_process import (
 from .declared_family import DeclaredFamily
 from .field_codec import PathText
 from .launch_runtime import CallingThreadUnavailable, LaunchRuntime, ThreadLaunch
+from .locked_store import DocumentChange
 from .maintenance_barrier import CarriedDocument
+from .store_files import DependentStateTier
 
 
 class ChildInitiator(DeclaredFamily, affix="ChildInitiator"):
@@ -140,7 +142,7 @@ class RuntimeChildReservation:
 
 
 @dataclass(frozen=True, slots=True)
-class RuntimeChildrenStore(ChildRegistration, CarriedDocument[RuntimeChildren]):
+class RuntimeChildrenStore(ChildRegistration, CarriedDocument[RuntimeChildren], DependentStateTier):
     """One file at the selected prefix covers children from every bus root."""
 
     filename: ClassVar[str] = "runtime_children.json"
@@ -167,12 +169,12 @@ class RuntimeChildrenStore(ChildRegistration, CarriedDocument[RuntimeChildren]):
             yield RuntimeChildReservation.capture(store)
 
     def finished(self, identity: ProcessIdentity) -> None:
-        self.update(lambda children: children.finished(identity))
+        self.update(lambda children: DocumentChange.to(children.finished(identity)))
 
     @classmethod
     def retire(cls, runtime_prefix: Path) -> None:
         store = cls.at(runtime_prefix.resolve())
-        children = store.update(lambda current: RetiredRuntimeChildren(current.records))
+        children = store.update(lambda current: DocumentChange.to(RetiredRuntimeChildren(current.records)))
         deadline = time.monotonic() + 10.0
         failures = []
         for child in children.records:
@@ -187,4 +189,4 @@ class RuntimeChildrenStore(ChildRegistration, CarriedDocument[RuntimeChildren]):
                 failures.append(str(error))
         if failures:
             raise ChildRetirementFailed("\n".join(failures))
-        store.update(lambda current: RetiredRuntimeChildren())
+        store.update(lambda current: DocumentChange.to(RetiredRuntimeChildren()))

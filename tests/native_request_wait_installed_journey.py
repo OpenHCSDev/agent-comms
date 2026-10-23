@@ -1,5 +1,6 @@
 """Real installed Toad/ACP/native waits with only the localhost provider controlled."""
 
+
 from agent_comms.lifecycle_capability import Unresolved
 from agent_comms.pi_vocabulary import OffThinkingLevel
 import argparse
@@ -13,23 +14,21 @@ import socket
 import sys
 import time
 
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.field_codec import FieldCodec
-from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.runtime import socket_path
 from agent_comms.runtime_requests import SubscribeRuntimeRequest
-from agent_comms.threads import Thread
 from toad.agent_schema import AgentDefinition
 from toad.app import ToadApp
-from toad.widgets.transcript_history import TranscriptHistory
 
 from l0a_native_installed_pilot import until, response_painted
 from runtime_fixture import stop_test_children, stop_test_owners
 from saved_state_user_journey_pilot import submit_editor
 from stored_inputs import stored_inputs
 from agent_comms.thread_model import DeclaredModel
+from agent_comms.threads import Thread
 
 
 class ObservedApp(ToadApp):
@@ -99,8 +98,7 @@ async def run(arguments):
     (config / "auth.json").write_text(json.dumps({"wait-local": {"type": "api_key", "key": "local-only"}}))
     (config / "settings.json").write_text(json.dumps({"compaction": {"enabled": False},
         "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}}}))
-    service = Comms(stage / "wire")
-    service.messaging.initialize_private_initial_protocol()
+    service = wire(stage / "wire")
     environment = dict(os.environ, AGENT_COMMS_ROOT=str(service.root),
         AGENT_COMMS_NATIVE_CONFIG_DIR=str(config), PI_CODING_AGENT_DIR=str(config),
         AGENT_COMMS_AGENT_MODELS="wait-local/fixture", AGENT_COMMS_AGENT_BIN="pi",
@@ -113,7 +111,7 @@ async def run(arguments):
     for name in ("PYTHONPATH", "PI_PROMPT", "PI_TASK", "PI_PARENT_ID", "AGENT_COMMS_STARTUP_INPUT_KEY"):
         environment.pop(name, None)
     os.environ.clear(); os.environ.update(environment)
-    service.registry.declare(service.registry.new_thread('wait-native', frozenset(), str(project), model=DeclaredModel('wait-local/fixture'), thinking_level=OffThinkingLevel))
+    service.registry.declare(Thread('wait-native', frozenset(), str(project), model=DeclaredModel('wait-local/fixture'), thinking_level=OffThinkingLevel))
     definition = AgentDefinition.decode({"name": "Native request wait", "identity": "wait",
         "short_name": "wait", "protocol": "acp",
         "run_command": {"*": shlex.join([sys.executable, "-m", "agent_comms.acp"])}})

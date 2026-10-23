@@ -6,15 +6,17 @@ import json
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import cached_property, partial
+from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Generic, TypeVar
 
 from .agent_activity import UnavailableRecipientActivity
 from .errors import RelationViolationError, UnregisteredThreadError
 from .routing import DeliveryScope
-from .thread_identity import ThreadIncarnation, ThreadProvenance
+from .thread_identity import ThreadIncarnation
+from .threads import ThreadProvenance
 
 if TYPE_CHECKING:
     from .audience_manifest import FrozenRecipient
@@ -170,6 +172,15 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
         if any(target not in names or alias in names for alias, target in self.aliases.items()):
             raise RelationViolationError("Provenance alias has no exclusive retained owner")
 
+    def bound_to(self, root: Path) -> RegistryProvenance:
+        """Recorded transcripts resolve under the root this namespace was captured from."""
+        threads = {name: replace(thread, session_file=thread.session_file.bound_to(root))
+                   for name, thread in self.threads.items()}
+        if all(threads[name].session_file is thread.session_file
+               for name, thread in self.threads.items()):
+            return self
+        return replace(self, threads=threads)
+
     @cached_property
     def sender_bindings(self) -> Mapping[str, str]:
         """One lazy SQL value for this namespace, including its historical names."""
@@ -188,6 +199,12 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
         carries but its captured registry lacks was deleted before capture."""
         return name not in self.threads
 
+    def unread_since(
+        self, actor: str, since: float | None, recorded_delivery: bool,
+    ) -> float | None:
+        """An archived namespace supplies display history, never native input grants."""
+        return since
+
     def displayed_recipient_effect(self, reads, message, thread: ThreadProvenance, *, document=None):
         return reads.displayed_incarnation(message, thread.incarnation, self, document=document)
 
@@ -199,10 +216,10 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
         return RetiredRecipient(recipient.recipient_lookup)
 
     @staticmethod
-    def capture(snapshot: RegistryProvenance) -> RegistryProvenance:
+    def capture(source: RegistryNames[ThreadProvenance]) -> RegistryProvenance:
         return RegistryProvenance(
             threads={
-                name: ThreadProvenance.capture(thread) for name, thread in snapshot.threads.items()
+                name: ThreadProvenance.capture(thread) for name, thread in source.threads.items()
             },
-            aliases=dict(snapshot.aliases),
+            aliases=dict(source.aliases),
         )

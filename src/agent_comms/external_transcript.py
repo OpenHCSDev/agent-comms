@@ -11,7 +11,7 @@ item finishes is the thread's activity, reported through Core's activity log.
 from __future__ import annotations
 
 from collections.abc import Generator, Iterable, Iterator
-from contextlib import closing, contextmanager
+from contextlib import aclosing, closing, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from sqlite3 import Connection
@@ -34,11 +34,12 @@ from .typed_table import (
     Generated,
     Index,
     RealStorage,
+    StoreRows,
     StoreWriter,
     TypedRow,
     TypedTable,
 )
-from .wire_watch import WatchSource, WireWatch
+from .watched import FileSource, Watched
 
 if TYPE_CHECKING:
     from .turn_digests import TurnBound
@@ -165,8 +166,12 @@ class ExternalPageRow(TypedRow):
                                parameters=(self.thread, self.turn_id, self.item_id), earlier=earlier)
 
 
+class ExternalTranscriptRows(StoreRows):
+    """The tables of ExternalTranscript; each row declares itself one."""
+
+
 @dataclass(frozen=True)
-class ExternalItemRow(ExternalPageRow, TypedTable):
+class ExternalItemRow(ExternalTranscriptRows, ExternalPageRow, TypedTable):
     """A stable item position; older pages prepend without moving saved cursors."""
 
     unique = (("thread", "seq"),)
@@ -199,7 +204,7 @@ class ExternalItemRow(ExternalPageRow, TypedTable):
 
 
 @dataclass(frozen=True)
-class ExternalEventRow(TypedTable):
+class ExternalEventRow(ExternalTranscriptRows, TypedTable):
     """Each saved event exists once; SQL derives its query keys from that event."""
 
     thread: Annotated[str, Column(primary_key=True)]
@@ -223,7 +228,7 @@ class ExternalEventRow(TypedTable):
     )
 
     foreign_keys = (
-        ForeignKey(("thread", "seq"), ExternalItemRow, ("thread", "seq"), on_delete="CASCADE"),
+        ForeignKey(columns=("thread", "seq"), target=ExternalItemRow, target_columns=("thread", "seq"), on_delete="CASCADE"),
     )
     indexes = (
         Index(("thread", "kind", "tool", "timestamp", "call_id")),
@@ -256,7 +261,7 @@ class ExternalEventRow(TypedTable):
 
 
 @dataclass(frozen=True)
-class DraftRow(TypedTable, TranscriptDraft, declared_name="external_draft"):
+class DraftRow(ExternalTranscriptRows, TypedTable, TranscriptDraft, declared_name="external_draft"):
     """The assigned transcript's current message, shared by native and CLI writers."""
 
     thread: Annotated[str, Column(primary_key=True)]
@@ -278,7 +283,7 @@ class DraftRow(TypedTable, TranscriptDraft, declared_name="external_draft"):
             yield DraftPublication()
             return
         from .registration import Registration
-        thread = Registration(RegistryFile.path_in(root)).require(original.owner_thread)
+        thread = Registration(RegistryFile.path_in(root)).snapshot().by_lookup[original.owner_lookup]
         original.owner_identity.require_recorded_owner(thread)
         transcript = ExternalTranscript(root, thread.incarnation)
         with transcript.writer_connection(check_same_thread=False) as connection:
@@ -393,6 +398,22 @@ class StoreRead(TranscriptSource):
                     for event in row.events_in(self.connection)))
                 for turn_id in ids)
 
+    def tool_call_count(self, since: float) -> int:
+        """Count each original call once, including its still-open draft in this snapshot."""
+        call = "$." + FieldCodec.record_key(ToolStartTranscript, "tool_call_id")
+        stamp = "$." + FieldCodec.record_key(ToolStartTranscript, "timestamp")
+        kind = "$." + ToolStartTranscript.family_discriminator
+        return self.connection.execute(
+            'SELECT count(DISTINCT call_id) FROM ('
+            f'SELECT call_id,kind,timestamp FROM "{ExternalEventRow.declared_name}" WHERE thread=? '
+            'UNION ALL '
+            'SELECT json_extract(item.value,?),json_extract(item.value,?),json_extract(item.value,?) '
+            f'FROM "{DraftRow.declared_name}" AS draft,json_each(draft.events) AS item '
+            'WHERE draft.thread=?) WHERE kind=? AND timestamp>=?',
+            (self.transcript.lookup, call, kind, stamp, self.transcript.lookup,
+             FieldCodec.encode(ToolStartTranscript), since),
+        ).fetchone()[0]
+
     def unjudged(self, todo):
         where, parameters = ExternalEventRow.unjudged_query(self.transcript.lookup, todo)
         with closing(self.connection.execute(
@@ -422,7 +443,7 @@ class ExternalTranscript(TranscriptSource, DurableStore):
     root: Path
     incarnation: ThreadIncarnation
     filename: ClassVar[str] = "external_transcripts.sqlite3"
-    rows: ClassVar[tuple[type[TypedTable], ...]] = (ExternalItemRow, ExternalEventRow, DraftRow)
+    tables = ExternalTranscriptRows
     # The CLI keeps its own items; a lost tail is republished when a watch starts.
     synchronous: ClassVar[str] = "NORMAL"
 
@@ -465,8 +486,9 @@ class ExternalTranscript(TranscriptSource, DurableStore):
         return True
 
     def oldest(self, connection) -> ExternalPageRow | NoItems:
-        return ExternalItemRow.one(connection, thread=self.lookup, row_type=ExternalPageRow,
-                                   order_by=("seq",), limit=1) or NoItems()
+        rows = ExternalItemRow.select(connection, thread=self.lookup, row_type=ExternalPageRow,
+                                      order_by=("seq",), limit=1)
+        return next(iter(rows), NoItems())
 
     def publish_page(self, items, earlier: ExternalPage) -> None:
         """Publish the newest snapshot once, including empty items that own a continuation."""
@@ -492,14 +514,16 @@ class ExternalTranscript(TranscriptSource, DurableStore):
 
     async def watch_requests(self, emit) -> None:
         previous = ()
-        async for _ in WireWatch.observations(*(WatchSource.modified_file(path)
-                                               for path in self.source_paths(self.root))):
-            with self.reading() as records:
-                current = records.frames()
-            for frame in current:
-                if frame not in previous:
-                    emit(frame)
-            previous = current
+        async with aclosing(Watched.watch_sources(
+            *(FileSource(path) for path in self.source_paths(self.root))
+        )) as observations:
+            async for _ in observations:
+                with self.reading() as records:
+                    current = records.frames()
+                for frame in current:
+                    if frame not in previous:
+                        emit(frame)
+                previous = current
 
     def draft(self, *, turn_id: str, item_id: str,
               events: tuple[TranscriptEvent, ...]) -> None:

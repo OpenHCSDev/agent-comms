@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
-from enum import StrEnum
 from typing import Annotated
 
 from agent_comms import field_codec
@@ -12,66 +11,23 @@ from agent_comms.coordination_contracts import (
     MAX_SANITIZED_DETAIL_CHARS,
     validate_execution_id,
 )
-from agent_comms.coordination_schema import CoordinatorTable
+from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.coordination_tables.executions import ExecutionReference
 from agent_comms.reason_codes import GivenReasonCode, RecoveryDetail
 from agent_comms.recovery_states import RecoveryCondition
 from agent_comms.typed_table import (
     Column,
     ForeignKey,
-    FrozenColumn,
     ImmutableRows,
-    IncrementingColumn,
     Index,
-    MonotoneColumns,
-    NoDelete,
-    NonDecreasing,
     RowId,
     TextStorage,
-    TypedTable,
     UnallocatedRowId,
 )
 
 
-class OwnerConnectivity(StrEnum):
-    CONNECTED = "connected"
-    RECONNECTING = "reconnecting"
-    OFFLINE = "offline"
-
-
-class ACPClientConnectivity(StrEnum):
-    CONNECTED = "connected"
-    DISCONNECTED = "disconnected"
-
-
 @dataclass(frozen=True, slots=True)
-class ConnectivityFacet(
-    IncrementingColumn,
-    MonotoneColumns,
-    ExecutionReference,
-    NoDelete,
-    CoordinatorTable,
-    TypedTable,
-    declared_name="connectivity",
-):
-
-    column_orders = (NonDecreasing(('observed_at_ms',)),)
-
-    execution_id: Annotated[str, field_codec.SnapshotExclude(), FrozenColumn(primary_key=True)]
-    owner: OwnerConnectivity
-    acp_client: ACPClientConnectivity
-    revision: Annotated[int, Column(check="revision>0")]
-    observed_at_ms: Annotated[int, Column(check="observed_at_ms>=0")]
-
-    def __post_init__(self) -> None:
-        validate_execution_id(self.execution_id)
-        object.__setattr__(self, "owner", OwnerConnectivity(self.owner))
-        object.__setattr__(self, "acp_client", ACPClientConnectivity(self.acp_client))
-        if self.revision <= 0 or self.observed_at_ms < 0:
-            raise ValueError("revision must be positive and observed_at_ms non-negative")
-
-@dataclass(frozen=True, slots=True)
-class RecoveryAudit(ImmutableRows, CoordinatorTable, TypedTable):
+class RecoveryAudit(ImmutableRows, ExecutionReference, CoordinatorRow):
     # Recovery condition is a stored fact; row identity is the table family tag.
 
     execution_id: Annotated[str, field_codec.SnapshotExclude()]
@@ -99,14 +55,12 @@ class RecoveryAudit(ImmutableRows, CoordinatorTable, TypedTable):
     indexes = (Index(("execution_id", "audit_id")),)
 
     @classmethod
-    def references(cls):
+    def references(cls) -> tuple[ForeignKey, ...]:
         from agent_comms.coordination_tables.attempts import AttemptRecord
-        from agent_comms.coordination_tables.executions import ExecutionRecord
 
-        return (
-            ForeignKey(("execution_id",), ExecutionRecord, ("execution_id",), on_delete="RESTRICT"),
+        return super().references() + (
             ForeignKey(
-                ("execution_id", "attempt"), AttemptRecord, ("execution_id", "attempt_ordinal")
+                columns=("execution_id", "attempt"), target=AttemptRecord, target_columns=("execution_id", "attempt_ordinal")
             ),
         )
 

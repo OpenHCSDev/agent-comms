@@ -1,5 +1,6 @@
 """Real install-style stop on a copied private bus with a controlled provider."""
 
+
 import asyncio
 import json
 from contextlib import closing
@@ -7,7 +8,7 @@ import shutil
 from pathlib import Path
 
 from agent_comms.cli_commands import StopCliCommand
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_states import ActiveGoal
@@ -19,6 +20,7 @@ from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.native_arguments import GivenArguments
 from native_backend_fixture import native_backend_fixture, wait_for
 from source_programs import SourcePrograms
+from agent_comms.threads import Thread
 
 
 async def stopped_goal_journey(
@@ -30,8 +32,8 @@ async def stopped_goal_journey(
         fixture.provider.response_gate = asyncio.Event()
         copied = base / "copy"
         shutil.copytree(fixture.root, copied)
-        comms = Comms(copied)
-        comms.registry.declare(comms.registry.new_thread(
+        comms = wire(copied)
+        comms.registry.declare(Thread(
             "stop-copy", frozenset(), str(fixture.project)))
         comms.goals.update_goal("stop-copy", SetGoalAction(
             text="Continue the synthetic stopped-goal journey."))
@@ -64,11 +66,11 @@ async def stopped_goal_journey(
             assert resumed is not None and resumed.number == ready.number
             fixture.provider.response_gate.set()
             await wait_for(lambda: (
-                bool(comms.registry.require("stop-copy").last_finished_turn_id)
-                and comms.registry.require("stop-copy").last_finished_turn_id
-                != stopped.last_finished_turn_id))
+                bool(comms.registry.require("stop-copy").turn_state.finished_turn_id)
+                and comms.registry.require("stop-copy").turn_state.finished_turn_id
+                != stopped.turn_state.finished_turn_id))
             continued = comms.registry.require("stop-copy")
-            assert continued.last_finished_turn_id
+            assert continued.turn_state.finished_turn_id
             with closing(store._connect()) as db:
                 finished = AttemptRecord.one(db, attempt_id=resumed.attempt_id)
             assert finished is not None and isinstance(finished.phase, SucceededAttempt)
@@ -82,8 +84,8 @@ async def stopped_goal_journey(
                 "before": before, "after": after,
                 "continued": FieldCodec.encode(continued.goal),
                 "provider_posts": fixture.provider.posts,
-                "stopped_turn": stopped.last_finished_turn_id,
-                "continued_turn": continued.last_finished_turn_id,
+                "stopped_turn": stopped.turn_state.finished_turn_id,
+                "continued_turn": continued.turn_state.finished_turn_id,
                 "failed_turn_observations": failures,
                 "stopped_attempt_phase": FieldCodec.encode(attempt.phase),
                 "continued_attempt_phase": FieldCodec.encode(finished.phase),

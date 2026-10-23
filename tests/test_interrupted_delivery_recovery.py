@@ -7,7 +7,6 @@ from functools import partial
 
 import pytest
 
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.assignment_states import DeferredAssignment, FullPendingAssignment
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.coordination_cohort import pending_sealed_assignments
@@ -30,15 +29,15 @@ async def test_interrupted_following_delivery_recovers_only_before_native_send(
     owner = comms.registry.require("beta")
     message = publish_initial(comms, "sender", "beta", "must survive selection")
     store_path = comms.root / "coordination.sqlite3"
-    lookup = RecordedThreadIncarnation("fixture", owner.created_at).lookup
+    lookup = owner.incarnation.lookup
     await _accept_visible_deliveries(
         comms.bus, root_id, store_path, lookup, 0, owner_name=owner.name,
     )
 
     with Coordination(str(store_path)) as store:
-        assignments = pending_sealed_assignments(store, lookup, owner.name)
-        with comms.bus.log.checked_read() as source:
-            deliveries = tuple(source.references(tuple(row.source for row in assignments)))
+        assignments = pending_sealed_assignments(store, lookup)
+        deliveries = comms.bus.bus.deliveries_for_references(
+            tuple(row.source for row in assignments))
     # Freeze the original storage operation without placing its live result,
     # representing an owner that died after reservation and before queue handoff.
     reserved = []
@@ -59,7 +58,7 @@ async def test_interrupted_following_delivery_recovers_only_before_native_send(
         leased = comms.agents.begin_turn(owner.name, "interrupted-turn")
         assert agent.inputs.dispositions.bind(
             item.key,
-            claim_scope=row.claim_scope,
+            claim_scope=row.claim_generation,
             turn_id=leased.thread.require_turn_lease().turn_id,
             native_id="a" * 32,
             text=row.source_text,
@@ -78,7 +77,7 @@ async def test_interrupted_following_delivery_recovers_only_before_native_send(
     )
     with Coordination(str(store_path)) as store:
         current = store.assignments.get(paused.assignment_id)
-        pending = pending_sealed_assignments(store, lookup, owner.name)
+        pending = pending_sealed_assignments(store, lookup)
     if native_bound:
         assert recovered == 0
         assert isinstance(current.lifecycle, DeferredAssignment)
@@ -112,12 +111,12 @@ async def test_recovery_without_paused_assignments_is_read_only(tmp_path, monkey
     owner = comms.registry.require("beta")
     publish_initial(comms, "sender", "beta", "unbound recovery source")
     store_path = comms.root / "coordination.sqlite3"
-    lookup = RecordedThreadIncarnation("fixture", owner.created_at).lookup
+    lookup = owner.incarnation.lookup
     await _accept_visible_deliveries(comms.bus, root_id, store_path, lookup, 0, owner_name="beta")
     with Coordination(str(store_path)) as store:
-        assignments = pending_sealed_assignments(store, lookup, "beta")
-        with comms.bus.log.checked_read() as source:
-            deliveries = tuple(source.references(tuple(row.source for row in assignments)))
+        assignments = pending_sealed_assignments(store, lookup)
+        deliveries = comms.bus.bus.deliveries_for_references(
+            tuple(row.source for row in assignments))
     reserved = []
     await Coordination.run_worker(partial(
         DeliveredInput.reserve_pending, agent.inputs, "beta", root_id,
@@ -134,5 +133,3 @@ async def test_recovery_without_paused_assignments_is_read_only(tmp_path, monkey
             assert await DeliveredInput.recover_interrupted(agent.inputs, "beta", root_id) == 0
     finally:
         await agent.shutdown()
-
-

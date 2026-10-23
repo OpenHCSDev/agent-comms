@@ -1,4 +1,5 @@
 """A fresh carry generation says nothing about the old goal's execution."""
+
 from contextlib import closing
 from dataclasses import replace
 import os
@@ -8,7 +9,7 @@ from uuid import uuid4
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.goal_actions import (
     ActiveGoalAction, GoalPrecondition, ModelInvocable, OwnerInvocable,
     RetryGoalAction, RuntimeInvocable,
@@ -18,14 +19,15 @@ from agent_comms.goal_generation import ReadyGeneration
 from agent_comms.goal_states import BlockedGoal
 from agent_comms.goals import Goal
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.threads import Thread
 
 
 def test_carried_blocked_goal_requires_explicit_retry_preserving_unknown(tmp_path):
-    comms = Comms(tmp_path / 'wire')
+    comms = wire(tmp_path / 'wire')
     store = comms.goals.open_goal_store()
     goal = Goal(published_seq=0, text='Historical objective; past execution is uncertain', id=uuid4().hex,
                 state=BlockedGoal('Inspect uncertain original work before explicit Retry'))
-    thread = comms.registry.declare(comms.registry.new_thread('legacy', frozenset({'test'}), str(tmp_path), goal=goal, process_identity=ProcessIdentity.capture(os.getpid())))
+    thread = comms.registry.declare(Thread('legacy', frozenset({'test'}), str(tmp_path), goal=goal, process_identity=ProcessIdentity.capture(os.getpid())))
     inputs = InputDispositions(comms.root)
     inputs.record('acp:unknown-original', seq=None, owner=thread.name,
                   claim_scope=comms.registry.snapshot().claim_generation(thread.name),

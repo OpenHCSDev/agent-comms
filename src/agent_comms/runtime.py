@@ -20,17 +20,23 @@ from contextlib import ExitStack, suppress
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
+
+from pydantic import BaseModel
 
 from acp.exceptions import RequestError
 from acp.schema import (
     DeniedOutcome,
     PermissionOption,
     RequestPermissionResponse,
+    SessionNotification,
     ToolCallUpdate,
 )
 
 from .jsonl_stream import JsonlStreamReader
+from .controller import (
+    ACP_PERMISSION_TIMEOUT_SECONDS, UNBOUND_CONTROLLER, Controller, SessionUpdateSink,
+)
 from .field_codec import MalformedRecord
 from .owner_protocol import (
     ClientPermissionResponse,
@@ -47,18 +53,26 @@ from .registry_document import RegistryEntry
 from .child_process import ProcessIdentity
 from .thread_identity import OwnerIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
-from .coordination_errors import CoordinationError
+from .coordination_errors import CoordinationError, IdentityConflict
 from .native_failures import NativeRequestFailure
 from .private_path import PrivateSocketRole
+
+if TYPE_CHECKING:
+    from .acp import CommsAgent
+    from .selected_write_authority import AcpSelectedWriteAuthority
+    from .turn_runner import TurnRunner
 
 
 def socket_path(root: Path, pid: int) -> Path:
     return root / "runtime" / f"{pid}.sock"
 
 
-UNBOUND_CONTROLLER = object()
-_UNBOUND_PUBLICATION_CLIENT = object()
-ACP_PERMISSION_TIMEOUT_SECONDS = 14.0
+class UnboundClient(SessionUpdateSink):
+    async def publish_update(self, *, session_id: str, update: BaseModel) -> bool:
+        raise RuntimeError("An unbound client cannot publish session updates")
+
+
+_UNBOUND_PUBLICATION_CLIENT = UnboundClient()
 _LOG = logging.getLogger(__name__)
 
 
@@ -66,7 +80,7 @@ class SubscriberClosed(ConnectionError):
     """The attached reader left; the normal end of a subscription, not a failed request."""
 
 
-class SocketClient:
+class SocketClient(Controller, SessionUpdateSink):
     def __init__(self, writer: asyncio.StreamWriter):
         self.writer = writer
         transport = writer.transport
@@ -78,6 +92,28 @@ class SocketClient:
         transport.set_write_buffer_limits(high=max(high_water, send_bytes), low=low_water)
         self.token = secrets.token_hex(32)
         self.pending: dict[str, asyncio.Future[RequestPermissionResponse]] = {}
+
+    def require_current(self, authority: AcpSelectedWriteAuthority, session_id: str) -> None:
+        if not authority.agent._runtime.is_controller(session_id, self):
+            raise IdentityConflict("Selected write controller disconnected")
+
+    async def request_ui_permission(
+        self, runner: TurnRunner, session_id: str,
+        request: tuple[ToolCallUpdate, list[PermissionOption]],
+    ) -> dict[str, object] | None:
+        tool_call, options = request
+        reply = await runner.runtime.request_permission(
+            session_id,
+            self,
+            tool_call.model_dump(by_alias=True, exclude_none=True),
+            [option.model_dump(by_alias=True, exclude_none=True) for option in options],
+        )
+        if reply is None:
+            return None
+        return reply.outcome.model_dump(by_alias=True, exclude_none=True)
+
+    def departed(self, runtime: RuntimeServer, session_id: str) -> bool:
+        return not runtime.is_controller(session_id, self)
 
     async def send(self, line: OwnerLine) -> None:
         """Bound this subscriber's output without borrowing the owner turn."""
@@ -144,12 +180,17 @@ class SocketClient:
                 )
         self.pending.clear()
 
-    async def session_update(self, *, session_id: str, update: Any) -> None:
+    async def publish_update(self, *, session_id: str, update: BaseModel) -> bool:
         await self.send(OwnerUpdate.of(update))
+        return True
 
 
-class OwnerIdentityChangedError(RuntimeError):
-    """A saved attachment must not follow a reused thread name."""
+class OwnerIdentityChangedError(RuntimeError, ConnectionError):
+    """A saved attachment lost its root or thread identity and cannot reconnect."""
+
+
+class OwnerReplyLostError(RuntimeError, ConnectionError):
+    """The owner disconnected after dispatch; a mutating request remains uncertain."""
 
 
 class SessionClients(dict[str, set[SocketClient]]):
@@ -169,20 +210,20 @@ class SessionClients(dict[str, set[SocketClient]]):
                 return
 
 
-class RuntimeServer:
-    def __init__(self, agent: Any):
+class RuntimeServer(SessionUpdateSink):
+    def __init__(self, agent: CommsAgent):
         self.agent = agent
         self.server: asyncio.Server | None = None
         self.clients = SessionClients(self)
         # Set only while handling a prompt on this particular attachment.
         # Never publish this bearer to ACP metadata, the transcript or other sockets.
-        self.controller: ContextVar[SocketClient | None | object] = ContextVar(
+        self.controller: ContextVar[Controller | None] = ContextVar(
             "runtime_permission_controller", default=UNBOUND_CONTROLLER
         )
         self.path = socket_path(agent._comms.root, os.getpid())
         self._resources = ExitStack()
 
-    def background(self, work: Coroutine[Any, Any, None]) -> asyncio.Task[None]:
+    def background[T](self, work: Coroutine[Any, Any, T]) -> asyncio.Task[T]:
         """Launch owner work without inheriting an attached human controller.
 
         Nobody awaits most owner work, so its failure is logged here; an
@@ -197,7 +238,7 @@ class RuntimeServer:
         return task
 
     @staticmethod
-    def _report_failure(task: asyncio.Task[None]) -> None:
+    def _report_failure[T](task: asyncio.Task[T]) -> None:
         if not task.cancelled() and (error := task.exception()) is not None:
             _LOG.error("Owner work %s failed", task.get_name(), exc_info=error)
 
@@ -214,12 +255,12 @@ class RuntimeServer:
             self._resources.close()
             raise
 
-    async def session_update(
+    async def publish_update(
         self,
         *,
         session_id: str,
-        update: Any,
-        _expected_client: Any = _UNBOUND_PUBLICATION_CLIENT,
+        update: BaseModel,
+        _expected_client: SessionUpdateSink | None = _UNBOUND_PUBLICATION_CLIENT,
         _expected_thread: str | None = None,
         _expected_sockets: frozenset[SocketClient] | None = None,
     ) -> bool:
@@ -247,8 +288,7 @@ class RuntimeServer:
         delivered = False
         client = self.agent.sessions.client
         if client is not None:
-            await client.session_update(session_id=session_id, update=update)
-            delivered = True
+            delivered = await client.publish_update(session_id=session_id, update=update)
         # Do not re-resolve the recipient set after an awaited handoff. A
         # socket reattach has a new identity even with the same session ID.
         sockets = (
@@ -262,8 +302,9 @@ class RuntimeServer:
             if socket_client not in self.clients.get(session_id, ()):
                 continue
             try:
-                await socket_client.session_update(session_id=session_id, update=update)
-                delivered = True
+                delivered = await socket_client.publish_update(
+                    session_id=session_id, update=update,
+                ) or delivered
             except SubscriberClosed:
                 self.clients.disconnect(socket_client)
         return delivered
@@ -429,7 +470,7 @@ class RuntimeConnection:
             await writer.drain()
             line = await self._read_response(reader)
             if not line:
-                raise RuntimeError("Thread owner disconnected after request; outcome unknown.")
+                raise OwnerReplyLostError("Thread owner disconnected after request; outcome unknown.")
             return OwnerLine.read(line).reply()
         finally:
             try:
@@ -467,7 +508,7 @@ class OwnerAttachment:
 
 
 class RuntimeProxy(RuntimeConnection):
-    def __init__(self, agent: Any, session_id: str, path: Path):
+    def __init__(self, agent: CommsAgent, session_id: str, path: Path):
         super().__init__(agent._comms, session_id, path)
         self.agent = agent
         self.writer: asyncio.StreamWriter | None = None
@@ -479,19 +520,23 @@ class RuntimeProxy(RuntimeConnection):
     def controller_token(self):
         return self._controller_token
 
-    async def subscribe(self) -> dict[str, object]:
-        attachment = await self._subscribe_once()
+    async def subscribe(
+        self, subscription: type[SubscribeRuntimeRequest] = SubscribeRuntimeRequest,
+    ) -> dict[str, object]:
+        attachment = await self._subscribe_once(subscription)
         self.task = asyncio.create_task(self.forward(attachment.reader))
         return attachment.presented
 
-    async def _subscribe_once(self) -> OwnerAttachment:
+    async def _subscribe_once(
+        self, subscription: type[SubscribeRuntimeRequest] = SubscribeRuntimeRequest,
+    ) -> OwnerAttachment:
         reader, writer = await self._connect_current()
         self.writer = writer
         try:
             writer.write(
                 (
                     json.dumps(
-                        SubscribeRuntimeRequest(
+                        subscription(
                             thread=self.session_id,
                         ).to_wire()
                     )
@@ -533,9 +578,10 @@ class RuntimeProxy(RuntimeConnection):
         )
         if self._closed or self.agent.sessions.client is not client:
             return
-        await client.session_update(
-            session_id=self.session_id, update={**line.update, "_meta": metadata}
-        )
+        notification = SessionNotification.model_validate({
+            "session_id": self.session_id, "update": {**line.update, "_meta": metadata},
+        })
+        await client.publish_update(session_id=notification.session_id, update=notification.update)
 
     def ask(self, request: OwnerPermissionRequest) -> None:
         if len(self._permission_tasks) >= 4 or request.id in self._permission_tasks:

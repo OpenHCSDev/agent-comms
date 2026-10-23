@@ -14,7 +14,7 @@ from dataclasses import dataclass, replace
 from itertools import dropwhile, takewhile
 from typing import ClassVar
 
-from agent_comms_hooks import ClaudeToolHook, ClaudeToolHookProgram, HookRecord
+from agent_comms_hooks import Bash, BashRefusal
 from agent_comms_hooks.shell import ShellCommand, shell_commands
 
 Words = tuple[str, ...]
@@ -74,15 +74,13 @@ class Pgrep:
         return any(
             run.program == cls.program
             and any(map(cls.full.fullmatch, takewhile(lambda arg: arg.startswith("-"), run.args)))
-            for run in Bash.commands(segment)
+            for run in WaitCommand.commands(segment)
         )
 
 
 @dataclass(frozen=True)
-class Bash(HookRecord):
-    """The Bash tool's input: one shell command line."""
-
-    command: str
+class WaitCommand(Bash):
+    """The Bash tool's input, read for the wait loops it runs."""
 
     loops: ClassVar[frozenset[str]] = frozenset(("until", "while"))
     body: ClassVar[Words] = ("do",)
@@ -120,7 +118,7 @@ class Bash(HookRecord):
                         case (program, flag, script, *_) if self.shell.fullmatch(
                             program
                         ) and self.script_flag.fullmatch(flag):
-                            for wait in Bash(script).waits():
+                            for wait in WaitCommand(script).waits():
                                 yield replace(wait, bounded=wait.bounded or timeout.bounded)
 
     def unbounded_wait(self) -> tuple[str, ...]:
@@ -141,23 +139,15 @@ class Bash(HookRecord):
         return tuple(reasons)
 
 
-class BoundedWaits(ClaudeToolHookProgram):
-    events = ("PreToolUse",)
-    tool = Bash.__name__
+class BoundedWaits(BashRefusal):
+    headline = "Unbounded wait refused"
 
     @classmethod
-    def command(cls) -> str:
-        return cls.console_script(f"{main.__module__}:{main.__name__}")
+    def reasons(cls, command: str) -> tuple[str, ...]:
+        return WaitCommand(command).unbounded_wait()
 
 
-def main() -> None:
-    hook = ClaudeToolHook.read()
-    reasons = Bash.decode(hook.tool_input).unbounded_wait()
-    if reasons:
-        hook.respond(
-            permissionDecision="deny",
-            permissionDecisionReason="Unbounded wait refused: " + "; ".join(reasons),
-        )
+main = BoundedWaits.main
 
 
 if __name__ == "__main__":

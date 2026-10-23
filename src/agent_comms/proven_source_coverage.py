@@ -8,61 +8,87 @@ historical watermark grants no current-owner, provider, write or reply permit.
 
 from __future__ import annotations
 
-from agent_comms.lifecycle_capability import Active
-
+import sqlite3
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Annotated, TYPE_CHECKING
-
-from .bus_source_page import CoveragePage
-from .native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
-from .field_codec import FieldCodec, Id128Text
+from typing import TYPE_CHECKING, Annotated
 
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
-
-from .audience_manifest import FrozenRecipient
-from .bus_publication import CommittedDelivery
-from .cohort_schema import ClaimBatchAcknowledgements, CohortTable
+from agent_comms.lifecycle_capability import Active
 from agent_comms.native_runtime_input import NativeRuntimeTable
+
+from .agent_backend import InputId
+from .audience_manifest import FrozenRecipient
+from .bus import Bus
+from .bus_publication import Delivered
+from .bus_source_page import CoveragePage
+from .cohort_schema import ClaimBatchAcknowledgements, CohortTable
 from .coordination_cohort import AcceptedCohort, _claim_record
+from .coordination_session import NativeBoundary
+from .field_codec import FieldCodec, Id128Text
 from .historical_native_inputs import HistoricalNativeInput, read_historical_native_inputs
 from .message_bus import MessageBus
-from .private_bus_checkpoint import (
-    PrefixWitness,
-    verify_private_bus_checkpoint_unlocked,
-)
-from .wake_policy import RecipientDecision
 from .native_input_record import NumberNativeColumn, TextNativeColumn, UnrecordedNativeColumn
+from .native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
+from .private_path import FileIdentity, ObservedPath, PresentPath
+from .wake_policy import RecipientDecision
 
 if TYPE_CHECKING:
+    from .cursor_owner import CursorOwner, CursorState
     from .native_entries import NativeEvidenceScope
-    from .cursor_owner import CursorState
-from .store_files import StoreLockContention
+    from .private_registry_guard import RegistryPrivacy
 
 _MAX_SCAN_SECONDS = 0.25
+
+
+@dataclass(frozen=True)
+class SourcePrefix(PresentPath):
+    """One immutable SQLite prefix; identity is not a message position."""
+
+    through_seq: int
+
+    @classmethod
+    def capture(cls, bus: Bus, after_seq: int) -> SourcePrefix:
+        identity = FileIdentity.from_stat(bus.path.stat())
+        prefix = cls(identity, bus.revision())
+        prefix.require_start(after_seq)
+        prefix.require_current(bus)
+        return prefix
+
+    def require_start(self, covered_seq: int) -> None:
+        if covered_seq > self.through_seq:
+            raise IdentityConflict("current source coverage exceeds the bus")
+
+    def require_current(self, bus: Bus) -> None:
+        if not ObservedPath.at(bus.path).same_file(self.identity):
+            raise IdentityConflict("native source database changed")
+        if bus.revision() < self.through_seq:
+            raise IdentityConflict("native source prefix regressed")
 
 
 class CoverageInput(ABC):
     """The new suffix either injects one native reference or preserves the old one."""
 
     @abstractmethod
-    def injected_for(self, state) -> int: ...
+    def injected_for(self, state: CursorState) -> int: ...
 
     @abstractmethod
-    def candidate(self, state, owner, coverage): ...
+    def candidate(
+        self, state: CursorState, owner: CursorOwner, coverage: ProvenSourceCoverage,
+    ) -> CurrentNativeCursor: ...
 
     @abstractmethod
-    def allows(self, owner, db, state, committed_input_id) -> bool: ...
+    def allows(self, owner: CursorOwner, db: sqlite3.Connection, state: CursorState) -> bool: ...
 
-    def require_reference(self, owner, cursor) -> None:
-        pass
+    @abstractmethod
+    def require_reference(self, owner: CursorOwner, cursor: CurrentNativeCursor) -> None: ...
 
-    def build(self, owner, covered_seq):
+    def build(self, owner: CursorOwner, covered_seq: int) -> CurrentNativeCursor:
         return CurrentNativeCursor(
             wire_root_id=owner.wire_root_id, recipient_lookup=owner.lookup,
-            owner_thread=owner.thread.name, owner_generation=owner.generation,
+             owner_generation=owner.generation,
             owner_claimed_generation=owner.claimed_generation, covered_seq=covered_seq,
             **self.input_fields(),
         )
@@ -73,25 +99,30 @@ class CoverageInput(ABC):
 
 @dataclass(frozen=True)
 class NoInjectedInput(CoverageInput):
-    def input_fields(self):
+    def input_fields(self) -> dict:
         return dict(injected_seq=0, input_id=UnrecordedNativeColumn(), stage=UnrecordedNativeColumn(),
                     session_id=UnrecordedNativeColumn(), request_generation=UnrecordedNativeColumn())
 
-    def injected_for(self, state):
+    def injected_for(self, state: CursorState) -> int:
         return state.injected_seq
 
-    def candidate(self, state, owner, coverage):
+    def candidate(
+        self, state: CursorState, owner: CursorOwner, coverage: ProvenSourceCoverage,
+    ) -> CurrentNativeCursor:
         return state.without_input(self, owner, coverage)
 
-    def allows(self, owner, db, state, committed_input_id):
+    def allows(self, owner: CursorOwner, db: sqlite3.Connection, state: CursorState) -> bool:
         return True
+
+    def require_reference(self, owner: CursorOwner, cursor: CurrentNativeCursor) -> None:
+        """A suffix without an injected input has no new reference to compare."""
 
 
 @dataclass(frozen=True)
 class InjectedInput(CoverageInput):
     original: HistoricalNativeInput
 
-    def input_fields(self):
+    def input_fields(self) -> dict:
         original = self.original
         return dict(
             injected_seq=original.source_seq, input_id=TextNativeColumn(original.input_id),
@@ -99,17 +130,19 @@ class InjectedInput(CoverageInput):
             session_id=TextNativeColumn(original.context.session_id),
             request_generation=NumberNativeColumn(original.context.request_generation),
         )
-    def injected_for(self, state):
+    def injected_for(self, state: CursorState) -> int:
         return self.original.source_seq
 
-    def candidate(self, state, owner, coverage):
+    def candidate(
+        self, state: CursorState, owner: CursorOwner, coverage: ProvenSourceCoverage,
+    ) -> CurrentNativeCursor:
         return self.build(owner, coverage.covered_seq)
 
-    def allows(self, owner, db, state, committed_input_id):
+    def allows(self, owner: CursorOwner, db: sqlite3.Connection, state: CursorState) -> bool:
         if self.original.owner_identity != owner.participant_identity:
             raise IdentityConflict('current cursor native proof belongs to another owner')
         state.require_input_progress(self.original)
-        if committed_input_id is not None and self.original.input_id != committed_input_id:
+        if not owner.permits_input(InputId(self.original.input_id)):
             return False
         row = NativeRuntimeInput.one(db, input_id=self.original.input_id)
         if row is not None and not row.sent_owner_claimed_generation.matches(owner.claimed_generation):
@@ -117,7 +150,7 @@ class InjectedInput(CoverageInput):
         owner.require_recorded_reference(db, self.original.reference)
         return True
 
-    def require_reference(self, owner, cursor):
+    def require_reference(self, owner: CursorOwner, cursor: CurrentNativeCursor) -> None:
         if cursor.injected_seq == self.original.source_seq and (
             cursor.reference != self.original.reference or self.original.owner_identity != owner.participant_identity
         ):
@@ -140,7 +173,7 @@ class ProvenSourceCoverage:
     no_wake_seqs: tuple[int, ...]
     blocked_seq: int | None
     more_sources: bool = False
-    source_witness: PrefixWitness = field(kw_only=True)
+    source_prefix: SourcePrefix = field(kw_only=True)
 
     @property
     def injected_source_seqs(self) -> tuple[int, ...]:
@@ -151,7 +184,12 @@ class ProvenSourceCoverage:
         sequences = self.injected_source_seqs
         if not sequences:
             return NoInjectedInput()
-        return InjectedInput(self.last_proof(sequences[-1]))
+        source_seq = sequences[-1]
+        matching = [item for item in self.inputs
+                    if item.source_seq == source_seq and item.expected_prompt_equality_established]
+        if not matching:
+            raise IdentityConflict("current cursor source lacks live-bound native proof")
+        return InjectedInput(matching[-1])
 
     def evidence(self, *, through_seq: int | None = None) -> tuple[HistoricalNativeInput, ...]:
         """Consume the native inputs already corroborated in this source read."""
@@ -159,18 +197,9 @@ class ProvenSourceCoverage:
             return self.inputs
         return tuple(item for item in self.inputs if item.source_seq <= through_seq)
 
-    def last_proof(self, source_seq: int) -> HistoricalNativeInput | None:
-        if source_seq == 0:
-            return None
-        matching = [item for item in self.inputs
-                    if item.source_seq == source_seq and item.expected_prompt_equality_established]
-        if not matching:
-            raise IdentityConflict("current cursor source lacks live-bound native proof")
-        return matching[-1]
-
 
 class SourceCoverage:
-    """Canonical source snapshot reader bound to one wire and stable recipient.
+    """Canonical SQLite prefix reader bound to one stable recipient.
 
     Owns bounded paging and historical checks, never permission to start native input.
     No claim, input or schema is created by this read path.
@@ -180,37 +209,10 @@ class SourceCoverage:
 
     def __init__(
         self, bus: MessageBus, store: Coordination, *, wire_root_id: str, recipient_lookup: str,
-        contention: StoreLockContention | None = None,
     ):
         self.bus, self.store = bus, store
-        self.contention = contention  # Borrowed lock wait resource; never source evidence.
         self.wire_root_id = FieldCodec.decode(Annotated[str, Id128Text], wire_root_id)
         self.recipient_lookup = FieldCodec.decode(Annotated[str, Id128Text], recipient_lookup)
-
-    def witness_unlocked(self) -> PrefixWitness:
-        return verify_private_bus_checkpoint_unlocked(
-            self.bus.log, self.bus.log.private_marker_unlocked()
-        )
-
-    def witness(self) -> PrefixWitness:
-        with self.bus.log.checked_read(
-            blocking=False, contention=self.contention
-        ) as source:
-            return source.witness
-
-    def recorded_witness(self, state: CursorState) -> PrefixWitness:
-        """The stored prefix is proved; reading it does not prove later sources."""
-        with self.bus.log.checked_read(blocking=False, contention=self.contention) as source:
-            witness: PrefixWitness = source.witness
-            self.start(state, source.marker.claimed_after_seq, witness)
-            return witness
-
-    def start(self, state: CursorState, floor: int, witness: PrefixWitness) -> int:
-        if witness.root_id != self.wire_root_id:
-            raise IdentityConflict("current source claim_scope root changed")
-        if not floor <= state.covered_seq <= witness.through_seq:
-            raise IdentityConflict("current source coverage regressed or exceeds the bus")
-        return state.covered_seq
 
     def read(
         self, *, limit: int = 100, after_seq: int = 0, partial: bool = False,
@@ -223,14 +225,33 @@ class SourceCoverage:
         not the last message anywhere on the bus. Filesystem flushes and locks
         can still take longer than the requested time limit.
         """
-        with source_reads.borrow():
-            request = CoveragePage.capture(lookup=self.recipient_lookup, limit=limit,
-                                           after_seq=after_seq, partial=partial)
+        request = CoveragePage.capture(lookup=self.recipient_lookup, limit=limit,
+                                       after_seq=after_seq, partial=partial)
+        return self._read(
+            request, SourcePrefix.capture(self.bus.bus, request.after_seq), source_reads)
+
+    def _read(
+        self, request: CoveragePage, prefix: SourcePrefix, source_reads: NativeEvidenceScope,
+    ) -> ProvenSourceCoverage:
+        with source_reads.borrow(), NativeBoundary(self.bus) as boundary:
+            boundary.privacy.require_root(self.wire_root_id, IdentityConflict("Coverage native namespace changed"))
             if self.store.session._connection.in_transaction:
                 raise IdentityConflict("source coverage requires a committed coordinator snapshot")
-            witness, initials, more = self._page(request)
-            horizon = initials[-1].message.seq if more else witness.latest_source_seq
-            covered, inputs, no_wake, blocked = after_seq if partial else 0, [], [], None
+            prefix.require_start(request.after_seq)
+            deadline = time.monotonic() + _MAX_SCAN_SECONDS
+            records = self.bus.bus.received(
+                self.recipient_lookup, after=request.after_seq, before=prefix.through_seq + 1,
+                descending=False, limit=request.limit + 1,
+            )
+            more = len(records) > request.limit
+            request.require_exhausted(more)
+            initials = tuple(delivery for record in records[:request.limit]
+                             for delivery in record.deliveries())
+            if time.monotonic() > deadline:
+                raise IdentityConflict("source coverage exceeded its scan deadline")
+            prefix.require_current(self.bus.bus)
+            horizon = initials[-1].seq if more else prefix.through_seq
+            covered, inputs, no_wake, blocked = request.after_seq if request.partial else 0, [], [], None
             for initial in initials:
                 seq = initial.message.seq
                 matches = [
@@ -243,10 +264,9 @@ class SourceCoverage:
                 if len(matches) > 1:
                     raise IdentityConflict("duplicate stable lookup in frozen audience")
                 if not matches:
-                    covered = seq
-                    continue
+                    raise IdentityConflict("recipient source differs from its frozen audience")
                 recipient, decision = matches[0]
-                acknowledgement = self._accepted_cohort(initial)
+                acknowledgement = self._accepted_cohort(initial, boundary.privacy)
                 if acknowledgement is None:
                     blocked = seq
                     break
@@ -264,6 +284,7 @@ class SourceCoverage:
                 covered = seq
             if blocked is None:
                 covered = max(covered, horizon)
+            prefix.require_current(self.bus.bus)
             return ProvenSourceCoverage(
                 self.wire_root_id,
                 self.recipient_lookup,
@@ -272,25 +293,10 @@ class SourceCoverage:
                 tuple(no_wake),
                 blocked,
                 more,
-                source_witness=witness,
+                source_prefix=prefix,
             )
 
-    def _page(self, request: CoveragePage) -> tuple[PrefixWitness, tuple[CommittedDelivery, ...], bool]:
-        deadline = time.monotonic() + _MAX_SCAN_SECONDS
-        remaining_before = self.contention.remaining if self.contention is not None else 0.0
-        with self.bus.log.checked_read(blocking=False, contention=self.contention) as source:
-            waited = remaining_before - self.contention.remaining if self.contention is not None else 0.0
-            if time.monotonic() > deadline + waited:
-                raise IdentityConflict("source coverage exceeded its scan deadline")
-            if source.marker.root_id != self.wire_root_id:
-                raise IdentityConflict("source coverage private wire root changed")
-            witness, initials, more = source.addressed_page(self.bus.log, request)
-            if request.after_seq > max(witness.latest_source_seq, source.marker.claimed_after_seq):
-                raise IdentityConflict("source coverage prefix exceeds checked initials")
-            request.require_exhausted(more)
-        return witness, tuple(initials), more
-
-    def _accepted_cohort(self, initial: CommittedDelivery) -> AcceptedCohort | None:
+    def _accepted_cohort(self, initial: Delivered, privacy: RegistryPrivacy) -> AcceptedCohort | None:
         with self.store.session.read():
             db = self.store.session._connection
             CohortTable.require_installed(db)
@@ -298,7 +304,7 @@ class SourceCoverage:
             sealed = ClaimBatchAcknowledgements.one(
                 db, wire_root_id=self.wire_root_id, wire_seq=initial.message.seq
             )
-            return _claim_record(db, initial) if sealed and sealed.sealed else None
+            return _claim_record(db, initial, privacy) if sealed and sealed.sealed else None
 
     def _selected_inputs(
         self, seq: int, recipient: FrozenRecipient, decision: RecipientDecision, acknowledgement: AcceptedCohort,
@@ -332,21 +338,18 @@ class SourceCoverage:
 
     def since(self, state: CursorState, *,
               source_reads: NativeEvidenceScope) -> ProvenSourceCoverage:
-        """Verify the sealed bus and prove only sources beyond its durable cursor."""
+        """Prove sources beyond the cursor, bounded to one captured SQLite prefix."""
         with source_reads.borrow():
-            with self.bus.log.checked_read(
-                blocking=False, contention=self.contention
-            ) as source:
-                witness = source.witness
-                covered = self.start(state, source.marker.claimed_after_seq, witness)
+            prefix = SourcePrefix.capture(self.bus.bus, state.covered_seq)
+            covered = state.covered_seq
             inputs, no_wake = [], []
             for _ in range(self.page_budget):
-                page = self.read(after_seq=covered, partial=True, source_reads=source_reads)
+                request = CoveragePage.capture(lookup=self.recipient_lookup,
+                                              after_seq=covered, partial=True)
+                page = self._read(request, prefix, source_reads)
                 if page.covered_seq < covered:
                     raise IdentityConflict("canonical source coverage regressed between pages")
-                if witness is not None and page.source_witness != witness:
-                    raise IdentityConflict("checked source changed between coverage pages")
-                witness, covered = page.source_witness, page.covered_seq
+                covered = page.covered_seq
                 inputs.extend(page.inputs)
                 no_wake.extend(page.no_wake_seqs)
                 if (
@@ -361,6 +364,6 @@ class SourceCoverage:
                         tuple(no_wake),
                         page.blocked_seq,
                         page.more_sources,
-                        source_witness=witness,
+                        source_prefix=prefix,
                     )
             raise IdentityConflict("source coverage exceeded bounded canonical page budget")

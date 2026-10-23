@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import sqlite3
 import uuid
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Self, cast
+from typing import Annotated, ClassVar, Self, cast
 
 from .errors import RelationViolationError, StoredHistoryUnreadable
 from .field_codec import (
@@ -20,6 +19,7 @@ from .field_codec import (
     MalformedRecord,
     NullMember,
 )
+from .native_session_reopen import NativeSessionIdentity
 from .registration import Registration
 from .thread_identity import ThreadIncarnation
 from .turn_context import (
@@ -35,9 +35,7 @@ from .turn_context import (
     UnrecordedSegment,
 )
 
-if TYPE_CHECKING:
-    from .registry_document import RegistrySnapshot
-from .typed_table import Column, DurableStore, Generated, Index, TypedTable
+from .typed_table import StoreRows, Column, DurableStore, Generated, Index, SingletonRow, TypedTable
 
 
 @dataclass(frozen=True)
@@ -62,7 +60,6 @@ class ContextSourceState(ABC):
         self,
         store: ContextStore,
         db: sqlite3.Connection,
-        snapshot: RegistrySnapshot,
         incarnation: ThreadIncarnation,
         cursor: ContextManifestCursor,
         previous: tuple[CapturedContext, ...],
@@ -85,7 +82,6 @@ class UnrecordedContextSource(ContextSourceState):
         self,
         store: ContextStore,
         db: sqlite3.Connection,
-        snapshot: RegistrySnapshot,
         incarnation: ThreadIncarnation,
         cursor: ContextManifestCursor,
         previous: tuple[CapturedContext, ...],
@@ -94,9 +90,12 @@ class UnrecordedContextSource(ContextSourceState):
         return ContextManifestPage(())
 
 
+class ContextStoreRows(StoreRows):
+    """The tables of ContextStore; each row declares itself one."""
+
+
 @dataclass(frozen=True)
-class ContextStoreInfo(ContextSourceState, TypedTable):
-    singleton: Annotated[Literal[1], Column(primary_key=True)]
+class ContextStoreInfo(ContextStoreRows, ContextSourceState, SingletonRow):
     source: ContextStoreIdentity
 
     @classmethod
@@ -120,14 +119,12 @@ class ContextStoreInfo(ContextSourceState, TypedTable):
         self,
         store: ContextStore,
         db: sqlite3.Connection,
-        snapshot: RegistrySnapshot,
         incarnation: ThreadIncarnation,
         cursor: ContextManifestCursor,
         previous: tuple[CapturedContext, ...],
         limit: int,
     ) -> ContextManifestPage:
-        owners = incarnation.recorded_names(snapshot)
-        where, parameters = cursor.selection(self.source, owners)
+        where, parameters = cursor.selection(self.source, incarnation)
         candidates = ContextRequest.select(
             db,
             where=where,
@@ -147,21 +144,18 @@ class ContextStoreInfo(ContextSourceState, TypedTable):
         older: BeforeContextManifest | LatestContextManifest = LATEST_CONTEXT
         newer: AfterContextManifest | LatestContextManifest = LATEST_CONTEXT
         if rows:
-            older = BeforeContextManifest(self.source, rows[0].id).available(db, owners)
-            newer = AfterContextManifest(self.source, rows[-1].id).available(db, owners)
+            older = BeforeContextManifest(self.source, rows[0].id).available(db, incarnation)
+            newer = AfterContextManifest(self.source, rows[-1].id).available(db, incarnation)
         retained = {item.record_id: item for item in previous if item.source == self.source}
         resources = tuple(
             retained[row.id] if row.id in retained else store.resolve(db, self.source, row)
             for row in rows
         )
-        for resource in resources:
-            if resource.value.thread.resolved(snapshot) != incarnation:
-                raise RelationViolationError("Context source differs from recorded owner")
         return ContextManifestPage(resources, older, newer)
 
 
 @dataclass(frozen=True)
-class ContextEntry(TypedTable):
+class ContextEntry(ContextStoreRows, TypedTable):
     session_id: Annotated[str, Column(primary_key=True)]
     session_file: Annotated[str, Column(primary_key=True)]
     entry_id: Annotated[str, Column(primary_key=True)]
@@ -187,7 +181,7 @@ class ContextEntry(TypedTable):
 
 
 @dataclass(frozen=True)
-class ContextSegmentVersion(TypedTable):
+class ContextSegmentVersion(ContextStoreRows, TypedTable):
     id: Annotated[int, Column(primary_key=True, auto_increment=True)]
     digest: str
     segment: RecordedSegmentManifest
@@ -195,8 +189,7 @@ class ContextSegmentVersion(TypedTable):
 
     @classmethod
     def append(cls, db: sqlite3.Connection, segment: RecordedSegmentManifest) -> int:
-        encoded = json.dumps(FieldCodec.encode(segment), sort_keys=True, separators=(",", ":"))
-        digest = hashlib.sha256(encoded.encode()).hexdigest()
+        digest = FieldCodec.digest(segment)
         rows = cls.select(db, digest=digest)
         if rows:
             existing = rows[0]
@@ -207,38 +200,28 @@ class ContextSegmentVersion(TypedTable):
 
 
 @dataclass(frozen=True)
-class ContextRequest(TypedTable):
+class ContextRequest(ContextStoreRows, TypedTable):
     id: Annotated[int, Column(primary_key=True, auto_increment=True)]
     identity: RecordedContextIdentity
-    thread_name: ClassVar[Generated] = Generated(
-        str,
-        Column(generated="json_extract(identity,'$.thread.name')"),
-    )
     thread_birth: ClassVar[Generated] = Generated(
         float,
         Column(generated="json_extract(identity,'$.thread.created_at')"),
     )
+    """The recorded incarnation's identity; its name is only a route."""
     versions: tuple[int, ...]
     size: int
-    indexes = (Index(("thread_name", "thread_birth", "id")),)
+    indexes = (Index(("thread_birth", "id")),)
 
     @classmethod
-    def owner_filter(
-        cls,
-        owners: tuple[ThreadIncarnation, ...],
-    ) -> tuple[str, tuple[object, ...]]:
-        return (
-            "(thread_name,thread_birth) IN (" + ",".join("(?,?)" for _ in owners) + ")",
-            tuple(value for owner in owners for value in (owner.name, owner.wire_birth)),
-        )
+    def owner_filter(cls, owner: ThreadIncarnation) -> tuple[str, tuple[object, ...]]:
+        return "thread_birth=?", (owner.require_recorded().created_at,)
 
     @classmethod
     def newest(cls, db: sqlite3.Connection, owner: ThreadIncarnation) -> list[ContextRequest]:
         """The thread's newest request, read through the owner index."""
         return cls.select(
             db,
-            thread_name=owner.name,
-            thread_birth=owner.wire_birth,
+            thread_birth=owner.require_recorded().created_at,
             order_by=("id",),
             descending=True,
             limit=1,
@@ -250,6 +233,7 @@ class ContextRequest(TypedTable):
         identity = FieldCodec.decode(
             RecordedContextIdentity, FieldCodec.project(record, "identity")
         )
+        identity.thread.require_recorded()
         return cast(
             int,
             cls.insert_values(
@@ -372,7 +356,7 @@ class ContextManifestCursor(ABC):
 
     @abstractmethod
     def selection(
-        self, source: ContextStoreIdentity, owners: tuple[ThreadIncarnation, ...]
+        self, source: ContextStoreIdentity, owner: ThreadIncarnation
     ) -> tuple[str, tuple[object, ...]]: ...
 
 
@@ -382,9 +366,9 @@ class LatestContextManifest(NullMember, ContextManifestCursor):
         return False
 
     def selection(
-        self, source: ContextStoreIdentity, owners: tuple[ThreadIncarnation, ...]
+        self, source: ContextStoreIdentity, owner: ThreadIncarnation
     ) -> tuple[str, tuple[object, ...]]:
-        return ContextRequest.owner_filter(owners)
+        return ContextRequest.owner_filter(owner)
 
 
 @dataclass(frozen=True)
@@ -398,19 +382,19 @@ class PositionedContextManifest(ContextManifestCursor):
         return True
 
     def selection(
-        self, source: ContextStoreIdentity, owners: tuple[ThreadIncarnation, ...]
+        self, source: ContextStoreIdentity, owner: ThreadIncarnation
     ) -> tuple[str, tuple[object, ...]]:
         if self.source != source:
             raise ValueError("Recorded context page changed its source")
-        where, parameters = ContextRequest.owner_filter(owners)
+        where, parameters = ContextRequest.owner_filter(owner)
         return where + f" AND id {self.comparison} ?", (*parameters, self.record_id)
 
     def available(
         self,
         db: sqlite3.Connection,
-        owners: tuple[ThreadIncarnation, ...],
+        owner: ThreadIncarnation,
     ) -> Self | LatestContextManifest:
-        where, parameters = ContextRequest.owner_filter(owners)
+        where, parameters = ContextRequest.owner_filter(owner)
         return (
             self
             if ContextRequest.exists(
@@ -481,7 +465,7 @@ class ContextManifestPage:
 class ContextStore(DurableStore):
     root: Path
     filename: ClassVar[str] = "turn_context.sqlite3"
-    rows = (ContextStoreInfo, ContextEntry, ContextSegmentVersion, ContextRequest)
+    tables = ContextStoreRows
     max_page_rows: ClassVar[int] = 8
     max_page_bytes: ClassVar[int] = 512 * 1024
     schema_error = StoredHistoryUnreadable
@@ -504,6 +488,16 @@ class ContextStore(DurableStore):
         if rows:
             return self.resolve(db, source, rows[0])
         return AbsentContext()
+
+    def entries(
+        self, identity: NativeSessionIdentity, entry_ids: Iterable[str],
+    ) -> dict[str, SegmentManifest]:
+        """The recorded manifest of each named journal entry that has one."""
+        with self.snapshot() as db:
+            return {row.entry_id: row.manifest for entry_id in entry_ids
+                    for row in ContextEntry.select(db, session_id=identity.session_id,
+                                                   session_file=identity.session_file,
+                                                   entry_id=entry_id)}
 
     def prior(self, owner: ThreadIncarnation) -> RecordedContextState:
         """Read the thread's previous request from a snapshot, outside any write lock."""
@@ -559,10 +553,9 @@ class ContextStore(DurableStore):
     ) -> ContextManifestPage:
         if not 1 <= limit <= self.max_page_rows:
             raise ValueError("Context page row limit exceeds its source budget")
-        snapshot = registry.snapshot()
-        incarnation = snapshot.require(name).incarnation
+        incarnation = registry.snapshot().require(name).incarnation
         selection = ContextManifestCursor.for_page(cursor)
         with self.snapshot() as db:
             return ContextStoreInfo.source_in(db).page(
-                self, db, snapshot, incarnation, selection, previous, limit
+                self, db, incarnation, selection, previous, limit
             )

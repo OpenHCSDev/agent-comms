@@ -4,25 +4,80 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Collection, Coroutine
-from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
+from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Coroutine, Mapping
+from contextlib import AbstractContextManager, AsyncExitStack, ExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
-
-from .pi_events import PiEvent
+from typing import TYPE_CHECKING, ClassVar, NoReturn
 
 from .child_process import AttachedChild, ChildOutcome, join_retirement
+from .declared_family import DeclaredFamily
+from .launch_runtime import INHERITED_ENVIRONMENT
 from .native_attestation import NativeAttestation, PendingAttestation
+from .native_failures import NativePiUnavailable, NativeRequestFailure
 from .native_pi import NativePiRpcLaunch
-from .native_failures import NativePiUnavailable
 from .native_session_reopen import NativeSessionIdentity
+from .pi_events import PiEvent
 from .pi_rpc import PiRpcChannel
 from .private_path import PrivateSocketRole
 from .session_revision import SessionRevision
 
 if TYPE_CHECKING:
-    from .turn_context import Provenance
+    from typing import Self
+
+    from .diagnostics import PublicationMeasurements
+    from .native_package import VerifiedNativePackage
+    from .participant_identity import ParticipantIdentity
+    from .pi_commands import ExtensionUiResponse, PiCommand
+    from .pi_native_backend import PiNativeBackend
+    from .pi_payloads import PiResponseData, StateData
+    from .threads import Thread
+    from .turn_context import Provenance, TurnContext
+
+
+class RetirementState(DeclaredFamily):
+    """The shutdown result owns completion, failure and cancellation behavior."""
+
+    retired: ClassVar[bool] = False
+
+    @property
+    def release_failure(self) -> BaseException | None:
+        return None
+
+    @abstractmethod
+    def require_outcome(self) -> ChildOutcome: ...
+
+    def interrupted(self, cancellation: asyncio.CancelledError) -> NoReturn:
+        raise cancellation
+
+
+class RetirementPending(RetirementState):
+    def require_outcome(self) -> ChildOutcome:
+        raise RuntimeError("Pi child retirement has not completed")
+
+
+@dataclass(frozen=True)
+class Retired(RetirementState):
+    outcome: ChildOutcome
+    retired: ClassVar[bool] = True
+
+    def require_outcome(self) -> ChildOutcome:
+        return self.outcome
+
+
+@dataclass(frozen=True)
+class RetirementFailed(RetirementState):
+    error: BaseException
+
+    @property
+    def release_failure(self) -> BaseException:
+        return self.error
+
+    def require_outcome(self) -> ChildOutcome:
+        raise self.error
+
+    def interrupted(self, cancellation: asyncio.CancelledError) -> NoReturn:
+        raise cancellation from self.error
 
 
 class InputForwarder(ABC):
@@ -88,31 +143,68 @@ class PiChild:
     resources: ExitStack = field(default_factory=ExitStack, repr=False, kw_only=True)
     transport: AsyncExitStack = field(default_factory=AsyncExitStack, repr=False, kw_only=True)
     forwarding: InputForwarder = field(default_factory=NoInputForwarder, init=False, repr=False)
-    _close_job: asyncio.Task[ChildOutcome | BaseException] | None = field(default=None, init=False, repr=False)
+    _close_job: asyncio.Task[RetirementState] | None = field(default=None, init=False, repr=False)
 
-    async def reply_ui(self, response) -> None:
-        await asyncio.wait_for(self.proc.write(self.reader.encode(response)), timeout=2)
+    def send(self, command: PiCommand) -> asyncio.Future:
+        future = self.reader.track(command)
+        self.proc.send(self.reader.command_bytes(command))
+        return future
+
+    async def drain(self) -> None:
+        await self.proc.drain()
+
+    async def send_fenced(
+        self, command: PiCommand, boundary: Callable[[], AbstractContextManager[None]],
+        *, measurements: PublicationMeasurements,
+    ) -> None:
+        self.reader.track(command)
+        await self.proc.send_fenced(self.reader.command_bytes(command), boundary, measurements=measurements)
+
+    async def reply_ui(self, response: ExtensionUiResponse) -> None:
+        self.send(response)
+        await asyncio.wait_for(self.drain(), timeout=2)
 
     @classmethod
-    async def start_command(cls, argv, *, cwd, env=None, pass_fds=(), event_type=PiEvent, **state):
+    async def start_command(
+        cls,
+        argv: tuple[str, ...],
+        *,
+        cwd: str,
+        env: Mapping[str, str] = INHERITED_ENVIRONMENT,
+        pass_fds: tuple[int, ...] = (),
+        event_type: type[PiEvent] = PiEvent,
+        **state,
+    ) -> Self:
         proc = await AttachedChild.start(argv, cwd=cwd, env=env, pass_fds=pass_fds)
         return cls(proc, PiRpcChannel(proc.stdout, event_type=event_type), **state)
 
-    async def request(self, command):
+    async def request(self, command: PiCommand) -> PiResponseData:
         if self.retired:
             raise RuntimeError('Pi child has retired')
         async with self.failures():
-            response = await self.reader.request(command, self.proc.stdin)
+            response = await self.reader.request(command, self)
         if not response.succeeded:
             raise RuntimeError(response.error.value_or("Pi gave no error text"))
         return response.data.require_payload()
 
     @property
-    def retired(self) -> bool:
+    def retirement_result(self) -> RetirementState:
+        """The original completed shutdown result; pending work has no result."""
         job = self._close_job
-        if job is None or not job.done():
-            return False
-        return not job.cancelled() and job.exception() is None and isinstance(job.result(), ChildOutcome)
+        if job is None or not job.done() or job.cancelled():
+            return RetirementPending()
+        error = job.exception()
+        if error is not None:
+            return RetirementFailed(error)
+        return job.result()
+
+    @property
+    def retired(self) -> bool:
+        return self.retirement_result.retired
+
+    @property
+    def release_failure(self) -> BaseException | None:
+        return self.retirement_result.release_failure
 
     def forward_input(self, operation: Callable[[], Coroutine[None, None, None]]) -> None:
         self.forwarding = self.forwarding.start(operation)
@@ -137,15 +229,11 @@ class PiChild:
         try:
             result = await join_retirement(job)
         except asyncio.CancelledError as cancellation:
-            if isinstance(error := job.result(), BaseException):
-                raise cancellation from error
-            raise
-        if isinstance(result, BaseException):
-            raise result
-        return result
+            job.result().interrupted(cancellation)
+        return result.require_outcome()
 
-    async def _shutdown(self, *, graceful: bool) -> ChildOutcome | BaseException:
-        # Return the original error: asyncio otherwise discards a typed
+    async def _shutdown(self, *, graceful: bool) -> RetirementState:
+        # Retain the original error: asyncio otherwise discards a typed
         # CancelledError after its first observation by a task-result reader.
         try:
             try:
@@ -168,11 +256,11 @@ class PiChild:
                 else:
                     self.resources.close()
         except BaseException as error:
-            return error
-        return outcome
+            return RetirementFailed(error)
+        return Retired(outcome)
 
     @asynccontextmanager
-    async def failures(self):
+    async def failures(self) -> AsyncIterator[None]:
         """Retain original bounded child output before transporting its failure."""
         try:
             yield
@@ -180,9 +268,11 @@ class PiChild:
             await self.shutdown()
             stderr = await self.proc.stderr_tail()
             error.add_note(f"Original native child stderr:\n{stderr or '(empty)'}")
-            if isinstance(error, NativePiUnavailable):
-                error.native_stderr = stderr
-            raise
+            try:
+                raise
+            except NativeRequestFailure as failure:
+                failure.attach_stderr(stderr)
+                raise
 
 
 @dataclass
@@ -199,7 +289,9 @@ class PiSessionChild(PiChild):
         self.coordination_revision = ()
 
     @classmethod
-    async def start(cls, key, attestation):
+    async def start(
+        cls, key: tuple[NativePiRpcLaunch, tuple[int, int]], attestation: NativeAttestation,
+    ) -> Self:
         launch, _ = key
         with ExitStack() as resources:
             environment = dict(launch.env)
@@ -219,22 +311,25 @@ class NativeChildState(ABC):
 
     retained = False
 
-    def managed_launch(self, command, arguments, *, package, root, owner, directory, worktree, environment, session_file):
+    def managed_launch(self, command: str, arguments: tuple[str, ...], *, package: VerifiedNativePackage, root: Path, owner: ParticipantIdentity, directory: Path, worktree: Path, environment: dict[str, str] | None, session_file: str | None) -> NativePiRpcLaunch:
         return NativePiRpcLaunch.managed(
             command, arguments, package=package, root=root, owner=owner, directory=directory,
             worktree=worktree, environment=environment, session_file=session_file,
         )
 
-    def reuse(self, key) -> PiSessionChild | None:
+    def reuse(self, key: tuple[NativePiRpcLaunch, tuple[int, int]]) -> PiSessionChild | None:
         return None
 
-    async def context_for_input(self, thread, context):
+    async def context_for_input(self, thread: Thread, context: TurnContext) -> TurnContext:
         return context
 
     def idle(self) -> RetainedNative:
         raise NativePiUnavailable("Selected idle Pi child is unavailable or stale")
 
-    async def inspect(self, persistent, prepare, request):
+    async def inspect(
+        self, persistent: PiNativeBackend, prepare: Callable[[], Awaitable[StateData]],
+        request: PiCommand,
+    ) -> PiResponseData:
         """Prepare once, then inspect through the acquired idle capability."""
         await prepare()
         return await persistent.child_state.idle().inspect_acquired(persistent, request)
@@ -261,7 +356,7 @@ class ChildNative(NativeChildState):
     @abstractmethod
     def _shutdown_successor(self) -> NativeChildState: ...
 
-    def retire(self, successor=None):
+    def retire(self, successor: NativeChildState | None = None) -> NativeChildState:
         following = self._shutdown_successor() if successor is None else successor
         return RetiringNative(self.child, following)
 
@@ -281,10 +376,13 @@ class SuccessorNative(ChildNative):
 class RetiringNative(SuccessorNative):
     available = False
 
-    async def inspect(self, persistent, prepare, request):
+    async def inspect(
+        self, persistent: PiNativeBackend, prepare: Callable[[], Awaitable[StateData]],
+        request: PiCommand,
+    ) -> PiResponseData:
         raise NativePiUnavailable("Native context requires an acquired native child")
 
-    def retire(self, successor=None):
+    def retire(self, successor: NativeChildState | None = None) -> NativeChildState:
         if successor is not None:
             self.successor = successor
         return self
@@ -297,10 +395,13 @@ class RetiringNative(SuccessorNative):
 @dataclass
 class BorrowedNative(SuccessorNative):
 
-    async def inspect(self, persistent, prepare, request):
+    async def inspect(
+        self, persistent: PiNativeBackend, prepare: Callable[[], Awaitable[StateData]],
+        request: PiCommand,
+    ) -> PiResponseData:
         # The active TurnSession owns receive/correlation. Borrow its original
         # pending response instead of starting a competing reader.
-        async with request.pending_response(self.child.reader, self.child.proc.stdin) as response:
+        async with request.pending_response(self.child) as response:
             return (await response).data.require_payload()
 
 @dataclass
@@ -314,12 +415,12 @@ class RetainedNative(ChildNative):
         launch = self.child.key[0]
         return self.child.proc.alive() and self.revision.current(launch.session.files(launch.root))
 
-    def idle(self):
+    def idle(self) -> RetainedNative:
         if not self.current:
             return super().idle()
         return self
 
-    async def inspect_acquired(self, persistent, request):
+    async def inspect_acquired(self, persistent: PiNativeBackend, request: PiCommand) -> PiResponseData:
         async with persistent.lock:
             current = persistent.child_state.idle()
             data = await current.child.request(request)
@@ -332,13 +433,13 @@ class RetainedNative(ChildNative):
                 current.child.forget_context()
             return data
 
-    def reuse(self, key):
+    def reuse(self, key: tuple[NativePiRpcLaunch, tuple[int, int]]) -> PiSessionChild | None:
         if self.child.key == key and self.current:
             self.child.attestation = PendingAttestation(self.identity)
             return self.child
         return None
 
-    def managed_launch(self, command, arguments, *, package, root, owner, directory, worktree, environment, session_file):
+    def managed_launch(self, command: str, arguments: tuple[str, ...], *, package: VerifiedNativePackage, root: Path, owner: ParticipantIdentity, directory: Path, worktree: Path, environment: dict[str, str] | None, session_file: str | None) -> NativePiRpcLaunch:
         if self.current and self.child.key[0].package == package:
             original, authentication = self.child.key
             candidate = original.retained_managed(command, arguments,
@@ -355,7 +456,7 @@ class RetainedNative(ChildNative):
     def _shutdown_successor(self) -> NativeChildState:
         return EmptyNative()
 
-    async def context_for_input(self, thread, context):
+    async def context_for_input(self, thread: Thread, context: TurnContext) -> TurnContext:
         if thread.project_resume_due or self.child.key[0].cwd != Path(thread.worktree):
             self.child.forget_context()
         if not self.current or self.identity.session_file != thread.runtime.read_key:

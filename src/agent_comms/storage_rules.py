@@ -6,19 +6,27 @@ import json
 import math
 import re
 import shutil
-import subprocess
 import time
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self, cast
 
-from agent_comms.field_codec import FieldCodec, PathText
+from pydantic import JsonValue
+
+from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import (
+    FieldCodec,
+    FieldRepresentation,
+    NullMember,
+    PathText,
+    RecordMember,
+    SubclassUnion,
+)
 from agent_comms.locked_store import DurableFile
-from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
@@ -29,11 +37,13 @@ from agent_comms.storage_room import (
     RoomAllocation,
     TestGateRoomWork,
 )
+from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.work_branches import WorkBranches
 from agent_comms_hooks.shell import ShellCommand
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
+    from agent_comms.heartbeat_frame import HeartbeatFrame
     from agent_comms.registration import Registration
     from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.threads import Thread
@@ -43,13 +53,61 @@ if TYPE_CHECKING:
 StoragePath = Annotated[Path, PathText]
 
 
-@dataclass(frozen=True)
-class StorageRoots:
+class ThreadStorage(SubclassUnion, affix="ThreadStorage"):
+    """A thread's storage roots: the ones its registry assigned, or none assigned yet."""
+
+    @abstractmethod
+    def assigned(self, rule: StorageRule, name: str) -> StorageRoots:
+        """The roots thread ``name`` holds under ``rule``."""
+
+    @abstractmethod
+    def stored(self) -> StorageRoots:
+        """The roots a registry row records."""
+
+
+@dataclass(frozen=True, slots=True)
+class StorageRoots(RecordMember, ThreadStorage):
     scratch: StoragePath
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not self.scratch.is_absolute():
             raise ValueError("Storage scratch requires an absolute path.")
+
+    def assigned(self, rule: StorageRule, name: str) -> StorageRoots:
+        return self
+
+    def stored(self) -> StorageRoots:
+        return self
+
+
+@dataclass(frozen=True, slots=True)
+class UnassignedThreadStorage(NullMember, ThreadStorage):
+    """A thread not yet declared; its registry assigns its roots at declaration."""
+
+    def assigned(self, rule: StorageRule, name: str) -> StorageRoots:
+        return rule.initial_roots(name)
+
+    def stored(self) -> StorageRoots:
+        raise RelationViolationError(
+            "A thread is stored only after its registry assigned its storage roots."
+        )
+
+
+class AssignedStorageRoots(FieldRepresentation):
+    """A stored thread holds the roots its registry assigned at registration, so its
+    stored form is StorageRoots; only an unregistered thread in memory has none."""
+
+    @classmethod
+    def decode(cls, value: object) -> StorageRoots:
+        return FieldCodec.decode(StorageRoots, value)
+
+    @classmethod
+    def encode(cls, value: object) -> object:
+        return FieldCodec.encode(cast(ThreadStorage, value).stored())
+
+    @classmethod
+    def schema(cls) -> dict[str, JsonValue]:
+        return FieldCodec.record_schema(StorageRoots)
 
 
 @dataclass(frozen=True)
@@ -84,9 +142,11 @@ class StorageRule(RoomAllocation, DurableFile):
     shown: ClassVar[int] = 5  # holders named in each list
     scratch_cap_gib: float = 3.0  # one unit's scratch together with its checkouts
     max_checkouts: int = 2
-    volume: StoragePath = Path.home()
-    scratch_base: StoragePath = Path.home() / '.cache' / 'agent-scratch'
-    checkout_base: StoragePath = Path.home() / 'wt'
+    # Home paths are read when the rule is built, never frozen at import.
+    volume: StoragePath = field(default_factory=Path.home)
+    scratch_base: StoragePath = field(
+        default_factory=lambda: Path.home() / '.cache' / 'agent-scratch')
+    checkout_base: StoragePath = field(default_factory=lambda: Path.home() / 'wt')
 
     def __post_init__(self):
         limits = (self.floor_gib, self.cleanup_gib, self.scratch_cap_gib)
@@ -96,11 +156,11 @@ class StorageRule(RoomAllocation, DurableFile):
             raise ValueError("Storage limits cannot be negative.")
 
     @classmethod
-    def load(cls, root: Path):
+    def load(cls, root: Path) -> Self:
         path = cls.path_in(root)
         return FieldCodec.decode(cls, json.loads(path.read_text()) if path.exists() else {})
 
-    def initial_roots(self, name):
+    def initial_roots(self, name: str) -> StorageRoots:
         return StorageRoots(self.scratch_base / name)
 
     def order_checkout(self, name: str, problem: str) -> Path:
@@ -170,16 +230,11 @@ class StorageRule(RoomAllocation, DurableFile):
         home = thread.project_path
         candidates = (home, *self.checkout_paths(thread))
         checkouts = {home}
-        listed = set()
+        listed: set[Path] = set()
         for repository in candidates:
             if repository in listed or not (repository / '.git').exists():
                 continue
-            output = subprocess.run(
-                ('git', '-C', str(repository), 'worktree', 'list', '--porcelain', '-z'),
-                capture_output=True, text=True, check=True, timeout=10,
-            ).stdout
-            entries = tuple(Path(field.removeprefix('worktree ')).resolve()
-                            for field in output.split('\0') if field.startswith('worktree '))
+            entries = WorkBranches(repository).read_checkout().worktrees()
             listed.update(entries)
             checkouts.update(path for path in entries
                              if path.is_dir() and self.owns_checkout(thread, path, path))
@@ -257,19 +312,15 @@ class StorageRule(RoomAllocation, DurableFile):
         (see owns_checkout); a path inside a checkout is judged by that checkout."""
         if '.artifacts' in path.parts:
             self.deny('writes inside .artifacts are forbidden')
-        if path.is_relative_to(self.scratch_base) and not path.is_relative_to(thread.storage_roots.scratch):
-            self.deny(f'foreign scratch destination {path}; registered scratch is {thread.storage_roots.scratch}')
+        scratch = thread.storage_roots.assigned(self, thread.name).scratch
+        if path.is_relative_to(self.scratch_base) and not path.is_relative_to(scratch):
+            self.deny(f'foreign scratch destination {path}; registered scratch is {scratch}')
         base = self.checkout_base.resolve()
         if path.is_relative_to(base) and path != base:
             checkout = base / path.relative_to(base).parts[0]
             judged_by = source if checkout == path else checkout
             if not self.owns_checkout(thread, checkout, judged_by):
                 self.deny(f'{checkout} is not a checkout of {thread.name}')
-
-    def render(self, roots):
-        return (f'StorageRule: scratch {roots.scratch}; '
-                f'{self.max_checkouts} extra checkouts; allocation floor {self.floor_gib:g} GiB. '
-                'No clones, virtualenv creation, uv sync or .artifacts writes.')
 
     def order_text(self, thread: Thread, pythons: Sequence[str]) -> str:
         """The rule uses the same declared paths as storage enforcement."""
@@ -280,7 +331,8 @@ class StorageRule(RoomAllocation, DurableFile):
             f'at most {self.max_checkouts} besides your home checkout {thread.project_path}, '
             'removed with git worktree remove in the same order that created them; '
             'your only scratch dir is '
-            f'{thread.storage_roots.scratch}/, capped at {self.scratch_cap_gib:g} GB together with '
+            f'{thread.storage_roots.assigned(self, thread.name).scratch}/, '
+            f'capped at {self.scratch_cap_gib:g} GB together with '
             f'your checkouts. Run tests with PYTHONPATH=src on the shared {" or ".join(pythons)}; '
             'never create a venv, never uv sync, never write .artifacts, never git clone. '
             f'Below {self.floor_gib:g} GB free on {self.volume}, no worktree, venv, build, install '
@@ -346,10 +398,11 @@ class StorageViolation(UndatedStandingRule, declared_name=None):
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState]) -> tuple[Self, ...]:
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+        # Storage reads the filesystem, not the git source an unreadable card failed on:
+        # a unit whose declared home is gone is that card and a missing home.
         held = StandingRule.holders(comms, commander)
-        return cls.for_units(comms, (unit for state in observed
-                                    for unit in state.readable_units() if unit in held))
+        return cls.for_units(comms, (state.unit for state in observed if state.unit in held))
 
     @classmethod
     def for_units(cls, comms: Comms, units: Iterable[ThreadIncarnation]) -> tuple[Self, ...]:
@@ -401,6 +454,11 @@ class StorageProjection:
     def storage(self) -> UnitStorage:
         return UnitStorage.read(self.rule, self.thread)
 
+    def check(self, effects: Sequence[StorageEffect]) -> None:
+        """Preflight every effect of one call against this one snapshot."""
+        for effect in effects:
+            effect.check(self)
+
 
 class ShellProgram:
     names: ClassVar[frozenset[str]] = frozenset()
@@ -430,9 +488,13 @@ class StorageDenied(SelectedToolDenied):
     """The storage preflight refused an operation before it executed."""
 
 
-class StorageEffect:
+class StorageEffect(ABC):
     """Preflight one actual operation and declare its measured work, if any."""
     work: ClassVar[tuple] = ()
+
+    @abstractmethod
+    def check(self, projection: StorageProjection) -> None:
+        """Refuse this operation if the thread's storage cannot take it."""
 
 
 @dataclass(frozen=True)

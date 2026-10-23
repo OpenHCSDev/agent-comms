@@ -6,6 +6,7 @@ import sys
 
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.installer.publication import RuntimePublication
+from agent_comms.installer.runtime_resolution import RuntimeResolution
 
 
 def test_pointer_publication_does_not_kill_unselected_runtime_processes(tmp_path, monkeypatch):
@@ -16,6 +17,7 @@ def test_pointer_publication_does_not_kill_unselected_runtime_processes(tmp_path
     for runtime in runtimes.values():
         (runtime / "bin").mkdir(parents=True)
         (runtime / "bin/python").symlink_to(sys.executable)
+        RuntimeResolution(core_commit="process-lifetime-fixture", packages={}).save(runtime)
     current = LaunchRuntime.current_pointer()
     current.parent.mkdir(parents=True)
     current.symlink_to(runtimes["previous-runtime"])

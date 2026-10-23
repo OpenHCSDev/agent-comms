@@ -6,12 +6,12 @@ import asyncio
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 import os
+import sqlite3
 from pathlib import Path
 from typing import AsyncIterator, ClassVar, Self
 from urllib.parse import quote
 
 import aiohttp
-from agent_comms.coordination_database import CoordinationStore
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.messages import Message
 from agent_comms.send_result import SendResult
@@ -57,6 +57,7 @@ class OpenCodeOptions(Options):
 class Attach(Watch):
     """The selected native session owns its Core thread and bridge child."""
 
+    help = "Attach the running OpenCode session to its bus thread and deliver to it"
     pid: int
 
     @classmethod
@@ -197,7 +198,7 @@ class OpenCodeServer(OpenCodeHistory, OnlineHistory):
 class OpenCodeBridge(OpenCodeServer, TranscriptBridge[OpenCodeOptions], declared_name=None):
     query = {'limit': '20'}  # A restarted bridge publishes again only the newest messages.
 
-    def __init__(self, options: OpenCodeOptions, binding: Binding, db: CoordinationStore) -> None:
+    def __init__(self, options: OpenCodeOptions, binding: Binding, db: sqlite3.Connection) -> None:
         TranscriptBridge.__init__(self, options, binding, db)
         OpenCodeServer.__init__(self, binding.thread, options.server, options.directory)
 

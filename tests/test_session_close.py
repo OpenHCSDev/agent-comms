@@ -1,4 +1,5 @@
 """Scoped attachment retirement through original stores, sockets and ACP routing."""
+from agent_comms.controller import SessionUpdateSink
 
 import asyncio
 import os
@@ -10,19 +11,22 @@ from acp.schema import SessionInfoUpdate
 
 from agent_comms.acp import CommsAgent, CommsClient
 from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.threads import Thread
 
 
-class AttachmentClient:
+class AttachmentClient(SessionUpdateSink):
     def __init__(self):
         self.updates = []
         self.entered = {name: asyncio.Event() for name in ("alpha", "beta")}
         self.release = asyncio.Event()
         self.retired = set()
 
-    async def session_update(self, *, session_id, update, **kwargs):
+    async def publish_update(self, *, session_id, update, **kwargs):
         self.updates.append((session_id, update))
+        return True
 
     async def request_permission(self, *, session_id, **kwargs):
         self.entered[session_id].set()
@@ -37,7 +41,7 @@ class AttachmentClient:
 async def test_close_retires_one_real_subscription_and_permission(tmp_path, monkeypatch):
     # This declared model catalogue avoids SDK/model discovery; no model runs.
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/one")
-    comms = wire(tmp_path / "w")
+    comms = installed_comms(tmp_path / "w")
     owner = CommsAgent(comms, runtime_enabled=True, auto_wake=False)
     client = CommsClient(comms, auto_wake=False, use_unstable_protocol=True)
     other = CommsClient(comms, auto_wake=False, use_unstable_protocol=True)
@@ -79,10 +83,11 @@ async def test_close_retires_one_real_subscription_and_permission(tmp_path, monk
         assert owner.sessions.bindings == {"alpha": "alpha", "beta": "beta"}
         assert other.sessions.proxies["alpha"].controller_token is not None
         assert owner._runtime.is_controller("beta", selected["beta"])
-        await owner._runtime.session_update(session_id="beta", update=SessionInfoUpdate(
+        await owner._runtime.publish_update(session_id="beta", update=SessionInfoUpdate(
             session_update="session_info_update", title="Still attached"))
         async with asyncio.timeout(5):
-            while not any(name == "beta" and update.get("title") == "Still attached"
+            while not any(name == "beta" and isinstance(update, SessionInfoUpdate)
+                          and update.title == "Still attached"
                           for name, update in callbacks.updates):
                 await asyncio.sleep(0)
         # Reloading the closed ID creates a new original subscription.
@@ -99,7 +104,7 @@ async def test_close_retires_one_real_subscription_and_permission(tmp_path, monk
 @pytest.mark.asyncio
 async def test_close_joins_unsent_request_and_capability_requires_claim(tmp_path):
     comms = wire(tmp_path / "w")
-    comms.registry.declare(comms.registry.new_thread('cold', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.declare(Thread('cold', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     client = CommsClient(comms, auto_wake=False, use_unstable_protocol=True)
     proxy = RuntimeProxy(client, "cold", socket_path(comms.root, os.getpid()))
     client.sessions.proxies["cold"] = proxy

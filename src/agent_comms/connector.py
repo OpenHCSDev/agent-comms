@@ -17,6 +17,7 @@ Usage:
 
 from __future__ import annotations
 
+
 import asyncio
 import base64
 import hashlib
@@ -40,10 +41,11 @@ from aiohttp.web_urldispatcher import AbstractResource, ResourceRoute, SystemRou
 from pydantic import JsonValue
 
 
-from .cli_bridges.shared import DeclaredVerb
+from .bus_publication import DirectorOrigin
+from .declared_verb import DeclaredVerb
 from .cli_protocol import CoreError
 from .command import Command
-from .comms import Comms, client_wire
+from .comms import Comms, client_wire, wire
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .errors import RelationViolationError, ToolRefusedError, UnregisteredThreadError
 from .coordination_errors import CoordinationError
@@ -51,14 +53,16 @@ from .field_codec import (
     Argument, FieldCodec, GitCommitText, MalformedRecord, PathText, WireName, WireOmitDefault,
     boundary_decoder,
 )
-from .goal_actions import DirectiveGoalAction
-from .host_services import HostService, SystemdUserService
+from agent_comms.channel_targets import NamedTarget
+from agent_comms.owner_requests import NewestOpenRequest, RequestSelection
+from .host_services import HostService, SystemdSite
 from .connector_store import (
     CODE_SECONDS, ApprovalQueueFull, ApprovalRefused, AuthorizationQuery,
     AuthorizationRequest, ClaudeCallback,
     ConnectorGrants, ConnectorStore, IssuedTokens, RegisteredClient, TrustedBrowser, digest,
 )
-from .messages import Message, QuestionKind
+from .locked_store import DocumentChange
+from .messages import QuestionKind
 from .commander.standing import UnownedOrderWatch
 from .commander_heartbeat import CommanderHeartbeat
 from .coordinator import Coordination
@@ -67,9 +71,11 @@ from .head_review import HeadReview, PullRequestHead
 from .repository_name import RepositoryName
 from .todos import DirectiveText, ReviewedHeadVerdict
 from .tool_result import ToolResult
-from .tool_caller import ThreadCaller
+from .task_sources import OwnerRequestAttachment
+from .tool_caller import ThreadCaller, ToolCaller
 from .tools import (
-    CommsVerdictTool, ReadTool, TodoChanged, ToolRequest, tool_field,
+    CommsSendTool, CommsVerdictTool, MessagePublished, ReadTool, SendTool,
+    TodoChanged, ToolRequest, tool_field,
 )
 
 LOOPBACK = "127.0.0.1"
@@ -78,24 +84,32 @@ PORT = 18766
 
 @dataclass(frozen=True)
 class DirectorCaller(ThreadCaller):
-    """claude-ai speaks for the owner: each message it sends a thread is a directive, recorded as a
-    request when that thread holds owner requests."""
+    """claude-ai speaks for the owner, so its sends carry the director origin, which records each
+    message to a thread as a directive like the owner's own."""
 
     def require_directive(self, comms: Comms, body: str) -> None:
         """A directive passes DirectiveText. claude-ai directs the commanders, so the
         commander rules review does not gate it."""
         DirectiveText.require(body)
 
-    def sent(self, comms: Comms, message: Message) -> None:
-        if message.target in comms.registry:  # a channel holds no requests
-            comms.goals.update_goal(
-                message.target,
-                DirectiveGoalAction(text=message.body, seq=message.seq, at=message.timestamp),
-            )
+    def origin(self) -> DirectorOrigin:
+        return DirectorOrigin()
 
 
 class ConnectorTool(ToolRequest[DirectorCaller], affix="ConnectorTool"):
     """Connector-only declarations are absent from the native/CLI tool registry."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class ConnectorSendTool(SendTool, ConnectorTool, declared_name=CommsSendTool.declared_name):
+    request: Annotated[
+        RequestSelection,
+        *tool_field("Owner request ID; omitted selects the recipient's newest open request"),
+    ] = NewestOpenRequest()
+
+    def attachment(self, comms: Comms, target: NamedTarget) -> OwnerRequestAttachment:
+        requests = self.request.for_message(comms.goals.todos, target, comms.registry)
+        return OwnerRequestAttachment(tuple(request.id for request in requests))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -196,7 +210,7 @@ class TokenGrant(DeclaredFamily, affix="Grant"):
     def redeemed(self, grants: ConnectorGrants) -> ConnectorGrants:
         """The grants with this credential spent; refuses a credential it does not hold."""
 
-    def exchange(self, grants: ConnectorGrants) -> tuple[ConnectorGrants, IssuedTokens]:
+    def exchange(self, grants: ConnectorGrants) -> DocumentChange[ConnectorGrants, IssuedTokens]:
         return self.redeemed(grants).issued(self.client_id)
 
 
@@ -561,7 +575,7 @@ class Connector:
         Waiting with a client route borrowed would hold up its replacement. The
         pass inherits the bus's hold wait; requests retain client_wire's fast refusal.
         """
-        yield Comms.blocking_reads(self.root)
+        yield wire(self.root)
 
     def invoke(
         self, tool: type[ToolRequest] | type[ConnectorTool], arguments: Mapping[str, object]
@@ -654,10 +668,10 @@ class Connector:
         client_id = secrets.token_urlsafe(16)
         await asyncio.to_thread(
             self.store.update,
-            lambda grants: replace(
+            lambda grants: DocumentChange.to(replace(
                 grants,
                 clients=grants.clients | {client_id: RegisteredClient(registration.client_name)},
-            ),
+            )),
         )
         return web.json_response(FieldCodec.encode(ClientRegistrationReply(
             client_id=client_id, client_id_issued_at=int(time.time()),
@@ -676,17 +690,17 @@ class Connector:
         browser = request.cookies.get(TrustedBrowser.cookie_name, "")
         notices: list[AuthorizationRequest] = []
 
-        def decided(grants: ConnectorGrants) -> ConnectorGrants:
+        def decided(grants: ConnectorGrants) -> DocumentChange[ConnectorGrants, ConnectorGrants]:
             now = time.time()
             grants = grants.unexpired(now)
             if query.client_id not in grants.clients:
                 raise web.HTTPBadRequest(text="Unknown client.")
             if grants.trusts(browser):
-                return grants.code_issued(query, code, now)
+                return DocumentChange.to(grants.code_issued(query, code, now))
             if query.request_id not in grants.requests:
                 grants = grants.waiting(query, digest(approval), now)
                 notices.append(grants.requests[query.request_id])
-            return grants
+            return DocumentChange.to(grants)
 
         try:
             grants = await asyncio.to_thread(self.store.update, decided)
@@ -751,23 +765,21 @@ class Connector:
         """Consume the owner's POST and establish browser trust in the same update."""
         link = FieldCodec.decode(ApprovalLink, dict(request.match_info))
         code, browser = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
-        approved: list[AuthorizationQuery] = []
 
-        def consumed(grants: ConnectorGrants) -> ConnectorGrants:
+        def consumed(grants: ConnectorGrants) -> DocumentChange[ConnectorGrants, AuthorizationQuery]:
             now = time.time()
             held = grants.require_approval(link.request_id, link.secret, now)
-            approved.append(held.query)
-            return replace(
+            return DocumentChange(replace(
                 grants.unexpired(now).code_issued(held.query, code, now),
                 trusted_browsers=grants.trusted_browsers | {digest(browser): TrustedBrowser(now)},
-            )
+            ), held.query)
 
         try:
-            await asyncio.to_thread(self.store.update, consumed)
+            approved = await asyncio.to_thread(self.store.update, consumed)
         except ApprovalRefused as refusal:
             raise web.HTTPBadRequest(text=str(refusal)) from refusal
         response = web.HTTPFound(
-            approved[0].redirect(code),
+            approved.redirect(code),
             headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
         )
         response.set_cookie(
@@ -781,19 +793,12 @@ class Connector:
             grant = TokenGrant.received(await request.post())
         except MalformedRecord as error:
             return OAuthError("invalid_request", str(error)).response()
-        exchanged: list[IssuedTokens] = []
-
-        def spent(grants: ConnectorGrants) -> ConnectorGrants:
-            grants, response = grant.exchange(grants)
-            exchanged.append(response)
-            return grants
-
         try:
-            await asyncio.to_thread(self.store.update, spent)
+            exchanged = await asyncio.to_thread(self.store.update, grant.exchange)
         except OAuthError as refusal:
             return refusal.response()
         return web.json_response(
-            FieldCodec.encode(exchanged[0]), headers={"Cache-Control": "no-store"}
+            FieldCodec.encode(exchanged), headers={"Cache-Control": "no-store"}
         )
 
     @staticmethod
@@ -828,7 +833,7 @@ class Connector:
 
 @dataclass(frozen=True, kw_only=True)
 class ConnectorVerb(
-    DeclaredVerb, Command,
+    DeclaredVerb, Command[ConnectorStore, int | str],
     affix="Verb", discovery_package=HostService.__module__,
 ):
     """One connector command: its options are its fields, and its parser comes from them."""
@@ -894,8 +899,7 @@ class ServeVerb(ConnectorOptions):
         for signum in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(signum, stopped.set)
         try:
-            await web.TCPSite(runner, LOOPBACK, self.port).start()
-            SystemdUserService.ready()
+            await SystemdSite(runner, LOOPBACK, self.port).start()
             await stopped.wait()
         finally:
             await runner.cleanup()
@@ -906,9 +910,9 @@ class RevokeVerb(ConnectorVerb):
     help = "Revoke every issued token, code and trusted browser"
 
     def apply(self, ctx: ConnectorStore) -> int | str:
-        ctx.update(lambda grants: replace(
+        ctx.update(lambda grants: DocumentChange.to(replace(
             grants, requests={}, codes={}, access={}, refresh={}, trusted_browsers={}
-        ))
+        )))
         return 0
 
 

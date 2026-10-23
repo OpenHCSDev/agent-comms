@@ -24,7 +24,7 @@ from .envelope_claim_transitions import (
 from .field_codec import FieldCodec, MalformedRecord
 from .lifecycle_capability import Executing
 from .native_arguments import NativeArguments
-from .native_tool_call import CodingCall, NativeToolMode, SelectedToolDenied, ToolNotExecuting
+from .native_tool_call import CodingCall, NativeToolMode, ToolNotExecuting
 from .native_tool_transport import ToolListener, ToolTransport, UnboundToolTransport
 from .native_tools import NativeToolDeclaration
 from .pi_payloads import StorageDenialToolDetails
@@ -38,6 +38,7 @@ from .selected_tool_broker import (
 )
 from .storage_room import NoRoomNeeded, RoomReservation
 from .storage_rules import StorageDenied
+from .tool_denial import SelectedToolDenied
 from .turn_goal_permission import TurnGoalPermission
 
 if TYPE_CHECKING:
@@ -58,7 +59,7 @@ class CodingToolOwner(ABC):
     async def reserve_room(self, call: CodingCall) -> RoomReservation:
         registry = self.comms.registry
         thread = registry.require(self.owner_name)
-        effects = await asyncio.to_thread(call.decide_storage, registry, thread.name)
+        effects = await asyncio.to_thread(call.decide_storage, registry.storage_rule, thread)
         work = tuple(dict.fromkeys(kind for effect in effects for kind in effect.work))
         if work:
             return await registry.storage_rule.wait_for_room(
@@ -71,7 +72,7 @@ class CodingToolOwner(ABC):
             self.goal_permission.require_current(snapshot.require(self.owner_name).goal)
             self.verify(store, turn, snapshot)
             slot = call.slot(turn.command.input_id, round_number)
-            consume_selected_slot(turn.launch.session.directory, slot, slot)
+            consume_selected_slot(store, slot, slot)
             owner = self.comms.registry.require(self.owner_name)
             resource = call.allowed_claim()
             if resource is not None:
@@ -100,7 +101,7 @@ class CodingToolOwner(ABC):
 @dataclass(frozen=True, slots=True)
 class SelectedCodingToolOwner(CodingToolOwner):
     store: Coordination
-    claim_scope: WakeClaim
+    resource_scope: WakeClaim
     session_dir: Path
     input_id: str
     goal_permission: TurnGoalPermission = field()
@@ -115,8 +116,8 @@ class SelectedCodingToolOwner(CodingToolOwner):
                 self.store.session._connection, self.input_id
             ):
                 raise SelectedToolDenied("Tool original is absent from the reserved native batch")
-        return replace(self, claim_scope=replace(
-            self.claim_scope,
+        return replace(self, resource_scope=replace(
+            self.resource_scope,
             source_seq=assignment.wire_seq,
             source_message_id=assignment.message_id,
             wake_assignment_id=assignment.assignment_id,
@@ -127,11 +128,11 @@ class SelectedCodingToolOwner(CodingToolOwner):
     def verify(self, store, turn, snapshot):
         if self.input_id != turn.command.input_id:
             raise SelectedToolDenied("Native tool input changed")
-        verify_sent_full_input(store, self.claim_scope, self.owner_name, self.input_id)
-        verify_selected_wake(self.comms, store, self.claim_scope, self.owner_name)
+        verify_sent_full_input(store, self.resource_scope, self.owner_name, self.input_id)
+        verify_selected_wake(self.comms, store, self.resource_scope, self.owner_name)
 
     def claim_resource(self, store, turn, resource, slot):
-        scope = replace(self.claim_scope, operation_id=slot)
+        scope = replace(self.resource_scope, operation_id=slot)
         return publish_selected_resource_claim(self.comms, store, scope, self.owner_name, resource)
 
 

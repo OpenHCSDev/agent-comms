@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import ast
 import re
-import subprocess
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, ClassVar
+
+from pydantic import JsonValue
 
 from agent_comms.errors import ToolRefusedError
 
@@ -24,10 +25,9 @@ from .field_codec import (
     SubclassUnion,
     WireValue,
 )
-from .goals import CheckedCommit, GitCommandFailed
+from .repo import GitCommandError, Repo
 
 if TYPE_CHECKING:
-    from .repo import Repo
     from .todos import PullRequestLink
 
 
@@ -53,17 +53,17 @@ class SourceRevision(ABC):
 
     def lines(self, repository: Path, file: str) -> tuple[str, ...]:
         if repository not in self._commits:
-            CheckedCommit.git(str(repository), 'fetch', 'origin', self.fetch_refspec)
-            self._commits[repository] = CheckedCommit.git(
-                str(repository), 'rev-parse', '--verify', f'{self.reference}^{{commit}}'
+            Repo.git(repository, 'fetch', 'origin', self.fetch_refspec)
+            self._commits[repository] = Repo.git(
+                repository, 'rev-parse', '--verify', f'{self.reference}^{{commit}}'
             ).strip()
         commit = self._commits[repository]
         root = repository.absolute()
         path = (root / file).relative_to(root).as_posix()
         try:
-            text = CheckedCommit.git(str(repository), 'show', f'{commit}:{path}')
+            text = Repo.git(repository, 'show', f'{commit}:{path}')
             return tuple(text.splitlines())
-        except GitCommandFailed as error:
+        except GitCommandError as error:
             if error.source_path_absent(commit, path):
                 raise MissingSourceLine(
                     f'Source file {file} does not exist at {commit}.'
@@ -177,7 +177,7 @@ class FileLine(WireValue, SourceReference):
         return f"{self.file}:{self.line}"
 
     @classmethod
-    def from_wire(cls, data: Any) -> FileLine:
+    def from_wire(cls, data: JsonValue) -> FileLine:
         if not isinstance(data, str):
             raise MalformedRecord("Expected a 'file.py:line' string.")
         file, separator, line = data.rpartition(":")
@@ -186,7 +186,7 @@ class FileLine(WireValue, SourceReference):
         return cls(file=file, line=int(line))
 
     @classmethod
-    def schema(cls) -> dict[str, Any]:
+    def schema(cls) -> dict[str, JsonValue]:
         return {"type": "string", "description": "Source reference spelled file.py:line"}
 
     @classmethod
@@ -249,17 +249,24 @@ class ChangeReport(RecordMember, ReportEvidence):
 
     def require_references_exist(self, worktree: Path) -> None:
         """Every owner and consumer reference exists at this declared branch head."""
-        revision = _git(worktree, "rev-parse", "--verify", "--quiet",
-                        f"{self.branch}^{{commit}}", branch=self.branch)
+        try:
+            revision = Repo.git(worktree, "rev-parse", "--verify", "--quiet",
+                                f"{self.branch}^{{commit}}").strip()
+        except GitCommandError as error:
+            if error.no_such_revision():
+                raise ValueError(f"Change report branch {self.branch!r} does not resolve "
+                                 f"in {worktree}") from None
+            raise
         sources: dict[str, str] = {}
         for fact in self.facts:
             for reference in (fact.owner, *fact.consumers):
                 content = sources.get(reference.file)
                 if content is None:
                     try:
-                        content = _git(worktree, "show", f"{revision}:{reference.file}",
-                                       branch=self.branch)
-                    except ValueError:
+                        content = Repo.git(worktree, "show", f"{revision}:{reference.file}")
+                    except GitCommandError as error:
+                        if not error.source_path_absent(revision, reference.file):
+                            raise
                         raise ValueError(
                             f"Change report references {reference.file}, absent at "
                             f"branch head {self.branch} ({revision[:12]}) in {worktree}"
@@ -271,20 +278,6 @@ class ChangeReport(RecordMember, ReportEvidence):
                         f"past the {len(content.splitlines())} lines present at branch "
                         f"head {self.branch} ({revision[:12]}) in {worktree}"
                     )
-
-
-def _git(worktree: Path, *arguments: str, branch: str) -> str:
-    """One git read against the sending worktree; failures name the branch."""
-    result = subprocess.run(
-        ["git", "-C", str(worktree), *arguments],
-        capture_output=True, timeout=20,
-    )
-    if result.returncode != 0:
-        detail = result.stderr.decode(errors="replace").strip() or "git failed"
-        raise ValueError(
-            f"Change report branch {branch!r} does not resolve in {worktree}: {detail}"
-        )
-    return result.stdout.decode(errors="replace").strip()
 
 
 @dataclass(frozen=True, slots=True)

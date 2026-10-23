@@ -6,15 +6,16 @@ from contextlib import closing
 
 import pytest
 
-from agent_comms.thread_text import SavedSessionFile
-from agent_comms.comms import wire
+from agent_comms.session_file import RegistrySessionLocation
+from conftest import installed_comms
 from agent_comms.coordination_errors import StaleRevision
 from agent_comms.thread_text import ForkedParent, GivenThreadText
+from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize("journal_mode", ["DELETE", "WAL"])
 def test_saved_input_annotation_revokes_page_without_journal_change(tmp_path, journal_mode):
-    comms = wire(tmp_path / "wire")
+    comms = installed_comms(tmp_path / "wire")
     path = tmp_path / "native.jsonl"
     native_id = "a" * 32
     path.write_text(json.dumps({
@@ -22,7 +23,7 @@ def test_saved_input_annotation_revokes_page_without_journal_change(tmp_path, jo
             "role": "user", "inputId": native_id, "content": "private wrapper",
         },
     }) + "\n")
-    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=SavedSessionFile(str(path))))
+    comms.registry.declare(Thread('worker', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), comms.root)))
     comms.transcripts.routes.record_input_display("b" * 32, None)
     with closing(sqlite3.connect(comms.transcripts.routes.path)) as connection:
         assert connection.execute("PRAGMA journal_mode=" + journal_mode).fetchone()[0] == journal_mode.lower()
@@ -38,13 +39,13 @@ def test_saved_input_annotation_revokes_page_without_journal_change(tmp_path, jo
 
 
 def test_native_append_preserves_captured_cut_and_fork_source_change_revokes_it(tmp_path):
-    comms = wire(tmp_path / "wire")
+    comms = installed_comms(tmp_path / "wire")
     parent = tmp_path / "parent.jsonl"
     parent.write_text(json.dumps({"type": "message", "id": "parent-1", "timestamp": "2026-10-19T00:00:00Z", "message": {
         "role": "assistant", "content": [{"type": "text", "text": "parent answer"}],
     }}) + "\n")
-    comms.registry.declare(comms.registry.new_thread('parent', frozenset(), str(tmp_path), session_file=SavedSessionFile(str(parent))))
-    comms.registry.declare(comms.registry.new_thread('child', frozenset(), str(tmp_path), parent=ForkedParent('parent'), task=GivenThreadText('continue')))
+    comms.registry.declare(Thread('parent', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(parent), comms.root)))
+    comms.registry.declare(Thread('child', frozenset(), str(tmp_path), parent=ForkedParent('parent'), task=GivenThreadText('continue')))
     captured = comms.transcripts.capture_page_read("child")
     assert any(event.text == "parent answer" for event in captured.read().events)
     with parent.open("a") as output:
@@ -70,7 +71,7 @@ def test_native_append_preserves_captured_cut_and_fork_source_change_revokes_it(
 
 
 def test_native_rewrite_inside_captured_cut_revokes_the_read(tmp_path):
-    comms = wire(tmp_path / "wire")
+    comms = installed_comms(tmp_path / "wire")
     path = tmp_path / "native.jsonl"
     original = json.dumps({"type": "message", "id": "entry", "timestamp": "2026-10-19T00:00:00Z", "message": {
         "role": "assistant", "content": [{"type": "text", "text": "first answer"}],
@@ -78,7 +79,7 @@ def test_native_rewrite_inside_captured_cut_revokes_the_read(tmp_path):
     replacement = original.replace("first answer", "other answer")
     assert len(replacement) == len(original)
     path.write_text(original)
-    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=SavedSessionFile(str(path))))
+    comms.registry.declare(Thread('worker', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), comms.root)))
     captured = comms.transcripts.capture_page_read("worker")
 
     path.write_text(replacement)
@@ -92,12 +93,12 @@ def test_thread_activity_and_annotations_do_not_replay_saved_content(tmp_path):
     from dataclasses import replace
     from agent_comms.acp_extension import TranscriptSnapshotUpdate
 
-    comms = wire(tmp_path / "wire")
+    comms = installed_comms(tmp_path / "wire")
     path = tmp_path / "native.jsonl"
     path.write_text(json.dumps({"type": "message", "id": "entry", "timestamp": "2026-10-19T00:00:00Z", "message": {
         "role": "assistant", "content": [{"type": "text", "text": "Original retained answer"}],
     }}) + "\n")
-    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=SavedSessionFile(str(path))))
+    comms.registry.declare(Thread('worker', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), comms.root)))
     captured = comms.transcripts.capture_page_read("worker")
     original = captured.read()
     comms.registry.heartbeat("worker")

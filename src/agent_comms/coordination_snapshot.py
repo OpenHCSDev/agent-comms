@@ -23,7 +23,6 @@ from agent_comms.coordination_tables.attempts import (
 )
 from agent_comms.coordination_tables.executions import (
     CurrentExecutions,
-    ExecutionOrigin,
     ExecutionRecord,
     NoPointedAttempt,
     NoPointedExecution,
@@ -33,7 +32,7 @@ from agent_comms.coordination_tables.executions import (
     ReplayAssessments,
 )
 from agent_comms.coordination_tables.publications import PublicationEvidence, PublicationIntents
-from agent_comms.coordination_tables.recovery import ConnectivityFacet, RecoveryAudit
+from agent_comms.coordination_tables.recovery import RecoveryAudit
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.field_codec import boundary_decoder, projected, SnapshotName, WireName
 from agent_comms.reason_codes import ReasonCode
@@ -59,7 +58,6 @@ class RecoverySnapshot:
     publication_evidence: Annotated[
         tuple[PublicationEvidence, ...], WireName("publication_receipts")
     ]
-    connectivity: ConnectivityFacet | None
     last_recovery: RecoveryAudit | None
     current_execution_id: PointerExecution
     current_attempt_ordinal: PointerAttempt
@@ -97,13 +95,13 @@ class RecoverySnapshot:
         if intent is None or not intent.matches_request(self.execution.execution_id, candidate):
             raise IdentityConflict("prepared response envelope conflicts")
 
-    def require_publishing_intent(self, exact_target: str) -> tuple[PublicationIntents, ResponseObligation]:
+    def require_publishing_intent(self, exact_target: str, registry) -> tuple[PublicationIntents, ResponseObligation]:
         if len(self.publication_intents) != len(self.require_wire_responses()):
             raise IdentityConflict("all original response bodies must be frozen before first append")
         obligation = self.require_wire_response(exact_target)
         obligation.lifecycle.require_publishing()
         intent = ResponseObligation.response_record(self.publication_intents, exact_target)
-        if intent is None or intent.message.sender != self.execution.owner_thread:
+        if intent is None or registry.require(intent.message.sender).incarnation.lookup != self.execution.owner_lookup:
             raise IdentityConflict("no frozen publishing intent for current owner")
         return intent, obligation
 
@@ -150,7 +148,6 @@ class RecoverySnapshot:
             *self.obligations,
             *self.publication_intents,
             *self.publication_evidence,
-            self.connectivity,
             self.last_recovery,
         )
         if any(
@@ -208,11 +205,7 @@ class RecoverySnapshot:
             raise IntegrityViolationError("snapshot current pointer is inconsistent")
 
     def validate_response_route(self) -> None:
-        if self.execution.origin is ExecutionOrigin.WIRE:
-            if not self.assignments or not self.obligations:
-                raise IntegrityViolationError("wire snapshots require original obligations")
-        elif self.obligations or self.assignments:
-            raise IntegrityViolationError("claimless snapshots cannot have claims or obligations")
+        self.execution.origin.validate_routes(self.assignments, self.obligations)
         expected = {row.lifecycle.exact_target for row in self.assignments}
         targets = tuple(row.exact_target for row in self.obligations)
         if len(set(targets)) != len(targets) or set(targets) != expected:
@@ -253,7 +246,8 @@ class RecoverySnapshot:
             raise RecoveryBlocked("settlement requires exact final done/death evidence")
         ReplayAssessments.accumulate(db, execution.execution_id, outcome.replay_contribution)
         execution_state, response = outcome.disposition(self, attempt)
-        session.release_resources(self, outcome, boundary)
+        if boundary is not None:
+            session.release_resources(self, outcome, boundary)
         now = session.now(max(execution.updated_at_ms, attempt.updated_at_ms))
         AttemptRecord.update(
             db,
@@ -352,14 +346,12 @@ class RecoverySnapshot:
         belonging to a later attempt (or an unbound manual claim) is untouched.
         The caller retains wire/bus/registry exclusion through terminal commit.
         """
-        bus, bus_lock = boundary.bus, boundary.bus_lock
+        bus = boundary.bus
         attempt = self.require_attempt()
-        metadata = bus.log.private_marker_unlocked()
-        with bus_lock.current_source(bus.log, metadata) as source:
-            current = source.claim_projection().live_in(boundary.registry)
+        current = bus.bus.claim_projection().live_in(boundary.registry)
         owned = tuple(
             claim for claim in current.values()
-            if claim.claim_scope.belongs_to(attempt)
+            if claim.resource_scope.belongs_to(attempt)
         )
         if owned:
             bus.publisher.release_resources(boundary, owned, outcome.release_wording)

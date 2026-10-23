@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.errors import StaleAttemptError
 import os
 import tempfile
 from collections.abc import Iterator
@@ -13,14 +14,7 @@ import pytest
 
 from agent_comms.goal_attempt_identity import GoalAttemptIdentity
 from agent_comms.goal_attempt_phase import ReservedAttempt, ResolvedAttempt
-from agent_comms.goal_attempts import (
-    AttemptRecord,
-    GoalAttemptStore,
-    NoAttempt,
-    RecordedAttempt,
-    StaleAttemptError,
-    StorageUncertainError,
-)
+from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore, NoAttempt, RecordedAttempt, StorageUncertainError
 from agent_comms.goal_generation import CancelledGeneration, ReadyGeneration, ReservedGeneration
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX owner-private ledger root.")

@@ -5,15 +5,16 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, ClassVar, Annotated
-
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .context_reading import ContextReading, UnmeasuredContext
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, SingleFieldValue, WireName, WireRequired
+from .locked_store import DocumentChange
 from .maintenance_barrier import CarriedDocument
 from .pi_counts import PiCount, UnreportedCount
+from .store_files import DependentStateTier
 from .thread_model import ThreadModel, UndeclaredModel
 from .thread_owned_state import ThreadOwnedState
 
@@ -28,9 +29,10 @@ class RuntimeInfo(DeclaredFamily, affix="RuntimeInfo"):
     @abstractmethod
     def context_reading(self) -> ContextReading: ...
 
-    @abstractmethod
-    def model_or(self, default: str) -> str: ...
+    def model_or(self, default: str) -> str:
+        return self.model.otherwise(default)
 
+    model: ThreadModel
     context_used: PiCount
     context_size: PiCount
 
@@ -42,10 +44,8 @@ class UnobservedRuntimeInfo(RuntimeInfo):
     def context_reading(self) -> ContextReading:
         return UnmeasuredContext()
 
+    model = UndeclaredModel()
     context_used = context_size = UnreportedCount()
-
-    def model_or(self, default: str) -> str:
-        return default
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,8 +68,6 @@ class AgentRuntimeInfo(RuntimeInfo):
     def context_reading(self) -> ContextReading:
         return self.context_size.reading(self.context_used)
 
-    def model_or(self, default: str) -> str:
-        return self.model.otherwise(default)
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,7 +78,7 @@ class RuntimeInfoDocument(SingleFieldValue):
 
 
 @dataclass(frozen=True, slots=True)
-class RuntimeInfoStore(ThreadOwnedState, CarriedDocument[RuntimeInfoDocument]):
+class RuntimeInfoStore(ThreadOwnedState, CarriedDocument[RuntimeInfoDocument], DependentStateTier):
     """Latest observations, independently committed from the registry/log."""
 
     filename: ClassVar[str] = "runtime_info.json"
@@ -107,20 +105,22 @@ class RuntimeInfoStore(ThreadOwnedState, CarriedDocument[RuntimeInfoDocument]):
     def observe(self, thread: str, timestamp: float, observation: RuntimeInfoObservation) -> None:
         """Apply only this observation's fields in the original store transaction."""
 
-        def apply(document: RuntimeInfoDocument) -> RuntimeInfoDocument:
+        def apply(
+            document: RuntimeInfoDocument,
+        ) -> DocumentChange[RuntimeInfoDocument, RuntimeInfoDocument]:
             values = document.observations
             current = values.get(thread)
             if current is None:
                 current = AgentRuntimeInfo(thread=thread, timestamp=timestamp)
             observed = observation.project_runtime_info(replace(current, timestamp=timestamp))
-            return RuntimeInfoDocument({**values, thread: observed})
+            return DocumentChange.to(RuntimeInfoDocument({**values, thread: observed}))
 
         self.update(apply)
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
         names = {thread.name for thread in threads}
         self.update(
-            lambda document: (
+            lambda document: DocumentChange.to(
                 RuntimeInfoDocument({name: value for name, value in document.observations.items() if name not in names})
                 if names & document.observations.keys()
                 else document
@@ -128,13 +128,15 @@ class RuntimeInfoStore(ThreadOwnedState, CarriedDocument[RuntimeInfoDocument]):
         )
 
     def rename_thread(self, old_name: str, new_name: str) -> None:
-        def rename(document: RuntimeInfoDocument) -> RuntimeInfoDocument:
+        def rename(
+            document: RuntimeInfoDocument,
+        ) -> DocumentChange[RuntimeInfoDocument, RuntimeInfoDocument]:
             values = document.observations
             if old_name not in values or old_name == new_name:
-                return document
-            return RuntimeInfoDocument({
+                return DocumentChange.to(document)
+            return DocumentChange.to(RuntimeInfoDocument({
                 **{name: value for name, value in values.items() if name != old_name},
                 new_name: replace(values[old_name], thread=new_name),
-            })
+            }))
 
         self.update(rename)

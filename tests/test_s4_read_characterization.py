@@ -7,12 +7,13 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.comms import wire
+from conftest import installed_comms
+from agent_comms.threads import Thread
 
 
 def test_replaced_human_incarnation_rejects_painted_proof_and_prior_reads(tmp_path):
-    comms = wire(tmp_path)
-    comms.registry.declare(comms.registry.new_thread('worker', frozenset({'team'}), str(tmp_path)))
+    comms = installed_comms(tmp_path)
+    comms.registry.declare(Thread('worker', frozenset({'team'}), str(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     message = comms.messaging.send("worker", "#team", "painted").message
     page = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name))

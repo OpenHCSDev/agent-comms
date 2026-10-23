@@ -1,6 +1,7 @@
 """Restart success includes the connector's actual served read, not only its interpreter."""
 from __future__ import annotations
 
+import asyncio
 import os
 import socket
 import subprocess
@@ -8,33 +9,85 @@ import sys
 from pathlib import Path
 
 import pytest
+from aiohttp import ClientSession, web
 
 from connector_readiness import ConnectorReadiness
 from agent_comms.connector import ConnectorVerb
 from agent_comms.connector_store import ConnectorStore
-from agent_comms.host_services import HostService, ServiceNotServingError
+from agent_comms.host_services import HostService, ServiceNotServingError, SystemdSite
 from agent_comms.host_services.connector import InstallServiceVerb, SystemdConnectorService
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.locked_store import DocumentChange
+from agent_comms.threads import Thread
+
+
+def test_site_notifies_only_after_successful_start(monkeypatch):
+    address = f"@p404-ready-{os.getpid()}"
+    monkeypatch.setenv(SystemdSite.notify_variable, address)
+
+    async def serve():
+        app = web.Application()
+
+        async def read(request):
+            return web.Response(text="serving")
+
+        app.router.add_get("/", read)
+        runner = web.AppRunner(app)
+        await runner.setup()
+        try:
+            with (socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as supervisor,
+                  socket.socket() as occupied):
+                supervisor.bind("\0" + address[1:])
+                supervisor.settimeout(.02)
+                site = SystemdSite(runner, "127.0.0.1", 0)
+                with pytest.raises(TimeoutError):
+                    supervisor.recv(64)
+                occupied.bind(("127.0.0.1", 0))
+                occupied.listen()
+                blocked = SystemdSite(runner, "127.0.0.1", occupied.getsockname()[1])
+                with pytest.raises(OSError):
+                    await blocked.start()
+                with pytest.raises(TimeoutError):
+                    supervisor.recv(64)
+                await site.start()
+                assert supervisor.recv(64) == b"READY=1"
+                port = runner.addresses[0][1]
+                async with ClientSession() as client:
+                    async with client.get(f"http://127.0.0.1:{port}/") as reply:
+                        assert await reply.text() == "serving"
+                await site.stop()
+                with pytest.raises(TimeoutError):
+                    supervisor.recv(64)
+        finally:
+            await runner.cleanup()
+
+    asyncio.run(serve())
 
 
 def test_the_connector_is_a_declared_service():
     assert SystemdConnectorService in HostService.members_with(HostService)
 
 
+def test_a_private_home_does_not_discover_the_real_user_service(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert not SystemdConnectorService.unit_file().exists()
+    assert SystemdConnectorService.running() == ()
+
+
 @pytest.fixture
 def connector_service(comms, tmp_path, monkeypatch):
     """A real supervisor on a copied bus; only systemd's process control is replaced."""
     for name in ("claude-ai", "worker"):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(comms.root)))
+        comms.registry.declare(Thread(name, frozenset(), str(comms.root)))
     copied = tmp_path / "copied-bus"
     StoreBackup.copy_tree(comms.root, copied)
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
     store = ConnectorStore.owned()
-    store.update(lambda grants: grants)
+    store.update(DocumentChange.to)
     with socket.socket() as reserved:
         reserved.bind(("127.0.0.1", 0))
         port = reserved.getsockname()[1]
@@ -82,7 +135,10 @@ def connector_service(comms, tmp_path, monkeypatch):
 def test_restart_proves_a_healthy_connector_on_its_installed_runtime(connector_service, capsys):
     service = connector_service
     result = service.restart_onto(Path(sys.executable))
-    assert str(Path(sys.executable)) in result
+    service.serves()  # ServingProbe's proof, run here by the root's own runtime.
+    assert result.runtime == Path(sys.executable)
+    assert result.line() == (f"Connector on port {service.port} for {service.launch.path} "
+                             f"restarted onto {sys.executable}")
     assert service.result.round_trip in capsys.readouterr().err
     assert not service.store.read().access  # Its one short-lived proof grant was revoked.
 
@@ -114,5 +170,6 @@ def test_restart_refuses_a_connector_with_an_undecodable_store(connector_service
     service.store.path.write_text('{"not_a_grant": true}')
     with pytest.raises(ServiceNotServingError, match="RecordProblems"):
         service.restart_onto(Path(sys.executable))
+        service.serves()
     with socket.socket() as refused:
         assert refused.connect_ex(("127.0.0.1", service.port)) != 0

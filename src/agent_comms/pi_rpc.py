@@ -71,10 +71,10 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
         except asyncio.QueueShutDown:
             return reading.result()
 
-    async def request(self, command, writer):
+    async def request(self, command, child):
         if self._read_task is None:
-            return await command.exchange(self, writer, strict=True, on_event=self.event_type.unowned_event)
-        async with command.pending_response(self, writer) as future:
+            return await command.exchange(child, strict=True, on_event=self.event_type.unowned_event)
+        async with command.pending_response(child) as future:
             await asyncio.wait((future, self._read_task), return_when=asyncio.FIRST_COMPLETED)
             response = future.result() if future.done() else self._read_task.result()
             if response is None:
@@ -106,11 +106,6 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
             return None
         return self.decode_record(raw, strict=strict, max_bytes=max_bytes, event_type=self.event_type)
 
-    def encode(self, command: PiCommand) -> bytes:
-        """Register before writing; correlated proof still requires its native input ID."""
-        self.track(command)
-        return self.command_bytes(command)
-
     def track(self, command: PiCommand) -> asyncio.Future[Response]:
         """Expose the same pending response to the request's lifecycle owner."""
         return command.id.track_in(self.pending, type(command), command)
@@ -119,7 +114,7 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
     def command_bytes(command: PiCommand) -> bytes:
         return (json.dumps(command.to_rpc()) + "\n").encode()
 
-    def correlate(self, response) -> PiCommand:
+    def correlate(self, response: Response) -> PiCommand:
         command = response.id.take_from(self.pending, response.command, response)
         if command is None:
             raise MalformedRecord("Pi RPC response has no pending command")

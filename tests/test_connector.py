@@ -1,5 +1,6 @@
 """The claude.ai connector: OAuth in front of an MCP transport over the ToolRequest family."""
 
+
 import asyncio
 import base64
 import fcntl
@@ -23,7 +24,8 @@ from aiohttp.test_utils import TestClient, TestServer
 from connector_readiness import ConnectorReadiness
 
 from agent_comms.active_route import active_route_path
-from agent_comms.comms import Comms
+from agent_comms.bus import Bus
+from agent_comms.comms import Comms, wire
 from agent_comms.connector import (
     CALLER,
     ApprovalLink,
@@ -38,6 +40,7 @@ from agent_comms.connector_store import (
     IssuedCode, TrustedBrowser, digest,
 )
 from agent_comms.coordinator import Coordination
+from agent_comms.locked_store import DocumentChange
 from agent_comms.message_bus import WatchPass
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import ServicePassFailing
@@ -48,6 +51,7 @@ from agent_comms.maintenance_barrier import (
 )
 from agent_comms.store_files import _store_lock
 from agent_comms.tools import CommsChannelsTool, ReadTool, ToolRequest, invoke_tool
+from agent_comms.threads import Thread
 
 LIST = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
 
@@ -66,13 +70,14 @@ def test_real_connector_refusals_and_replaced_source(tmp_path, source_programs):
     """The actual serve entrypoint, curl transport and production maintenance thread."""
     import os
     import subprocess
-    import sys
 
     project = Path(__file__).resolve().parents[1]
     environment = {**os.environ, "PYTHONPATH": str(project / "src"),
                    "PATH": os.pathsep.join((str(source_programs.prefix / "bin"), os.environ["PATH"]))}
+    # The proof creates the root it serves, so it runs under the serving runtime.
     proof = subprocess.run(
-        [sys.executable, "-X", "faulthandler", str(project / "tests/verify_connector_live.py"),
+        [str(source_programs.prefix / "bin/python"), "-X", "faulthandler",
+         str(project / "tests/verify_connector_live.py"),
          str(tmp_path / "live-connector")],
         env=environment, capture_output=True, text=True, timeout=60,
     )
@@ -88,7 +93,7 @@ def test_connector_round_trip_reads_this_bus_as_its_caller(comms, tmp_path, regi
     import subprocess
     import sys
 
-    comms.registry.declare(comms.registry.new_thread("claude-ai", frozenset(), str(comms.root)))
+    comms.registry.declare(Thread("claude-ai", frozenset(), str(comms.root)))
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
@@ -97,7 +102,7 @@ def test_connector_round_trip_reads_this_bus_as_its_caller(comms, tmp_path, regi
         "PYTHONPATH": os.pathsep.join((str(Path(__file__).resolve().parents[1] / "src"),
                                        *site.getsitepackages()))})
     command = "from agent_comms.connector import main; raise SystemExit(main())"
-    before = comms.bus.log.latest_sequence()
+    before = comms.bus.bus.revision()
     service = subprocess.Popen(
         [sys.executable, "-c", command, "serve", "--root", comms.root, "--port", str(port)],
         env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
@@ -124,7 +129,7 @@ def test_connector_round_trip_reads_this_bus_as_its_caller(comms, tmp_path, regi
     finally:
         service.terminate()
         service.wait(timeout=30)
-    assert comms.bus.log.latest_sequence() == before
+    assert comms.bus.bus.revision() == before
 
 
 @pytest.fixture
@@ -135,7 +140,7 @@ def store(tmp_path: Path) -> ConnectorStore:
 @pytest.fixture
 def connector(store: ConnectorStore, root: Path, comms: Comms):
     for created_at, name in enumerate(("worker", "claude-ai"), start=1):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(root), created_at=created_at))
+        comms.registry.declare(Thread(name, frozenset(), str(root), created_at=created_at))
     return Connector(store, "http://127.0.0.1:18766", root)
 
 
@@ -190,7 +195,7 @@ async def approved_token(client: TestClient, comms: Comms) -> str:
     waiting = await client.get("/authorize", params=parameters, allow_redirects=False)
     assert waiting.status == 200
     owner = comms.messaging.user_identity(str(comms.root))
-    notice = comms.bus.inbox(owner.name)[-1]
+    notice = comms.bus.inbox(owner.name).page.messages[-1]
     link = urlsplit(notice.body.splitlines()[-1])
     assert (await client.head(link.path, allow_redirects=False)).status == 405
     preview = await client.get(link.path, allow_redirects=False)
@@ -268,7 +273,7 @@ async def test_request_log_names_the_route_and_never_its_values(client, store, r
         "/authorize", params=FieldCodec.encode(login.query), allow_redirects=False
     )).status == 200
     owner = comms.messaging.user_identity(str(comms.root))
-    link = urlsplit(comms.bus.inbox(owner.name)[-1].body.splitlines()[-1])
+    link = urlsplit(comms.bus.inbox(owner.name).page.messages[-1].body.splitlines()[-1])
     secret = link.path.rsplit("/", 1)[-1]
     runner = web.AppRunner(Connector(store, "http://127.0.0.1:18766", root).application(),
                            access_log=None)
@@ -323,7 +328,7 @@ class PublishingWatch(WatchPass[None]):
 async def test_watch_pass_waits_for_install_then_runs_once(comms, copied_connector, caplog):
     original = comms.messaging.send("worker", "claude-ai", "Original stays unchanged").message
     connector = await copied_connector()
-    copied = Comms(connector.root)
+    copied = wire(connector.root)
     barrier = MaintenanceBarrier(copied.registry.store.path)
     held = barrier.begin(MaintenanceOperator.current())
     held = barrier.advance(held, PausedPhase)
@@ -332,9 +337,9 @@ async def test_watch_pass_waits_for_install_then_runs_once(comms, copied_connect
 
     @contextmanager
     def opened_wire():
-        with connector.service_wire() as wire:
+        with connector.service_wire() as service:
             opened.set()
-            yield wire
+            yield service
 
     watch = PublishingWatch()
     passes = ServicePassStore.at(connector.root)
@@ -344,7 +349,7 @@ async def test_watch_pass_waits_for_install_then_runs_once(comms, copied_connect
             assert await asyncio.to_thread(opened.wait, 3)
             assert not await asyncio.to_thread(watch.completed.wait, .05)
             assert watch.calls == 0
-            assert copied.bus.log.latest_sequence() == original.seq
+            assert copied.bus.bus.revision() == original.seq
             assert not [record for record in caplog.records if record.levelno >= logging.ERROR]
         finally:
             barrier.advance(held, ReadyPhase)
@@ -354,9 +359,9 @@ async def test_watch_pass_waits_for_install_then_runs_once(comms, copied_connect
         with suppress(asyncio.CancelledError):
             await pending
     assert watch.calls == 1
-    assert [message.body for message in copied.bus.inbox("worker")] == ["One watch pass"]
+    assert [message.body for message in copied.bus.inbox("worker").page.messages] == ["One watch pass"]
     assert passes.read().failing == {}
-    assert comms.bus.log.latest_sequence() == original.seq
+    assert comms.bus.bus.revision() == original.seq
     assert not [record for record in caplog.records if record.levelno >= logging.ERROR]
 
 
@@ -395,12 +400,12 @@ async def test_watch_pass_logs_real_failures_with_tracebacks(connector, caplog):
     assert error.exc_info[0] is RuntimeError
     assert str(error.exc_info[1]) == "A real watch failure"
     assert error.exc_info[2] is not None
-    failing, = ServicePassFailing.violations(Comms(connector.root), "worker")
+    failing, = ServicePassFailing.violations(wire(connector.root), "worker")
     assert failing.watch == "FailingWatch"
     assert failing.line().endswith(
         ": RuntimeError: A real watch failure -> fix the owner of the failing read this wake")
     passes.passed("FailingWatch")
-    assert ServicePassFailing.violations(Comms(connector.root), "worker") == ()
+    assert ServicePassFailing.violations(wire(connector.root), "worker") == ()
 
 
 async def test_registration_accepts_only_the_claude_callback(client):
@@ -425,7 +430,7 @@ async def test_connector_lists_every_tool(client, store, comms):
 
 
 async def test_connector_reads_two_newest_first_conversation_pages(client, store, comms):
-    comms.registry.declare(comms.registry.new_thread("commander", frozenset(), str(comms.root)))
+    comms.registry.declare(Thread("commander", frozenset(), str(comms.root)))
     originals = [comms.messaging.send("worker", "claude-ai", f"history {number}").message
                  for number in range(5)]
     comms.messaging.send("commander", "claude-ai", "not this conversation")
@@ -460,7 +465,7 @@ async def test_connector_channel_history_on_a_copy_leaves_unread_unchanged(
         "worker", "#comms", f"@claude-ai channel post {number}").message
         for number in range(55)]
     connector = await copied_connector()
-    copied = Comms(connector.root)
+    copied = wire(connector.root)
     target = CommandTarget.named("#comms")
     before = copied.bus.pending_count("claude-ai", target)
     ledger = copied.bus.reads.read()
@@ -497,7 +502,7 @@ async def test_connector_thread_tools_act_as_claude_ai(client, store, comms):
             "jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": call})).json()
         assert reply["result"]["isError"] is False, reply
     assert comms.registry.require("claude-ai").goal.text == "Ship the connector"
-    assert [(message.sender, message.body) for message in comms.bus.inbox("worker")] == [
+    assert [(message.sender, message.body) for message in comms.bus.inbox("worker").page.messages] == [
         ("claude-ai", "Owner said go")]
 
 
@@ -515,7 +520,7 @@ async def test_a_call_returns_what_the_tool_returns_in_process(client, store, ro
             },
         )
     ).json()
-    in_process = invoke_tool(Comms(root), "comms_threads", {}, caller=CALLER)
+    in_process = invoke_tool(wire(root), "comms_threads", {}, caller=CALLER)
     assert called["result"]["structuredContent"] == in_process
 
 
@@ -528,13 +533,14 @@ async def test_maintenance_refuses_before_locked_stores_on_a_copied_bus(
     copied_root = connector.root
     monkeypatch.setenv("HOME", str(tmp_path))
     async with TestClient(TestServer(connector.application())) as reader:
-        headers = {"Authorization": f"Bearer {await approved_token(reader, Comms(copied_root))}"}
-        before = (copied_root / "bus.jsonl").read_bytes()
+        headers = {"Authorization": f"Bearer {await approved_token(reader, wire(copied_root))}"}
+        copied_bus = Bus(Bus.path_in(copied_root))
+        before = copied_bus.revision()
         barrier = MaintenanceBarrier(copied_root / "registry.json")
         held = barrier.begin(MaintenanceOperator.current())
         for phase in phases:
             held = barrier.advance(held, phase)
-        with _store_lock(barrier.wire_path), _store_lock(barrier.registry_path), ExitStack() as locks:
+        with _store_lock(copied_bus.path), _store_lock(barrier.registry_path), ExitStack() as locks:
             directory = os.open(active_route_path().parent, os.O_RDONLY | os.O_DIRECTORY)
             locks.callback(os.close, directory)
             fcntl.flock(directory, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -554,8 +560,8 @@ async def test_maintenance_refuses_before_locked_stores_on_a_copied_bus(
             assert refusal == {
                 "type": "held", "error": "Maintenance holds ingress: the bus is under maintenance"}
             assert barrier.current_unlocked() == held
-            assert (copied_root / "bus.jsonl").read_bytes() == before
-    assert comms.bus.log.latest_sequence() == original.seq
+            assert copied_bus.revision() == before
+    assert comms.bus.bus.revision() == original.seq
     assert comms.owners.maintenance.read().turn_pending is False
 
 
@@ -565,7 +571,7 @@ async def test_approval_previews_do_not_grant_browser_trust(client, store, comms
         "/authorize", params=FieldCodec.encode(login.query), allow_redirects=False
     )).status == 200
     owner = comms.messaging.user_identity(str(comms.root))
-    link = urlsplit(comms.bus.inbox(owner.name)[-1].body.splitlines()[-1])
+    link = urlsplit(comms.bus.inbox(owner.name).page.messages[-1].body.splitlines()[-1])
     before = store.path.read_bytes()
     for _ in range(2):
         preview = await client.get(link.path, allow_redirects=False)
@@ -593,7 +599,7 @@ async def test_pending_authorizations_are_bounded(client, store, comms):
             "/authorize", params=FieldCodec.encode(query), allow_redirects=False
         )).status == 200
     owner = comms.messaging.user_identity(str(comms.root))
-    before = len(comms.bus.inbox(owner.name))
+    before = len(comms.bus.inbox(owner.name).page.messages)
     assert before == ConnectorGrants.waiting_limit
     blocked = replace(login.query, state="overflow")
     for _ in range(2):
@@ -603,28 +609,28 @@ async def test_pending_authorizations_are_bounded(client, store, comms):
         assert refused.status == 429 and int(refused.headers["Retry-After"]) == CODE_SECONDS
     assert len(store.read().requests) == ConnectorGrants.waiting_limit
     assert blocked.request_id not in store.read().requests
-    assert len(comms.bus.inbox(owner.name)) == before
+    assert len(comms.bus.inbox(owner.name).page.messages) == before
     repeated = replace(login.query, state="0")
     assert (await client.get(
         "/authorize", params=FieldCodec.encode(repeated), allow_redirects=False
     )).status == 200
-    assert len(comms.bus.inbox(owner.name)) == before
+    assert len(comms.bus.inbox(owner.name).page.messages) == before
     held = store.read().requests[repeated.request_id]
-    store.update(lambda grants: replace(grants, requests=grants.requests | {
+    store.update(lambda grants: DocumentChange.to(replace(grants, requests=grants.requests | {
         repeated.request_id: replace(held, expires_at=time.time() - 1)
-    }))
+    })))
     assert (await client.get(
         "/authorize", params=FieldCodec.encode(blocked), allow_redirects=False
     )).status == 200
     assert len(store.read().requests) == ConnectorGrants.waiting_limit
-    assert len(comms.bus.inbox(owner.name)) == before + 1
+    assert len(comms.bus.inbox(owner.name).page.messages) == before + 1
 
 
 async def test_owner_browser_approval_lifecycle(client, store, comms):
     """One real HTTP/store/bus journey: owner consent, remembered browser, expiry and revoke."""
     token = await approved_token(client, comms)
     owner = comms.messaging.user_identity(str(comms.root))
-    notices = comms.bus.inbox(owner.name)
+    notices = comms.bus.inbox(owner.name).page.messages
     assert len(notices) == 1 and notices[0].target == owner.name
     first_link = urlsplit(notices[0].body.splitlines()[-1])
     assert first_link.netloc == "127.0.0.1:18766"
@@ -652,7 +658,7 @@ async def test_owner_browser_approval_lifecycle(client, store, comms):
     assert redirected.status == 302
     redirected_query = parse_qs(urlsplit(redirected.headers["Location"]).query)
     assert redirected_query["state"] == [query.state] and redirected_query["code"]
-    assert len(comms.bus.inbox(owner.name)) == 1
+    assert len(comms.bus.inbox(owner.name).page.messages) == 1
 
     client.session.cookie_jar.clear()
     query = replace(query, state="untrusted-browser")
@@ -662,27 +668,27 @@ async def test_owner_browser_approval_lifecycle(client, store, comms):
         )
         assert waiting.status == 200
         assert "sent to the owner on comms" in await waiting.text()
-    notices = comms.bus.inbox(owner.name)
+    notices = comms.bus.inbox(owner.name).page.messages
     assert len(notices) == 2  # Retry the same waiting query, not the owner's message.
     link = urlsplit(notices[-1].body.splitlines()[-1])
     assert (await client.get(link.path + "wrong", allow_redirects=False)).status == 400
     expired = replace(store.read().requests[query.request_id], expires_at=time.time() - 1)
-    store.update(lambda grants: replace(
+    store.update(lambda grants: DocumentChange.to(replace(
         grants, requests={query.request_id: expired},
         codes=grants.codes | {"expired-code": IssuedCode(
             query.client_id, query.code_challenge, expires_at=expired.expires_at
         )},
-    ))
+    )))
     assert (await client.get(link.path, allow_redirects=False)).status == 400
-    store.update(lambda grants: grants.issued(query.client_id)[0])
+    store.update(lambda grants: grants.issued(query.client_id))
     assert not store.read().requests and "expired-code" not in store.read().codes
 
     waiting = await client.get("/authorize", params=FieldCodec.encode(query))
     assert waiting.status == 200
     held = store.read().requests[query.request_id]
-    store.update(lambda grants: replace(grants, requests={
+    store.update(lambda grants: DocumentChange.to(replace(grants, requests={
         query.request_id: replace(held, expires_at=time.time() - 1)
-    }))
+    })))
     fresh = replace(query, state="fresh-wait")
     assert (await client.get("/authorize", params=FieldCodec.encode(fresh))).status == 200
     assert query.request_id not in store.read().requests
@@ -695,7 +701,7 @@ async def test_owner_browser_approval_lifecycle(client, store, comms):
         "/authorize", params=FieldCodec.encode(fresh), allow_redirects=False
     )).status == 200
     assert not store.read().codes and not store.read().trusts(browser)
-    assert len(comms.bus.inbox(owner.name)) == 5
+    assert len(comms.bus.inbox(owner.name).page.messages) == 5
 
 
 async def test_a_revoked_token_is_refused(client, store, comms):

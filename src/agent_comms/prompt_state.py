@@ -8,11 +8,9 @@ from typing import TYPE_CHECKING, Never
 
 from . import turn_failure as failures
 from .agent_backend import TurnInboxItem
-from .locked_store import RegistryFile
-from .maintenance_barrier import MaintenanceBarrier
 
 if TYPE_CHECKING:
-    from .backend import TurnSession
+    from .backend import NativeSession, TurnSession
     from .pi_events import AgentSettled, InputCommitted, MessageStart, Response
 
 
@@ -64,15 +62,6 @@ class UnwrittenPrompt(PromptState, TurnInboxItem):
     def dispatch(self):
         return UnacknowledgedPrompt()
 
-    async def deliver_to(self, inputs, session):
-        def write():
-            session.grant_prompt()
-            session.stdin.write(session.native.reader.encode(session.command))
-        async with MaintenanceBarrier(RegistryFile.path_in(session.startup.root)).ingress_async() as status:
-            with status.phase.send_new(session.send_boundary, None, session.command.input_id, session.command.message) as outcome:
-                completion = outcome.dispatch(inputs, session, self, write)
-        return await completion
-
     def refuse(self, inputs, session):
         session.output.record_failure(failures.InputMissing("Original input was cleared before send."))
         session.finish_request()
@@ -82,6 +71,13 @@ class UnwrittenPrompt(PromptState, TurnInboxItem):
         from .native_pi import NativePiInputNotSent
 
         raise NativePiInputNotSent(error, attestation) from error
+
+
+class PreparedSession(UnwrittenPrompt):
+    """An idle-session preparation owns no user prompt."""
+
+    def permits_retention(self, session: NativeSession) -> bool:
+        return session.output.clean
 
 
 @dataclass(frozen=True)

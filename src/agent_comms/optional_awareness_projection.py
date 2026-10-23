@@ -20,16 +20,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
-from agent_comms.coordination_database import CoordinationStore, StoreBusy
+from agent_comms.coordination_database import CoordinationStore
+from agent_comms.locked_store import StoreBusy
 from agent_comms.coordination_errors import CoordinationError
-from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
 from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import OwnerGenerations
 from agent_comms.coordination_tables.responses import ResponseObligation
 
-from .audience_manifest import FrozenRecipient
-from .bus_publication import CommittedDelivery
+from .bus_publication import Delivered
 from .child_process import ProcessIdentity
 from .cohort_schema import (
     AwarenessClaimGenerations,
@@ -51,9 +50,9 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .message_reference import MessageReference
 from .native_input_owner import RegistryOwner
-from .private_registry_guard import _require_no_private_owner_rename
+from .private_registry_guard import RegistryPrivacy
 from .registration import Registration
-from .store_files import _store_lock
+from .store_files import StoreLockContention, _store_lock
 from .threads import Thread
 from .turn_context import ContextSegment, InstructionFile, ResourceProvenance, WireProvenance
 from .typed_table import TypedRow
@@ -64,7 +63,6 @@ from .wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
 class _ParticipantOwner(TypedRow):
     generation: int
     committed: bool
-    owner_thread: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,14 +101,14 @@ class OptionalAwarenessProjection:
         generation: int,
         claimed_generation: int,
     ) -> OptionalAwarenessProjection:
-        with index.log.checked_read() as source:
-            after_seq = source.marker.claimed_after_seq
-        return cls(index, after_seq, through_seq, generation, claimed_generation,
+        # No native cursor is supplied here: include the unstarted prefix,
+        # never infer recipient progress from a sender's resource claim.
+        return cls(index, 0, through_seq, generation, claimed_generation,
                    registry=registry)
 
     async def segments(
         self,
-        initial: CommittedDelivery,
+        initial: Delivered,
         assignment: WakeAssignment,
         owner: Thread,
     ) -> tuple[ContextSegment, ...]:
@@ -148,7 +146,7 @@ class OptionalAwarenessProjection:
             raise ValueError("optional awareness text budget is outside the bounded read")
 
     def __call__(
-        self, initial: CommittedDelivery, assignment: WakeAssignment, owner: Thread
+        self, initial: Delivered, assignment: WakeAssignment, owner: Thread
     ) -> OptionalAwarenessResult:
         """Return complete SQL-backed rows, or omit the entire supplement.
 
@@ -169,7 +167,7 @@ class OptionalAwarenessProjection:
             return OmittedAwareness.capture(reason=type(error).__name__)
 
     def _build(
-        self, initial: CommittedDelivery, assignment: WakeAssignment, owner: Thread
+        self, initial: Delivered, assignment: WakeAssignment, owner: Thread
     ) -> OptionalAwarenessResult:
         if owner.process_identity != ProcessIdentity.capture(os.getpid()):
             raise ProjectionUnavailableError("selected owner is not this process")
@@ -179,10 +177,7 @@ class OptionalAwarenessProjection:
         turn = owner.turn_record.read()
         if not turn.has_claim(self.expected_claimed_generation):
             raise ProjectionUnavailableError("selected owner turn changed")
-        if FrozenRecipient(assignment.recipient_lookup, assignment.recipient) != FrozenRecipient(
-            owner.incarnation.lookup,
-            owner.name,
-        ):
+        if assignment.recipient_lookup != owner.incarnation.lookup:
             raise ProjectionUnavailableError("selected recipient changed")
         if (assignment.wire_seq, assignment.message_id) != (
             initial.message.seq,
@@ -191,13 +186,13 @@ class OptionalAwarenessProjection:
             raise ProjectionUnavailableError("selected source changed")
         if not self.after_seq < initial.message.seq <= self.through_seq:
             raise ProjectionUnavailableError("selected source is outside the captured window")
-        _require_no_private_owner_rename(self.index.log.path.parent)
         # Each selected row must now carry immutable same-transaction owner
         # generation provenance. An incomplete join omits the whole read.
-        root_id = initial.wire_root_id
+        with _store_lock(self.registry.store.path, contention=StoreLockContention(0)):
+            privacy = self.registry.store.private_guard_unlocked()
+            root_id = privacy.namespace
         lookup = assignment.recipient_lookup
         page = self.index.page(
-            root_id=root_id,
             recipient_lookup=lookup,
             after_seq=self.after_seq,
             required_through_seq=self.through_seq,
@@ -206,9 +201,9 @@ class OptionalAwarenessProjection:
         if page.has_more:
             raise ProjectionUnavailableError("binding candidate decisions exceed the row budget")
 
-        path = CoordinationStore.path_in(self.index.log.path.parent)
+        path = CoordinationStore.path_in(self.index.root)
         with CoordinationStore.observing(path) as db:
-            self._verify_schema_and_owner(db, initial, assignment, owner)
+            self._verify_schema_and_owner(db, initial, assignment, owner, privacy)
             decisions = self._selected_decisions(db, root_id, lookup, page.through_seq)
             candidates = tuple(
                 (row.source_seq, row.message_id, row.wake_mode, row.target) for row in page.entries
@@ -219,7 +214,6 @@ class OptionalAwarenessProjection:
             obligations = self._open_obligations(db, lookup)
             expected = OwnerGenerations(
                 owner_lookup=lookup,
-                owner_thread=owner.name,
                 generation=self.expected_participant_generation,
             )
             selected = [row for row in decisions if row.generation.current(expected)]
@@ -270,9 +264,8 @@ class OptionalAwarenessProjection:
         return result
 
     def _verify_live_inclusion(self, path: os.PathLike[str], lookup: str, owner: Thread) -> None:
-        _require_no_private_owner_rename(self.index.log.path.parent)
         registry = self.registry
-        with _store_lock(registry.store.path, blocking=False):
+        with _store_lock(registry.store.path, contention=StoreLockContention(0)):
             snapshot = registry.store.read_snapshot_unlocked()
             RegistryOwner(
                 thread=owner,
@@ -283,37 +276,37 @@ class OptionalAwarenessProjection:
         with CoordinationStore.observing(Path(path), StoreBusy()) as db:
             rows = _ParticipantOwner.read(
                 db.execute(
-                    "SELECT g.generation,p.committed,g.owner_thread FROM owner_generations g "
+                    "SELECT g.generation,p.committed FROM owner_generations g "
                     "JOIN participants p ON p.participant_lookup=g.owner_lookup "
                     "WHERE g.owner_lookup=?",
                     (lookup,),
                 )
             )
-            if rows != [_ParticipantOwner(self.expected_participant_generation, True, owner.name)]:
+            if rows != [_ParticipantOwner(self.expected_participant_generation, True)]:
                 raise ProjectionUnavailableError("current participant generation changed")
-        _require_no_private_owner_rename(self.index.log.path.parent)
 
     def _verify_schema_and_owner(
         self,
         db: sqlite3.Connection,
-        initial: CommittedDelivery,
+        initial: Delivered,
         assignment: WakeAssignment,
         owner: Thread,
+        privacy: RegistryPrivacy,
     ) -> None:
-        CoordinatorTable.require_schema(db)
+        privacy.coordinator_schema().require_schema(db)
         CohortTable.require_installed(db)
         assert_optional_awareness_schema(db)
         people = _ParticipantOwner.read(
             db.execute(
-                "SELECT p.committed,g.owner_thread,g.generation FROM participants p "
+                "SELECT p.committed,g.generation FROM participants p "
                 "JOIN owner_generations g ON g.owner_lookup=p.participant_lookup "
                 "WHERE p.participant_lookup=?",
                 (assignment.recipient_lookup,),
             )
         )
-        if people != [_ParticipantOwner(self.expected_participant_generation, True, owner.name)]:
+        if people != [_ParticipantOwner(self.expected_participant_generation, True)]:
             raise ProjectionUnavailableError("selected participant owner changed")
-        acknowledgement = _claim_record(db, initial)
+        acknowledgement = _claim_record(db, initial, privacy)
         if not any(current == assignment for current in acknowledgement.assignments):
             raise ProjectionUnavailableError("current selected claim lost its sealed acknowledgement")
 

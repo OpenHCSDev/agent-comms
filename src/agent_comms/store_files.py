@@ -11,7 +11,7 @@ import tempfile
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
+from collections.abc import AsyncIterator, Iterable, Iterator, Mapping
 from contextlib import (
     AbstractAsyncContextManager,
     AbstractContextManager,
@@ -24,27 +24,15 @@ from contextvars import Context, ContextVar
 from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
 from pathlib import Path
-from typing import TYPE_CHECKING, BinaryIO, ClassVar
+from typing import BinaryIO, ClassVar
 
 from .child_process import Platform
 from .declared_family import DeclaredFamily
-from .errors import CheckpointNeedsRepairError, RelationViolationError
+from .errors import RelationViolationError
 from .private_path import FileIdentity, PrivateFileRole
 
 with suppress(ModuleNotFoundError):  # Windows; Win32Platform never asks a mode for its flock.
     import fcntl
-
-if TYPE_CHECKING:
-    import sqlite3
-
-    from .private_bus_checkpoint import (
-        CheckedRead,
-        PrefixWitness,
-        WritableCheckpoint,
-    )
-    from .wire_log import WireLog
-    from .wire_metadata import WireMetadata
-
 
 class LockMode(ABC):
     """Whether a store lock lets other holders in, and what its holder may do."""
@@ -54,75 +42,34 @@ class LockMode(ABC):
         """This mode's POSIX flock operation."""
 
     @abstractmethod
-    def open_checkpoint(self, checkpoint: WritableCheckpoint) -> sqlite3.Connection:
-        """Open a writable bus checkpoint as this lock's holder may."""
-
-    @abstractmethod
-    def verify_checkpoint(self, checkpoint: WritableCheckpoint, bus: WireLog,
-                          marker: WireMetadata, db: sqlite3.Connection,
-                          stream: BinaryIO) -> PrefixWitness:
-        """Verify a writable bus checkpoint as this lock's holder may."""
-
-    @abstractmethod
     def require_writer(self) -> None:
         """Require the exclusive holder before rebuilding a replaced source."""
 
     def require_held(self, held: LockMode) -> None:
         pass
 
-    @abstractmethod
-    def after_repair_needed(self, error: CheckpointNeedsRepairError) -> LockMode:
-        """The mode that may repair what this holder could only name."""
-
 
 class SharedLock(LockMode):
-    """Concurrent readers; the checkpoint is only checked, never repaired."""
+    """Concurrent readers of the owning store."""
 
     def flock(self) -> int:
         return fcntl.LOCK_SH
 
-    def open_checkpoint(self, checkpoint: WritableCheckpoint) -> sqlite3.Connection:
-        return checkpoint.open_read_only()
-
-    def verify_checkpoint(self, checkpoint: WritableCheckpoint, bus: WireLog,
-                          marker: WireMetadata, db: sqlite3.Connection,
-                          stream: BinaryIO) -> PrefixWitness:
-        return checkpoint.check_final(bus, marker, db, stream)
-
     def require_writer(self) -> None:
-        raise CheckpointNeedsRepairError("Replaced bus file needs its page index rebuilt.")
-
-    def after_repair_needed(self, error: CheckpointNeedsRepairError) -> LockMode:
-        return ExclusiveLock()
+        raise RelationViolationError("Cannot upgrade an enclosing shared store lock.")
 
 
 class ExclusiveLock(LockMode):
-    """One holder, which may repair the checkpoint it verifies."""
+    """The owning store's exclusive writer."""
 
     def flock(self) -> int:
         return fcntl.LOCK_EX
-
-    def open_checkpoint(self, checkpoint: WritableCheckpoint) -> sqlite3.Connection:
-        return checkpoint.open_for_repair()
-
-    def verify_checkpoint(self, checkpoint: WritableCheckpoint, bus: WireLog,
-                          marker: WireMetadata, db: sqlite3.Connection,
-                          stream: BinaryIO) -> PrefixWitness:
-        return checkpoint.verify_with_repair(bus, marker, db, stream)
 
     def require_writer(self) -> None:
         pass
 
     def require_held(self, held: LockMode) -> None:
-        try:
-            held.require_writer()
-        except CheckpointNeedsRepairError as error:
-            raise RelationViolationError(
-                "Cannot upgrade an enclosing shared store lock."
-            ) from error
-
-    def after_repair_needed(self, error: CheckpointNeedsRepairError) -> LockMode:
-        raise error
+        held.require_writer()
 
 
 @dataclass(slots=True)
@@ -130,11 +77,6 @@ class StoreLockContention:
     """One operation's contention budget, spent only while acquiring physical locks."""
 
     remaining: float
-
-    @classmethod
-    def for_blocking(cls, blocking: bool) -> StoreLockContention:
-        """An unbounded wait, or no wait at all."""
-        return cls(math.inf if blocking else 0)
 
     def waits(self, descriptor: int, platform: Platform, *, mode: LockMode) -> Iterator[float]:
         """One physical acquisition algorithm; drivers own sync/async waiting."""
@@ -161,6 +103,19 @@ class StoreLockContention:
     async def acquire_async(self, descriptor: int, platform: Platform, *, mode: LockMode) -> None:
         for delay in self.waits(descriptor, platform, mode=mode):
             await asyncio.sleep(delay)
+
+
+class UnboundedContention(StoreLockContention):
+    """The budget that never runs out: spending from it leaves it unbounded, so one
+    declared instance serves every caller that waits as long as the lock is held."""
+
+    __slots__ = ()
+
+    def __init__(self) -> None:
+        super().__init__(math.inf)
+
+
+UNBOUNDED_CONTENTION = UnboundedContention()
 
 
 @dataclass
@@ -196,12 +151,16 @@ class StoreLock:
 
     @classmethod
     @contextmanager
-    def ordered(cls, requests: Mapping[StoreLockOwner, LockMode], *, blocking=True, contention=None):
+    def ordered(
+        cls, requests: Mapping[StoreLockOwner, LockMode], *,
+        contention: StoreLockContention = UNBOUNDED_CONTENTION,
+    ):
         """Acquire store owners by their declared rank, never their filenames."""
         with ExitStack() as resources:
             yield {owner: resources.enter_context(owner.locked(
-                mode=requests[owner], blocking=blocking, contention=contention))
-                for owner in sorted(requests, key=lambda owner: (owner.lock_rank, str(owner.path)))}
+                mode=requests[owner], contention=contention))
+                for owner in sorted(requests, key=lambda owner: (
+                    type(owner).lock_rank(), str(owner.path)))}
 
     @classmethod
     def current_release(cls) -> StoreLockRelease:
@@ -295,30 +254,77 @@ class StoreOwner(DeclaredFamily):
         )
 
 
-class StoreLockOwner(StoreOwner, declared_name=None):
+class StoreLockFile(StoreOwner, declared_name=None):
+    """A file whose writers take the store lock inode beside it, so that inode is
+    this file's live state, never a leftover."""
+
+    __slots__ = ()
+
+
+class StoreLockOwner(StoreLockFile, declared_name=None):
     __slots__ = ()
     path: Path
-    lock_rank: ClassVar[int]
     lock_type: ClassVar[type[StoreLock]] = StoreLock
 
     @classmethod
-    def declare_lock_order(cls, owners: tuple[type[StoreLockOwner], ...]) -> None:
-        if len(set(owners)) != len(owners):
-            raise TypeError("A store owner occurs twice in the lock order")
-        missing = set(cls.members_with(cls)) - set(owners)
-        if missing:
-            names = ", ".join(sorted(owner.__name__ for owner in missing))
-            raise TypeError(f"Store owners missing from the lock order: {names}")
-        for rank, owner in enumerate(owners):
-            owner.lock_rank = rank
+    def lock_tiers(cls) -> tuple[type[StoreLockOwner], ...]:
+        """Direct tier declarations, in this module's family-registration order."""
+        return tuple(owner for owner in StoreLockOwner.members_with(StoreLockTier)
+                     if StoreLockTier in owner.__bases__)
 
-    def locked(self, *, blocking: bool = True, read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
-               mode: LockMode = ExclusiveLock(), contention: StoreLockContention | None = None):
-        return _store_lock(self.path, blocking=blocking, read_budget=read_budget,
+    @classmethod
+    def lock_rank(cls) -> int:
+        tiers = StoreLockOwner.lock_tiers()
+        inherited = tuple(tier for tier in tiers if tier in cls.__mro__)
+        if len(inherited) != 1:
+            raise TypeError(f"{cls.__qualname__} must inherit exactly one store lock tier")
+        return tiers.index(inherited[0])
+
+    @classmethod
+    def validate_selection(cls, members: Iterable[type[DeclaredFamily]]) -> None:
+        # A tier registers before it can rank its concrete stores. Store declarations
+        # already see all tiers because this module finishes before theirs imports.
+        if StoreLockTier not in cls.__bases__:
+            cls.lock_rank()
+
+    def locked(self, *, read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
+               mode: LockMode = ExclusiveLock(),
+               contention: StoreLockContention = UNBOUNDED_CONTENTION):
+        return _store_lock(self.path, read_budget=read_budget,
                            mode=mode, contention=contention, lock_type=self.lock_type)
 
     def locked_async(self) -> AbstractAsyncContextManager[StoreLock]:
         return _async_store_lock(self.path, lock_type=self.lock_type)
+
+
+class StoreLockTier(StoreLockOwner, declared_name=None):
+    """Rank capabilities in the existing owner family, without a file of their own."""
+
+    __slots__ = ()
+
+
+class SourceTier(StoreLockTier):
+    """HistoryArchive.attach holds history before registry (historical_views.py:472/492)."""
+
+    __slots__ = ()
+
+
+class RegistryTier(StoreLockTier):
+    """Tag updates hold registry before catalog (channel_management.py:191/303)."""
+
+    __slots__ = ()
+
+
+class CatalogTier(StoreLockTier):
+    """CapturedSelection holds catalog before reads (read_basis.py:1127/1128)."""
+
+    __slots__ = ()
+
+
+class DependentStateTier(StoreLockTier):
+    """Reads follow catalog; rename/delete state follows registry (thread_management.py:397)."""
+
+    __slots__ = ()
 
 
 def store_lock_path(store_path: Path) -> Path:
@@ -326,10 +332,23 @@ def store_lock_path(store_path: Path) -> Path:
     return store_path.with_name(f'.{store_path.name}.lock')
 
 
+def locked_store_path(lock_path: Path) -> Path:
+    """The store ``store_lock_path`` would name ``lock_path`` for; inverse of that function."""
+    return lock_path.with_name(lock_path.name.removeprefix('.').removesuffix('.lock'))
+
+
+def is_store_lock(path: Path) -> bool:
+    """Whether ``path`` is the lock ``store_lock_path`` names, present or not its store."""
+    store = locked_store_path(path)
+    return store != path and store_lock_path(store) == path
+
+
 @contextmanager
 def _store_lock_file(store_path: Path):
     """Open read-only: lock retirement must not generate a close-write watch event."""
-    store_path.parent.mkdir(parents=True, exist_ok=True)
+    if is_store_lock(store_path):
+        raise ValueError(f"A store lock is never itself a lockable store: {store_path}")
+    store_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     lock_path = store_lock_path(store_path)
     with StoreLock.releasing(), os.fdopen(
         os.open(lock_path, os.O_RDONLY | os.O_CREAT, 0o666), "rb"
@@ -353,24 +372,20 @@ class UnacquiredStoreLock:
     @contextmanager
     def locked(
         self, store_path: Path, read_budget: StoreReadBudget, mode: LockMode,
-        contention: StoreLockContention, lock_type: type[StoreLock], blocking: bool,
+        contention: StoreLockContention, lock_type: type[StoreLock],
     ) -> Iterator[StoreLock]:
         platform = Platform.current()
-        with _store_lock_file(store_path) as lock_file, ExitStack() as resources:
-            def acquire(mode):
-                contention.acquire(lock_file.fileno(), platform, mode=mode)
-                return resources.enter_context(StoreLockAcquisition.holding(
-                    store_path, lock_file, platform, read_budget, mode=mode, lock_type=lock_type))
-            try:
-                lock = acquire(mode)
-            except CheckpointNeedsRepairError as error:
-                lock = acquire(mode.after_repair_needed(error))
-            yield lock
+        with _store_lock_file(store_path) as lock_file:
+            contention.acquire(lock_file.fileno(), platform, mode=mode)
+            with StoreLockAcquisition.holding(
+                store_path, lock_file, platform, read_budget, mode=mode, lock_type=lock_type,
+            ) as lock:
+                yield lock
 
     @asynccontextmanager
     async def locked_async(
         self, store_path: Path, read_budget: StoreReadBudget, mode: LockMode,
-        contention: StoreLockContention, lock_type: type[StoreLock], blocking: bool,
+        contention: StoreLockContention, lock_type: type[StoreLock],
     ) -> AsyncIterator[StoreLock]:
         platform = Platform.current()
         with _store_lock_file(store_path) as lock_file:
@@ -379,12 +394,6 @@ class UnacquiredStoreLock:
                 store_path, lock_file, platform, read_budget, mode=mode, lock_type=lock_type,
             ) as lock:
                 yield lock
-
-    async def read_checked[T](
-        self, log: WireLog, read: Callable[[CheckedRead], T], mode: LockMode,
-        worker: Callable[[Callable[[], T]], Awaitable[T]],
-    ) -> T:
-        return await log._read_checked_fresh(read, mode, worker)
 
 
 @dataclass
@@ -426,23 +435,17 @@ class StoreLockAcquisition:
 
     def locked(
         self, store_path: Path, read_budget: StoreReadBudget, mode: LockMode,
-        contention: StoreLockContention, lock_type: type[StoreLock], blocking: bool,
+        contention: StoreLockContention, lock_type: type[StoreLock],
     ) -> AbstractContextManager[StoreLock]:
         return self.source(store_path, read_budget, lock_type)
 
     @asynccontextmanager
     async def locked_async(
         self, store_path: Path, read_budget: StoreReadBudget, mode: LockMode,
-        contention: StoreLockContention, lock_type: type[StoreLock], blocking: bool,
+        contention: StoreLockContention, lock_type: type[StoreLock],
     ) -> AsyncIterator[StoreLock]:
         with self.source(store_path, read_budget, lock_type) as lock:
             yield lock
-
-    async def read_checked[T](
-        self, log: WireLog, read: Callable[[CheckedRead], T], mode: LockMode,
-        worker: Callable[[Callable[[], T]], Awaitable[T]],
-    ) -> T:
-        return await log._read_checked_borrowed(read, self, worker)
 
     @classmethod
     @contextmanager
@@ -474,55 +477,81 @@ class StoreLockAcquisition:
 def _store_lock(
     store_path: Path,
     *,
-    blocking: bool = True,
     read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
     mode: LockMode = ExclusiveLock(),
-    contention: StoreLockContention | None = None,
+    contention: StoreLockContention = UNBOUNDED_CONTENTION,
     lock_type: type[StoreLock] = StoreLock,
 ) -> AbstractContextManager[StoreLock]:
-    wait = contention or StoreLockContention.for_blocking(blocking)
     return StoreLockAcquisition.current(store_path, mode).locked(
-        store_path, read_budget, mode, wait, lock_type, blocking,
+        store_path, read_budget, mode, contention, lock_type,
     )
 
 
 def _async_store_lock(
     store_path: Path,
     *,
-    blocking: bool = True,
     read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
     mode: LockMode = ExclusiveLock(),
-    contention: StoreLockContention | None = None,
+    contention: StoreLockContention = UNBOUNDED_CONTENTION,
     lock_type: type[StoreLock] = StoreLock,
 ) -> AbstractAsyncContextManager[StoreLock]:
-    wait = contention or StoreLockContention.for_blocking(blocking)
     return StoreLockAcquisition.current(store_path, mode).locked_async(
-        store_path, read_budget, mode, wait, lock_type, blocking,
+        store_path, read_budget, mode, contention, lock_type,
     )
 
 
-def _atomic_write_text(
-    path: Path, text: str, *, fsync_parent: bool = False,
-    mode: int = PrivateFileRole.permissions,
-) -> None:
-    """Replace a snapshot; private guarded writes also durably sync its name."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary_path = StoreOwner.stage_file(path)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as output:
-            os.chmod(temporary_path, mode)
-            output.write(text)
-            output.flush()
-            os.fsync(output.fileno())
-        os.replace(temporary_path, path)
-        if fsync_parent:
-            directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
-            try:
-                os.fsync(directory_fd)
-            finally:
-                os.close(directory_fd)
-    finally:
-        temporary_path.unlink(missing_ok=True)
+@dataclass(frozen=True)
+class AtomicFile:
+    """A staged replacement always syncs its contents and directory entry."""
+
+    path: Path
+    mode: int = PrivateFileRole.permissions
+
+    @contextmanager
+    def staged(self) -> Iterator[BinaryIO]:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary = StoreOwner.stage_file(self.path)
+        try:
+            with os.fdopen(descriptor, "wb") as output:
+                os.chmod(temporary, self.mode)
+                yield output
+                output.flush()
+                os.fsync(output.fileno())
+            self._publish(temporary)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    def write_text(self, text: str) -> None:
+        self.write_bytes(text.encode("utf-8"))
+
+    def write_bytes(self, data: bytes) -> None:
+        with self.staged() as output:
+            output.write(data)
+
+    def replace(self, staged: Path) -> None:
+        """Publish an independently prepared file after syncing its data."""
+        Platform.current().sync_file(staged)
+        self._publish(staged)
+
+    def _publish(self, staged: Path) -> None:
+        self._install(staged)
+        Platform.current().sync_directory(self.path.parent)
+
+    def _install(self, staged: Path) -> None:
+        os.replace(staged, self.path)
+
+    def sync(self) -> None:
+        """Sync an existing file without replacing an open database's inode."""
+        platform = Platform.current()
+        platform.sync_file(self.path)
+        platform.sync_directory(self.path.parent)
+
+
+class ExclusiveAtomicFile(AtomicFile):
+    """Create a new name atomically, refusing an existing destination."""
+
+    def _install(self, staged: Path) -> None:
+        os.link(staged, self.path)
 
 
 def _repair_trailing_jsonl(path: Path) -> None:

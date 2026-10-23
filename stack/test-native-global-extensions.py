@@ -18,7 +18,7 @@ import sys
 import time
 import tempfile
 
-from agent_comms.candidate_maintenance import drain_candidate_catchup
+from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.storage_rules import StorageRoots
 from agent_comms.native_package import NativeImportsManifest, VerifiedNativePackage
@@ -63,10 +63,9 @@ def main(fixture: Path):
     }
     environment.update(RestartEnvironment(native_config=agent, agent_directory=agent).encode_native())
     from agent_comms.child_process import ProcessIdentity
-    from agent_comms.comms import Comms
     from agent_comms.threads import Thread
 
-    comms = Comms(root / "wire")
+    comms = wire(root / "wire")
     thread = Thread("native-startup-fixture", frozenset(), str(project),
                     storage_roots=StorageRoots(root / "scratch"),
                     process_identity=ProcessIdentity.capture(os.getpid()))
@@ -164,7 +163,4 @@ console.log(JSON.stringify({{errors, extensions:extensions.map(e => ({{path:e.pa
 
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory(prefix="native-globals-") as directory:
-        try:
-            main(Path(directory) / "fixture")
-        finally:
-            drain_candidate_catchup(Path(directory))
+        main(Path(directory) / "fixture")

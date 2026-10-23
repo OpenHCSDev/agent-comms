@@ -18,7 +18,7 @@ from .thread_presentation import ThreadPresentation
 
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity
-    from .bus_publication import CommittedDelivery
+    from .bus_publication import Delivered
     from .goal_actions import GoalAction
     from .goal_attempts import Generation
     from .goal_failure_observation import GoalFailureEvidence
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 class GoalWaitTarget(WireValue):
     incarnation: RecordedThreadIncarnation
 
-    def sent(self, original: CommittedDelivery) -> bool:
+    def sent(self, original: Delivered) -> bool:
         return original.audience.sender_lookup == self.incarnation.lookup
 
     def to_wire(self) -> dict[str, str | float]:
@@ -269,7 +269,7 @@ class AttemptFailedExecution(BlockedExecution, RetryableExecution):
 
     @property
     def reason(self) -> str:
-        return self.evidence.reason.value
+        return self.evidence.failure.declared_name
 
 
 class GoalPublicationSnapshot(ABC):

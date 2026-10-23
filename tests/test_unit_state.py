@@ -14,8 +14,9 @@ from agent_comms.message_page import MessagePageRequest
 from agent_comms.read_basis import DMDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.thread_text import ForkedParent, SavedSessionFile
-from agent_comms.todos import DeliverTodo, OperationDelivery, PullRequests
+from agent_comms.thread_text import ForkedParent
+from agent_comms.session_file import RegistrySessionLocation
+from agent_comms.todos import DeliverTodo, OperationDelivery, ProgressRead
 from agent_comms.ui_model.unit_state import (
     AwaitingCommander,
     Blocked,
@@ -95,7 +96,7 @@ def recorded_turn(comms, calls):
     path.write_text("".join(json.dumps(row) + "\n" for row in rows))
     path.chmod(0o600)
     thread = comms.registry.require("worker")
-    comms.registry.register(replace(thread, session_file=SavedSessionFile(str(path))))
+    comms.registry.register(replace(thread, session_file=RegistrySessionLocation.from_path(str(path), comms.root)))
 
 
 def unread_checkout(comms, tmp_path):
@@ -153,7 +154,7 @@ def test_unit_state_family_uses_real_records(held_bus, tmp_path, member):
             pass  # Assigned work, before its first-call deadline.
         else:
             pytest.fail(f"New UnitState needs its real-record scenario: {member}")
-        states = UnitState.current(comms, "lead", PullRequests())
+        states = UnitState.current(comms, "lead", ProgressRead())
         (state,) = (state for state in states if state.unit.name == unit)
         assert isinstance(state, member)
         assert state.unit == comms.registry.require(unit).incarnation
@@ -189,7 +190,7 @@ def test_stopped_child_without_lead_orders_remains_in_the_frame(held_bus):
     with LaunchRoot.from_path(held_bus.root).selected():
         (state,) = (
             state
-            for state in UnitState.current(held_bus, "lead", PullRequests())
+            for state in UnitState.current(held_bus, "lead", ProgressRead())
             if state.unit == child.incarnation
         )
         assert isinstance(state, Idle)
@@ -238,15 +239,13 @@ def test_heartbeat_keeps_every_unit_when_one_checkout_is_unreadable(
         assert isinstance(cards[0], Unreadable)
         assert {card.unit.name for card in cards} >= {"worker", "outsider"}
         heartbeat.pass_body(held_bus, observed)
-        page = held_bus.bus.log.read_page(
-            MessagePageRequest(
-                DMDisplayScope.capture(
-                    heartbeat.sender,
-                    "lead",
-                    held_bus.registry.snapshot(),
-                )
+        page = MessagePageRequest(
+            DMDisplayScope.capture(
+                heartbeat.sender,
+                "lead",
+                held_bus.registry.snapshot(),
             )
-        )
+        ).read_opened(held_bus.bus.bus)
         message = next(row for row in page.messages if row.sender == heartbeat.sender)
         assert all(card.line() in message.body for card in cards)
         assert message.body.index(cards[0].line()) < message.body.index(cards[-1].line())

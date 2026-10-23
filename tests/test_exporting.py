@@ -7,10 +7,9 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.bus_publication import PRIVATE_WIRE_FIELD
-from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
+from agent_comms.channels import AnyOfMatch, ViewPredicate, ParticipantsView
 from agent_comms.cli import main
-from agent_comms.comms import wire
+from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.exporting import (
     ChannelScope,
@@ -27,6 +26,7 @@ from agent_comms.exporting import (
     WireTranscriptExporter,
 )
 from agent_comms.messages import Message, InfoKind
+from agent_comms.threads import Thread
 
 
 def message(sequence: int, body: str, *, timestamp: float | None = None) -> Message:
@@ -38,6 +38,15 @@ def message(sequence: int, body: str, *, timestamp: float | None = None) -> Mess
         timestamp=float(sequence if timestamp is None else timestamp),
         seq=sequence,
     )
+
+
+@pytest.fixture
+def export_comms(comms: Comms, tmp_path) -> Comms:
+    comms.channels.create_tag("team")
+    for name in ("alice", "bob"):
+        comms.registry.declare(Thread(
+            name, frozenset({"team"}), str(tmp_path)))
+    return comms
 
 
 def exporter(
@@ -83,26 +92,20 @@ def test_wire_export_declarations_are_explicit_and_fail_loud():
         WireExportBoundary(-1, 1.0)
 
 
-@pytest.mark.parametrize("format", [JsonlFormat(), TextFormat()])
-@pytest.mark.parametrize("private_key", [PRIVATE_WIRE_FIELD, "_agent_comms_private_future"])
-def test_raw_mapping_with_private_bus_sideband_never_enters_export(
-    tmp_path, format: WireExportFormat, private_key: str
-) -> None:
-    destination = tmp_path / "wire-export"
-    raw = message(1, "public body").to_wire()
-    raw["future_extension"] = {"public": True}
-    raw[private_key] = {"publication_key": "SECRET-PRIVATE-RECEIPT"}
+def test_jsonl_exports_the_public_projection_of_a_delivery(tmp_path, export_comms):
+    published = export_comms.messaging.send("alice", "#team", "public body").message
+    record = export_comms.bus.bus.lookup(published.seq)
+    public = Message.from_message(record)
+    destination = tmp_path / "public.jsonl"
 
-    with pytest.raises(ValueError):
-        exporter(format=format, through=1).export([raw], destination)
+    exporter(through=record.seq).export((record,), destination)
 
-    assert not destination.exists()
-    assert not list(tmp_path.glob(".wire-export.*.tmp"))
+    assert records(destination)[1]["message"] == public.to_wire()
 
 
 def test_jsonl_is_versioned_lossless_and_receipt_has_artifact_provenance(tmp_path):
     destination = tmp_path / "wire.jsonl"
-    first = message(1, "hello").to_wire()
+    first = message(1, "hello")
     second = message(2, "unicode: café")
 
     acknowledgement = exporter(through=2).export(iter([first, second]), destination)
@@ -120,7 +123,7 @@ def test_jsonl_is_versioned_lossless_and_receipt_has_artifact_provenance(tmp_pat
         "boundary": {"through_seq": 2, "export_started_at": 200.0},
     }
     assert rows[1]["record"] == rows[2]["record"] == "message"
-    assert rows[1]["message"] == first
+    assert rows[1]["message"] == first.to_wire()
     assert Message.from_wire(rows[2]["message"]) == second
     assert acknowledgement.source_messages == acknowledgement.exported_messages == 2
     assert acknowledgement.omitted_messages == 0 and not acknowledgement.truncated
@@ -278,25 +281,22 @@ def test_atomic_private_output_refuses_existing_and_symlink_and_force_replaces(t
         assert destination.stat().st_mode & 0o777 == 0o600
 
 
-def test_wire_snapshot_excludes_appends_after_its_fixed_boundary(tmp_path):
-    comms = wire(tmp_path / "wire")
-    for name in ("alice", "bob"):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path)))
+def test_wire_snapshot_excludes_appends_after_its_fixed_boundary(export_comms):
+    comms = export_comms
     comms.messaging.send("alice", "#team", "captured").message.message_id
 
-    with comms.bus.log.full_history_snapshot() as (through, messages):
+    with comms.bus.bus.reading() as source:
+        through = source.revision()
         comms.messaging.send("bob", "#team", "too late").message.message_id
-        snapshot = list(messages)
+        snapshot = list(source.message_history())
 
     assert through == 1
     assert [item.body for item in snapshot] == ["captured"]
     assert [item.body for item in read_history(comms)] == ["captured", "too late"]
 
 
-def test_comms_export_uses_target_owned_channel_and_alias_aware_dm_scopes(tmp_path):
-    comms = wire(tmp_path / "wire")
-    for name in ("alice", "bob"):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path)))
+def test_comms_export_uses_target_owned_channel_and_alias_aware_dm_scopes(tmp_path, export_comms):
+    comms = export_comms
     comms.messaging.send("alice", "#team", "team row").message.message_id
     comms.channels.create_tag("other")
     comms.messaging.send("alice", "#other", "other row").message.message_id
@@ -326,11 +326,7 @@ def test_comms_export_uses_target_owned_channel_and_alias_aware_dm_scopes(tmp_pa
     assert dm_receipt.scope.participants == ("renamed", "bob")
 
     comms.channels.set_saved_view(
-        SavedView(
-            "projection",
-            ViewKind.PARTICIPANTS,
-            ViewPredicate(AnyOfMatch, frozenset({"team"})),
-        )
+        ParticipantsView('projection', ViewPredicate(AnyOfMatch, frozenset({'team'})))
     )
     with pytest.raises(RelationViolationError):
         comms.views.export_wire(
@@ -341,11 +337,11 @@ def test_comms_export_uses_target_owned_channel_and_alias_aware_dm_scopes(tmp_pa
         )
 
 
-def test_export_wire_cli_requires_explicit_scope_and_bound_and_emits_receipt(tmp_path, capsys):
-    root = tmp_path / "wire"
-    comms = wire(root)
-    for name in ("alice", "bob"):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path)))
+def test_export_wire_cli_requires_explicit_scope_and_bound_and_emits_receipt(
+    tmp_path, capsys, export_comms, durable_home,
+):
+    comms = export_comms
+    root = comms.root
     comms.messaging.send("alice", "#team", "hello").message.message_id
     destination = tmp_path / "cli.jsonl"
 
@@ -372,14 +368,10 @@ def test_export_wire_cli_requires_explicit_scope_and_bound_and_emits_receipt(tmp
     assert records(destination)[1]["message"]["text"] == "hello"
 
 
-def test_export_does_not_mutate_wire_or_read_markers(tmp_path):
-    comms = wire(tmp_path / "wire")
-    for name in ("alice", "bob"):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
+def test_export_does_not_mutate_history_or_read_state(tmp_path, export_comms):
+    comms = export_comms
     comms.messaging.send("alice", "bob", "unread").message.message_id
-    bus_before = comms.bus.log.path.read_bytes()
-    markers = comms.root / "read_markers.json"
-    markers_before = markers.read_bytes() if markers.exists() else None
+    bus_before = tuple(comms.bus.bus.message_history())
 
     comms.views.export_wire(
         tmp_path / "everything.jsonl",
@@ -388,8 +380,7 @@ def test_export_does_not_mutate_wire_or_read_markers(tmp_path):
         limit=FullLimit(),
     )
 
-    assert comms.bus.log.path.read_bytes() == bus_before
-    assert (markers.read_bytes() if markers.exists() else None) == markers_before
+    assert tuple(comms.bus.bus.message_history()) == bus_before
     assert comms.bus.pending_count("bob") == 1
 
 

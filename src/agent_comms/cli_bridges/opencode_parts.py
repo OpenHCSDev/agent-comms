@@ -5,10 +5,9 @@ import builtins
 from abc import ABC, abstractmethod
 from typing import ClassVar, Literal
 
-from metaclass_registry import RegistryConfig
 from pydantic import ConfigDict, Field, JsonValue, model_validator
 
-from agent_comms.cli_protocol import TaggedWire, TextWire, WireHeader, WireModel
+from agent_comms.cli_protocol import TaggedWire, TextWire, WireHeader
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.runtime_updates import (
     CompletedItem,
@@ -30,6 +29,8 @@ from agent_comms.transcript_events import (
 )
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 
+from ..wire_models import WireModel
+
 
 class MessageTime(WireModel):
     created: int | float
@@ -41,14 +42,12 @@ class RoleHeader(WireHeader):
     @classmethod
     def summary(cls, value: dict) -> dict:
         # The assistant message a compaction writes is flagged as the summary.
-        if value.get('role') == AssistantMessage.wire_tag and value.get('summary') is True:
-            return {'type': SummaryMessage.wire_tag}
+        if value.get('role') == AssistantMessage.declared_name and value.get('summary') is True:
+            return {'type': SummaryMessage.declared_name}
         return {'type': value.get('role')}
 
 
-class MessageInfo(TaggedWire, ABC):
-    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
+class MessageInfo(TaggedWire, ABC, affix=""):
     header = RoleHeader
     id: str
     sessionID: str
@@ -61,8 +60,7 @@ class MessageInfo(TaggedWire, ABC):
         return part.finished(self)
 
 
-class UserMessage(MessageInfo):
-    wire_tag = 'user'
+class UserMessage(MessageInfo, declared_name='user'):
     role: Literal['user']
 
     def finished(self, part: Part) -> bool:
@@ -73,8 +71,7 @@ class UserMessage(MessageInfo):
         return part.prompted(self)
 
 
-class AssistantMessage(MessageInfo):
-    wire_tag = 'assistant'
+class AssistantMessage(MessageInfo, declared_name='assistant'):
     role: Literal['assistant']
     parentID: str
 
@@ -82,10 +79,9 @@ class AssistantMessage(MessageInfo):
         return part.present(self)
 
 
-class SummaryMessage(AssistantMessage):
+class SummaryMessage(AssistantMessage, declared_name='summary'):
     """OpenCode's summary of the conversation before a compaction: shown live as the reply it
     is, and for history it replaces everything before it."""
-    wire_tag = 'summary'
     role: Literal['assistant']
     summary: Literal[True]
 
@@ -93,9 +89,7 @@ class SummaryMessage(AssistantMessage):
         return (*part.present(self), *part.summarized())
 
 
-class Part(TaggedWire, ABC):
-    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
+class Part(TaggedWire, ABC, affix=""):
     id: str
     sessionID: str
     messageID: str
@@ -123,7 +117,7 @@ class PartTime(WireModel):
     end: int | float | None = None
 
 
-class TextualPart(Part, ABC):
+class TextualPart(Part, ABC, declared_name=None):
     text: str
     time: PartTime | None = None
     event_type: ClassVar[builtins.type[LiveTextTranscript]]
@@ -146,7 +140,7 @@ class TextualPart(Part, ABC):
         return (StartedItem(message.id, self.id, self.phase, accumulator),)
 
 
-class TextPart(TextWire, TextualPart):
+class TextPart(TextWire, TextualPart, declared_name='text'):
     event_type = AssistantTranscript
     phase = ModelWaitPhase('Replying')
 
@@ -160,8 +154,7 @@ class TextPart(TextWire, TextualPart):
         return (Summarized(self.text),)
 
 
-class ReasoningPart(TextualPart):
-    wire_tag = 'reasoning'
+class ReasoningPart(TextualPart, declared_name='reasoning'):
     event_type = ThinkingTranscript
     phase = ModelWaitPhase()
 
@@ -177,9 +170,7 @@ class StatusHeader(WireHeader):
     type: str = Field(alias='status')
 
 
-class ToolState(TaggedWire, ABC):
-    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
+class ToolState(TaggedWire, ABC, affix=""):
     header = StatusHeader
     input: ToolArguments
     finished: ClassVar[bool] = False
@@ -193,8 +184,7 @@ class ToolState(TaggedWire, ABC):
         return CliToolArguments.decode(shown, sent)
 
 
-class PendingTool(ToolState):
-    wire_tag = 'pending'
+class PendingTool(ToolState, declared_name='pending'):
 
     def started_at(self, message: AssistantMessage) -> RecordedEventTime:
         return RecordedEventTime(message.time.created / 1000)
@@ -207,8 +197,7 @@ class PendingTool(ToolState):
                             ToolDraft(started_at, (call.started(part.id, started_at.at),))),)
 
 
-class RunningTool(PendingTool):
-    wire_tag = 'running'
+class RunningTool(PendingTool, declared_name='running'):
     time: PartTime
 
     def started_at(self, message: AssistantMessage) -> RecordedEventTime:
@@ -236,8 +225,7 @@ class EndedTool(ToolState, ABC):
         )),)
 
 
-class CompletedTool(EndedTool):
-    wire_tag = 'completed'
+class CompletedTool(EndedTool, declared_name='completed'):
     output: str
     ok = True
 
@@ -246,8 +234,7 @@ class CompletedTool(EndedTool):
         return self.output
 
 
-class FailedTool(EndedTool):
-    wire_tag = 'error'
+class FailedTool(EndedTool, declared_name='error'):
     error: str
     ok = False
 
@@ -256,8 +243,7 @@ class FailedTool(EndedTool):
         return self.error
 
 
-class ToolPart(Part):
-    wire_tag = 'tool'
+class ToolPart(Part, declared_name='tool'):
     callID: str
     tool: str
     state: ToolState.declared_union()
@@ -269,14 +255,13 @@ class ToolPart(Part):
         return self.state.present(self, message)
 
 
-class StructuralPart(Part, ABC):
+class StructuralPart(Part, ABC, declared_name=None):
     """Native bookkeeping and input attachments are not assistant transcript items."""
     def present(self, message: AssistantMessage) -> tuple[RuntimeUpdate, ...]:
         return ()
 
 
-class FilePart(StructuralPart):
-    wire_tag = 'file'
+class FilePart(StructuralPart, declared_name='file'):
     filename: str = ''
     mime: str = ''
 
@@ -286,36 +271,36 @@ class FilePart(StructuralPart):
                                               position=self.id, timestamp=message.time.created / 1000),)))
 
 
-class AgentPart(StructuralPart):
-    wire_tag = 'agent'
+class AgentPart(StructuralPart, declared_name='agent'):
+    pass
 
 
-class SubtaskPart(StructuralPart):
-    wire_tag = 'subtask'
+class SubtaskPart(StructuralPart, declared_name='subtask'):
+    pass
 
 
-class CompactionPart(StructuralPart):
-    wire_tag = 'compaction'
+class CompactionPart(StructuralPart, declared_name='compaction'):
+    pass
 
 
-class RetryPart(StructuralPart):
-    wire_tag = 'retry'
+class RetryPart(StructuralPart, declared_name='retry'):
+    pass
 
 
-class StepStartPart(StructuralPart):
-    wire_tag = 'step-start'
+class StepStartPart(StructuralPart, declared_name='step-start'):
+    pass
 
 
-class StepFinishPart(StructuralPart):
-    wire_tag = 'step-finish'
+class StepFinishPart(StructuralPart, declared_name='step-finish'):
+    pass
 
 
-class SnapshotPart(StructuralPart):
-    wire_tag = 'snapshot'
+class SnapshotPart(StructuralPart, declared_name='snapshot'):
+    pass
 
 
-class PatchPart(StructuralPart):
-    wire_tag = 'patch'
+class PatchPart(StructuralPart, declared_name='patch'):
+    pass
 
 
 class SavedMessage(WireModel):

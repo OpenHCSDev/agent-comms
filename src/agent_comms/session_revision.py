@@ -66,7 +66,7 @@ class SessionRevision(SessionObservation):
             except FileNotFoundError:
                 proof = MissingInputProofRevision()
             return cls(native, proof)
-        except (FileNotFoundError, PermissionError) as error:
+        except OSError as error:
             # Unreadable proof is not a missing proof. Deny source acquisition.
             return UnavailableSessionObservation(error)
 

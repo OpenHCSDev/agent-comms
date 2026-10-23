@@ -6,6 +6,8 @@ Retains request/response/timing/trace files under the supplied owned output path
 """
 
 from __future__ import annotations
+
+
 from agent_comms.repository_name import RepositoryName
 
 import argparse
@@ -22,14 +24,15 @@ from dataclasses import replace
 from pathlib import Path
 
 from agent_comms.change_report import FileLine
-from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
+from agent_comms.channels import AnyOfMatch, ViewPredicate, ParticipantsView
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import Comms
+from agent_comms.comms import Comms, wire
 from agent_comms.connector import Connector
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction, PausedGoalAction, SetGoalAction
-from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
+from agent_comms.goals import CountCheckResult, OrderCheck
+from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_status import StoppedThreadStatus
@@ -39,25 +42,25 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsOrderDoneTool, CommsTodoCreateTool
 from connector_readiness import ConnectorReadiness
 from order_scope_fixture import FIX_SCOPE
+from agent_comms.threads import Thread
 
 
 def seed(root: Path, project: Path) -> None:
     root.mkdir(mode=0o700)
-    comms = Comms(root)
+    comms = wire(root)
     for name in ("claude-ai", "worker", "archivable"):
         comms.registry.declare(
-            comms.registry.new_thread(name, frozenset({"probe"}), str(project)),
+            Thread(name, frozenset({"probe"}), str(project)),
             status=StoppedThreadStatus(),
         )
-    comms.messaging.initialize_private_initial_protocol()
     comms.channels.set_saved_view(
-        SavedView(
-            "probe-view", ViewKind.PARTICIPANTS, ViewPredicate(AnyOfMatch, frozenset({"probe"}))
-        )
+        ParticipantsView('probe-view', ViewPredicate(AnyOfMatch, frozenset({'probe'})))
     )
     comms.goals.update_goal(
         "claude-ai", SetGoalAction(text="Measure the connector calls.", goal_id="probe-goal")
     )
+    comms.goals.todos.add_request(comms.registry.require('claude-ai').incarnation,
+                                 'Measure the connector calls.')
     original = comms.messaging.send("worker", "claude-ai", "Original scratch history.").message
     assert original.sender == "worker"
     for worker in threading.enumerate():
@@ -82,7 +85,8 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
     order = CreateProblemGoalAction(
         problem="P1",
         order=pending,
-        request="request",
+        request=NewestOpenRequest().for_order(comms.goals.todos,
+                                              comms.registry.require('claude-ai').incarnation),
         review_at=RecordedEventTime(time.time() + 600),
         commander="claude-ai", assigner=comms.registry.require('claude-ai').incarnation,
         repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"),
@@ -103,18 +107,8 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
         "comms_order_work",
         "comms_unjudged",
     }
-    if name in order_tools:
-        from agent_comms.goal_actions import ClearGoalAction
-
-        comms.goals.update_goal("claude-ai", ClearGoalAction())
-        comms.goals.update_goal(
-            "claude-ai",
-            SetGoalAction(
-                text="Measure the connector calls.", goal_id="request", order=RequestGoalOrder()
-            ),
-        )
-        if name != "comms_todo_create":
-            CommsTodoCreateTool(owner="worker", order=order).apply(comms, ThreadCaller("claude-ai"))
+    if name in order_tools - {'comms_todo_create'}:
+        CommsTodoCreateTool(owner="worker", order=order).apply(comms, ThreadCaller("claude-ai"))
     if name == "comms_resume_goal":
         comms.goals.update_goal(
             "claude-ai", PausedGoalAction(progress="Paused only on this scratch bus.")
@@ -289,7 +283,7 @@ def run(output: Path, checkout: Path, selected: list[str]) -> None:
         case.mkdir()
         root, home = case / "wire", case / "home"
         shutil.copytree(original, root)
-        comms = Comms(root)
+        comms = wire(root)
         args = arguments(comms, name, project, checkout)
         for worker in threading.enumerate():
             if worker.name.startswith("agent-comms-"):
@@ -410,13 +404,7 @@ def run(output: Path, checkout: Path, selected: list[str]) -> None:
                     (output / "timings.json").write_text(json.dumps(rows, indent=2) + "\n")
                     print(json.dumps(row), flush=True)
                     if name == "comms_send" and status == "200" and not row["isError"]:
-                        from agent_comms.wire_record import WireRecord
-
-                        saved = [
-                            message
-                            for line in comms.bus.log.path.read_text().splitlines()
-                            for message in WireRecord.public_from_wire(json.loads(line)).messages()
-                        ]
+                        saved = comms.bus.bus.message_history()
                         assert any(message.body == args["body"] for message in saved)
             finally:
                 service.terminate()

@@ -6,43 +6,51 @@ import asyncio
 import os
 from abc import abstractmethod
 from collections import Counter
-from contextlib import aclosing
+from collections.abc import AsyncIterator, Iterable
+from contextlib import aclosing, asynccontextmanager
 from dataclasses import dataclass
 from functools import cached_property, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Protocol
 
-from acp import Client, RequestError
+from acp import RequestError
 from acp.schema import (
     ConfigOptionUpdate,
-    SessionConfigOptionBoolean,
     SessionConfigOptionSelect,
     SessionConfigSelectOption,
     SetSessionConfigOptionResponse,
 )
 
-from .active_route import CommsRoute, resolve_comms_route
+from .active_route import resolve_comms_route
 from .agent_backend import UseSettings
-from .comms import Comms
+from .bus import Bus
+from .child_process import join_retirement
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, RestartEnvironment
-from .native_arguments import ConfiguredBinary, InheritedArguments, NativeArguments
-from .native_package import VerifiedNativePackage
-from .native_pi import NativePiRpcLaunch
+from .native_arguments import ConfiguredBinary, InheritedArguments
 from .native_failures import NativePiUnavailable
-from .pi_vocabulary import ThinkingChoice
-from .thread_model import ThreadModel
-from .threads import ChosenModel, NextTurnConfiguration, Thread
-from .wire_watch import WatchSource, WireWatch
+from .native_pi import NativePiRpcLaunch
+from .threads import ChosenModel, NextTurnConfiguration
+from .watched import FileSource
 
 if TYPE_CHECKING:
+    from acp.schema import SessionConfigOptionBoolean
+
+    from .active_route import CommsRoute
+    from .comms import Comms
+    from .native_arguments import NativeArguments
+    from .native_package import VerifiedNativePackage
     from .pi_commands import SettingCommand
-    from .runtime import RuntimeServer, SocketClient
+    from .pi_vocabulary import ThinkingChoice
+    from .runtime import RuntimeServer
+    from .controller import SessionUpdateSink
     from .session_effects import SessionEffects
     from .session_lifecycle import SessionLifecycle
+    from .thread_model import ThreadModel
+    from .threads import Thread
 
 
 class InvalidConfigChoice(ValueError):
@@ -340,6 +348,7 @@ class SessionConfigOptions(ConfigOptions):
         self.catalog_publish_lock = asyncio.Lock()
         self.publications: dict[str, ConfigOptionUpdate] = {}
         self._publication_sessions: set[str] = set()
+        self._menus: set[asyncio.Task[None]] = set()
         self.observer = self.runtime.background(self._observe_configuration())
         # The stored settings each session's owner last saw, to notice a change.
         # The model and thinking level each running turn currently uses.
@@ -355,7 +364,7 @@ class SessionConfigOptions(ConfigOptions):
         )
         if self.publications.get(session_id) == update:
             return
-        if await self.runtime.session_update(session_id=session_id, update=update):
+        if await self.runtime.publish_update(session_id=session_id, update=update):
             # Retain exactly what this send supplied, not a later catalog
             # generation or settings observation acquired during its await.
             self.publications[session_id] = update
@@ -365,8 +374,7 @@ class SessionConfigOptions(ConfigOptions):
     ) -> SetSessionConfigOptionResponse:
         try:
             member = CatalogConfigOption.member_named(config_id)
-            if not isinstance(value, str):
-                raise ValueError("Expected string setting")
+            value = FieldCodec.decode(str, value)
         except ValueError:
             raise RequestError.invalid_params(
                 {"reason": f"Unknown session configuration option: {config_id!r}"}
@@ -431,19 +439,39 @@ class SessionConfigOptions(ConfigOptions):
         await self.effects.turns.goals.sync_goal_execution(session_id, name)
         await self.use_stored_settings(session_id, name)
 
-    async def observe_configuration(self, session_id: str, client: Client | SocketClient) -> None:
-        """Subscribe an ACP consumer and supply its own initial configuration."""
+    def start_menu(self, session_id: str, client: SessionUpdateSink) -> asyncio.Task[None]:
+        """Retain initial publication until it finishes or its consumer retires."""
         self._publication_sessions.add(session_id)
-        self.runtime.background(self.send_menu(client, session_id))
+        task = self.runtime.background(self.send_menu(client, session_id))
+        self._menus.add(task)
+        task.add_done_callback(self._menus.discard)
+        return task
 
-    async def send_menu(self, client: Client | SocketClient, session_id: str) -> None:
+    @asynccontextmanager
+    async def observe_configuration(
+        self, session_id: str, client: SessionUpdateSink,
+    ) -> AsyncIterator[None]:
+        """An attached socket owns its initial catalog wait through disconnect."""
+        task = self.start_menu(session_id, client)
+        try:
+            yield
+        finally:
+            await self.retire_observations((task,))
+
+    async def retire_observations(self, tasks: Iterable[asyncio.Task[None]]) -> None:
+        pending = tuple(tasks)
+        for task in pending:
+            task.cancel()
+        await join_retirement(asyncio.gather(*pending, return_exceptions=True))
+
+    async def send_menu(self, client: SessionUpdateSink, session_id: str) -> None:
         options = await self.options_for_session(session_id)
         async with self.catalog_publish_lock:
             update = ConfigOptionUpdate(
                 session_update="config_option_update", config_options=options,
             )
-            await client.session_update(session_id=session_id, update=update)
-            self.publications[session_id] = update
+            if await client.publish_update(session_id=session_id, update=update):
+                self.publications[session_id] = update
 
     async def options_for_session(
         self, session_id: str,
@@ -458,17 +486,16 @@ class SessionConfigOptions(ConfigOptions):
 
     async def _observe_configuration(self) -> None:
         sources = (
-            WatchSource.file(self.comms.registry.store.path),
-            WatchSource.file(self.configuration.native_config / "auth.json"),
+            FileSource(self.comms.registry.store.path),
+            FileSource(self.configuration.native_config / "auth.json"),
         )
-        async with aclosing(WireWatch.observations(*sources)) as observations:
+        async with aclosing(Bus.watch_sources(*sources)) as observations:
             async for _ in observations:
                 for session_id in tuple(self._publication_sessions):
                     await self.publish_configuration(session_id)
 
     async def close(self) -> None:
-        self.observer.cancel()
-        await asyncio.gather(self.observer, return_exceptions=True)
+        await self.retire_observations((*self._menus, self.observer))
         self._publication_sessions.clear()
 
     async def publish_configuration(

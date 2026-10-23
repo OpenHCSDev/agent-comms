@@ -10,7 +10,7 @@ from agent_comms.assignment_states import AssignmentState, EngagedAssignment, Fu
 from agent_comms.attempt_states import SucceededAttempt
 from agent_comms.coordination_errors import IntegrityViolationError
 from agent_comms.coordination_tables.assignments import WakeAssignment
-from agent_comms.coordination_tables.executions import ExecutionOrigin, ExecutionRecord
+from agent_comms.coordination_tables.executions import ExecutionProvenance, ExecutionRecord, WireOrigin, AcpOrigin
 from agent_comms.execution_states import (
     ActiveExecution,
     ExecutionState,
@@ -43,9 +43,8 @@ def test_state_data_cannot_be_attached_to_wrong_variant():
 def test_record_replacement_uses_only_nominal_state():
     record = ExecutionRecord(
         execution_id="e",
-        origin=ExecutionOrigin.ACP,
+        origin=AcpOrigin,
         lifecycle=PendingExecution(),
-        owner_thread="t",
         owner_lookup="o",
         revision=1,
         max_attempts=3,
@@ -86,20 +85,20 @@ def test_execution_extension_is_stored_and_transitioned(tmp_path):
 
     try:
         with Coordination(tmp_path / "coordination.sqlite3") as store:
-            store.participants.register("owner", "owner", "owner", committed=True)
+            store.participants.register("owner", committed=True)
             store.session._connection.execute(
-                "INSERT INTO executions (execution_id,origin,lifecycle,owner_thread,owner_loo"
+                "INSERT INTO executions (execution_id,origin,lifecycle,owner_loo"
                 "kup,revision,max_attempts,reason_code,created_at_ms,updated_at_ms) VALUES ('"
-                "e','acp',json_object('kind','paused'),'owner','owner',1,2,NULL,1,1)"
+                "e','acp',json_object('kind','paused'),'owner',1,2,NULL,1,1)"
             )
-            record = store.snapshots.get("e").execution
+            record = store.get("e").execution
             assert isinstance(record.lifecycle, PausedExecution)
             assert FieldCodec.decode(type(record), FieldCodec.encode(record)) == record
             store.session._connection.execute(
                 "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','pending'),revis"
                 "ion=2 WHERE execution_id='e'"
             )
-            assert isinstance(store.snapshots.get("e").execution.lifecycle, PendingExecution)
+            assert isinstance(store.get("e").execution.lifecycle, PendingExecution)
     finally:
         ExecutionState.__registry__.pop("paused")
 
@@ -117,11 +116,11 @@ def test_new_response_state_roundtrips_real_store(tmp_path):
 
     try:
         with Coordination(tmp_path / "coordination.sqlite3") as store:
-            store.participants.register("p", "owner", "owner", committed=True)
+            store.participants.register("p", committed=True)
             with store.session.writing() as db:
                 ExecutionRecord(
-                    execution_id="e", origin=ExecutionOrigin.WIRE,
-                    lifecycle=QueuedExecution(), owner_thread="owner", owner_lookup="p",
+                    execution_id="e", origin=WireOrigin,
+                    lifecycle=QueuedExecution(), owner_lookup="p",
                     revision=1, max_attempts=2, reason_code=NoReasonCode(),
                     created_at_ms=0, updated_at_ms=0,
                 ).insert(db)
@@ -136,14 +135,14 @@ def test_new_response_state_roundtrips_real_store(tmp_path):
                     reason_code=NoReasonCode(), created_at_ms=0, updated_at_ms=0, revision=1,
                 ).insert(db)
                 ExecutionAssignmentLink("e", "c", 0).insert(db)
-            obligation, = store.snapshots.get("e").obligations
+            obligation, = store.get("e").obligations
             assert isinstance(obligation.lifecycle, ReviewedResponse)
             assert FieldCodec.decode(type(obligation), FieldCodec.encode(obligation)) == obligation
             ResponseObligation.update(
                 store.session._connection, where="execution_id=?", parameters=("e",),
                 lifecycle=SilentResponse(), revision=2,
             )
-            settled, = store.snapshots.get("e").obligations
+            settled, = store.get("e").obligations
             assert isinstance(settled.lifecycle, SilentResponse)
     finally:
         ResponseState.__registry__.pop("reviewed")
@@ -158,7 +157,7 @@ def test_assignment_extension_derives_sql_projection_and_transitions(tmp_path):
 
     try:
         with Coordination(tmp_path / "coordination.sqlite3") as store:
-            store.participants.register("owner", "owner", "owner", committed=True)
+            store.participants.register("owner", committed=True)
             assignment = WakeAssignment(
                 assignment_id="assignment",
                 recipient="owner",

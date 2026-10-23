@@ -1,5 +1,7 @@
 """Real session endpoint retirement; no live home, provider, or package mutation."""
 
+
+
 import json
 import os
 import select
@@ -15,28 +17,33 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_bridges.monitor import InspectSession, PauseSession
 from agent_comms.cli_bridges import claude
 from agent_comms.cli_bridges.shared import (
-    MONITOR_FRAME, Binding, MonitorProbe, Serve, SessionBridgeResumes,
+    MONITOR_FRAME, Binding, MonitorBridgeStopped, MonitorProbe, Serve, SessionBridgeResumes,
 )
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.root_runtime import RootRuntime
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms_hooks.session import started
-from agent_comms_hooks.watch import LapsedWatch, LiveWatch, WatchClaim, WatchRecord
+from agent_comms_hooks.watch import LapsedWatch, LiveWatch, NoSessionBridge, WatchClaim, WatchRecord
 from source_programs import SourcePrograms
+from agent_comms.threads import Thread
 
 SERVE_FROM_SOURCE = (sys.executable, '-c', 'from agent_comms.cli_bridges.claude import main; main()')
 
 
 @contextmanager
-def session_bridge(tmp_path, home, program=SERVE_FROM_SOURCE):
-    comms = Comms(tmp_path / 'bus')
-    comms.messaging.initialize_private_initial_protocol()
-    comms.registry.declare(comms.registry.new_thread(
+def session_bridge(tmp_path, home, program=SERVE_FROM_SOURCE, *, state_directory=None,
+                   runtime=LaunchRuntime.running()):
+    """``runtime`` serves ``program`` and so owns the bus it attaches to."""
+    comms = wire(tmp_path / 'bus')
+    RootRuntime.publish(comms.root, runtime)
+    comms.registry.declare(Thread(
         'bridge-copy', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
     transcript = tmp_path / 'copied-session.jsonl'
     transcript.write_text('')
-    state = home / '.local/state/agent-comms/claude-bridge-copy'
+    state = (home / '.local/state/agent-comms/claude-bridge-copy'
+             if state_directory is None else state_directory)
     binding = Binding(str(comms.root), 'bridge-copy', transcript.stem)
     with Binding.open(state) as db:
         binding.bind(db)
@@ -56,7 +63,7 @@ def session_bridge(tmp_path, home, program=SERVE_FROM_SOURCE):
         deadline = time.monotonic() + 20
         while child.poll() is None and time.monotonic() < deadline:
             try:
-                observed = InspectSession().information(claim)
+                observed = InspectSession().information(claim.socket_path)
                 break
             except (FileNotFoundError, ConnectionRefusedError):
                 time.sleep(.05)
@@ -73,11 +80,15 @@ def stop(child):
     child.wait(timeout=15)
 
 
-def probe(child):
-    assert select.select((child.stdout,), (), (), 15)[0], 'Monitor did not attach'
+def frame(child):
+    assert select.select((child.stdout,), (), (), 15)[0], 'Monitor wrote nothing'
     line = child.stdout.readline()
     assert line, child.stderr.read().decode()
-    value = MONITOR_FRAME.validate_json(line)
+    return MONITOR_FRAME.validate_json(line)
+
+
+def probe(child):
+    value = frame(child)
     assert isinstance(value, MonitorProbe)
     return value
 
@@ -89,8 +100,9 @@ def test_real_monitor_survives_bridge_retirement_and_requires_a_fresh_probe(tmp_
             monitor = subprocess.Popen(
                 (sys.executable, '-c',
                  'import asyncio; from agent_comms.cli_bridges.monitor import read_monitor; '
+                 'from agent_comms.cli_bridges.shared import MonitorBridgeStopped; '
                  'from agent_comms_hooks.watch import WatchClaim; '
-                 'asyncio.run(read_monitor(WatchClaim("copied-session")))'),
+                 'asyncio.run(read_monitor(WatchClaim("copied-session"), MonitorBridgeStopped.announce))'),
                 env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             )
             cleanup.callback(stop, monitor)
@@ -100,6 +112,10 @@ def test_real_monitor_survives_bridge_retirement_and_requires_a_fresh_probe(tmp_
                 bridge.pause(resources)
                 assert monitor.poll() is None
             assert child.wait(timeout=15) == 0, log.read_text()
+            # A stopped bridge is an outage the session hears about, once, from the reader.
+            notice = frame(monitor)
+            assert isinstance(notice, MonitorBridgeStopped)
+            assert str(claim.path.with_suffix('.log')) in notice.notice
             with log.open('ab') as output:
                 successor = subprocess.Popen(child.args, env=env, stdout=output, stderr=output)
             cleanup.callback(stop, successor)
@@ -119,8 +135,8 @@ def test_wrong_pause_identity_cannot_stop_the_real_session_bridge(
             process=other if wrong_identity == 'process' else observed.process,
         )
         with pytest.raises(ValueError, match='different'):
-            request.exchange(claim)
-        assert InspectSession().information(claim).process == observed.process
+            request.exchange(claim.socket_path)
+        assert InspectSession().information(claim.socket_path).process == observed.process
         assert child.poll() is None, log.read_text()
 
 
@@ -136,7 +152,7 @@ def test_installer_pause_closes_the_real_bridge_and_eof_never_replays_or_relaunc
         (bridge,) = Serve.running(home)
         assert bridge.observed.process == observed.process
         with ExitStack() as resources:
-            (paused,) = bridge.pause(resources)
+            paused = bridge.pause(resources)
             assert paused.bridge == bridge
             assert child.poll() is None
             # The paused process keeps the claim; no session hook sees it lapse.
@@ -147,6 +163,30 @@ def test_installer_pause_closes_the_real_bridge_and_eof_never_replays_or_relaunc
         assert isinstance(claim.state(), LapsedWatch)
         with Binding.open(home / '.local/state/agent-comms/claude-bridge-copy') as db:
             assert Binding.select(db)[0].thread == claim.thread
+
+
+@pytest.mark.parametrize('state_directory', (
+    Path('.local/state/claude-comms-inbox'), Path('custom session storage'),
+), ids=('default-claude-state', 'custom-state'))
+def test_installer_discovers_the_live_claim_independent_of_state_directory(
+        tmp_path, bridge_home, state_directory):
+    with session_bridge(tmp_path, bridge_home,
+                        state_directory=bridge_home / state_directory) as (
+            home, claim, observed, child, log):
+        (bridge,) = Serve.running(home)
+        assert bridge.claim == claim
+        assert bridge.observed.process == observed.process
+        with ExitStack() as resources:
+            paused = bridge.pause(resources)
+            assert paused.bridge == bridge
+            assert isinstance(claim.state(), LiveWatch)
+            # A held claim's absent socket is an install's gap: the reader waits it out.
+            claim.state().await_socket(claim, FileNotFoundError(claim.socket_path))
+        assert child.wait(timeout=15) == 0, log.read_text()
+        assert isinstance(claim.state(), LapsedWatch)
+        # A bridge that stopped ends the Monitor reader with the reason, not a silent spin.
+        with pytest.raises(NoSessionBridge):
+            claim.state().await_socket(claim, FileNotFoundError(claim.socket_path))
 
 
 def test_session_start_and_runtime_replacement_share_the_declared_launcher(tmp_path):
@@ -179,11 +219,13 @@ def bridges_serving(state):
 def test_install_swap_keeps_the_claim_and_resumes_the_same_process_on_the_new_runtime(
         tmp_path, bridge_home, monkeypatch):
     old, new = (SourcePrograms.create(tmp_path / name) for name in ('old', 'new'))
-    with session_bridge(tmp_path, bridge_home, (str(old.script(claude.main)),)) as (
+    with session_bridge(tmp_path, bridge_home, (str(old.script(claude.main)),), runtime=old.runtime) as (
             home, claim, observed, child, log):
         current = home / LaunchRuntime.current_pointer().relative_to(Path.home())
         current.parent.mkdir(parents=True)
         current.symlink_to(new.prefix.absolute(), target_is_directory=True)
+        # Publication hands the bus to the installed runtime, as the installer's does.
+        RootRuntime.publish(tmp_path / 'bus', new.runtime)
         monkeypatch.setenv('HOME', str(home))
         assert observed.runtime.prefix == old.prefix.resolve()
         env = {**os.environ, 'HOME': str(home)}
@@ -208,14 +250,16 @@ def test_install_swap_keeps_the_claim_and_resumes_the_same_process_on_the_new_ru
                 monitor = subprocess.Popen(
                     (sys.executable, '-c',
                      'import asyncio; from agent_comms.cli_bridges.monitor import read_monitor; '
+                     'from agent_comms.cli_bridges.shared import MonitorBridgeStopped; '
                      'from agent_comms_hooks.watch import WatchClaim; '
-                     f'asyncio.run(read_monitor(WatchClaim({claim.thread!r})))'),
+                     f'asyncio.run(read_monitor(WatchClaim({claim.thread!r}), '
+                     'MonitorBridgeStopped.announce))'),
                     env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 )
                 cleanup.callback(stop, monitor)
             bridges.require_resumed()
-            assert bridges.lines() == ()
-            resumed = InspectSession().information(claim)
+            assert bridges.failures == ()
+            resumed = InspectSession().information(claim.socket_path)
             assert resumed.process == observed.process
             assert resumed.process.pid == child.pid
             assert resumed.runtime.prefix == new.prefix.resolve()

@@ -1,3 +1,4 @@
+
 from bus_history import read_history
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.messages import NoticeRole
@@ -5,7 +6,8 @@ import pytest
 from agent_comms.tool_caller import NoThreadCaller
 
 from agent_comms.mentions import MentionQuery
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.mentions import MentionCandidate, ThreadMention
 from agent_comms.messages import Message, AlertKind, InfoKind
@@ -13,22 +15,23 @@ from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, M
 from agent_comms.routing import ScheduledTurn
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
 from agent_comms.thread_model import DeclaredModel
+from agent_comms.threads import Thread
 
 
 def test_mentions_are_addressees_without_changing_channel_delivery(tmp_path):
-    comms = Comms(tmp_path)
+    comms = installed_comms(tmp_path)
     for name in ("alpha", "beta"):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset({'team'}), str(tmp_path)))
     message = comms.messaging.send_user_message(
-        "#team", "@alpha please review; @beta FYI", worktree=str(tmp_path)
+        CommandTarget.named('#team'), "@alpha please review; @beta FYI", worktree=str(tmp_path)
     )
     assert message.target == "#team"
     assert [item.thread for item in message.mentions] == ["alpha", "beta"]
     assert [message.body[item.start : item.end] for item in message.mentions] == ["@alpha", "@beta"]
-    assert [item.message_id for item in comms.bus.inbox("alpha")] == [message.message_id]
-    assert [item.message_id for item in comms.bus.inbox("beta")] == [message.message_id]
-    assert read_history(Comms(tmp_path), "#team")[0].mentions == message.mentions
-    assert Message.from_wire(message.to_wire()) == message
+    assert [item.message_id for item in comms.bus.inbox("alpha").page.messages] == [message.message_id]
+    assert [item.message_id for item in comms.bus.inbox("beta").page.messages] == [message.message_id]
+    assert read_history(wire(tmp_path), "#team")[0].mentions == message.mentions
+    assert Message.from_wire(message.to_wire()) == message.envelope
     scheduled = ScheduledTurn.incoming(message)
     assert scheduled.origin.exact_reply_target == "#team"
     assert "Response policy: mentioned_only" in scheduled.prompt
@@ -38,11 +41,11 @@ def test_mentions_are_addressees_without_changing_channel_delivery(tmp_path):
 
 
 def test_aliases_resolve_but_emails_paths_and_unknown_names_are_plain_text(tmp_path):
-    comms = Comms(tmp_path)
-    comms.registry.declare(comms.registry.new_thread('alpha', frozenset({'team'}), str(tmp_path)))
+    comms = installed_comms(tmp_path)
+    comms.registry.declare(Thread('alpha', frozenset({'team'}), str(tmp_path)))
     comms.registry.rename("alpha", "renamed")
     message = comms.messaging.send_user_message(
-        "#team",
+        CommandTarget.named('#team'),
         "mail@alpha /tmp/@alpha \\dir\\@alpha @@alpha @unknown (@alpha).",
         worktree=str(tmp_path),
     )
@@ -52,12 +55,12 @@ def test_aliases_resolve_but_emails_paths_and_unknown_names_are_plain_text(tmp_p
 
 
 def test_channel_response_eligibility_is_typed_and_unknown_mentions_are_collective(tmp_path):
-    comms = Comms(tmp_path)
+    comms = installed_comms(tmp_path)
     for name in ("alpha", "beta"):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset({'team'}), str(tmp_path)))
 
     collective = comms.messaging.send_user_message(
-        "#team", "@unknown can anyone answer?", worktree=str(tmp_path)
+        CommandTarget.named('#team'), "@unknown can anyone answer?", worktree=str(tmp_path)
     )
     assert not collective.mentions
     assert collective.role.response_policy(collective) is CollectivePolicy.instance()
@@ -71,7 +74,7 @@ def test_channel_response_eligibility_is_typed_and_unknown_mentions_are_collecti
     assert "Response policy: collective; channel members may respond" in collective_prompt
     assert "delivery and history remain #team" in collective_prompt
 
-    mentioned = comms.messaging.send_user_message("#team", "@beta please answer", worktree=str(tmp_path))
+    mentioned = comms.messaging.send_user_message(CommandTarget.named('#team'), "@beta please answer", worktree=str(tmp_path))
     eligibility = mentioned.response_eligibility(("alpha", "beta"))
     assert eligibility.policy is MentionedOnlyPolicy.instance()
     assert eligibility.recipients == ("beta",)
@@ -161,16 +164,16 @@ def test_completion_uses_the_model_syntax_at_the_cursor():
 def test_failed_delivery_posts_a_non_waking_notice_to_the_origin(tmp_path):
     from agent_comms.messages import AlertKind
 
-    comms = Comms(tmp_path)
+    comms = installed_comms(tmp_path)
     for name in ("sender", "owner"):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset({'team'}), str(tmp_path)))
     # A notice never wakes its recipient, so failure feedback cannot loop.
     comms.messaging.send("owner", "#team", "Delivery failed: usage limit", AlertKind, role=NoticeRole()).message.message_id
     notice = read_history(comms, "#team")[-1]
     assert isinstance(notice.role, NoticeRole) and not notice.role.response_policy(notice).starts_turn
     with comms.bus.opened_activity() as clocks:
         assert "sender" not in comms.views.last_sent_timestamps(clocks.sent.items(), registry=comms.registry.snapshot())
-    assert Message.from_wire(notice.to_wire()) == notice
+    assert Message.from_wire(notice.to_wire()) == notice.envelope
 
 
 def test_model_tool_changes_own_and_another_thread(comms, tmp_path, monkeypatch):
@@ -180,8 +183,8 @@ def test_model_tool_changes_own_and_another_thread(comms, tmp_path, monkeypatch)
 
     invoke_tool = partial(invoke_tool, caller=ThreadCaller("owner"))
 
-    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path)))
-    comms.registry.declare(comms.registry.new_thread('peer', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('owner', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('peer', frozenset(), str(tmp_path)))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
     result = invoke_tool(comms, "comms_model", {"model": "openrouter/own"})
     assert result == {
@@ -212,8 +215,8 @@ def test_targeted_inbox_returns_mentions_and_advances_only_own_cursor(comms, tmp
     from agent_comms.tools import invoke_tool
 
     for name in ("alpha", "beta"):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path)))
-    comms.messaging.send_user_message("#team", "@alpha please review", worktree=str(tmp_path))
+        comms.registry.declare(Thread(name, frozenset({'team'}), str(tmp_path)))
+    comms.messaging.send_user_message(CommandTarget.named('#team'), "@alpha please review", worktree=str(tmp_path))
     assert comms.bus.pending_count("alpha", CommandTarget.named("#team")) == 1
     assert comms.bus.pending_count("beta", CommandTarget.named("#team")) == 1
     result = invoke_tool(
@@ -232,17 +235,17 @@ def test_inbox_rejects_an_empty_target(tmp_path):
 
     from agent_comms.tools import invoke_tool
 
-    comms = Comms(tmp_path)
-    comms.registry.declare(comms.registry.new_thread('beta', frozenset({'team'}), str(tmp_path)))
+    comms = wire(tmp_path)
+    comms.registry.declare(Thread('beta', frozenset({'team'}), str(tmp_path)))
     with pytest.raises(ValueError):
         invoke_tool(comms, "comms_inbox", {"thread": "beta", "target": ""}, caller=NoThreadCaller())
 
 
 def test_committed_channel_mention_follows_recipient_renames_without_expanding_audience(tmp_path):
-    comms = Comms(tmp_path)
+    comms = installed_comms(tmp_path)
     for name, tags in [("alpha", {"team"}), ("observer", {"team"}), ("outsider", set())]:
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(tags), str(tmp_path)))
-    message = comms.messaging.send_user_message("#team", "@alpha please review", worktree=str(tmp_path))
+        comms.registry.declare(Thread(name, frozenset(tags), str(tmp_path)))
+    message = comms.messaging.send_user_message(CommandTarget.named('#team'), "@alpha please review", worktree=str(tmp_path))
     comms.registry.rename("alpha", "renamed")
     comms.registry.rename("renamed", "final")
     aliases = comms.registry.snapshot().aliases
@@ -257,7 +260,7 @@ def test_committed_channel_mention_follows_recipient_renames_without_expanding_a
         in ScheduledTurn.incoming(message, aliases=aliases).prompt
     )
     assert message.mentions[0].thread == "alpha"  # Original wire record is unchanged.
-    outside = comms.messaging.send_user_message("#team", "@outsider review", worktree=str(tmp_path))
+    outside = comms.messaging.send_user_message(CommandTarget.named('#team'), "@outsider review", worktree=str(tmp_path))
     comms.registry.rename("outsider", "outside-renamed")
     assert not comms.bus.incoming_page("outside-renamed", after=0).messages
     assert (

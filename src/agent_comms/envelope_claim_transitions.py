@@ -1,11 +1,4 @@
-"""Pure claim transitions for the single-authority bus envelope.
-
-No bus send, file append, O_EXCL claim sidecar, write fence, or retry lives here.
-A caller must serialize send and every claim-bearing read under the wire→bus
-locks, accept only newline-complete rows after fsync of the opened bus file (and
-its parent on creation), and quarantine/re-fsync a visible row after failed
-fsync before any reader observes it. Parsed rows alone are NOT durable proof.
-"""
+"""Pure resource transitions; Bus owns their atomic publication and projection."""
 
 from __future__ import annotations
 
@@ -18,6 +11,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
 
+from .projection_source import ProjectionSource
 from .coordination_errors import IdentityConflict
 from .field_codec import (
     BoundedText,
@@ -122,7 +116,7 @@ class WritableFileClaim(FileClaimPath):
 
 
 @dataclass(frozen=True, slots=True)
-class AssignmentBinding:
+class AssignmentBinding(ProjectionSource):
     """The selected claim's revision and source, used for permission checks and its SQL row."""
 
     assignment_id: Annotated[str, BoundedText]
@@ -142,7 +136,7 @@ class AssignmentBinding:
 
 
 @dataclass(frozen=True)
-class ClaimScope(SubclassUnion, ABC, affix=""):
+class ClaimScope(SubclassUnion, ABC, ProjectionSource, affix=""):
     """What one acquisition belongs to; its member answers reuse, liveness and operation use."""
 
     def reuses(self, other: RecordedScope) -> bool:
@@ -155,8 +149,9 @@ class ClaimScope(SubclassUnion, ABC, affix=""):
     def held_at(self, claimed_generation: int) -> bool:
         """Whether the owner's current claimed generation still holds this acquisition."""
 
-    @abstractmethod
-    def require_new_operation(self, is_used: Callable[[str], bool]) -> None: ...
+    @property
+    def operation_ids(self) -> tuple[str, ...]:
+        return ()
 
 
 @dataclass(frozen=True)
@@ -170,17 +165,12 @@ class UnrecordedScope(NullMember, ClaimScope):
     def held_at(self, claimed_generation: int) -> bool:
         return False
 
-    def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
-        pass
-
 
 @dataclass(frozen=True)
 class RecordedScope(ClaimScope, declared_name=None):
     """Every acquisition published today records the input generation and operation it serves."""
 
-    owner_claimed_generation: Annotated[
-        int, WireName("owner_admission_generation")
-    ]
+    owner_claimed_generation: int
     operation_id: Annotated[str, Id128Text]
     turn_id: str
 
@@ -192,9 +182,9 @@ class RecordedScope(ClaimScope, declared_name=None):
     def held_at(self, claimed_generation: int) -> bool:
         return claimed_generation == self.owner_claimed_generation
 
-    def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
-        if is_used(self.operation_id):
-            raise IdentityConflict("Claim operation was already consumed")
+    @property
+    def operation_ids(self) -> tuple[str, ...]:
+        return (self.operation_id,)
 
 
 @dataclass(frozen=True)
@@ -264,7 +254,7 @@ class WakeClaim(RecordMember, RecordedScope):
 
 
 @dataclass(frozen=True, slots=True)
-class ClaimRelease:
+class ClaimRelease(ProjectionSource):
     resource: Annotated[str, ResourcePathText]
     generation: Annotated[str, Id128Text]
 
@@ -283,11 +273,11 @@ class ClaimIdentity:
 @dataclass(frozen=True)
 class AcquiringClaim(ClaimIdentity):
     generation: Annotated[str, Id128Text]
-    claim_scope: Annotated[ClaimScope, WireName("admission")]
+    resource_scope: ClaimScope
 
 
 @dataclass(frozen=True)
-class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, affix=""):
+class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, ProjectionSource, affix=""):
     """One original resource transition; its member declares what it changes."""
 
     max_resources: ClassVar[int] = 32
@@ -306,8 +296,15 @@ class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, affix=""):
     @abstractmethod
     def resources(self) -> tuple[str, ...]: ...
 
-    def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
+    @property
+    def operation_ids(self) -> tuple[str, ...]:
         """A release consumes no acquisition operation."""
+        return ()
+
+    def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
+        for operation_id in self.operation_ids:
+            if is_used(operation_id):
+                raise IdentityConflict("Claim operation was already consumed")
 
     def claimed(self, resource: str) -> ClaimOwner:
         raise ClaimTransitionError("Release originals do not acquire resources.")
@@ -353,7 +350,7 @@ class Acquisition(ClaimTransition, declared_name=None):
         default=(), kw_only=True
     )
     generation: Annotated[str, Id128Text] = field(kw_only=True)
-    claim_scope: ClassVar[ClaimScope]
+    resource_scope: ClassVar[ClaimScope]
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -372,8 +369,9 @@ class Acquisition(ClaimTransition, declared_name=None):
             **{declared.name: getattr(self, declared.name) for declared in fields(AcquiringClaim)},
         )
 
-    def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
-        self.claim_scope.require_new_operation(is_used)
+    @property
+    def operation_ids(self) -> tuple[str, ...]:
+        return self.resource_scope.operation_ids
 
     def require_holders(self, previous: ClaimProjection) -> None:
         for resource in self.claims:
@@ -391,7 +389,7 @@ class Acquisition(ClaimTransition, declared_name=None):
 class WakeClaims(RecordMember, Acquisition, AcquiringClaim):
     """An acquisition published today; its row records the scope it serves."""
 
-    claim_scope: Annotated[RecordedScope, WireName("admission")]
+    resource_scope: RecordedScope
 
 
 @dataclass(frozen=True)
@@ -401,7 +399,7 @@ class UnscopedClaims(RecordMember, Acquisition):
     Only bus history holds this row; no writer publishes one.
     """
 
-    claim_scope: ClassVar[ClaimScope] = UnrecordedScope()
+    resource_scope: ClassVar[ClaimScope] = UnrecordedScope()
 
 
 @dataclass(frozen=True)
@@ -440,15 +438,13 @@ class UnclaimedResource(ResourceClaim):
 
 @dataclass(frozen=True)
 class ClaimOwner(AcquiringClaim, ResourceClaim):
+    # Built only by Acquisition.claimed from a validated acquisition and one of its own claims.
     resource: Annotated[str, ResourcePathText]
-
-    def __post_init__(self) -> None:
-        FieldCodec.require_fields(self)
 
     def acquire(
         self, scope: RecordedScope, registry: RegistrySnapshot, publish: Callable[[], ClaimOwner]
     ) -> ClaimOwner:
-        return self if self.claim_scope.reuses(scope) and self.live(registry) else publish()
+        return self if self.resource_scope.reuses(scope) and self.live(registry) else publish()
 
     def require_holder(self, owner: str, incarnation: str) -> None:
         if (self.owner, self.incarnation) != (owner, incarnation):
@@ -457,25 +453,27 @@ class ClaimOwner(AcquiringClaim, ResourceClaim):
     def live(self, registry: RegistrySnapshot) -> bool:
         incarnation = RecordedThreadIncarnation(self.owner, float(self.incarnation))
         return any(
-            registry.status(thread.name).active
-            and thread.process_alive
-            and self.claim_scope.held_at(registry.claim_generation(thread.name))
-            for thread in registry.threads_for(incarnation)
+            thread.process_alive
+            and self.resource_scope.held_at(registry.claim_generation(thread.name))
+            for thread in registry.active_threads(registry.threads_for(incarnation))
         )
 
 
 @dataclass(frozen=True, slots=True)
-class ClaimProjection(Mapping[str, ClaimOwner]):
+class ClaimProjection(Mapping[str, ClaimOwner], ProjectionSource):
     """Immutable sorted claim table plus the last processed envelope sequence."""
 
     last_seq: Annotated[int, ProjectionSequence] = 0
-    # Built from a dict, which the codec checks; held afterwards as a read-only view.
+    # Built from a dict by the transitions and the holder tables; held as a read-only view.
     _claims: dict[str, ClaimOwner] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        FieldCodec.require_fields(self)
+        # Each ClaimOwner held its own fields to their types when it was built; re-encoding
+        # every owner on every projection made a rebuild re-validate the whole claim table.
+        FieldCodec.require_fields(self, "last_seq")
         if any(
-            value.resource != key or value.seq > self.last_seq
+            value.resource != key
+            or value.seq > self.last_seq
             for key, value in self._claims.items()
         ):
             raise ClaimTransitionError("Previous projection is malformed.")

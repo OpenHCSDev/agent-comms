@@ -4,20 +4,24 @@ from dataclasses import replace
 import json
 import shlex
 import time
-from pathlib import Path
 
 import pytest
 
-from test_todos import order, pr_commander, thread
+from test_todos import order, thread
 
 from agent_comms.commander.order import OrderFile, main
 from agent_comms.commander.request import RequestAddVerb
 from agent_comms.field_codec import FieldCodec
-from agent_comms.installer.practice import practice_copy
-from agent_comms.goals import OrderCheck
+from agent_comms.installer.practice import PracticeCopy
+from agent_comms.locked_store import RootFile
+from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repo import Repo
-from agent_comms.todos import DeliveredProblemOrder, GoalRef, OrderMessage
+from agent_comms.todos import (
+    DeliveredProblemOrder, MergedListedPullRequest, OrderMessage, PullRequestCommit,
+    PullRequestLink,
+)
+from agent_comms.work_branches import WorkBranches
+from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsChannelsTool
 
@@ -26,7 +30,15 @@ pytest_plugins = ("test_todos",)
 
 
 @pytest.fixture
-def held_commander(pr_commander):
+def cited_source(pr_commander, proof_build_checkouts):
+    """The source the proof fixture built. The commander declares its repos as plain Repo,
+    and the practice copy decodes them as such, so the source is selected by GitHub name."""
+    return next(graph.repository for graph in proof_build_checkouts
+                if graph.repository.github == pr_commander.repos[0].github)
+
+
+@pytest.fixture
+def held_commander(pr_commander, cited_source):
     source = pr_commander
     worker = thread("worker", source.root, 2.0)
     source.comms.registry.register(worker)
@@ -34,29 +46,70 @@ def held_commander(pr_commander):
     lead = source.comms.registry.require(source.commander)
     todo = source.comms.goals.todos.create(
         "P1", source.repos[0].github, "Repair the held workflow", creator=lead, assigner=lead.incarnation,
-        owner=worker, generation="initial-order", goal=GoalRef(lead.name, lead.created_at, lead.goal.require().id),
-        review_at=RecordedEventTime(time.time() + 1000), order=order(source.repos[0]),
+        owner=worker, generation="initial-order",
+        request=NewestOpenRequest().for_order(source.comms.goals.todos, lead.incarnation),
+        review_at=RecordedEventTime(time.time() + 1000), order=order(cited_source),
     )
     published = source.comms.messaging.send(source.commander, worker.name, "Repair the held workflow through its existing declaration.")
     source.comms.goals.todos.apply(todo.id, OrderMessage(todo.revision, lead.incarnation, published.message.message_id))
     original = source.comms.goals.todos.get(todo.id)
-    with practice_copy(source.root, source.root.parent / f"{source.root.name}-copied") as (root, _):
-        ctx = source.model_copy(update={
-            "root": root, "state": root / "state",
-            "repos": (*source.repos, Repo.of(Path(__file__).resolve().parents[1])),
-        })
-        yield ctx
+    practice = PracticeCopy(source.root, source.root.parent / f"{source.root.name}-copied")
+    practice.include(tuple(RootFile.existing_in(practice.root)))
+    (root, _) = practice.path, practice.measurement
+    ctx = source.model_copy(update={"root": root, "state": root / "state"})
+    yield ctx
     assert source.comms.goals.todos.get(todo.id) == original
 
 
-def test_clean_resend_derives_the_existing_order_and_leaves_no_strike(held_commander):
+def link_pull_request(ctx, pid, number):
+    """The order's recorded PR link, as `order pr` writes it."""
+    store = ctx.comms.goals.todos
+    current = store.get(pid)
+    order = replace(current.order, pull_requests=(PullRequestLink(current.repo, number),))
+    with store.writing() as connection:
+        replace(current, order=order, revision=current.revision + 1).upsert(connection)
+    return store.get(pid)
+
+
+def merge_two_commit_fix(source, binaries, number):
+    """A fix PR merged with a merge commit: its first commit only half-fixes count.txt.
+
+    Returns (base, first, merge); GitHub's row for the request joins the forge stub."""
+    checkout = source.checkout
+    source.git(checkout, 'fetch', '-q', 'origin', WorkBranches.main)
+    source.git(checkout, 'checkout', '-q', '-B', 'main', f'origin/{WorkBranches.main}')
+    (checkout / 'count.txt').write_text('2\n')
+    source.git(checkout, 'add', 'count.txt')
+    source.git(checkout, 'commit', '-qm', 'The defect counts two')
+    base = source.git(checkout, 'rev-parse', 'HEAD').strip()
+    source.git(checkout, 'checkout', '-q', '-b', f'fix/{number}')
+    commits = []
+    for count in (1, 0):
+        (checkout / 'count.txt').write_text(f'{count}\n')
+        source.git(checkout, 'commit', '-qam', f'The fix leaves {count}')
+        commits.append(source.git(checkout, 'rev-parse', 'HEAD').strip())
+    source.git(checkout, 'checkout', '-q', 'main')
+    source.git(checkout, 'merge', '-q', '--no-ff', '-m', f'Merge pull request #{number}', f'fix/{number}')
+    merge = source.git(checkout, 'rev-parse', 'HEAD').strip()
+    source.git(checkout, 'push', '-q', 'origin', 'main', f'{commits[-1]}:refs/pull/{number}/head')
+    stub = binaries / 'pull_requests.json'
+    data = json.loads(stub.read_text())
+    data['requests'][str(number)] = {'body': f'## fix {number}', 'listed': FieldCodec.encode(
+        MergedListedPullRequest(number=number, branch=f'fix/{number}', head=commits[-1],
+                                updated='2026-10-23T12:00:00Z', base=WorkBranches.main,
+                                merge=PullRequestCommit(merge), merged='2026-10-23T12:00:00Z'))}
+    stub.write_text(json.dumps(data))
+    return base, commits[0], merge
+
+
+def test_clean_resend_derives_the_existing_order_and_leaves_no_strike(held_commander, cited_source):
     ctx = held_commander
     original = ctx.comms.goals.todos.get("P1")
     marker = ctx.root / "unfinished"
     marker.touch()
     now = time.time()
     replacement = replace(
-        order(ctx.repos[0]), id="replacement-order",
+        order(cited_source), id="replacement-order",
         check=OrderCheck(str(ctx.repos[0].checkout), f"test ! -e {shlex.quote(str(marker))}"),
         at=RecordedEventTime(now), first_call_deadline=RecordedEventTime(now + 120),
     )
@@ -78,13 +131,13 @@ def test_clean_resend_derives_the_existing_order_and_leaves_no_strike(held_comma
     ThreadCaller("worker").invoke(CommsChannelsTool(), ctx.comms)
 
 
-def test_second_unplanned_order_is_refused_without_recording(held_commander):
+def test_second_unplanned_order_is_refused_without_recording(held_commander, cited_source):
     ctx = held_commander
     original = ctx.comms.goals.todos.get("P1")
     marker = ctx.root / "unfinished"
     marker.touch()
     document = OrderFile(
-        replace(order(ctx.repos[0]), id="second-order",
+        replace(order(cited_source), id="second-order",
                 check=OrderCheck(str(ctx.repos[0].checkout), f"test ! -e {shlex.quote(str(marker))}")),
         "The copied workflow still contains an unfinished decision that prevents completion",
         "This is stupid because assigning another order hides the already unfinished work",
@@ -94,7 +147,7 @@ def test_second_unplanned_order_is_refused_without_recording(held_commander):
     lead = ctx.comms.registry.require(ctx.commander)
     ctx.comms.goals.todos.create(
         "P2", ctx.repos[0].github, "Repair the second workflow", creator=lead, assigner=lead.incarnation, owner=lead,
-        generation="second-workflow", goal=GoalRef(lead.name, lead.created_at, lead.goal.require().id),
+        generation="second-workflow", request=original.request.require(),
         review_at=RecordedEventTime(time.time() + 1000), order=document.order,
     )
     path = ctx.root / "second-order.json"
@@ -110,22 +163,41 @@ def test_second_unplanned_order_is_refused_without_recording(held_commander):
     print(str(refused.value))
 
 
-def test_done_problem_delivers_the_units_held_order(held_commander):
+def test_done_checks_the_merged_tree_and_records_the_first_commit(
+    held_commander, cited_source, tmp_path,
+):
+    """The merged tree is the delivered tree; a half-fixed first commit is still the delivery."""
     ctx = held_commander
-    sha = ctx.repos[0].git(ctx.repos[0].checkout, "rev-parse", "HEAD").strip()
-    with chdir(ctx.repos[0].checkout):
-        main(["done", "worker", "P1", "--sha", sha], ctx)
-    saved = ctx.comms.goals.todos.get("P1")
+    base, first, merge = merge_two_commit_fix(cited_source, tmp_path / 'bin', 4)
+    current = ctx.comms.goals.todos.get('P1')
+    check = OrderCheck(str(cited_source.checkout), 'cat count.txt', CountCheckResult(0))
+    store = ctx.comms.goals.todos
+    with store.writing() as connection:
+        replace(current, order=replace(current.order, check=check),
+                revision=current.revision + 1).upsert(connection)
+    link_pull_request(ctx, 'P1', 4)
+    with chdir(cited_source.checkout):
+        main(["done", "worker", "P1"], ctx)
+    saved = store.get("P1")
     assert not saved.pending
     assert isinstance(saved.order, DeliveredProblemOrder)
-    assert saved.order.delivery.delivered == sha
+    assert (saved.order.delivery.delivered, saved.order.delivery.commit) == (first, merge)
+    assert saved.order.check_base(cited_source.checkout) == base
+
+
+def test_done_without_a_merged_pull_request_records_nothing(held_commander):
+    ctx = held_commander
+    original = ctx.comms.goals.todos.get("P1")
+    with pytest.raises(ValueError, match="P1 has no merged pull request"):
+        main(["done", "worker", "P1"], ctx)
+    assert ctx.comms.goals.todos.get("P1") == original
 
 
 def test_a_problem_not_held_by_the_unit_is_refused(held_commander):
     ctx = held_commander
     original = ctx.comms.goals.todos.get("P1")
     with pytest.raises(ValueError, match="worker holds no order on P2"):
-        main(["done", "worker", "P2", "--sha", "HEAD"], ctx)
+        main(["done", "worker", "P2"], ctx)
     with pytest.raises(ValueError, match="other holds no order on P1"):
         ctx.comms.goals.todos.resolve_order(ctx.incarnation, "other", "P1")
     assert ctx.comms.goals.todos.get("P1") == original

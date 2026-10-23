@@ -11,7 +11,7 @@ from .assignment_states import CompletedAssignment
 from .channel_coding_tools import SelectedCodingToolOwner
 from .coordination_errors import CoordinationError, IdentityConflict, StaleFence
 from .coordinator import Coordination
-from .coordination_tables.executions import ExecutionOrigin
+from .coordination_tables.executions import WireOrigin
 from .coordination_snapshot import RecoverySnapshot
 from .coordination_tables.responses import ResponseObligation
 from .durable_turn import DurableTurn
@@ -75,7 +75,7 @@ class SelectedPrompt:
             sent_outcomes=self.sent_outcomes(),
         )
         projection = OptionalAwarenessProjection.for_selected(
-            WakeCandidateIndex(participant.bus.log),
+            WakeCandidateIndex(participant.bus.bus),
             registry=participant.bus._registry,
             through_seq=participant.batch.sources[-1].delivery.message.seq,
             generation=participant.identity.generation,
@@ -115,24 +115,24 @@ class SelectedAttempt:
         if snapshot.execution.execution_id != execution_id:
             raise IdentityConflict("selected attempt differs from its created batch execution")
         if snapshot.execution.lifecycle.queued:
-            snapshot = store.executions.mark_pending(
+            snapshot = store.mark_pending(
                 execution_id,
                 expected_revision=snapshot.execution.revision,
             ).value
         token = prepare_fence_token()
         attempt_ordinal = (snapshot.execution.lifecycle.current_attempt_ordinal or 0) + 1
-        started = store.attempts.start(
+        started = store.start(
             AttemptStart(
                 execution_id,
                 attempt_ordinal,
-                participant.owner.thread.name,
+                participant.lookup,
                 participant.identity.generation,
                 token,
                 expected_execution_revision=snapshot.execution.revision,
                 expected_pointer_revision=snapshot.pointer_revision,
             )
         ).value
-        progress = DurableTurn(store.attempts, started.fence, started.snapshot.pointer_revision, "")
+        progress = DurableTurn(store, started.fence, started.snapshot.pointer_revision, "")
         selected = started.snapshot.assignments
         if tuple(row.assignment_id for row in selected) != assignment_ids:
             raise IdentityConflict("full wake lost an original batch assignment")
@@ -165,7 +165,7 @@ class SelectedAttempt:
         return SelectedCodingToolOwner(
             comms=participant.comms,
             store=participant.store,
-            claim_scope=claim_scope,
+            resource_scope=claim_scope,
             owner_name=participant.owner.thread.name,
             session_dir=session.directory,
             input_id=input_id,
@@ -255,9 +255,9 @@ class SelectedConsideration:
         participant = self.participant
         if not participant.batch.requires_triage:
             await participant.require_current()
-            created = participant.store.executions.create(
-                participant.batch.execution_id, ExecutionOrigin.WIRE,
-                participant.lookup, participant.owner.thread.name,
+            created = participant.store.create(
+                participant.batch.execution_id, WireOrigin,
+                participant.lookup,
                 execution.max_attempts,
                 sources=participant.batch.sources,
             ).value

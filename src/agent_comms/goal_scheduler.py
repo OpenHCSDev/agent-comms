@@ -6,6 +6,7 @@ and checks the declared start rules before recovering any unused READY grant.
 
 from __future__ import annotations
 
+from .errors import GoalAttemptError
 import asyncio
 import os
 from dataclasses import dataclass, field
@@ -25,7 +26,6 @@ from .goal_actions import (
     RetryGoalAction,
     SetGoalAction,
 )
-from .goal_attempts import GoalAttemptError
 from .goal_presentation import GoalPublicationSnapshot, UnpublishedGoalSnapshot
 from .goals import Goal, GoalDeclaration, GoalRevision
 from .reservation_rules import ReservationViolationError
@@ -151,7 +151,7 @@ class GoalScheduler:
         name = self.sessions.require(session_id)
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
         goal = thread.goal.require_checkpoint(GoalRevision(goal_id, expected_revision))
-        # update_goal owns the wire lock and atomically rechecks both this
+        # update_goal owns the registry lock and atomically rechecks both this
         # snapshot and the executing owner. Do not acquire its lock twice.
         edited = await Coordination.run_worker(lambda: self.comms.goals.update_goal(
             name,

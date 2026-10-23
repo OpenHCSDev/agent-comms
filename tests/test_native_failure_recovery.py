@@ -1,6 +1,7 @@
 """Released-owner recovery refuses damaged original evidence; it grants no replay."""
 from __future__ import annotations
 
+
 import asyncio
 import json
 import multiprocessing
@@ -17,9 +18,9 @@ from typing import NamedTuple
 import pytest
 
 from agent_comms.attempt_recovery import RecoveryMonitorCapability
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.coordination_errors import IdentityConflict, RecoveryBlocked
-from agent_comms.coordination_tables.executions import ExecutionOrigin
+from agent_comms.coordination_tables.executions import ExecutionProvenance, WireOrigin
 from agent_comms.coordinator import Coordination
 from agent_comms.cursor_publication import CursorDelivery
 from agent_comms.declared_family import DeclaredFamily
@@ -113,6 +114,7 @@ class FailedHistory(ClaimedHistory):
                 NativeRuntimeInput.one(db, input_id=claim.input_id).commit_context(db, context)
         append_input_entry(identity.path, {
             "type": "message", "id": "error-terminal", "parentId": entry_id,
+            "timestamp": "2026-10-01T00:00:00.001Z",
             "message": {"role": "assistant", "stopReason": "error",
                         "errorMessage": "Codex error: The usage limit has been reached",
                         "content": []},
@@ -128,9 +130,9 @@ async def release_native_input(directory: Path, history: type[NativeSendHistory]
                 comms, store, root_id, "beta", 0, cursor_delivery=cursor_delivery,
             ) as participant:
                 assert participant is not None
-                created = store.executions.create(
-                    participant.batch.execution_id, ExecutionOrigin.WIRE,
-                    participant.lookup, participant.owner.thread.name, 1,
+                created = store.create(
+                    participant.batch.execution_id, WireOrigin,
+                    participant.lookup, 1,
                     sources=participant.batch.sources,
                 ).value
                 attempt = await SelectedAttempt.engage(participant, created)
@@ -193,7 +195,7 @@ def test_recovery_refuses_released_but_live_owner(released_failure):
     with Coordination(source.root / "coordination.sqlite3") as store:
         with pytest.raises(RecoveryBlocked):
             RecoveryMonitorCapability.recover_native_failure(store, source.execution_id, source.session_file)
-        assert store.snapshots.get(source.execution_id).is_current
+        assert store.get(source.execution_id).is_current
 
 
 class EvidenceDamage(DeclaredFamily, affix="Damage"):
@@ -226,17 +228,24 @@ class DifferentParentDamage(EvidenceDamage):
 
 class AdditionalInputDamage(EvidenceDamage):
     def alter_rows(self, rows):
-        rows.append({"type": "message", "message": {"role": "user", "content": []}})
+        rows.append({
+            "type": "message", "id": "additional-input", "parentId": rows[-1]["id"],
+            "timestamp": "2026-10-01T00:00:00.002Z",
+            "message": {"role": "user", "content": []},
+        })
 
 
 class ToolDamage(EvidenceDamage):
     def alter_rows(self, rows):
-        rows[-1]["message"]["content"] = [{"type": "toolCall", "name": "bash"}]
+        rows[-1]["message"]["content"] = [{
+            "type": "toolCall", "id": "unexpected-tool", "name": "bash",
+            "arguments": {"command": "true"},
+        }]
 
 
 class WrongEpochDamage(EvidenceDamage):
     def alter(self, source):
-        releases = Comms(source.root).owners.releases
+        releases = wire(source.root).owners.releases
         original = releases.get("beta")
         with releases.writing() as db:
             OwnerReleaseEvidence.update(db, where="name=?", parameters=("beta",), before=original.after + 1)
@@ -260,6 +269,6 @@ def test_recovery_refuses_ambiguous_evidence(released_failure, damage):
     with Coordination(source.root / "coordination.sqlite3") as store:
         with pytest.raises(case.refusal):
             RecoveryMonitorCapability.recover_native_failure(store, source.execution_id, session_file)
-        assert store.snapshots.get(source.execution_id).is_current
+        assert store.get(source.execution_id).is_current
         assert len(NativeRuntimeInput.select(store.session._connection)) == 1
     assert source.session_file.read_bytes() == before

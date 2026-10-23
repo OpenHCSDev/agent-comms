@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.lifecycle_capability import Active
-
 import dataclasses
 import json
 import sys
@@ -11,18 +9,37 @@ import threading
 from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
-from pathlib import Path
 from functools import partial
-from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, NoReturn, TextIO, Type
+from pathlib import Path
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, NoReturn, Type
 
 from pydantic import JsonValue
 
+from agent_comms.lifecycle_capability import Active
+from agent_comms.todos import (
+    ClaimOrder,
+    CorrectCheckTodo,
+    DeliverTodo,
+    InstallTodo,
+    OrderClaim,
+    OrderDelivery,
+    OrderProgress,
+    PlainText,
+    ProgressRead,
+    ReviewedHeadVerdict,
+    ServeTodo,
+    StrikeReason,
+    Todo,
+    TodoOperation,
+    ToolCallVerdict,
+    VerdictAudience,
+)
 
 from . import cli as comms_cli
 from .change_report import NoChangeReport, ReportEvidence
-from .channel_management import KeepThreadsTagDisposition, TagAction, TagDisposition
-from .channel_targets import ChannelTarget, CommandTarget
-from .channels import AnyChannel, Channel, SavedView, ViewKind, ViewMatch, ViewPredicate
+from .channel_management import ListTagEdit, TagEdit
+from agent_comms.channel_targets import ChannelTarget, CommandTarget, NamedTarget
+from .channels import AnyChannel, Channel, SavedView, ViewMatch, ViewPredicate
 from .cli_commands import (
     ArchiveCliCommand,
     CliCommand,
@@ -38,31 +55,32 @@ from .cli_commands import (
     ThreadsCliCommand,
     ThreadStoppedResult,
 )
-from .cli_result import ToolCatalogResult
-from .commander.capacity import Load
-from .ui_model.unit_state import UnitState
+from .cli_result import CliResult, ToolCatalogResult
+from .commander.vibe_check import OverloadDegradation
+from .commander_hud import CommanderHud
 from .coordination_tables.refusals import SendRefusal
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
 from .errors import RelationViolationError, ToolRefusedError
 from .field_codec import (
-    FieldCodec,
-    MalformedRecord,
-    NullMember,
-    SingleFieldValue,
-    SubclassUnion,
-    projected,
     Argument,
     ContextSource,
     DefaultNonNull,
     Description,
+    FieldCodec,
     FieldDirective,
+    MalformedRecord,
     Normalize,
+    NullMember,
+    SingleFieldValue,
+    SubclassUnion,
     WireChoices,
+    WireForm,
     WireName,
     WireOmitDefault,
+    projected,
 )
-from .launch_runtime import LaunchRuntime
+from .heartbeat_frame import HeartbeatFrame
 from .goal_actions import (
     ActiveGoalAction,
     CreateProblemGoalAction,
@@ -75,70 +93,61 @@ from .goal_actions import (
     TransitionGoalAction,
 )
 from .goal_history import RecordedGoalRevision
-from .goal_presentation import GoalSnapshot, GoalExecution
+from .goal_presentation import GoalExecution, GoalSnapshot
 from .goal_waits import NoStandbyReview, StandbyReview
 from .goals import Goal, GoalDeclaration, OrderCheck
-from .message_bus import HeldBusWrite
-from .standing_rules import StandingRule
-from .plan_phases import OrderPhase
-from .message_reference import MessageReference
-from .message_page import PageBounds
 from .history_result import HistoryPageResult
 from .input_attempt import UnresolvedInput
+from .launch_runtime import LaunchRuntime
+from .message_bus import HeldBusWrite
+from .message_page import PageBounds
+from .message_reference import MessageReference
 from .messages import InfoKind, Message, MessageKind, NoticeRole, SendableMessageKind
 from .native_tools import ArgumentTool, NativeRequestTools, NativeToolDeclaration
+from .order_story import FleetStory, OrderStory
+from .order_work import OrderWork
+from .owner_lifecycle import OwnerRestartSelection, OwnerStartResult
 from .page_traversal import NewestCursor, PageCursor
-from .owner_lifecycle import OwnerStartResult, OwnerRestartSelection
+from .pi_payloads import PublishedGoalToolDetails
+from .pi_vocabulary import ServiceTier, ThinkingLevelField
+from .plan_phases import OrderPhase
 from .presentation import ChannelView
+from .progress_claims import ProgressClaim
 from .read_basis import NamedViewer
-from .relationships import Collaboration, GoalDerivedContact, GoalMentionDiagnostic
+from .relationships import (
+    Collaboration,
+    GoalDerivedContact,
+    GoalMentionDiagnostic,
+    RelationshipEdit,
+)
 from .restart_queue import (
     QueuedRestart,
+)
+from .restart_queue import (
     cancel as cancel_restart,
+)
+from .restart_queue import (
     enqueue as enqueue_restart,
+)
+from .restart_queue import (
     status as restart_status,
 )
-from .thread_management import InheritedTags, RenameThreadResult, TagChoice
-from .threads import NextTurnConfiguration
-from .thread_model import ThreadModel
-from .transcript_events import SentTranscript
-from agent_comms.todos import (
-    ClaimOrder,
-    OrderClaim,
-    CorrectCheckTodo,
-    ServeTodo,
-    DeliverTodo,
-    InstallTodo,
-    OrderDelivery,
-    OrderProgress,
-    ToolCallVerdict,
-    PlainText,
-    PullRequests,
-    ReviewedHeadVerdict,
-    StrikeReason,
-    Todo,
-    TodoOperation,
-    VerdictAudience,
-)
-from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing
-from .thread_identity import ThreadIncarnation
-from .tool_result import ToolResult
-from .pi_payloads import PublishedGoalToolDetails
 from .send_result import CorrectionResult, SendResult
+from .standing_rules import StandingRule
 from .task_sources import (
-    CurrentTaskScopeSelection,
     Constraint,
+    CurrentTaskScopeSelection,
+    NoTaskAttachment,
     Decision,
+    OriginalTaskChange,
     Subtask,
     TaskAttachment,
     TaskChange,
     TaskScopeSelection,
-    OriginalTaskChange,
 )
 from .order_story import FleetStory, OrderStory
 from .order_work import OrderWork
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
-from agent_comms.private_bus_checkpoint import PublicMessages
 from .progress_claims import ProgressClaim
 from .relationships import RelationshipEdit
 from .thread_execution import (
@@ -148,7 +157,14 @@ from .thread_execution import (
     StartOwnerControl,
     ThreadCommandAvailability,
 )
+from .thread_identity import ThreadIncarnation
+from .thread_management import InheritedTags, RenameThreadResult, TagChoice
+from .thread_model import ThreadModel
+from .threads import NextTurnConfiguration
+from .tool_caller import NoThreadCaller, ThreadCaller, ThreadListing, ToolCaller
 from .tool_output import MAX_INLINE_OUTPUT_BYTES
+from .tool_result import ToolResult
+from .transcript_events import SentTranscript
 from .turn_digests import (
     LastTurns,
     OrderEditsRead,
@@ -157,6 +173,7 @@ from .turn_digests import (
     TurnsSince,
     UnjudgedEdits,
 )
+from .ui_model.unit_state import UnitState
 from .work_branches import WorkBranch, WorkBranches
 
 if TYPE_CHECKING:
@@ -325,7 +342,7 @@ class TaskPublished(ToolResult):
 class InboxPageRead(ToolResult):
     """One unread page; only its returned references can be acknowledged."""
 
-    messages: tuple[Message, ...]
+    messages: tuple[Annotated[Message, WireForm], ...]
     acknowledged: int
     remaining: int
     unresolved_inputs: tuple[UnresolvedInput, ...]
@@ -405,7 +422,6 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
     )
     context: ClassVar[str | None] = None
     action_label: ClassVar[str | None] = None
-    action_order: ClassVar[int] = 0
 
     @classmethod
     def context_bindings(cls) -> dict[str, type[ContextBinding]]:
@@ -427,7 +443,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
             result.update(
                 context=cls.context,
                 action_label=cls.action_label or cls.label,
-                action_order=cls.action_order,
+                action_order=cls.declared_position(),
                 context_bindings={
                     key: binding.declared_name for key, binding in cls.context_bindings().items()
                 },
@@ -469,9 +485,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
         return self.apply(comms, caller)
 
 
-class PublishingToolRequest[Caller: ToolCaller = ToolCaller](
-    HeldBusWrite, ToolRequest[Caller], declared_name=None
-):
+class PublishingTool[Caller: ToolCaller = ToolCaller](HeldBusWrite):
     """A publication waits at the bus owner before any caller or message mutation."""
 
     def apply(self, comms: Comms, caller: Caller) -> ToolResult:
@@ -479,6 +493,12 @@ class PublishingToolRequest[Caller: ToolCaller = ToolCaller](
 
     @abstractmethod
     def publish(self, comms: Comms, caller: Caller) -> ToolResult: ...
+
+
+class PublishingToolRequest[Caller: ToolCaller = ToolCaller](
+    PublishingTool[Caller], ToolRequest[Caller], declared_name=None,
+):
+    """Native declarations using the shared publication capability."""
 
 
 class LiveOwnerTool:
@@ -609,19 +629,12 @@ class CommsTagsTool(ToolRequest):
         "List, create, rename, or delete tags. Renaming/deleting updates thread "
         "assignments and channel filters. Uncovered tags automatically have a channel."
     )
-    action: Annotated[TagAction, *tool_field("Operation")] = TagAction.LIST
-    name: Annotated[str, *tool_field("Tag name")] = ""
-    new_name: Annotated[str, *tool_field("Replacement tag for rename")] = ""
-    disposition: Annotated[TagDisposition, *tool_field("Tagged-thread operation")] = (
-        dataclasses.field(default_factory=KeepThreadsTagDisposition)
-    )
-    confirmed: Annotated[bool, *tool_field("Confirm thread archiving or deletion")] = (
-        False
+    edit: Annotated[TagEdit, *tool_field("Tag operation and its arguments")] = (
+        dataclasses.field(default_factory=ListTagEdit)
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> TagList:
-        tags = self.action.apply(comms.channels, self.name, self.new_name,
-                                disposition=self.disposition, confirmed=self.confirmed)
+        tags = self.edit.apply(comms.channels)
         return TagList(tuple(sorted(tags)))
 
 
@@ -683,13 +696,13 @@ class CommsSetViewTool(ToolRequest):
         " messages and never own channel history."
     )
     name: Annotated[str, *tool_field("View name without #")]
-    kind: Annotated[ViewKind, *tool_field("Projection kind")]
+    kind: Annotated[type[SavedView], *tool_field("Projection kind")]
     match: Annotated[type[ViewMatch], *tool_field("Tag predicate")]
     tags: Annotated[str, *tool_field("One or more comma-separated tags")]
 
     def apply(self, comms: Comms, caller: ToolCaller) -> SavedView:
         return comms.channels.set_saved_view(
-            SavedView(self.name, self.kind, ViewPredicate(self.match, _tag_set(self.tags))))
+            self.kind(self.name, ViewPredicate(self.match, _tag_set(self.tags))))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -956,10 +969,22 @@ class CommsUnjudgedTool(ThreadReadTool):
 @dataclass(frozen=True, kw_only=True)
 class CommsCommanderLoadTool(ThreadReadTool):
     label = "Measured commander load"
-    description = "Read canonical order/edit debt and receiving child commanders; never self-reported."
+    description = "Read open orders, review timers and unjudged edits used by the overload rule."
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> Load:
-        return Load.of(comms, caller.subject(self.thread))
+    def apply(self, comms: Comms, caller: ToolCaller) -> OverloadDegradation:
+        return OverloadDegradation.of(comms, caller.subject(self.thread), ProgressRead())
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsHudTool(ThreadReadTool):
+    label = "Commander HUD"
+    description = (
+        "comms_hud reads orders by holder, review timers, strikes, unjudged edit counts, "
+        "ready/draft PRs, declared plan phases and the overload decision from their owners."
+    )
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> CommanderHud:
+        return CommanderHud.read(comms, caller.subject(self.thread))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1012,7 +1037,7 @@ class CommsTodoListTool(ThreadReadTool):
     def apply(self, comms: Comms, caller: ToolCaller) -> TodoList:
         actor = comms.registry.require(caller.subject(self.thread)).incarnation
         listed = tuple(comms.goals.todos.for_commander(actor))
-        pulls = PullRequests(listed)
+        pulls = ProgressRead(listed)
         return TodoList(listed, {todo.id: OrderProgress.read(todo, comms.registry, pulls)
                                  for todo in listed if todo.holder})
 
@@ -1029,8 +1054,10 @@ class CommsStandingRulesTool(ThreadToolRequest):
     ] = 0.0
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> StandingRulesRead:
-        states = UnitState.current(comms, caller.name, PullRequests())
-        broken = (*StandingRule.broken(comms, caller.name, observed=states),
+        pulls = ProgressRead()
+        states = UnitState.current(comms, caller.name, pulls)
+        frame = HeartbeatFrame.read(comms, caller.name, pulls)
+        broken = (*StandingRule.broken(comms, caller.name, observed=states, frame=frame),
                   *(state for state in states if state.attention()))
         rejected = StandingRule.enforce_all(comms, caller.name, broken)
         return StandingRulesRead(
@@ -1084,13 +1111,10 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolReque
         actor = comms.registry.require(caller.name).incarnation
         generation = todo.held().generation
         todo.require_assignee(actor, generation)
-        with comms.bus.log.checked_read() as source:
-            original = PublicMessages.require(
-                source.connection, message_id=todo.latest_message.message_id
-            )
+        original = comms.bus.bus.lookup_message(todo.latest_message.message_id)
         claim = OrderClaim.for_order(
             todo, actor, self.pull_request, self.head, self.report,
-            MessageReference(original.seq, original.message_id),
+            original.reference, store=comms.goals.todos,
         )
         changed = ClaimOrder(
             todo.revision, actor, generation, claim
@@ -1208,13 +1232,13 @@ class CommsOrderStoryTool(ReadTool, ToolRequest):
 @dataclass(frozen=True, kw_only=True)
 class CommsFleetStoryTool(ThreadReadTool):
     label = "Fleet story"
-    description = ("Read one story line for every pending order of this commander, "
-                   "including linked problems.")
+    description = ("Read what each order this commander holds out is doing now, one line per "
+                   "order; orders held by units that no longer read collapse into one line.")
 
     def apply(self, comms: Comms, caller: ToolCaller) -> FleetStory:
-        actor = comms.registry.require(caller.subject(self.thread)).incarnation
-        todos = (todo for todo in comms.goals.todos.for_commander(actor) if todo.pending)
-        return FleetStory(tuple(story.line for story in OrderStory.collect(todos)))
+        snapshot = comms.registry.snapshot()
+        actor = snapshot.require(caller.subject(self.thread)).incarnation
+        return FleetStory.collect(comms.goals.todos.held_for_commander(actor), snapshot)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1342,7 +1366,7 @@ class CommsSendRefusalsTool(ReadTool, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSendTool(PublishingToolRequest):
+class SendTool(PublishingTool):
     label = "Comms Send"
     description = (
         "Send a message to another thread or channel. Address specific threads with "
@@ -1364,17 +1388,27 @@ class CommsSendTool(PublishingToolRequest):
     ] = NoChangeReport()
 
     def publish(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
+        target = CommandTarget.named(self.target)
         try:
             caller.require_directive(comms, self.body)
-            body = VerdictAudience(self.audience).addressed(self.target, self.body)
-            result = comms.messaging.send(self.sender, self.target, body, self.type, report=self.report)
+            body = target.addressed(self.audience, self.body)
+            result = comms.messaging.send(
+                self.sender, target.name, body, self.type, report=self.report,
+                task=self.attachment(comms, target), origin=caller.origin())
         except ToolRefusedError as error:
             # The caller hears the refusal now; the record waits for the wire lock on its own.
             threading.Thread(target=SendRefusal.record,
                              args=(comms.root, self.sender, self.target, error)).start()
             raise
-        caller.sent(comms, result.message)
         return MessagePublished.from_send(result)
+
+    def attachment(self, comms: Comms, target: NamedTarget) -> TaskAttachment:
+        """An ordinary send carries no authored task or selected request."""
+        return NoTaskAttachment()
+
+
+class CommsSendTool(SendTool, ToolRequest):
+    """The native send declaration; its fields and publication belong to SendTool."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1532,7 +1566,7 @@ class CommsInboxTool(ToolRequest):
         "already reviewed entries, and excluded owner/other-dependency inputs."
     )
     thread: Annotated[str, *tool_field("Thread name")]
-    target: Annotated[str, *tool_field("Channel or peer conversation")] = AnyChannel.declared_name
+    target: Annotated[str, *tool_field("Channel or peer conversation")] = AnyChannel.address()
     ack: Annotated[bool, *tool_field("Mark exactly the returned messages delivered")] = (
         True
     )
@@ -1550,7 +1584,7 @@ class CommsInboxTool(ToolRequest):
         review = self.standby.review(comms, thread)
         page = comms.bus.inbox_at(
             thread, comms.registry.snapshot(), CommandTarget.named(target),
-            bounds=PageBounds(limit=self.limit, max_bytes=MAX_INLINE_OUTPUT_BYTES // 2),
+            bounds=PageBounds(limit=self.limit),
         )
         messages = page.page.messages
         unresolved = tuple(comms.goals.unresolved_inputs(thread))
@@ -1560,77 +1594,6 @@ class CommsInboxTool(ToolRequest):
             messages, acknowledged, page.remaining + len(messages) - acknowledged,
             unresolved, standby_review=review,
         )
-
-
-@dataclass(frozen=True, kw_only=True)
-class CommsForkTool(LiveOwnerTool, NativeOwnerCommand, ToolRequest):
-    label = "Comms Fork"
-    description = "Fork a child agent thread from a registered parent's persistent session."
-    context = "thread"
-    action_label = "Fork from this thread"
-    action_order = 10
-    name: Annotated[str, *tool_field("Child thread name")]
-    parent: Annotated[str, *tool_field("Parent thread name", binding=SubjectBinding)]
-    task: Annotated[str, *tool_field("Optional task for the child")] = ""
-    tags: Annotated[
-        TagChoice, *tool_field("Comma-separated tags; omitted inherits parent tags")
-    ] = InheritedTags()
-
-    def apply(self, comms: Comms, caller: ToolCaller) -> ThreadCreatedResult:
-        parent = comms.registry.require(self.parent)
-        return ForkCliCommand(name=self.name, parent=parent.name, task=self.task,
-                              project=parent.worktree, model=parent.model,
-                              thinking_level=parent.thinking_level,
-                              tags=self.tags).apply(comms)
-
-
-@dataclass(frozen=True, kw_only=True)
-class CommsStopTool(NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
-    label = "Stop Comms Thread"
-    description = "Stop a thread after verifying that its process owns the registered identity."
-    context = "thread"
-    action_label = "Stop process"
-    action_order = 20
-    name: Annotated[str, *tool_field("Thread name", binding=SubjectBinding)]
-
-    def apply(self, comms: Comms, caller: ToolCaller) -> ThreadStoppedResult:
-        return StopCliCommand(name=self.name).apply(comms)
-
-
-@dataclass(frozen=True, kw_only=True)
-class CommsStartTool(LiveOwnerTool, NativeOwnerCommand, StartOwnerControl, ToolRequest):
-    label = "Start Comms Thread"
-    description = (
-        "Start a stopped agent thread with its saved conversation and configuration. "
-        "Reuses an already-running owner without interrupting it. The returned PID is "
-        "reserved; startup may still be in progress. Does not send a new task."
-    )
-    context = "thread"
-    action_label = "Start thread"
-    action_order = 21
-    name: Annotated[str, *tool_field("Thread to start", binding=SubjectBinding)]
-
-    def apply(self, comms: Comms, caller: ToolCaller) -> OwnerStartResult:
-        return StartCliCommand(name=self.name).apply(comms)
-
-
-@dataclass(frozen=True, kw_only=True)
-class CommsQueueRestartTool(LiveOwnerTool, NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
-    label = "Queue Idle Owner Restart"
-    description = (
-        "Queue an exact live owner incarnation for restart when idle. Never interrupt an active "
-        "turn. A changed owner or uncertain attempt is never retried automatically. "
-        "Restarts in the calling process's runtime; does not deploy another runtime."
-    )
-    context = "thread"
-    action_label = "Queue idle restart"
-    action_order = 22
-    name: Annotated[str, *tool_field("Live agent thread", binding=SubjectBinding)]
-
-    def apply(self, comms: Comms, caller: ToolCaller) -> RestartQueued:
-        return RestartQueued(
-            enqueue_restart(comms, OwnerRestartSelection.capture(comms.registry.snapshot(), self.name),
-                            launch_runtime=LaunchRuntime.running()))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1654,12 +1617,78 @@ class CommsCancelRestartTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
+class CommsForkTool(LiveOwnerTool, NativeOwnerCommand, ToolRequest):
+    label = "Comms Fork"
+    description = "Fork a child agent thread from a registered parent's persistent session."
+    context = "thread"
+    action_label = "Fork from this thread"
+    name: Annotated[str, *tool_field("Child thread name")]
+    parent: Annotated[str, *tool_field("Parent thread name", binding=SubjectBinding)]
+    task: Annotated[str, *tool_field("Optional task for the child")] = ""
+    tags: Annotated[
+        TagChoice, *tool_field("Comma-separated tags; omitted inherits parent tags")
+    ] = InheritedTags()
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> ThreadCreatedResult:
+        parent = comms.registry.require(self.parent)
+        return ForkCliCommand(name=self.name, parent=parent.name, task=self.task,
+                              project=parent.worktree, model=parent.model,
+                              thinking_level=parent.thinking_level,
+                              tags=self.tags).apply(comms)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsStopTool(NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
+    label = "Stop Comms Thread"
+    description = "Stop a thread after verifying that its process owns the registered identity."
+    context = "thread"
+    action_label = "Stop process"
+    name: Annotated[str, *tool_field("Thread name", binding=SubjectBinding)]
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> ThreadStoppedResult:
+        return StopCliCommand(name=self.name).apply(comms)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsStartTool(LiveOwnerTool, NativeOwnerCommand, StartOwnerControl, ToolRequest):
+    label = "Start Comms Thread"
+    description = (
+        "Start a stopped agent thread with its saved conversation and configuration. "
+        "Reuses an already-running owner without interrupting it. The returned PID is "
+        "reserved; startup may still be in progress. Does not send a new task."
+    )
+    context = "thread"
+    action_label = "Start thread"
+    name: Annotated[str, *tool_field("Thread to start", binding=SubjectBinding)]
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> OwnerStartResult:
+        return StartCliCommand(name=self.name).apply(comms)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsQueueRestartTool(LiveOwnerTool, NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
+    label = "Queue Idle Owner Restart"
+    description = (
+        "Queue an exact live owner incarnation for restart when idle. Never interrupt an active "
+        "turn. A changed owner or uncertain attempt is never retried automatically. "
+        "Restarts in the calling process's runtime; does not deploy another runtime."
+    )
+    context = "thread"
+    action_label = "Queue idle restart"
+    name: Annotated[str, *tool_field("Live agent thread", binding=SubjectBinding)]
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> RestartQueued:
+        return RestartQueued(
+            enqueue_restart(comms, OwnerRestartSelection.capture(comms.registry.snapshot(), self.name),
+                            launch_runtime=LaunchRuntime.running()))
+
+
+@dataclass(frozen=True, kw_only=True)
 class CommsArchiveTool(ArchiveOwnerControl, ToolRequest):
     label = "Archive Comms Thread"
     description = "Archive a stopped thread while retaining its messages."
     context = "thread"
     action_label = "Archive stopped thread"
-    action_order = 30
     name: Annotated[str, *tool_field("Stopped thread name", binding=SubjectBinding)]
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadArchivedResult:
@@ -1679,8 +1708,18 @@ class ToolsCliCommand(CliCommand):
         return self.name.catalog(ctx, tuple(NativeRequestTools.catalog()))
 
 
+@dataclass(frozen=True)
+class ToolReplyResult(CliResult):
+    """The tool protocol's own reply, the one every adapter receives, written unwrapped."""
+
+    reply: dict[str, JsonValue]
+
+    def to_wire(self) -> dict[str, JsonValue]:
+        return self.reply
+
+
 @dataclass(frozen=True, kw_only=True)
-class InvokeCliCommand(CliCommand, declared_name="tool"):
+class InvokeCliCommand(CliCommand[ToolReplyResult], declared_name="tool"):
     help = "Invoke one declared adapter tool, as --from THREAD when given"
     caller: Annotated[
         ThreadCaller | NoThreadCaller,
@@ -1705,22 +1744,13 @@ class InvokeCliCommand(CliCommand, declared_name="tool"):
                 self.declared_name, *self.caller.from_flag(), '--tool', self.tool,
                 '--arguments', json.dumps(self.arguments))
 
-    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
-        return invoke_tool(ctx, self.tool, self.arguments, caller=self.caller)
-
-    def run(self, ctx: Comms, output: TextIO) -> int:
-        """The tool protocol's own reply, the one every adapter receives, not a CLI result."""
-        json.dump(self.apply(ctx), output, indent=2)
-        output.write("\n")
-        return 0
+    def apply(self, ctx: Comms) -> ToolReplyResult:
+        return ToolReplyResult(invoke_tool(ctx, self.tool, self.arguments, caller=self.caller))
 
 
 def context_tool_catalog(context: str) -> list[dict[str, object]]:
-    tools = sorted(
-        (tool for tool in ToolRequest.members_with(ToolRequest) if tool.context == context),
-        key=lambda tool: tool.action_order,
-    )
-    return [tool.schema() for tool in tools]
+    return [tool.schema() for tool in ToolRequest.members_with(ToolRequest)
+            if tool.context == context]
 
 
 def invoke_tool(

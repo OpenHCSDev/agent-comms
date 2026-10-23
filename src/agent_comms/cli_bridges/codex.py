@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import sqlite3
 from collections import deque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -12,17 +13,17 @@ from uuid import uuid4
 
 import aiohttp
 from pydantic import JsonValue
-from agent_comms.coordination_database import CoordinationStore
 from agent_comms.messages import Message
 from agent_comms.send_result import SendResult
 from agent_comms.cli_protocol import EarlierItems, Outcome, DeliveredOutcome
 from .history import CodexHistory, HarnessAddress, OnlineHistory
 from .shared import Binding, IncomingFrame, TranscriptBridge, Options, run_bridge
 from agent_comms.runtime_updates import (
-    EarlierPublishedPage, PublishedPage, RuntimeUpdate, SessionFacts, ThreadOutput,
+    EarlierPublishedPage, OfferedToolsObserved, PublishedPage, RuntimeUpdate, SessionFacts, ThreadOutput,
 )
+from agent_comms.thread_identity import UnreportedTools
 from .codex_protocol import (
-    Capabilities, ClientInfo, DisplayOutput, Initialize, Initialized, MessageInput,
+    Capabilities, ClientInfo, DisplayOutput, Initialize, InitializeResponse, Initialized, MessageInput,
     Request, RPC_RESPONSE, RpcReply, RpcNotification, TextInput,
     ToolOutput, RequestParams, ResumeThread, ResumedThread, ItemsList, ItemsPage, ItemStream, BusInput,
 )
@@ -36,6 +37,7 @@ class CodexConnection:
         self.sequence = 0
         self.pending: deque[RpcNotification] = deque()
         self.answers: dict[int, asyncio.Future[JsonValue]] = {}
+        self.initialized: InitializeResponse
 
     def answer(self, request_id: int | None) -> asyncio.Future[JsonValue]:
         if request_id is None:
@@ -79,8 +81,8 @@ class CodexConnection:
         async with aiohttp.ClientSession(connector=aiohttp.UnixConnector(path=path)) as client:
             async with client.ws_connect('http://localhost/') as socket:
                 connection = cls(socket)
-                await connection.call(Initialize(
-                    clientInfo=ClientInfo(), capabilities=Capabilities()))
+                connection.initialized = InitializeResponse.model_validate(await connection.call(Initialize(
+                    clientInfo=ClientInfo(), capabilities=Capabilities())))
                 await socket.send_str(Initialized().model_dump_json())
                 yield connection
 
@@ -114,6 +116,7 @@ class CodexAppServer(CodexHistory, OnlineHistory):
     async def seen(self, codex: CodexConnection) -> AsyncIterator[RuntimeUpdate]:
         resumed = ResumedThread.model_validate(await codex.call(ResumeThread(threadId=self.thread)))
         yield SessionFacts(source_id=self.thread, project=resumed.thread.cwd)
+        yield OfferedToolsObserved(UnreportedTools(codex.initialized.userAgent))
         # Only completed snapshots. An active item's deltas must be assembled
         # from its actual start, not appended to an overlapping snapshot
         # fetched concurrently with those deltas.
@@ -124,7 +127,7 @@ class CodexAppServer(CodexHistory, OnlineHistory):
 
 class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions], declared_name=None):
 
-    def __init__(self, options: CodexOptions, binding: Binding, db: CoordinationStore) -> None:
+    def __init__(self, options: CodexOptions, binding: Binding, db: sqlite3.Connection) -> None:
         TranscriptBridge.__init__(self, options, binding, db)
         CodexAppServer.__init__(self, binding.thread, options.socket)
 

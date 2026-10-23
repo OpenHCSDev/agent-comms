@@ -1,104 +1,235 @@
-"""Bus field declarations, independent of Message and publication lifetimes."""
+"""Bus query projections over the message-owned record and capability declarations."""
 
 from __future__ import annotations
 
 import sqlite3
-import time
-from dataclasses import Field, dataclass, fields, make_dataclass, replace
-from functools import cache
-from inspect import get_annotations
-from typing import Annotated, get_type_hints
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Annotated
 
-from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec, WireName, WireOrder
-from agent_comms.response_acknowledgement import KeyedResponseAcknowledgement
-from agent_comms.typed_table import AppendOnlyTables, Column, DurableTables, TypedTable
+from agent_comms import messages
+from agent_comms.field_codec import FieldCodec
+from agent_comms.message_reference import MessageReference
+from agent_comms.typed_table import (
+    Column,
+    ComposedSchemas,
+    Index,
+    ProjectionProducerTables,
+    TypedTable,
+    sql_literal,
+)
+
+if TYPE_CHECKING:
+    from .read_basis import RepliesDisplayScope
 
 
-class BusRecord(DeclaredFamily, affix="Record"):
-    """The record family also owns the header's stored class identity."""
-
-
-class BusTables(DurableTables, AppendOnlyTables):
-    """Bus history cannot be rebuilt from another source."""
+class BusSchema(ComposedSchemas, messages.BusTables, ProjectionProducerTables, messages.BusProjectionTables,
+                declared_name=None):
+    """One file reconciles its declared families using each family's carry policy."""
 
 
 @dataclass(frozen=True)
-class BusRow(TypedTable, BusTables):
-    seq: Annotated[int, Column(primary_key=True, auto_increment=True)]
-    kind: type[BusRecord]
-    at: float
+class ParticipantSource(messages.BusProjectionTables, declared_name=None):
+    """A recorded participant's positions in actual frozen deliveries."""
+
+    lookup: Annotated[str, Column(primary_key=True)]
+    seq: Annotated[int, Column(primary_key=True)]
+
+    @classmethod
+    def query(cls, lookup: str) -> tuple[str, tuple[object, ...]]:
+        return f'SELECT seq FROM "{cls.declared_name}" WHERE lookup=?', (lookup,)
 
 
-class _CapabilityTable:
-    """A class's table is derived once, after its dataclass decorator has run."""
+class SentSource(ParticipantSource):
+    """The participant authored this record."""
 
-    def __get__(self, instance, owner) -> type[TypedTable]:
-        return self.for_class(owner)
 
-    @cache
-    def for_class(self, owner) -> type[TypedTable]:
-        hints = get_type_hints(owner, include_extras=True)
-        return make_dataclass(
-            BusTables.__name__.removesuffix("Tables") + owner.__name__ + "Row",
-            [("seq", Annotated[int, Column(primary_key=True, references=(BusRow, "seq"))]),
-             *((item.name, hints[item.name], item) for item in BusCapability.declared_fields(owner))],
-            bases=(TypedTable, BusTables),
-            namespace={"__module__": owner.__module__},
-            frozen=True,
+class ReceivedSource(ParticipantSource):
+    """The participant belongs to the frozen delivery audience."""
+
+    @classmethod
+    def query(
+        cls, lookup: str, sender_lookups: tuple[str, ...] = (),
+    ) -> tuple[str, tuple[object, ...]]:
+        query, parameters = super().query(lookup)
+        if sender_lookups:
+            marks = ",".join("?" for _ in sender_lookups)
+            query += (f' AND seq IN (SELECT seq FROM "{SentSource.declared_name}" '
+                      f'WHERE lookup IN ({marks}))')
+        return query, (*parameters, *sender_lookups)
+
+
+@dataclass(frozen=True)
+class AwaitingAnswerSource(ReceivedSource):
+    """The scope owner's append-time answer eligibility for a frozen recipient."""
+
+    recipient: str
+    starts_direct_turn: bool
+    renamed_from = ("direct_reply_source",)
+    indexes = (
+        Index(("recipient", "seq")),
+        Index(("lookup", "starts_direct_turn", "seq")),
+    )
+
+    @classmethod
+    def recipient_predicate(
+        cls, sequence: str, recipients: frozenset[str],
+    ) -> tuple[str, tuple[str, ...]]:
+        marks = ",".join("?" for _ in recipients)
+        return (
+            f'EXISTS (SELECT 1 FROM "{cls.declared_name}" AS awaiting '
+            f'WHERE awaiting.seq={sequence} AND awaiting.recipient IN ({marks}))',
+            tuple(recipients),
         )
 
 
-@dataclass(frozen=True)
-class BusCapability(BusTables):
-    """The hierarchy and each dataclass declaration own their table union."""
-
-    table = _CapabilityTable()
+class DirectReplySource(AwaitingAnswerSource, declared_name=None):
+    """A bounded selection of the same answer index, with no second stored table."""
 
     @classmethod
-    @cache
-    def declared_fields(cls, owner: type) -> tuple[Field, ...]:
-        own = get_annotations(owner)
-        header_fields = {item.name for item in fields(BusRow)}
-        return tuple(item for item in fields(owner)
-                     if item.name in own and item.name not in header_fields)
+    def query(
+        cls, lookup: str, sender_lookups: tuple[str, ...] = (),
+    ) -> tuple[str, tuple[object, ...]]:
+        query, parameters = AwaitingAnswerSource.query(lookup, sender_lookups)
+        return query + " AND starts_direct_turn=?", (*parameters, True)
+
+
+@dataclass(frozen=True)
+class MessageIdentitySource(MessageReference, messages.BusProjectionTables):
+    """A record's existing reference, searchable without recomputing its content hash."""
+
+    sender: str
+    indexes = (
+        Index(("seq",), unique=True),
+        Index(("message_id",)),
+        Index(("sender", "message_id")),
+    )
 
     @classmethod
-    @cache
-    def tables(cls) -> tuple[type[TypedTable], ...]:
-        return tuple(base.table for base in cls.__mro__
-                     if issubclass(base, BusCapability) and BusCapability.declared_fields(base))
-
-    def rows(self) -> tuple[TypedTable, ...]:
-        """One row per capability table, each cut from this record's own encoding by the
-        table's declared keys. The table reuses the record's fields, so a key the encoding
-        omits for its default decodes to the same default."""
-        encoded = FieldCodec.encode_fields(self)
-        return tuple(
-            FieldCodec.decode_record(table, {
-                key: encoded[key] for _, key in FieldCodec.record_fields(table) if key in encoded})
-            for table in self.tables())
-
-    def append_to(self, db: sqlite3.Connection) -> int:
-        """Write the header, then this record's rows under the sequence the header got."""
-        cursor = BusRow.insert_values(db, kind=type(self), at=time.time())
-        stored = replace(self, seq=FieldCodec.decode(int, cursor.lastrowid))
-        for row in stored.rows():
-            row.insert(db)
-        return stored.seq
+    def reference_sql(cls, alias: str) -> str:
+        fields = ",".join(
+            value for item, key in FieldCodec.record_fields(MessageReference)
+            for value in (sql_literal(key), cls._sql(alias + ".{" + item.name + "}"))
+        )
+        return f"json_object({fields})"
 
 
 @dataclass(frozen=True)
-class Addressed(BusCapability):
-    sender: Annotated[str, WireName("from"), WireOrder(2)]
-    target: Annotated[str, WireName("to"), WireOrder(3), Column(index=True)]
+class AnsweredSource(messages.BusProjectionTables):
+    original: Annotated[MessageReference, Column(primary_key=True)]
+    seq: Annotated[int, Column(primary_key=True)]
 
+    @classmethod
+    def unanswered_references(
+        cls, db: sqlite3.Connection, sequences: tuple[int, ...], responders: frozenset[str],
+    ) -> tuple[MessageReference, ...]:
+        """Select recorded originals before loading any message or reply content."""
+        if not sequences:
+            return ()
+        for seq in sequences:
+            MessageIdentitySource.require(db, seq=seq)
+        asking = ",".join("?" for _ in sequences)
+        replying = ",".join("?" for _ in responders)
+        identity = MessageIdentitySource.declared_name
+        reference = MessageIdentitySource.reference_sql("asked")
+        rows = db.execute(
+            f'SELECT asked.seq, asked.message_id FROM "{identity}" AS asked '
+            f'WHERE asked.seq IN ({asking}) AND NOT EXISTS ('
+            f'SELECT 1 FROM "{cls.declared_name}" AS answered '
+            f'JOIN "{identity}" AS author ON author.seq=answered.seq '
+            + cls._sql(f'WHERE answered.{{original}}={reference} ')
+            + f'AND author.sender IN ({replying})) ORDER BY asked.seq',
+            (*sequences, *responders),
+        )
+        return tuple(MessageReference(FieldCodec.decode(int, row[0]),
+                                      FieldCodec.decode(str, row[1])) for row in rows)
 
-@dataclass(frozen=True)
-class KeyedPublication(BusCapability):
-    acknowledgement: Annotated[KeyedResponseAcknowledgement, Column(unique=True)]
+    @classmethod
+    def unanswered(
+        cls, db: sqlite3.Connection, scope: RepliesDisplayScope,
+        since: float, before: float, upper: int, limit: int,
+        kinds: tuple[type[messages.MessageKind], ...] = (),
+    ) -> tuple[messages.BusRecord, ...]:
+        """Read unanswered originals through the existing reference and sender indexes."""
+        requesters, responders = scope.second_names - scope.first_names, scope.first_names
+        reference = MessageIdentitySource.reference_sql("asked")
+        eligible, eligibility = AwaitingAnswerSource.recipient_predicate(
+            "asked.seq", scope.first_names,
+        )
+        asking = ",".join("?" for _ in requesters)
+        replying = ",".join("?" for _ in responders)
+        kind_filter = (
+            "AND " + messages.Message.table._sql("message.{type}")
+            + " IN (" + ",".join("?" for _ in kinds) + ") "
+            if kinds else ""
+        )
+        query = (
+            f'SELECT asked.seq FROM "{MessageIdentitySource.declared_name}" AS asked '
+            f'JOIN "{messages.Message.table.declared_name}" AS message USING(seq) '
+            f'WHERE asked.sender IN ({asking}) AND '
+            + messages.Message.table._sql('message.{timestamp} BETWEEN ? AND ? ')
+            + f'AND asked.seq < ? {kind_filter}AND ({eligible}) AND NOT EXISTS ('
+            f'SELECT 1 FROM "{cls.declared_name}" AS answered '
+            f'JOIN "{MessageIdentitySource.declared_name}" AS author ON author.seq=answered.seq '
+            + cls._sql(f'WHERE answered.{{original}}={reference} ')
+            + f'AND author.sender IN ({replying})) ORDER BY asked.seq DESC LIMIT ?'
+        )
+        sequences = db.execute(query, (
+            *requesters, since, before, upper, *(kind.declared_name for kind in kinds),
+            *eligibility, *responders, limit,
+        ))
+        headers = (messages.BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in sequences)
+        return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
-    def append_to(self, db: sqlite3.Connection) -> int:
-        """A keyed publication appended again answers with the sequence it first got."""
-        prior = KeyedPublication.table.select(db, acknowledgement=self.acknowledgement)
-        return prior[0].seq if prior else super().append_to(db)
+    @classmethod
+    def _answer_rows(
+        cls, db: sqlite3.Connection, scope: RepliesDisplayScope,
+        since: float, selection: str,
+    ) -> sqlite3.Cursor:
+        requesters, responders = scope.second_names, scope.first_names
+        eligible, eligibility = AwaitingAnswerSource.recipient_predicate(
+            "asked.seq", scope.first_names,
+        )
+        asking = ",".join("?" for _ in requesters)
+        replying = ",".join("?" for _ in responders)
+        identity = MessageIdentitySource.declared_name
+        content = messages.Message.table
+        query = (
+            'WITH matches AS (SELECT reply.seq, '
+            + content._sql('reply_message.{timestamp} AS timestamp ')
+            + f'FROM "{identity}" AS reply '
+            f'JOIN "{content.declared_name}" AS reply_message USING(seq) '
+            f'WHERE reply.sender IN ({replying}) AND '
+            + content._sql('reply_message.{timestamp} >= ? AND EXISTS (')
+            + f'SELECT 1 FROM "{cls.declared_name}" AS answered '
+            f'JOIN "{identity}" AS asked ON '
+            + cls._sql(f'answered.{{original}}={MessageIdentitySource.reference_sql("asked")} ')
+            + f'JOIN "{content.declared_name}" AS question ON question.seq=asked.seq '
+            f'WHERE answered.seq=reply.seq AND asked.seq<reply.seq '
+            f'AND asked.sender IN ({asking}) AND '
+            + content._sql('question.{timestamp} >= ? ')
+            + f'AND ({eligible}))) ' + selection
+        )
+        return db.execute(query, (*responders, since, *requesters, since, *eligibility))
+
+    @classmethod
+    def latest_answer(
+        cls, db: sqlite3.Connection, scope: RepliesDisplayScope,
+        since: float,
+    ) -> tuple[messages.BusRecord, ...]:
+        sequences = cls._answer_rows(
+            db, scope, since,
+            'SELECT seq FROM matches ORDER BY seq DESC LIMIT 1',
+        )
+        headers = (messages.BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in sequences)
+        return tuple(header.kind.read_from(db, header.seq) for header in headers)
+
+    @classmethod
+    def answer_timestamp(
+        cls, db: sqlite3.Connection, scope: RepliesDisplayScope,
+        since: float,
+    ) -> float:
+        row = cls._answer_rows(
+            db, scope, since,
+            'SELECT COALESCE(MAX(timestamp),0.0) FROM matches',
+        ).fetchone()
+        return FieldCodec.decode(float, row[0])

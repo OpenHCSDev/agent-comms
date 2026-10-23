@@ -17,6 +17,7 @@ from agent_comms.typed_table import (
     IntegerStorage,
     SqlStorage,
     SqlValue,
+    SQLiteSchemaObject,
     TypedRow,
     TypedTable,
     RowNotFoundError,
@@ -43,7 +44,7 @@ class TableChildRow(TypedTable):
 
     @classmethod
     def references(cls):
-        return (ForeignKey(("parent", "parent_count"), TableParentRow, ("key", "count")),)
+        return (ForeignKey(columns=("parent", "parent_count"), target=TableParentRow, target_columns=("key", "count")),)
 
 
 def test_required_row_distinguishes_absence_from_duplicate_results():
@@ -108,9 +109,55 @@ def test_declared_table_family(tmp_path):
         assert TableChildRow.select(db)[0].weight is None
 
 
+def test_rebuild_converts_a_field_and_preserves_the_declared_rows_and_constraints():
+    with sqlite3.connect(':memory:') as db:
+        db.execute('PRAGMA foreign_keys=ON')
+        TableParentRow.create(db)
+        TableChildRow.create(db)
+        TableParentRow('p', 3).insert(db)
+        rows = (TableChildRow('first', 'p', True, ('one',), 125.0),
+                TableChildRow('second', 'p', False, ('two',), 250.0))
+        for row in rows:
+            row.insert(db)
+        db.execute(f'ALTER TABLE "{TableChildRow.declared_name}" RENAME COLUMN weight TO retired_weight')
+        TableChildRow.rebuild(db, {'weight': 'retired_weight / 100.0'})
+        assert TableChildRow.select(db, order_by=('key',)) == [
+            replace(row, weight=row.weight / 100) for row in rows]
+        assert not SQLiteSchemaObject.differences(
+            TableChildRow.stored_objects(db), TableChildRow.schema_objects())
+        assert db.execute('PRAGMA foreign_key_check').fetchall() == []
+        with pytest.raises(sqlite3.IntegrityError):
+            replace(rows[0], key='invalid', parent='missing').insert(db)
+        db.execute(f'ALTER TABLE "{TableChildRow.declared_name}" DROP COLUMN weight')
+        TableChildRow.rebuild(db)
+        assert TableChildRow.select(db, order_by=('key',)) == [replace(row, weight=None) for row in rows]
+
+
+def test_writer_derives_missing_nullable_fields_but_refuses_unclaimed_data():
+    from agent_comms.goal_history import GoalHistoryEntry, GoalHistoryError
+    from agent_comms.goals import NoGoal
+    from agent_comms.typed_table import WriterOwnedFile
+
+    entry = GoalHistoryEntry(1, 'baseline', 1.0, NoGoal(), NoGoal(),
+                             owner_created_at=1.0, state='committed')
+    with sqlite3.connect(':memory:') as db:
+        GoalHistoryEntry.create(db)
+        entry.insert(db)
+        for column in ('request_before', 'request_after'):
+            db.execute(f'ALTER TABLE "{GoalHistoryEntry.declared_name}" DROP COLUMN {column}')
+        db.commit()
+        GoalHistoryEntry.reconcile_schema(db, WriterOwnedFile())
+        assert GoalHistoryEntry.require(db, sequence=1) == entry
+        db.execute(f'ALTER TABLE "{GoalHistoryEntry.declared_name}" ADD COLUMN unclaimed TEXT')
+        db.execute(f'UPDATE "{GoalHistoryEntry.declared_name}" SET unclaimed=?', ('preserve this',))
+        db.commit()
+        with pytest.raises(GoalHistoryError):
+            GoalHistoryEntry.reconcile_schema(db, WriterOwnedFile())
+        assert db.execute(f'SELECT unclaimed FROM "{GoalHistoryEntry.declared_name}"').fetchall() == [('preserve this',)]
+
+
 def test_atomic_creation_preserves_declared_indexes_triggers_and_strict_creation():
     from agent_comms.native_pi import NativeContextJournal
-    from agent_comms.typed_table import SQLiteSchemaObject
 
     with sqlite3.connect(':memory:') as db:
         NativeContextJournal.create(db, if_not_exists=True)

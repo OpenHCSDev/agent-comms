@@ -1,6 +1,8 @@
 """Read real persisted notification assignments without scheduling a model."""
 from dataclasses import replace
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
+from conftest import installed_comms
+from agent_comms.threads import Thread
 
 
 def test_channel_assignments_are_visible_from_agent_view(tmp_path):  # noqa: F811
@@ -18,12 +20,10 @@ def test_channel_assignments_are_visible_from_agent_view(tmp_path):  # noqa: F81
 
 
 def test_legacy_bus_has_no_fabricated_receipts(tmp_path):  # noqa: F811
-    from agent_comms.comms import Comms
-    from agent_comms.threads import Thread
 
     root = tmp_path / 'legacy'
-    comms = Comms(root)
-    comms.registry.declare(comms.registry.new_thread('reader', frozenset(), str(tmp_path)))
+    comms = installed_comms(root)
+    comms.registry.declare(Thread('reader', frozenset(), str(tmp_path)))
     assert comms.views.thread_presentations(('reader',)).require('reader').notifications == ()
     assert not (root / 'coordination.sqlite3').exists()
 

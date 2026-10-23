@@ -1,21 +1,25 @@
 """Build identities shared by the isolated build hook and the running package."""
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-import subprocess
 
 
 class CoreStamp(ABC):
     @abstractmethod
     def commit(self) -> str: ...
 
+    @abstractmethod
+    def producer_digests(
+        self, declared: Mapping[str, Callable[[], str]], installed: Callable[[], dict[str, str]],
+    ) -> dict[str, str]: ...
+
     def write(self, path: Path) -> None:
         """Generate one importable value using its declared concrete type."""
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
-            f"from agent_comms.core_stamp import {type(self).__name__}\n"
-            f"STAMP = {self!r}\n",
+            f"from {type(self).__module__} import {type(self).__name__}\nSTAMP = {self!r}\n",
             encoding="utf-8",
         )
 
@@ -27,12 +31,7 @@ class WheelStamp(CoreStamp):
     def commit(self) -> str:
         return self.value
 
-
-@dataclass(frozen=True)
-class CheckoutStamp(CoreStamp):
-    value: str
-
-    def commit(self) -> str:
-        return subprocess.check_output(
-            ("git", "rev-parse", "HEAD"), cwd=self.value, text=True,
-        ).strip()
+    def producer_digests(
+        self, declared: Mapping[str, Callable[[], str]], installed: Callable[[], dict[str, str]],
+    ) -> dict[str, str]:
+        return installed()

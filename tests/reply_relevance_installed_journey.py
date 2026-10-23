@@ -1,7 +1,11 @@
 """One configured saved-helper fork and fresh USER channel request, never a retry."""
 
+from agent_comms.channel_targets import CommandTarget
+
+
+from bus_record_fixture import prepare_native_comms
 from agent_comms.lifecycle_capability import Complete
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.native_entries import NativeEvidenceScope
 import asyncio
 import hashlib
@@ -12,9 +16,8 @@ import sys
 import time
 
 import acp
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_text import ForkedParent
-from agent_comms.comms import Comms, wire
+from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.publications import PublicationEvidence
@@ -26,9 +29,9 @@ from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.selected_triage import FullSelectedTriage
-from agent_comms.threads import Thread
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from shared_bus_restart_native import attach
+from agent_comms.threads import Thread
 
 
 async def run(stage, package):
@@ -63,14 +66,14 @@ async def run(stage, package):
             settings_hashes[str(original)] = hashlib.sha256(original.read_bytes()).hexdigest()
     # Only the offline canonical fork helper's output directory differs. Workers
     # retain the actual original model/settings/auth/extension environment.
-    service = Comms(stage / 'w')
+    service = prepare_native_comms(wire(stage / 'w'))
     fork = await ForkSessionHelper.run(
         ForkSessionRequest(str(package), str(source_file), source.worktree, str(stage / 'forks')),
         cwd=Path(source.worktree),
         env=environment,
     )
     assert Path(fork.session_file).is_relative_to(stage)
-    root_id = service.messaging.initialize_private_initial_protocol()
+    root_id = service.registry.prepare_native_root().namespace
     binary = Path(sys.executable).with_name('pi-comms-native')
     environment.update(AGENT_COMMS_ROOT=str(service.root),
         AGENT_COMMS_AGENT_BIN=str(binary),
@@ -83,7 +86,7 @@ async def run(stage, package):
         environment.pop(key, None)
     os.environ.clear()
     os.environ.update(environment)
-    child = service.registry.new_thread('reply505', source.tags, source.worktree, parent=ForkedParent(source.name), task=source.task, session_file=SavedSessionFile(fork.session_file), model=source.model, thinking_level=source.thinking_level, execution=source.execution)
+    child = Thread('reply505', source.tags, source.worktree, parent=ForkedParent(source.name), task=source.task, session_file=RegistrySessionLocation.from_path(fork.session_file, service.root), model=source.model, thinking_level=source.thinking_level, execution=source.execution)
     service.registry.declare(child)
     assert 'openhcs' in child.tags
     packets = []
@@ -119,7 +122,7 @@ async def run(stage, package):
             await client.initialize(protocol_version=1)
             await client.load_session(cwd=source.worktree, session_id=child.name, mcp_servers=[])
             persist('ordinary-installed-acp-saved-load-ready-before-input')
-            original = service.messaging.send_user_message('#openhcs',
+            original = service.messaging.send_user_message(CommandTarget.named('#openhcs'),
                 'Please reply tersely if you receive this. This is a distinct current '
                 'connectivity request, not continuation of your assigned task or a retry. '
                 'Reply with Received 505-20261002-a1.', worktree=source.worktree)
@@ -142,15 +145,12 @@ async def run(stage, package):
                             replies = tuple(row for row in publications if row.execution_id == claims[0].lifecycle.execution_id)
                             reply, = replies
                             assert reply.exact_target == '#openhcs'
-                            actual, = service.bus.log.messages_for_references((reply.reference,))
+                            actual, = service.bus.bus.messages_for_references((reply.reference,))
                             assert actual.sender == child.name and actual.body.strip()
                             history = read_historical_native_inputs(
                                 store,
                                 wire_root_id=root_id,
-                                recipient_lookup=RecordedThreadIncarnation(
-                                    "fixture",
-                                    service.registry.require(child.name).created_at,
-                                ).lookup,
+                                recipient_lookup=service.registry.require(child.name).incarnation.lookup,
                                 source_seq=original.seq,
                                 source_reads=source_reads,
                             )

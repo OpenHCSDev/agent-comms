@@ -16,9 +16,8 @@ from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.todos import (
     OrderDelivery,
     RecordedCommitDelivery,
-    Slop,
-    DeclarationDerivation,
 )
+from agent_comms.slop import DeclarationDerivation, Slop
 
 
 def order(source: SourceRepository, identity, command='printf 1', expected=1):

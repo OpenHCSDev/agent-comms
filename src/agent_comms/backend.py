@@ -45,9 +45,7 @@ from . import pi_events as pi
 from . import turn_failure as failures
 from .agent_backend import TurnInbox
 from .acp_failure import UnrecordedFailureSource
-from .child_process import TimedOutOutcome
 from .coordinator import Coordination
-from .diagnostics import FailureReason
 from .extension_ui import ExtensionUiSession
 from .field_codec import Id128Text, MalformedRecord, boundary_decoder
 from .image_inputs import ImageInput
@@ -64,7 +62,7 @@ from .request_progress import NO_REQUEST_OBSERVER, RequestObserver, RequestProgr
 from .native_tool_call import NativeToolMode
 from .native_tool_transport import ToolTransport, UnboundToolTransport
 from .mro_dispatch import MroDispatch, handles
-from .selected_tool_broker import SelectedToolDenied
+from .tool_denial import SelectedToolDenied
 from .send_outcome import SendBoundary
 from .turn_context import InputContributionCoordinates
 from .turn_inputs import InputForwarding
@@ -80,10 +78,8 @@ if TYPE_CHECKING:
     from .pi_payloads import AssistantMessage, UserMessage
 
 
-def compaction_summary(value: Any) -> str:
+def compaction_summary(value: str) -> str:
     """Preserve saved Markdown, excluding terminal control codes."""
-    if not isinstance(value, str):
-        return ""
     return "".join(
         char if char in "\n\t" or not unicodedata.category(char).startswith("C") else " "
         for char in value.replace("\r\n", "\n")
@@ -101,7 +97,7 @@ PROMPT_START_TIMEOUT_SECONDS = 180.0
 _IDENTITY_FAILURE_TEXT = "Pi session identity changed during this turn."
 
 
-async def terminate_task_process(task: asyncio.Task[Any]) -> None:
+async def terminate_task_process[Result](task: asyncio.Task[Result]) -> None:
     """Terminate the backend subprocess owned by an agent turn task."""
     session = TurnSession.active.get(task)
     if session is not None:
@@ -158,12 +154,10 @@ async def stream_agent_events(
                 session_file=session_file,
             ))
         except NativePiUnavailable as error:
-            yield events.Error(text=str(error), reason_code="native_launch_invalid")
-            yield events.Done(ok=False, reason_code="native_launch_invalid", text=str(error))
+            yield events.Error(text=str(error), reason_code=failures.NativeLaunchInvalid.declared_name)
+            yield events.Done(ok=False, failure=failures.NativeLaunchInvalid(str(error)), text=str(error))
             return
-        from .session_fence import session_writer_fence
-
-        async with session_writer_fence(launch.session.session_file):
+        async with launch.session.files(root).accept_input():
             async with aclosing(
                 TurnSession(
                     launch,
@@ -395,9 +389,7 @@ class NativeSession(MroDispatch, ABC):
         return self.started_input and self.accepts_output and self.output.matches_message(text)
 
     def ensure_input_forwarding(self):
-        if self.native.proc.stdin is not None:
-            self.stdin = self.native.proc.stdin
-            self.native.forward_input(partial(self.inputs.forward, self))
+        self.native.forward_input(partial(self.inputs.forward, self))
 
     def observe_input_during_abort(self, event):
         if self.accepts_output:
@@ -413,32 +405,27 @@ class NativeSession(MroDispatch, ABC):
 
     async def abort_stalled_rpc(self) -> None:
         await self.native.finish_input()
-        if self.native.proc.stdin is not None and self.native.proc.returncode is None:
-            abort_deadline = self.loop.time() + max(0.0, self.rpc_abort_grace)
-            try:
-                self.native.proc.stdin.write(
-                    self.native.reader.encode(commands.Abort(id=RequestId("agent-comms-watchdog")))
+        abort_deadline = self.loop.time() + max(0.0, self.rpc_abort_grace)
+        try:
+            remaining = max(0.0, abort_deadline - self.loop.time())
+            abort = commands.Abort(id=RequestId("agent-comms-watchdog"))
+            self.native.send(abort)
+            await asyncio.wait_for(self.native.drain(), timeout=remaining)
+            while remaining := max(0.0, abort_deadline - self.loop.time()):
+                response = await asyncio.wait_for(
+                    self.native.reader.readline(), timeout=remaining
                 )
-                remaining = max(0.0, abort_deadline - self.loop.time())
-                await asyncio.wait_for(self.native.proc.stdin.drain(), timeout=remaining)
-                while remaining := max(0.0, abort_deadline - self.loop.time()):
-                    response = await asyncio.wait_for(
-                        self.native.reader.readline(), timeout=remaining
-                    )
-                    if not response:
-                        break
-                    try:
-                        abort_payload = PiRpcChannel.decode_record(response)
-                    except (json.JSONDecodeError, UnicodeDecodeError, MalformedRecord):
-                        continue
-                    abort_payload.observe_abort(self)
-                    if (
-                        isinstance(abort_payload, pi.Response)
-                        and abort_payload.command is commands.Abort
-                    ):
-                        break
-            except TimeoutError:
-                pass
+                if not response:
+                    break
+                try:
+                    abort_payload = PiRpcChannel.decode_record(response)
+                except (json.JSONDecodeError, UnicodeDecodeError, MalformedRecord):
+                    continue
+                abort_payload.observe_abort(self)
+                if abort_payload.responds_to(abort):
+                    break
+        except (TimeoutError, BrokenPipeError):
+            pass
         await self.native.shutdown()
 
     def context_info(self) -> events.ContextInfo:
@@ -490,12 +477,11 @@ class NativeSession(MroDispatch, ABC):
                 )
                 async with self.native.failures():
                     self.output.sensitive |= self.native.sensitive_diagnostics
-                    if self.native.proc.stdin is not None:
-                        try:
-                            self.native.proc.stdin.write(self.native.reader.encode(self.native.attestation.request))
-                            await self.native.proc.stdin.drain()
-                        except (BrokenPipeError, ConnectionResetError):
-                            pass
+                    try:
+                        self.native.send(self.native.attestation.request)
+                        await self.native.drain()
+                    except (BrokenPipeError, ConnectionResetError):
+                        pass
                     await self.initialize_rpc()
                     while True:
                         self.skip = False
@@ -545,7 +531,6 @@ class NativeSession(MroDispatch, ABC):
             return
         if not self.line:
             if self.awaiting_native_attestation:
-                self.output.preflight_failure = FailureReason.PREFLIGHT_EXIT
                 self.output.diagnostic = {
                     "elapsed_ms": round(
                         (self.loop.time() - self.watchdog.launch_started_at) * 1000
@@ -554,7 +539,7 @@ class NativeSession(MroDispatch, ABC):
                 }
                 self.output.diagnostic.update(self.watchdog.session_load.diagnostic)
                 self.output.record_failure(
-                    failures.InputIdUnavailable(
+                    failures.NativePreflightExit(
                         "Pi native input-ID capability preflight ended before attestation."
                     )
                 )
@@ -592,7 +577,7 @@ class NativeSession(MroDispatch, ABC):
         self.output.discard_text()
         updates = (self.context_info(), events.TurnState(
             state="failed",
-            reason_code="session_identity_uncertain",
+            reason_code=failures.IdentityUncertain.declared_name,
             elapsed_ms=0,
             phase=ShutdownPhase(),
         ))
@@ -626,8 +611,10 @@ class NativeSession(MroDispatch, ABC):
             retention.retain(self.native, self.native_session)
         if not self.native_session.child_state.retained:
             outcome = await self.native.shutdown(graceful=True)
-            if isinstance(outcome, TimedOutOutcome):
-                self.output.record_failure(failures.BackendDidNotExit("agent backend did not exit"))
+            outcome.report_shutdown(partial(
+                self.output.record_failure,
+                failures.BackendDidNotExit("agent backend did not exit"),
+            ))
 
     async def finish_diagnostics(self) -> None:
         self.error_text = (

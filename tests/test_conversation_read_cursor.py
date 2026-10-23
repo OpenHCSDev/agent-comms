@@ -1,10 +1,11 @@
 from dataclasses import replace
 
 from agent_comms.channel_targets import CommandTarget
-from agent_comms.comms import wire
 from agent_comms.read_basis import ChannelConversation, ConversationCursor, ReadCursor
 from agent_comms.read_ledger import ReadDocument
 from agent_comms.recorded_bus import RecordedBusIdentity
+from conftest import installed_comms
+from agent_comms.threads import Thread
 
 
 def test_prefixes_and_alias_union_stay_in_their_conversation():
@@ -46,9 +47,9 @@ def test_add_closes_gaps_without_losing_sparse_reads_or_mutating_the_source():
 
 
 def setup_conversations(root):
-    comms = wire(root)
+    comms = installed_comms(root)
     for name in ("sender", "reader"):
-        comms.registry.declare(comms.registry.new_thread(
+        comms.registry.declare(Thread(
             name, frozenset({"a", "b"}), str(root),
         ))
     messages = [comms.messaging.send("sender", target, target).message
@@ -62,7 +63,7 @@ def seed_prefix(comms, viewer, through):
     comms.bus.reads.replace(replace(
         comms.bus.reads.read(),
         messages={owner: ReadCursor({ChannelConversation(target="#a"): ConversationCursor(through)})},
-        bus_identity=RecordedBusIdentity.capture(comms.bus.log.path),
+        bus_identity=RecordedBusIdentity.capture(comms.bus.bus.path),
     ))
 
 
@@ -71,7 +72,7 @@ def test_real_route_counts_and_inbox_use_each_conversation(tmp_path):
     seed_prefix(comms, "reader", messages[2].seq)
     assert comms.bus.pending_count("reader", CommandTarget.named("#a")) == 0
     assert comms.bus.pending_count("reader", CommandTarget.named("#b")) == 2
-    assert [m.seq for m in comms.bus.inbox("reader")] == [messages[1].seq, messages[3].seq]
+    assert [m.seq for m in comms.bus.inbox("reader").page.messages] == [messages[1].seq, messages[3].seq]
     basis = comms.bus.delivered("reader", tuple(m.reference for m in messages))
     assert tuple(seq for item in basis.conversations for seq in item.sequences) == (
         messages[1].seq, messages[3].seq,

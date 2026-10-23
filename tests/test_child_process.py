@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import subprocess
 import sys
 import time
-from contextlib import closing, nullcontext
+from contextlib import closing, contextmanager, nullcontext
 from dataclasses import replace
 from pathlib import Path
 
@@ -20,20 +19,85 @@ from agent_comms.child_process import (
     ChildOutcome,
     DiesWithLauncherLifetime,
     ExitedOutcome,
+    ForcedStopOutcome,
     GroupMember,
     IdentityMismatchError,
     ObservedProcess,
-    OutlivesLauncherLifetime,
-    SpawnedProcess,
-    SynchronousProcess,
     Platform,
     ProcessIdentity,
+    STOP_GRACE_SECONDS,
+    SpawnedProcess,
+    SynchronousProcess,
     TimedOutOutcome,
 )
 from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_runtime import LaunchRuntime
-
 from process_tree_fixture import TREE, identities, ready
+
+
+def test_wait_any_exit_returns_before_another_member_exits() -> None:
+    first = SpawnedProcess.launch((sys.executable, "-c", "import time; time.sleep(.1)"))
+    last = SpawnedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
+    try:
+        started = time.monotonic()
+        Platform.current().wait_any_exited((first.identity, last.identity), 10)
+        assert time.monotonic() - started < 5
+        assert not first.alive()
+        assert last.alive()
+    finally:
+        first.close()
+        last.close()
+
+
+def test_wait_any_exit_returns_for_reused_identity_and_exited_member() -> None:
+    child = SpawnedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
+    platform = Platform.current()
+    try:
+        # Another incarnation at the pid means the awaited member already exited.
+        started = time.monotonic()
+        platform.wait_any_exited(
+            (replace(child.identity, start_time=child.identity.start_time + 1),), 10,
+        )
+        assert time.monotonic() - started < 5
+        assert child.alive()
+    finally:
+        child.close()
+    started = time.monotonic()
+    platform.wait_any_exited((child.identity,), 10)
+    assert time.monotonic() - started < 5
+
+
+def test_stop_batch_shares_one_force_deadline() -> None:
+    command = (sys.executable, "-c", (
+        "import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+        "print('ready',flush=True); time.sleep(60)"
+    ))
+    children = tuple(SpawnedProcess.launch(command, output=subprocess.PIPE) for _ in range(2))
+    try:
+        for child in children:
+            assert child.process.stdout is not None
+            assert child.process.stdout.readline() == b"ready\n"
+        signalled: dict[int, list[float]] = {index: [] for index in range(len(children))}
+
+        def recording(index: int):
+            @contextmanager
+            def guard():
+                signalled[index].append(time.monotonic())
+                yield
+            return guard
+
+        outcomes = SynchronousProcess.stop_together(
+            tuple((child, recording(index)) for index, child in enumerate(children))
+        )
+        assert all(isinstance(outcome, ForcedStopOutcome) for outcome in outcomes)
+        # Each plan's first guarded signal is the graceful pass, its second the force.
+        # One shared deadline forces both within one grace period, whatever the load.
+        forced = [times[1] for times in signalled.values()]
+        assert max(forced) - min(forced) < STOP_GRACE_SECONDS
+        assert all(child.retired for child in children)
+    finally:
+        for child in children:
+            child.close()
 
 
 @pytest.mark.asyncio
@@ -82,6 +146,43 @@ def test_synchronous_run_collects_both_streams_and_returncode(tmp_path: Path) ->
         timeout=5, cwd=tmp_path, env=dict(os.environ),
     )
     assert (result.returncode, result.stdout, result.stderr) == (7, b"out\n", b"err\n")
+
+
+def test_child_imports_the_checkout_its_parent_imported(tmp_path: Path) -> None:
+    import agent_comms
+
+    # No inherited import path: only the owner can point the child at this checkout,
+    # not the editable install's .pth, which may name another worktree.
+    environment = {name: value for name, value in os.environ.items() if name != "PYTHONPATH"}
+    result = SpawnedProcess.run(
+        (sys.executable, "-c", "import agent_comms; print(agent_comms.__file__)"),
+        timeout=30, cwd=tmp_path, env=environment,
+    )
+    assert result.returncode == 0, result.stderr
+    checkout = Path(__file__).resolve().parents[1]
+    assert Path(agent_comms.__file__).resolve().is_relative_to(checkout)
+    assert Path(result.stdout.decode().strip()).resolve().is_relative_to(checkout)
+
+
+def test_grandchild_import_path_holds_one_copy_of_the_checkout(tmp_path: Path) -> None:
+    # The child relaunches through the same owner: two generations of real launches.
+    report = (
+        "import os,sys; from pathlib import Path; "
+        "from agent_comms.child_process import SpawnedProcess; "
+        "r = SpawnedProcess.run((sys.executable, '-c', "
+        "'import os; print(os.environ[\"PYTHONPATH\"])'), "
+        "timeout=30, cwd=Path.cwd(), env=dict(os.environ)); "
+        "sys.stdout.buffer.write(r.stdout)"
+    )
+    environment = {name: value for name, value in os.environ.items() if name != "PYTHONPATH"}
+    result = SpawnedProcess.run(
+        (sys.executable, "-c", report), timeout=60, cwd=tmp_path, env=environment
+    )
+    assert result.returncode == 0, result.stderr
+    import agent_comms
+
+    root = str(Path(agent_comms.__file__).resolve().parents[1])
+    assert result.stdout.decode().strip().split(os.pathsep).count(root) == 1
 
 
 def test_stop_batch_retires_live_child_after_an_original_identity_exits() -> None:
@@ -206,69 +307,11 @@ def test_new_outcome_is_derived_and_field_encoded() -> None:
 
 
 @pytest.mark.asyncio
-async def test_namespace_deadline_kills_group_escaping_descendant(tmp_path: Path) -> None:
-    from agent_comms.child_process import NamespaceContainment, NamespacedChild, SignaledOutcome
-
-    if not isinstance(Platform.current(), NamespaceContainment):
-        pytest.skip("This platform does not provide PID namespaces")
-    acknowledgement = tmp_path / "escaped"
-    command = (
-        sys.executable,
-        "-c",
-        """import subprocess,sys,time
-code=('import os,sys,time; os.setsid(); '
-      'open(sys.argv[1],"w").write("alive"); time.sleep(60)')
-subprocess.Popen([sys.executable,'-c',code,sys.argv[1]])
-time.sleep(60)
-""",
-        str(acknowledgement),
-    )
-    child = await NamespacedChild.start(command, deadline=time.monotonic() + 2)
-    try:
-        await ready(acknowledgement)
-        assert child.namespace.alive()
-        async with asyncio.timeout(6):
-            outcome = await child.wait()
-            assert isinstance(outcome, SignaledOutcome)
-    finally:
-        await child.stop()
-    assert not child.namespace.alive()
-
-
-@pytest.mark.asyncio
 async def test_exec_failure_is_reported_by_real_exec_boundary(tmp_path: Path) -> None:
     from agent_comms.child_process import FailedToStartOutcome
 
     result = await BoundedRun.run((str(tmp_path / "missing-executable"),), timeout=2)
     assert isinstance(result.outcome, FailedToStartOutcome)
-
-
-@pytest.mark.asyncio
-async def test_namespace_watchdog_survives_launcher_death(tmp_path: Path) -> None:
-    from agent_comms.child_process import NamespaceContainment, PidNamespace
-
-    if not isinstance(Platform.current(), NamespaceContainment):
-        pytest.skip("This platform does not provide PID namespaces")
-    acknowledgement = tmp_path / "namespace.json"
-    launcher = SpawnedProcess.launch(
-        (
-            sys.executable,
-            str(Path(__file__).with_name('namespace_launcher_child.py')),
-            str(acknowledgement),
-        )
-    )
-    try:
-        await ready(acknowledgement)
-        namespace = FieldCodec.decode(PidNamespace, json.loads(acknowledgement.read_text()))
-        assert namespace.alive()
-        launcher.force()
-        await launcher.wait()
-        async with asyncio.timeout(6):
-            while namespace.alive():
-                await asyncio.sleep(0.02)
-    finally:
-        if launcher.alive():
-            await launcher.stop()
 
 
 @pytest.mark.asyncio
@@ -360,24 +403,17 @@ async def test_killed_launcher_takes_its_child_and_leaves_its_resident(tmp_path:
 
 def test_detached_reserves_identity_before_child_can_execute(tmp_path: Path) -> None:
     acknowledgement = tmp_path / "started"
-    recorded = []
-
-    def reserve(identity: ProcessIdentity) -> None:
-        assert not acknowledgement.exists()
-        assert identity.alive()
-        recorded.append(identity)
-
-    child = SpawnedProcess.launch(
+    with SpawnedProcess.launching(
         (
             sys.executable,
             "-c",
             'import sys,time; open(sys.argv[1],"w").write("started"); time.sleep(60)',
             str(acknowledgement),
         ),
-        before_start=reserve,
-    )
+    ) as child:
+        assert not acknowledgement.exists()
+        assert child.identity.alive()
     try:
-        assert recorded == [child.identity]
         stale = ObservedProcess(replace(child.identity, start_time=child.identity.start_time + 1))
         with pytest.raises(IdentityMismatchError):
             stale.stop_sync()
@@ -391,20 +427,16 @@ def test_reservation_failure_never_executes_and_reaps_child(tmp_path: Path) -> N
     acknowledgement = tmp_path / "should-not-exist"
     captured = []
 
-    def reject(identity: ProcessIdentity) -> None:
-        captured.append(identity)
+    with pytest.raises(ValueError), SpawnedProcess.launching(
+        (
+            sys.executable,
+            "-c",
+            "import sys; open(sys.argv[1], 'w').write('wrong')",
+            str(acknowledgement),
+        ),
+    ) as child:
+        captured.append(child.identity)
         raise ValueError("reservation refused")
-
-    with pytest.raises(ValueError):
-        SpawnedProcess.launch(
-            (
-                sys.executable,
-                "-c",
-                "import sys; open(sys.argv[1], 'w').write('wrong')",
-                str(acknowledgement),
-            ),
-            before_start=reject,
-        )
     assert len(captured) == 1
     assert not captured[0].alive()
     assert not acknowledgement.exists()

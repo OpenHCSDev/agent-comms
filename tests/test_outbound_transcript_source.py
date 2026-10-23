@@ -1,35 +1,39 @@
 """Whole conversations derive their original frozen wire sources, in both directions."""
 
-from dataclasses import replace
+from agent_comms.channel_targets import CommandTarget
 
-from agent_comms.channels import AnyChannel
-from agent_comms.tools import invoke_tool
-from agent_comms.tool_caller import NoThreadCaller
-from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.comms import wire
-from agent_comms.coordination_errors import StaleRevision
-from agent_comms.coordinator import Coordination
-from agent_comms.notification_assignment import NotificationAssignment
-from agent_comms.notification_progress import (
-    ContextualProgress, SentProgress, UnrecordedProgress,
-)
-from agent_comms.errors import RelationViolationError
-from agent_comms.pi_payloads import PublishedMessageToolDetails
-from agent_comms.transcripts import TranscriptRead
-from test_coordinated_runtime import _root, tmp_path  # noqa: F401
+import sqlite3
+from dataclasses import replace
 
 import pytest
 
+from agent_comms.channels import AnyChannel
+from agent_comms.comms import wire
+from agent_comms.coordination_errors import StaleRevision
+from agent_comms.coordinator import Coordination
+from agent_comms.errors import RelationViolationError
+from agent_comms.notification_assignment import NotificationAssignment
+from agent_comms.notification_progress import (
+    ContextualProgress,
+    SentProgress,
+    UnrecordedProgress,
+)
+from agent_comms.pi_payloads import PublishedMessageToolDetails
+from agent_comms.tool_caller import NoThreadCaller
+from agent_comms.tools import invoke_tool
+from agent_comms.transcripts import TranscriptRead
+from test_coordinated_runtime import _root, tmp_path  # noqa: F401
+from agent_comms.threads import Thread
+
 
 def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_path):  # noqa: F811
-    import sqlite3
     from agent_comms.coordination_errors import CoordinationReadUnavailable
 
     root, _root_id, comms, initial, _people = _root(tmp_path)
     database = root / "coordination.sqlite3"
     captured = NotificationAssignment.read(root, (initial,))
     original = captured.resolve(root)
-    wire_before = comms.bus.log.path.read_bytes()
+    wire_before = comms.bus.bus.revision()
     assert original
     with Coordination(str(database)) as writer:
         with writer.session.writing():
@@ -46,7 +50,7 @@ def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_p
     assert reopened.resolve(root) == original
     with TranscriptRead.publication_source(root) as native_read:
         assert native_read is not None
-    assert comms.bus.log.path.read_bytes() == wire_before
+    assert comms.bus.bus.revision() == wire_before
 
 
 @pytest.mark.parametrize('direct', [False, True])
@@ -85,20 +89,20 @@ def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):
         owner, 'NativePiUnavailable', 'Original uncertain outcome', recorded_at=1.0
     )
     assert comms.agents.set_drain_diagnostic('beta', owner, diagnostic)
-    message = comms.messaging.send_user_message('#team', 'Independent saved original',
+    message = comms.messaging.send_user_message(CommandTarget.named('#team'), 'Independent saved original',
                                                worktree=str(tmp_path))
     with Coordination(str(root/'coordination.sqlite3')) as store:
         before = WakeAssignment.select(store.session._connection)
-    wire_before = comms.bus.log.path.read_bytes()
+    wire_before = comms.bus.bus.revision()
     notices = comms.views.message_notifications_for_references((message.reference,))[message.seq,message.message_id]
     beta = next(notice for notice in notices if notice.recipient=='beta')
     assert beta.state == ContextualProgress(UnrecordedProgress())
     assert beta.state.detail == ''
-    assert beta.recipient_identity.recipient_lookup==RecordedThreadIncarnation("fixture", comms.registry.require('beta').created_at).lookup
+    assert beta.recipient_identity.recipient_lookup==comms.registry.require('beta').incarnation.require_recorded().lookup
     with Coordination(str(root/'coordination.sqlite3')) as store:
         assert WakeAssignment.select(store.session._connection)==before
     assert not any(row.wire_seq==message.seq for row in before)
-    assert comms.bus.log.path.read_bytes()==wire_before
+    assert comms.bus.bus.revision()==wire_before
     # The immutable source's recipient survives rename; current readiness must
     # join its original birth rather than manufacture a new membership/claim.
     comms.registry.rename('beta','renamed')
@@ -141,10 +145,10 @@ def test_publication_intent_joins_original_sender_and_target_only(tmp_path):  # 
     _path, _root_id, comms, initial, _people = _root(tmp_path)
     reply = comms.messaging.send("beta", "sender", "First original reply").message
     source = AssignedTranscriptSource.for_thread(
-        comms.root, comms.registry.require("beta"), comms.bus.log
+        comms.root, comms.registry.require("beta"), comms.bus.bus
     )
-    original = tuple(source.rows("w.seq=?", (reply.seq,)))
-    lookup = RecordedThreadIncarnation("fixture", source.recipient.created_at).lookup
+    original = source.rows(sequences=(reply.seq,))
+    lookup = source.recipient.require_recorded().lookup
     intent = TurnRouting((initial.message.reference,), MessageRoute("beta", ("sender", "alpha")))
     # A later send can fail; this first committed subset stays a valid relation.
     intent.require_publications(original, lookup)
@@ -169,7 +173,7 @@ def test_open_sender_source_advances_without_a_native_tool_copy(tmp_path):  # no
         {"from": "beta", "to": "sender", "body": "Original outgoing ownership reply"},
         caller=NoThreadCaller(),
     ))
-    message, = comms.bus.log.messages_for_references((acknowledgement.message.source,))
+    message, = comms.bus.bus.messages_for_references((acknowledgement.message.source,))
     after = comms.transcripts.capture_page_read("beta")
     assert after.identity.wire_frontier.sequence == message.seq
     assert not before.current()
@@ -208,11 +212,12 @@ def test_unrelated_canonical_append_keeps_open_source_content(tmp_path):  # noqa
 def test_open_source_rejects_replaced_wire_inode(tmp_path):  # noqa: F811
     _path, _root_id, comms, _initial, _people = _root(tmp_path)
     before = comms.transcripts.capture_page_read("beta")
-    replacement = comms.bus.log.path.with_suffix(".replacement")
-    replacement.write_bytes(comms.bus.log.path.read_bytes())
-    replacement.replace(comms.bus.log.path)
-    with pytest.raises(RelationViolationError):
-        before.content_current()
+    replacement = comms.bus.bus.path.with_suffix(".replacement")
+    comms.bus.bus.backup(replacement)
+    replacement.replace(comms.bus.bus.path)
+    assert not before.content_current()
+    with pytest.raises(StaleRevision):
+        before.read()
 
 
 def test_published_source_binding_keeps_exact_original_request(tmp_path):  # noqa: F811
@@ -232,38 +237,14 @@ def test_published_source_binding_keeps_exact_original_request(tmp_path):  # noq
     assert comms.transcripts.bind_page_read("renamed", identity).identity is identity
     comms.registry.unregister("renamed")
     comms.registry.remove("renamed")
-    comms.registry.declare(comms.registry.new_thread('renamed', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('renamed', frozenset(), str(tmp_path)))
     with pytest.raises(StaleRevision):
         comms.transcripts.bind_page_read("renamed", identity)
 
 
-def test_original_open_checked_prefix_expires_with_canonical_lock(tmp_path):  # noqa: F811
-    import sqlite3
-
-    _path, _root_id, comms, initial, _people = _root(tmp_path)
-    with comms.bus.log.checked_read() as source:
-        assert source.connection.execute("PRAGMA query_only").fetchone()[0] == 1
-        assert tuple(source.references((initial.message.reference,))) == (initial,)
-    assert source.stream.closed
-    with pytest.raises(sqlite3.ProgrammingError):
-        source.connection.execute("SELECT 1")
-    with pytest.raises(RelationViolationError):
-        tuple(source.references((initial.message.reference,)))
-
-
-def test_missing_checked_wire_cannot_be_an_empty_presentation(tmp_path):  # noqa: F811
+def test_missing_bus_cannot_be_an_empty_presentation(tmp_path):  # noqa: F811
     _path, _root_id, comms, _initial, _people = _root(tmp_path)
-    comms.bus.log.path.unlink()
-    with pytest.raises(
-        RelationViolationError,
-    ):
+    comms.bus.bus.path.unlink()
+    with pytest.raises(sqlite3.OperationalError) as missing:
         comms.views.thread_presentations(("beta",)).require("beta")
-
-
-def test_bus_guard_preserves_the_callers_original_failure(tmp_path):  # noqa: F811
-    _path, _root_id, comms, _initial, _people = _root(tmp_path)
-    failure = OSError("Caller-owned failure after actual durability claim_scope")
-    with pytest.raises(OSError) as raised:
-        with comms.bus.log.locked():
-            raise failure
-    assert raised.value is failure
+    assert missing.value.sqlite_errorcode == sqlite3.SQLITE_CANTOPEN

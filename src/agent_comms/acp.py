@@ -23,36 +23,53 @@ import os
 import re
 import sys
 import time
+from collections.abc import Sequence
 from contextlib import AsyncExitStack
 from functools import partial
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from acp import RequestError, run_agent
+from acp import RequestError
+from acp.agent.connection import AgentSideConnection
+from acp.connection import StreamEvent
+from acp.core import DEFAULT_STDIO_BUFFER_LIMIT_BYTES
 from acp.schema import (
     AgentMessageChunk,
+    ClientCapabilities,
+    Implementation,
     InitializeResponse,
+    LoadSessionRequest,
     LoadSessionResponse,
+    NewSessionRequest,
     NewSessionResponse,
+    PromptRequest,
     PromptResponse,
+    PermissionOption,
+    RequestPermissionResponse,
+    ToolCallUpdate,
     SetSessionConfigOptionResponse,
     TextContentBlock,
 )
+from acp.stdio import stdio_streams
+from pydantic import BaseModel, JsonValue, ValidationError
 
-from agent_comms.coordination_errors import (
-    IdentityConflict,
-    PublicationActivationBlocked,
-)
+from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 
+from . import acp_extension
 from .acp_extension import (
     CompactRequest,
     encode_updates,
 )
 from .acp_failure import NativeTurnError
+from .channel_targets import NamedTarget
 from .cohort_foreground import _accept_visible_deliveries
 from .comms import Comms, wire
+from .controller import (
+    ACP_PERMISSION_TIMEOUT_SECONDS, Controller, SessionUpdateSink, UNBOUND_CONTROLLER,
+)
 from .coordination_cohort import next_sealed_assignment
 from .coordination_database import CoordinationStore
+from .cursor_owner import CursorOwner
 from .cursor_publication import CursorPublication
 from .field_codec import FieldCodec, MalformedRecord
 from .image_inputs import prompt_images
@@ -63,7 +80,6 @@ from .message_bus import MessageBus
 from .publisher import ResponseWrites
 from .queued_input import DeliveredInput
 from .runtime import (
-    UNBOUND_CONTROLLER,
     RuntimeProxy,
     RuntimeServer,
     socket_path,
@@ -74,14 +90,47 @@ from .session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
 from .threads import Thread
 from .turn_effects import TurnEffects
 from .turn_runner import TurnRunner
-from .turn_terminal import EndedWithoutResult, TurnInterruption, TurnTerminal
-from .wire_log import WireLog
+from .turn_terminal import EndedWithoutResult, TurnInterruption
 
 if TYPE_CHECKING:
     from .selected_tool_broker import SelectedToolIntent
+    from .selected_write_authority import AcpSelectedWriteAuthority
 
 from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary
 from .turn_runner import RELAY_PREFIX
+
+
+class SdkSessionConnection(AgentSideConnection, Controller, SessionUpdateSink):
+    """The SDK connection and controller publish one Core acceptance answer."""
+
+    async def publish_update(self, *, session_id: str, update: BaseModel) -> bool:
+        await self.session_update(session_id=session_id, update=update)
+        return True
+
+
+    def require_current(self, authority: AcpSelectedWriteAuthority, session_id: str) -> None:
+        if self is not authority.agent.sessions.client:
+            raise IdentityConflict("Selected write ACP controller changed")
+
+    async def request_ui_permission(
+        self, runner: TurnRunner, session_id: str,
+        request: tuple[ToolCallUpdate, list[PermissionOption]],
+    ) -> dict[str, object] | None:
+        tool_call, options = request
+        if self is runner.sessions.client:
+            response = await asyncio.wait_for(
+                self.request_permission(
+                    session_id=session_id, tool_call=tool_call, options=options
+                ),
+                timeout=ACP_PERMISSION_TIMEOUT_SECONDS,
+            )
+            return RequestPermissionResponse.model_validate(response).outcome.model_dump(
+                by_alias=True, exclude_none=True
+            )
+        return None
+
+    def departed(self, runtime: RuntimeServer, session_id: str) -> bool:
+        return False
 
 
 class CommsAgent(SessionEffects, InputEffects, TurnEffects):
@@ -136,7 +185,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         self.turns.bind(self.sessions, self.inputs)
         # A preplanned write is valid only while its original ACP controller
         # remains attached. Never restore this binding after a process crash.
-        self._selected_write_controllers: dict[tuple[str, int], tuple[str, object]] = {}
+        self._selected_write_controllers: dict[tuple[str, int], tuple[str, Controller]] = {}
 
     def _create_runtime_proxy(self, thread: Thread, session_id: str) -> RuntimeProxy:
         return RuntimeProxy(
@@ -146,7 +195,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
     # Private attachment ABI consumed by runtime/compaction. State exists only
     # on its component; in-process consumers use that owner directly.
 
-    def on_connect(self, client: Any) -> None:
+    def on_connect(self, client: SdkSessionConnection) -> None:
         """Called by AgentSideConnection with the client-facing connection."""
         self.sessions.client = client
 
@@ -155,40 +204,76 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
     async def initialize(
         self,
         protocol_version: int,
-        client_capabilities: Any = None,
-        client_info: Any = None,
+        client_capabilities: ClientCapabilities | None = None,
+        client_info: Implementation | None = None,
     ) -> InitializeResponse:
         return await self.sessions.initialize(protocol_version, client_capabilities, client_info)
 
+    @staticmethod
+    def _sdk_request[Request: BaseModel](
+        model: type[Request], /, **parameters: JsonValue | Sequence[BaseModel]
+    ) -> Request:
+        """Reassemble SDK fields and expanded metadata using the SDK declaration."""
+        metadata = parameters.pop("_meta", None) or parameters.pop("field_meta", None) or {}
+        if not isinstance(metadata, dict):
+            raise RequestError.invalid_params({"reason": "ACP metadata must be an object"})
+        fields = {name: value for name, value in parameters.items() if name in model.model_fields}
+        expanded = {
+            name: value for name, value in parameters.items() if name not in model.model_fields
+        }
+        try:
+            return model.model_validate({**fields, "field_meta": {**metadata, **expanded}})
+        except ValidationError as error:
+            raise RequestError.invalid_params({"reason": str(error)}) from error
+
     async def new_session(
-        self, cwd: str, mcp_servers: list[Any] | None = None, **kwargs: Any
+        self, cwd: str, mcp_servers: Sequence[BaseModel] | None = None, **kwargs: JsonValue
     ) -> NewSessionResponse:
-        return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+        request = self._sdk_request(
+            NewSessionRequest,
+            cwd=cwd,
+            mcp_servers=[] if mcp_servers is None else mcp_servers,
+            **kwargs,
+        )
+        return await self.sessions.new_session(request)
 
     async def load_session(
         self,
         cwd: str,
         session_id: str,
-        mcp_servers: list[Any] | None = None,
-        **kwargs: Any,
+        mcp_servers: Sequence[BaseModel] | None = None,
+        **kwargs: JsonValue,
     ) -> LoadSessionResponse:
-        return await self.sessions.load_session(cwd, session_id, mcp_servers, **kwargs)
+        request = self._sdk_request(
+            LoadSessionRequest,
+            cwd=cwd,
+            session_id=session_id,
+            mcp_servers=[] if mcp_servers is None else mcp_servers,
+            **kwargs,
+        )
+        return await self.sessions.load_session(request)
 
-    async def prompt(self, session_id: str, prompt: list[Any], **kwargs: Any) -> PromptResponse:
+    async def prompt(
+        self, session_id: str, prompt: Sequence[BaseModel], **kwargs: JsonValue
+    ) -> PromptResponse:
+        request = self._sdk_request(PromptRequest, session_id=session_id, prompt=prompt, **kwargs)
+        return await self.receive_prompt(request)
+
+    async def receive_prompt(self, request: PromptRequest) -> PromptResponse:
         from .acp_extension import decode_request
         from .acp_request_consumer import AcpRequestConsumer
 
         try:
-            request = decode_request(kwargs.get("_meta") or kwargs.get("field_meta"), **kwargs)
+            command = decode_request(request.field_meta)
         except MalformedRecord as error:
             raise RequestError.invalid_params({"reason": str(error)}) from error
         # Literal /compact is the external ACP text command; ours uses a record.
-        text = self._prompt_text(prompt).strip()
+        text = self._prompt_text(request).strip()
         if re.match(r"^/compact(?:\s|$)", text):
-            self._require_compaction_text(prompt)
-            request = CompactRequest(text[len("/compact") :].strip())
+            self._require_compaction_text(request)
+            command = CompactRequest(text[len("/compact") :].strip())
         try:
-            return await AcpRequestConsumer(self, session_id, prompt).run(request)
+            return await AcpRequestConsumer(self, request).run(command)
         except NativeTurnError as error:
             raise RequestError.internal_error(error.request.error_data()) from error.__cause__
 
@@ -214,48 +299,53 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         from .selected_write_plan import SelectedWritePlans
 
         owner = self.sessions.require(session_id)
-        root_id = self._private_nk_marker()
         controller = self._runtime.controller.get()
-        if controller is None or (
-            controller is UNBOUND_CONTROLLER and self.sessions.client is None
-        ):
+        attached = self.sessions.client if controller is UNBOUND_CONTROLLER else controller
+        if attached is None:
             raise RequestError.invalid_params(
                 {"reason": "Selected write requires attached ACP controller"}
             )
-        acknowledgement = await Coordination.run_worker(partial(SelectedWritePlans(self._comms, root_id).submit,
-            owner_name=owner,
-            source_seq=request.source_seq,
-            source_message_id=request.source_message_id,
-            resource=request.resource,
-            contents=request.contents,
-        ))
-        attached = self.sessions.client if controller is UNBOUND_CONTROLLER else controller
+        scope = await Coordination.run_worker(partial(self.cursors.scope, owner, session_id))
+        plans = SelectedWritePlans(self._comms, scope.require_live().wire_root_id)
+        acknowledgement = await Coordination.run_worker(
+            partial(
+                plans.submit,
+                owner_name=owner,
+                source_seq=request.source_seq,
+                source_message_id=request.source_message_id,
+                resource=request.resource,
+                contents=request.contents,
+            )
+        )
         self._selected_write_controllers[(owner, request.source_seq)] = (
             acknowledgement.operation_id,
             attached,
         )
         return PromptResponse(stop_reason="end_turn", field_meta=encode_updates(acknowledgement))
 
-    async def _prompt_request(self, session_id: str, prompt: list[Any], request) -> PromptResponse:
-        display_text = request.user_text or self._prompt_text(prompt)
+    async def _prompt_request(
+        self, request: PromptRequest, command: acp_extension.PromptRequest
+    ) -> PromptResponse:
+        session_id = request.session_id
+        text = self._prompt_text(request)
+        display_text = command.user_text or text
         try:
-            images = prompt_images(prompt)
+            images = prompt_images(request)
         except ValueError as error:
             raise RequestError.invalid_params({"reason": str(error)}) from error
-        if images and self._prompt_text(prompt).lstrip().startswith(("@", "#", RELAY_PREFIX)):
+        if images and text.lstrip().startswith((*NamedTarget.sigils(), RELAY_PREFIX)):
             raise RequestError.invalid_params(
                 {"reason": "Send images to an agent thread, not as a coordination relay."}
             )
-        text = self._prompt_text(prompt)
         if (
             (await self.turns.active_backend_turn(session_id)).is_open
-            and not text.lstrip().startswith(("@", "#", RELAY_PREFIX))
+            and not text.lstrip().startswith((*NamedTarget.sigils(), RELAY_PREFIX))
         ):
             return await self.inputs.accept_followup(
                 session_id,
                 text=text,
                 display_text=display_text,
-                request=request,
+                request=command,
                 images=images,
             )
         async with self.turns.turn_locks.setdefault(session_id, asyncio.Lock()):
@@ -270,25 +360,28 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             )
             try:
                 return await self.turns.prompt_owned(
-                    session_id, prompt, display_text=display_text, input_id=request.input_id,
-                    origin=request.origin,
+                    request,
+                    images=images,
+                    display_text=display_text,
+                    input_id=command.input_id,
+                    origin=command.origin,
                 )
             finally:
                 if context is not None:
                     self._runtime.controller.reset(context)
 
     @staticmethod
-    def _require_compaction_text(prompt: list[Any]) -> None:
-        if len(prompt) != 1:
+    def _require_compaction_text(request: PromptRequest) -> None:
+        if len(request.prompt) != 1:
             raise RequestError.invalid_params({"reason": "/compact requires one text block."})
-        block = prompt[0]
-        kind = block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
-        if kind != "text":
+        if not isinstance(request.prompt[0], TextContentBlock):
             raise RequestError.invalid_params({"reason": "/compact requires text only."})
 
-    async def emit_session_identity(self, session_id: str, name: str, client: Any = None) -> None:
+    async def emit_session_identity(
+        self, session_id: str, name: str, client: SessionUpdateSink,
+    ) -> None:
         """Let a subscriber identify its owner before potentially long replay."""
-        await (client or self._runtime).session_update(
+        await client.publish_update(
             session_id=session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
@@ -303,36 +396,21 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             with open(debug_path, "a") as debug_log:
                 debug_log.write(f"[{time.time():.3f}] {message}\n")
 
-    async def cancel(self, session_id: str, **kwargs: Any) -> None:
+    async def cancel(self, session_id: str, **kwargs: JsonValue) -> None:
         return await self.turns.cancel(session_id, **kwargs)
 
-    async def close_session(self, session_id: str, **kwargs: Any):
+    async def close_session(self, session_id: str, **kwargs: JsonValue):
         return await self.sessions.close_session(session_id)
 
     async def set_config_option(
-        self, config_id: str, session_id: str, value: str | bool, **kwargs: Any
+        self, config_id: str, session_id: str, value: str | bool, **kwargs: JsonValue
     ) -> SetSessionConfigOptionResponse:
         return await self.sessions.config.set_option(config_id, session_id, value)
 
-    async def authenticate(self, method_id: str, **kwargs: Any) -> None:
+    async def authenticate(self, method_id: str, **kwargs: JsonValue) -> None:
         raise RequestError.auth_required({"reason": "agent-comms requires no authentication"})
 
     # ─── Helpers ─────────────────────────────────────────────────────────────
-
-    @property
-    def configured_root_id(self) -> str:
-        """The bus root ID the launch pinned; the bus reader checks it against the marker."""
-        return self._comms.owners.require_private_launch().wire_root_id
-
-    def _private_nk_marker(self) -> str:
-        """Check that the bus belongs to the configured root before a request runs."""
-        configured_root_id = self.configured_root_id
-        with self._comms.bus.log.checked_read() as source:
-            if source.marker.root_id != configured_root_id:
-                raise PublicationActivationBlocked(
-                    "private N/K ACP root does not match configuration"
-                )
-            return source.marker.root_id
 
     async def _drain_private_nk(self, session_id: str, wire_root_id: str) -> int:
         """Run a selected private wake for this ACP session.
@@ -348,8 +426,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
         launch = self._comms.owners.require_private_launch()
         package = launch.native_package
-        if launch.wire_root_id != wire_root_id:
-            raise PublicationActivationBlocked("private N/K ACP root does not match its launch")
         thread_name = await self.sessions.sync_identity(session_id)
         snapshot = await Coordination.run_worker(self._comms.registry.snapshot)
         owner = snapshot.require(thread_name)
@@ -361,11 +437,14 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             return 0
         if not owner.process_identity.runs_here():
             raise IdentityConflict("private N/K ACP recipient is not this process owner")
-        bus = MessageBus(WireLog.path_in(self._comms.root), self._comms.registry, ResponseWrites)
-        def read_claim():
-            with bus.log.checked_read() as source:
-                return source.marker.claimed_after_seq
-        claimed_after_seq = await Coordination.run_worker(read_claim)
+        lookup = owner.incarnation.require_recorded().lookup
+        bus = MessageBus(self._comms.root, self._comms.registry, ResponseWrites)
+        delivery = self.cursors.delivery(session_id)
+        async with delivery.reading() as source_reads:
+            state = await CursorOwner.read_async(
+                bus, wire_root_id=wire_root_id, owner_name=thread_name, source_reads=source_reads,
+            )
+        after_seq = state.covered_seq
         store_path = CoordinationStore.path_in(self._comms.root)
         # One execution owns this wake's package acquisition: acceptance of new
         # originals and the selected launch share it instead of verifying twice.
@@ -374,34 +453,30 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             wire_root_id=wire_root_id,
             owner_name=thread_name,
             native_package=package,
-            cursor_delivery=self.cursors.delivery(session_id),
+            cursor_delivery=delivery,
             write_authority=AcpSelectedWriteAuthority(
                 self, session_id, SelectedWritePlans(self._comms, wire_root_id)
             ),
-            **(
-                {"selected_tool_intent": self._private_selected_tool_intent}
-                if self._private_selected_tool_intent is not None
-                else {}
-            ),
+            selected_tool_intent=self._private_selected_tool_intent,
         )
         with execution.cursor_delivery.measurements.operation("accept_deliveries"):
             await _accept_visible_deliveries(
-                bus, wire_root_id, store_path, owner.incarnation.lookup, 0,
+                bus, wire_root_id, store_path, lookup, after_seq,
                 owner_name=owner.name, acquire_package=execution.validate,
             )
         if self.inputs.owns_execution(session_id, owner):
             # A running turn takes its owner's pending messages as inputs;
             # whatever it cannot take wakes this owner once the turn ends.
             await DeliveredInput.deliver_pending(
-                self.inputs, session_id, owner, bus, wire_root_id, claimed_after_seq
+                self.inputs, session_id, owner, bus, wire_root_id, after_seq
             )
             await self.cursors.publish(session_id, thread_name)
             return 0
         def select(store):
             with store.session.read():
-                participant = store.participants.get(owner.incarnation.lookup)
+                participant = store.participants.get(lookup)
                 candidate = next_sealed_assignment(
-                    store, participant.lookup, owner.name, after_seq=claimed_after_seq,
+                    store, participant.lookup, after_seq=after_seq,
                 )
                 if candidate is None:
                     return False
@@ -424,7 +499,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         ).schedule()
         return 1
 
-    async def shutdown(self, terminal: TurnTerminal = EndedWithoutResult()) -> None:
+    async def shutdown(self) -> None:
         """Stop drains and mark threads owned by this ACP connection offline."""
         async with AsyncExitStack() as retirement:
             # CursorPublication owns the cross-observation evidence lifetime;
@@ -432,20 +507,18 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             retirement.callback(self.cursors.close)
             retirement.push_async_callback(self.sessions.release_owned)
             retirement.callback(self.inputs.end_sessions)
-            retirement.push_async_callback(self.turns.close, terminal)
+            retirement.push_async_callback(self.turns.close)
             retirement.push_async_callback(self.sessions.close_proxies)
-            retirement.push_async_callback(self.inputs.close, terminal)
+            retirement.push_async_callback(self.inputs.close)
             retirement.push_async_callback(self.annotations.close)
 
     @staticmethod
-    def _prompt_text(prompt: list[Any]) -> str:
-        chunks: list[str] = []
-        for block in prompt:
-            if isinstance(block, dict):
-                chunks.append(str(block.get("text", "")))
-            else:
-                chunks.append(str(getattr(block, "text", "") or ""))
-        return "\n".join(chunk for chunk in chunks if chunk)
+    def _prompt_text(request: PromptRequest) -> str:
+        return "\n".join(
+            block.text
+            for block in request.prompt
+            if isinstance(block, TextContentBlock) and block.text
+        )
 
 
 class CommsClient(CommsAgent):
@@ -504,19 +577,24 @@ def main() -> int:
                 use_unstable_protocol=True,
             )
 
-            def observe(event: Any) -> None:
+            def observe(event: StreamEvent) -> None:
                 agent._debug_log(
                     f"{event.direction.value}: {json.dumps(event.message)[:200]}"
-                    if hasattr(event, "message")
-                    else f"{event.direction.value}"
                 )
 
-            conn_kwargs: dict[str, Any] = {}
-            if os.environ.get("AGENT_COMMS_DEBUG_LOG"):
-                conn_kwargs["observers"] = [observe]
             try:
-                await run_agent(agent, use_unstable_protocol=agent.use_unstable_protocol,
-                                **conn_kwargs)  # type: ignore[arg-type]
+                output_stream, input_stream = await stdio_streams(
+                    limit=DEFAULT_STDIO_BUFFER_LIMIT_BYTES
+                )
+                connection = SdkSessionConnection(
+                    agent, input_stream, output_stream, listening=False,
+                    use_unstable_protocol=agent.use_unstable_protocol,
+                    observers=[observe] if os.environ.get("AGENT_COMMS_DEBUG_LOG") else None,
+                )
+                try:
+                    await connection.listen()
+                finally:
+                    await asyncio.shield(connection.close())
             finally:
                 await agent.shutdown()
 

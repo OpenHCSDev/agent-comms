@@ -6,7 +6,7 @@ from multiprocessing.connection import Connection
 from pathlib import Path
 
 from agent_comms.cli_bridges.shared import Binding
-from agent_comms.coordination_database import CoordinationStore
+from agent_comms.locked_store import SQLiteFile
 
 
 def _bind(state: Path, requested: Binding, pipe: Connection) -> None:
@@ -46,7 +46,7 @@ def concurrent_bindings(state: Path, requests: tuple[Binding, Binding]) -> list[
             process.start()
             child.close()
         assert [_receive(pipe) for pipe in pipes] == ['ready', 'ready']
-        control = CoordinationStore.writer(state / 'delivery.sqlite3')
+        control = SQLiteFile.writer(state / 'delivery.sqlite3')
         control.execute('BEGIN IMMEDIATE')
         for pipe in pipes:
             pipe.send('bind')

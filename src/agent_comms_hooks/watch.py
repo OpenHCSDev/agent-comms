@@ -11,6 +11,7 @@ import fcntl
 import hashlib
 import json
 import os
+import time
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
@@ -24,6 +25,15 @@ if TYPE_CHECKING:
 
 class SessionRefusedError(ValueError):
     """A session endpoint rejected the control request, not malformed wire data."""
+
+
+class NoSessionBridge(RuntimeError):
+    """No bridge holds this claim: nothing is delivered until connect starts one."""
+
+    def __init__(self, session: str) -> None:
+        super().__init__(
+            f'No session bridge is running for session {session}; its log names why it stopped. '
+            'Start it with agent-comms-claude-bridge connect.')
 
 
 @dataclass(frozen=True)
@@ -67,6 +77,11 @@ class WatchClaim:
     @classmethod
     def directory(cls, home: Path) -> Path:
         return home / ".local/state/agent-comms/cli-watch"
+
+    @classmethod
+    def endpoints(cls, home: Path) -> tuple[Path, ...]:
+        """Live session endpoints share the claim directory, independent of --state."""
+        return tuple(sorted(cls.directory(home).glob("*.sock")))
 
     @property
     def path(self) -> Path:
@@ -161,12 +176,22 @@ class WatchState:
         with claim.held(record):
             pass
 
-    def serving_claims(self) -> tuple[WatchClaim, ...]:
-        return ()
-
     def may_serve(self, bus: str) -> bool:
         """Whether this session can be the bus thread named; unbound, it cannot be ruled out."""
         return True
+
+    def bindings(self) -> tuple[WatchRecord, ...]:
+        """No session binding exists until this watch is enrolled."""
+        return ()
+
+    def announce_absence(self, announce: Callable[[], None]) -> bool:
+        """No bridge holds the claim: the reader says delivery is down, once per outage."""
+        announce()
+        return True
+
+    def await_socket(self, claim: WatchClaim, absent: OSError) -> None:
+        """No bridge holds the claim, so its socket is gone, not between bridges."""
+        raise NoSessionBridge(claim.thread) from absent
 
 
 class UnclaimedWatch(WatchState):
@@ -177,6 +202,9 @@ class UnclaimedWatch(WatchState):
 class RecordedWatch(WatchState):
     claim: WatchClaim
     record: WatchRecord
+
+    def bindings(self) -> tuple[WatchRecord, ...]:
+        return (self.record,)
 
     def connect(self, serve: Callable[[], Serve],
                 request: Callable[[Serve], SessionRequest]) -> None:
@@ -189,7 +217,7 @@ class RecordedWatch(WatchState):
         operation.owner.require_alive()
         verification = request(operation)
         try:
-            verification.exchange(self.claim)
+            verification.exchange(self.claim.socket_path)
         except (FileNotFoundError, ConnectionRefusedError, SessionRefusedError):
             self.reconnect(operation, verification)
 
@@ -207,14 +235,20 @@ class LiveWatch(RecordedWatch):
             'No second bridge launched. Stop that Monitor once, then connect.')
 
     def end(self, request: Callable[[], SessionRequest]) -> None:
-        request().exchange(self.claim)
+        request().exchange(self.claim.socket_path)
 
     def enrol(self, claim: WatchClaim, record: WatchRecord) -> None:
         if self.record != record:
             raise ValueError('This session is already bound to another bridge command')
 
-    def serving_claims(self) -> tuple[WatchClaim, ...]:
-        return (self.claim,) if self.claim.socket_path.exists() else ()
+    def announce_absence(self, announce: Callable[[], None]) -> bool:
+        """A held claim's absent socket is an install's swap, not an outage."""
+        return False
+
+    def await_socket(self, claim: WatchClaim, absent: OSError) -> None:
+        """The claim's lock outlives the install's exec, so a held claim's absent socket is
+        the swap's gap: wait for the successor however long it starts."""
+        time.sleep(.05)
 
 
 class LapsedWatch(RecordedWatch):

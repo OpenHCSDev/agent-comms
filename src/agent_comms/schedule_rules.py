@@ -1,17 +1,22 @@
 """Independent owner-local scheduling barriers, using the shared rule family."""
 
 import asyncio
+from abc import abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from acp import RequestError
 
 from .coordinator import Coordination
+from .declared_family import DeclaredFamily
 from .drain_failures import drain_failures
 from .activity import FailedWakeDiagnostic
 from .errors import RelationViolationError
+from .maintenance_barrier import MaintenanceStatus
 from .reservation_rules import ReservationRule, RuleCheck, ReservationViolationError
 from .routing import ScheduledTurn
+from .turn_outcome import TurnOutcome
 
 if TYPE_CHECKING:
     from .goals import GoalDeclaration
@@ -19,6 +24,34 @@ if TYPE_CHECKING:
     from .input_drain import InputDrain
     from .thread_identity import OwnerIdentity
     from .turn_runner import TurnRunner
+
+
+class WakeOutcome(DeclaredFamily, TurnOutcome):
+    """A completed wake owns whether observation should run again."""
+
+    @abstractmethod
+    def settle(self, observer: Callable[[str], None], session_id: str) -> None: ...
+
+
+@dataclass(frozen=True)
+class WakeHeld(WakeOutcome):
+    hold: MaintenanceStatus
+
+    def settle(self, observer: Callable[[str], None], session_id: str) -> None:
+        """Maintenance reopening supplies the next wake."""
+
+
+class WakeDue(WakeOutcome):
+    def settle(self, observer: Callable[[str], None], session_id: str) -> None:
+        observer(session_id)
+
+
+class SchedulesWake(RuleCheck):
+    """A check that schedules a wake, so it waits for the previous wake to finish."""
+
+
+class BackgroundWake(RuleCheck):
+    """A check that starts work in the background, so configuration can disable it."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -32,7 +65,7 @@ class OwnerTurnScheduleCheck(SessionScheduleCheck):
     turns: "TurnRunner"
 
 
-class ProjectResumeCheck(OwnerTurnScheduleCheck):
+class ProjectResumeCheck(BackgroundWake, OwnerTurnScheduleCheck):
     """Start the turn the registry records as due after a project change.
 
     The registry entry is the only record, so an owner started later reads
@@ -55,7 +88,7 @@ class ProjectResumeCheck(OwnerTurnScheduleCheck):
             WakeScheduleCheck(session_id=session_id, inputs=inputs).schedule()
 
 
-class WakeScheduleCheck(SessionScheduleCheck):
+class WakeScheduleCheck(SchedulesWake, BackgroundWake, SessionScheduleCheck):
     """Check wake permission and execute it under the existing turn lock.
 
     A queued wake never carries a stale owner grant across a lock wait. The
@@ -71,18 +104,18 @@ class WakeScheduleCheck(SessionScheduleCheck):
             self.session_id, self.inputs.runtime.background(self.run())
         )
 
-    async def run(self) -> None:
+    async def run(self) -> WakeOutcome:
         inputs, session_id = self.inputs, self.session_id
         while inputs.state(session_id).pending_turns:
             if ClosingScheduleRule().violated(self):
-                return
+                return WakeDue()
             async with inputs.effects.turns.turn_locks.setdefault(session_id, asyncio.Lock()):
                 # The bus may accept a channel post while an operator drains the
                 # fleet. Keep its existing queued origin; do not start a native
                 # turn or consume it until this root's typed phase is READY.
                 hold = await Coordination.run_worker(inputs.comms.owners.maintenance.read)
                 if hold.turn_pending:
-                    return hold
+                    return WakeHeld(hold)
                 snapshot = await Coordination.run_worker(inputs.comms.registry.snapshot)
                 owner = snapshot.require(inputs.sessions.require(session_id))
                 try:
@@ -105,7 +138,7 @@ class WakeScheduleCheck(SessionScheduleCheck):
                         session_id,
                         inputs.sessions.require(session_id),
                         "\n\n".join(turn.prompt for turn in pending),
-                        origins=tuple(origin for turn in pending for origin in turn.origins),
+                        origins=tuple(origin for turn in pending for origin in turn.origin.messages()),
                         autonomous_goal=len(pending) == 1 and pending[0].autonomous_goal,
                         dependency_wait_id=pending[0].goal_wait_id,
                     )
@@ -114,6 +147,7 @@ class WakeScheduleCheck(SessionScheduleCheck):
                     await inputs.effects.turns.goals.sync_goal_execution(session_id, owner.name)
                 finally:
                     inputs.effects.turns.turn_tasks.pop(session_id, None)
+        return WakeDue()
 
     @staticmethod
     def _retain_goal_turns(pending: list[ScheduledTurn], goal: "GoalDeclaration") -> None:
@@ -126,7 +160,7 @@ class WakeScheduleCheck(SessionScheduleCheck):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SelectedWakeCheck(SessionScheduleCheck):
+class SelectedWakeCheck(SchedulesWake, SessionScheduleCheck):
     """A selected turn runs beside the owner's observation, which hands it later messages."""
 
     execution: "SelectedExecution"
@@ -142,15 +176,15 @@ class SelectedWakeCheck(SessionScheduleCheck):
             self.session_id, self.inputs.runtime.background(self.run())
         )
 
-    async def run(self) -> None:
+    async def run(self) -> WakeOutcome:
         inputs, session_id = self.inputs, self.session_id
         effects = inputs.effects
-        root_id = effects.configured_root_id
+        root_id = inputs.comms.owners.require_private_launch().wire_root_id
         # Selection may have been scheduled just before maintenance began.
         # A deferred selection is not a successful drain or diagnostic recovery.
         hold = await Coordination.run_worker(inputs.comms.owners.maintenance.read)
         if hold.turn_pending:
-            return hold
+            return WakeHeld(hold)
         async with drain_failures(inputs.comms, self.thread, self.owner, FailedWakeDiagnostic):
             before = await inputs._observe_private_revision(session_id, root_id)
             result = await effects.turns.run_selected(session_id, self.execution)
@@ -170,6 +204,7 @@ class SelectedWakeCheck(SessionScheduleCheck):
             if result is not None:
                 # Messages this turn could not take are still pending.
                 await inputs.drain_inbox(session_id)
+        return WakeDue()
 
 
 class ClosingScheduleRule(ReservationRule):
@@ -197,7 +232,7 @@ class NativeInboxOwnerTurnRule(ReservationRule):
 
 
 class PendingWakeScheduleRule(ReservationRule):
-    check_type = (WakeScheduleCheck, SelectedWakeCheck)
+    check_type = SchedulesWake
     explanation = "A previously scheduled wake has not finished."
 
     def violated(self, check):
@@ -213,7 +248,7 @@ class PendingTurnOwnerTurnRule(ReservationRule):
 
 
 class DisabledWakeScheduleRule(ReservationRule):
-    check_type = (WakeScheduleCheck, ProjectResumeCheck)
+    check_type = BackgroundWake
     explanation = "Background waking is disabled by the input/runtime configuration."
 
     def violated(self, check):

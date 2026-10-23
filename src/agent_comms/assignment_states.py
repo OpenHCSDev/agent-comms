@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import json
 from abc import abstractmethod
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
 from .coordination_errors import IdentityConflict, IntegrityViolationError
-from .declared_family import DeclaredFamily
+from .coordinator_vocabulary import CoordinatorVocabulary
+from .field_codec import FieldCodec
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Active, Complete, Deferred, Failed, Pending, Terminal
 from .notification_progress import (
@@ -25,7 +25,18 @@ from .typed_table import sql_literal
 from .wake_policy import BoundedTriageWake, Engagement, FullWake, PassiveWake, WakePolicy
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable, Sequence
+    from typing import Self
+
     from .agent_activity import RecipientActivity
+    from .audience_manifest import FrozenRecipient
+    from .bus_publication import Delivered
+    from .coordination_tables.assignments import WakeAssignment
+    from .coordination_tables.responses import ResponseObligation
+    from .historical_native_inputs import FailedTriageHistoricalNativeInput
+    from .native_input_record import TriageNativeExecution
+    from .notification_assignment import AssignmentActivity
+    from .presentation import MessageNotification
 
 
 @dataclass(frozen=True)
@@ -50,7 +61,40 @@ class PendingDecision:
 
 
 @dataclass(frozen=True)
-class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
+class AssignmentState(CoordinatorVocabulary, LifecycleState, affix="Assignment"):
+    @classmethod
+    def sql_vocabulary(cls) -> dict[str, str]:
+        members = cls.members_with(cls)
+
+        def case(subject: str, arms: Iterable[tuple[type[AssignmentState], str]]) -> str:
+            return (
+                f"CASE {subject} "
+                + " ".join(
+                    f"WHEN {sql_literal(member.declared_name)} THEN {arm}" for member, arm in arms
+                )
+                + " END"
+            )
+
+        vocabulary = dict(
+            assignment_names=cls.sql_values(cls.names()),
+            assignment_binding=case(
+                "disposition", ((member, f"({member.binding_expression()})") for member in members)
+            ),
+        )
+        for suffix, expression in (
+            ("", "lifecycle"),
+            ("_new", "NEW.lifecycle"),
+            ("_old", "OLD.lifecycle"),
+        ):
+            kind = f"json_extract({expression}, '$.kind')"
+            vocabulary["assignment_mode" + suffix] = case(
+                kind, ((member, member.mode_expression(expression)) for member in members)
+            )
+            vocabulary["assignment_verdict" + suffix] = case(
+                kind, ((member, member.verdict_expression(expression)) for member in members)
+            )
+        return vocabulary
+
     @classmethod
     def selection_predicate(cls, capability: type, alias: str) -> str:
         states = ",".join(
@@ -64,10 +108,10 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
     def extend_selection(cls, predicate: str, alias: str) -> str:
         return predicate
 
-    def rejected_triage_history(self, execution, **source):
+    def rejected_triage_history(self, execution: TriageNativeExecution, **source) -> FailedTriageHistoricalNativeInput | None:
         raise ValueError("Recorded triage lacks a decision or a terminal failed claim")
 
-    def wake_frame(self, source, obligation) -> tuple[str, str]:
+    def wake_frame(self, source: Delivered, obligation: ResponseObligation | None) -> tuple[str, str]:
         raise IdentityConflict("full wake frame requires the current response obligation")
 
     def requires_selected_triage(self) -> bool:
@@ -87,19 +131,19 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
     notification_state: ClassVar[type[ContextualProgress]] = ContextualProgress
     records_conversation_response: ClassVar[bool] = False
 
-    def recorded_response(self, original, replies, recipient_lookup):
+    def recorded_response(self, original: Delivered, replies: Sequence[Delivered], recipient_lookup: str) -> Delivered | None:
         return None
 
     def notification(
         self,
-        recipient,
-        sender_lookup,
+        recipient: FrozenRecipient,
+        sender_lookup: str,
         *,
         observation: RecipientActivity,
-        activity=None,
+        activity: AssignmentActivity | None = None,
         updated_at_ms: int = 0,
         triage_inflight: bool = False,
-    ):
+    ) -> MessageNotification:
         from .presentation import MessageNotification
 
         return MessageNotification(
@@ -121,12 +165,8 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
     def binding_expression(cls) -> str:
         return "execution_id IS NULL AND exact_target IS NULL"
 
-    def writable_pending_assignments(self, assignment):
+    def writable_pending_assignments(self, assignment: WakeAssignment) -> tuple[WakeAssignment, ...]:
         return ()
-
-    def permits_engagement_change(self, after):
-        gaining = self.execution_id is None and after.execution_id is not None
-        return not gaining or bool(after.items_with(EngagedAssignment, after))
 
     @property
     @abstractmethod
@@ -145,11 +185,13 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
         return None
 
     @classmethod
-    def build(cls, mode, execution_id, target):
+    def build(cls, mode: WakePolicy, execution_id: str | None, target: str | None) -> Self:
         return cls()
 
     @classmethod
-    def load(cls, mode, verdict, execution_id, target):
+    def load(
+        cls, mode: WakePolicy, verdict: str | None, execution_id: str | None, target: str | None,
+    ) -> Self:
         state = cls.build(mode, execution_id, target)
         if (state.mode, state.verdict, state.execution_id) != (mode, verdict, execution_id):
             raise IntegrityViolationError("claim decision relation is inconsistent")
@@ -199,14 +241,14 @@ class PendingNotification(EngageableAssignment, Pending):
 
     def notification(
         self,
-        recipient,
-        sender_lookup,
+        recipient: FrozenRecipient,
+        sender_lookup: str,
         *,
-        observation,
-        activity=None,
-        updated_at_ms=0,
-        triage_inflight=False,
-    ):
+        observation: RecipientActivity,
+        activity: AssignmentActivity | None = None,
+        updated_at_ms: int = 0,
+        triage_inflight: bool = False,
+    ) -> MessageNotification:
         notification = super().notification(
             recipient, sender_lookup, observation=observation, activity=activity
         )
@@ -222,14 +264,14 @@ class SelectedResponseNotification:
 
     def notification(
         self,
-        recipient,
-        sender_lookup,
+        recipient: FrozenRecipient,
+        sender_lookup: str,
         *,
-        observation,
-        activity=None,
-        updated_at_ms=0,
-        triage_inflight=False,
-    ):
+        observation: RecipientActivity,
+        activity: AssignmentActivity,
+        updated_at_ms: int = 0,
+        triage_inflight: bool = False,
+    ) -> MessageNotification:
         notification = super().notification(
             recipient, sender_lookup, observation=observation, activity=activity
         )
@@ -245,14 +287,14 @@ class PreengagementTarget:
 
 
 class ChangedNotification:
-    def notification(self, recipient, sender_lookup, **kwargs):
+    def notification(self, recipient: FrozenRecipient, sender_lookup: str, **kwargs) -> MessageNotification:
         return replace(
             super().notification(recipient, sender_lookup, **kwargs), changed=True
         )
 
 
 class TriagePendingAssignment(PreengagementTarget, PendingNotification, AssignmentState):
-    def wake_frame(self, source, obligation) -> tuple[str, str]:
+    def wake_frame(self, source: Delivered, obligation: ResponseObligation | None) -> tuple[str, str]:
         if obligation is not None:
             raise IdentityConflict("bounded triage cannot inherit a response obligation")
         return self.mode.triage_expectation(), "No response obligation exists until triage engages."
@@ -271,7 +313,7 @@ class TriagePendingAssignment(PreengagementTarget, PendingNotification, Assignme
 
 
 class FullPendingAssignment(PreengagementTarget, PendingNotification, AssignmentState):
-    def writable_pending_assignments(self, assignment):
+    def writable_pending_assignments(self, assignment: WakeAssignment) -> tuple[WakeAssignment, ...]:
         return (assignment,)
 
     @property
@@ -348,13 +390,13 @@ class BoundAssignment(ChangedNotification, AssignmentDecision, AssignmentState):
         return "execution_id IS NOT NULL AND exact_target IS NOT NULL"
 
     @classmethod
-    def build(cls, mode, execution_id, target):
+    def build(cls, mode: WakePolicy, execution_id: str | None, target: str | None) -> Self:
         return cls(mode.engage(execution_id, target))
 
 
 class EngagedAssignment(SelectedResponseNotification, BoundAssignment):
     notification_state = EngagedProgress
-    def wake_frame(self, source, obligation) -> tuple[str, str]:
+    def wake_frame(self, source: Delivered, obligation: ResponseObligation | None) -> tuple[str, str]:
         if obligation is None:
             raise IdentityConflict("full wake frame requires the current response obligation")
         obligation.lifecycle.require_preparation()
@@ -363,14 +405,12 @@ class EngagedAssignment(SelectedResponseNotification, BoundAssignment):
             source.exact_reply_target,
         ):
             raise IdentityConflict("full wake frame requires the current response obligation")
-        return self.mode.full_expectation(), "you owe a response: " + json.dumps(
+        return self.mode.full_expectation(), "you owe a response: " + FieldCodec.compact(
             {
                 "target": obligation.exact_target,
                 "source_seq": source.seq,
                 "execution_id": obligation.execution_id,
-            },
-            ensure_ascii=True,
-            separators=(",", ":"),
+            }, ensure_ascii=True,
         )
 
     def require_engagement(self) -> Engagement:
@@ -385,14 +425,14 @@ class EngagedAssignment(SelectedResponseNotification, BoundAssignment):
 class CompletedAssignment(Complete, Terminal, BoundAssignment):
     def notification(
         self,
-        recipient,
-        sender_lookup,
+        recipient: FrozenRecipient,
+        sender_lookup: str,
         *,
-        observation,
-        activity,
-        updated_at_ms=0,
-        triage_inflight=False,
-    ):
+        observation: RecipientActivity,
+        activity: AssignmentActivity,
+        updated_at_ms: int = 0,
+        triage_inflight: bool = False,
+    ) -> MessageNotification:
         notification = super().notification(
             recipient, sender_lookup, observation=observation, activity=activity
         )
@@ -411,7 +451,7 @@ class InterruptedAssignment(
     decision: PendingDecision | Engagement
 
     @classmethod
-    def build(cls, mode, execution_id, target):
+    def build(cls, mode: WakePolicy, execution_id: str | None, target: str | None) -> Self:
         return cls(
             PendingDecision(mode) if execution_id is None else mode.engage(execution_id, target)
         )
@@ -437,11 +477,6 @@ class DeferredAssignment(
             FailedAssignment,
         )
 
-    def permits_engagement_change(self, after):
-        return super().permits_engagement_change(after) and not (
-            self.execution_id is not None and after.items_with(Pending, after)
-        )
-
 
 @dataclass(frozen=True)
 class DeliveredAssignment(
@@ -456,7 +491,7 @@ class DeliveredAssignment(
     decision: PendingDecision
     records_conversation_response = True
 
-    def recorded_response(self, original, replies, recipient_lookup):
+    def recorded_response(self, original: Delivered, replies: Sequence[Delivered], recipient_lookup: str) -> Delivered | None:
         return next(
             (
                 reply.message
@@ -468,14 +503,14 @@ class DeliveredAssignment(
 
     def notification(
         self,
-        recipient,
-        sender_lookup,
+        recipient: FrozenRecipient,
+        sender_lookup: str,
         *,
-        observation,
-        activity,
-        updated_at_ms=0,
-        triage_inflight=False,
-    ):
+        observation: RecipientActivity,
+        activity: AssignmentActivity,
+        updated_at_ms: int = 0,
+        triage_inflight: bool = False,
+    ) -> MessageNotification:
         notification = super().notification(
             recipient, sender_lookup, observation=observation, activity=activity
         )
@@ -488,27 +523,27 @@ class DeliveredAssignment(
         return AssignmentState.binding_expression()
 
     @classmethod
-    def build(cls, mode, execution_id, target):
+    def build(cls, mode: WakePolicy, execution_id: str | None, target: str | None) -> Self:
         return cls(PendingDecision(mode))
 
 
 class FailedAssignment(Failed, Terminal, InterruptedAssignment):
     def notification(
         self,
-        recipient,
-        sender_lookup,
+        recipient: FrozenRecipient,
+        sender_lookup: str,
         *,
-        observation,
-        activity,
-        updated_at_ms=0,
-        triage_inflight=False,
-    ):
+        observation: RecipientActivity,
+        activity: AssignmentActivity | None,
+        updated_at_ms: int = 0,
+        triage_inflight: bool = False,
+    ) -> MessageNotification:
         notification = super().notification(
             recipient, sender_lookup, observation=observation, activity=activity
         )
         return replace(notification, state=FailedProgress(notification.state))
 
-    def rejected_triage_history(self, execution, **source):
+    def rejected_triage_history(self, execution: TriageNativeExecution, **source) -> FailedTriageHistoricalNativeInput | None:
         """A proved rejected result is delivered source, never an IGNORE decision."""
         from .historical_native_inputs import FailedTriageHistoricalNativeInput
 

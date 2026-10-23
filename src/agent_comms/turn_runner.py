@@ -5,52 +5,54 @@ from __future__ import annotations
 import asyncio
 from contextlib import AsyncExitStack, asynccontextmanager
 from functools import partial
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from acp.exceptions import RequestError
 from acp.schema import (
+    PromptRequest,
     PromptResponse,
-    RequestPermissionResponse,
 )
+from pydantic import JsonValue
 
-from .image_inputs import prompt_images
-from .following_inputs import OwnerFollowingInputs
-from .queued_input import InitialInput
-from .input_origin import InputOrigin, UnattributedInputOrigin
 from . import agent_events as events
 from .agent_backend import AgentBackend
 from .agent_event_updates import AcpEventConsumer, TurnEventConsumer
+from .channel_targets import NamedTarget
 from .channels import AllChannel
-from .comms import Comms
+from .controller import Controller
 from .coordinator import Coordination
 from .errors import RelationViolationError
+from .following_inputs import OwnerFollowingInputs
 from .goal_actions import (
     GoalPrecondition,
     OwnerInvocable,
     PausedGoalAction,
 )
 from .goal_scheduler import GoalScheduler
+from .image_inputs import ImageInput
+from .input_origin import InputOrigin, UnattributedInputOrigin
 from .messages import Message
 from .mro_dispatch import MroDispatch, handles
 from .native_arguments import LaunchArguments, LaunchBinary
 from .native_input_owner import RegistryOwner
+from .pi_payloads import StateData
+from .queued_input import InitialInput
 from .routing import TurnRouting
 from .runtime import (
-    ACP_PERMISSION_TIMEOUT_SECONDS,
     RuntimeServer,
-    SocketClient,
     SubscriberClosed,
 )
-from .pi_payloads import StateData
 from .threads import Thread
 from .transcript_updates import TurnTranscriptUpdate
 from .turn_effects import TurnEffects
 from .turn_lease import TurnLeaseFence, TurnState
+from .turn_outcome import TurnOutcome
 from .turn_phase import CancellingPhase, TurnPhase
-from .turn_terminal import EndedWithoutResult, TurnInterruption, TurnTerminal
+from .turn_terminal import TurnInterruption
 
 if TYPE_CHECKING:
     from . import pi_events as pi
+    from .comms import Comms
     from .coordinated_runtime import SelectedExecution
     from .input_drain import DrainTurn, InputDrain
     from .session_lifecycle import SessionLifecycle
@@ -58,6 +60,8 @@ if TYPE_CHECKING:
 
 AGENT_PREFIX = "!agent "
 RELAY_PREFIX = "!relay "
+
+type TurnTask = asyncio.Task[TurnOutcome | PromptResponse | None]
 
 
 class CompactionObservation(MroDispatch):
@@ -96,7 +100,7 @@ class TurnRunner:
         self.owner_stop = owner_stop
         self.agent_bin = agent_bin.configured()
         self.agent_args = agent_args.configured()
-        self.turn_tasks: dict[str, asyncio.Task[Any]] = {}
+        self.turn_tasks: dict[str, TurnTask] = {}
         # One backend per ACP session, of the bound thread's declared kind.
         self.persistent_backends: dict[str, AgentBackend] = {}
         self.turn_locks: dict[str, asyncio.Lock] = {}
@@ -174,25 +178,29 @@ class TurnRunner:
         return context.require_session_file(thread.runtime.path)
 
     async def prompt_owned(
-        self, session_id: str, prompt: list[Any], *, display_text: str | None = None,
+        self,
+        request: PromptRequest,
+        *,
+        images: tuple[ImageInput, ...],
+        display_text: str | None = None,
         input_id: str | None = None,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> PromptResponse:
+        session_id = request.session_id
         turn_task = asyncio.current_task()
         assert turn_task is not None
         self.turn_tasks[session_id] = turn_task
         try:
             thread_name = await self.sessions.sync_identity(session_id)
             await Coordination.run_worker(partial(self.comms.registry.require, thread_name))
-            text = self.effects._prompt_text(prompt)
-            images = prompt_images(prompt)
+            text = self.effects._prompt_text(request)
             agent_task: str | None = None
             relay_text: str | None = None
             if text.startswith(AGENT_PREFIX):
                 agent_task = text[len(AGENT_PREFIX) :].strip()
             elif text.startswith(RELAY_PREFIX):
                 relay_text = text[len(RELAY_PREFIX) :].strip()
-            elif text.lstrip().startswith(("@", "#")):
+            elif NamedTarget.leads(text):
                 relay_text = text
             else:
                 agent_task = text.strip()
@@ -235,7 +243,7 @@ class TurnRunner:
                 actor=OwnerInvocable,
             )
 
-    async def cancel(self, session_id: str, **kwargs: Any) -> None:
+    async def cancel(self, session_id: str, **kwargs: JsonValue) -> None:
         if session_id in self.sessions.proxies:
             await self.sessions.proxies[session_id].request("cancel")
             return
@@ -262,7 +270,7 @@ class TurnRunner:
         self,
         session_id: str,
         turn_id: str,
-        controller: Any,
+        controller: Controller | None,
         request: pi.DialogUiRequest,
     ) -> pi.ExtensionUiChoice:
         """Project one bounded Pi UI dialog to exactly the turn's ACP controller.
@@ -277,29 +285,9 @@ class TurnRunner:
         permission = request.permission(turn_id)
         if permission is None:
             return pi.CancelledUiChoice()
-        tool_call, options = permission
         try:
-            if isinstance(controller, SocketClient):
-                reply = await self.runtime.request_permission(
-                    session_id,
-                    controller,
-                    tool_call.model_dump(by_alias=True, exclude_none=True),
-                    [option.model_dump(by_alias=True, exclude_none=True) for option in options],
-                )
-                if reply is None:
-                    return pi.CancelledUiChoice()
-                outcome = reply.outcome.model_dump(by_alias=True, exclude_none=True)
-            elif controller is self.sessions.client:
-                response = await asyncio.wait_for(
-                    controller.request_permission(
-                        session_id=session_id, tool_call=tool_call, options=options
-                    ),
-                    timeout=ACP_PERMISSION_TIMEOUT_SECONDS,
-                )
-                outcome = RequestPermissionResponse.model_validate(response).outcome.model_dump(
-                    by_alias=True, exclude_none=True
-                )
-            else:
+            outcome = await controller.request_ui_permission(self, session_id, permission)
+            if outcome is None:
                 return pi.CancelledUiChoice()
         except (TimeoutError, SubscriberClosed, RequestError):
             # A timed-out, departed or explicitly refusing controller grants no permission.
@@ -307,9 +295,7 @@ class TurnRunner:
             return pi.CancelledUiChoice()
         if not await Coordination.run_worker(partial(self.owns_turn, session_id, turn_id)):
             return pi.CancelledUiChoice()
-        if isinstance(controller, SocketClient) and not self.runtime.is_controller(
-            session_id, controller
-        ):
+        if controller.departed(self.runtime, session_id):
             return pi.CancelledUiChoice()
         selected = outcome.get("optionId")
         if outcome.get("outcome") != "selected" or type(selected) is not str:
@@ -319,7 +305,7 @@ class TurnRunner:
     def acquire_turn(
         self, resources: AsyncExitStack, session_id: str, thread_name: str,
         turn_id: str, detail: str, routing: TurnRouting | None = None, *,
-        task: asyncio.Task[Any] | None = None,
+        task: TurnTask | None = None,
     ) -> RegistryOwner:
         """Bind the exact installed lease to cleanup before worker delivery.
 
@@ -350,7 +336,7 @@ class TurnRunner:
         session_id: str,
         lease: TurnLeaseFence,
         *,
-        task: asyncio.Task[Any] | None = None,
+        task: TurnTask | None = None,
     ) -> None:
         """Settle after terminal publication, releasing waiters even if the UI fails.
 
@@ -447,7 +433,7 @@ class TurnRunner:
         task: str,
         *,
         origins: tuple[Message, ...] = (),
-        images: tuple[Any, ...] = (),
+        images: tuple[ImageInput, ...] = (),
         original_keys: tuple[str, ...] = (),
         initial_display_text: str | None = None,
         autonomous_goal: bool = False,
@@ -474,11 +460,12 @@ class TurnRunner:
             dependency_wait_id=dependency_wait_id,
         ).run()
 
-    async def close(self, terminal: TurnTerminal = EndedWithoutResult()) -> None:
+    async def close(self) -> None:
+        """Cancel every turn; each settles from the runner's owner stop (finish_goals)."""
         tasks = dict(self.turn_tasks)
         self.turn_tasks.clear()
         for task in tasks.values():
-            task.cancel(terminal)
+            task.cancel()
         await asyncio.gather(*tasks.values(), return_exceptions=True)
         # A relay-only turn never created a backend, so it has no runtime work to stop.
         await asyncio.gather(
@@ -499,10 +486,11 @@ def parse_target(text: str) -> tuple[str, str]:
     is consumed, never broadcast.
     """
     stripped = text.strip()
-    for prefix, template in (("@", "{}"), ("#", "#{}")):
-        if stripped.startswith(prefix) and len(stripped) > 1:
-            parts = stripped[1:].split(maxsplit=1)
-            name = parts[0].rstrip("@#")
+    sigils = "".join(NamedTarget.sigils())
+    for kind in NamedTarget.__subclasses__():
+        if stripped.startswith(kind.sigil) and len(stripped) > len(kind.sigil):
+            parts = stripped[len(kind.sigil):].split(maxsplit=1)
+            name = parts[0].rstrip(sigils)
             if name and len(parts) == 2 and parts[1].strip():
-                return template.format(name), parts[1].strip()
-    return AllChannel.declared_name, stripped
+                return kind.address(name), parts[1].strip()
+    return AllChannel.address(), stripped

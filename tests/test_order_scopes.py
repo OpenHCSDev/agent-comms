@@ -1,10 +1,6 @@
 """Order scope is decoded once and owns its allowed delivery all the way to storage."""
 from dataclasses import replace
 import json
-import os
-import subprocess
-import sys
-from pathlib import Path
 
 import pytest
 
@@ -14,9 +10,9 @@ from source_revision_fixture import SourceRepository
 from agent_comms.change_report import FileLine, MissingSourceLine, PullRequestHeadRevision
 from agent_comms.check_root import CheckRoot
 from agent_comms.commander.order import OrderFile
+from cli_command import core
 from agent_comms.field_codec import FieldCodec, MalformedRecord
-from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
-from agent_comms.goals import RequestGoalOrder
+from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.tool_caller import ThreadCaller
@@ -25,6 +21,7 @@ from agent_comms.todos import (
     CommitDelivery, DoneTodoState, FixShape, OrderScope,
     PendingProblemOrder, ReportDelivery, ReportedProblemOrder, TriageScope,
 )
+from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize('scope', (TriageScope(), FIX_SCOPE))
@@ -57,17 +54,16 @@ def test_shape_references_are_class_lines_not_names_or_decorators(tmp_path):
 
 def assigned(comms, scope, source, problem='P1'):
     for name in ('lead', 'worker'):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(comms.root)))
+        comms.registry.declare(Thread(name, frozenset(), str(comms.root)))
     return requested(comms, scope, source, problem)
 
 
 def requested(comms, scope, source, problem='P1'):
-    comms.goals.update_goal('lead', SetGoalAction(
-        text='Classify the failing source or fix its declared parent', goal_id='request',
-        order=RequestGoalOrder()))
+    request = comms.goals.todos.add_request(comms.registry.require('lead').incarnation,
+        'Classify the failing source or fix its declared parent').id
     caller = ThreadCaller('lead')
     CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
-        problem=problem, order=replace(order(source), scope=scope), request='request',
+        problem=problem, order=replace(order(source), scope=scope), request=request,
         review_at=RecordedEventTime(1000), commander='lead',
         assigner=comms.registry.require('lead').incarnation,
         repo=RepositoryName.from_wire('OpenHCSDev/agent-comms'),
@@ -111,14 +107,9 @@ def test_report_returns_through_the_real_cli_on_a_selected_history_copy(comms, t
         report = 'The copied native order needs classification only; no source was changed.'
         request = CommsOrderDoneTool(problem=current.id, order_id=current.order.id,
                                      delivery=ReportDelivery(report=report), claims=())
-        result = subprocess.run(
-            (sys.executable, '-m', 'agent_comms.cli', '--root', str(copied.root), 'tool',
-             '--from', 'lead', '--tool', request.declared_name,
-             '--arguments', json.dumps(request.arguments)),
-            env={**os.environ, 'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src')},
-            capture_output=True, text=True, timeout=30)
+        result = core('--root', str(copied.root), 'tool', '--from', 'lead',
+                      '--tool', request.declared_name, '--arguments', json.dumps(request.arguments))
         assert result.returncode == 0, result.stderr
         assert report in result.stdout
         assert copied.goals.todos.get(current.id).state is DoneTodoState
     assert comms.goals.todos.get('P1').pending
-

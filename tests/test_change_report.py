@@ -13,6 +13,7 @@ from agent_comms.messages import (
     AckKind, AlertKind, ChangeReportKind, HandoffKind, InfoKind, Message,
     MessageKind, QuestionKind,
 )
+from agent_comms.threads import Thread
 
 
 def git(worktree, *arguments):
@@ -42,7 +43,7 @@ def reporter_repo(tmp_path):
 
 @pytest.fixture
 def reporter(wired, reporter_repo):
-    wired.registry.declare(wired.registry.new_thread(name='reporter', tags=frozenset(), worktree=str(reporter_repo)))
+    wired.registry.declare(Thread(name='reporter', tags=frozenset(), worktree=str(reporter_repo)))
     return wired
 
 
@@ -95,7 +96,10 @@ class TestChangeReportKind:
         stored, = list(reporter.views.history_page(CommandTarget.named("fixer"), viewer=NamedViewer("reporter")).messages)
         assert stored.report == report(reporter_repo)
         assert stored.type is ChangeReportKind
-        assert Message.from_committed_wire(committed.to_wire()) == stored
+        assert (
+            Message.from_wire(Message.from_message(committed).to_wire())
+            == Message.from_message(stored)
+        )
 
     def test_missing_fields_are_named_in_the_refusal(self):
         from agent_comms.field_codec import FieldCodec, MalformedRecord

@@ -9,6 +9,7 @@ from functools import cache
 from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
+from .projection_source import ProjectionSource
 
 if TYPE_CHECKING:
     from .messages import Message
@@ -16,9 +17,13 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class ResponsePolicy(DeclaredFamily, affix="Policy"):
+class ResponsePolicy(DeclaredFamily, ProjectionSource, affix="Policy"):
     starts_turn = False
     separate_turn = False
+
+    @property
+    def starts_direct_turn(self) -> bool:
+        return self.starts_turn and self.separate_turn
 
     @classmethod
     @cache
@@ -28,10 +33,11 @@ class ResponsePolicy(DeclaredFamily, affix="Policy"):
     def validate_recipients(self, recipients: tuple[str, ...]) -> None:
         """Channel policies allow the recipients their declaration selects."""
 
+    @abstractmethod
     def recipients(
         self, message: Message, audience: Sequence[str], *, aliases: Mapping[str, str] | None = None
     ) -> tuple[str, ...]:
-        return ()
+        """Resolve this policy's channel recipients."""
 
     @abstractmethod
     def guidance(self, message: Message, *, aliases: Mapping[str, str] | None = None) -> str:
@@ -47,7 +53,12 @@ class ResponsePolicy(DeclaredFamily, affix="Policy"):
         return f"bus:{message.seq}:owner:{float(owner.created_at).hex()}"
 
 
-class NoChannelRecipients:
+class NoChannelRecipients(ProjectionSource):
+    def recipients(
+        self, message: Message, audience: Sequence[str], *, aliases: Mapping[str, str] | None = None
+    ) -> tuple[str, ...]:
+        return ()
+
     def validate_recipients(self, recipients: tuple[str, ...]) -> None:
         if recipients:
             raise ValueError("This eligibility cannot declare channel recipients.")
@@ -109,7 +120,7 @@ class InformationalPolicy(NoChannelRecipients, ResponsePolicy):
 
 
 @dataclass(frozen=True, slots=True)
-class ResponseEligibility:
+class ResponseEligibility(ProjectionSource):
     policy: ResponsePolicy
     recipients: tuple[str, ...] = ()
 

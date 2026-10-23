@@ -12,6 +12,7 @@ from agent_comms.todos import (
     InstalledMergedProblemOrder,
     MergedProblemOrder,
     OperationDelivery,
+    PullRequestLink,
     ReportedProblemOrder,
     TriageScope,
 )
@@ -34,11 +35,12 @@ class TestOrderCompletion:
     ):
         ctx = held_commander
         repo = ctx.repos[0]
-        graph = next(graph for graph in proof_build_checkouts if graph.repository == repo)
+        graph = next(graph for graph in proof_build_checkouts if graph.repository.github == repo.github)
         original = ctx.comms.goals.todos.get('P1').order
         merged = replace(original, check=OrderCheck(
             str(repo.checkout), 'printf 1', CountCheckResult(0)))
-        self.record(ctx, merged.merged(graph.installed))
+        self.record(ctx, replace(merged, pull_requests=(PullRequestLink(repo.github, 1),))
+                    .merged(graph.installed))
         command = "git log -1 --format=%s | grep -c 'proof 0'"
         main(['check', 'P1', '--check', f'{repo.checkout} :: {command} -> 0',
               '--why', 'The old check included declarations outside the authorized family'], ctx)
@@ -46,12 +48,13 @@ class TestOrderCompletion:
         assert isinstance(corrected.order, MergedProblemOrder)
         assert corrected.order.check_base(repo.checkout) == f'{graph.installed}^1'
         assert corrected.order.check_corrections[-1].previous == merged.check
-        main(['done', 'worker', 'P1', '--sha', graph.installed], ctx)
+        main(['done', 'worker', 'P1'], ctx)
         delivered = ctx.comms.goals.todos.get('P1')
         assert isinstance(delivered.order, DeliveredProblemOrder)
         assert delivered.order.check.command == command
         assert delivered.order.delivery.delivered == graph.installed
-        assert delivered.order.check_base(repo.checkout) == graph.installed
+        assert delivered.order.check_base(repo.checkout) == repo.git(
+            repo.checkout, 'rev-parse', f'{graph.installed}^1').strip()
         assert delivered.strike_count == corrected.strike_count
 
     def test_open_correction_uses_main_and_keeps_the_order(self, held_commander):
@@ -61,7 +64,7 @@ class TestOrderCompletion:
         main(['check', 'P1', '--check', f'{repo.checkout} :: printf 1 -> 0',
               '--why', 'The original check counted source outside the declared fix family'], ctx)
         corrected = ctx.comms.goals.todos.get('P1')
-        assert corrected.order.check_base(repo.checkout) == WorkBranches.main
+        assert corrected.order.check_base(repo.checkout) == f"origin/{WorkBranches.main}"
         assert corrected.order.check.command == 'printf 1'
         assert (corrected.order.id, corrected.assignment,
                 corrected.review_at, corrected.strikes) == (
@@ -84,7 +87,7 @@ class TestOrderCompletion:
         ctx = held_commander
         evidence = ctx.root / 'operation.txt'
         evidence.write_text('The copied operation completed through its current check.')
-        main(['done', 'worker', 'P1', '--sha', 'op', '--seen', str(evidence)], ctx)
+        main(['done', 'worker', 'P1', '--op', '--seen', str(evidence)], ctx)
         delivered = ctx.comms.goals.todos.get('P1')
         assert isinstance(delivered.order.delivery, OperationDelivery)
         assert delivered.order.delivery.evidence.artifact() == str(evidence)
@@ -94,14 +97,15 @@ class TestOrderCompletion:
         original = self.record(
             ctx, replace(ctx.comms.goals.todos.get('P1').order, scope=TriageScope()))
         with pytest.raises(ValueError, match='Triage returns --seen REPORT'):
-            main(['done', 'worker', 'P1', '--sha', 'op'], ctx)
+            main(['done', 'worker', 'P1', '--op'], ctx)
         assert ctx.comms.goals.todos.get('P1') == original
 
     def test_merged_close_accepts_the_explicit_artifact(
         self, held_commander, proof_build_checkouts,
     ):
         ctx = held_commander
-        graph = next(graph for graph in proof_build_checkouts if graph.repository == ctx.repos[0])
+        graph = next(graph for graph in proof_build_checkouts
+                     if graph.repository.github == ctx.repos[0].github)
         works = 'Open retained workflow and confirm its report stays visible'
         original = ctx.comms.goals.todos.get('P1').order
         self.record(ctx, replace(original, run=ApplicationOrderRun(works)).merged(graph.installed))

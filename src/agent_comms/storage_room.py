@@ -21,8 +21,8 @@ from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
 from .repo import Checkout
 from .thread_identity import ThreadIncarnation
-from .typed_table import Column, DurableStore, JsonStorage, TypedTable
-from .wire_watch import ModifiedWatchSource, WireWatch
+from .typed_table import Column, DurableStore, JsonStorage, StoreRows, TypedTable
+from .watched import ChangeSignal, FileSource
 
 
 class RoomWork(DeclaredFamily, affix="RoomWork"):
@@ -85,14 +85,18 @@ class HoldingRoomPhase(RoomPhase):
     held: RoomNeed
 
 
+class RoomLedgerRows(StoreRows):
+    """The tables of RoomLedger; each row declares itself one."""
+
+
 @dataclass(frozen=True)
-class WorkPeak(TypedTable):
+class WorkPeak(RoomLedgerRows, TypedTable):
     work: Annotated[type[RoomWork], Column(primary_key=True)]
     need: Annotated[RoomNeed, Column(storage=JsonStorage)]
 
 
 @dataclass(frozen=True)
-class RoomClaim(TypedTable):
+class RoomClaim(RoomLedgerRows, TypedTable):
     ticket: Annotated[str, Column(primary_key=True)]
     root: str
     unit: Annotated[ThreadIncarnation, Column(storage=JsonStorage)]
@@ -106,7 +110,7 @@ class RoomClaim(TypedTable):
 class RoomLedger(DurableStore):
     root: Path
     filename = "work_room.sqlite3"
-    rows = (WorkPeak, RoomClaim)
+    tables = RoomLedgerRows
 
     def dead_claims(self):
         # Dead/replaced processes cannot hold room, but are never replayed.
@@ -287,13 +291,21 @@ class RoomAllocation:
                 with ledger.writing() as db:
                     claim.insert(db)
             await asyncio.to_thread(enqueue)
-            source = ModifiedWatchSource(ledger.root, frozenset(
-                os.fsencode(path.name) for path in ledger.source_paths(ledger.root)))
-            async for _ in WireWatch.observations(source, refresh_seconds=self.room_refresh_seconds):
-                if await asyncio.to_thread(self._admit, ticket):
-                    measurement = WorkMeasurement(self, process)
-                    admitted = True
-                    return MeasuredRoomReservation(self, ticket, measurement)
+            async with ChangeSignal.opened(*(
+                FileSource(path) for path in ledger.source_paths(ledger.root)
+            )) as changes:
+                while True:
+                    changes.prepare()
+                    if await asyncio.to_thread(self._admit, ticket):
+                        measurement = WorkMeasurement(self, process)
+                        admitted = True
+                        return MeasuredRoomReservation(self, ticket, measurement)
+                    # OS free space can change without any Core ledger write.
+                    try:
+                        async with asyncio.timeout(self.room_refresh_seconds):
+                            await changes.wait()
+                    except TimeoutError:
+                        pass
         finally:
             if not admitted:
                 await asyncio.to_thread(ledger.release, ticket)

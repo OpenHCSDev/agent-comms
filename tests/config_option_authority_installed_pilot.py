@@ -6,6 +6,8 @@ root, setting, native journal or historical input is changed.
 """
 from __future__ import annotations
 
+
+
 import argparse
 import asyncio
 from contextlib import AsyncExitStack
@@ -17,7 +19,7 @@ import sys
 
 from acp.exceptions import RequestError
 from agent_comms.acp import CommsAgent
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.pi_vocabulary import OffThinkingLevel, HighThinkingLevel
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.threads import Thread
@@ -104,8 +106,7 @@ async def run(stage, package, models, ui, menu_contention=False):
     stage.mkdir(mode=0o700, parents=True, exist_ok=False)
     project = stage / 'project'
     project.mkdir()
-    service = Comms(stage / 'wire')
-    service.messaging.initialize_private_initial_protocol()
+    service = wire(stage / 'wire')
     environment = dict(os.environ)
     environment.update(
         AGENT_COMMS_ROOT=str(service.root),
@@ -118,7 +119,7 @@ async def run(stage, package, models, ui, menu_contention=False):
     rows = []
     for index, model in enumerate(models):
         name = f'configuration-{index}'
-        service.registry.declare(service.registry.new_thread(name, frozenset(), str(project), model=DeclaredModel(model), thinking_level=OffThinkingLevel, task=GivenThreadText('Private provider-free configuration acceptance; never send a prompt')))
+        service.registry.declare(Thread(name, frozenset(), str(project), model=DeclaredModel(model), thinking_level=OffThinkingLevel, task=GivenThreadText('Private provider-free configuration acceptance; never send a prompt')))
         service.owners.start(
             name, agent_bin=GivenBinary(str(Path(sys.executable).with_name('pi-comms-native'))),
             agent_args=GivenArguments(()),

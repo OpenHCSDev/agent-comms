@@ -1,22 +1,24 @@
 """Bus history holds tool acquisitions written before claims recorded a scope."""
+
 import pytest
 
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.envelope_claim_transitions import (
     ClaimProjection, ClaimRelease, ClaimTransition, NativeClaim, ReleasedClaims,
     UnrecordedScope, UnscopedClaims, WakeClaims,
 )
 from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.thread_status import RunningThreadStatus
+from agent_comms.threads import Thread
 
 G1, G2 = "a" * 32, "b" * 32
 
 
 def test_unscoped_history_row_decodes_projects_never_live_and_releases(tmp_path):
-    comms = Comms(tmp_path / "wire")
-    comms.registry.declare(comms.registry.new_thread("owner", frozenset(), str(tmp_path)))
+    comms = wire(tmp_path / "wire")
+    comms.registry.declare(Thread("owner", frozenset(), str(tmp_path)))
     comms.registry.register(comms.registry.require("owner"), RunningThreadStatus())
-    comms.registry.declare(comms.registry.new_thread("peer", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread("peer", frozenset(), str(tmp_path)))
     owner = comms.registry.require("owner")
     resource = str(tmp_path / "held.py")
     # The row exactly as the writer before native claim scopes stored it.
@@ -28,7 +30,7 @@ def test_unscoped_history_row_decodes_projects_never_live_and_releases(tmp_path)
     assert FieldCodec.encode(transition) == stored
     transition.require_new_operation(lambda operation: pytest.fail("no operation was recorded"))
     held = transition.project(ClaimProjection())
-    assert held[resource].claim_scope == UnrecordedScope()
+    assert held[resource].resource_scope == UnrecordedScope()
     registry = comms.registry.snapshot()
     assert not held[resource].live(registry)
 
@@ -37,7 +39,7 @@ def test_unscoped_history_row_decodes_projects_never_live_and_releases(tmp_path)
     taken = WakeClaims(
         owner="peer", incarnation=str(peer.created_at), seq=2, message_id="msg-2",
         claims=(resource,), generation=G2,
-        claim_scope=NativeClaim(owner_claimed_generation=1, operation_id="c" * 32,
+        resource_scope=NativeClaim(owner_claimed_generation=1, operation_id="c" * 32,
                                 turn_id="turn-2", input_id="input-2"),
     ).apply(held, registry)
     assert taken[resource].owner == "peer"
@@ -49,6 +51,6 @@ def test_unscoped_history_row_decodes_projects_never_live_and_releases(tmp_path)
 
     # A row published today records its scope; history rows carry none.
     with pytest.raises(MalformedRecord):
-        FieldCodec.decode(ClaimTransition, {**stored, "admission": None})
+        FieldCodec.decode(ClaimTransition, {**stored, "resource_scope": None})
     scoped = FieldCodec.encode(taken[resource])
-    assert scoped["admission"]["operation_id"] == "c" * 32
+    assert scoped["resource_scope"]["operation_id"] == "c" * 32

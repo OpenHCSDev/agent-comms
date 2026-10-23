@@ -102,7 +102,6 @@ class NativeSendStage(ABC):
                 stage=type(self.execution),
                 **self.execution.binding_fields(),
                 owner_lookup=self.recipient_lookup,
-                owner_thread=owner.thread.name,
                 owner_generation=owner.generation,
                 owner_token_digest=token_digest,
             ).insert(db)
@@ -163,9 +162,7 @@ class NativeSendStage(ABC):
                 )
             # Binding writers acquire sidecar before SQL. Keep that order here,
             # and finish journal I/O before acquiring the coordinator snapshot.
-            with self.bound_prompt(
-                store, input_id, owner, wire_root_id, prompt, blocking=True,
-            ) as binding:
+            with self.bound_prompt(store, input_id, owner, wire_root_id, prompt) as binding:
                 if not expected_prompt_matches_journal(context.session_file, binding, evidence=evidence):
                     raise IdentityConflict("live native input lacks exact bound source prompt equality")
                 with store.session.read():
@@ -210,9 +207,9 @@ class NativeSendStage(ABC):
     @contextmanager
     def bound_prompt(
         self, store: Coordination, input_id: str, owner: ParticipantOwner,
-        wire_root_id: str, prompt: str, *, blocking: bool = False,
+        wire_root_id: str, prompt: str,
     ) -> Iterator[PromptBinding]:
-        with expected_prompt_bindings(store, (input_id,), blocking=blocking) as bindings:
+        with expected_prompt_bindings(store, (input_id,)) as bindings:
             binding = bindings.get(input_id)
             self.require_bound_prompt(binding, owner, wire_root_id, prompt)
             yield binding
@@ -352,9 +349,9 @@ class FullNativeSend(NativeSendStage):
         # then settle the attempt.
         with store.session.writing() as db:
             row = self.pending_input(store, input_id, owner, token_digest)
-            store.attempts.require_fence(self.fence)
+            store.require_fence(self.fence)
             row.commit_context(db, context)
-        with self.progress.using_attempts(store.attempts):
+        with self.progress.using_attempts(store):
             return self.progress.fail_terminal(failure)
 
     async def continue_after_failure(self, settlement, failure: TurnFailure) -> None:
@@ -364,14 +361,14 @@ class FullNativeSend(NativeSendStage):
 
     async def fail_unknown(self, bus, owner, witness) -> None:
         def settle(store):
-            with self.progress.using_attempts(store.attempts), store.session.boundary(bus) as boundary:
+            with self.progress.using_attempts(store), store.session.boundary(bus) as boundary:
                 witness.require_live(boundary.registry, self.fence)
                 self.progress.fail_unknown(boundary)
 
         await Coordination.run_async(self.progress.attempts.session.path, settle)
 
     def reserve_claim(self, store: Coordination, db: sqlite3.Connection) -> None:
-        snapshot, _ = store.attempts.require_fence(self.fence)
+        snapshot, _ = store.require_fence(self.fence)
         self.require_claim(store)
         if snapshot.pointer_revision < 1 or self.assignments != snapshot.assignments:
             raise StaleFence("full input cannot bind to the current attempt")
@@ -394,14 +391,14 @@ class FullNativeSend(NativeSendStage):
     ) -> None:
         with store.session.writing() as db:
             row = self.pending_input(store, input_id, owner, token_digest)
-            snapshot, _ = store.attempts.require_fence(self.fence)
+            snapshot, _ = store.require_fence(self.fence)
             for assignment in self.assignments:
                 engagement = assignment.lifecycle.require_engagement()
                 snapshot.require_wire_response(engagement.exact_target)
             row.commit_context(db, context)
 
     def require_phase(self, store: Coordination, current: WakeAssignment) -> None:
-        snapshot, attempt = store.attempts.require_fence(self.fence)
+        snapshot, attempt = store.require_fence(self.fence)
         current.lifecycle.require_engagement()
         if (
             not snapshot.execution.lifecycle.items_with(Active, snapshot.execution)

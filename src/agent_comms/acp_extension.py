@@ -6,10 +6,8 @@ they never authorize a native send, restore a queue, or replay an UNKNOWN input.
 
 from __future__ import annotations
 
-import json
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
-from hashlib import sha256
 from typing import TYPE_CHECKING, Annotated, Callable, ClassVar
 
 
@@ -22,6 +20,7 @@ from .acp_failure import (
 )
 from .agent_backend import InputId, SendNow, TurnInbox
 from .agent_events import CompactionEvent
+from .child_process import ProcessIdentity
 from .context_reading import ContextReading
 from .declared_family import DeclaredFamily
 from .external_transcript import DraftRow
@@ -42,7 +41,7 @@ from .native_runtime_input import CurrentNativeCursor
 from .owner_protocol import IncompatibleOwner
 from .pi_payloads import McpLiveAcknowledgement
 from .routing import MessageRoute
-from .thread_identity import ClaimedIdentity, ThreadIncarnation
+from .thread_identity import ClaimScoped, ThreadIncarnation
 from .tool_result import DeclaredReply
 from .transcripts import TranscriptCursor, TranscriptPage, TranscriptReadIdentity
 from .turn_context import ContextManifest
@@ -95,16 +94,6 @@ class TextRouteUpdate(AgentCommsUpdate):
 @dataclass(frozen=True)
 class TranscriptChangedUpdate(AgentCommsUpdate):
     cursor: TranscriptCursor | None
-
-
-@dataclass(frozen=True)
-class UnknownDeliveryFailure(BackendDeliveryFailure):
-    wire_root_id: str
-    wire_seq: int
-    message_id: str
-
-    def present(self, receiver, body: str) -> None:
-        receiver.delivery_unknown(self, body)
 
 
 class ClaimBlockedFailure(BackendDeliveryFailure):
@@ -207,11 +196,10 @@ class AttachmentScope(AcceptsNull, ExternalJsonShape, WireValue):
         raise ValueError('Attachment has no live local owner scope.')
 
 
-class LiveAttachmentScope(AttachmentScope):
+class LiveAttachmentScope(AttachmentScope, ClaimScoped):
     """Logical ACP attachment and executor evidence have separate identities."""
     session_id: str
-    claim_scope: ClaimedIdentity
-    owner_pid: int
+    owner: ProcessIdentity
 
     @property
     @abstractmethod
@@ -219,11 +207,11 @@ class LiveAttachmentScope(AttachmentScope):
 
     @property
     def owner_created_at(self):
-        return self.claim_scope.incarnation.require_recorded().created_at
+        return self.claimed_identity.incarnation.require_recorded().created_at
 
     @property
     def claimed_generation(self):
-        return self.claim_scope.claimed_generation
+        return self.claimed_identity.claimed_generation
 
     def to_wire(self):
         return FieldCodec.encode_record(self)
@@ -275,7 +263,7 @@ class ObservedAttachmentRelation(AttachmentRelation):
     def ambiguous(self):
         return (not self.same_incarnation or
                 (self.original.claimed_generation == self.received.claimed_generation
-                 and self.original.owner_pid != self.received.owner_pid))
+                 and self.original.owner != self.received.owner))
 
     @property
     def newer(self):
@@ -289,7 +277,7 @@ class ObservedAttachmentRelation(AttachmentRelation):
     def current(self):
         return (self.same_incarnation
                 and self.original.claimed_generation == self.received.claimed_generation
-                and self.original.owner_pid == self.received.owner_pid)
+                and self.original.owner == self.received.owner)
 
 
 class CursorScope(AttachmentScope):
@@ -311,16 +299,14 @@ class NoCursorScope(CursorScope):
 class LiveCursorScope(CursorScope, LiveAttachmentScope):
     session_id: str
     wire_root_id: str
-    claim_scope: Annotated[ClaimedIdentity, WireName("admission")]
-    owner_pid: int
+    owner: ProcessIdentity
 
     def __post_init__(self):
         Id128Text.decode(self.wire_root_id)
-        self.claim_scope.incarnation.require_recorded()
+        self.claimed_identity.incarnation.require_recorded()
         if (
             not self.session_id
-            or self.owner_pid <= 0
-            or self.claim_scope.claimed_generation <= 0
+            or self.claimed_identity.claimed_generation <= 0
         ):
             raise ValueError("Invalid native cursor scope")
 
@@ -380,7 +366,7 @@ class VerifiedCursorObservation(CursorObservation):
         cursor = self.cursor
         if (
             cursor.wire_root_id != scope.wire_root_id
-            or cursor.owner_thread != scope.claim_scope.incarnation.name
+            or cursor.recipient_lookup != scope.claimed_identity.incarnation.lookup
             or cursor.owner_claimed_generation != scope.claimed_generation
             or not 0 <= cursor.injected_seq <= cursor.covered_seq
         ):
@@ -408,9 +394,7 @@ class CursorEnvelope:
 
     @property
     def digest(self) -> str:
-        return sha256(
-            json.dumps(FieldCodec.encode(self), sort_keys=True, separators=(",", ":")).encode()
-        ).hexdigest()
+        return FieldCodec.digest(self)
 
 
 @dataclass(frozen=True)
@@ -456,8 +440,7 @@ class NoQueueScope(QueueScope):
 @dataclass(frozen=True)
 class LiveQueueScope(QueueScope, LiveAttachmentScope):
     session_id: str
-    claim_scope: Annotated[ClaimedIdentity, WireName("admission")]
-    owner_pid: int
+    owner: ProcessIdentity
 
     @property
     def logical_key(self):
@@ -559,7 +542,7 @@ class AvailableQueueProjection(QueueProjection):
         raise ValueError('Available input queue has no original attachment scope.')
 
     def capture_human_input(self, comms, acquire_scope: Callable[[], QueueScope]) -> HumanInputOrigin:
-        return HumanInputOrigin.capture(comms, acquire_scope().claim_scope)
+        return HumanInputOrigin.capture(comms, acquire_scope().claimed_identity)
 
 
 @dataclass(frozen=True)
@@ -580,9 +563,7 @@ class QueueChangedUpdate(AgentCommsUpdate):
 
     @property
     def digest(self) -> str:
-        return sha256(
-            json.dumps(FieldCodec.encode(self), sort_keys=True, separators=(",", ":")).encode()
-        ).hexdigest()
+        return FieldCodec.digest(self)
 
 
 @dataclass(frozen=True)
@@ -601,7 +582,7 @@ class InputStartedUpdate(AgentCommsUpdate):
 class CoordinationChangedUpdate(AgentCommsUpdate):
     thread: ThreadIncarnation
     wire_root: str
-    owner_pid: int
+    owner: ProcessIdentity
     worktree: str
     model: str
     thinking_level: str | None

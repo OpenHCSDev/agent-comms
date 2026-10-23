@@ -2,21 +2,18 @@
 
 from __future__ import annotations
 
-from agent_comms.lifecycle_capability import Active, Settled
+from agent_comms.lifecycle_capability import Active
 
-import json
-import os
 import re
 import shlex
 import signal
 import subprocess
 import tempfile
-import time
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Literal
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
 from .child_process import (BoundedRun, CheckPrinted, ChildOutcome, ChildResult, CountPrinted,
                             ExitedOutcome, SignaledOutcome, TimedOutOutcome)
@@ -25,19 +22,19 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec, JsonShapeFamily, JsonShapeMember, MalformedRecord, NullMember,
-    RecordMember, SubclassUnion,
+    PresenceExclude, RecordMember, SubclassUnion,
 )
 from .goal_states import ActiveGoal, GoalState
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from .turn_goal_permission import ContinuationGoalPermission, GoalPermission, InactiveGoalPermission
 from .registration_inheritance import RegistrationInheritance
-from .repo import ScratchCheckout
+from .repo import GitCommandError, Repo, ScratchCheckout
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .text_digest import TextDigest
 from .ui_model.goal import GoalDisplay
 
 if TYPE_CHECKING:
-    from .goal_actions import DirectiveGoalAction, GoalAction, GoalActionContext
+    from .goal_actions import GoalAction, GoalActionContext
     from .goal_presentation import GoalExecution
     from .goal_waits import GoalWaits
     from .task_sources import TaskScope
@@ -50,8 +47,6 @@ if TYPE_CHECKING:
     from .turn_goal_account import VerifiedGoalSettlement
     from .thread_identity import TurnId
     from .todos import Todo
-    from .messages import Message
-    from .private_bus_checkpoint import CheckedRead
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -141,9 +136,9 @@ class ResolvedMentionBinding(GoalMentionBinding):
         contacts = tuple(
             GoalDerivedContact(
                 owner.name,
-                owner.created_at,
+                owner.incarnation.wire_birth,
                 executor.name,
-                executor.created_at,
+                executor.incarnation.wire_birth,
                 goal.id,
                 source.text_revision,
             )
@@ -379,12 +374,15 @@ class OrderCheck:
 
     def recorded(self, sha: str, repository: str) -> tuple[ChildResult, ...]:
         """Read the check run result without starting the check."""
-        return tuple(checked.result for checked in CheckedCommit.stored(repository, sha)
-                     if checked.command == self.command)[:1]
+        return self.recorded_among(CheckedCommit.stored(repository, sha))
+
+    def recorded_among(self, stored: tuple[CheckedCommit, ...]) -> tuple[ChildResult, ...]:
+        """This check's result among a commit's stored check results."""
+        return tuple(checked.result for checked in stored if checked.command == self.command)[:1]
 
     def at(self, revision: str, repository: str, checkout_base: Path) -> ChildResult:
         """Read the result on ``revision``, or explicitly run the check in a detached checkout."""
-        sha = CheckedCommit.git(repository, "rev-parse", f"{revision}^{{commit}}").strip()
+        sha = Repo.git(repository, "rev-parse", f"{revision}^{{commit}}").strip()
         for recorded in self.recorded(sha, repository):
             return recorded
         try:
@@ -410,28 +408,6 @@ class OrderCheck:
         return ChildResult(ChildOutcome.from_returncode(run.returncode), run.stdout)
 
 
-class GitCommandFailed(RuntimeError):
-    """A Git operation failure, not malformed order data to aggregate and continue past."""
-
-    def __init__(self, repository: str, run: subprocess.CompletedProcess[str]):
-        self.run = run
-        detail = run.stderr.strip() or f"git failed with exit {run.returncode}"
-        super().__init__(f"Git in {repository}: {detail}")
-
-    def source_path_absent(self, sha: str, file: str) -> bool:
-        """Only Git's missing-path result, never a failed fetch or corrupt repository."""
-        return self.run.returncode == 128 and self.run.stderr in (
-            f"fatal: path '{file}' does not exist in '{sha}'\n",
-            f"fatal: path '{file}' exists on disk, but not in '{sha}'\n",
-        )
-
-    def no_check_ran_on(self, sha: str) -> bool:
-        """Git's absent-note reply, not a corrupt repository or an invalid revision."""
-        return self.run.returncode == 1 and self.run.stderr in (
-            "", f"error: no note found for object {sha}.\n",
-        )
-
-
 @dataclass(frozen=True)
 class CheckedCommit:
     """What an order's check printed at a commit. A commit's result never changes, so the git
@@ -449,42 +425,26 @@ class CheckedCommit:
     def result(self) -> ChildResult:
         return ChildResult(self.outcome, self.stdout.encode())
 
-    @staticmethod
-    def git(repository: str, *args: str) -> str:
-        run = subprocess.run(("git", "-C", repository, *args), capture_output=True, text=True,
-                             timeout=60, env=os.environ | {"LC_ALL": "C"})
-        if run.returncode:
-            raise GitCommandFailed(repository, run)
-        return run.stdout
-
     @classmethod
     def stored(cls, repository: str, sha: str) -> tuple[CheckedCommit, ...]:
         """Every check result the commit's note records; a commit no check ran on has none."""
         try:
-            cls.git(repository, *cls.NOTES, "list", sha)
-        except GitCommandFailed as failure:
+            Repo.git(repository, *cls.NOTES, "list", sha)
+        except GitCommandError as failure:
             if failure.no_check_ran_on(sha):
                 return ()  # No check ran on this commit.
             raise
         return tuple(FieldCodec.decode(cls, FieldCodec.parse(line)) for line in
-                     cls.git(repository, *cls.NOTES, "show", sha).splitlines() if line)
+                     Repo.git(repository, *cls.NOTES, "show", sha).splitlines() if line)
 
     def store(self, repository: str, sha: str) -> None:
-        self.git(repository, *self.NOTES, "append", "-m",
-                 json.dumps(FieldCodec.encode(self), separators=(",", ":")), sha)
+        Repo.git(repository, *self.NOTES, "append", "-m",
+                 FieldCodec.compact(FieldCodec.encode(self)), sha)
 
 
 class GoalOrder(DeclaredFamily, affix="GoalOrder"):
     def require_completion(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
         pass
-
-    def require_request(self) -> None:
-        raise ValueError("An order serves an open owner request: request add records one.")
-
-    def open_requests(
-        self, goal: Goal, goals: Goals, owner: ThreadIncarnation
-    ) -> tuple[tuple[Goal, tuple[Todo, ...]], ...]:
-        return ()
 
     def instructions(self, todos: Sequence[Todo]) -> str:
         return ""
@@ -500,17 +460,6 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
 
     def require_model_block(self) -> None:
         pass
-
-    def directed(self, goal: Goal, directive: DirectiveGoalAction, ctx: GoalActionContext) -> Goal:
-        """Only a thread holding owner requests records an owner directive."""
-        return goal
-
-    def directive_messages(self, goals: Goals) -> tuple[Message, ...]:
-        return ()
-
-    def overdue_directives(self, goal: Goal, goals: Goals, owner: ThreadIncarnation,
-                           now: float) -> tuple[tuple[RequestDirective, Message], ...]:
-        return ()
 
     @abstractmethod
     def require_order(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None: ...
@@ -530,83 +479,6 @@ class UnorderedGoalOrder(GoalOrder):
 
     def require_replacement(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
         pass
-
-
-@dataclass(frozen=True)
-class RequestDirective:
-    """One original directive; only a reply linked to that message answers it."""
-
-    window: ClassVar[int] = 10 * 60  # seconds the commander has to act on a directive
-    seq: int
-    deadline: float
-
-    @property
-    def due_time(self) -> str:
-        return time.strftime("%H:%M", time.localtime(self.deadline))
-
-    def original(self, source: CheckedRead) -> Message:
-        return source.delivery(self.seq).message
-
-
-@dataclass(frozen=True)
-class RequestGoalOrder(GoalOrder):
-    """An owner request on the commander's own Goal: each order names the one it serves, and the
-    request stays open until no order serving it is open. Each owner directive the commander
-    receives is recorded on it when it arrives."""
-
-    directives: tuple[RequestDirective, ...] = ()
-
-    def require_order(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
-        pass
-
-    def require_replacement(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
-        if not goal.state.items_with(Settled, goal):
-            raise ValueError(f"Request {goal.id} is still open; mark it done first.")
-
-    def require_completion(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
-        if self.serving(goal, goals, owner):
-            raise ValueError(f"Request {goal.id} still has open orders.")
-
-    def require_request(self) -> None:
-        pass
-
-    def serving(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> tuple[Todo, ...]:
-        return tuple(todo for todo in goals.todos.for_request(owner, goal.id) if todo.pending)
-
-    def directed(self, goal: Goal, directive: DirectiveGoalAction, ctx: GoalActionContext) -> Goal:
-        """A closed request is replaced by one the directive opens; an open one records it."""
-        if not goal.state.items_with(Settled, goal):
-            return replace(goal, revision=goal.revision + 1, order=replace(
-                self, directives=(*self.directives, directive.directive())))
-        return directive.request(goal, ctx)
-
-    def directive_messages(self, goals: Goals) -> tuple[Message, ...]:
-        """Every directive's original, read in one checked read: a read per directive held the
-        wire lock once per message the owner ever sent (2,258 holds, 20 s per order call)."""
-        source: CheckedRead
-        with goals.bus.log.checked_read() as source:
-            return tuple(directive.original(source) for directive in self.directives)
-
-    def overdue_directives(self, goal: Goal, goals: Goals, owner: ThreadIncarnation,
-                           now: float) -> tuple[tuple[RequestDirective, Message], ...]:
-        """Each directive past its deadline that the owner has not answered, with its original;
-        the originals and every reply to them come from one checked read."""
-        due = tuple(directive for directive in self.directives if directive.deadline < now)
-        if not due:
-            return ()
-        source: CheckedRead
-        with goals.bus.log.checked_read() as source:
-            originals = tuple((directive, directive.original(source)) for directive in due)
-            answered = {answer for reply in source.replies(tuple(
-                message.reference for _, message in originals))
-                if reply.message.sender == owner.name for answer in reply.message.answers}
-        return tuple((directive, message) for directive, message in originals
-                     if message.reference not in answered)
-
-    def open_requests(
-        self, goal: Goal, goals: Goals, owner: ThreadIncarnation
-    ) -> tuple[tuple[Goal, tuple[Todo, ...]], ...]:
-        return ((goal, self.serving(goal, goals, owner)),)
 
 
 @dataclass(frozen=True)
@@ -886,15 +758,17 @@ class ReportedTurn(ReportedTurnState, JsonShapeMember):
 class Goal(RecordMember, GoalDeclaration):
     """A goal owns one typed record for storage and agent-comms protocol boundaries."""
 
-    text: str
+    # A presence row names the goal and its state; its body and bookkeeping stay with the goal tools.
+    text: Annotated[str, PresenceExclude()]
     id: str
-    published_seq: int
-    progress: str = ""
-    revision: int = 0
-    reported_turn: ReportedTurnState = field(default_factory=NoReportedTurn)
-    mention_source: GoalMentionSource | None = None
+    published_seq: Annotated[int, PresenceExclude()]
+    progress: Annotated[str, PresenceExclude()] = ""
+    revision: Annotated[int, PresenceExclude()] = 0
+    reported_turn: Annotated[ReportedTurnState, PresenceExclude()] = field(
+        default_factory=NoReportedTurn)
+    mention_source: Annotated[GoalMentionSource | None, PresenceExclude()] = None
     state: GoalState = field(default_factory=ActiveGoal)
-    order: GoalOrder = field(default_factory=UnorderedGoalOrder)
+    order: Annotated[GoalOrder, PresenceExclude()] = field(default_factory=UnorderedGoalOrder)
 
     def stopped_permit(self, store: GoalAttemptStore) -> GoalTurnPermit:
         return store.stopped_permit(self.id)

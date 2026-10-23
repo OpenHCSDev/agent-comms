@@ -9,31 +9,32 @@ from __future__ import annotations
 import hashlib
 import math
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
-from dataclasses import dataclass, field, fields, replace
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass, field, replace
 from functools import cached_property
-from typing import TYPE_CHECKING, Callable, ClassVar, Self, TypeVar, Annotated
-
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self, TypeVar
 
 from agent_comms.participant_identity import ParticipantIdentity
-from .agent_backend import AgentBackend, RuntimeLocation
-from .channel_targets import Tag
+
 from .cli_options import JsonFlagRecord
-from .declared_family import DeclaredFamily, declared_words
+from .declared_family import (
+    DeclaredFamily,
+    UniqueExternalSelector,
+    UnknownFamilyMember,
+    declared_words,
+)
 from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,
-    WireValue,
+    SingleFieldValue,
     WireName,
-    WireOmitDefault,
-    WireRequired,
+    WireValue,
 )
+from .projection_source import ProjectionSource
 from .response_policy import CollectivePolicy, InformationalPolicy, ResponsePolicy
-from .thread_text import NoSessionFile, NoThreadText, SessionFile, ThreadText
 
 if TYPE_CHECKING:
     from .child_process import ProcessIdentity
-    from .maintenance_barrier import MaintenanceBarrier
     from .messages import Message
     from .participant_store import ParticipantStore
     from .read_ledger import ReadDocument, ReadLedger
@@ -42,6 +43,128 @@ if TYPE_CHECKING:
     from .todos import Todo
 
 T = TypeVar("T")
+
+
+@dataclass(frozen=True, slots=True, order=True)
+class ToolName(SingleFieldValue):
+    """A name supplied by the runtime's offered-tool declaration."""
+
+    value: str
+
+
+class OfferedTools(DeclaredFamily, affix="OfferedTools"):
+    """No observation, a reported catalogue, or an explicitly unreported catalogue."""
+
+    @abstractmethod
+    def changes_from(self, previous: OfferedTools) -> tuple[str, ...]: ...
+
+    @abstractmethod
+    def before_reported(self, current: ReportedTools) -> tuple[str, ...]: ...
+
+    @abstractmethod
+    def before_unreported(self, current: UnreportedTools) -> tuple[str, ...]: ...
+
+    @abstractmethod
+    def on_version(self, version: str) -> tuple[OfferedTools, ...]: ...
+
+    @abstractmethod
+    def restarted_over(self, before: OfferedTools) -> OfferedTools: ...
+
+    def on_catalogue(self, names: frozenset[ToolName]) -> tuple[OfferedTools, ...]:
+        return ()
+
+    def without_catalogue(self) -> tuple[OfferedTools, ...]:
+        return ()
+
+    def fills_version(self, version: str) -> bool:
+        return False
+
+    def filled_by(self, current: OfferedTools) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
+class UnobservedTools(OfferedTools):
+    """No runtime has reported yet; this member never produces a publication."""
+
+    def changes_from(self, previous: OfferedTools) -> tuple[str, ...]:
+        return ()
+
+    def before_reported(self, current: ReportedTools) -> tuple[str, ...]:
+        return ()
+
+    def before_unreported(self, current: UnreportedTools) -> tuple[str, ...]:
+        return ()
+
+    def on_version(self, version: str) -> tuple[OfferedTools, ...]:
+        return (UnreportedTools(version),)
+
+    def restarted_over(self, before: OfferedTools) -> OfferedTools:
+        return before  # Nothing observed: the last real record stays the comparison.
+
+    def filled_by(self, current: OfferedTools) -> bool:
+        return True
+
+
+@dataclass(frozen=True)
+class ObservedTools(OfferedTools, declared_name=None):
+    version: str
+
+    def unreported_change(self, version: str) -> tuple[str, ...]:
+        return (
+            (f"runtime {self.version} -> {version}, tool set unreported",)
+            if self.version != version
+            else ()
+        )
+
+    def before_unreported(self, current: UnreportedTools) -> tuple[str, ...]:
+        return self.unreported_change(current.version)
+
+    def on_version(self, version: str) -> tuple[OfferedTools, ...]:
+        return (UnreportedTools(version),) if self.version != version else ()
+
+    def on_catalogue(self, names: frozenset[ToolName]) -> tuple[OfferedTools, ...]:
+        return (ReportedTools(self.version, names),)
+
+    def without_catalogue(self) -> tuple[OfferedTools, ...]:
+        return (UnreportedTools(self.version),)
+
+    def fills_version(self, version: str) -> bool:
+        return self.version == version
+
+    def restarted_over(self, before: OfferedTools) -> OfferedTools:
+        return self
+
+
+@dataclass(frozen=True)
+class ReportedTools(ObservedTools):
+    # Not ``names``: dataclass would take the inherited DeclaredFamily.names as its default.
+    tools: Annotated[frozenset[ToolName], WireName("names")]
+
+    def changes_from(self, previous: OfferedTools) -> tuple[str, ...]:
+        return previous.before_reported(self)
+
+    def before_reported(self, current: ReportedTools) -> tuple[str, ...]:
+        missing = self.tools - current.tools
+        return (
+            (
+                f"missing tools {', '.join(sorted(name.value for name in missing))}; "
+                f"runtime {current.version}",
+            )
+            if missing
+            else ()
+        )
+
+
+class UnreportedTools(ObservedTools):
+    def filled_by(self, current: OfferedTools) -> bool:
+        return current.fills_version(self.version)
+
+    def changes_from(self, previous: OfferedTools) -> tuple[str, ...]:
+        return previous.before_unreported(self)
+
+    def before_reported(self, current: ReportedTools) -> tuple[str, ...]:
+        return self.unreported_change(current.version)
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,9 +254,14 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
     def recorded_names(self, snapshot: RegistryProvenance) -> tuple[ThreadIncarnation, ...]:
         """Original names retained for this exact current incarnation."""
         canonical = self.resolved(snapshot)
-        return (canonical, *(canonical.renamed(alias)
-                             for alias, name in snapshot.aliases.items()
-                             if name == canonical.name))
+        return (
+            canonical,
+            *(
+                canonical.renamed(alias)
+                for alias, name in snapshot.aliases.items()
+                if name == canonical.name
+            ),
+        )
 
 
 @dataclass(frozen=True, eq=False)
@@ -211,19 +339,18 @@ class CommanderForkIdentity(RecordedThreadIncarnation):
         return self.authority
 
 
-class BirthlessIncarnation(ThreadIncarnation):
+class BirthlessIncarnation(
+    ThreadIncarnation, UniqueExternalSelector, DeclaredFamily, affix="Incarnation"
+):
     """A member whose wire birth is a declared mark, not recorded evidence; never a lookup.
 
     Each member declares its mark in ``WIRE_BIRTH``; the record decodes a mark to its member."""
 
     WIRE_BIRTH: ClassVar[float]
-    members: ClassVar[dict[float, type[BirthlessIncarnation]]] = {}
 
-    def __init_subclass__(cls, **kwargs: object) -> None:
-        super().__init_subclass__(**kwargs)
-        if cls.WIRE_BIRTH in BirthlessIncarnation.members:
-            raise TypeError(f"Wire birth {cls.WIRE_BIRTH} is already declared")
-        BirthlessIncarnation.members[cls.WIRE_BIRTH] = cls
+    @classmethod
+    def selection_key(cls) -> float:
+        return cls.WIRE_BIRTH
 
     @property
     def wire_birth(self) -> float:
@@ -295,60 +422,6 @@ class CoreWatcherIncarnation(BirthlessIncarnation):
         return "Core's watcher"
 
 
-@dataclass(frozen=True, kw_only=True)
-class ThreadProvenance:
-    """Recorded thread identity, without permission to own a process or start a turn."""
-
-    name: str
-    tags: frozenset[str]
-    worktree: str
-    created_at: Annotated[float, WireRequired()]
-    session_file: SessionFile = field(default_factory=NoSessionFile)
-    title: ThreadText = field(default_factory=NoThreadText)
-    backend: Annotated[type[AgentBackend], WireOmitDefault()] = field(
-        default_factory=AgentBackend.for_new_threads
-    )
-
-    @cached_property
-    def runtime(self) -> RuntimeLocation:
-        """The codec decoded both stored fields; their record owns this binding."""
-        return self.session_file.location(self.backend)
-
-    @property
-    def display_title(self) -> str:
-        return self.title.otherwise(self.name)
-
-    @staticmethod
-    def require_name(name: str) -> None:
-        allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
-        if not name or not set(name) <= allowed:
-            raise ValueError(f"Thread name {name!r} must be alphanumeric with hyphens/underscores.")
-
-    def __post_init__(self) -> None:
-        self.incarnation
-        self.require_name(self.name)
-        if not self.worktree:
-            raise ValueError("Thread worktree cannot be empty.")
-        for tag in self.tags:
-            Tag.validate(tag)
-
-    @staticmethod
-    def capture(thread: ThreadProvenance) -> ThreadProvenance:
-        """Freeze only determining provenance from the original typed declaration."""
-        return ThreadProvenance(
-            **{
-                item.name: getattr(thread, item.name)
-                for item in fields(ThreadProvenance)
-                if item.init
-            }
-        )
-
-    @cached_property
-    def incarnation(self) -> ThreadIncarnation:
-        """The declaration's birth member, created once and shared by its readers."""
-        return ThreadIncarnationRecord(self.name, self.created_at).incarnation()
-
-
 @dataclass(frozen=True, slots=True)
 class ThreadIncarnationRecord:
     """The single exact external name/birth record; members own its meaning."""
@@ -357,9 +430,11 @@ class ThreadIncarnationRecord:
     created_at: float
 
     def incarnation(self) -> ThreadIncarnation:
-        if self.created_at in BirthlessIncarnation.members:
-            return BirthlessIncarnation.members[self.created_at].recorded_as(self.name)
-        return RecordedThreadIncarnation(self.name, self.created_at)
+        try:
+            member = BirthlessIncarnation.member_selected(self.created_at)
+        except UnknownFamilyMember:
+            return RecordedThreadIncarnation(self.name, self.created_at)
+        return member.recorded_as(self.name)
 
     @classmethod
     def decode(cls, name: str, birth: float) -> ThreadIncarnation:
@@ -367,7 +442,7 @@ class ThreadIncarnationRecord:
 
 
 @dataclass(frozen=True, slots=True)
-class TurnId:
+class TurnId(ProjectionSource):
     value: str
 
     @classmethod
@@ -409,11 +484,29 @@ class ClaimedIdentity:
     """A registry-allocated input generation, never an owner lease."""
 
     incarnation: ThreadIncarnation
-    claimed_generation: Annotated[int, WireName("admission_generation")]
+    claimed_generation: int
 
     def includes(self, previous: ClaimedIdentity) -> bool:
         """Compare order only within this registry's input-generation counter."""
-        return self.incarnation == previous.incarnation and self.claimed_generation >= previous.claimed_generation
+        return (
+            self.incarnation == previous.incarnation
+            and self.claimed_generation >= previous.claimed_generation
+        )
+
+
+@dataclass(frozen=True)
+class ClaimScoped:
+    """A record scoped to one registry-allocated input identity."""
+
+    claimed_identity: ClaimedIdentity
+
+
+@dataclass(frozen=True, slots=True)
+class ThreadAuthority:
+    """One registry participant's owner lease and allocated input claim."""
+
+    owner: OwnerIdentity
+    claim: ClaimedIdentity
 
 
 @dataclass(frozen=True, slots=True)
@@ -432,17 +525,23 @@ class TurnFence:
 
     identity: TurnIdentity
     turn_id: str
-    claimed_generation: Annotated[int, WireName("admission_generation")]
+    claimed_generation: int
 
     def renamed(self, name: str) -> Self:
         """Registry alias resolution changes the name, never incarnation or epochs."""
-        return replace(self, identity=replace(
-            self.identity, incarnation=replace(self.identity.incarnation, name=name)
-        ))
+        return replace(
+            self,
+            identity=replace(
+                self.identity, incarnation=replace(self.identity.incarnation, name=name)
+            ),
+        )
 
     def can_attest(self, claim_scope: int) -> bool:
-        return (self.identity.generation > 0 and self.claimed_generation > 0
-                and self.claimed_generation == claim_scope)
+        return (
+            self.identity.generation > 0
+            and self.claimed_generation > 0
+            and self.claimed_generation == claim_scope
+        )
 
     def __eq__(self, other: object) -> bool:
         """Lease and finished observations share the same turn identity."""
@@ -456,7 +555,7 @@ class TurnFence:
 
 
 @dataclass(slots=True)
-class GenerationCounter:
+class GenerationCounter(ProjectionSource):
     """One monotonic allocation domain, including deleted-name tombstones."""
 
     counter: int = 0
@@ -489,7 +588,7 @@ class GenerationCounter:
         self.generations[new] = self.generations.pop(old)
 
 
-class ThreadRole(DeclaredFamily, affix="ThreadRole"):
+class ThreadRole(DeclaredFamily, ProjectionSource, affix="ThreadRole"):
     """Whether a thread executes turns is the member's type; its wire name is its spelling."""
 
     origin_label: ClassVar[str]
@@ -528,14 +627,18 @@ class ThreadRole(DeclaredFamily, affix="ThreadRole"):
 
     @classmethod
     @abstractmethod
-    def require_maintenance_open(cls, barrier: MaintenanceBarrier, claims_owner: bool) -> None:
-        """An owner claim waits for open maintenance; a human claims no owner."""
+    def unread_since(cls, since: float | None, recorded_delivery: bool) -> float | None:
+        """A routed display's unread boundary, never permission to start an input."""
 
     @classmethod
     @abstractmethod
     def displayed_recipient_effect(
-        cls, reads: ReadLedger, message: Message, thread: Thread,
-        snapshot: RegistryProvenance, document: ReadDocument | None,
+        cls,
+        reads: ReadLedger,
+        message: Message,
+        thread: Thread,
+        snapshot: RegistryProvenance,
+        document: ReadDocument | None,
     ) -> object:
         """Only a human recipient's display records a read."""
 
@@ -571,7 +674,7 @@ class AgentThreadRole(ThreadRole):
 
     @classmethod
     def register_sender(cls, participants: ParticipantStore, lookup: str, name: str) -> None:
-        participants.register(lookup, name, name, committed=True)
+        participants.register(lookup, committed=True)
 
     @classmethod
     def require_executable(cls, refusal: Exception) -> None:
@@ -590,14 +693,17 @@ class AgentThreadRole(ThreadRole):
         return ()
 
     @classmethod
-    def require_maintenance_open(cls, barrier: MaintenanceBarrier, claims_owner: bool) -> None:
-        if claims_owner:
-            barrier.assert_open_unlocked()
+    def unread_since(cls, since: float | None, recorded_delivery: bool) -> float | None:
+        return since if recorded_delivery else None
 
     @classmethod
     def displayed_recipient_effect(
-        cls, reads: ReadLedger, message: Message, thread: Thread,
-        snapshot: RegistryProvenance, document: ReadDocument | None,
+        cls,
+        reads: ReadLedger,
+        message: Message,
+        thread: Thread,
+        snapshot: RegistryProvenance,
+        document: ReadDocument | None,
     ) -> object:
         return ()
 
@@ -658,13 +764,17 @@ class UserThreadRole(ThreadRole):
         return (item,)
 
     @classmethod
-    def require_maintenance_open(cls, barrier: MaintenanceBarrier, claims_owner: bool) -> None:
-        """A human claims no owner, so maintenance never gates its registration."""
+    def unread_since(cls, since: float | None, recorded_delivery: bool) -> float | None:
+        return since
 
     @classmethod
     def displayed_recipient_effect(
-        cls, reads: ReadLedger, message: Message, thread: Thread,
-        snapshot: RegistryProvenance, document: ReadDocument | None,
+        cls,
+        reads: ReadLedger,
+        message: Message,
+        thread: Thread,
+        snapshot: RegistryProvenance,
+        document: ReadDocument | None,
     ) -> object:
         return reads.displayed_incarnation(message, thread.incarnation, snapshot, document=document)
 

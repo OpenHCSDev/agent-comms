@@ -9,18 +9,13 @@ from contextlib import ExitStack, contextmanager, nullcontext
 from functools import cached_property
 from typing import TYPE_CHECKING
 
-from agent_comms.coordination_database import (
-    DEFAULT_STORE_CONTENTION,
-    CoordinationStore,
-    StoreContention,
-)
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import (
     CoordinationReadUnavailable,
     IntegrityViolationError,
 )
-from agent_comms.locked_store import RegistryFile
-from agent_comms.store_files import StoreLockContention
-from agent_comms.wire_log import CurrentSnapshotOpening, WireLog
+from agent_comms.locked_store import DEFAULT_STORE_CONTENTION, RegistryFile, StoreContention
+from agent_comms.store_files import UNBOUNDED_CONTENTION, StoreLockContention
 
 if TYPE_CHECKING:
     from .message_bus import MessageBus
@@ -60,7 +55,7 @@ class CoordinationSession(CoordinationStore):
         with self.writing():
             yield None
 
-    def release_resources(self, snapshot, outcome, boundary: NativeBoundary | None) -> None:
+    def release_resources(self, snapshot, outcome, boundary: NativeBoundary) -> None:
         """Standalone attempts cannot acquire native file claims."""
 
     @contextmanager
@@ -80,30 +75,30 @@ class CoordinationSession(CoordinationStore):
 
 
 class NativeBoundary(ExitStack):
-    """Publication locks ordered by their namespace, log and registry owners."""
+    """Borrow the registry's own read lock for a publication decision."""
 
-    def __init__(self, bus, *, blocking=True, contention=None, measurements=None):
+    def __init__(
+        self, bus: MessageBus, *, contention: StoreLockContention = UNBOUNDED_CONTENTION,
+    ) -> None:
         super().__init__()
         from agent_comms.diagnostics import PublicationMeasurements
 
         # One budget for every lock the boundary takes, the activity cut included.
         self.bus = bus
-        self.contention = contention or StoreLockContention.for_blocking(blocking)
-        self.measurements = measurements if measurements is not None else PublicationMeasurements()
+        self.contention = contention
+        self.measurements = PublicationMeasurements()
 
     def __enter__(self):
-        from .store_files import ExclusiveLock, SharedLock, StoreLock
+        from .store_files import SharedLock, _store_lock
 
         try:
-            self.activity = self.enter_context(
-                self.bus.opened_activity(CurrentSnapshotOpening(self.contention)))
+            self.activity = self.enter_context(self.bus.opened_activity(self.contention))
             with self.measurements.operation("file_exclusion"):
-                locks = self.enter_context(StoreLock.ordered(
-                    {self.bus: SharedLock(), self.bus.log: ExclusiveLock(),
-                     self.bus._registry.store: SharedLock()},
+                self.enter_context(_store_lock(
+                    self.bus._registry.store.path, mode=SharedLock(),
                     contention=self.contention))
-            self.bus_lock = locks[self.bus.log]
             with self.measurements.operation("registry_snapshot"):
+                self.privacy = self.bus._registry.store.private_guard_unlocked()
                 self.registry = self.bus._registry.store.read_snapshot_unlocked()
             return self
         except BaseException:
@@ -120,36 +115,50 @@ class NativeCoordinationSession(CoordinationSession):
         from . import message_bus, publisher, registration
 
         return message_bus.MessageBus(
-            WireLog.path_in(self.path.parent),
+            self.path.parent,
             registration.Registration(RegistryFile.path_in(self.path.parent)),
             publisher.ClaimWrites,
         )
 
-    def boundary(self, bus=None, **options):
-        selected = self.bus if bus is None else bus
-        if selected.log.path.parent.resolve() != self.path.parent.resolve():
+    def boundary_contention(self) -> StoreLockContention:
+        """A session's boundary waits as long as the lock is held."""
+        return UNBOUNDED_CONTENTION
+
+    def boundary(self, bus: MessageBus) -> NativeBoundary:
+        if bus.bus.path.parent.resolve() != self.path.parent.resolve():
             raise IntegrityViolationError("native boundary belongs to another coordinator")
-        return NativeBoundary(selected, **options)
+        return NativeBoundary(bus, contention=self.boundary_contention())
 
     @contextmanager
     def settlement(
         self, boundary: NativeBoundary | None = None
     ) -> Iterator[NativeBoundary]:
         """Acquire a native boundary, or borrow the caller's already held one."""
-        with self.boundary() if boundary is None else nullcontext(boundary) as acquired:
-            if acquired.bus.log.path.parent.resolve() != self.path.parent.resolve():
+        with self.boundary(self.bus) if boundary is None else nullcontext(boundary) as acquired:
+            if acquired.bus.bus.path.parent.resolve() != self.path.parent.resolve():
                 raise IntegrityViolationError("settlement boundary belongs to another coordinator")
             with self.writing():
                 yield acquired
 
-    def release_resources(self, snapshot, outcome, boundary: NativeBoundary | None) -> None:
-        if not isinstance(boundary, NativeBoundary):
-            raise IntegrityViolationError("native release requires an acquired boundary")
+    def release_resources(self, snapshot, outcome, boundary: NativeBoundary) -> None:
         snapshot.release_resources(boundary, outcome)
 
 
 class ReadNativeCoordinationSession(NativeCoordinationSession):
     """Read-only native coordination through the complete session constructor."""
+
+    def __init__(
+        self, path: str, *, clock_ms: Callable[[], int] = system_clock,
+        contention: StoreContention = DEFAULT_STORE_CONTENTION,
+    ) -> None:
+        self.contention = contention
+        super().__init__(path, clock_ms=clock_ms, contention=contention)
+
+    def boundary_contention(self) -> StoreLockContention:
+        """A read's boundary spends the read's own budget on every lock it takes, so
+        contention the read cannot wait out raises BlockingIOError for its caller to
+        defer, instead of a wait with no end."""
+        return self.contention.lock_budget()
 
     def _prepare_private_file(self) -> None:
         self._private_file()

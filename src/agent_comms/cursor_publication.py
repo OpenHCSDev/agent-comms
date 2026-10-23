@@ -1,7 +1,7 @@
 """Read durable native evidence and order its informational ACP publication.
 
 Delivery bookkeeping belongs to the connection, never to input permission or
-the durable cursor. Every observation reads NativeSourceCursor's original proof.
+the durable cursor. Every observation reads the cursor owner's original proof.
 """
 
 from __future__ import annotations
@@ -19,26 +19,21 @@ from .acp_extension import (
     CursorAdvancedUpdate,
     CursorEnvelope,
     CursorScope,
-    EmptyCursorObservation,
-    LiveCursorScope,
-    NoCursorScope,
     UnavailableCursorObservation,
-    VerifiedCursorObservation,
     encode_updates,
 )
+from .agent_backend import InputId
 from .comms import Comms
 from .coordination_errors import ParticipantNotRegistered
 from .coordinator import Coordination
+from .cursor_owner import CommittedCursorOwner, CursorOwner, CursorState
 from .diagnostics import PublicationMeasurements
-from .errors import RelationViolationError
 from .message_bus import MessageBus
 from .native_entries import NativeEvidenceScope
-from .native_runtime_input import CurrentNativeCursor
-from .native_source_cursor import NativeSourceCursor
+from .private_registry_guard import RegistryPrivacy
 from .publisher import ResponseWrites
 from .runtime import RuntimeServer
-from .thread_identity import ClaimedIdentity
-from .wire_log import WireLog
+from .store_files import SharedLock
 
 if TYPE_CHECKING:
     from .selected_participant import SelectedParticipant
@@ -71,17 +66,17 @@ class CursorDelivery:
 
     async def advance(
         self, participant: SelectedParticipant, input_id: str,
-    ) -> CurrentNativeCursor | None:
+    ) -> CursorState:
         """Selected settlement borrows this recipient's serialized reader lifetime."""
         async with self.reading() as source_reads:
-            return await NativeSourceCursor.advance_async(
-                participant.bus, source_reads=source_reads,
+            owner = CommittedCursorOwner(
+                thread=participant.owner.thread,
+                claimed_generation=participant.owner.claimed_generation,
                 wire_root_id=participant.root_id,
-                owner=participant.owner.thread,
-                owner_claimed_generation=participant.owner.claimed_generation,
-                owner_generation=participant.identity.generation,
-                committed_input_id=input_id,
+                generation=participant.identity.generation,
+                input_id=InputId(input_id),
             )
+            return await owner.advance_async(participant.bus, source_reads=source_reads)
 
     def close(self) -> None:
         self.source_reads.close()
@@ -115,26 +110,10 @@ class CursorPublication:
         return self.deliveries.setdefault(session_id, CursorDelivery())
 
     def scope(self, thread_name: str, session_id: str) -> CursorScope:
-        return self.comms.owners.launch_authority.cursor_scope(self, thread_name, session_id)
-
-    def shared_scope(self) -> CursorScope:
-        """A shared root's scope: it launches no owner whose cursor this process publishes."""
-        return NoCursorScope()
-
-    def live_scope(self, root_id: str, thread_name: str, session_id: str) -> CursorScope:
-        """A private root's scope: this process's live owner of ``thread_name``."""
-        try:
-            owner, generation = self.comms.registry.live_owner_with_claim(thread_name)
-        except RelationViolationError:
-            return NoCursorScope()  # This process has no live owner input grant.
-        if not owner.process_identity.runs_here():
-            return NoCursorScope()
-        return LiveCursorScope(
-            session_id,
-            root_id,
-            ClaimedIdentity(owner.incarnation, generation),
-            owner.require_process().pid,
-        )
+        registry = self.comms.registry.store
+        with registry.locked(mode=SharedLock()):
+            privacy = registry.private_guard_unlocked()
+            return privacy.cursor_scope(registry.read_snapshot_unlocked(), thread_name, session_id)
 
     async def observe(
         self, thread_name: str, session_id: str, *, defer_busy: bool = False,
@@ -152,18 +131,18 @@ class CursorPublication:
         self, delivery: CursorDelivery, thread_name: str, session_id: str, *,
         source_reads: NativeEvidenceScope, defer_busy: bool, advance: bool,
     ) -> CursorEnvelope:
-        root_id = self.comms.owners.require_private_launch().wire_root_id
         revision = delivery.next_revision()
         scope = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
         unavailable = CursorEnvelope(scope, revision, UnavailableCursorObservation())
         if not scope.matches_session(session_id):
             return unavailable
+        root_id = scope.require_live().wire_root_id
         try:
-            bus = MessageBus(WireLog.path_in(self.comms.root), self.comms.registry, ResponseWrites)
+            bus = MessageBus(self.comms.root, self.comms.registry, ResponseWrites)
             read_cursor = (
-                NativeSourceCursor.refresh_async if advance else NativeSourceCursor.read_async
+                CursorOwner.refresh_async if advance else CursorOwner.read_async
             )
-            cursor = await read_cursor(
+            state = await read_cursor(
                 bus, wire_root_id=root_id, owner_name=thread_name,
                 source_reads=source_reads,
             )
@@ -181,14 +160,18 @@ class CursorPublication:
         return CursorEnvelope(
             scope,
             revision,
-            EmptyCursorObservation() if cursor is None else VerifiedCursorObservation(cursor),
+            state.observation(),
         )
 
-    async def trusted_metadata(self, thread_name: str, session_id: str) -> tuple:
-        launch = self.comms.owners.launch_authority
-        return await launch.cursor_metadata(self, thread_name, session_id)
+    async def trusted_metadata(
+        self, thread_name: str, session_id: str,
+    ) -> tuple[CursorAdvancedUpdate, ...]:
+        privacy = await Coordination.run_worker(partial(RegistryPrivacy.capture, self.comms.root))
+        return await privacy.cursor_metadata(self, thread_name, session_id)
 
-    async def observed_metadata(self, thread_name: str, session_id: str) -> tuple:
+    async def observed_metadata(
+        self, thread_name: str, session_id: str,
+    ) -> tuple[CursorAdvancedUpdate, ...]:
         """A private root's trusted cursor read, published as session metadata."""
         observed = await self.observe(thread_name, session_id)
         self.delivery(session_id).trusted_read(observed)
@@ -213,7 +196,7 @@ class CursorPublication:
         if selected_status is None and delivery.already_published(observed):
             return
         try:
-            await self.runtime.session_update(
+            await self.runtime.publish_update(
                 session_id=session_id,
                 update=SessionInfoUpdate(
                     session_update="session_info_update",

@@ -5,6 +5,8 @@ Only private scratch and the loopback server are changed; no installed service i
 """
 from __future__ import annotations
 
+
+
 import argparse
 import json
 import os
@@ -16,7 +18,7 @@ import threading
 import time
 from pathlib import Path
 
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.maintenance_barrier import (
     InstallingPhase, MaintenanceBarrier, MaintenanceOperator, PausedPhase,
@@ -24,16 +26,16 @@ from agent_comms.maintenance_barrier import (
 from agent_comms.store_files import _store_lock
 from connector_readiness import ConnectorReadiness
 from verify_connector_live import curl_call
+from agent_comms.threads import Thread
 
 
 def prove(scratch: Path) -> None:
     scratch.mkdir(mode=0o700, parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="maintenance-proof-", dir=scratch) as directory:
         base = Path(directory)
-        original = Comms(base / "original")
+        original = wire(base / "original")
         for name in ("claude-ai", "worker"):
-            original.registry.declare(original.registry.new_thread(name, frozenset(), str(base)))
-        original.messaging.initialize_private_initial_protocol()
+            original.registry.declare(Thread(name, frozenset(), str(base)))
         original.messaging.send("worker", "claude-ai", "Ready for your message")
         for worker in threading.enumerate():
             if worker.name == "agent-comms-candidate-maintenance":

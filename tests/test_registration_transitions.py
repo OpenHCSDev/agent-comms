@@ -5,19 +5,21 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
 from agent_comms.registration import Registration
+from agent_comms.thread_identity import ReportedTools, ToolName, UnreportedTools
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.turn_lease import NoFinishedTurn
 from agent_comms.thread_text import GivenThreadText
+from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize('transition', ['metadata', 'session', 'restart', 'stop', 'new-turn'])
 def test_registration_transition_preserves_or_revokes_exact_lease(tmp_path, transition):
     registry = Registration(tmp_path / 'registry.json')
-    thread = registry.new_thread('owner', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+    thread = Thread('owner', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     registry.register(thread)
     leased, _ = registry.lease_local_turn('owner', 'turn')
     lease = leased.require_turn_lease()
@@ -29,7 +31,7 @@ def test_registration_transition_preserves_or_revokes_exact_lease(tmp_path, tran
     if transition == 'metadata':
         updated = replace(leased, title=GivenThreadText('new title'), tags=frozenset({'changed'}))
     elif transition == 'session':
-        updated = replace(leased, session_file=SavedSessionFile(str(tmp_path / 'new.jsonl')))
+        updated = replace(leased, session_file=RegistrySessionLocation.from_path(str(tmp_path / 'new.jsonl'), tmp_path))
     elif transition == 'restart':
         kwargs['new_owner'] = True
         advances_owner = True
@@ -53,9 +55,35 @@ def test_registration_transition_preserves_or_revokes_exact_lease(tmp_path, tran
     assert (completion != NoFinishedTurn()) == (preserves_record and not advances_owner)
 
 
+def tools(version, *names):
+    return ReportedTools(version, frozenset(ToolName(name) for name in names))
+
+
+@pytest.mark.parametrize('restart, before, after, lost', [
+    ('new-owner', tools('1', 'a', 'b'), tools('1', 'a'), ('missing tools b; runtime 1',)),
+    ('stop-start', tools('1', 'a', 'b'), tools('1', 'a'), ('missing tools b; runtime 1',)),
+    ('stop-stop-start', tools('1', 'a', 'b'), tools('1', 'a'), ('missing tools b; runtime 1',)),
+    ('stop-start', tools('1', 'a', 'b'), tools('1', 'a', 'b'), ()),
+    ('new-owner', UnreportedTools('1'), UnreportedTools('1'), ()),
+    ('new-owner', UnreportedTools('1'), UnreportedTools('2'), ('runtime 1 -> 2, tool set unreported',)),
+])
+def test_owner_restart_compares_tools_with_last_real_record(tmp_path, restart, before, after, lost):
+    registry = Registration(tmp_path / 'registry.json')
+    registry.register(Thread('owner', frozenset(), str(tmp_path)))
+    registry.observe_offered_tools(registry.require('owner').incarnation, before)
+    stops = restart.count('stop')
+    for _ in range(stops):
+        registry.register(registry.require('owner'), status=StoppedThreadStatus())
+    registry.register(registry.require('owner'), new_owner=True)
+    current = registry.require('owner')
+    assert current.offered_before_restart == before
+    registry.observe_offered_tools(current.incarnation, after)
+    assert registry.require('owner').lost_tools() == lost
+
+
 def test_rename_preserves_exact_turn_release_but_not_reused_identity(tmp_path):
     registry = Registration(tmp_path / 'registry.json')
-    thread = registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+    thread = Thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     registry.register(thread)
     leased, _ = registry.lease_local_turn('owner', 'same-id')
     lease = leased.require_turn_lease()
@@ -69,7 +97,7 @@ def test_rename_preserves_exact_turn_release_but_not_reused_identity(tmp_path):
 
 def test_idle_restart_fence_cannot_borrow_metadata_or_claim(tmp_path):
     registry = Registration(tmp_path / 'registry.json')
-    registry.register(registry.new_thread('owner', frozenset(), str(tmp_path)))
+    registry.register(Thread('owner', frozenset(), str(tmp_path)))
     original = registry.snapshot()
     expected = original.threads['owner']
     claim_scope = original.claim_generation('owner')
@@ -88,7 +116,7 @@ def test_idle_restart_fence_cannot_borrow_metadata_or_claim(tmp_path):
 def test_batch_idle_fence_refuses_busy_second_without_partial_commit(tmp_path):
     registry = Registration(tmp_path / "registry.json")
     for name in ("first", "second"):
-        registry.register(registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
+        registry.register(Thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     before = registry.snapshot()
     selected = tuple((before.threads[name], before.claim_generation(name)) for name in ("first", "second"))
     registry.lease_local_turn('second', 'busy')

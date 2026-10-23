@@ -2,29 +2,37 @@
 
 from __future__ import annotations
 
-import json
 import os
-import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
+from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Annotated
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
-
-from .agent_backend import AgentBackend
+from .agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
+from .channel_targets import Tag
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .cli_result import ThreadToolCatalogResult
 from .context_segments.wake_values import WakeWorkContext
+from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import (
-    Argument, Description, FieldCodec, NullMember, RegistrationPolicy,
-    SingleFieldValue, SubclassUnion, WireOmitDefault, WireRequired,
+    Argument,
+    Description,
+    FieldCodec,
+    NullMember,
+    RegistrationPolicy,
+    SingleFieldValue,
+    SubclassUnion,
+    WireOmitDefault,
+    WireRequired,
 )
 from .goals import (
     GoalDeclaration,
     NoGoal,
 )
 from .launch_root import LaunchRoot
+from .lifecycle import LifecycleState
 from .lifecycle_capability import Executing
 from .locked_store import DurableFile, PatternFile
 from .native_arguments import NativeArguments
@@ -40,33 +48,69 @@ from .registration_inheritance import (
     InheritEmpty,
     InheritPrevious,
 )
-from .storage_rules import StoragePath, StorageRoots, StorageRule
-from .store_files import _atomic_write_text
+from .session_file import NoSessionFile, SessionFile
+from .storage_rules import (
+    AssignedStorageRoots,
+    StoragePath,
+    StorageRule,
+    ThreadStorage,
+    UnassignedThreadStorage,
+)
+from .store_files import AtomicFile
 from .task_sources import TaskScope
+from .thread_creation import CreationSeconds, CreationTime, GeneratedCreationTime
 from .thread_execution import NativeThreadExecution, ThreadExecution
-from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
-from .thread_text import NoParent, NoSessionFile, NoThreadText, SessionFile, ThreadParent, ThreadText
 from .thread_identity import (
     AgentThreadRole,
-    ThreadProvenance,
+    OfferedTools,
+    ThreadIncarnation,
+    ThreadIncarnationRecord,
     ThreadRole,
     TurnFence,
     TurnId,
     TurnIdentity,
+    UnobservedTools,
 )
-from .turn_lease import NoTurnRecord, TurnLease, TurnLeaseFence, TurnRecord, TurnState
+from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
+from .thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
+from .turn_lease import FinishedTurn, NoTurnRecord, TurnLease, TurnLeaseFence, TurnRecord, TurnState
 
 if TYPE_CHECKING:
     from .goal_management import Goals
     from .launch_runtime import ThreadLaunch
 
 
-class _GeneratedCreationTime(float):
-    """Transient marker for default timestamps; never persisted as claim authority."""
+@dataclass(frozen=True)
+class ThreadWorkState(DeclaredFamily, LifecycleState, affix="ThreadWorkState"):
+    """Order availability belongs to the thread, independently of process presence."""
+
+    @classmethod
+    def successors(cls) -> tuple[type[LifecycleState], ...]:
+        return ThreadWorkState.members_with(ThreadWorkState)
+
+    @abstractmethod
+    def candidates(self, thread: Thread) -> tuple[Thread, ...]: ...
+
+    @abstractmethod
+    def require_assignment(self) -> None: ...
 
 
-def _thread_creation_time() -> float:
-    return _GeneratedCreationTime(time.time())
+class ReadyThreadWorkState(ThreadWorkState):
+    def candidates(self, thread: Thread) -> tuple[Thread, ...]:
+        return (thread,)
+
+    def require_assignment(self) -> None:
+        pass
+
+
+class ParkedThreadWorkState(ThreadWorkState):
+    def candidates(self, thread: Thread) -> tuple[Thread, ...]:
+        return ()
+
+    def require_assignment(self) -> None:
+        raise RelationViolationError(
+            "The commander parked this thread; resume it before assigning work."
+        )
 
 
 class NextTurnSetting(ABC):
@@ -138,23 +182,87 @@ class NextTurnConfiguration:
         return self.service_tier.configured(self.model.configured(thought))
 
 
-@dataclass(frozen=True, slots=True)
-class Thread(DurableFile, PatternFile, ThreadProvenance):
-    filename: ClassVar[str] = "native-sessions/{lookup}/{name}"
-    catalog_filename: ClassVar[str] = "comms-catalog.json"
-    """Declares one agent thread's identity and provenance."""
+@dataclass(frozen=True, kw_only=True)
+class ThreadProvenance:
+    """Recorded thread identity, without permission to own a process or start a turn."""
 
     name: str = field(kw_only=False)
-    tags: Annotated[frozenset[str], RegistrationPolicy(InheritEmpty)] = field(
-        kw_only=False
-    )
+    tags: Annotated[frozenset[str], RegistrationPolicy(InheritEmpty)] = field(kw_only=False)
     worktree: str = field(kw_only=False)
+    created_at: Annotated[CreationTime, CreationSeconds, WireRequired()]
+    session_file: Annotated[SessionFile, RegistrationPolicy(InheritApplied)] = field(
+        default_factory=NoSessionFile
+    )
+    title: Annotated[ThreadText, RegistrationPolicy(InheritApplied)] = field(
+        default_factory=NoThreadText
+    )
+    backend: Annotated[
+        type[AgentBackend], WireOmitDefault(), RegistrationPolicy(InheritPrevious)
+    ] = field(default_factory=NewThreadBackend.selected)
+
+    @cached_property
+    def runtime(self) -> RuntimeLocation:
+        """The codec decoded both stored fields; their record owns this binding."""
+        return self.session_file.location(self.backend)
+
+    @cached_property
+    def writable_runtime(self) -> RuntimeLocation:
+        """The runtime a launch writes; a copied bus refuses a harness transcript."""
+        return self.session_file.writable_location(self.backend)
+
+    @property
+    def display_title(self) -> str:
+        return self.title.otherwise(self.name)
+
+    @staticmethod
+    def require_name(name: str) -> None:
+        allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
+        if not name or not set(name) <= allowed:
+            raise ValueError(f"Thread name {name!r} must be alphanumeric with hyphens/underscores.")
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "created_at", FieldCodec.decode(
+            Annotated[CreationTime, CreationSeconds], self.created_at))
+        self.require_name(self.incarnation.name)
+        if not self.worktree:
+            raise ValueError("Thread worktree cannot be empty.")
+        for tag in self.tags:
+            Tag.validate(tag)
+
+    @staticmethod
+    def capture(thread: ThreadProvenance) -> ThreadProvenance:
+        """Freeze only determining provenance from the original typed declaration."""
+        return ThreadProvenance(
+            **{
+                item.name: getattr(thread, item.name)
+                for item in fields(ThreadProvenance)
+                if item.init
+            }
+        )
+
+    @cached_property
+    def incarnation(self) -> ThreadIncarnation:
+        """The declaration's birth member, created once and shared by its readers."""
+        return ThreadIncarnationRecord(self.name, self.created_at.to_wire()).incarnation()
+
+
+class ThreadCatalog(DurableFile, PatternFile):
+    """The tool catalog a native launch reads from its thread's session directory."""
+
+    __slots__ = ()
+    filename: ClassVar[str] = "native-sessions/{lookup}/comms-catalog.json"
+
+
+@dataclass(frozen=True, slots=True)
+class Thread(ThreadProvenance):
+    """Declares one agent thread's identity and provenance."""
+
     parent: ThreadParent = field(default_factory=NoParent)
+    work_state: Annotated[
+        ThreadWorkState, RegistrationPolicy(InheritPrevious), WireOmitDefault()
+    ] = field(default_factory=ReadyThreadWorkState, kw_only=True)
     task: ThreadText = field(default_factory=NoThreadText)
     process_identity: ProcessState = field(default_factory=NoProcess)
-    session_file: Annotated[SessionFile, RegistrationPolicy(InheritApplied)] = (
-        field(default_factory=NoSessionFile, kw_only=True)
-    )
     model: Annotated[ThreadModel, RegistrationPolicy(InheritApplied)] = field(
         default_factory=UndeclaredModel
     )
@@ -167,13 +275,12 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
     goal: Annotated[GoalDeclaration, RegistrationPolicy(GoalDeclaration)] = (
         field(default_factory=NoGoal)
     )
-    created_at: Annotated[float, WireRequired()] = field(
-        default_factory=_thread_creation_time, kw_only=True
+    created_at: Annotated[CreationTime, CreationSeconds, WireRequired()] = field(
+        default_factory=GeneratedCreationTime.now, kw_only=True
     )
-    _generated_created_at: bool = field(init=False, default=False, repr=False, compare=False)
     storage_roots: Annotated[
-        StorageRoots, RegistrationPolicy(InheritPrevious)
-    ] = field(kw_only=True)
+        ThreadStorage, AssignedStorageRoots, RegistrationPolicy(InheritPrevious), WireRequired()
+    ] = field(default_factory=UnassignedThreadStorage, kw_only=True)
     # Projects this conversation ran in before its current one: a saved session
     # resumes from them and a started turn finishes in one of them.
     earlier_projects: Annotated[
@@ -189,24 +296,43 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
     project_resume_due: Annotated[
         bool, RegistrationPolicy(InheritPrevious), WireOmitDefault()
     ] = False
-    title: Annotated[ThreadText, RegistrationPolicy(InheritApplied)] = field(
-        default_factory=NoThreadText, kw_only=True
-    )
     role: Annotated[type[ThreadRole], RegistrationPolicy(InheritPrevious)] = (
         AgentThreadRole
     )
     execution: Annotated[type[ThreadExecution], WireOmitDefault()] = field(
         default=NativeThreadExecution, kw_only=True
     )
-    backend: Annotated[
-        type[AgentBackend],
-        WireOmitDefault(),
-        RegistrationPolicy(InheritPrevious),
-    ] = field(default_factory=AgentBackend.for_new_threads, kw_only=True)
     turn_record: TurnRecord = field(default_factory=NoTurnRecord)
     channel_scope_generation: int = 0
     turn_generation: int = 0
-    last_finished_turn_id: str | None = None
+    offered: Annotated[OfferedTools, WireOmitDefault()] = field(
+        default_factory=UnobservedTools, kw_only=True
+    )
+    offered_before_restart: Annotated[OfferedTools, WireOmitDefault()] = field(
+        default_factory=UnobservedTools, kw_only=True
+    )
+
+    def observing_tools(self, offered: OfferedTools) -> Thread:
+        """Fill this incarnation; observations cannot manufacture a restart."""
+        if self.offered == offered or not self.offered.filled_by(offered):
+            return self
+        return replace(self, offered=offered)
+
+    def lost_tools(self) -> tuple[str, ...]:
+        return self.offered.changes_from(self.offered_before_restart)
+
+    def restarted_tools(self) -> Thread:
+        """A new owner incarnation starts unobserved over the last real record."""
+        return replace(self, offered=UnobservedTools(),
+                       offered_before_restart=self.offered.restarted_over(self.offered_before_restart))
+
+    def require_commander(self) -> None:
+        """The thread's declared provider owns eligibility to command."""
+        if not self.model.native(NativeArguments(())).provider_type.may_command:
+            raise RelationViolationError(
+                f"Thread {self.name!r} with declared model {self.model.otherwise(None)!r} "
+                "cannot command: no Codex commander."
+            )
 
     def inherited_history(self, registry, visited):
         if self.name in visited:
@@ -250,7 +376,7 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
 
     @property
     def turn_state(self) -> TurnState:
-        return TurnState(self.turn_record.read(), self.last_finished_turn_id)
+        return self.turn_record.state()
 
     def restart_candidates(self, status):
         return self.execution.restart_candidates(self, status)
@@ -276,14 +402,12 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         if not arguments.loads(NativeRequestTools.native_extension(package)):
             return arguments.argv
         launch = LaunchRoot.from_path(root)
-        directory = self.native_session_directory(launch.path)
-        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-        path = self.path_in(launch.path, lookup=self.incarnation.require_recorded().lookup,
-                            name=self.catalog_filename)
+        path = self.catalog_path(launch.path)
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         catalog = ThreadToolCatalogResult(
             tuple(NativeRequestTools.catalog()), self.service_tier, launch.arguments(),
         )
-        _atomic_write_text(path, json.dumps(catalog.to_wire(), separators=(",", ":")))
+        AtomicFile(path).write_text(FieldCodec.compact(catalog.to_wire()))
         return (*arguments.argv, "--comms-catalog", str(path))
 
     def launch(self) -> ThreadLaunch:
@@ -292,14 +416,13 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
 
         return ThreadLaunch.from_thread(self)
 
+    def catalog_path(self, root: Path) -> Path:
+        return ThreadCatalog.path_in(root, lookup=self.incarnation.require_recorded().lookup)
+
     def native_session_directory(self, root: Path) -> Path:
-        return self.path_in(root, lookup=self.incarnation.require_recorded().lookup, name="")
+        return self.catalog_path(root).parent
 
     def __post_init__(self) -> None:
-        generated = isinstance(self.created_at, _GeneratedCreationTime)
-        object.__setattr__(self, "_generated_created_at", generated)
-        if generated:
-            object.__setattr__(self, "created_at", float(self.created_at))
         super(Thread, self).__post_init__()
         self.incarnation.require_recorded()  # Archives may lack a birth; live threads may not.
         self.process_identity.require_held_by(self.role)
@@ -310,12 +433,7 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
             raise ValueError("Channel scope generation must be a nonnegative 63-bit integer.")
         if type(self.turn_generation) is not int or not 0 <= self.turn_generation < 1 << 63:
             raise ValueError("Turn generation must be an exact nonnegative 63-bit integer.")
-        if self.last_finished_turn_id is not None and (
-            type(self.last_finished_turn_id) is not str
-            or not self.last_finished_turn_id
-            or self.turn_generation == 0
-        ):
-            raise ValueError("Finished turn requires a prior turn generation and ID.")
+        self.turn_record.require_generation(self.turn_generation)
         if self.parent.named(self.name):
             raise RelationViolationError(f"Thread {self.name!r} cannot be its own parent.")
 
@@ -398,9 +516,20 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
                     thread.worktree, thread.execution, thread.model, thread.thinking_level)
         return launch(self) == launch(other)
 
+    def same_turn(self, other: Thread) -> bool:
+        """Compare captured references and epochs, including captures made while idle.
+
+        Reading the mutable turn files again could make two revoked leases look
+        equal. The saved references and registry generations retain their fence.
+        """
+        return (
+            self.turn_record == other.turn_record
+            and self.turn_generation == other.turn_generation
+        )
+
     def without_turn(self) -> Thread:
         """Drop the reference; the registry transaction owns revoking the record."""
-        return replace(self, turn_record=NoTurnRecord())
+        return replace(self, turn_record=self.turn_record.released())
 
     def preserve_registration_history(self, previous: Thread) -> Thread:
         """Metadata writers cannot forge channel scope or reset a finished turn."""
@@ -409,28 +538,24 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
             if scope >= (1 << 63) - 1:
                 raise RelationViolationError("Channel scope generation exhausted")
             scope += 1
-        result = replace(self, created_at=previous.created_at, channel_scope_generation=scope)
+        result = replace(self, created_at=previous.created_at, channel_scope_generation=scope,
+                         offered=previous.offered,
+                         offered_before_restart=previous.offered_before_restart)
         if self.turn_generation != previous.turn_generation:
             result = replace(
-                result, turn_generation=previous.turn_generation,
-                last_finished_turn_id=(
-                    previous.last_finished_turn_id
-                    if self.turn_record == previous.turn_record else None
-                ),
+                result, turn_generation=previous.turn_generation, turn_record=previous.turn_record,
             )
         return result
 
     def for_claim(self, name: str) -> Thread:
-        """Assign an allocated name without turning a generated clock into caller identity."""
-        created = _GeneratedCreationTime(self.created_at) if self._generated_created_at else self.created_at
-        return replace(self, name=name, created_at=created)
+        """Assign an allocated name, retaining the creation value's allocation policy."""
+        return replace(self, name=name)
 
     def for_registration(self, canonical_name: str, previous: Thread | None) -> Thread:
         """Resolve metadata once from its field declarations, retaining exact identity.
 
-        An unchanged declaration is returned intact: replacing it would discard
-        the transient generated-creation marker used by the locked registry to
-        resolve clock collisions. Executor and turn authority are not metadata.
+        Executor and turn authority are not metadata. The creation value retains
+        its own allocation policy across replacements.
         """
         inherited = {}
         if previous is not None:
@@ -466,14 +591,20 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
             return False
         return self.turn_lease.observes_task_turn(
             identity, turn,
-            idle=identity.generation == self.turn_generation and self.last_finished_turn_id == turn.value)
+            idle=identity.generation == self.turn_generation
+            and self.turn_record == FinishedTurn(turn.value))
+
+    @property
+    def turn_identity(self) -> TurnIdentity:
+        """The turn generation this thread's registry entry currently names."""
+        return TurnIdentity(self.incarnation, self.turn_generation)
 
     def observed_turn(self, claim_scope: int) -> TurnFence | None:
         """Passive current/last-completed witness; never a begin-turn grant."""
-        turn_id = self.turn_record.read().observed_id(self.last_finished_turn_id)
+        turn_id = self.turn_state.observed_id()
         if turn_id is None:
             return None
-        return TurnFence(TurnIdentity(self.incarnation, self.turn_generation), turn_id, claim_scope)
+        return TurnFence(self.turn_identity, turn_id, claim_scope)
 
     def latest_idle_turn(self, fence: TurnFence, claim_scope: int) -> bool:
         """Only the exact latest completed turn can release a dependency."""
@@ -501,7 +632,7 @@ def current_thread(registry) -> Thread:
     from .launch_runtime import ThreadLaunch
 
     launch = ThreadLaunch.current()
-    return registry.new_thread(
+    return Thread(
         name=launch.name,
         tags=launch.tags,
         worktree=launch.worktree,

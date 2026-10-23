@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import base64
 import binascii
-from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Annotated, Literal
-from agent_comms import field_codec
+
 from acp.schema import (
     BlobResourceContents,
     EmbeddedResourceContentBlock,
@@ -15,7 +14,9 @@ from acp.schema import (
     PromptRequest,
     TextResourceContents,
 )
-from pydantic import TypeAdapter
+
+from agent_comms import field_codec
+
 from .mro_dispatch import MroDispatch, handles
 
 IMAGE_MIME_TYPES = frozenset({"image/png", "image/jpeg", "image/gif", "image/webp"})
@@ -82,13 +83,8 @@ class PromptImages(MroDispatch):
             raise ValueError("Image input requires base64 data and a MIME type.")
 
 
-_PROMPT_CONTENT: TypeAdapter[list[object]] = TypeAdapter(
-    PromptRequest.model_fields["prompt"].rebuild_annotation()
-)
-
-
-def prompt_images(blocks: Sequence[object]) -> tuple[ImageInput, ...]:
+def prompt_images(request: PromptRequest) -> tuple[ImageInput, ...]:
     images = PromptImages()
-    for block in _PROMPT_CONTENT.validate_python(list(blocks), strict=True):
+    for block in request.prompt:
         images.dispatch_sync(block)
     return tuple(images.images)

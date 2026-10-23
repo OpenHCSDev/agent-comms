@@ -1,5 +1,6 @@
 """Build-bound close uses real repositories and a retained-history bus copy."""
 
+
 import subprocess
 import sys
 import time
@@ -15,42 +16,36 @@ from agent_comms.build_identity import (
     UninstalledRepositoryError,
 )
 from agent_comms.check_root import CheckRoot
-from agent_comms.commander.config import CommanderConfig
+from agent_comms.commander.order import Commander
 from agent_comms.commander.standing import InstallDue
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
-from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
-from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
-from agent_comms.installer.runtime_resolution import (
-    ArchiveRecord,
-    CommitRecord,
-    CorePackage,
-    GitRecord,
-    PackageRecord,
-    RuntimePackage,
-    RuntimeResolution,
-)
+from agent_comms.goal_actions import CreateProblemGoalAction
+from agent_comms.goals import CountCheckResult, OrderCheck
+from agent_comms.installer.probes.packages import ArchiveRecord, CommitRecord, GitRecord, PackageRecord
+from agent_comms.installer.runtime_resolution import CorePackage, RuntimePackage, RuntimeResolution
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repo import Repo
-from agent_comms.standing_rules import StandingRule
+from agent_comms.repo import GitCommandError, Repo
 from agent_comms.repository_name import RepositoryName
+from agent_comms.standing_rules import StandingRule
 from agent_comms.todos import (
     CommitDelivery,
     DoneTodoState,
-    GoalRef,
-    OpenTodoState,
     FileDeliveryEvidence,
+    OpenTodoState,
     OperationDelivery,
     PendingProblemOrder,
     Todo,
 )
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsOrderDoneTool, CommsProblemCloseTool, CommsTodoCreateTool
+from fixture_git import IDENTITY
 from order_scope_fixture import FIX_SCOPE
 from source_revision_fixture import SourceRepository
+from agent_comms.threads import Thread
 
 
 @dataclass(frozen=True)
@@ -79,12 +74,7 @@ def proof_build_checkouts(
             subprocess.run(
                 (
                     "git",
-                    "-c",
-                    "user.name=Proof Build",
-                    "-c",
-                    "user.email=proof@example.invalid",
-                    "-c",
-                    "commit.gpgsign=false",
+                    *IDENTITY,
                     "commit",
                     "--allow-empty",
                     "-m",
@@ -147,7 +137,7 @@ def test_merge_in_head_cannot_close_until_the_recorded_build_contains_it(
     todo = comms.goals.todos.create(
         "P1", graph.repository.github, "Prove installation instead of inferring it from merge",
         creator=lead, assigner=lead.incarnation, owner=lead, generation="fixture-goal",
-        goal=GoalRef(lead.name, lead.created_at, "fixture-goal"),
+        request=comms.goals.todos.add_request(lead.incarnation, "Prove the installed build").id,
         review_at=RecordedEventTime(1000), order=merged,
     )
     with pytest.raises(DeliveredCommitNotInstalledError):
@@ -230,11 +220,10 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
         for graph in proof_build_checkouts
         if graph.repository.github == CorePackage.repository
     )
-    source = Comms(tmp_path / "bus")
-    source.messaging.initialize_private_initial_protocol()
+    source = wire(tmp_path / "bus")
     for number, name in enumerate(("lead", "worker"), 1):
         source.registry.declare(
-            source.registry.new_thread(
+            Thread(
                 name, frozenset({"comms"}), str(tmp_path), created_at=float(number)
             )
         )
@@ -255,14 +244,9 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
     artifact.write_text(works)
     source.registry.storage_rule = replace(source.registry.storage_rule, scratch_base=tmp_path)
     with CheckRoot(source, ("lead", "worker"), tmp_path / "proof" / "copied").open() as copied:
-        copied.goals.update_goal(
-            "lead",
-            SetGoalAction(
-                text="Record the copied application proof",
-                goal_id="request",
-                order=RequestGoalOrder(),
-            ),
-        )
+        request = copied.goals.todos.add_request(
+            copied.registry.require("lead").incarnation, "Record the copied application proof",
+        ).id
         cases = (
             ("P1", OperationDelivery(proof_build=installed), None),
             ("P2", OperationDelivery(proof_build=older), ProofBuildMismatchError),
@@ -294,7 +278,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
                     order=CreateProblemGoalAction(
                         problem=problem,
                         order=order,
-                        request="request",
+                        request=request,
                         review_at=RecordedEventTime(4102444800),
                         commander="lead", assigner=caller.identity(copied),
                         repo=graph.repository.github,
@@ -332,7 +316,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
 
 def test_build_containment_does_not_turn_git_failure_into_absence_or_success(proof_build_checkouts):
     graph = proof_build_checkouts[0]
-    with pytest.raises(subprocess.CalledProcessError):
+    with pytest.raises(GitCommandError):
         RecordedBuildIdentity.installed().contains("0" * 40, graph.repository.checkout)
 
 
@@ -356,9 +340,9 @@ def test_install_due_compares_fetched_main_to_installed_build(
     # Deliberately stale: the rule must fetch rather than trust the existing remote ref.
     Repo.git(checkout, "update-ref", "refs/remotes/origin/main", graph.oldest)
     before = Repo.git(checkout, "rev-parse", "HEAD")
-    bus = Comms(tmp_path / "bus")
-    config = CommanderConfig.on_machine("lead", (graph.repository,), bus.root, tmp_path / "home")
-    CommanderConfig.path_in(bus.root).write_text(config.model_dump_json())
+    bus = wire(tmp_path / "bus")
+    bus.registry.declare(Thread("lead", frozenset(), str(checkout)))
+    Commander.on_root("lead", (graph.repository,), bus.root)
 
     due = InstallDue.violations(bus, "lead")
 
@@ -396,9 +380,9 @@ def test_install_waits_for_merges_to_settle_into_one_batch(
     subprocess.run(("git", "init", "--bare", str(origin)), check=True, capture_output=True)
     Repo.git(checkout, "remote", "set-url", "origin", str(origin))
     Repo.git(checkout, "push", "origin", f"{graph.newer}:refs/heads/main")
-    bus = Comms(tmp_path / "bus")
-    config = CommanderConfig.on_machine("lead", (graph.repository,), bus.root, tmp_path / "home")
-    CommanderConfig.path_in(bus.root).write_text(config.model_dump_json())
+    bus = wire(tmp_path / "bus")
+    bus.registry.declare(Thread("lead", frozenset(), str(checkout)))
+    Commander.on_root("lead", (graph.repository,), bus.root)
     merged = int(Repo.git(checkout, "log", "-1", "--format=%ct", graph.newer))
 
     monkeypatch.setattr(time, "time", lambda: merged + InstallDue.settle - 1)

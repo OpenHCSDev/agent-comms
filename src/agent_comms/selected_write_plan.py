@@ -10,34 +10,33 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import json
 import os
-import secrets
 from contextlib import suppress
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, Annotated
+from typing import TYPE_CHECKING, Literal
 
 from .coordination_database import CoordinationStore
 from .locked_store import DurableFile, PatternFile
+from .store_files import AtomicFile
 
 if TYPE_CHECKING:
     from .acp_extension import SelectedWriteAcceptedUpdate
+    from .comms import Comms
+    from .coordination_tables.assignments import WakeAssignment
+    from .threads import Thread
 
 from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordinator import Coordination
 
-from .comms import Comms
+from .child_process import Platform
 from .coordination_cohort import sealed_cohort_assignments
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ExistingFileClaim
-from .field_codec import FieldCodec, Id128Text, MalformedRecord, WireName
+from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .message_reference import MessageReference
-from .private_path import PrivateDirectoryRole, PrivateFileRole, fsync_directory
-from .store_files import _store_lock
-from .thread_identity import ClaimedIdentity, RecordedThreadIncarnation
-from .threads import Thread
+from .private_path import PrivateDirectoryRole, PrivateFileRole
+from .thread_identity import ClaimedIdentity, ClaimScoped, RecordedThreadIncarnation
 
 _MAX_BYTES = 1024 * 1024
 
@@ -50,11 +49,10 @@ class PlannedWrite:
 
 
 @dataclass(frozen=True, slots=True)
-class SelectedWriteBinding:
+class SelectedWriteBinding(ClaimScoped):
     root_id: str
     source: MessageReference
     assignment_id: str
-    claim_scope: Annotated[ClaimedIdentity, WireName("admission")]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -67,9 +65,8 @@ class SelectedWriteIntent(DeclaredFamily, affix="WriteIntent"):
     source_seq: int
     source_message_id: str
     claim_id: str
-    owner: str
-    incarnation: float
-    claim_epoch: Annotated[int, WireName("admission_epoch")]
+    owner: RecordedThreadIncarnation
+    claim_epoch: int
     expected_attempt_ordinal: Literal[1]
     operation_id: str
     resource: str
@@ -79,8 +76,9 @@ class SelectedWriteIntent(DeclaredFamily, affix="WriteIntent"):
     @property
     def binding(self) -> SelectedWriteBinding:
         return SelectedWriteBinding(
-            self.root_id, MessageReference(self.source_seq, self.source_message_id),
-            self.claim_id, ClaimedIdentity(RecordedThreadIncarnation(self.owner, self.incarnation), self.claim_epoch),
+            root_id=self.root_id, source=MessageReference(self.source_seq, self.source_message_id),
+            assignment_id=self.claim_id,
+            claimed_identity=ClaimedIdentity(self.owner, self.claim_epoch),
         )
 
     def require_accepted(self):
@@ -120,7 +118,7 @@ class SelectedWritePlans(DurableFile, PatternFile):
     def __init__(self, comms: Comms, root_id: str):
         self.comms = comms
         self.root_id = root_id
-        self.directory = comms.root / self.root_directory
+        self.directory = self.directory_in(comms.root)
 
     def _prepare_dir(self) -> None:
         with suppress(FileExistsError):
@@ -129,7 +127,7 @@ class SelectedWritePlans(DurableFile, PatternFile):
         # Also on an existing directory: a previous mkdir may have survived
         # while its parent fsync failed. Do not acknowledge a later intent
         # until the directory entry itself is known durable.
-        fsync_directory(self.comms.root)
+        Platform.current().sync_directory(self.comms.root)
 
     def _validate_dir(self) -> bool:
         try:
@@ -144,14 +142,12 @@ class SelectedWritePlans(DurableFile, PatternFile):
         if not self._validate_dir():
             return None
         try:
-            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+            fd = PrivateFileRole.read(path, IdentityConflict("Selected write intent is not private"))
         except FileNotFoundError:
             return None
         try:
             info = os.fstat(fd)
-            if PrivateFileRole.violation(info) is not None:
-                raise IdentityConflict("Selected write intent is not private")
-            if info.st_nlink != 1 or info.st_size > 2 * _MAX_BYTES:
+            if info.st_size > 2 * _MAX_BYTES:
                 raise IdentityConflict("Selected write intent has unsafe identity")
             with os.fdopen(fd, "rb") as stream:
                 fd = -1
@@ -186,15 +182,14 @@ class SelectedWritePlans(DurableFile, PatternFile):
         raw = contents.encode("utf-8")
         if not raw or len(raw) > _MAX_BYTES:
             raise IdentityConflict("Selected write requires 1..1048576 UTF-8 bytes")
-        with _store_lock(self.comms._wire_lock_path):
-            with self.comms.bus.log.locked():
-                marker = self.comms.bus.log.private_marker_unlocked()
-            if marker.root_id != self.root_id or not marker.claims:
-                raise IdentityConflict("Selected write requires matching private claim root")
+        with self.comms.registry.store.locked():
+            self.comms.registry.store.private_guard_unlocked().require_root(
+                self.root_id, IdentityConflict("Selected write requires its original native namespace"),
+            )
             owner, claimed_generation = self.comms.registry.live_owner_with_claim(owner_name)
             if not owner.process_identity.runs_here() or owner.executing:
                 raise IdentityConflict("Selected write owner is not idle in this process")
-            initial = self.comms.bus.log.read_delivery_cohort(self.root_id, source_seq)
+            initial = self.comms.bus.bus.delivery(source_seq)
             if initial.message.message_id != source_message_id:
                 raise IdentityConflict("Selected write source identity changed")
             lookup = owner.incarnation.lookup
@@ -205,7 +200,7 @@ class SelectedWritePlans(DurableFile, PatternFile):
                     for assignment in assignments
                     for pending in assignment.lifecycle.writable_pending_assignments(assignment)
                     if pending.source == MessageReference(source_seq, source_message_id)
-                    and pending.recipient == owner.name
+                    and pending.recipient_lookup == lookup
                 ]
                 if len(selected) != 1:
                     raise IdentityConflict("Selected write has no one pending FULL selected claim")
@@ -216,15 +211,14 @@ class SelectedWritePlans(DurableFile, PatternFile):
             record = AcceptedWriteIntent(
                 schema=1, root_id=self.root_id, source_seq=source_seq,
                 source_message_id=source_message_id, claim_id=selected[0].assignment_id,
-                owner=owner.name, incarnation=owner.created_at, claim_epoch=claimed_generation,
+                owner=owner.incarnation.require_recorded(), claim_epoch=claimed_generation,
                 expected_attempt_ordinal=1, operation_id=operation_id, resource=str(path),
                 contents_b64=base64.b64encode(raw).decode("ascii"), digest=hashlib.sha256(raw).hexdigest(),
             )
-            data = json.dumps(FieldCodec.encode(record), sort_keys=True, separators=(",", ":")).encode()
+            data = FieldCodec.compact(FieldCodec.encode(record), sort_keys=True).encode()
             try:
-                fd = os.open(
-                    record_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600
-                )
+                fd = PrivateFileRole.create(
+                    record_path, IdentityConflict("Selected write intent is not private"))
             except FileExistsError as error:
                 raise IdentityConflict(
                     "Selected write intent already accepted or UNKNOWN; never retry"
@@ -234,7 +228,7 @@ class SelectedWritePlans(DurableFile, PatternFile):
                     stream.write(data)
                     stream.flush()
                     os.fsync(stream.fileno())
-                fsync_directory(self.directory)
+                Platform.current().sync_directory(self.directory)
             except BaseException:
                 # The visible file may have committed despite the error. Keep
                 # it as an UNKNOWN barrier; never unlink/retry the operation.
@@ -253,8 +247,8 @@ class SelectedWritePlans(DurableFile, PatternFile):
             return None
         row = row.require_accepted()
         expected = SelectedWriteBinding(
-            self.root_id, assignment.source, assignment.assignment_id,
-            ClaimedIdentity(owner.incarnation, claimed_generation),
+            root_id=self.root_id, source=assignment.source, assignment_id=assignment.assignment_id,
+            claimed_identity=ClaimedIdentity(owner.incarnation, claimed_generation),
         )
         if row.binding != expected:
             raise IdentityConflict("Selected write intent is stale or uncertain")
@@ -270,16 +264,4 @@ class SelectedWritePlans(DurableFile, PatternFile):
         if accepted.operation_id != operation_id:
             raise IdentityConflict("Selected write intent is no longer unique")
         completed = accepted.applied()
-        temporary = path.with_name(f".{path.name}.{secrets.token_hex(8)}.tmp")
-        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-        try:
-            with os.fdopen(fd, "wb") as stream:
-                stream.write(json.dumps(FieldCodec.encode(completed), sort_keys=True, separators=(",", ":")).encode())
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(temporary, path)
-            fsync_directory(self.directory)
-        except BaseException:
-            # A post-write failure is UNKNOWN. The bus claim and attempt
-            # remain visible; no path automatically reissues the write.
-            raise
+        AtomicFile(path).write_bytes(FieldCodec.compact(FieldCodec.encode(completed), sort_keys=True).encode())

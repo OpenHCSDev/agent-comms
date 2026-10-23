@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import sqlite3
-from dataclasses import dataclass
-from typing import Annotated, Literal
+from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
-from agent_comms.coordination_errors import SchemaVersionError
-from agent_comms.coordination_schema import CoordinatorTable
+from agent_comms.coordination_errors import IdentityConflict, SchemaVersionError
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.participants import OwnerGenerations, OwnerRecord, Participants
-from agent_comms.coordinator import Coordination
-from agent_comms.private_runtime_schema import PrivateRuntimeSchema
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 
+from .audience_manifest import MAX_AUDIENCE_BYTES
+from .coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
 from .field_codec import MalformedRecord, WireName
+from .response_acknowledgement import _canonical
 from .typed_table import (
     Column,
     ColumnGuard,
@@ -29,22 +31,21 @@ from .typed_table import (
     InitialOneWayColumn,
     NoDelete,
     SharedFileTables,
-    SQLiteJournalMode,
     TypedTable,
+    WithoutRowid,
 )
+
+if TYPE_CHECKING:
+    from .bus_publication import Delivered
+    from .private_registry_guard import RegistryPrivacy
 
 _LOG = logging.getLogger(__name__)
 
 
-class CohortTable(SharedFileTables, DurableTables, PrivateRuntimeSchema):
+class CohortTable(PrivateCoordinatorTable):
     """Mandatory sealed N/K acknowledgement declarations."""
 
     __slots__ = ()
-    schema_error = SchemaVersionError
-
-    @classmethod
-    def install(cls, store) -> None:
-        install_private_cohort_schema(store)
 
 
 class AwarenessTable(SharedFileTables, DurableTables):
@@ -53,6 +54,20 @@ class AwarenessTable(SharedFileTables, DurableTables):
     __slots__ = ()
     schema_error = SchemaVersionError
 
+    @classmethod
+    def install_optional(cls, db: sqlite3.Connection) -> None:
+        """Optional provenance cannot roll back mandatory native preparation."""
+        db.execute("SAVEPOINT optional_awareness_install")
+        try:
+            if not cls.stored_schema(db):
+                cls.create_schema(db)
+            assert_optional_awareness_schema(db)
+        except (sqlite3.Error, SchemaVersionError, MalformedRecord) as error:
+            db.execute("ROLLBACK TO optional_awareness_install")
+            _LOG.warning("Optional awareness schema unavailable: %r", error, exc_info=error)
+        finally:
+            db.execute("RELEASE optional_awareness_install")
+
 
 @dataclass(frozen=True, kw_only=True)
 class ClaimBatchAcknowledgements(
@@ -60,7 +75,7 @@ class ClaimBatchAcknowledgements(
     GuardedColumns,
     NoDelete,
     CohortTable,
-    TypedTable,
+    WithoutRowid,
     declared_name="claim_batch_receipts",
 ):
     transition_column = "sealed"
@@ -91,6 +106,8 @@ class ClaimBatchAcknowledgements(
         WHERE d.wire_root_id = OLD.wire_root_id AND d.wire_seq = OLD.wire_seq
         AND d.kind = 'unmentioned_observer')))"""),
     )
+    manifest_format: ClassVar[str] = "audience-v1"
+    decision_domain: ClassVar[bytes] = b"agent-comms:cohort-decisions:v1\0"
 
     wire_root_id: Annotated[
         str,
@@ -118,7 +135,38 @@ class ClaimBatchAcknowledgements(
     policy_version: Annotated[str, FrozenColumn(check="length(policy_version) BETWEEN 1 AND 256")]
     accepted_at_ms: Annotated[int, FrozenColumn(check="accepted_at_ms >= 0")]
     sealed: bool = False
-    without_rowid = True
+
+    @classmethod
+    def decision_hash(cls, delivery: Delivered) -> str:
+        encoded = _canonical([decision.to_wire() for decision in delivery.decisions])
+        if len(encoded) > MAX_AUDIENCE_BYTES:
+            raise ValueError("Private decision set exceeds its byte bound.")
+        return hashlib.sha256(cls.decision_domain + encoded).hexdigest()
+
+    @classmethod
+    def for_delivery(
+        cls, delivery: Delivered, privacy: RegistryPrivacy, accepted_at_ms: int,
+    ) -> ClaimBatchAcknowledgements:
+        """Native acknowledgement facts derive from the actual delivered value."""
+        return cls(
+            wire_root_id=privacy.namespace,
+            wire_seq=delivery.seq,
+            message_id=delivery.message_id,
+            exact_target=delivery.target,
+            envelope_digest=delivery.audience.wire_envelope_digest,
+            audience_digest=delivery.audience.digest,
+            decisions_digest=cls.decision_hash(delivery),
+            member_count=len(delivery.audience.recipients),
+            claim_count=sum(len(decision.claim_decisions()) for decision in delivery.decisions),
+            manifest_codec=cls.manifest_format,
+            resolver_version=RESOLVER_VERSION,
+            policy_version=POLICY_VERSION,
+            accepted_at_ms=accepted_at_ms,
+        )
+
+    def require_delivery(self, delivery: Delivered, privacy: RegistryPrivacy) -> None:
+        if replace(self, sealed=False) != self.for_delivery(delivery, privacy, self.accepted_at_ms):
+            raise IdentityConflict("sealed cohort acknowledgement conflicts with committed bus")
 
     def require_selected_claim(self, assignment: WakeAssignment) -> None:
         """An awareness contribution borrows this original sealed acknowledgement."""
@@ -128,7 +176,7 @@ class ClaimBatchAcknowledgements(
             raise ProjectionUnavailableError("selected source acknowledgement is unsealed or changed")
 
 @dataclass(frozen=True, kw_only=True)
-class ClaimBatchMembers(GuardedInserts, ImmutableRows, CohortTable, TypedTable):
+class ClaimBatchMembers(GuardedInserts, ImmutableRows, CohortTable, WithoutRowid):
 
     insert_condition = """((SELECT sealed FROM claim_batch_receipts r
         WHERE r.wire_root_id = NEW.wire_root_id AND r.wire_seq = NEW.wire_seq) != 0)
@@ -149,15 +197,14 @@ class ClaimBatchMembers(GuardedInserts, ImmutableRows, CohortTable, TypedTable):
         ("claim_id",),
         ("wire_root_id", "wire_seq", "recipient_lookup"),
     )
-    without_rowid = True
 
     @classmethod
     def references(cls):
         return (
-            ForeignKey(("claim_id",), WakeAssignment, ("assignment_id",)),
-            ForeignKey(("recipient_lookup",), Participants, ("participant_lookup",)),
+            ForeignKey(columns=("claim_id",), target=WakeAssignment, target_columns=("assignment_id",)),
+            ForeignKey(columns=("recipient_lookup",), target=Participants, target_columns=("participant_lookup",)),
             ForeignKey(
-                ("wire_root_id", "wire_seq"), ClaimBatchAcknowledgements, ("wire_root_id", "wire_seq")
+                columns=("wire_root_id", "wire_seq"), target=ClaimBatchAcknowledgements, target_columns=("wire_root_id", "wire_seq")
             ),
         )
 
@@ -167,7 +214,7 @@ class CohortDeliveries(
     GuardedInserts,
     ImmutableRows,
     CohortTable,
-    TypedTable,
+    WithoutRowid,
     declared_name="cohort_delivery_receipts",
 ):
     """Sealed deliveries, including observers that receive no execution claim."""
@@ -206,7 +253,6 @@ class CohortDeliveries(
         ("wire_root_id", "wire_seq", "claim_id"),
     )
     indexes = (Index(("recipient_lookup", "wire_seq")),)
-    without_rowid = True
 
     @classmethod
     def sealed_sequences_after(
@@ -233,10 +279,10 @@ class CohortDeliveries(
     @classmethod
     def references(cls):
         return (
-            ForeignKey(("recipient_lookup",), Participants, ("participant_lookup",)),
-            ForeignKey(("claim_id",), WakeAssignment, ("assignment_id",)),
+            ForeignKey(columns=("recipient_lookup",), target=Participants, target_columns=("participant_lookup",)),
+            ForeignKey(columns=("claim_id",), target=WakeAssignment, target_columns=("assignment_id",)),
             ForeignKey(
-                ("wire_root_id", "wire_seq"), ClaimBatchAcknowledgements, ("wire_root_id", "wire_seq")
+                columns=("wire_root_id", "wire_seq"), target=ClaimBatchAcknowledgements, target_columns=("wire_root_id", "wire_seq")
             ),
         )
 
@@ -250,30 +296,23 @@ class AwarenessClaimGenerations(
         ON r.wire_root_id=m.wire_root_id AND r.wire_seq=m.wire_seq JOIN owner_generations g
         ON g.owner_lookup=m.recipient_lookup WHERE m.claim_id=NEW.claim_id
         AND m.wire_root_id=NEW.wire_root_id AND m.wire_seq=NEW.wire_seq
-        AND m.recipient_lookup=NEW.recipient_lookup AND c.recipient=NEW.canonical_thread
-        AND c.message_id=r.message_id AND r.sealed=0 AND g.owner_thread=NEW.canonical_thread
+        AND m.recipient_lookup=NEW.recipient_lookup AND c.recipient_lookup=NEW.recipient_lookup
+        AND c.message_id=r.message_id AND r.sealed=0
         AND g.generation=NEW.owner_generation))"""
 
     claim_id: Annotated[str, Column(primary_key=True)]
     wire_root_id: str
     wire_seq: Annotated[int, Column(check="wire_seq > 0")]
     owner_lookup: Annotated[str, WireName("recipient_lookup"), Column(record_key=True)]
-    owner_thread: Annotated[
-        str,
-        WireName("canonical_thread"),
-        Column(record_key=True, check="length(canonical_thread) BETWEEN 1 AND 256"),
-    ]
     owner_generation: Annotated[int, Column(check="owner_generation > 0")]
 
     def current(self, expected: OwnerGenerations) -> bool:
-        """A historical capture is omitted; a changed current owner refuses."""
+        """Old owner generations are historical; renaming preserves their identity."""
         from .wake_candidate_index import ProjectionUnavailableError
 
-        if self.owner_generation < expected.generation:
-            return False
-        if self.owner_identity != expected:
+        if self.owner_lookup != expected.owner_lookup or self.owner_generation > expected.generation:
             raise ProjectionUnavailableError("captured participant owner changed")
-        return True
+        return self.owner_identity == expected
 
     def require_selection(self, assignment: WakeAssignment, acknowledgement: ClaimBatchAcknowledgements) -> None:
         """Verify this immutable acceptance capture against its original claim."""
@@ -282,20 +321,18 @@ class AwarenessClaimGenerations(
         expected = type(self)(
             claim_id=assignment.assignment_id, wire_root_id=acknowledgement.wire_root_id,
             wire_seq=assignment.wire_seq, owner_lookup=assignment.recipient_lookup,
-            owner_thread=assignment.recipient, owner_generation=self.owner_generation,
+            owner_generation=self.owner_generation,
         )
         if self != expected:
             raise ProjectionUnavailableError("selected source generation provenance changed")
 
     def require_obligation(self, execution, link, assignment, obligation) -> None:
         """Captured ownership and the reply's original relational key agree."""
-        from .coordination_tables.executions import ExecutionOrigin
         from .wake_candidate_index import ProjectionUnavailableError
 
-        if execution.origin is not ExecutionOrigin.WIRE:
-            raise ProjectionUnavailableError("open obligation has no wire origin")
+        execution.origin.require_obligation()
         original_owner = OwnerGenerations(
-            owner_lookup=execution.owner_lookup, owner_thread=execution.owner_thread,
+            owner_lookup=execution.owner_lookup,
             generation=self.owner_generation,
         )
         original_link = type(link)(
@@ -312,44 +349,15 @@ class AwarenessClaimGenerations(
     @classmethod
     def references(cls):
         return (
-            ForeignKey(("claim_id",), WakeAssignment, ("assignment_id",)),
-            ForeignKey(("owner_lookup",), Participants, ("participant_lookup",)),
+            ForeignKey(columns=("claim_id",), target=WakeAssignment, target_columns=("assignment_id",)),
+            ForeignKey(columns=("owner_lookup",), target=Participants, target_columns=("participant_lookup",)),
             ForeignKey(
-                ("wire_root_id", "wire_seq", "claim_id"),
-                ClaimBatchMembers,
-                ("wire_root_id", "wire_seq", "claim_id"),
+                columns=("wire_root_id", "wire_seq", "claim_id"),
+                target=ClaimBatchMembers,
+                target_columns=("wire_root_id", "wire_seq", "claim_id"),
             ),
         )
 
 def assert_optional_awareness_schema(db: sqlite3.Connection) -> None:
     if not AwarenessTable.stored_schema(db) or AwarenessTable.schema_differs(db):
         raise SchemaVersionError("optional awareness generation schema is unavailable")
-
-
-def _install_optional_awareness_schema(db: sqlite3.Connection) -> None:
-    if not AwarenessTable.stored_schema(db):
-        AwarenessTable.create_schema(db)
-    assert_optional_awareness_schema(db)
-
-
-def install_private_cohort_schema(store: Coordination) -> None:
-    """Create current acknowledgement tables on a fresh coordinator; no old-schema repair."""
-    with store.session.writing() as db:
-        CoordinatorTable.require_schema(db)
-        if not CohortTable.stored_schema(db):
-            CohortTable.create_schema(db)
-        CohortTable.require_installed(db)
-        if SQLiteJournalMode.read(db.execute("PRAGMA journal_mode")) != [
-            SQLiteJournalMode("delete")
-        ]:
-            raise SchemaVersionError("cohort schema requires rollback-journal mode")
-        # Missing/corrupt optional metadata must not roll back mandatory cohort
-        # creation, and no prior claim is retroactively assigned a generation.
-        db.execute("SAVEPOINT optional_awareness_install")
-        try:
-            _install_optional_awareness_schema(db)
-        except (sqlite3.Error, SchemaVersionError, MalformedRecord) as error:
-            db.execute("ROLLBACK TO optional_awareness_install")
-            _LOG.warning("Optional awareness schema unavailable: %r", error, exc_info=error)
-        finally:
-            db.execute("RELEASE optional_awareness_install")

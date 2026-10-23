@@ -24,7 +24,7 @@ class GrantedSend(SendOutcome):
         return self._drain(session)
 
     async def _drain(self, session):
-        await session.stdin.drain()
+        await session.native.drain()
         return True
 
 

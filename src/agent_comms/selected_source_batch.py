@@ -1,13 +1,13 @@
 """Captured selected sources share one input; they do not create another inbox."""
 
 import hashlib
-import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .bus_publication import CommittedDelivery
+from .bus_publication import Delivered
 from .coordination_errors import IdentityConflict
 from .coordination_tables.assignments import WakeAssignment
+from .field_codec import FieldCodec
 from .messages import InfoKind, Message
 from .native_failures import NativePiUnavailable
 from .turn_context import ReplyRouteSegment, WireProvenance
@@ -26,7 +26,7 @@ class SelectedSource:
 
     assignment_id: str
     store: AssignmentStore
-    delivery: CommittedDelivery
+    delivery: Delivered
 
     @property
     def assignment(self) -> WakeAssignment:
@@ -85,7 +85,7 @@ class SelectedSourceBatch:
     @property
     def execution_id(self) -> str:
         return "wirev1" + hashlib.sha256(
-            json.dumps(self.assignment_ids, separators=(",", ":")).encode()
+            FieldCodec.compact(self.assignment_ids).encode()
         ).hexdigest()
 
     @property

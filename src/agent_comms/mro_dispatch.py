@@ -6,6 +6,7 @@ from collections.abc import Callable, Iterable, Iterator
 from typing import Any, ClassVar, TypeVar
 
 Handler = TypeVar("Handler", bound=Callable[..., Any])
+Value = TypeVar("Value")
 
 
 def handles(*classes: type) -> Callable[[Handler], Handler]:
@@ -53,17 +54,24 @@ class MroDispatch:
                 if capability in classes:
                     yield name
 
+    @classmethod
+    def handler_for(cls, value_type: type) -> Callable[..., Any]:
+        """The most specific class-level handler declared for ``value_type``."""
+        return getattr(cls, next(cls.handler_names_for(value_type)))
+
     def handlers_for(self, value: Any):
         for name in self.handler_names_for(type(value)):
             yield getattr(self, name)
 
-    async def dispatch(self, value: Any, *args, **kwargs) -> Any:
+    async def dispatch(self, value: Value, *args, **kwargs) -> Value | None:
         handlers = tuple(self.handlers_for(value))
         if not handlers:
             return value
         return await self.consume_handlers(value, handlers, *args, **kwargs)
 
-    async def consume_handlers(self, value: Any, handlers: Iterable[Handler], *args, **kwargs) -> Any:
+    async def consume_handlers(
+        self, value: Value, handlers: Iterable[Handler], *args, **kwargs,
+    ) -> Value | None:
         """Consume the selected declarations inside the consumer's resource lifetime."""
         for handler in handlers:
             replacement = await handler(value, *args, **kwargs)
@@ -72,11 +80,13 @@ class MroDispatch:
             value = self.replace_value(value, replacement)
         return value
 
-    def dispatch_sync(self, value: Any, *args, **kwargs) -> Any:
+    def dispatch_sync(self, value: Value, *args, **kwargs) -> Value | None:
         """Consume saved presentation facts without introducing an event loop."""
         return self.consume_handlers_sync(value, self.handlers_for(value), *args, **kwargs)
 
-    def consume_handlers_sync(self, value: Any, handlers: Iterable[Handler], *args, **kwargs) -> Any:
+    def consume_handlers_sync(
+        self, value: Value, handlers: Iterable[Handler], *args, **kwargs,
+    ) -> Value | None:
         for handler in handlers:
             replacement = handler(value, *args, **kwargs)
             if replacement is self.DISCARD:
@@ -85,7 +95,7 @@ class MroDispatch:
         return value
 
     @staticmethod
-    def replace_value(value: Any, replacement: Any) -> Any:
+    def replace_value(value: Value, replacement: Value | None) -> Value:
         if replacement is None:
             return value
         if type(replacement) is not type(value):

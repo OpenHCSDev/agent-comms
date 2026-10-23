@@ -2,22 +2,24 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from collections.abc import Iterator
 from contextlib import aclosing
 from functools import cached_property
 from pathlib import Path
 from typing import AsyncIterator, BinaryIO, Self
 
-from agent_comms.cli_protocol import WireModel
-from agent_comms.coordination_database import CoordinationStore
+from agent_comms.bus import Bus
 from agent_comms.private_path import FileRevision
-from agent_comms.wire_watch import WatchSource, WireWatch
-from agent_comms_hooks.session import SessionHook
-from .claude_protocol import CLAUDE_RECORD, ClaudeRecord, ClaudeSession, ClaudeMonitorFrame
-from .history import ClaudeHistory, HarnessAddress, JsonLinesFile, OfflineHistory, OnlineHistory
-from .shared import Binding, Enrol, LineMonitorBridge, Options, run_bridge
 from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts
 from agent_comms.thread_text import NoThreadText, ThreadText
+from agent_comms.watched import FileSource
+from agent_comms_hooks.session import SessionHook
+
+from ..wire_models import WireModel
+from .claude_protocol import CLAUDE_RECORD, ClaudeMonitorFrame, ClaudeRecord, ClaudeSession
+from .history import ClaudeHistory, HarnessAddress, JsonLinesFile, OfflineHistory, OnlineHistory
+from .shared import Binding, Enrol, LineMonitorBridge, Options, run_bridge
 
 
 class SubagentMeta(WireModel):
@@ -36,7 +38,7 @@ class ClaudeJsonLines(JsonLinesFile):
     def record_updates(self, record: ClaudeRecord, state: ClaudeSession, offset: int,
                        raw: bytes) -> Iterator[RuntimeUpdate]:
         yield from state.located(record.cwd)
-        for update in record.updates(state):
+        for update in (*state.version_reported(record.version), *record.updates(state)):
             yield from update.during(state.phase)
 
     def facts(self, stream: BinaryIO, boundary: int) -> Iterator[RuntimeUpdate]:
@@ -91,7 +93,7 @@ class ClaudeBridge(RunningClaude, LineMonitorBridge, declared_name=None):
     window_bytes = ClaudeMonitorFrame.BATCH_CHARS * 2
     RECENT_BYTES = 4 * 1024 * 1024
 
-    def __init__(self, options: Options, binding: Binding, db: CoordinationStore) -> None:
+    def __init__(self, options: Options, binding: Binding, db: sqlite3.Connection) -> None:
         LineMonitorBridge.__init__(self, options, binding, db)
         RunningClaude.__init__(self, binding.thread)
 
@@ -108,7 +110,7 @@ class ClaudeBridge(RunningClaude, LineMonitorBridge, declared_name=None):
     async def transcript(self) -> AsyncIterator[RuntimeUpdate]:
         session = self.start_state()
         source = self.options.operation.transcript_source()
-        async with aclosing(WireWatch.observations(WatchSource.modified_file(source))) as changes:
+        async with aclosing(Bus.watch_sources(FileSource(source))) as changes:
             await anext(changes)
             while not source.exists():
                 await anext(changes)
@@ -131,12 +133,15 @@ class ClaudeBridge(RunningClaude, LineMonitorBridge, declared_name=None):
 
 
 class Connect(Enrol):
+    help = "Bind this running Claude session to a bus thread and start its bridge now"
+    reported = 'Session bridge running and ready. Run watch under Monitor to receive.'
+
     @classmethod
     def serves(cls, bridge: type) -> bool:
         return issubclass(bridge, ClaudeBridge)
 
-    async def execute(self, bridge: LineMonitorBridge) -> None:
-        await super().execute(bridge)
+    def begin(self, bridge: LineMonitorBridge) -> None:
+        """Serve.launch raises unless the started bridge answers its readiness exchange."""
         SessionHook.current(
             bridge.binding.thread, str(RunningClaude(bridge.binding.thread).source)
         ).start()

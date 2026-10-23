@@ -11,9 +11,9 @@ provider until a separate reviewed enforced cap exists; tests use a fake model.
 
 from __future__ import annotations
 
+
 import argparse
 import asyncio
-import json
 import os
 import re
 import select
@@ -27,7 +27,7 @@ from pathlib import Path
 from agent_comms.coordination_errors import PublicationActivationBlocked
 
 from .child_process import ProcessIdentity
-from .comms import Comms
+from .comms import wire
 from .coordinated_runtime import SelectedExecution
 from .cursor_publication import CursorDelivery
 from .errors import RelationViolationError
@@ -35,7 +35,6 @@ from .field_codec import FieldCodec, MalformedRecord
 from agent_comms.native_session_files import NativeSessionFiles
 from .native_package import VerifiedNativePackage
 from .selected_result import CoordinatedTurn
-from .store_files import _store_lock
 from .thread_text import GivenThreadText
 from .threads import Thread
 
@@ -100,31 +99,25 @@ def reserve_foreground_owner(
         raise MalformedRecord("A private wire-root ID is required")
     worktree = root / "work"
     NativeSessionFiles.require_private_directory(worktree)
-    comms = Comms(root)
-    with comms.bus.log.checked_read() as source:
-        marker = source.marker
-    if marker.root_id != wire_root_id:
-        raise RelationViolationError("Private wire root changed before owner reservation")
-    owner = comms.registry.new_thread(
+    comms = wire(root)
+    owner = Thread(
         name, tags, str(worktree), process_identity=ProcessIdentity.capture(os.getpid()), task=GivenThreadText(task),
     )
-    # Ordinary Comms.register intentionally supports replacing idle owners. That
-    # is NOT safe for a private foreground attempt: serialize the exact fresh
-    # check and registry write against every public Comms.register/send caller
-    # on the same wire lock without changing the shared operations module.
-    with _store_lock(comms._wire_lock_path):
+    # Foreground attempts must reserve a fresh name, never replace an owner
+    # that may retain uncertain input. The registry owns that namespace check.
+    with comms.registry.store.locked():
+        comms.registry.store.private_guard_unlocked().require_root(
+            wire_root_id, RelationViolationError("Native namespace changed before owner reservation"),
+        )
         canonical = comms.registry.canonical_name(owner.name)
         if canonical != owner.name or canonical in comms.registry.all_threads():
             raise RelationViolationError("Foreground recipient already exists")
-        comms.channels._require_available_new_tags(owner.tags)
-        comms.registry.register(owner)
-        with comms.channels.catalog.editing() as document:
-            document.remember_tags(owner.tags)
+        comms.registry._declare_unlocked(owner)
     return ForegroundOwner(root, wire_root_id, owner.name, native_package)
 
 
 def _emit(payload: dict[str, object]) -> None:
-    json.dump(payload, sys.stdout, separators=(",", ":"))
+    sys.stdout.write(FieldCodec.compact(payload))
     sys.stdout.write("\n")
     sys.stdout.flush()
 

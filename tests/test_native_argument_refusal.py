@@ -4,11 +4,12 @@ from agent_comms.pi_payloads import ReportedFlag, ReportedText
 import asyncio
 import json
 import os
+from types import SimpleNamespace
 
 import pytest
 
 from agent_comms.native_tool_call import ArgumentRefusal, CodingCall
-from agent_comms.native_tool_call import SelectedToolDenied
+from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.pi_payloads import ToolCallContent
@@ -31,6 +32,7 @@ async def test_refused_arguments_complete_without_an_owner_callback(tmp_path, re
             raise AssertionError("invalid arguments must never acquire authority")
 
     socket = CodingToolSocket(tool_listener(tmp_path, "a" * 64), Owner(), pid=os.getpid())
+    socket.turn = SimpleNamespace(launch=SimpleNamespace(root=tmp_path))
     args = {"command": False}
     raw = (json.dumps({"token": socket.listener.token, "call_id": "bad", "name": "bash",
                        "arguments": {"command": "false"}}) + "\n").encode()
@@ -47,6 +49,6 @@ async def test_refused_arguments_complete_without_an_owner_callback(tmp_path, re
         tool_call_id=ReportedText("bad"), tool_name=ReportedText("bash"), is_error=ReportedFlag(True)
     ), "b" * 32)
     socket.assert_complete()
-    assert not (tmp_path / "selected-tool-ledger").exists()
+    assert not (tmp_path / "coordination.sqlite3").exists()
 
 

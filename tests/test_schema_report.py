@@ -9,7 +9,7 @@ from agent_comms.cli_commands import SchemaReportCliCommand
 from agent_comms.field_codec import FieldCodec
 from agent_comms.todos import Todo
 from agent_comms.typed_table import SQLiteSchemaObject, SQLiteSchemaDifference
-from test_private_bus_checkpoint import _root
+from bus_record_fixture import context_comms
 
 
 
@@ -20,7 +20,7 @@ def unfinished_todo(db):
     defaults = {item.name: item.default if item.default_factory is MISSING else item.default_factory()
                 for item in fields(Todo) if (item.default, item.default_factory) != (MISSING, MISSING)}
     row = {item.wire_name: named[item.name] if item.name in named else item.encode(defaults[item.name])
-           for item in Todo._fields() if item.name in named or item.name in defaults}
+           for item in Todo._fields if item.name in named or item.name in defaults}
     columns = ", ".join(f'"{name}"' for name in row)
     db.execute(f"INSERT INTO todo ({columns}) VALUES ({', '.join('?' * len(row))})", tuple(row.values()))
 
@@ -29,7 +29,7 @@ def _old_todo(path):
     """A store created before the selector CHECKs were declared."""
     target = Todo.schema_objects()[Todo.declared_name]
     original = target
-    for item in Todo._fields():
+    for item in Todo._fields:
         for constraint in item.storage.family_constraints(item.name, item.annotation):
             original = original.replace(f" CHECK ({constraint})", "", 1)
     assert original != target
@@ -48,8 +48,8 @@ def test_comparison_names_changed_missing_and_extra_objects():
             SQLiteSchemaDifference("missing", None, "sql"))
 
 
-def test_cli_inspects_existing_stores_without_rewriting_them(tmp_path, capsys, monkeypatch):
-    comms, _ = _root(tmp_path)
+def test_cli_inspects_existing_stores_without_rewriting_them(tmp_path, capsys, durable_home):
+    comms = context_comms(tmp_path)
     path = comms.root / "todos.sqlite3"
     _old_todo(path)
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -63,7 +63,7 @@ def test_cli_inspects_existing_stores_without_rewriting_them(tmp_path, capsys, m
 
 
 def test_unknown_and_unavailable_stores_do_not_look_clean(tmp_path):
-    comms, _ = _root(tmp_path)
+    comms = context_comms(tmp_path)
     with closing(sqlite3.connect(comms.root / "unknown.sqlite3")) as db:
         db.execute("CREATE TABLE unowned (x)")
     (comms.root / "broken.sqlite3").write_bytes(b"not a database")

@@ -1,24 +1,25 @@
 """Native launcher identity, route and acquired package remain independent."""
+
+
 import shlex
 import sys
 from pathlib import Path
 
 
-from agent_comms.thread_text import SavedSessionFile
-from agent_comms import native_package
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.native_package import VerifiedNativePackage
+from agent_comms.threads import Thread
 
 
-async def test_fork_runs_selected_python_before_copying_saved_history(tmp_path, monkeypatch, *, thread_registration):
-    from agent_comms.comms import Comms
+async def test_fork_runs_selected_python_before_copying_saved_history(tmp_path, monkeypatch, pinned_native, *, thread_registration):
+    from agent_comms.comms import wire
     from agent_comms.fresh_private_session import create_fresh_private_session
     from agent_comms.pi_native_backend import PiNativeBackend
 
-    package = VerifiedNativePackage.acquire(native_package.pinned_native_package())
-    comms = Comms(tmp_path / "wire")
-    comms.messaging.initialize_private_initial_protocol()
+    package = VerifiedNativePackage.acquire(pinned_native)
+    comms = wire(tmp_path / "wire")
     LaunchRoot.from_path(comms.root).install()
     selected = tmp_path / "selected-core"
     (selected / "bin").mkdir(parents=True)
@@ -39,7 +40,7 @@ async def test_fork_runs_selected_python_before_copying_saved_history(tmp_path, 
     parent = create_fresh_private_session(tmp_path / "sessions", worktree=tmp_path)
     original = parent.path.read_bytes()
     copied = await PiNativeBackend.fork(
-        thread_registration.new_thread('parent', tags=frozenset(), worktree=str(tmp_path), session_file=SavedSessionFile(parent.session_file)),
+        Thread('parent', tags=frozenset(), worktree=str(tmp_path), session_file=RegistrySessionLocation.from_path(parent.session_file, comms.root)),
         str(package.cli), LaunchRuntime(interpreter),
     )
     assert marker.read_text() == str(selected)

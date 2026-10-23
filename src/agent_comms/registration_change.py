@@ -31,14 +31,6 @@ class RegistrationChange(ABC):
     def prior_goal(self) -> GoalDeclaration: ...
 
     @property
-    def claims_owner(self) -> bool:
-        return self.thread.process_identity.claims_owner(self.status) and self.takes_over_owner
-
-    @property
-    @abstractmethod
-    def takes_over_owner(self) -> bool: ...
-
-    @property
     @abstractmethod
     def changes_owner(self) -> bool: ...
 
@@ -51,7 +43,7 @@ class RegistrationChange(ABC):
 
     def apply(self, document: RegistryDocument) -> None:
         """Caller holds registry/publication authority and records goal history."""
-        thread = self.thread
+        thread = self.thread.restarted_tools() if self.changes_owner else self.thread
         document.install_thread(thread)
         document.set_status(thread.name, self.status)
         document.last_seen[thread.name] = time.time()
@@ -63,7 +55,6 @@ class RegistrationChange(ABC):
 class InitialRegistration(RegistrationChange):
     prior_goal = NoGoal()
     changes_owner = True
-    takes_over_owner = True
 
     def restarted(self) -> RegistrationChange:
         return InitialOwnerRegistration(thread=self.thread, status=self.status)
@@ -88,7 +79,6 @@ class UpdatedRegistration(RegistrationChange):
                     process_identity=self.previous.process_identity,
                     turn_record=self.previous.turn_record,
                     turn_generation=self.previous.turn_generation,
-                    last_finished_turn_id=self.previous.last_finished_turn_id,
                 ),
             )
         return requested.process_identity.registration_change(
@@ -98,13 +88,6 @@ class UpdatedRegistration(RegistrationChange):
     @property
     def prior_goal(self) -> GoalDeclaration:
         return self.previous.goal
-
-    @property
-    def takes_over_owner(self) -> bool:
-        return (
-            self.previous.process_identity != self.thread.process_identity
-            or self.previous_status.starts_owner(self.status)
-        )
 
     @property
     def changes_owner(self) -> bool:
@@ -139,10 +122,6 @@ class ExplicitOwnerChange(RegistrationChange):
     """Fresh explicit registration always revokes imported permission to run a turn."""
 
     changes_owner = True
-
-    @property
-    def claims_owner(self) -> bool:
-        return True
 
     def restarted(self) -> RegistrationChange:
         return self

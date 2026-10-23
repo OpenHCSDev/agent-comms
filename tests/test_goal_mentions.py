@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 import json
 from dataclasses import asdict
 from pathlib import Path
@@ -9,7 +10,8 @@ from pathlib import Path
 import pytest
 
 from agent_comms.relationships import CollaboratingRelationshipGroup, RelationshipEdit
-from agent_comms.comms import Comms
+from agent_comms.comms import Comms, wire
+from conftest import installed_comms
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     CompletedGoalAction,
@@ -25,14 +27,15 @@ from agent_comms.goals import (
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.tools import invoke_tool
 from agent_comms.tool_caller import ThreadCaller
+from agent_comms.threads import Thread
 
 
 def _wire(tmp_path: Path) -> Comms:
-    comms = Comms(tmp_path / "wire")
+    comms = installed_comms(tmp_path / "wire")
     for name, created in (("owner", 17001.0), ("peer", 17002.0), ("other", 17003.0)):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path), created_at=created))
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path), created_at=created))
     comms.registry.declare(
-        comms.registry.new_thread('human', frozenset(), str(tmp_path), role=UserThreadRole, created_at=17004.0)
+        Thread('human', frozenset(), str(tmp_path), role=UserThreadRole, created_at=17004.0)
     )
     return comms
 
@@ -88,11 +91,10 @@ def test_exact_goal_mentions_are_mutual_read_only_awareness_with_provenance(
     assert tool["collaborations"] == []
     assert tool["visible_collaborators"][0]["sources"] == ["goal_mention"]
     assert {item["token"] for item in tool["unresolved_goal_mentions"]} == {"owner", "unknown"}
-    reopened = Comms(comms.root)
+    reopened = wire(comms.root)
     assert _rows(reopened, "peer")[0]["owner"].goal_contacts == (contact,)
     assert not comms.relationships.store.path.exists()
-    with comms.bus.log.opened_wire_snapshot() as source:
-        assert tuple(source.public_records()) == ()
+    assert comms.bus.bus.revision() == 0
 
 
 def test_only_exact_registered_executable_names_bind_without_alias_or_prefix(
@@ -147,7 +149,7 @@ def test_bound_renames_follow_only_the_same_incarnation_and_name_reuse_is_stale(
     assert _rows(comms, "reviewer")[0]["owner"].target == "owner"
     comms.owners.stop("reviewer")
     comms.registry.remove("reviewer")
-    comms.registry.declare(comms.registry.new_thread('peer', frozenset(), str(tmp_path), created_at=18002.0))
+    comms.registry.declare(Thread('peer', frozenset(), str(tmp_path), created_at=18002.0))
     # The old token must not grant a link to a new peer with the same spelling.
     assert _rows(comms, "owner")[0] == {}
     assert _rows(comms, "peer")[0] == {}
@@ -225,34 +227,6 @@ def test_goal_status_edits_and_explicit_contacts_are_independent(tmp_path: Path)
     assert comms.relationships.collaborations("owner")[0].note == "Explicit retained note"
 
 
-@pytest.mark.parametrize("goal_mention", [False, True])
-def test_collaboration_tool_ignores_unrelated_malformed_bus_history(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, goal_mention: bool
-) -> None:
-    comms = _wire(tmp_path)
-    manual = comms.relationships.edit(
-        "owner", RelationshipEdit.member_named("add"), "peer", "Explicit note survives"
-    )
-    assert manual is not None
-    if goal_mention:
-        comms.goals.update_goal("owner", SetGoalAction(text="Review with @peer"))
-    bus = comms.bus.log.path
-    bus.write_bytes(b'{"seq":1}\n')  # Complete JSON row, malformed as a Message.
-    bus.chmod(0o600)
-    original_bus = bus.read_bytes()
-    original_relationships = comms.relationships.store.path.read_bytes()
-    monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
-    assert comms.relationships.collaborations("owner") == (manual,)
-    result = invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller("owner"))
-    assert result["collaborations"] == json.loads(json.dumps([asdict(manual)]))
-    if goal_mention:
-        assert result["visible_collaborators"][0]["sources"] == ["explicit", "goal_mention"]
-    else:
-        assert result == {"collaborations": json.loads(json.dumps([asdict(manual)]))}
-    assert bus.read_bytes() == original_bus
-    assert comms.relationships.store.path.read_bytes() == original_relationships
-
-
 def test_reused_owner_incarnation_cannot_inherit_old_derived_contact(tmp_path: Path) -> None:
     comms = _wire(tmp_path)
     goal = comms.goals.update_goal("owner", SetGoalAction(text="@peer"))
@@ -260,7 +234,7 @@ def test_reused_owner_incarnation_cannot_inherit_old_derived_contact(tmp_path: P
     comms.owners.stop("owner")
     comms.registry.remove("owner")
     comms.registry.declare(
-        comms.registry.new_thread('owner', frozenset(), str(tmp_path), goal=goal, created_at=18001.0)
+        Thread('owner', frozenset(), str(tmp_path), goal=goal, created_at=18001.0)
     )
     assert _rows(comms, "peer")[0] == {}
     assert _rows(comms, "owner")[0] == {}
@@ -276,7 +250,7 @@ def test_old_writer_text_change_drops_derived_links_without_erasing_goal(tmp_pat
     raw["threads"]["owner"]["goal"]["text"] = "No mention"
     raw["threads"]["owner"]["goal"]["revision"] += 1
     path.write_text(json.dumps(raw))
-    reopened = Comms(comms.root)
+    reopened = wire(comms.root)
     assert reopened.registry.require("owner").goal.text == "No mention"
     assert _rows(reopened, "owner")[0] == {}
     assert reopened.relationships.goal_contacts("owner")[0] == ()

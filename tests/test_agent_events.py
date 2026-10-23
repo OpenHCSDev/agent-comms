@@ -172,8 +172,10 @@ def test_payload_fields_and_frozen_multiple_inheritance():
     for value in (start, events.OriginalInputStarted(), events.ModelChanged("id", True)):
         with pytest.raises(FrozenInstanceError):
             value.extra = "not a declared field"
-    done = events.Done("failed", False, "input_authority_changed", {"elapsed_ms": 3})
-    assert done.reason_code == "input_authority_changed"
+    from agent_comms.turn_failure import AuthorityChanged
+
+    done = events.Done("failed", False, AuthorityChanged("failed"), {"elapsed_ms": 3})
+    assert done.reason_code == "authority_changed"
     assert done.diagnostic == {"elapsed_ms": 3}
 
 
@@ -187,7 +189,7 @@ async def test_request_correlation_separates_families_and_ignores_late_results()
     model = pending.add(SetModel, "same", request=model_command)
     thinking = pending.add(SetThinkingLevel, "same", request=thinking_command)
     with pytest.raises(ValueError):
-        pending.add(SetModel, "same")
+        pending.add(SetModel, "same", request=model_command)
     refused = Response(
         id=RequestId("same"), command=SetModel, success=ReportedFlag(False),
         error=ReportedText("unavailable"),

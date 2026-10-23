@@ -5,8 +5,9 @@ from datetime import datetime
 
 import pytest
 
-from agent_comms.cli_bridges.monitor import AttachMonitor, NoReader, REPLIES
+from agent_comms.cli_bridges.monitor import AttachMonitor, NoReader
 from agent_comms.cli_bridges.shared import BridgeLog, MONITOR_FRAME
+from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import InfoKind, Message
 from agent_comms_hooks.watch import WatchClaim, WatchRecord
 
@@ -30,9 +31,10 @@ def test_bridge_log_timestamps_each_line_including_fragmented_writes_and_traceba
 @asynccontextmanager
 async def reader(claim):
     stream, writer = await asyncio.open_unix_connection(str(claim.socket_path))
-    writer.write((AttachMonitor().model_dump_json() + '\n').encode())
+    request = AttachMonitor()
+    writer.write((FieldCodec.compact(FieldCodec.encode(request)) + '\n').encode())
     await writer.drain()
-    REPLIES.validate_json(await stream.readline()).require()
+    request.decode_reply(await stream.readline())
     probe = MONITOR_FRAME.validate_json(await stream.readline())
     try:
         yield stream, writer, probe

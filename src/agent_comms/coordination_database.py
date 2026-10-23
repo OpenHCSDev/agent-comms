@@ -1,70 +1,29 @@
-"""Private SQLite connections and declaration-owned schema installation."""
+"""Private coordinator storage and declaration-owned schema installation."""
 
 from __future__ import annotations
 
-import hashlib
 import os
 import sqlite3
 import stat
 import tempfile
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from contextlib import AbstractContextManager, closing, contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Self
 
-from agent_comms.coordination_errors import (
-    CoordinationReadUnavailable,
-    IntegrityViolationError,
-)
+from agent_comms.coordination_errors import CoordinationReadUnavailable, IntegrityViolationError
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.typed_table import (
     CarriedWriter,
-    SQLiteTableName,
+    ReconciledFile,
     StoreWriter,
+    TableSchema,
 )
 
+from .child_process import Platform
 from .declared_family import DeclaredFamily
-
-
-class StoreContention(ABC):
-    """Typed SQLite busy behavior shared by snapshots and writers."""
-
-    @abstractmethod
-    def reader(self, uri: str) -> sqlite3.Connection: ...
-
-    @abstractmethod
-    def writer(
-        self, path: str | os.PathLike[str], options: dict[str, object]
-    ) -> sqlite3.Connection: ...
-
-
-@dataclass(frozen=True)
-class StoreWait(StoreContention):
-    def reader(self, uri: str) -> sqlite3.Connection:
-        return sqlite3.connect(uri, uri=True, isolation_level=None)
-
-    def writer(
-        self, path: str | os.PathLike[str], options: dict[str, object]
-    ) -> sqlite3.Connection:
-        return sqlite3.connect(path, timeout=CoordinationStore.writer_timeout, **options)
-
-
-@dataclass(frozen=True)
-class StoreBusy(StoreContention):
-    """Do not wait when optional display or input work cannot acquire a SQLite lock."""
-
-    def reader(self, uri: str) -> sqlite3.Connection:
-        with CoordinationReadUnavailable.checking():
-            return sqlite3.connect(uri, uri=True, isolation_level=None, timeout=0)
-
-    def writer(
-        self, path: str | os.PathLike[str], options: dict[str, object]
-    ) -> sqlite3.Connection:
-        return sqlite3.connect(path, timeout=0, **options)
-
-
-DEFAULT_STORE_CONTENTION = StoreWait()
+from .locked_store import DEFAULT_STORE_CONTENTION, StoreContention
 
 
 class StoreFile(DeclaredFamily):
@@ -106,152 +65,51 @@ class ReadableStore(StoreFile):
             yield consumer.capture(connection, *arguments)
 
 
-class CoordinationStore(CarriedWriter):
-    """Own SQLite read snapshots and the shared writer busy policy."""
+class CoordinationStore(CarriedWriter, ReconciledFile):
+    """The private coordinator database and its declared schema."""
 
     filename = "coordination.sqlite3"
-    writer_timeout = 5.0
-    header = b"SQLite format 3\0"
 
     @classmethod
-    def is_database(cls, path: Path) -> bool:
-        with path.open("rb") as stream:
-            return stream.read(len(cls.header)) == cls.header
+    def table_schema(cls) -> type[CoordinatorTable]:
+        return CoordinatorTable
 
     @classmethod
-    def digest(cls, path: Path) -> str:
-        """The store's schema and rows as SQLite reads them, whichever of its files hold
-        them."""
-        with closing(cls.read_snapshot(path)) as db:
-            content = hashlib.sha256()
-            for statement in db.iterdump():
-                content.update(statement.encode())
-            return content.hexdigest()
+    def schema_at(cls, path: Path) -> type[TableSchema]:
+        from .private_registry_guard import RegistryPrivacy
 
-    @staticmethod
-    def writer(
-        path: str | os.PathLike[str], contention: StoreContention = DEFAULT_STORE_CONTENTION,
-        **options: object,
-    ) -> sqlite3.Connection:
-        """Open a writer through the store family's typed busy behavior."""
-        return CoordinationStore.identifiers_only(contention.writer(path, options))
-
-    @staticmethod
-    def identifiers_only(db: sqlite3.Connection) -> sqlite3.Connection:
-        """A double-quoted name is an identifier, never a string: a missing column fails
-        as missing instead of reading back as a literal named after it."""
-        for option in (sqlite3.SQLITE_DBCONFIG_DQS_DML, sqlite3.SQLITE_DBCONFIG_DQS_DDL):
-            db.setconfig(option, False)
-        return db
-
-    @staticmethod
-    def begin_snapshot(db: sqlite3.Connection) -> None:
-        """Acquire one committed read revision before any consumer query."""
-        db.execute("BEGIN")
-        # BEGIN is lazy. Acquire the snapshot before schema decoders can
-        # reclassify BUSY as unsupported data or absent rows.
-        SQLiteTableName.read(db.execute("SELECT name FROM sqlite_master LIMIT 1"))
+        return RegistryPrivacy.capture(path.parent).coordinator_schema()
 
     @classmethod
-    def _configure_reader(cls, db: sqlite3.Connection) -> sqlite3.Connection:
-        try:
-            cls.identifiers_only(db)
-            db.row_factory = sqlite3.Row
-            db.execute("PRAGMA query_only=ON")
-            db.execute("PRAGMA foreign_keys=ON")
-            return db
-        except BaseException:
-            db.close()
-            raise
+    def observed(cls, path: Path) -> StoreFile:
+        """Classify through SQLite without dropping another connection's process locks.
 
-    @classmethod
-    def _open_reader(
-        cls, path: Path, contention: StoreContention
-    ) -> sqlite3.Connection:
-        return cls._configure_reader(
-            contention.reader(path.resolve().as_uri() + "?mode=ro")
-        )
-
-    @classmethod
-    def _acquire_snapshot(cls, db: sqlite3.Connection) -> sqlite3.Connection:
-        try:
-            cls.begin_snapshot(db)
-            return db
-        except BaseException:
-            db.close()
-            raise
-
-    @classmethod
-    def read_snapshot(
-        cls, path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION
-    ) -> sqlite3.Connection:
-        """Open and acquire one consistent read-only snapshot with SQLite's busy handler."""
-        return cls._acquire_snapshot(cls._open_reader(path, contention))
-
-    @classmethod
-    def recovering_snapshot(cls, path: Path) -> sqlite3.Connection:
-        """Acquire evidence after SQLite is allowed to recover an existing hot journal."""
-        uri = path.resolve().as_uri() + "?mode=rw"
-        return cls._acquire_snapshot(cls._configure_reader(cls.writer(uri, uri=True)))
-
-    @staticmethod
-    @contextmanager
-    def reading(
-        path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION
-    ):
-        """Own a configured read connection whose consumers bound each snapshot."""
-        with CoordinationReadUnavailable.checking():
-            with closing(CoordinationStore._open_reader(path, contention)) as db:
-                yield db
-
-    @staticmethod
-    def observed(path: Path) -> StoreFile:
-        """Never let a read-only SQLite open create a WAL shared-memory sidecar.
-
-        WAL-mode SQLite can create -shm even when opened with mode=ro. Refuse such a
-        database *before* opening SQLite; rollback-journal mode is the current
-        coordinator configuration. Do not create directories, chmod, or recover a
-        hot journal. A concurrent WAL conversion is outside this schema contract.
+        Both rollback and WAL snapshots are readable. SQLite may maintain its own
+        WAL companions; observation never changes stored rows, installs a schema,
+        chmods a file, or permits recovery to write through a read-only connection.
         """
         try:
             info = path.lstat()
             if not stat.S_ISREG(info.st_mode):
                 return InvalidStore("Coordinator is not a regular file")
-            with path.open("rb") as stream:
-                header = stream.read(100)
+            if not info.st_size:
+                return InvalidStore("Coordinator is empty")
+            with (
+                CoordinationReadUnavailable.checking(),
+                closing(cls.read_snapshot(path)),
+            ):
+                pass
         except FileNotFoundError:
             return MissingStore()
         except PermissionError as error:
             return InvalidStore(str(error))
-        if len(header) < 100 or not header.startswith(CoordinationStore.header):
-            return InvalidStore("Coordinator has an invalid SQLite header")
-        if header[18:20] != b"\x01\x01":
-            return InvalidStore("Coordinator is not in rollback-journal mode")
+        except sqlite3.DatabaseError as error:
+            return InvalidStore(str(error))
         return ReadableStore(path)
 
-    @staticmethod
-    @contextmanager
-    def observing(
-        path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION
-    ):
-        """Read existing committed data without initializing storage or permitting writes."""
-        with CoordinationReadUnavailable.checking():
-            try:
-                with closing(CoordinationStore.read_snapshot(path, contention)) as db:
-                    try:
-                        yield db
-                    finally:
-                        if db.in_transaction:
-                            db.execute("ROLLBACK")
-            except sqlite3.OperationalError as error:
-                error.add_note(
-                    f"SQLite observation store: {path}; "
-                    f"SQLite error: {error.sqlite_errorname} ({error.sqlite_errorcode})"
-                )
-                raise
-
     def __init__(
-        self, path: str | os.PathLike[str],
+        self,
+        path: str | os.PathLike[str],
         contention: StoreContention = DEFAULT_STORE_CONTENTION,
     ) -> None:
         super().__init__(Path(path))
@@ -259,7 +117,7 @@ class CoordinationStore(CarriedWriter):
         self._connection = self._open_connection(contention)
         try:
             self._configure_connection()
-            CoordinatorTable.reconcile_schema(self._connection)
+            self._initialize_schema()
             self._enforce_private_modes()
         except BaseException:
             self._connection.close()
@@ -267,6 +125,10 @@ class CoordinationStore(CarriedWriter):
 
     def _open_connection(self, contention: StoreContention) -> sqlite3.Connection:
         return self.writer(self.path, contention, isolation_level=None)
+
+    def _initialize_schema(self) -> None:
+        """The root's own composition of this file decides its schema and its strays."""
+        self.schema_at(self.path).install_schema(self._connection, self.schema_change(self.path))
 
     def _configure_connection(self) -> None:
         for row_type in CoordinatorTable.declarations():
@@ -292,12 +154,8 @@ class CoordinationStore(CarriedWriter):
                     os.link(staging, self.path, follow_symlinks=False)
             finally:
                 os.unlink(staging)
-        info = self._private_file()
-        # NTFS ACLs, not POSIX mode bits, define privacy on Windows. The
-        # disposable private execution path is Linux-only; keep the schema
-        # usable here without pretending chmod supplies a Windows ACL.
-        if os.name != "nt" and stat.S_IMODE(info.st_mode) != 0o600:
-            os.chmod(self.path, 0o600, follow_symlinks=False)
+        self._private_file()
+        Platform.current().make_private(self.path, 0o600)
 
     def _private_file(self) -> os.stat_result:
         try:
@@ -312,14 +170,8 @@ class CoordinationStore(CarriedWriter):
         return StoreWriter.transaction(self, self._connection)
 
     def _enforce_private_modes(self) -> None:
-        if os.name == "nt":
-            return  # POSIX no-follow chmod cannot establish an NTFS ACL.
-        for suffix in ("", "-journal", "-wal", "-shm"):
-            candidate = Path(f"{self.path}{suffix}")
-            # SQLite may unlink a journal between observation and chmod.
-            with suppress(FileNotFoundError):
-                if stat.S_IMODE(candidate.lstat().st_mode) != 0o600:
-                    os.chmod(candidate, 0o600, follow_symlinks=False)
+        for candidate in self.files(self.path):
+            Platform.current().make_private(candidate, 0o600)
 
     def close(self) -> None:
         self._connection.close()

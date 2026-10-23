@@ -23,7 +23,9 @@ from .transcript_events import (
     TranscriptEvent,
 )
 from .thread_text import NoThreadText, ThreadText
+from .thread_identity import OfferedTools
 from .turn_phase import IdlePhase, ModelWaitPhase, TurnPhase
+from .turn_item import TurnItem
 
 if TYPE_CHECKING:
     from .cli_bridges.shared import TranscriptBridge
@@ -151,35 +153,19 @@ class ClosedDraft(DraftAccumulator):
 
 
 @dataclass(frozen=True)
-class ItemKey:
-    """One item's identity: the turn that holds it and its producer's item id."""
-
-    turn_id: str
-    item_id: str
-
-
-class KeyedItem(ItemKey):
-    """An update about one item, named by the turn that holds it and its producer's item id."""
-
-    @property
-    def key(self) -> ItemKey:
-        return ItemKey(self.turn_id, self.item_id)
-
-
-@dataclass(frozen=True)
 class ThreadOutput(activity.ThreadOutput):
     """Where a CLI's output lands in Core: finished items and current activity."""
 
     transcript: ExternalTranscript
     agents: AgentActivity
-    drafts: dict[ItemKey, DraftAccumulator] = field(default_factory=dict)
+    drafts: dict[TurnItem, DraftAccumulator] = field(default_factory=dict)
 
     def publish_batch(self, updates: list[RuntimeUpdate]) -> None:
         assembled = [part for update in updates for part in update.accumulate(self)]
         for update in RuntimeUpdate.coalesced(assembled):
             update.publish(self)
 
-    def draft(self, key: ItemKey) -> DraftAccumulator:
+    def draft(self, key: TurnItem) -> DraftAccumulator:
         return self.drafts.get(key, NO_PREFIX)
 
     def start_item(self, update: StartedItem) -> tuple[RuntimeUpdate, ...]:
@@ -218,10 +204,16 @@ class ReadingPhase(ABC):
     def status(self, update: StatusUpdate) -> tuple[RuntimeUpdate, ...]:
         """Current activity now, or held until the reader has caught up."""
 
+    def offered(self, update: OfferedToolsObserved) -> tuple[RuntimeUpdate, ...]:
+        return (update,)
+
 
 @dataclass(frozen=True)
 class RuntimeUpdate(ABC):
     """One change a runtime reports about its thread."""
+
+    def trail_events(self) -> tuple[object, ...]:
+        return ()
 
     def during(self, phase: ReadingPhase) -> tuple[RuntimeUpdate, ...]:
         return (self,)
@@ -235,7 +227,7 @@ class RuntimeUpdate(ABC):
     async def observed(self, bridge: TranscriptBridge) -> None:  # noqa: B027 - default hook
         """A source-owned notification may confirm delivery before publication."""
 
-    def retain_before(self, later: set[ItemKey]) -> bool:
+    def retain_before(self, later: set[TurnItem]) -> bool:
         """Whether this update still needs publication before later updates."""
         return True
 
@@ -248,7 +240,7 @@ class RuntimeUpdate(ABC):
 
     @staticmethod
     def coalesced(updates: list[RuntimeUpdate]) -> list[RuntimeUpdate]:
-        later: set[ItemKey] = set()
+        later: set[TurnItem] = set()
         kept = [update for update in reversed(updates) if update.retain_before(later)]
         return list(reversed(kept))
 
@@ -258,6 +250,17 @@ class StatusUpdate(RuntimeUpdate):
 
     def during(self, phase: ReadingPhase) -> tuple[RuntimeUpdate, ...]:
         return phase.status(self)
+
+
+@dataclass(frozen=True)
+class OfferedToolsObserved(RuntimeUpdate):
+    offered: OfferedTools
+
+    def during(self, phase: ReadingPhase) -> tuple[RuntimeUpdate, ...]:
+        return phase.offered(self)
+
+    def publish(self, output: ThreadOutput) -> None:
+        output.agents.registry.observe_offered_tools(output.transcript.incarnation, self.offered)
 
 
 @dataclass(frozen=True)
@@ -276,7 +279,7 @@ class TurnEnded(StatusUpdate):
 
 
 @dataclass(frozen=True)
-class ActiveItem(KeyedItem, StatusUpdate):
+class ActiveItem(TurnItem, StatusUpdate):
     """An item the CLI started producing: what it is doing now."""
 
     phase: TurnPhase
@@ -289,15 +292,18 @@ class ActiveItem(KeyedItem, StatusUpdate):
 
 
 @dataclass(frozen=True)
-class FinishedItem(KeyedItem, RuntimeUpdate):
+class FinishedItem(TurnItem, RuntimeUpdate):
     """One CLI item's complete presentation, identified by its producer."""
 
     events: tuple[TranscriptEvent, ...]
 
+    def trail_events(self) -> tuple[object, ...]:
+        return self.events
+
     def publish(self, output: ThreadOutput) -> None:
         output.transcript.finish(turn_id=self.turn_id, item_id=self.item_id, events=self.events)
 
-    def retain_before(self, later: set[ItemKey]) -> bool:
+    def retain_before(self, later: set[TurnItem]) -> bool:
         later.add(self.key)
         return True
 
@@ -309,7 +315,7 @@ class FinishedItem(KeyedItem, RuntimeUpdate):
 
 
 @dataclass(frozen=True)
-class PageItem(ItemKey):
+class PageItem(TurnItem):
     """An item-list identity survives even when its update is invisible in the live view."""
 
     update: RuntimeUpdate
@@ -412,7 +418,7 @@ class HistoryNotice(RuntimeUpdate):
 
 
 @dataclass(frozen=True)
-class DraftItem(KeyedItem, RuntimeUpdate):
+class DraftItem(TurnItem, RuntimeUpdate):
     """A pending item's events, materialized only if this preview survives coalescing."""
 
     accumulator: PresentableDraft
@@ -424,7 +430,7 @@ class DraftItem(KeyedItem, RuntimeUpdate):
     def publish(self, output: ThreadOutput) -> None:
         output.transcript.draft(turn_id=self.turn_id, item_id=self.item_id, events=self.events)
 
-    def retain_before(self, later: set[ItemKey]) -> bool:
+    def retain_before(self, later: set[TurnItem]) -> bool:
         keep = self.key not in later
         later.add(self.key)
         return keep
@@ -455,7 +461,7 @@ class StartedItem(DraftUpdate, ActiveItem):
 
 
 @dataclass(frozen=True)
-class AppendDraftItem(KeyedItem, DraftUpdate):
+class AppendDraftItem(TurnItem, DraftUpdate):
     text: str
     section: int = 0
 

@@ -36,7 +36,7 @@ class FollowingInputs:
             ))
             await DeliveredInput.deliver_pending(
                 inputs, session_id, owner, inputs.comms.bus,
-                inputs.effects.configured_root_id, after_seq=after_seq,
+                inputs.comms.owners.require_private_launch().wire_root_id, after_seq=after_seq,
             )
 
     async def open(self, session: TrackedTurnSession) -> None:
@@ -90,14 +90,14 @@ class OwnerFollowingInputs(FollowingInputs):
             session_id=self.session_id,
             thread=thread,
             turn=TurnId(lease.turn_id),
-            claim_scope=lease.claimed_generation,
+            claim_generation=lease.claimed_generation,
             original=original,
             goal_permit=NoLaunchPermit(),
         )
         self.scope = LiveQueueScope(
-            self.session_id,
-            ClaimedIdentity(lease.identity.incarnation, lease.claimed_generation),
-            thread.require_process().pid,
+            session_id=self.session_id,
+            claimed_identity=ClaimedIdentity(lease.identity.incarnation, lease.claimed_generation),
+            owner=thread.require_process(),
         )
         inputs.state(self.session_id).capture_first_source(original)
         session.forward_inbox(self.inbox, sender)

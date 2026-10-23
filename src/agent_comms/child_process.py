@@ -14,16 +14,15 @@ import math
 import multiprocessing
 import os
 import re
-import secrets
-import selectors
-import shutil
+import select
 import signal
+import stat
 import subprocess
 import sys
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Mapping
 from concurrent.futures import Future, ProcessPoolExecutor
 from contextlib import (
     AbstractContextManager,
@@ -36,12 +35,18 @@ from contextlib import (
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, NoReturn
+from tempfile import TemporaryDirectory
+from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar, NoReturn, TextIO
+
+with suppress(ModuleNotFoundError):
+    import fcntl
+with suppress(ModuleNotFoundError):
+    import msvcrt
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, NullMember, RecordMember, SubclassUnion
-from .launch_runtime import LaunchRuntime
+from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime
 from .sealed import Sealed
 
 if TYPE_CHECKING:
@@ -50,11 +55,10 @@ if TYPE_CHECKING:
     from .store_files import LockMode
     from .thread_identity import ThreadIncarnation, ThreadRole
     from .thread_presentation import ThreadOwnerBinding, ThreadPresentation
-    from .thread_status import ThreadStatus
+    from .thread_status import ActiveThreadPresence, ThreadStatus
     from .turn_lease import ActiveTurn
 
 STOP_GRACE_SECONDS = 2.0
-STOP_POLL_SECONDS = 0.02  # no kernel event reports an emptied process group
 
 
 class IdentityMismatchError(ProcessLookupError):
@@ -80,10 +84,6 @@ class ProcessState(SubclassUnion, affix=""):
     def allows_owner_start(self) -> bool: ...
     @abstractmethod
     def allows_inactive_stop(self) -> bool: ...
-    @abstractmethod
-    def allows_goal_observation(self, status: ThreadStatus) -> bool: ...
-    @abstractmethod
-    def claims_owner(self, status: ThreadStatus) -> bool: ...
 
     @abstractmethod
     def require_held_by(self, role: type[ThreadRole]) -> None: ...
@@ -118,6 +118,9 @@ class ProcessState(SubclassUnion, affix=""):
     def alive(self) -> bool: ...
 
     @abstractmethod
+    def thread_status(self, presence: ActiveThreadPresence, last_seen: float) -> ThreadStatus: ...
+
+    @abstractmethod
     def runs_here(self) -> bool: ...
     @abstractmethod
     def owns_turn(self, turn: ActiveTurn) -> bool: ...
@@ -136,12 +139,6 @@ class NoProcess(NullMember, ProcessState):
 
     def allows_inactive_stop(self) -> bool:
         return True
-
-    def allows_goal_observation(self, status: ThreadStatus) -> bool:
-        return False
-
-    def claims_owner(self, status: ThreadStatus) -> bool:
-        return False
 
     def require_held_by(self, role: type[ThreadRole]) -> None:
         """No process is held, so any role may declare it."""
@@ -175,6 +172,9 @@ class NoProcess(NullMember, ProcessState):
 
     def alive(self) -> bool:
         return False
+
+    def thread_status(self, presence: ActiveThreadPresence, last_seen: float) -> ThreadStatus:
+        return presence.heartbeat_seen(last_seen)
 
     def runs_here(self) -> bool:
         return False
@@ -212,12 +212,6 @@ class ProcessIdentity(RecordMember, ProcessState):
 
     def allows_inactive_stop(self) -> bool:
         return self.runs_here()
-
-    def allows_goal_observation(self, status: ThreadStatus) -> bool:
-        return status.active
-
-    def claims_owner(self, status: ThreadStatus) -> bool:
-        return status.active
 
     def require_held_by(self, role: type[ThreadRole]) -> None:
         role.require_executable(
@@ -261,7 +255,7 @@ class ProcessIdentity(RecordMember, ProcessState):
         return os.getpid() == self.pid
 
     def owns_turn(self, turn: ActiveTurn) -> bool:
-        return turn.owner_pid == self.pid
+        return turn.owner == self
 
     def signal(self, signum: int) -> None:
         Platform.current().send(self, signum)
@@ -283,6 +277,9 @@ class ProcessIdentity(RecordMember, ProcessState):
     def require_release_by(self, process: ProcessIdentity) -> None:
         if self != process:
             raise RelationViolationError("Only the registered owner may release itself.")
+
+    def thread_status(self, presence: ActiveThreadPresence, last_seen: float) -> ThreadStatus:
+        return presence.process_seen(self)
 
     def registration_change(
         self, previous: ProcessState, change: UpdatedRegistration, incarnation: ThreadIncarnation,
@@ -345,95 +342,58 @@ class PidfdHandles:
             code = ctypes.get_errno()
             raise OSError(code, os.strerror(code))
 
-    def watch_deadline(self, pidfd: int, deadline: float) -> None:
-        """Exact-process deadline, reusable by the independent watchdog entry."""
-        if not math.isfinite(deadline):
-            raise ValueError("Finite absolute deadline required")
-        os.fstat(pidfd)
-        with selectors.DefaultSelector() as selector:
-            selector.register(pidfd, selectors.EVENT_READ)
-            while (remaining := deadline - time.monotonic()) > 0:
-                if selector.select(remaining):
-                    return
-        with suppress(ProcessLookupError):
-            self.signal_pidfd(pidfd, signal.SIGKILL)
-
-
-@dataclass(frozen=True)
-class NamespaceReady:
-    token: str
-    namespace: str
-    pid: int
-
-
-@dataclass(frozen=True, eq=False)
-class PidNamespace(ProcessIdentity):
-    """The exact host identity of PID 1 owns the namespace's executing lifetime.
-
-    Linux kills and reaps every remaining member before PID 1 finishes exiting.
-    A pidfd for this init therefore observes the whole namespace, without asking
-    for permission to inspect unrelated processes on the machine.
-    """
-
-    namespace: str
-
-
-@dataclass(frozen=True)
-class NamespaceLaunch:
-    command: tuple[str, ...]
-    token: str
-    deadline: float
-
-
-class NamespaceContainment:
-    """Linux namespace launch and typed, gated PID-1 readiness proof."""
-
-    @staticmethod
-    def namespace_argv(launch: NamespaceLaunch, ready_fd: int, release_fd: int) -> tuple[str, ...]:
-        unshare = shutil.which("unshare")
-        if unshare is None:
-            raise NotImplementedError("PID namespace containment requires unshare")
-        return (
-            unshare,
-            "--user",
-            "--map-root-user",
-            "--pid",
-            "--fork",
-            "--kill-child=SIGKILL",
-            "--",
-            *NamespaceInitCommand(launch, ready_fd, release_fd).argv(),
-        )
-
-    @staticmethod
-    def namespace_owner(parent: ProcessIdentity, proof: NamespaceReady) -> PidNamespace:
-        """Resolve only unshare's gated init, before it can exec business code."""
-        parent.require_alive()
-        children = Path(f'/proc/{parent.pid}/task/{parent.pid}/children').read_text().split()
-        (pid,) = map(int, children)
-        init = ProcessIdentity.capture(pid)
-        parent.require_alive()
-        return PidNamespace(init.pid, init.start_time, proof.namespace)
-
-
 class Platform(DeclaredFamily, affix="Platform"):
     store_lock_interval = 0.025
+    sync_open_flags: ClassVar[int] = os.O_RDONLY
 
     @classmethod
     def current(cls) -> Platform:
         return cls.member_named(sys.platform)()
 
+    def sync_file(self, path: Path) -> None:
+        descriptor = os.open(path, self.sync_open_flags)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+
+    @abstractmethod
+    def sync_directory(self, path: Path) -> None: ...
+
+    @abstractmethod
+    def require_pinned_paths(self, refusal: Exception) -> None: ...
+
+    @abstractmethod
+    def is_private(self, info: os.stat_result, permissions: int) -> bool: ...
+
+    @abstractmethod
+    def is_owned(self, info: os.stat_result) -> bool: ...
+
+    @abstractmethod
+    def make_private(self, path: Path, permissions: int) -> None: ...
+
+    @abstractmethod
+    def make_private_descriptor(self, descriptor: int, permissions: int) -> None: ...
+
+    @contextmanager
+    def socket_address(self, path: Path, descriptor: int) -> Generator[Path, None, None]:
+        with TemporaryDirectory(prefix="ac-socket-", dir="/tmp") as directory:
+            parent = Path(directory) / "d"
+            parent.symlink_to(path.parent, target_is_directory=True)
+            if not os.path.samestat(os.stat(parent), os.fstat(descriptor)):
+                raise ValueError("Socket directory changed during address acquisition")
+            yield parent / path.name
+
     @abstractmethod
     def try_store_lock(self, descriptor: int, *, mode: LockMode) -> None:
         """One nonblocking native attempt; busy is BlockingIOError."""
 
-    def acquire_store_lock(self, descriptor: int, *, mode: LockMode, blocking: bool) -> None:
-        """Use the common physical wait driver when the platform needs polling."""
-        from .store_files import StoreLockContention
-
-        StoreLockContention(math.inf if blocking else 0).acquire(descriptor, self, mode=mode)
-
     def release_store_lock(self, descriptor: int) -> None:
         """POSIX locks end at last close, including inherited descriptors."""
+
+    @abstractmethod
+    def acquire_session_writer(self, descriptor: int) -> None:
+        """Wait in the kernel for this session's input writer; close releases it."""
 
     @abstractmethod
     def launch(
@@ -454,7 +414,14 @@ class Platform(DeclaredFamily, affix="Platform"):
         raise NotImplementedError('This platform does not expose exact parent identities')
 
     async def wait_exited(self, identity: ProcessIdentity) -> None:
-        raise NotImplementedError('This platform does not expose process exit observation')
+        """Wait for one incarnation's exit; members with a loop-readable handle override this."""
+        await asyncio.to_thread(self.wait_any_exited, (identity,), math.inf)
+
+    @abstractmethod
+    def wait_any_exited(
+        self, identities: tuple[ProcessIdentity, ...], timeout: float,
+    ) -> None:
+        """Wait for a member's exit or the caller's remaining deadline."""
 
     def matches(self, identity: ProcessIdentity) -> bool:
         try:
@@ -490,21 +457,44 @@ class Platform(DeclaredFamily, affix="Platform"):
 
 
 class PosixPlatform(Platform):
-    def acquire_store_lock(self, descriptor: int, *, mode: LockMode, blocking: bool) -> None:
-        import fcntl
+    def require_pinned_paths(self, refusal: Exception) -> None:
+        return None
 
-        fcntl.flock(descriptor, mode.flock() | (0 if blocking else fcntl.LOCK_NB))
+    def sync_directory(self, path: Path) -> None:
+        descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+
+    def is_private(self, info: os.stat_result, permissions: int) -> bool:
+        return stat.S_IMODE(info.st_mode) == permissions and self.is_owned(info)
+
+    def is_owned(self, info: os.stat_result) -> bool:
+        return info.st_uid == os.geteuid()
+
+    def make_private(self, path: Path, permissions: int) -> None:
+        with suppress(FileNotFoundError):
+            if stat.S_IMODE(path.lstat().st_mode) != permissions:
+                os.chmod(path, permissions, follow_symlinks=False)
+
+    def make_private_descriptor(self, descriptor: int, permissions: int) -> None:
+        if stat.S_IMODE(os.fstat(descriptor).st_mode) != permissions:
+            os.fchmod(descriptor, permissions)
 
     def try_store_lock(self, descriptor: int, *, mode: LockMode) -> None:
         import fcntl
 
         fcntl.flock(descriptor, mode.flock() | fcntl.LOCK_NB)
 
+    def acquire_session_writer(self, descriptor: int) -> None:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+
     def launch(
         self, command: tuple[str, ...], pass_fds: tuple[int, ...], runtime: LaunchRuntime,
         lifetime: type[ChildLifetime],
     ) -> ChildLaunch:
-        return PosixLaunch(command, pass_fds, runtime, lifetime.launcher(self))
+        return PosixLaunch(self, command, pass_fds, runtime, lifetime)
 
     def parent_death_binding(self) -> int:
         """Darwin has no parent-death signal: its exec gate binds no launcher."""
@@ -534,7 +524,11 @@ class LinuxProcessRecord:
     parent: int
 
 
-class LinuxPlatform(NamespaceContainment, PidfdHandles, PosixPlatform):
+class LinuxPlatform(PidfdHandles, PosixPlatform):
+    @contextmanager
+    def socket_address(self, path: Path, descriptor: int) -> Generator[Path, None, None]:
+        yield Path(f"/proc/{os.getpid()}/fd/{descriptor}") / path.name
+
     def parent_death_binding(self) -> int:
         """The exec gate arms PR_SET_PDEATHSIG and binds to this launcher's PID."""
         return os.getpid()
@@ -580,6 +574,27 @@ class LinuxPlatform(NamespaceContainment, PidfdHandles, PosixPlatform):
             return
         finally:
             os.close(descriptor)
+
+    def wait_any_exited(
+        self, identities: tuple[ProcessIdentity, ...], timeout: float,
+    ) -> None:
+        descriptors: list[int] = []
+        try:
+            pending = select.poll()
+            for identity in identities:
+                try:
+                    descriptor = self.open_pidfd(identity.pid)
+                    descriptors.append(descriptor)
+                    current = self.identity(identity.pid)
+                except ProcessLookupError:
+                    return
+                if current != identity:
+                    return  # Another incarnation holds the pid: this member exited.
+                pending.register(descriptor, select.POLLIN)
+            pending.poll(None if math.isinf(timeout) else max(0, math.ceil(timeout * 1000)))
+        finally:
+            for descriptor in descriptors:
+                os.close(descriptor)
 
     def members_of_group(self, pgid: int) -> tuple[ProcessIdentity, ...]:
         members = []
@@ -688,11 +703,80 @@ class DarwinPlatform(PosixPlatform):
                     members.append(self.identity(pid))
         return tuple(members)
 
+    def wait_any_exited(
+        self, identities: tuple[ProcessIdentity, ...], timeout: float,
+    ) -> None:
+        with select.kqueue() as pending:
+            events = [
+                select.kevent(
+                    identity.pid, filter=select.KQ_FILTER_PROC,
+                    flags=select.KQ_EV_ADD | select.KQ_EV_ONESHOT,
+                    fflags=select.KQ_NOTE_EXIT,
+                )
+                for identity in identities
+            ]
+            for identity in identities:
+                try:
+                    current = self.identity(identity.pid)
+                except ProcessLookupError:
+                    return
+                if current != identity:
+                    return  # Another incarnation holds the pid: this member exited.
+            try:
+                returned = pending.control(
+                    events, 1, None if math.isinf(timeout) else max(0, timeout),
+                )
+                for event in returned:
+                    if event.flags & select.KQ_EV_ERROR:
+                        raise OSError(event.data, os.strerror(event.data))
+            except ProcessLookupError:
+                return
+
 
 class Win32Platform(Platform):
     """Kernel creation times and named job objects bind the complete child tree."""
 
+    def require_pinned_paths(self, refusal: Exception) -> None:
+        raise refusal
+
+    class InputLockOffset(ctypes.Structure):
+        _fields_ = [
+            ("Internal", ctypes.c_size_t),
+            ("InternalHigh", ctypes.c_size_t),
+            ("Offset", ctypes.c_uint32),
+            ("OffsetHigh", ctypes.c_uint32),
+            ("hEvent", ctypes.c_void_p),
+        ]
+
+    def acquire_session_writer(self, descriptor: int) -> None:
+        offset = self.InputLockOffset()
+        lock = self.kernel.LockFileEx
+        lock.argtypes = (ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32,
+                         ctypes.c_uint32, ctypes.c_uint32, ctypes.POINTER(self.InputLockOffset))
+        lock.restype = ctypes.c_int
+        if not lock(msvcrt.get_osfhandle(descriptor), 2, 0, 1, 0, ctypes.byref(offset)):
+            self.raise_last_error()
+
     store_lock_interval = 0.01
+    # Windows' CRT _commit (used by os.fsync) rejects a read-only descriptor.
+    sync_open_flags: ClassVar[int] = os.O_RDWR
+
+    def sync_directory(self, path: Path) -> None:
+        # The Windows CRT cannot open a directory for fsync.
+        pass
+
+    def is_private(self, info: os.stat_result, permissions: int) -> bool:
+        # NTFS ACLs, not POSIX mode bits, determine privacy.
+        return True
+
+    def is_owned(self, info: os.stat_result) -> bool:
+        return True
+
+    def make_private(self, path: Path, permissions: int) -> None:
+        pass
+
+    def make_private_descriptor(self, descriptor: int, permissions: int) -> None:
+        pass
 
     def try_store_lock(self, descriptor: int, *, mode: LockMode) -> None:
         import errno
@@ -731,6 +815,12 @@ class Win32Platform(Platform):
         self._api("CloseHandle", ctypes.c_int, handle)
         self._api("GetProcessTimes", ctypes.c_int, handle, pointer, pointer, pointer, pointer)
         self._api("WaitForSingleObject", dword, handle, dword)
+        self.wait_callback_type = ctypes.WINFUNCTYPE(None, pointer, ctypes.c_ubyte)
+        self._api("CreateEventW", handle, pointer, ctypes.c_int, ctypes.c_int, ctypes.c_wchar_p)
+        self._api("SetEvent", ctypes.c_int, handle)
+        self._api("RegisterWaitForSingleObject", ctypes.c_int, ctypes.POINTER(handle), handle,
+                  self.wait_callback_type, pointer, dword, dword)
+        self._api("UnregisterWaitEx", ctypes.c_int, handle, handle)
         self._api("CreateJobObjectW", handle, pointer, ctypes.c_wchar_p)
         self._api("OpenJobObjectW", handle, dword, ctypes.c_int, ctypes.c_wchar_p)
         self._api("AssignProcessToJobObject", ctypes.c_int, handle, handle)
@@ -745,6 +835,10 @@ class Win32Platform(Platform):
         self._api("Thread32Next", ctypes.c_int, handle, pointer)
         self._api("OpenThread", handle, dword, ctypes.c_int, dword)
         self._api("ResumeThread", dword, handle)
+
+    def raise_last_error(self) -> NoReturn:
+        """Translate this thread's saved Windows error through ctypes once."""
+        raise ctypes.WinError(ctypes.get_last_error())
 
     def _api(self, name: str, result, *arguments) -> None:
         function = getattr(self.kernel, name)
@@ -774,12 +868,43 @@ class Win32Platform(Platform):
             ctypes.byref(kernel),
             ctypes.byref(user),
         ):
-            raise ctypes.WinError(ctypes.get_last_error())
+            self.raise_last_error()
         return ProcessIdentity(pid, created.value)
 
     def identity(self, pid: int) -> ProcessIdentity:
         with self.process_handle(pid) as handle:
             return self._identity(pid, handle)
+
+    def wait_any_exited(
+        self, identities: tuple[ProcessIdentity, ...], timeout: float,
+    ) -> None:
+        event = self.kernel.CreateEventW(None, True, False, None)
+        if not event:
+            self.raise_last_error()
+        callback = self.wait_callback_type(lambda _context, _expired: self.kernel.SetEvent(event))
+        try:
+            with ExitStack() as waits:
+                for identity in identities:
+                    try:
+                        handle = waits.enter_context(self.process_handle(identity.pid))
+                        current = self._identity(identity.pid, handle)
+                    except ProcessLookupError:
+                        return
+                    if current != identity:
+                        return  # Another incarnation holds the pid: this member exited.
+                    registered = ctypes.c_void_p()
+                    if not self.kernel.RegisterWaitForSingleObject(
+                        ctypes.byref(registered), handle, callback, None, 0xFFFFFFFF, 8,
+                    ):  # INFINITE; WT_EXECUTEONLYONCE
+                        self.raise_last_error()
+                    # Join callbacks before closing their process handles and shared event.
+                    waits.callback(self.kernel.UnregisterWaitEx, registered, ctypes.c_void_p(-1))
+                milliseconds = (0xFFFFFFFF if math.isinf(timeout)
+                                else max(0, math.ceil(timeout * 1000)))
+                if self.kernel.WaitForSingleObject(event, milliseconds) == 0xFFFFFFFF:
+                    self.raise_last_error()
+        finally:
+            self.kernel.CloseHandle(event)
 
     @staticmethod
     def job_name(identity: ProcessIdentity) -> str:
@@ -789,7 +914,7 @@ class Win32Platform(Platform):
     def job(self, identity: ProcessIdentity):
         handle = self.kernel.OpenJobObjectW(0x000C, False, self.job_name(identity))
         if not handle:
-            raise ctypes.WinError(ctypes.get_last_error())
+            self.raise_last_error()
         try:
             yield handle
         finally:
@@ -813,7 +938,7 @@ class Win32Platform(Platform):
                                 members.append(self.identity(pid))
                         return tuple(members)
                     if ctypes.get_last_error() != 234:  # ERROR_MORE_DATA
-                        raise ctypes.WinError(ctypes.get_last_error())
+                        self.raise_last_error()
                     capacity *= 2
         except FileNotFoundError:
             if self.matches(leader):
@@ -825,7 +950,7 @@ class Win32Platform(Platform):
             if self._identity(identity.pid, handle) != identity:
                 raise IdentityMismatchError(identity.pid)
             if not self.kernel.TerminateProcess(handle, signum):
-                raise ctypes.WinError(ctypes.get_last_error())
+                self.raise_last_error()
 
     def terminate_group(self, identity: ProcessIdentity) -> None:
         if not self.matches(identity):
@@ -839,7 +964,7 @@ class Win32Platform(Platform):
         try:
             with self.job(identity) as job:
                 if not self.kernel.TerminateJobObject(job, 1):
-                    raise ctypes.WinError(ctypes.get_last_error())
+                    self.raise_last_error()
         except FileNotFoundError:
             if self.matches(identity):
                 raise RuntimeError("Refusing to kill a process without its owned job") from None
@@ -850,13 +975,13 @@ class Win32Platform(Platform):
                 raise IdentityMismatchError(identity.pid)
             job = self.kernel.CreateJobObjectW(None, self.job_name(identity))
             if not job:
-                raise ctypes.WinError(ctypes.get_last_error())
+                self.raise_last_error()
             try:
                 if not self.kernel.AssignProcessToJobObject(job, process):
-                    raise ctypes.WinError(ctypes.get_last_error())
+                    self.raise_last_error()
                 snapshot = self.kernel.CreateToolhelp32Snapshot(4, 0)  # TH32CS_SNAPTHREAD
                 if snapshot == ctypes.c_void_p(-1).value:
-                    raise ctypes.WinError(ctypes.get_last_error())
+                    self.raise_last_error()
                 try:
                     entry = self.ThreadEntry()
                     entry.size = ctypes.sizeof(entry)
@@ -865,10 +990,10 @@ class Win32Platform(Platform):
                         if entry.owner == identity.pid:
                             thread = self.kernel.OpenThread(2, False, entry.tid)
                             if not thread:
-                                raise ctypes.WinError(ctypes.get_last_error())
+                                self.raise_last_error()
                             try:
                                 if self.kernel.ResumeThread(thread) == 0xFFFFFFFF:
-                                    raise ctypes.WinError(ctypes.get_last_error())
+                                    self.raise_last_error()
                                 return
                             finally:
                                 self.kernel.CloseHandle(thread)
@@ -897,6 +1022,18 @@ class Win32Platform(Platform):
 class ChildLifetime(DeclaredFamily, affix="Lifetime"):
     """Whether a launched child may outlive the process that launched it."""
 
+    handoff: ClassVar[bool] = False
+
+    @classmethod
+    def spawned(cls, process: subprocess.Popen[bytes], descriptor: int,
+                registration: ChildRegistration) -> SpawnedProcess:
+        return SpawnedProcess(process, Platform.current().identity(process.pid), registration)
+
+    @classmethod
+    async def spawned_async(cls, process: asyncio.subprocess.Process, descriptor: int,
+                            registration: ChildRegistration) -> AttachedChild:
+        return AttachedChild(process, Platform.current().identity(process.pid), registration)
+
     @classmethod
     @abstractmethod
     def launcher(cls, platform: PosixPlatform) -> int:
@@ -917,6 +1054,37 @@ class DiesWithLauncherLifetime(ChildLifetime):
 
 class OutlivesLauncherLifetime(ChildLifetime):
     """A resident the launcher hands off, such as a worker, a watcher or a bridge."""
+
+    handoff: ClassVar[bool] = True
+
+    @staticmethod
+    def resident(descriptor: int) -> ProcessIdentity:
+        encoded = os.read(descriptor, 64)
+        if not encoded:
+            raise ChildProcessError("Exec gate exited without handing off its resident")
+        return Platform.current().identity(int(encoded))
+
+    @classmethod
+    def spawned(cls, process: subprocess.Popen[bytes], descriptor: int,
+                registration: ChildRegistration) -> SpawnedProcess:
+        try:
+            identity = cls.resident(descriptor)
+        finally:
+            returncode = process.wait()
+        if returncode != 0:
+            raise ChildProcessError("Resident handoff failed")
+        return HandedOffProcess(process, identity, registration)
+
+    @classmethod
+    async def spawned_async(cls, process: asyncio.subprocess.Process, descriptor: int,
+                            registration: ChildRegistration) -> AttachedChild:
+        try:
+            identity = await asyncio.to_thread(cls.resident, descriptor)
+        finally:
+            returncode = await process.wait()
+        if returncode != 0:
+            raise ChildProcessError("Resident handoff failed")
+        return HandedOffAttachedChild(process, identity, registration)
 
     @classmethod
     def launcher(cls, platform: PosixPlatform) -> int:
@@ -941,8 +1109,11 @@ NO_CHILD_REGISTRATION = NoChildRegistration()
 
 
 class ChildLaunch(ABC):
-    # The composition root binds the store after process types are declared.
-    children_store: ClassVar[type[RuntimeChildrenStore]]
+    @property
+    def children_store(self) -> type[RuntimeChildrenStore]:
+        from .runtime_children import RuntimeChildrenStore
+
+        return RuntimeChildrenStore
 
     def __init__(self, runtime: LaunchRuntime):
         self.runtime = runtime
@@ -963,11 +1134,19 @@ class ChildLaunch(ABC):
     @abstractmethod
     def options(self) -> dict: ...
 
+    def spawned(self, process: subprocess.Popen[bytes], registration: ChildRegistration
+                ) -> SpawnedProcess:
+        return ChildLifetime.spawned(process, -1, registration)
+
+    async def spawned_async(self, process: asyncio.subprocess.Process,
+                            registration: ChildRegistration) -> AttachedChild:
+        return await ChildLifetime.spawned_async(process, -1, registration)
+
     def spawn(
         self,
         *,
         cwd=None,
-        env=None,
+        env: Mapping[str, str] = INHERITED_ENVIRONMENT,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -975,13 +1154,12 @@ class ChildLaunch(ABC):
         """Record the launch handle before the platform allows exec."""
         with self.children_store.launching(self.runtime) as reservation:
             process = subprocess.Popen(
-                self.argv, cwd=cwd, env=env, stdin=stdin, stdout=stdout,
-                stderr=stderr, **self.options,
+                self.argv, cwd=cwd, env=self.runtime.child_environment(env), stdin=stdin,
+                stdout=stdout, stderr=stderr, **self.options,
             )
-            identity = Platform.current().identity(process.pid)
-            child = SpawnedProcess(process, identity, reservation.store)
+            child = self.spawned(process, reservation.store)
             try:
-                self.record(identity, reservation)
+                self.record(child.identity, reservation)
             except BaseException:
                 child.reap()
                 child.close_streams()
@@ -991,13 +1169,13 @@ class ChildLaunch(ABC):
     async def spawn_async(self, *, cwd, env, stdio: ChildStdio) -> AttachedChild:
         async with self.children_store.launching_async(self.runtime) as reservation:
             process = await asyncio.create_subprocess_exec(
-                self.argv[0], *self.argv[1:], cwd=cwd, env=env, **stdio.options, **self.options,
+                self.argv[0], *self.argv[1:], cwd=cwd, env=self.runtime.child_environment(env),
+                **stdio.options, **self.options,
             )
-            identity = Platform.current().identity(process.pid)
-            child = AttachedChild(process, identity, reservation.store)
+            child = await self.spawned_async(process, reservation.store)
             child._stderr_task = asyncio.create_task(child._drain_stderr())
             try:
-                self.record(identity, reservation)
+                self.record(child.identity, reservation)
             except BaseException:
                 await process.wait()
                 await child._stderr_task
@@ -1062,15 +1240,19 @@ class WindowsLaunch(ChildLaunch):
 
 
 class PosixLaunch(ChildLaunch):
-    def __init__(self, command: tuple[str, ...], pass_fds: tuple[int, ...], runtime: LaunchRuntime,
-                 launcher: int):
+    def __init__(self, platform: PosixPlatform, command: tuple[str, ...],
+                 pass_fds: tuple[int, ...], runtime: LaunchRuntime,
+                 lifetime: type[ChildLifetime]):
         super().__init__(runtime)
+        self.platform = platform
         self.command = command
         self.pass_fds = pass_fds
-        self.launcher = launcher
+        self.lifetime = lifetime
         self.read_fd, self.write_fd = os.pipe()
         self.error_r, error_w = os.pipe()
         self.error_writer = os.fdopen(error_w, "wb", buffering=0)
+        self.identity_r, identity_w = os.pipe()
+        self.identity_writer = os.fdopen(identity_w, "wb", buffering=0)
 
     @property
     def argv(self) -> tuple[str, ...]:
@@ -1081,7 +1263,9 @@ class PosixLaunch(ChildLaunch):
             _EXEC_GATE,
             str(self.read_fd),
             str(self.error_writer.fileno()),
-            str(self.launcher),
+            str(self.lifetime.launcher(self.platform)),
+            str(int(self.lifetime.handoff)),
+            str(self.identity_writer.fileno()),
             *self.command,
         )
 
@@ -1089,8 +1273,19 @@ class PosixLaunch(ChildLaunch):
     def options(self) -> dict:
         return {
             "start_new_session": True,
-            "pass_fds": (self.read_fd, self.error_writer.fileno(), *self.pass_fds),
+            "pass_fds": (self.read_fd, self.error_writer.fileno(),
+                         self.identity_writer.fileno(), *self.pass_fds),
         }
+
+    def spawned(self, process: subprocess.Popen[bytes], registration: ChildRegistration
+                ) -> SpawnedProcess:
+        self.identity_writer.close()
+        return self.lifetime.spawned(process, self.identity_r, registration)
+
+    async def spawned_async(self, process: asyncio.subprocess.Process,
+                            registration: ChildRegistration) -> AttachedChild:
+        self.identity_writer.close()
+        return await self.lifetime.spawned_async(process, self.identity_r, registration)
 
     def release(self, identity: ProcessIdentity) -> None:
         self.error_writer.close()
@@ -1112,7 +1307,8 @@ class PosixLaunch(ChildLaunch):
 
     def close(self) -> None:
         self.error_writer.close()
-        for fd in (self.read_fd, self.write_fd, self.error_r):
+        self.identity_writer.close()
+        for fd in (self.read_fd, self.write_fd, self.error_r, self.identity_r):
             os.close(fd)
 
 
@@ -1207,6 +1403,12 @@ class NoCountYetPrinted(NoIntegerPrinted):
 class ChildOutcome(DeclaredFamily, affix="Outcome"):
     interrupted: ClassVar[bool] = False
 
+    def report_shutdown(self, report_timeout: Callable[[], None]) -> None:
+        pass
+
+    def fork_failure(self, interrupted_consequence: Callable[[], str]) -> str:
+        return ""
+
     def printed_count(self, stdout: bytes) -> CheckPrinted:
         return NoCountYetPrinted()
 
@@ -1239,8 +1441,15 @@ class ExitedOutcome(ChildOutcome):
         return self.code == 0
 
 
+class InterruptedForkOutcome(ChildOutcome):
+    """A killed helper may leave its native writer locks behind."""
+
+    def fork_failure(self, interrupted_consequence: Callable[[], str]) -> str:
+        return interrupted_consequence()
+
+
 @dataclass(frozen=True)
-class SignaledOutcome(ChildOutcome):
+class SignaledOutcome(InterruptedForkOutcome):
     interrupted: ClassVar[bool] = True
     signal_number: int
 
@@ -1254,8 +1463,11 @@ class SignaledOutcome(ChildOutcome):
 
 
 @dataclass(frozen=True)
-class TimedOutOutcome(ChildOutcome):
+class TimedOutOutcome(InterruptedForkOutcome):
     termination: ChildOutcome
+
+    def report_shutdown(self, report_timeout: Callable[[], None]) -> None:
+        report_timeout()
 
     @property
     def summary(self) -> str:
@@ -1308,6 +1520,20 @@ class ChildResult:
 # exit. It owns no business logic or stored state and preserves exec PID/group.
 _EXEC_GATE = """import os,sys
 fd=int(sys.argv[1]); error_fd=int(sys.argv[2]); launcher=int(sys.argv[3])
+handoff=int(sys.argv[4]); identity_fd=int(sys.argv[5])
+if handoff:
+    ready_r, ready_w = os.pipe()
+    resident = os.fork()
+    if resident:
+        os.close(ready_w)
+        ready = os.read(ready_r, 1); os.close(ready_r)
+        if ready != b'R': os._exit(126)
+        os.write(identity_fd, str(resident).encode()); os.close(identity_fd)
+        os._exit(0)
+    os.close(ready_r)
+    os.setsid()
+    os.write(ready_w, b'R'); os.close(ready_w)
+os.close(identity_fd)
 if launcher:
     import ctypes
     # PR_SET_PDEATHSIG (1) survives exec: the kernel kills this child with its launcher.
@@ -1317,7 +1543,7 @@ if launcher:
 go=os.read(fd,1); os.close(fd)
 if go != b'G': sys.exit(126)
 os.set_inheritable(error_fd, False)
-try: os.execvpe(sys.argv[4], sys.argv[4:], os.environ)
+try: os.execvpe(sys.argv[6], sys.argv[6:], os.environ)
 except OSError as error:
     os.write(error_fd, str(error.errno).encode()); os._exit(126)
 """
@@ -1397,29 +1623,26 @@ class ChildProcess(Sealed, ABC):
 
     def _stop_plan(
         self, guard: Callable[[], AbstractContextManager[None]], deadline: float = math.inf,
-    ) -> Generator[float, None, type[GracefulStopOutcome]]:
+    ) -> Generator[tuple[tuple[ProcessIdentity, ...], float], None, type[GracefulStopOutcome]]:
         with guard():
             self.platform.terminate_group(self.identity)
         grace_deadline = min(time.monotonic() + STOP_GRACE_SECONDS, deadline)
         stage = GracefulStopOutcome
-        while self.platform.group_members(self.identity):
-            if time.monotonic() >= grace_deadline:
+        while members := self.platform.group_members(self.identity):
+            now = time.monotonic()
+            if stage is GracefulStopOutcome and now >= grace_deadline:
                 stage = ForcedStopOutcome
                 with guard():
                     self.platform.force_group(self.identity)
-                break
-            yield STOP_POLL_SECONDS
-        # A killed process exits once the kernel releases it (swapped memory,
-        # pending disk IO), which has no deadline. Kill again each round so a
-        # member forked during the first kill retires too.
-        while self.platform.group_members(self.identity):
-            if time.monotonic() >= deadline:
-                survivors = self.platform.group_members(self.identity)
-                raise ChildRetirementFailed(f"Process group still alive: {survivors}")
+                continue
             if stage is ForcedStopOutcome:
+                if now >= deadline:
+                    raise ChildRetirementFailed(f"Process group still alive: {members}")
                 with guard():
                     self.platform.force_group(self.identity)
-            yield STOP_POLL_SECONDS
+            # Re-enumerate after a member exits: a surviving member may have forked.
+            until = grace_deadline if stage is GracefulStopOutcome else deadline
+            yield members, max(0, until - now)
         self.registration.finished(self.identity)
         return stage
 
@@ -1428,10 +1651,10 @@ class ChildProcess(Sealed, ABC):
         plan = self._stop_plan(guard, deadline)
         while True:
             try:
-                delay = next(plan)
+                members, timeout = next(plan)
             except StopIteration as done:
                 return done.value
-            time.sleep(delay)
+            self.platform.wait_any_exited(members, timeout)
 
     async def _stop(self) -> ChildOutcome:
         pending = asyncio.get_running_loop().run_in_executor(
@@ -1514,7 +1737,7 @@ class AttachedChild(ChildProcess):
         command: tuple[str, ...],
         *,
         cwd: str | Path | None = None,
-        env: dict[str, str] | None = None,
+        env: Mapping[str, str] = INHERITED_ENVIRONMENT,
         pass_fds: tuple[int, ...] = (),
         stdio: ChildStdio = StreamingChildStdio(),
         runtime: LaunchRuntime = LaunchRuntime.running(),
@@ -1533,12 +1756,25 @@ class AttachedChild(ChildProcess):
                 raise
         return child
 
-    async def write(self, data: bytes) -> None:
-        """Write to this still-running child's input and observe transport backpressure."""
+    def send(self, data: bytes) -> None:
+        """Write synchronously while this child's input still exists and it runs."""
         if self.stdin is None or self.returncode is not None:
             raise BrokenPipeError
         self.stdin.write(data)
+
+    async def drain(self) -> None:
         await self.stdin.drain()
+
+    async def write(self, data: bytes) -> None:
+        """Write to this still-running child's input and observe transport backpressure."""
+        self.send(data)
+        await self.drain()
+
+    async def send_fenced(self, data: bytes, boundary, *, measurements) -> None:
+        """Keep the independent raw writer on this child's original input."""
+        from .native_prompt_send import send_fenced_prompt
+
+        await send_fenced_prompt(self.stdin, data, boundary, measurements=measurements)
 
     @property
     def returncode(self) -> int | None:
@@ -1607,6 +1843,19 @@ class AttachedChild(ChildProcess):
             return outcome
         except TimeoutError:
             return TimedOutOutcome(await self.stop())
+
+
+class HandedOffAttachedChild(AttachedChild):
+    """The gate was reaped; resident completion has no parent exit status."""
+
+    @property
+    def returncode(self) -> None:
+        return None
+
+    async def wait(self) -> ChildOutcome:
+        await self.identity.wait_exited()
+        await asyncio.shield(self._stderr_task)
+        return DetachedExitOutcome()
 
 
 class ParentLifeline:
@@ -1679,7 +1928,7 @@ class BoundedRun:
         timeout: float,
         input: bytes | None = None,
         cwd: str | Path | None = None,
-        env: dict[str, str] | None = None,
+        env: Mapping[str, str] = INHERITED_ENVIRONMENT,
         pass_fds: tuple[int, ...] = (),
         runtime: LaunchRuntime = LaunchRuntime.running(),
     ):
@@ -1759,18 +2008,23 @@ class SynchronousProcess(ChildProcess):
             plans[index] = process._stop_plan(guard, deadline)
         stages = {}
         while plans:
-            delays = []
+            waits = []
             for index, plan in tuple(plans.items()):
                 try:
-                    delays.append(next(plan))
+                    waits.append(next(plan))
                 except StopIteration as done:
                     stages[index] = done.value
                     del plans[index]
                 except ChildRetirementFailed as error:
                     errors.append(error)
                     del plans[index]
-            if delays:
-                time.sleep(min(delays))
+            if waits:
+                members = tuple(dict.fromkeys(
+                    member for identities, _timeout in waits for member in identities
+                ))
+                Platform.current().wait_any_exited(
+                    members, min(timeout for _identities, timeout in waits),
+                )
         if errors:
             raise errors[0] if len(errors) == 1 else ExceptionGroup("Process retirement failed", errors)
         return tuple(stages[index](process.reap()) for index, (process, _) in enumerate(stops))
@@ -1786,8 +2040,7 @@ class ObservedProcess(SynchronousProcess):
         return DetachedExitOutcome()
 
     async def wait(self) -> ChildOutcome:
-        while self.alive():
-            await asyncio.sleep(STOP_POLL_SECONDS)
+        await self.platform.wait_exited(self.identity)
         return self.reap()
 
 
@@ -1807,24 +2060,27 @@ class SpawnedProcess(SynchronousProcess):
         self.process = process
 
     @classmethod
-    def launch(
+    @contextmanager
+    def launching(
         cls,
         command: tuple[str, ...],
         *,
         cwd: str | Path | None = None,
-        env: dict[str, str] | None = None,
-        output: Any = subprocess.DEVNULL,
-        before_start: Callable[[ProcessIdentity], None] | None = None,
+        env: Mapping[str, str] = INHERITED_ENVIRONMENT,
+        stdin: int | BinaryIO | TextIO = subprocess.DEVNULL,
+        output: int | BinaryIO | TextIO = subprocess.DEVNULL,
+        stderr: int | BinaryIO | TextIO = subprocess.STDOUT,
         runtime: LaunchRuntime = LaunchRuntime.running(),
         lifetime: type[ChildLifetime] = DiesWithLauncherLifetime,
-    ) -> SpawnedProcess:
+    ) -> Generator[SpawnedProcess]:
+        """Yield the child before it executes; leaving the body releases it, raising reaps it."""
         if not command:
             raise ValueError("A child command is required")
         with Platform.current().launch(command, (), runtime, lifetime) as launch:
-            child = launch.spawn(cwd=cwd, env=env, stdout=output, stderr=output)
+            child = launch.spawn(cwd=cwd, env=env, stdin=stdin, stdout=output,
+                                 stderr=stderr)
             try:
-                if before_start is not None:
-                    before_start(child.identity)
+                yield child
             except BaseException:
                 launch.cancel_before_release(child.identity)
                 child.reap()
@@ -1836,7 +2092,12 @@ class SpawnedProcess(SynchronousProcess):
             except BaseException:
                 child.close()
                 raise
-        return child
+
+    @classmethod
+    def launch(cls, command: tuple[str, ...], **options: Any) -> SpawnedProcess:
+        """Launch with nothing to reserve before the child executes."""
+        with cls.launching(command, **options) as child:
+            return child
 
     def collect(self, *, timeout: float) -> subprocess.CompletedProcess[bytes]:
         """Collect within the caller's owned context; its exit retires descendants."""
@@ -1856,7 +2117,8 @@ class SpawnedProcess(SynchronousProcess):
         if not math.isfinite(timeout) or timeout <= 0:
             raise ValueError("A positive finite timeout is required")
         deadline = time.monotonic() + timeout
-        with cls.launch(command, cwd=cwd, env=env, output=subprocess.PIPE) as child:
+        with cls.launch(command, cwd=cwd, env=env, output=subprocess.PIPE,
+                        stderr=subprocess.PIPE) as child:
             try:
                 return child.collect(timeout=max(0, deadline - time.monotonic()))
             finally:
@@ -1866,8 +2128,7 @@ class SpawnedProcess(SynchronousProcess):
         return ChildOutcome.from_returncode(self.process.wait(timeout=STOP_GRACE_SECONDS))
 
     async def wait(self) -> ChildOutcome:
-        while self.process.poll() is None:
-            await asyncio.sleep(STOP_POLL_SECONDS)
+        await self.platform.wait_exited(self.identity)
         return self.reap()
 
     def close_streams(self) -> None:
@@ -1886,6 +2147,13 @@ class SpawnedProcess(SynchronousProcess):
 
     def __exit__(self, *_):
         self.close()
+
+
+class HandedOffProcess(ObservedProcess, SpawnedProcess):
+    """Keep launch streams, while observed-process behavior owns resident retirement."""
+
+    def collect(self, *, timeout: float) -> subprocess.CompletedProcess[bytes]:
+        raise ChildProcessError("A handed-off resident has no parent exit status to collect")
 
 
 class PoolWorkerStopped(BaseException):
@@ -1952,112 +2220,6 @@ class DetachedExitOutcome(ChildOutcome):
         return False
 
 
-class NamespacedChild(ChildProcess):
-    """Attached shape with kernel containment and an independent hard deadline.
-
-    Lifted from the selected-Pi guardian: namespace PID1 attests readiness before
-    exec release, a pidfd watchdog arms before launch, and killing unshare kills
-    namespace PID1 (including descendants which escaped the process group).
-    Business input/UNKNOWN journals stay with the caller.
-    """
-
-    def __init__(self, child: AttachedChild, watchdog: AttachedChild, namespace: PidNamespace):
-        super().__init__(child.identity)
-        self.child = child
-        self.watchdog = watchdog
-        self.namespace = namespace
-
-    @classmethod
-    async def start(
-        cls,
-        command: tuple[str, ...],
-        *,
-        deadline: float,
-        cwd: str | Path | None = None,
-        env: dict[str, str] | None = None,
-    ) -> NamespacedChild:
-        platform = Platform.current()
-        if not isinstance(platform, NamespaceContainment) or not isinstance(platform, PidfdHandles):
-            raise NotImplementedError("Exact namespace deadline containment unavailable")
-        if not math.isfinite(deadline) or deadline <= time.monotonic():
-            raise ValueError("A future finite monotonic deadline is required")
-        launch = NamespaceLaunch(command, secrets.token_hex(16), deadline)
-        ready_r, ready_w = os.pipe()
-        release_r, release_w = os.pipe()
-        child = watchdog = None
-        descriptor = None
-        try:
-            child = await AttachedChild.start(
-                platform.namespace_argv(launch, ready_w, release_r),
-                cwd=cwd,
-                env=env,
-                pass_fds=(ready_w, release_r),
-            )
-            descriptor = platform.open_pidfd(child.pid)
-            watchdog = await AttachedChild.start(
-                WatchDeadlineCommand(descriptor, deadline).argv(),
-                pass_fds=(descriptor,),
-            )
-            assert watchdog.stdout is not None
-            async with asyncio.timeout(max(0, deadline - time.monotonic())):
-                if await watchdog.stdout.readline() != b"armed\n":
-                    raise RuntimeError("Independent child watchdog failed to arm")
-                # Reading this dedicated pipe cannot consume provider stdout.
-                os.set_blocking(ready_r, False)
-                loop = asyncio.get_running_loop()
-                ready: asyncio.Future[bytes] = loop.create_future()
-                data = bytearray()
-
-                def receive() -> None:
-                    if ready.done():
-                        return
-                    chunk = os.read(ready_r, 4096)
-                    data.extend(chunk)
-                    if len(data) > 4096 or not chunk:
-                        ready.set_exception(RuntimeError("Namespace readiness missing"))
-                    elif b"\n" in data:
-                        ready.set_result(bytes(data))
-
-                loop.add_reader(ready_r, receive)
-                try:
-                    proof = FieldCodec.decode(NamespaceReady, json.loads(await ready))
-                finally:
-                    loop.remove_reader(ready_r)
-                if (
-                    proof.token != launch.token
-                    or proof.pid != 1
-                    or proof.namespace == os.readlink("/proc/self/ns/pid")
-                    or not child.alive()
-                ):
-                    raise RuntimeError("Namespace readiness identity mismatch")
-                namespace = platform.namespace_owner(child.identity, proof)
-                os.write(release_w, b"G")
-                return cls(child, watchdog, namespace)
-        except BaseException:
-            if child is not None:
-                await child.stop()
-            if watchdog is not None:
-                await watchdog.stop()
-            raise
-        finally:
-            for fd in (ready_r, ready_w, release_r, release_w):
-                os.close(fd)
-            if descriptor is not None:
-                os.close(descriptor)
-
-    async def wait(self) -> ChildOutcome:
-        return await self._retire(await self.child.wait())
-
-    async def _stop(self) -> ChildOutcome:
-        return await self._retire(await self.child.stop())
-
-    async def _retire(self, result: ChildOutcome) -> ChildOutcome:
-        await self.watchdog.stop()
-        async with asyncio.timeout(STOP_GRACE_SECONDS):
-            await self.namespace.wait_exited()
-        return result
-
-
 class ChildCommand(DeclaredFamily, affix="Command"):
     """Internal child entrypoints decode once through their declaration owner."""
 
@@ -2092,40 +2254,3 @@ class ControllingTerminalCommand(ChildCommand):
         os.execvpe(self.command[0], self.command, os.environ)
 
 
-@dataclass(frozen=True)
-class NamespaceInitCommand(ChildCommand):
-    launch: NamespaceLaunch
-    ready_fd: int
-    release_fd: int
-
-    def run(self) -> None:
-        try:
-            if os.getpid() != 1 or time.monotonic() >= self.launch.deadline:
-                raise RuntimeError("Namespace init missing or deadline elapsed")
-            proof = NamespaceReady(
-                self.launch.token,
-                os.readlink("/proc/self/ns/pid"),
-                os.getpid(),
-            )
-            os.write(self.ready_fd, (json.dumps(FieldCodec.encode(proof)) + "\n").encode())
-            os.close(self.ready_fd)
-            if os.read(self.release_fd, 1) != b"G" or time.monotonic() >= self.launch.deadline:
-                raise RuntimeError("Namespace release absent or deadline elapsed")
-            os.close(self.release_fd)
-            os.execvpe(self.launch.command[0], self.launch.command, os.environ)
-        except BaseException:
-            os._exit(127)
-
-
-@dataclass(frozen=True)
-class WatchDeadlineCommand(ChildCommand):
-    descriptor: int
-    deadline: float
-
-    def run(self) -> None:
-        platform = Platform.current()
-        if not isinstance(platform, PidfdHandles):
-            raise NotImplementedError("Exact process watchdog unavailable")
-        os.fstat(self.descriptor)
-        print("armed", flush=True)
-        platform.watch_deadline(self.descriptor, self.deadline)

@@ -10,10 +10,11 @@ from typing import Annotated
 from .coordination_errors import IdentityConflict
 from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from .typed_table import (
+    TableReference,
     Column,
     GuardedInserts,
     ImmutableRows,
-    TypedTable,
+    WithoutRowid,
 )
 
 
@@ -22,7 +23,7 @@ class TriageNativeSources(
     GuardedInserts,
     ImmutableRows,
     NativeRuntimeTable,
-    TypedTable,
+    WithoutRowid,
     declared_name="native_runtime_triage_sources",
 ):
     insert_condition = """(NOT EXISTS (SELECT 1 FROM native_runtime_input n
@@ -34,11 +35,10 @@ class TriageNativeSources(
         JOIN json_each(NEW.assignment_ids) member ON member.value=previous.value))"""
 
     input_id: Annotated[
-        str, Column(primary_key=True, references=(NativeRuntimeInput, "input_id"))
+        str, Column(primary_key=True, references=TableReference(NativeRuntimeInput, ("input_id",)))
     ]
     assignment_ids: tuple[str, ...]
 
-    without_rowid = True
     checks = ("json_array_length(assignment_ids)>0",)
 
     def __post_init__(self):

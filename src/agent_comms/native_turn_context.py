@@ -9,6 +9,7 @@ from agent_comms import field_codec
 from .native_session_reopen import NativeSessionIdentity
 from .pi_payloads import PiResponseData, StrictFields
 from .tool_result import DeclaredReply
+from .thread_identity import OfferedTools
 from .turn_context import (
     ContextManifest,
     ContextSourceText,
@@ -29,6 +30,7 @@ if TYPE_CHECKING:
 class NativeContextManifestData(StrictFields, PiResponseData):
     counter: str
     segments: tuple[SegmentManifest, ...]
+    offered_tools: OfferedTools
     request_id: Annotated[
         DispatchRequest, field_codec.WireName("requestId"), field_codec.WireOmitDefault()
     ] = field(default_factory=UnobservedDispatchRequest)

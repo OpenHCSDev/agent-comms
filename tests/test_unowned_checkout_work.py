@@ -1,20 +1,20 @@
 """Retained Git work protects linked rows through the real watcher and heartbeat."""
 
+
+from agent_comms.bus import Bus
+
 import json
-import os
-from pathlib import Path
 import subprocess
-import sys
 import time
 from contextlib import nullcontext
+from pathlib import Path
 
 import pytest
 
+from cli_command import core
 from order_scope_fixture import FIX_SCOPE
-
-from agent_comms.candidate_maintenance import drain_candidate_catchup
 from agent_comms.change_report import FileLine
-from agent_comms.commander.config import CommanderConfig
+from agent_comms.threads import ParkedThreadWorkState, ReadyThreadWorkState
 from agent_comms.commander.standing import (
     CheckoutHeldWheelSpin,
     ReassignedWheelSpin,
@@ -22,23 +22,28 @@ from agent_comms.commander.standing import (
     UnownedWheelSpin,
     WaitingUnownedWheelSpin,
 )
-from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation, CommanderReview
-from agent_comms.comms import Comms
+from agent_comms.commander_heartbeat import (
+    CommanderHeartbeat,
+    CommanderObservation,
+    CommanderReview,
+)
+from agent_comms.comms import Comms, wire
 from agent_comms.field_codec import FieldCodec
-from agent_comms.goal_actions import SetGoalAction
-from agent_comms.goals import OrderCheck, RequestGoalOrder
-from agent_comms.installer.practice import practice_copy
+from agent_comms.goals import OrderCheck
+from agent_comms.installer.practice import PracticeCopy
+from agent_comms.locked_store import RootFile
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
-from agent_comms.storage_rules import StorageDenied, StorageRule, shell_storage_effects
+from agent_comms.storage_rules import StorageDenied, StorageProjection, StorageRule, shell_storage_effects
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import CoreWatcherIncarnation
-from agent_comms.todos import GoalRef, PendingProblemOrder, PullRequests, ReleaseTodo, StrikeReason
+from agent_comms.todos import PendingProblemOrder, ProgressRead, ReleaseTodo, StrikeReason
 from agent_comms.transcript_events import AssistantTranscript
-from agent_comms.work_branches import UnreadableCheckoutRead, WorkBranches
 from agent_comms.ui_model.unit_state import UnitState, Unreadable
+from agent_comms.work_branches import UnreadableCheckoutRead, WorkBranches
+from agent_comms.threads import Thread
 
 
 def git(directory: Path, *arguments: str) -> str:
@@ -86,7 +91,7 @@ def test_a_second_repository_checkout_is_judged_by_its_source_before_it_exists(
     adding = f'git -C {other} worktree add -q -b worker-toad {lockstep}'
 
     def decide(command: str, cwd: Path) -> None:
-        checkout_bus.registry.decide_storage('worker', shell_storage_effects(command, cwd))
+        StorageProjection(checkout_bus.registry.storage_rule, checkout_bus.registry.require('worker')).check(shell_storage_effects(command, cwd))
 
     with pytest.raises(StorageDenied, match='is not a checkout of worker'):
         decide(f'git worktree add -q -b worker-wrong {lockstep}', tmp_path / 'declared-project')
@@ -94,7 +99,7 @@ def test_a_second_repository_checkout_is_judged_by_its_source_before_it_exists(
         decide(f'git -C {other} worktree add -q {lockstep.with_name("worker--P1--textual")}',
                tmp_path)
     with pytest.raises(StorageDenied, match='is not a checkout of idle'):
-        checkout_bus.registry.decide_storage('idle', shell_storage_effects(adding, tmp_path))
+        StorageProjection(checkout_bus.registry.storage_rule, checkout_bus.registry.require('idle')).check(shell_storage_effects(adding, tmp_path))
     assert not lockstep.exists()
     decide(adding, tmp_path)
     subprocess.run(adding.split(), check=True, capture_output=True, timeout=15)
@@ -122,13 +127,16 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
     root = tmp_path / 'seed'
     root.mkdir(mode=0o700)
     (root / 'storage.json').write_text(json.dumps(FieldCodec.encode(rule)))
-    c = Comms(root)
-    c.messaging.initialize_private_initial_protocol()
-    for name in ('lead', 'worker', 'idle'):
-        c.registry.declare(c.registry.new_thread(
-            name, frozenset(), str(home), execution=ExternalThreadExecution))
-    c.goals.update_goal('lead', SetGoalAction(
-        text='Keep changes with their author', order=RequestGoalOrder(), goal_id='request'))
+    Bus.install(Bus.path_in(root))
+    c = wire(root)
+    # Two order holders never share one worktree, so the unit taking the work has its own.
+    spare = tmp_path / 'idle-project'
+    git(home, 'worktree', 'add', '-q', '-b', 'idle-home', str(spare))
+    for name, worktree in (('lead', home), ('worker', home), ('idle', spare)):
+        c.registry.declare(Thread(
+            name, frozenset(), str(worktree), execution=ExternalThreadExecution))
+    request = c.goals.todos.add_request(
+        c.registry.require('lead').incarnation, 'Keep changes with their author').id
     lead, worker = c.registry.require('lead'), c.registry.require('worker')
     now = time.time()
     order = PendingProblemOrder(
@@ -142,7 +150,7 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
             problem, RepositoryName.from_wire('OpenHCSDev/agent-comms'),
             'Keep changes with their author', creator=lead, assigner=lead.incarnation, owner=worker,
             generation='shared-work', review_at=RecordedEventTime(now + 3600),
-            order=order, goal=GoalRef('lead', lead.created_at, 'request'))
+            order=order, request=request)
     # Both current IDs change, as they do when Core hands work out again.
     for problem in ('P1', 'P2'):
         row = c.goals.todos.get(problem)
@@ -150,12 +158,12 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
             problem, expected_revision=row.revision, owner=worker,
             assigner=lead.incarnation, generation='reissued-work',
             review_at=RecordedEventTime(now + 3600), order=order.reissued(now + 1),
-            goal=GoalRef('lead', lead.created_at, 'request'))
+            request=request)
     c.goals.todos.create(
         'P3', RepositoryName.from_wire('OpenHCSDev/agent-comms'),
         'Keep unrelated work separate', creator=lead, assigner=lead.incarnation, owner=worker,
         generation='other-work', review_at=RecordedEventTime(now + 3600),
-        order=order.reissued(now + 2), goal=GoalRef('lead', lead.created_at, 'request'))
+        order=order.reissued(now + 2), request=request)
     row = c.goals.todos.get('P2')
     assert {related.id for related in c.goals.todos.related_problems(row)} == {'P1', 'P2'}
     c.goals.todos.apply('P2', ReleaseTodo(
@@ -189,51 +197,50 @@ def test_dirty_then_unpushed_then_pushed_linked_checkout(checkout_bus: Comms, tm
     untouched = original.goals.todos.get('P2')
     idle_goal = original.registry.require('idle').goal
     checkout = original.registry.storage_rule.order_checkout('worker', 'P1')
-    with practice_copy(original.root, tmp_path / 'practice') as (root, _measurement):
-        c = Comms(root)
-        review = CommanderReview(frozenset())
+    practice = PracticeCopy(original.root, tmp_path / 'practice')
+    practice.include(tuple(RootFile.existing_in(practice.root)))
+    (root, _measurement) = practice.path, practice.measurement
+    c = wire(root)
+    review = CommanderReview(frozenset())
 
-        def beat():
-            frame = CommanderObservation.read(c, c.registry.require('lead'))
-            review.wake(c, CommanderHeartbeat.sender, frame.thread, frame.rules, frame.states)
+    def beat():
+        frame = CommanderObservation.read(c, c.registry.require('lead'))
+        review.wake(c, CommanderHeartbeat.sender, frame.thread, frame.rules, frame.states)
 
-        with LaunchRoot.from_path(root).selected():
-            (checkout / 'work.py').write_text('# not yet published\n')
-            assert_retained(c)
-            beat()
-            git(checkout, 'add', 'work.py')
-            git(checkout, 'commit', '-q', '-m', 'Unpushed work')
-            assert git(checkout, 'status', '--porcelain') == ''
-            assert_retained(c)
-            git(checkout, 'push', '-q', 'origin', 'worker-work')
-            config = CommanderConfig.read_root(root)
-            config.model_copy(update={'parked': frozenset({'idle'})}).write(tmp_path / 'copy-home')
-            waiting = UnownedWheelSpin.violations(c, 'lead')
-            assert len(waiting) == 1
-            assert isinstance(waiting[0], WaitingUnownedWheelSpin)
-            UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
-            assert c.goals.todos.get('P2').holder is None
-            beat()
-            config.write(tmp_path / 'copy-home')
-            available = UnownedWheelSpin.violations(c, 'lead')
-            assert len(available) == 1
-            assert isinstance(available[0], ReassignedWheelSpin)
-            assert available[0].unit == 'idle'
-            assert set(available).isdisjoint(review.rules)
-            UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
-            assigned = c.goals.todos.get('P2')
-            assert assigned.holder == 'idle'
-            assert c.registry.require('idle').goal.require().text
-            beat()
-        drain_candidate_catchup(root)
-        history = subprocess.run(
-            (sys.executable, '-m', 'agent_comms.cli', '--root', str(root), 'history',
-             '--target', '@commander-heartbeat', '--as', 'lead', '--limit', '10'),
-            env=os.environ.copy(), capture_output=True, text=True, timeout=30, check=True)
-        assert f'WORK HELD: P2 worker retains work in {checkout}' in history.stdout
-        assert f'NO LONGER CURRENT: WORK HELD: P2 worker retains work in {checkout}' in history.stdout
-        print('PRIVATE HEARTBEAT', history.stdout)
-        print('PRIVATE WATCHER: dirty and unpushed retained; clean pushed assigned to', assigned.holder)
+    with LaunchRoot.from_path(root).selected():
+        (checkout / 'work.py').write_text('# not yet published\n')
+        assert_retained(c)
+        beat()
+        git(checkout, 'add', 'work.py')
+        git(checkout, 'commit', '-q', '-m', 'Unpushed work')
+        assert git(checkout, 'status', '--porcelain') == ''
+        assert_retained(c)
+        git(checkout, 'push', '-q', 'origin', 'worker-work')
+        c.registry.set_work_state('idle', ParkedThreadWorkState())
+        waiting = UnownedWheelSpin.violations(c, 'lead')
+        assert len(waiting) == 1
+        assert isinstance(waiting[0], WaitingUnownedWheelSpin)
+        UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
+        assert c.goals.todos.get('P2').holder is None
+        beat()
+        c.registry.set_work_state('idle', ReadyThreadWorkState())
+        available = UnownedWheelSpin.violations(c, 'lead')
+        assert len(available) == 1
+        assert isinstance(available[0], ReassignedWheelSpin)
+        assert available[0].unit == 'idle'
+        assert set(available).isdisjoint(review.rules)
+        UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
+        assigned = c.goals.todos.get('P2')
+        assert assigned.holder == 'idle'
+        assert c.registry.require('idle').goal.require().text
+        beat()
+    history = core('--root', str(root), 'history',
+                   '--target', '@commander-heartbeat', '--as', 'lead', '--limit', '10')
+    assert history.returncode == 0, history.stderr
+    assert f'WORK HELD: P2 worker retains work in {checkout}' in history.stdout
+    assert f'NO LONGER CURRENT: WORK HELD: P2 worker retains work in {checkout}' in history.stdout
+    print('PRIVATE HEARTBEAT', history.stdout)
+    print('PRIVATE WATCHER: dirty and unpushed retained; clean pushed assigned to', assigned.holder)
     assert original.goals.todos.get('P2') == untouched
     assert original.registry.require('idle').goal == idle_goal
 
@@ -241,18 +248,20 @@ def test_dirty_then_unpushed_then_pushed_linked_checkout(checkout_bus: Comms, tm
 def test_unreadable_checkout_is_its_units_state_and_the_pass_carries_on(
         checkout_bus: Comms, tmp_path: Path):
     """10:08 on 2026-10-21: one unit's unreadable checkout failed the whole pass for every unit."""
-    with practice_copy(checkout_bus.root, tmp_path / 'practice') as (root, _measurement):
-        c = Comms(root)
-        checkout = c.registry.storage_rule.order_checkout('worker', 'P1')
-        (checkout / '.git').write_text('gitdir: /nonexistent/removed\n')
-        before = c.goals.todos.get('P2')
-        with LaunchRoot.from_path(root).selected():
-            read = WorkBranches(checkout).read_checkout()
-            assert isinstance(read, UnreadableCheckoutRead) and read.holds_work
-            UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
-            assert c.goals.todos.get('P2') == before
-            unreadable, = (state for state in UnitState.current(c, 'lead', PullRequests())
-                          if isinstance(state, Unreadable))
-            assert unreadable.unit == c.registry.require('worker').incarnation
-            assert str(checkout) in unreadable.reason
-            assert 'not a git repository' in unreadable.line()
+    practice = PracticeCopy(checkout_bus.root, tmp_path / 'practice')
+    practice.include(tuple(RootFile.existing_in(practice.root)))
+    (root, _measurement) = practice.path, practice.measurement
+    c = wire(root)
+    checkout = c.registry.storage_rule.order_checkout('worker', 'P1')
+    (checkout / '.git').write_text('gitdir: /nonexistent/removed\n')
+    before = c.goals.todos.get('P2')
+    with LaunchRoot.from_path(root).selected():
+        read = WorkBranches(checkout).read_checkout()
+        assert isinstance(read, UnreadableCheckoutRead) and read.holds_work
+        UnownedOrderWatch().watch_pass(lambda: nullcontext(c))
+        assert c.goals.todos.get('P2') == before
+        unreadable, = (state for state in UnitState.current(c, 'lead', ProgressRead())
+                      if isinstance(state, Unreadable))
+        assert unreadable.unit == c.registry.require('worker').incarnation
+        assert str(checkout) in unreadable.reason
+        assert 'not a git repository' in unreadable.line()

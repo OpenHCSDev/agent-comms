@@ -45,6 +45,7 @@ export declare class NativeInputClaim {
 }
 export interface NativeContextManifest {
     counter: string;
+    offered_tools: {kind: 'reported_tools'; version: string; names: readonly string[]};
     segments: readonly NativeContextSegmentManifest[];
     requestId?: string;
     values?: NativeContextData['segments'];

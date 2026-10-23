@@ -9,20 +9,19 @@ from contextlib import closing
 import pytest
 from pydantic import ValidationError
 
-from agent_comms.bus_route_counts import RouteIndexRebuilding
 from agent_comms.cli import _fail, main
-from agent_comms.cli_bridges.shared import Binding, DeliveryRow, StoredBinding
+from agent_comms.cli_bridges.shared import Binding, DeliveryRow, GivenBinding, StoredBinding
+from agent_comms.field_codec import RecordProblems
 from agent_comms.cli_protocol import (
     WATCH_LINE, FailedCoreError, UnavailableCoreError, UnconfirmedOutcome, DeliveredOutcome,
 )
-from agent_comms.coordination_database import CoordinationStore
+from agent_comms.locked_store import SQLiteFile
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.messages import InfoKind, Message
 
 
 @pytest.mark.parametrize('error,expected', [
     (CoordinationReadUnavailable('wording does not decide recovery'), UnavailableCoreError),
-    (RouteIndexRebuilding(12, 4096), UnavailableCoreError),
     (RuntimeError('database is locked'), FailedCoreError),
     (ValueError('first\nsecond'), FailedCoreError),
 ])
@@ -33,7 +32,7 @@ def test_exception_declaration_encodes_one_line(error, expected, capsys):
     decoded = WATCH_LINE.validate_json(output)
     assert type(decoded) is expected
     assert decoded.error == str(error)
-    assert json.loads(output)['type'] == expected.wire_tag
+    assert json.loads(output)['type'] == expected.declared_name
 
 
 def test_error_keeps_cause_without_using_cause_text_as_policy(capsys):
@@ -157,10 +156,46 @@ def test_existing_binding_lookup_does_not_acquire_a_writer(tmp_path):
         assert binding.bind(db) == binding
         statements = []
         db.set_trace_callback(statements.append)
-        with closing(CoordinationStore.writer(tmp_path / 'delivery.sqlite3')) as writer:
+        with closing(SQLiteFile.writer(tmp_path / 'delivery.sqlite3')) as writer:
             writer.execute('BEGIN IMMEDIATE')
             assert StoredBinding().bind(db) == binding
             assert writer.in_transaction
         assert not any(sql.startswith(('BEGIN', 'COMMIT', 'ROLLBACK')) for sql in statements)
 
 
+
+
+@pytest.mark.asyncio
+async def test_watched_record_crosses_the_watch_line_as_its_envelope(root):
+    """The bridge's watch child writes what bus.watch yields; the bridge decodes that same line."""
+    from contextlib import aclosing
+
+    from goal_owner_fixture import canonical_goal_wire
+
+    from agent_comms.cli_protocol import ArrivedMessage
+    from agent_comms.read_basis import ExplicitWatchAcknowledgment
+    from agent_comms.threads import Thread
+
+    comms = canonical_goal_wire(root)
+    for name in ("a", "b"):
+        comms.registry.declare(Thread(name=name, tags=frozenset(), worktree='/wt'))
+    sent = comms.messaging.send("a", "b", "crosses").message
+    async with aclosing(comms.bus.watch("b", acknowledgment=ExplicitWatchAcknowledgment)) as watched:
+        async with asyncio.timeout(5):
+            record = await anext(watched)
+    line = WATCH_LINE.validate_json(ArrivedMessage(message=record).model_dump_json())
+    assert isinstance(line, ArrivedMessage)
+    assert line.message.to_wire() == sent.to_wire() == record.to_wire()
+
+
+def test_given_binding_fields_override_the_stored_binding(tmp_path):
+    """A partial binding takes each missing field from the stored one; a field absent from
+    both is refused by name, and a changed field still claims another conversation."""
+    type_key = {Binding.family_discriminator: Binding.declared_name}
+    with Binding.open(tmp_path) as db:
+        with pytest.raises(RecordProblems, match='bus_thread'):
+            GivenBinding({**type_key, 'root': str(tmp_path)}).bind(db)
+        stored = Binding(str(tmp_path), 'viewer', 'external-session').bind(db)
+        assert GivenBinding({**type_key, 'root': str(tmp_path)}).bind(db) == stored
+        with pytest.raises(ValueError, match='another Core/CLI conversation'):
+            GivenBinding({**type_key, 'bus_thread': 'other-viewer'}).bind(db)

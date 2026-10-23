@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import math
 import os
-import tempfile
 from abc import abstractmethod
 from collections import deque
 from collections.abc import Callable, Iterable, Mapping
@@ -15,15 +13,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import BinaryIO, ClassVar
 
-from .bus_publication import reject_private_wire_fields
 from .channels import Channel
 from .cli_result import CliResult
 from .declared_family import DeclaredFamily
-from .errors import RelationViolationError
 from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
-from .messages import Message
 from .message_reference import MessageReference
+from .messages import Message
 from .registration import Registration
+from .store_files import AtomicFile, ExclusiveAtomicFile
 
 
 class WireExportFormat(DeclaredFamily, affix="Format"):
@@ -39,12 +36,12 @@ class WireExportFormat(DeclaredFamily, affix="Format"):
         """Render the durable metadata record."""
 
     @abstractmethod
-    def row(self, message: Message, stored: Mapping[str, object]) -> bytes:
-        """Render a parsed message and its lossless stored envelope."""
+    def row(self, message: Message) -> bytes:
+        """Render the message's public projection."""
 
     @staticmethod
     def json_record(record: Mapping[str, object]) -> str:
-        return json.dumps(record, ensure_ascii=False, separators=(",", ":"))
+        return FieldCodec.compact(record, ensure_ascii=False)
 
 
 class SelectableWireExportFormat(WireExportFormat):
@@ -58,8 +55,10 @@ class JsonlFormat(SelectableWireExportFormat):
     def header(self, metadata: Mapping[str, object]) -> bytes:
         return (self.json_record(metadata) + "\n").encode()
 
-    def row(self, message: Message, stored: Mapping[str, object]) -> bytes:
-        return (self.json_record({"record": "message", "message": stored}) + "\n").encode()
+    def row(self, message: Message) -> bytes:
+        return (self.json_record({
+            "record": "message", "message": Message.from_message(message).to_wire(),
+        }) + "\n").encode()
 
 
 @dataclass(frozen=True)
@@ -70,7 +69,7 @@ class TextFormat(SelectableWireExportFormat):
             f"# metadata: {self.json_record(metadata)}\n"
         ).encode()
 
-    def row(self, message: Message, stored: Mapping[str, object]) -> bytes:
+    def row(self, message: Message) -> bytes:
         timestamp = (
             datetime.fromtimestamp(message.timestamp, UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
             if math.isfinite(message.timestamp) and message.timestamp > 0
@@ -430,12 +429,12 @@ class WireTranscriptExporter:
 
     def export(
         self,
-        envelopes: Iterable[Message | Mapping[str, object]],
+        messages: Iterable[Message],
         destination: Path,
         *,
         overwrite: bool = False,
     ) -> WireExportProvenance:
-        """Consume ascending envelopes once and atomically publish the artifact."""
+        """Consume ascending messages once and atomically publish the artifact."""
         header = self._header()
         self.limit.validate_header(len(header))
 
@@ -444,35 +443,25 @@ class WireTranscriptExporter:
         if not overwrite and os.path.lexists(destination):
             raise FileExistsError(f"Wire-export destination {str(destination)!r} already exists.")
 
-        descriptor, temporary = tempfile.mkstemp(
-            prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent
-        )
-        temporary_path = Path(temporary)
+        artifact = AtomicFile(destination) if overwrite else ExclusiveAtomicFile(destination)
         stats = ExportSelectionStats()
         exported = 0
         first_selected: Message | None = None
         last_selected: Message | None = None
-        try:
-            with os.fdopen(descriptor, "wb") as output:
-                writer = _ArtifactWriter(output)
-                writer.write(header)
-                rows = self._rows(envelopes, stats)
-                for row in self.limit.select(
-                    rows, len(header), self.boundary.export_started_at, stats
-                ):
-                    writer.write(row.data)
-                    exported += 1
-                    if first_selected is None:
-                        first_selected = row.message
-                    last_selected = row.message
-                output.flush()
-                os.fsync(output.fileno())
-                bytes_written = writer.size
-                output_sha256 = writer.digest.hexdigest()
-
-            self._publish(temporary_path, destination, overwrite=overwrite)
-        finally:
-            temporary_path.unlink(missing_ok=True)
+        with artifact.staged() as output:
+            writer = _ArtifactWriter(output)
+            writer.write(header)
+            rows = self._rows(messages, stats)
+            for row in self.limit.select(
+                rows, len(header), self.boundary.export_started_at, stats
+            ):
+                writer.write(row.data)
+                exported += 1
+                if first_selected is None:
+                    first_selected = row.message
+                last_selected = row.message
+            bytes_written = writer.size
+            output_sha256 = writer.digest.hexdigest()
 
         omitted = stats.source_messages - exported
         return WireExportProvenance(
@@ -513,51 +502,19 @@ class WireTranscriptExporter:
 
     def _rows(
         self,
-        envelopes: Iterable[Message | Mapping[str, object]],
+        messages: Iterable[Message],
         stats: ExportSelectionStats,
     ) -> Iterable[WireExportRow]:
         previous_sequence = -1
-        for envelope in envelopes:
-            for row in self._source_rows(envelope):
-                previous_sequence = self._validate_sequence(row.message, previous_sequence)
-                if row.message.seq > self.boundary.through_seq:
-                    return
-                stats.source_messages += 1
-                yield row
-
-    def _source_rows(self, envelope: Message | Mapping[str, object]):
-        from .wire_record import WireRecord
-
-        if isinstance(envelope, Message):
-            stored: Mapping[str, object] = envelope.to_wire()
-            messages = (envelope,)
-        else:
-            reject_private_wire_fields(envelope)
-            stored = envelope
-            messages = WireRecord.public_from_wire(stored).messages()
         for message in messages:
-            yield WireExportRow(message, self.format.row(message, stored))
+            previous_sequence = self._validate_sequence(message, previous_sequence)
+            if message.seq > self.boundary.through_seq:
+                return
+            stats.source_messages += 1
+            yield WireExportRow(message, self.format.row(message))
 
     @staticmethod
     def _validate_sequence(message: Message, previous: int) -> int:
         if message.seq <= previous:
             raise ValueError("Wire-export envelopes must have unique ascending sequences.")
         return message.seq
-
-    @staticmethod
-    def _publish(temporary: Path, destination: Path, *, overwrite: bool) -> None:
-        if overwrite:
-            os.replace(temporary, destination)
-        else:
-            try:
-                os.link(temporary, destination)
-            except FileExistsError:
-                raise FileExistsError(
-                    f"Wire-export destination {str(destination)!r} already exists."
-                ) from None
-        if os.name != "nt":
-            directory = os.open(destination.parent, os.O_RDONLY)
-            try:
-                os.fsync(directory)
-            finally:
-                os.close(directory)

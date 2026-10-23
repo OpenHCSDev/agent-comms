@@ -1,10 +1,13 @@
 """Normal coding policies use existing claims; no provider or user work is touched."""
 
+
+
 from agent_comms.pi_payloads import ReportedFlag, ReportedText
 import json
 import os
 import secrets
 from pathlib import Path
+from types import SimpleNamespace
 from dataclasses import replace
 from tempfile import TemporaryDirectory
 
@@ -13,7 +16,7 @@ import pytest
 from agent_comms.native_tool_call import CodingCall
 from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.storage_room import NoRoomNeeded
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.envelope_claim_transitions import (
     ClaimConflict,
     ClaimTransitionError,
@@ -26,6 +29,7 @@ from agent_comms.coordination_session import NativeBoundary
 from agent_comms.native_tools import CodingTool
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import ToolCallContent
+from agent_comms.threads import Thread
 
 
 def test_create_claim_competes_before_file_exists_and_releases_without_creation():
@@ -34,11 +38,10 @@ def test_create_claim_competes_before_file_exists_and_releases_without_creation(
         root.mkdir(mode=0o700)
         work = Path(directory) / "work"
         work.mkdir()
-        c = Comms(root)
+        c = wire(root)
         for name, created in [("a", 21.0), ("b", 22.0)]:
-            thread = c.registry.new_thread(name, frozenset({'team'}), str(work), created_at=created)
+            thread = Thread(name, frozenset({'team'}), str(work), created_at=created)
             c.registry.declare(replace(thread, process_identity=ProcessIdentity.capture(os.getpid())))
-        c.messaging.initialize_private_initial_protocol()
         resource = WritableFileClaim(Path("new/nested/file.py"))
         def acquire(name):
             with NativeBoundary(c.bus) as boundary:
@@ -46,12 +49,12 @@ def test_create_claim_competes_before_file_exists_and_releases_without_creation(
                 scope = NativeClaim(owner_claimed_generation=boundary.registry.claim_generation(name),
                                     operation_id=secrets.token_hex(16), turn_id=f"create-{name}",
                                     input_id=f"create-input-{name}")
-                return c.bus.publisher._publish_acquisition_unlocked(boundary.bus_lock,
+                return c.bus.publisher._publish_acquisition_unlocked(
                     boundary.registry, owner, resource.normalized(work), scope,
                     activity=boundary.activity)
         committed = acquire("a")
         assert not (work / "new").exists()
-        assert c.bus.log.claim_projection()[str(work / "new/nested/file.py")].seq == committed.seq
+        assert c.bus.bus.claim_projection()[str(work / "new/nested/file.py")].seq == committed.seq
         with pytest.raises(ClaimConflict):
             acquire("b")
         with NativeBoundary(c.bus) as boundary:
@@ -69,13 +72,12 @@ def test_stopped_holder_reclaimed_in_copied_root(tmp_path, monkeypatch, existing
     resource = WritableFileClaim(work / "shared.py")
     if existing:
         resource.resource.write_text("original\n")
-    original = Comms(tmp_path / "original")
+    original = wire(tmp_path / "original")
     for name in ("holder-a", "holder-b"):
-        thread = original.registry.new_thread(name, frozenset(), str(work))
+        thread = Thread(name, frozenset(), str(work))
         original.registry.declare(replace(
             thread, process_identity=ProcessIdentity.capture(os.getpid())
         ))
-    original.messaging.initialize_private_initial_protocol()
 
     def acquire(comms, name):
         with NativeBoundary(comms.bus) as boundary:
@@ -86,13 +88,13 @@ def test_stopped_holder_reclaimed_in_copied_root(tmp_path, monkeypatch, existing
                 input_id=f"input-{name}",
             )
             return comms.bus.publisher._publish_acquisition_unlocked(
-                boundary.bus_lock, boundary.registry, owner, resource.normalized(work),
+                boundary.registry, owner, resource.normalized(work),
                 scope, activity=boundary.activity,
             )
 
     first = acquire(original, "holder-a")
-    original_bytes = original.bus.log.path.read_bytes()
-    copied = Comms(shutil.copytree(original.root, tmp_path / "copied"))
+    original_revision = original.bus.bus.revision()
+    copied = wire(shutil.copytree(original.root, tmp_path / "copied"))
     assert first.live(copied.registry.snapshot())
     with pytest.raises(ClaimConflict):
         acquire(copied, "holder-b")
@@ -102,9 +104,9 @@ def test_stopped_holder_reclaimed_in_copied_root(tmp_path, monkeypatch, existing
     assert second.owner == "holder-b" and second.generation != first.generation
     with NativeBoundary(copied.bus) as boundary:
         copied.bus.publisher.release_resources(boundary, (first,), "Late old release")
-    assert copied.bus.log.claim_projection()[second.resource] == second
-    assert original.bus.log.path.read_bytes() == original_bytes
-    assert original.registry.status("holder-a").active
+    assert copied.bus.bus.claim_projection()[second.resource] == second
+    assert original.bus.bus.revision() == original_revision
+    original.registry.status("holder-a").require_active()
     assert resource.resource.exists() == existing
     if existing:
         assert resource.resource.read_text() == "original\n"
@@ -158,7 +160,7 @@ def test_coding_names_and_argument_types_come_from_declarations():
     ("write", {"path": "x", "content": 3}),
 ])
 def test_pi_argument_records_reject_bad_shapes_without_claiming(name, arguments):
-    from agent_comms.native_tool_call import SelectedToolDenied
+    from agent_comms.tool_denial import SelectedToolDenied
 
     from agent_comms.native_tool_call import RefusedCodingCall
 
@@ -169,7 +171,7 @@ def test_pi_argument_records_reject_bad_shapes_without_claiming(name, arguments)
 
 
 def test_family_selector_is_denied_but_record_presentation_stays_readable():
-    from agent_comms.native_tool_call import SelectedToolDenied
+    from agent_comms.tool_denial import SelectedToolDenied
     from agent_comms.tool_declaration import NoToolRecord, ToolDeclaration
 
     arguments = {"path": "x", "tool": "write"}
@@ -220,7 +222,7 @@ async def test_tool_error_while_check_waits_cannot_receive_late_permission(tmp_p
 
     owner = Owner()
     socket = CodingToolSocket(tool_listener(tmp_path, secrets.token_hex(32)), owner, pid=os.getpid())
-    socket.turn = object()
+    socket.turn = SimpleNamespace(launch=SimpleNamespace(root=tmp_path))
     socket.announce((ToolCallContent(id="late", name="read", arguments={"path": "a"}),))
     socket.tool_started(ToolExecutionStart(
         tool_call_id=ReportedText("late"), tool_name=ReportedText("read"), args={"path": "a"}
@@ -249,7 +251,7 @@ async def test_child_that_stopped_waiting_is_logged_not_raised(tmp_path, caplog,
         input_id = secrets.token_hex(16)
 
         async def allow(self, turn, round_number, call):
-            from agent_comms.native_tool_call import SelectedToolDenied
+            from agent_comms.tool_denial import SelectedToolDenied
 
             answered.set()
             if refused:

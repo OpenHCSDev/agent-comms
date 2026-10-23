@@ -2,22 +2,25 @@
 
 from __future__ import annotations
 
-import os
-import subprocess
 import sys
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 from urllib.parse import urlsplit
 
 from packaging.markers import Marker
 from packaging.utils import canonicalize_name
-from pydantic import BaseModel, Field, RootModel, TypeAdapter
+from pydantic import BaseModel, Field
 
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.installer.probes.packages import ArchivePin, GitPin, PackagePin, PackageRecord
+from agent_comms.installer.probes.packages import DistributionVersionsProbe, InstalledPackagesProbe
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repository_name import RepositoryName
+
+if TYPE_CHECKING:
+    from agent_comms.installer.upgrade import Stack
 
 
 class RuntimePackage(DeclaredFamily, affix="Package"):
@@ -29,7 +32,11 @@ class RuntimePackage(DeclaredFamily, affix="Package"):
         return resolution.packages[cls.distribution].source.revision()
 
 
-class CorePackage(RuntimePackage):
+class ConsoleScriptPackage:
+    """A runtime package whose console scripts the installer publishes."""
+
+
+class CorePackage(RuntimePackage, ConsoleScriptPackage):
     distribution = "agent-comms"
     repository = RepositoryName("OpenHCSDev", "agent-comms")
 
@@ -38,7 +45,7 @@ class CorePackage(RuntimePackage):
         return resolution.core_commit
 
 
-class ToadPackage(RuntimePackage):
+class ToadPackage(RuntimePackage, ConsoleScriptPackage):
     distribution = "batrachian-toad"
     repository = RepositoryName("OpenHCSDev", "toad")
 
@@ -46,65 +53,6 @@ class ToadPackage(RuntimePackage):
 class TextualPackage(RuntimePackage):
     distribution = "textual"
     repository = RepositoryName("OpenHCSDev", "textual")
-
-
-@dataclass(frozen=True)
-class PackagePin:
-    version: str
-
-
-@dataclass(frozen=True)
-class GitPin(PackagePin):
-    commit: str
-
-
-@dataclass(frozen=True)
-class ArchivePin(PackagePin):
-    url: str
-
-
-class CommitRecord(BaseModel):
-    commit_id: str
-
-
-class SourceRecord(BaseModel):
-    url: str
-
-    def revision(self) -> str:
-        raise ValueError("The installed package does not record a Git revision")
-
-
-class ArchiveRecord(SourceRecord):
-    def pin(self, version: str) -> PackagePin:
-        return ArchivePin(version, self.url)
-
-
-class GitRecord(SourceRecord):
-    vcs_info: CommitRecord
-
-    def revision(self) -> str:
-        return self.vcs_info.commit_id
-
-    def pin(self, version: str) -> PackagePin:
-        return GitPin(version, self.vcs_info.commit_id)
-
-
-class RegistryRecord(RootModel[None]):
-    """null is the build record's declared registry-package representation."""
-
-    def revision(self) -> str:
-        raise ValueError("A registry package does not record a Git revision")
-
-    def pin(self, version: str) -> PackagePin:
-        return PackagePin(version)
-
-
-class PackageRecord(BaseModel):
-    version: str
-    source: GitRecord | ArchiveRecord | RegistryRecord
-
-    def pin(self) -> PackagePin:
-        return self.source.pin(self.version)
 
 
 class RegistrySource(BaseModel):
@@ -162,6 +110,28 @@ class LocalPackage(LockedPackage):
     source: EditableSource | VirtualSource
 
 
+class ProjectGitSource(BaseModel):
+    git: str
+    branch: str
+
+
+class ProjectPathSource(BaseModel):
+    path: Path
+    editable: bool
+
+
+class UvProject(BaseModel):
+    sources: dict[str, ProjectGitSource | ProjectPathSource]
+
+
+class ProjectTools(BaseModel):
+    uv: UvProject
+
+
+class StackProject(BaseModel):
+    tool: ProjectTools
+
+
 class ResolvedLock(BaseModel):
     package: list[VersionedPackage | LocalPackage]
 
@@ -180,7 +150,7 @@ class ResolvedLock(BaseModel):
 class UnbuiltRuntime:
     prefix: Path
 
-    def matches(self, lock: Path, python: Path, core: str) -> bool:
+    def matches(self, lock: Path, stack: Stack, core: str) -> bool:
         return False
 
 
@@ -204,25 +174,8 @@ class RuntimeResolution(BaseModel):
         return cls.at(prefix)
 
     @classmethod
-    def capture(cls, python: Path, core: str) -> RuntimeResolution:
-        environment = LaunchRuntime(python).environment(os.environ)
-        program = """import importlib.metadata as m,json,sys
-from pathlib import Path
-import agent_comms
-from agent_comms.package_stamp import STAMP
-from packaging.utils import canonicalize_name
-if not Path(agent_comms.__file__).resolve().is_relative_to(Path(sys.prefix).resolve()):
-    raise ValueError('Core is editable, not a built runtime package')
-if STAMP.commit() != sys.argv[1]:
-    raise ValueError('The wheel stamp does not name the selected source')
-print(json.dumps({canonicalize_name(d.metadata['Name']): {
-    'version':d.version,
-    'source':json.loads(source) if (source := d.read_text('direct_url.json')) else None
-} for d in m.distributions()}))
-"""
-        packages = TypeAdapter(dict[str, PackageRecord]).validate_json(
-            subprocess.check_output([python, "-c", program, core], env=environment)
-        )
+    def capture(cls, stack: Stack, core: str) -> RuntimeResolution:
+        packages = stack.probe(InstalledPackagesProbe(core))
         return cls(core_commit=core, packages=packages)
 
     def save(self, prefix: Path) -> None:
@@ -241,21 +194,10 @@ print(json.dumps({canonicalize_name(d.metadata['Name']): {
             )
         return result
 
-    def matches(self, lock: Path, python: Path, core: str) -> bool:
+    def matches(self, lock: Path, stack: Stack, core: str) -> bool:
         resolved = ResolvedLock.model_validate(tomllib.loads(lock.read_text()))
         print(f"install: real lock decodes {len(resolved.package)} packages", file=sys.stderr)
         # sync --locked has already selected the platform, groups and extras. Read its
         # selected names/versions, then obtain every source identity from the lock itself.
-        selected = TypeAdapter(dict[str, str]).validate_json(
-            subprocess.check_output(
-                [
-                    python,
-                    "-c",
-                    "import importlib.metadata as m,json; "
-                    "from packaging.utils import canonicalize_name as n; "
-                    'print(json.dumps({n(d.metadata["Name"]):d.version '
-                    "for d in m.distributions()}))",
-                ]
-            )
-        )
+        selected = stack.probe(DistributionVersionsProbe())
         return self.pins() == resolved.pins(selected, core)

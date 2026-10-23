@@ -11,7 +11,7 @@ from . import agent_events as events
 from . import turn_phase as phases
 from .acp_failure import UnrecordedFailureSource
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, FieldPlan, WireName, WireOmitDefault
+from .field_codec import FieldCodec, FieldPlan, WireName, WireNullDefault, WireOmitDefault
 from .native_input_record import NativeInputCommit, NativeInputLocation
 from .native_pi import NativePiOperationFailed
 from .native_turn_context import NativeContextManifestData
@@ -53,32 +53,28 @@ class RetryProgress:
         return True
 
 
-class PiTurnPhase:
-    """Pi declarations own event entry/end matching; shared phases own stage behavior."""
 
-    _start_phases: ClassVar[dict[type[object], tuple[type[phases.TurnPhase], ...]]] = {}
-    _end_events: ClassVar[dict[type[object], frozenset[type[object]]]] = {}
+
+@dataclass(frozen=True)
+class PiEvent(OpenPayload, affix=""):
+    """One declaration-owned record received by the Pi RPC channel."""
+
+    starts: ClassVar[type[phases.TurnPhase] | None] = None
+    ends: ClassVar[tuple[type[phases.TurnPhase], ...]] = ()
 
     def on(self, current: phases.TurnPhase) -> phases.TurnPhase:
-        for event_type in type(self).__mro__:
-            for member in self._start_phases.get(event_type, ()):
-                return self.enter(member, current)
+        if self.starts is not None:
+            return self.enter(self.starts, current)
         return self.leave(current) if self.matches_end(current) else current
 
     def enter(self, member: type[phases.TurnPhase], current: phases.TurnPhase) -> phases.TurnPhase:
         return member()
 
     def matches_end(self, current: phases.TurnPhase) -> bool:
-        return any(event_type in self._end_events.get(member, frozenset())
-                   for member in type(current).__mro__ for event_type in type(self).__mro__)
+        return isinstance(current, self.ends)
 
     def leave(self, current: phases.TurnPhase) -> phases.TurnPhase:
         return phases.ModelWaitPhase()
-
-
-@dataclass(frozen=True)
-class PiEvent(PiTurnPhase, OpenPayload, affix=""):
-    """One declaration-owned record received by the Pi RPC channel."""
 
     def __init_subclass__(
         cls, *, starts: type[phases.TurnPhase] | None = None,
@@ -86,9 +82,9 @@ class PiEvent(PiTurnPhase, OpenPayload, affix=""):
     ) -> None:
         super().__init_subclass__(**kwargs)
         if starts is not None:
-            cls._start_phases[cls] = (starts,)
+            cls.starts = starts
         if ends is not None:
-            cls._end_events[ends] = cls._end_events.get(ends, frozenset()) | {cls}
+            cls.ends = (*cls.ends, ends)
 
     @staticmethod
     def unowned_event(event):
@@ -139,6 +135,9 @@ class PiEvent(PiTurnPhase, OpenPayload, affix=""):
 
     def responds_to(self, request: PiCommand) -> bool:
         return False
+
+    def correlate_or_deliver(self, channel, on_event: Callable[[PiEvent], None]) -> None:
+        on_event(self)
 
 
 class NativePiEvent(PiEvent, declared_name=None):
@@ -703,7 +702,7 @@ class MessageUpdate(phases.AcceptsPrompt, NativePiEvent, DurablePiEvent):
     message: PiMessage = field(
         default_factory=AbsentMessage
     )
-    usage: Annotated[PiUsage, WireOmitDefault()] = UnreportedUsage()
+    usage: Annotated[PiUsage, WireOmitDefault(), WireNullDefault()] = UnreportedUsage()
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         if self.message.update_context and not session.native.attestation.uncertain:
@@ -760,6 +759,9 @@ class Response(NativePiEvent, DurablePiEvent):
         return not self.success.value_or(True)
 
     async def deliver_to(self, channel) -> None:
+        channel.correlate(self)
+
+    def correlate_or_deliver(self, channel, on_event: Callable[[PiEvent], None]) -> None:
         channel.correlate(self)
 
     def responds_to(self, request: PiCommand) -> bool:

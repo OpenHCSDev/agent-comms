@@ -15,7 +15,7 @@ from agent_comms.coordination_contracts import (
     validate_execution_id,
 )
 from agent_comms.coordination_errors import RecoveryBlocked, StaleFence
-from agent_comms.coordination_schema import CoordinatorTable
+from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.coordination_tables.participants import OwnerGenerations, OwnerRecord
 from agent_comms.field_codec import SnapshotExclude, projected
 from agent_comms.owner_fence import AttemptAuthority
@@ -35,7 +35,6 @@ from agent_comms.typed_table import (
     NonDecreasing,
     NonDecreasingWhenPresent,
     TextStorage,
-    TypedTable,
 )
 
 if TYPE_CHECKING:
@@ -93,13 +92,12 @@ class AttemptRecord(
     OwnerRecord,
     GuardedInserts,
     NoDelete,
-    CoordinatorTable,
-    TypedTable,
+    CoordinatorRow,
     PreviousAttempt,
     declared_name="attempts",
 ):
     counter_reference = ForeignKey(
-        ("owner_lookup", "owner_generation"), OwnerGenerations, ("owner_lookup", "generation")
+        columns=("owner_lookup", "owner_generation"), target=OwnerGenerations, target_columns=("owner_lookup", "generation")
     )
     column_orders = (
         NonDecreasing(("updated_at_ms", "last_progress_at_ms", "backend_done", "process_dead")),
@@ -114,7 +112,7 @@ class AttemptRecord(
         AND NEW.attempt_ordinal = 1 + coalesce((SELECT max(a.attempt_ordinal) FROM attempts a
         WHERE a.execution_id = e.execution_id), 0)))
         OR (NOT EXISTS (SELECT 1 FROM owner_generations g WHERE g.owner_lookup = NEW.owner_lookup
-        AND g.owner_thread = NEW.owner_thread AND g.generation = NEW.owner_generation))
+        AND g.generation = NEW.owner_generation))
         OR ((json_extract(NEW.lifecycle, '$.kind')) != 'prompt_starting' OR NEW.revision != 1
         OR (CASE WHEN json_extract(NEW.lifecycle, '$.kind') IN ({terminal_attempt_names})
         THEN 1 ELSE json_extract(NEW.lifecycle, '$.backend_done') END) != 0
@@ -171,7 +169,7 @@ class AttemptRecord(
         return AttemptAuthority(
             self.execution_id,
             self.attempt_ordinal,
-            self.owner_thread,
+            self.owner_lookup,
             self.owner_generation,
             self.owner_token_digest,
         )
@@ -179,7 +177,6 @@ class AttemptRecord(
     execution_id: Annotated[str, SnapshotExclude(), FrozenColumn(primary_key=True)]
     attempt_ordinal: Annotated[int, FrozenColumn(primary_key=True, check="attempt_ordinal > 0")]
     owner_lookup: Annotated[str, FrozenColumn()]
-    owner_thread: Annotated[str, FrozenColumn(check="length(owner_thread) BETWEEN 1 AND 256")]
     owner_generation: Annotated[int, FrozenColumn(check="owner_generation > 0")]
     owner_token_digest: Annotated[
         str,
@@ -217,7 +214,6 @@ class AttemptRecord(
         validate_execution_id(self.execution_id)
         for field, value in (
             ("owner_lookup", self.owner_lookup),
-            ("owner_thread", self.owner_thread),
             ("owner_token_digest", self.owner_token_digest),
         ):
             require_nonempty(value, field)
@@ -291,12 +287,12 @@ class AttemptRecord(
         from agent_comms.coordination_tables.participants import Participants
 
         return (
-            ForeignKey(("execution_id",), ExecutionRecord, ("execution_id",)),
-            ForeignKey(("owner_lookup",), Participants, ("participant_lookup",)),
+            ForeignKey(columns=("execution_id",), target=ExecutionRecord, target_columns=("execution_id",)),
+            ForeignKey(columns=("owner_lookup",), target=Participants, target_columns=("participant_lookup",)),
             ForeignKey(
-                ("execution_id", "attempt_ordinal", "owner_lookup", "active_required_status"),
-                ExecutionRecord,
-                ("execution_id", "current_attempt_ordinal", "owner_lookup", "status"),
+                columns=("execution_id", "attempt_ordinal", "owner_lookup", "active_required_status"),
+                target=ExecutionRecord,
+                target_columns=("execution_id", "current_attempt_ordinal", "owner_lookup", "status"),
                 deferred=True,
             ),
         )

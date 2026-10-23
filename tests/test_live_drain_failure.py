@@ -1,5 +1,6 @@
 """The actual background drain exposes broken SQLite state and observes recovery."""
 
+
 import asyncio
 import json
 import os
@@ -13,7 +14,7 @@ import pytest
 from agent_comms.activity import (
     NativeInputDrainDiagnostic, StoppedDrainDiagnostic, UnavailableDrainDiagnostic,
 )
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
 from agent_comms.drain_failures import drain_failures
 from test_acp_private_nk_delivery import _session
@@ -30,7 +31,7 @@ async def until(predicate):
 
 def owner_view(comms):
     return next(
-        view for view in Comms(comms.root).views.thread_views() if view.thread.name == "beta"
+        view for view in wire(comms.root).views.thread_views() if view.thread.name == "beta"
     )
 
 
@@ -50,7 +51,6 @@ async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, b
     try:
         agent.inputs.ensure_live_drain("beta")
         await until(lambda: agent.inputs.state("beta").observation_watcher is not None)
-        agent.inputs.wake_observer("beta")
         await until(
             lambda: owner_view(comms).activity.readiness.source_diagnostic().holds_event_current
         )

@@ -1,5 +1,6 @@
 """Standby liveness preserves goal authority and never replays an input."""
 
+
 from agent_comms.messages import ConversationRole, NoticeRole
 import os
 from dataclasses import replace
@@ -9,7 +10,7 @@ import pytest
 from agent_comms.turn_lease import NoFinishedTurn
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.goal_actions import (
     EditGoalAction,
     GoalPrecondition,
@@ -24,12 +25,13 @@ from goal_owner_fixture import canonical_goal_wire
 from agent_comms.goal_waits import NoGoalWait
 from agent_comms.goal_waits import RecordedGoalWait
 from agent_comms.thread_text import GivenThreadText
+from agent_comms.threads import Thread
 
 
 
 def _thread(comms, name, worktree):
     comms.registry.declare(
-        comms.registry.new_thread(name, frozenset(), str(worktree), process_identity=ProcessIdentity.capture(os.getpid()))
+        Thread(name, frozenset(), str(worktree), process_identity=ProcessIdentity.capture(os.getpid()))
     )
 
 
@@ -110,12 +112,12 @@ def test_last_target_finishes_silently_releases_once_and_reopens(tmp_path):
     assert comms.goals.release_waits_after_terminal_turn(other_fence) == ()
     child_fence = _finish(comms, "child", "child-turn")
     assert comms.goals.release_waits_after_terminal_turn(child_fence) == ("owner",)
-    reopened = Comms(comms.root)
+    reopened = wire(comms.root)
     continued = reopened.registry.require("owner").goal
     assert continued.id == goal.id and continued.state.declared_name == "active"
     assert continued.revision == goal.revision + 2
     assert "without a qualifying direct reply" in continued.progress
-    assert reopened.goals.goal_execution("owner").state.value == "runnable"
+    assert reopened.goals.goal_execution("owner").runnable()
     assert isinstance(reopened.goals.goal_wait("owner"), NoGoalWait)
     assert reopened.registry.require("owner").goal.state.pause_source is None
     assert reopened.goals.release_waits_after_terminal_turn(child_fence) == ()

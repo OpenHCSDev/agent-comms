@@ -16,20 +16,23 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Generic, TypeVar
 
-from .child_process import join_retirement
+from .child_process import Platform, join_retirement
+from .coordination_database import CoordinationStore
 from .field_codec import FieldCodec, MalformedRecord, Token256Text
+from .errors import RelationViolationError
 from .lifecycle_capability import Complete
 from .native_tool_call import (
     DuplicateToolCallIdentity,
     NativeToolCall,
     OwnerToolConnection,
-    SelectedToolDenied,
     ToolOutcomeUnknown,
 )
-from .pi_payloads import PiContent, ToolCallContent
+from .pi_payloads import PiContent
 from .private_path import PrivateDirectoryRole, PrivateSocketRole
+from .tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
+    from .backend import TurnSession
     from .pi_events import ToolExecutionEnd, ToolExecutionStart
 
 _LOG = logging.getLogger(__name__)
@@ -99,13 +102,13 @@ class NativeToolRound(Generic[Call]):
         declared: list[Call] = []
         seen: set[str] = set()
         for item in content:
-            if isinstance(item, ToolCallContent):
-                call = decode_call(item.id, item.name, item.arguments)
+            for tool_call in item.tool_calls():
+                call = decode_call(tool_call.id, tool_call.name, tool_call.arguments)
                 if call.call_id in seen:
                     raise DuplicateToolCallIdentity(call.call_id)
                 seen.add(call.call_id)
                 declared.append(call)
-            elif not item.tool_round_allowed:
+            if not item.tool_round_allowed:
                 raise SelectedToolDenied("Invalid native tool content")
         if not declared:
             raise SelectedToolDenied("Native tool round has no declared call")
@@ -198,9 +201,12 @@ class ToolListener:
         self.session_directory = Path(directory).absolute()
         self.token = token
         self._resources = AsyncExitStack()
-        if not hasattr(socket, "SO_PEERCRED") or not hasattr(os, "O_NOFOLLOW"):
-            raise SelectedToolDenied("Selected tool requires a peer-credential Unix socket")
-        PrivateDirectoryRole.require(self.session_directory.lstat())
+        refusal = SelectedToolDenied("Selected tool requires a peer-credential Unix socket")
+        if not hasattr(socket, "SO_PEERCRED"):
+            raise refusal
+        Platform.current().require_pinned_paths(refusal)
+        PrivateDirectoryRole.require(
+            self.session_directory.lstat(), RelationViolationError("Selected tool socket parent is not private"))
         if self.session_directory.resolve() != self.session_directory:
             raise SelectedToolDenied("Selected tool socket parent is not private")
         with ExitStack() as prepared:
@@ -262,13 +268,14 @@ class ToolTransport(Generic[Call]):
     """A child-bound request policy. An instance always has its authenticated PID."""
 
     max_request = 1024 * 1024
+    turn: TurnSession
 
     @property
     def retainable(self) -> bool:
         return True
 
     @classmethod
-    async def open(cls, turn, ownership, *policy) -> UnboundToolTransport:
+    async def open(cls, turn: TurnSession, ownership, *policy) -> UnboundToolTransport:
         listener = ToolListener(turn.launch.session.directory, os.urandom(32).hex())
         ownership.push_async_callback(listener.close)
 
@@ -320,7 +327,7 @@ class ToolTransport(Generic[Call]):
         call.finish(
             FieldCodec.encode(event.tool_name),
             FieldCodec.encode(event.is_error),
-            self.listener.session_directory,
+            CoordinationStore.path_in(self.turn.launch.root),
             input_id,
             identity.round_number,
         )

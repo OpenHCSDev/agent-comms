@@ -2,10 +2,11 @@
 
 import json
 from collections.abc import Mapping
+from dataclasses import dataclass
 
 import pytest
 
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.tool_results import NoToolDiff
 from agent_comms.pi_commands import GetState, PiCommand, Prompt
 from agent_comms.pi_counts import PiCount, ReportedCount, UnreportedCount
@@ -30,6 +31,36 @@ from agent_comms.thread_model import DeclaredModel, UndeclaredModel
 
 def decode(record):
     return PiRpcChannel.decode_record((json.dumps(record) + "\n").encode(), strict=True)
+
+
+def test_single_external_member_is_derived_and_requires_one_provided_case():
+    from agent_comms.declared_family import DeclaredFamily
+    from agent_comms.field_codec import ExternalNullMember, SingleExternalMember
+    from agent_comms.pi_payloads import PiPayload
+
+    class Choice(SingleExternalMember, PiPayload, DeclaredFamily, affix="Choice"):
+        pass
+
+    @dataclass(frozen=True)
+    class MissingChoice(ExternalNullMember, Choice):
+        pass
+
+    assert Choice.from_wire(None) == MissingChoice()
+    with pytest.raises(ValueError, match="not enough values"):
+        Choice.from_wire({})
+
+    @dataclass(frozen=True)
+    class ProvidedChoice(Choice):
+        pass
+
+    assert Choice.from_wire({}) == ProvidedChoice()
+
+    @dataclass(frozen=True)
+    class AnotherChoice(Choice):
+        pass
+
+    with pytest.raises(ValueError, match="too many values"):
+        Choice.from_wire({})
 
 
 @pytest.mark.parametrize("command", ["switch_session"])
@@ -173,7 +204,7 @@ def test_tracked_commit_observations_preserve_original_receipt_and_refuse_repeti
     ],
 )
 def test_malformed_known_authority_fields_fail_at_boundary(record):
-    with pytest.raises((ValueError, TypeError)):
+    with pytest.raises(MalformedRecord):
         decode(record)
 
 
@@ -278,7 +309,7 @@ def test_pi_usage_and_its_token_total_are_reported_or_not_once_decoded():
 
 def test_raw_tool_arguments_reach_the_declared_call_refusal():
     from agent_comms.native_tool_call import CodingCall, RefusedCodingCall
-    from agent_comms.native_tool_call import SelectedToolDenied
+    from agent_comms.tool_denial import SelectedToolDenied
 
     event = decode({"type": "message_end", "message": {
         "role": "assistant", "content": [

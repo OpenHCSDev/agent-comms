@@ -11,7 +11,7 @@ from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
-from typing import TYPE_CHECKING, Any, Generic, Self, TypeVar, Annotated
+from typing import TYPE_CHECKING, Generic, Self, TypeVar
 
 from acp import RequestError
 
@@ -23,15 +23,15 @@ from .coordination_database import CoordinationStore
 from .coordination_errors import IdentityConflict, StaleRevision
 from .coordination_session import ReadNativeCoordinationSession
 from .coordinator import Coordination
+from .controller import Controller
 from .errors import RelationViolationError
-from .field_codec import Id128Text, WireName
+from .field_codec import Id128Text
 from .goals import GoalDeclaration, NoGoal
 from .image_inputs import ImageInput
 from .input_attempt import InputAttempt, ReservedInput
 from .input_disposition import InputDispositions
 from .input_origin import InputOrigin, UnattributedInputOrigin, WireInputOrigin
-from .store_files import _store_lock
-from .thread_identity import ClaimedIdentity
+from .thread_identity import ClaimScoped, ClaimedIdentity
 from .threads import Thread
 from .turn_goal_permission import AcceptedGoalPermission, TurnGoalPermission
 from .turn_input_source import AcceptedFollowingInput, DeliveredFollowingInput
@@ -39,7 +39,7 @@ from .turn_input_source import AcceptedFollowingInput, DeliveredFollowingInput
 if TYPE_CHECKING:
     from .acp_extension import QueueItem, QueueScope
     from .agent_backend import InputContent, TurnInbox
-    from .bus_publication import CommittedDelivery
+    from .bus_publication import Delivered
     from .comms import Comms
     from .coordination_tables.assignments import WakeAssignment
     from .input_drain import InputDrain
@@ -55,8 +55,7 @@ class InputHandoffRefused(RelationViolationError):
 
 
 @dataclass(frozen=True, slots=True)
-class QueuedInputContext:
-    claim_scope: Annotated[ClaimedIdentity, WireName("admission")]
+class QueuedInputContext(ClaimScoped):
     goal: GoalDeclaration = field(default_factory=NoGoal)
 
     @classmethod
@@ -67,14 +66,14 @@ class QueuedInputContext:
         """Use the caller's canonical registry name without changing authority."""
         return replace(
             self,
-            claim_scope=replace(
-                self.claim_scope,
-                incarnation=replace(self.claim_scope.incarnation, name=name),
+            claimed_identity=replace(
+                self.claimed_identity,
+                incarnation=replace(self.claimed_identity.incarnation, name=name),
             ),
         )
 
     def owns(self, claim_scope: ClaimedIdentity) -> bool:
-        return self.named(claim_scope.incarnation.name).claim_scope == claim_scope
+        return self.named(claim_scope.incarnation.name).claimed_identity == claim_scope
 
     @property
     def active_goal_id(self) -> str | None:
@@ -89,7 +88,7 @@ class QueuedInput:
     input_id: str
     prompt: str
     images: tuple[ImageInput, ...] = ()
-    controller: Any = None
+    controller: Controller | None = None
 
     @property
     def key(self) -> str:
@@ -99,7 +98,7 @@ class QueuedInput:
         """Show the item only when its recorded input generation matches the queue."""
         from .acp_extension import QueueItem
 
-        return (QueueItem(self.input_id, self.text),) if self.context.owns(scope.claim_scope) else ()
+        return (QueueItem(self.input_id, self.text),) if self.context.owns(scope.claimed_identity) else ()
 
     def source(self) -> AcceptedFollowingInput:
         return AcceptedFollowingInput(
@@ -118,12 +117,12 @@ class QueuedInput:
         prompt: str,
         echo: bool,
         images: tuple[ImageInput, ...],
-        controller: Any,
+        controller: Controller | None,
         ownership: ExitStack,
         input_id: str | None = None,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> tuple[Self, InputAttempt]:
-        """Called inside the wire boundary; acceptance follows the durable reservation."""
+        """Called under the registry lock; acceptance follows the durable reservation."""
         snapshot = inputs.comms.registry.snapshot()
         canonical = snapshot.canonical_name(name)
         owner = snapshot.threads[canonical]
@@ -131,7 +130,7 @@ class QueuedInput:
             owner,
             snapshot.claimed_identity(canonical),
         )
-        origin.require_ingress(inputs.comms, snapshot, context.claim_scope, controller)
+        origin.require_ingress(inputs.comms, snapshot, context.claimed_identity, controller)
         item = cls(
             text or prompt or "[image prompt]",
             echo,
@@ -142,7 +141,7 @@ class QueuedInput:
             controller,
         )
         row = ReservedInput(
-            item.key, None, canonical, context.claim_scope.claimed_generation,
+            item.key, None, canonical, context.claimed_identity.claimed_generation,
             canonical, item.text, origin=origin,
         )
         document = inputs.dispositions.reserve_originals(row, ownership=ownership)
@@ -166,7 +165,7 @@ class QueuedInput:
     @asynccontextmanager
     async def reserve(
         cls, inputs: InputDrain, session_id: str, name: str, *, text: str, prompt: str,
-        echo: bool, images: tuple[ImageInput, ...], controller: Any,
+        echo: bool, images: tuple[ImageInput, ...], controller: Controller | None,
         input_id: str | None = None,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> AsyncIterator[InputReservation[Self]]:
@@ -178,7 +177,7 @@ class QueuedInput:
                 sources = tuple(inputs.state(session_id).following.values())
 
                 def capture():
-                    with _store_lock(inputs.comms._wire_lock_path):
+                    with inputs.comms.registry.store.locked():
                         cls.require_capacity(inputs, sources)
                         return cls.capture(
                             inputs, name, text=text, prompt=prompt, echo=echo,
@@ -212,13 +211,12 @@ class QueuedInput:
                 self.require_live_source(inputs, session_id)
 
                 def verify():
-                    with _store_lock(inputs.comms._wire_lock_path):
-                        snapshot = inputs.comms.registry.snapshot()
-                        canonical = snapshot.canonical_name(name)
-                        self.require_handoff(
-                            snapshot, canonical, inputs.dispositions.lookup(self.key), self.input_id,
-                        )
-                        return canonical
+                    snapshot = inputs.comms.registry.snapshot()
+                    canonical = snapshot.canonical_name(name)
+                    self.require_handoff(
+                        snapshot, canonical, inputs.dispositions.lookup(self.key), self.input_id,
+                    )
+                    return canonical
 
                 canonical = await Coordination.run_worker(verify)
                 self.require_live_source(inputs, session_id)
@@ -328,11 +326,11 @@ class DeliveredInput(QueuedInput):
     @classmethod
     def reserve_pending(
         cls, inputs: InputDrain, name: str, root_id: str,
-        pending: tuple[tuple[CommittedDelivery, WakeAssignment], ...],
+        pending: tuple[tuple[Delivered, WakeAssignment], ...],
         sources: tuple[TurnInputSource, ...],
         reserved: list[tuple[Self, InputContent]],
     ) -> None:
-        """Fill the original reservation scope in a joined, wire-locked worker.
+        """Fill the original reservation scope under its current registry owner.
 
         The caller owns ``reserved`` and its AsyncExitStack before work starts,
         so cancellation cannot lose a successfully paused but unplaced input.
@@ -343,7 +341,7 @@ class DeliveredInput(QueuedInput):
         from .routing import ScheduledTurn
         from .turn_context import TurnContext
 
-        with _store_lock(inputs.comms._wire_lock_path):
+        with inputs.comms.registry.store.locked():
             accepted = pending[:max(cls.remaining_capacity(inputs, sources), 0)]
             if not accepted:
                 return
@@ -364,7 +362,7 @@ class DeliveredInput(QueuedInput):
                         (DeliveredMessageSegment.capture(source, assignment, owner),)
                     )
                     row = ReservedInput(
-                        key, message.seq, canonical, context.claim_scope.claimed_generation,
+                        key, message.seq, canonical, context.claimed_identity.claimed_generation,
                         message.target,
                         ScheduledTurn.incoming(message, aliases=snapshot.aliases).prompt,
                         origin=WireInputOrigin(root_id, message.reference),
@@ -433,7 +431,7 @@ class DeliveredInput(QueuedInput):
         if not any(row.key not in live_keys
                    for row in document.unbound_wire_inputs(root_id).values()):
             return 0
-        with _store_lock(comms._wire_lock_path):
+        with comms.registry.store.locked():
             entry = comms.registry.entry(name).entry
             owner = entry.thread
             document = dispositions.unresolved(entry.names)
@@ -480,18 +478,19 @@ class DeliveredInput(QueuedInput):
         lookup = owner.incarnation.lookup
 
         def read(store: Coordination):
+            from .coordination_session import NativeBoundary
+
             with store.session.read():
                 assignments = tuple(
                     assignment for assignment in pending_sealed_assignments(
-                        store, lookup, owner.name, after_seq=after_seq
+                        store, lookup, after_seq=after_seq
                     ) if assignment.audience.joins_active_turn()
                 )
-            with bus.log.checked_read() as source:
-                if source.marker.root_id != root_id:
-                    raise IdentityConflict("delivered source wire root changed")
-                originals = tuple(source.references(tuple(
+            with NativeBoundary(bus) as boundary, bus.bus.reading() as source:
+                boundary.privacy.require_root(root_id, IdentityConflict("delivered native namespace changed"))
+                originals = source.deliveries_for_references(tuple(
                     assignment.source for assignment in assignments
-                )))
+                ))
             return tuple(zip(originals, assignments, strict=True))
 
         pending = await Coordination.run_read_async(store_path, read)

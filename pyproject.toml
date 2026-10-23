@@ -41,6 +41,7 @@ dev = [
     "black==26.5.1",
     "ruff==0.16.0",
     "mypy==2.3.0",
+    "uv==0.13.1",
 ]
 
 [project.urls]
@@ -63,6 +64,7 @@ agent-comms-commander-reread = "agent_comms_hooks.reread:main"
 agent-comms-commander-deferral-guard = "agent_comms_hooks.deferral:main"
 agent-comms-commander-bounded-waits = "agent_comms_hooks.bounded_waits:main"
 agent-comms-queue-bypass-guard = "agent_comms_hooks.queue_bypass:main"
+agent-comms-test-ceremony-guard = "agent_comms_hooks.test_ceremony:main"
 agent-comms-claude-session-started = "agent_comms_hooks.session:started"
 agent-comms-claude-session-ended = "agent_comms_hooks.session:ended"
 agent-comms-connector = "agent_comms.connector:main"
@@ -91,16 +93,22 @@ include = [
 [tool.hatch.version]
 path = "src/agent_comms/__init__.py"
 
+[tool.uv]
+cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true } }]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = [".", "src", "tools"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-n auto --maxprocesses=8 --dist=worksteal"
 asyncio_mode = "auto"
 # A hung test fails by name instead of holding the whole job.
 timeout = 60
+# A test blocked inside a C call (SQLite, flock) never runs a SIGALRM handler, so the signal
+# method never fires; the thread method dumps every stack and ends the worker, and xdist
+# replaces it and runs the rest of its queue.
+timeout_method = "thread"
 # An interpreter missing a plugin refuses to start instead of silently ignoring `timeout`.
 required_plugins = ["pytest-timeout>=2.3", "pytest-xdist>=3.6", "pytest-asyncio>=0.23"]
 markers = ["refactor_guard: permanent architecture guards selected by the required debt check"]
@@ -125,3 +133,6 @@ extend-immutable-calls = ["agent_comms.store_files.ExclusiveLock"]
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
+
+[tool.uv.sources]
+metaclass-registry = { git = "https://github.com/OpenHCSDev/metaclass-registry", branch = "main" }

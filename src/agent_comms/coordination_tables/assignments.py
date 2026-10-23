@@ -15,7 +15,7 @@ from agent_comms.coordination_contracts import (
     require_optional_nonempty,
     validate_execution_id,
 )
-from agent_comms.coordination_schema import CoordinatorTable
+from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.envelope_claim_transitions import AssignmentBinding
 from agent_comms.field_codec import SnapshotExclude, WireName, projected
 from agent_comms.message_reference import MessageReference
@@ -35,7 +35,6 @@ from agent_comms.typed_table import (
     NoDelete,
     NonDecreasing,
     RequiredColumn,
-    TypedTable,
     WriteOnceColumns,
 )
 from agent_comms.wake_policy import MessageAudience
@@ -51,8 +50,7 @@ class WakeAssignment(
     IncrementingColumn,
     MonotoneColumns,
     NoDelete,
-    CoordinatorTable,
-    TypedTable,
+    CoordinatorRow,
     declared_name="wake_claims",
 ):
     write_once_columns = ('triage_verdict', 'execution_id', 'exact_target')
@@ -253,29 +251,29 @@ class WakeAssignment(
         from agent_comms.coordination_tables.responses import ResponseObligation
 
         return (
-            ForeignKey(("recipient_lookup",), Participants, ("participant_lookup",)),
-            ForeignKey(("execution_id",), ExecutionRecord, ("execution_id",)),
+            ForeignKey(columns=("recipient_lookup",), target=Participants, target_columns=("participant_lookup",)),
+            ForeignKey(columns=("execution_id",), target=ExecutionRecord, target_columns=("execution_id",)),
             ForeignKey(
-                ("execution_id", "exact_target"), ResponseObligation,
-                ("execution_id", "exact_target"), deferred=True,
+                columns=("execution_id", "exact_target"), target=ResponseObligation,
+                target_columns=("execution_id", "exact_target"), deferred=True,
             ),
             ForeignKey(
-                ("execution_id", "assignment_id"),
-                ExecutionAssignmentLink,
-                ("execution_id", "assignment_id"),
+                columns=("execution_id", "assignment_id"),
+                target=ExecutionAssignmentLink,
+                target_columns=("execution_id", "assignment_id"),
                 deferred=True,
             ),
             ForeignKey(
-                ("execution_id", "claim_status_kind"),
-                ExecutionRecord,
-                ("execution_id", "claim_status_kind"),
+                columns=("execution_id", "claim_status_kind"),
+                target=ExecutionRecord,
+                target_columns=("execution_id", "claim_status_kind"),
                 deferred=True,
             ),
         )
 
 @dataclass(frozen=True, slots=True)
 class ExecutionAssignmentLink(
-    GuardedInserts, ImmutableRows, CoordinatorTable, TypedTable, declared_name="execution_claims"
+    GuardedInserts, ImmutableRows, CoordinatorRow, declared_name="execution_claims"
 ):
 
     insert_condition = """(NOT EXISTS (SELECT 1 FROM executions e
@@ -303,8 +301,8 @@ class ExecutionAssignmentLink(
         from agent_comms.coordination_tables.executions import ExecutionRecord
 
         return (
-            ForeignKey(("execution_id",), ExecutionRecord, ("execution_id",), on_delete="RESTRICT"),
+            ForeignKey(columns=("execution_id",), target=ExecutionRecord, target_columns=("execution_id",), on_delete="RESTRICT"),
             ForeignKey(
-                ("assignment_id", "execution_id"), WakeAssignment, ("assignment_id", "execution_id")
+                columns=("assignment_id", "execution_id"), target=WakeAssignment, target_columns=("assignment_id", "execution_id")
             ),
         )

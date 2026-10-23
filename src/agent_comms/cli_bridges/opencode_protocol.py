@@ -6,10 +6,10 @@ from collections.abc import Iterable, Iterator
 from itertools import takewhile
 from typing import TYPE_CHECKING, ClassVar, Literal
 
-from metaclass_registry import RegistryConfig
-from pydantic import Field, JsonValue, TypeAdapter
+from pydantic import Field, JsonValue
 
-from agent_comms.cli_protocol import RegisteredWireMeta, TaggedWire, WireModel
+from agent_comms.cli_protocol import TaggedWire
+from agent_comms.declared_family import UnknownFamilyMember
 from agent_comms.runtime_updates import (
     AllTurnsEnded,
     AppendDraftItem,
@@ -18,6 +18,7 @@ from agent_comms.runtime_updates import (
     TurnStarted,
 )
 
+from ..wire_models import DeclaredWireFamily, WireModel
 from .opencode_parts import MessageInfo, Part, SavedMessage, UserMessage
 
 if TYPE_CHECKING:
@@ -82,9 +83,7 @@ class SessionError(WireModel):
     error: NativeError | None = None
 
 
-class SessionStatus(TaggedWire, ABC):
-    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
+class SessionStatus(TaggedWire, ABC, affix=""):
 
     @abstractmethod
     def publication(self) -> RuntimeUpdate: ...
@@ -93,8 +92,7 @@ class SessionStatus(TaggedWire, ABC):
         return (self.publication(),)
 
 
-class IdleStatus(SessionStatus):
-    wire_tag = 'idle'
+class IdleStatus(SessionStatus, declared_name='idle'):
 
     def publication(self) -> RuntimeUpdate:
         return TurnEnded()
@@ -105,15 +103,13 @@ class IdleStatus(SessionStatus):
         return (AllTurnsEnded(),)
 
 
-class BusyStatus(SessionStatus):
-    wire_tag = 'busy'
+class BusyStatus(SessionStatus, declared_name='busy'):
 
     def publication(self) -> RuntimeUpdate:
         return TurnStarted()
 
 
-class RetryStatus(SessionStatus):
-    wire_tag = 'retry'
+class RetryStatus(SessionStatus, declared_name='retry'):
     attempt: int
     message: str
     next: int | float
@@ -122,8 +118,8 @@ class RetryStatus(SessionStatus):
         return TurnStarted(f'Retry {self.attempt}: {self.message}')
 
 
-SESSION_STATUSES = TypeAdapter(dict[str, SessionStatus.declared_union()])
-MESSAGES = TypeAdapter(list[SavedMessage])
+SESSION_STATUSES = WireModel.adapter(dict[str, SessionStatus.declared_union()])
+MESSAGES = WireModel.adapter(list[SavedMessage])
 
 
 class StatusUpdate(WireModel):
@@ -139,11 +135,7 @@ class EventHeader(WireModel):
     type: str
 
 
-class OpenCodeEvent(WireModel, metaclass=RegisteredWireMeta):
-    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
-    wire_tag: ClassVar[str]
-
+class OpenCodeEvent(DeclaredWireFamily, WireModel, affix=""):
     async def saved_input(self, connection: OpenCodeConnection, text: str) -> UserMessage | None:
         return None
 
@@ -153,20 +145,20 @@ class OpenCodeEvent(WireModel, metaclass=RegisteredWireMeta):
     @classmethod
     def decode(cls, payload: str) -> OpenCodeEvent:
         header = EventHeader.model_validate_json(payload)
-        family = cls.__registry_config__.registry_dict
         # The native bus also carries projects, files and sessions outside this
         # subscription. Only declared event kinds participate in this contract.
-        declaration = family[header.type] if header.type in family else cls
+        try:
+            declaration = cls.member_named(header.type)
+        except UnknownFamilyMember:
+            declaration = cls
         return declaration.model_validate_json(payload)
 
 
-class Connected(OpenCodeEvent):
-    wire_tag = 'server.connected'
+class Connected(OpenCodeEvent, declared_name='server.connected'):
     type: Literal['server.connected']
 
 
-class PartUpdated(OpenCodeEvent):
-    wire_tag = 'message.part.updated'
+class PartUpdated(OpenCodeEvent, declared_name='message.part.updated'):
     properties: PartUpdate
 
     async def saved_input(self, connection: OpenCodeConnection, text: str) -> UserMessage | None:
@@ -181,8 +173,7 @@ class PartUpdated(OpenCodeEvent):
         return await stream.part(self.properties.part)
 
 
-class PartChanged(OpenCodeEvent):
-    wire_tag = 'message.part.delta'
+class PartChanged(OpenCodeEvent, declared_name='message.part.delta'):
     properties: PartDelta
 
     async def receive(self, stream: OpenCodeStream) -> tuple[RuntimeUpdate, ...]:
@@ -192,8 +183,7 @@ class PartChanged(OpenCodeEvent):
         return (AppendDraftItem(delta.messageID, delta.partID, delta.delta),)
 
 
-class MessageUpdated(OpenCodeEvent):
-    wire_tag = 'message.updated'
+class MessageUpdated(OpenCodeEvent, declared_name='message.updated'):
     properties: MessageUpdate
 
     async def receive(self, stream: OpenCodeStream) -> tuple[RuntimeUpdate, ...]:
@@ -208,8 +198,7 @@ class MessageUpdated(OpenCodeEvent):
         return stream.snapshot(saved)
 
 
-class StatusChanged(OpenCodeEvent):
-    wire_tag = 'session.status'
+class StatusChanged(OpenCodeEvent, declared_name='session.status'):
     properties: StatusUpdate
 
     async def receive(self, stream: OpenCodeStream) -> tuple[RuntimeUpdate, ...]:
@@ -218,8 +207,7 @@ class StatusChanged(OpenCodeEvent):
         return self.properties.status.receive(stream)
 
 
-class Failed(OpenCodeEvent):
-    wire_tag = 'session.error'
+class Failed(OpenCodeEvent, declared_name='session.error'):
     properties: SessionError
 
     async def saved_input(self, connection: OpenCodeConnection, text: str) -> UserMessage | None:

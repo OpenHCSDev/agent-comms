@@ -52,17 +52,11 @@ class AcpSelectedWriteAuthority(BoundSelectedWriteAuthority):
         return action.with_plan(self, plan, assignment, owner)
 
     def require_current(self, assignment, owner, operation_id):
-        from .runtime import SocketClient
-
         bound = self.agent._selected_write_controllers.get((owner.name, assignment.wire_seq))
         if bound is None or bound[0] != operation_id:
             raise IdentityConflict("Selected write original controller is no longer bound")
         controller = bound[1]
-        if isinstance(controller, SocketClient):
-            if not self.agent._runtime.is_controller(self.session_id, controller):
-                raise IdentityConflict("Selected write controller disconnected")
-        elif controller is not self.agent.sessions.client or controller is None:
-            raise IdentityConflict("Selected write ACP controller changed")
+        controller.require_current(self, self.session_id)
 
     def applied(self, assignment, owner, operation_id):
         self.plans.applied(assignment, owner, operation_id)

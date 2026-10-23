@@ -9,8 +9,10 @@ import pytest
 from agent_comms.native_tool_call import CodingCall
 from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.coordinator import Coordination
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.envelope_claim_transitions import ClaimTransitionError
-from agent_comms.native_tool_call import CoordinationBusy, SelectedToolDenied
+from agent_comms.native_tool_call import CoordinationBusy
+from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.selected_tool_broker import verify_sent_full_input
 
 
@@ -30,11 +32,9 @@ def test_edit_of_a_missing_file_inside_the_project_says_it_does_not_exist(tmp_pa
     assert reply(tmp_path, refused.value) == f"File does not exist: {project / 'absent.py'}"
 
 
-def test_busy_coordination_database_is_reported_as_busy(tmp_path):
-    (tmp_path / "wire").mkdir(mode=0o700)
-    path = tmp_path / "wire" / "coordination.sqlite3"
+def test_busy_coordination_database_is_reported_as_busy(tmp_path, private_comms):
+    path = CoordinationStore.path_in(private_comms.root)
     with Coordination(str(path)) as store:
-        store.install_private_runtime()
         writer = sqlite3.connect(path, isolation_level=None)
         try:
             writer.execute("BEGIN EXCLUSIVE")

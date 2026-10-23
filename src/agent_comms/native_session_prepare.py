@@ -17,41 +17,15 @@ from .native_package import VerifiedNativePackage
 from .native_startup import NativeStartup
 from .coordinator import Coordination
 from .pi_payloads import StateData
-from .session_fence import session_writer_fence
-from .prompt_state import UnwrittenPrompt
+from . import prompt_state
 
 if TYPE_CHECKING:
     from .pi_native_backend import PersistentPiSession
-    from .following_inputs import FollowingInputs
-
-
-class PreparedSession(UnwrittenPrompt):
-    acknowledged = False
-
-    def permits_retention(self, session: backend.NativeSession) -> bool:
-        return session.output.clean
-
-    async def deliver_to(
-        self, inputs: FollowingInputs, session: backend.NativeSession,
-    ) -> bool:
-        session.native.forget_context()
-        state = session.native.attestation.require_state()
-        identity = session.native.attestation.require_identity()
-        session.launch.session.attest(identity)
-        if (
-            state.is_streaming.value_or(True)
-            or state.is_compacting.value_or(True)
-            or not state.pending_message_count.matches(0)
-        ):
-            raise NativePiUnavailable("Native preparation did not attest the idle saved session")
-        session.active_session_file = identity.session_file
-        await session.stats.request(session)
-        return True
 
 
 class NativeSessionPreparation(backend.NativeSession):
     """Share native launch/attestation with turns; retain an idle child, send no prompt."""
-    prompt_type = PreparedSession
+    prompt_type = prompt_state.PreparedSession
 
     def finish_result(self) -> Iterable[events.AgentEvent]:
         if not self.native_session.child_state.retained:
@@ -100,11 +74,10 @@ class NativeSessionPreparation(backend.NativeSession):
         ))
         preparation = cls(launch, native_session=persistent,
                           startup=NativeStartup.for_launch(launch))
-        async with session_writer_fence(launch.session.session_file):
+        async with launch.session.files(root).accept_input():
             async with aclosing(preparation.run()) as stream:
                 async for event in stream:
-                    if isinstance(event, events.Done) and not event.ok:
-                        raise NativePiUnavailable(event.text)
+                    event.require_preparation_success()
             state = preparation.native.attestation.require_state()
             await observe(state, state.agent_info(preparation))
             return state

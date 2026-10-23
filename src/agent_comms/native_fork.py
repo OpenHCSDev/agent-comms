@@ -5,12 +5,13 @@ from __future__ import annotations
 import os
 import sys
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Annotated, ClassVar
 
 from agent_comms import field_codec
 
-from .child_process import ChildResult, SignaledOutcome, TimedOutOutcome
+from .child_process import ChildResult
 from .launch_runtime import LaunchRuntime
 from .native_session_reopen import NativeSessionIdentity
 from .pi_helper import PiHelper, PiHelperFailed, SessionHelperRequest
@@ -45,16 +46,20 @@ class ForkSessionHelper(PiHelper):
     def failure(cls, request: ForkSessionRequest, result: ChildResult) -> PiHelperFailed:
         # A thrown native error releases both locks in its finally; only a
         # signal (our bound's stop, or an external kill) skips that release.
-        if not isinstance(result.outcome, (TimedOutOutcome, SignaledOutcome)):
-            return super().failure(request, result)
         return PiHelperFailed(
             cls.declared_name,
             result,
+            result.outcome.fork_failure(partial(cls.interrupted_consequence, request)),
+        )
+
+    @classmethod
+    def interrupted_consequence(cls, request: ForkSessionRequest) -> str:
+        return (
             f"killed (bound {cls.timeout_for(request):.0f}s) while it may hold the native "
             f"writer locks of {request.file}; that lock and any partial fork in "
             f"{request.directory or 'the default session directory for ' + request.cwd} "
             "remain and block later forks of this parent until reviewed (locks are never "
-            "stolen automatically)",
+            "stolen automatically)"
         )
 
 

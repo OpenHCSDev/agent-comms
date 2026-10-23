@@ -12,16 +12,32 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.installer.probes.carry import Carry
+from agent_comms.pi_events import PiEvent
+from agent_comms.thread_identity import BirthlessIncarnation
+from agent_comms.private_registry_guard import RegistryPrivacy
+from agent_comms.tool_calls import CliToolArguments
 from agent_comms.phase_evidence import (
     AllEvidence,
+    BusStorageAbsent,
+    ClassFlagsAbsent,
+    ClassDeclared,
+    ClassRostersAbsent,
     CommitMerged,
-    NoDeclaredEvidence,
+    FunctionDeclared,
+    NoAbsenceProbes,
+    NoExactCopies,
+    NoGodFunction,
+    OwnClassChecksAbsent,
+    ParentsShared,
     ParityEvidence,
     PathsAbsent,
     PatternAbsent,
     PatternPresent,
     PhaseEvidence,
     PlanReading,
+    RestatedMembersAbsent,
+    RulesetGates,
 )
 from agent_comms.phase_tasks import PhaseTask, UnspecifiedPhaseTask
 
@@ -73,9 +89,12 @@ class UnplannedPhase(OrderPhase):
 
 
 class PlanPhase(OrderPhase, declared_name=None):
+    """Every named phase declares its plan and the evidence that proves it done; neither has
+    a default, because a phase whose work could never clear it is not a phase."""
+
     plan: ClassVar[type[Plan]]
     after: ClassVar[tuple[type[PlanPhase], ...]] = ()
-    evidence: ClassVar[PhaseEvidence] = NoDeclaredEvidence()
+    evidence: ClassVar[PhaseEvidence]
     task: ClassVar[PhaseTask] = UnspecifiedPhaseTask()
 
     @classmethod
@@ -145,39 +164,84 @@ class RecordPlanePhase(CommanderNativePhase):
 
 
 class ReviewQueuePhase(CommanderNativePhase):
-    """Revised 2026-10-21: a verdict per PR head gates the merge queue, so the review-queue
-    commit no longer proves this phase; P433 declares what main must show."""
+    """A verdict per PR head gates merging through main's required review status.
+
+    No GitHub merge queue is required. A bypass actor defeats the review gate.
+    """
 
     after = (RecordPlanePhase,)
+    evidence = RulesetGates()
+
+
+COMMANDER = "src/agent_comms/commander/"
 
 
 class ControlPlanePhase(CommanderNativePhase):
+    """Phase 7's deletes: Core owns every signal these scripts raised."""
+
     after = (RecordPlanePhase,)
-
-
-class ParityPhase(CommanderNativePhase):
-    after = (RecordPlanePhase, ReviewQueuePhase, ControlPlanePhase)
-    evidence = ParityEvidence()
-
-
-class CutoverPhase(CommanderNativePhase):
-    after = (RecordPlanePhase, ReviewQueuePhase, ControlPlanePhase, ParityPhase)
+    evidence = PathsAbsent(
+        tuple(
+            COMMANDER + name
+            for name in (
+                "rotate.py",
+                "capacity.py",
+                "forks",
+                "growth_watch.py",
+                "growth_seen.json",
+                "storage.py",
+                "rules.py",
+                "rules.jsonl",
+            )
+        )
+    )
 
 
 class StoryPhase(CommanderNativePhase):
-    """A view of the native records, not a prerequisite for their cutover."""
+    """A view of the native records, not a prerequisite for their cutover: both story tools
+    exist and the separate roast step is deleted."""
 
     after = (RecordPlanePhase,)
+    evidence = AllEvidence(
+        (
+            ClassDeclared("CommsOrderStoryTool", ("src/agent_comms/tools.py",)),
+            ClassDeclared("CommsFleetStoryTool", ("src/agent_comms/tools.py",)),
+            PatternAbsent(r"^def roast\b", (COMMANDER + "judge.py",)),
+        )
+    )
 
 
 class CommanderPagePhase(CommanderNativePhase):
     """A view of the native records and control plane, independent of cutover."""
 
     after = (RecordPlanePhase, ControlPlanePhase)
+    evidence = AllEvidence(
+        (
+            ClassDeclared("CommanderHud", ("src",)),
+            PatternPresent(r"\bcomms_hud\b", ("src",)),
+        )
+    )
+
+
+class ParityPhase(CommanderNativePhase):
+    """The native capability owners, not a second matrix of demonstrations, decide completion."""
+
+    after = (RecordPlanePhase, ReviewQueuePhase, ControlPlanePhase, CommanderPagePhase)
+    evidence = ParityEvidence(tuple(phase.evidence for phase in after))
+
+
+class CutoverPhase(CommanderNativePhase):
+    """The native evidence passes and the machine-wide commander configuration is gone."""
+
+    after = (ParityPhase,)
+    evidence = AllEvidence((ParityPhase.evidence, PatternAbsent(r"\bCommanderConfig\b")))
 
 
 class SkillPhase(CommanderNativePhase):
+    """The skill names no script."""
+
     after = (CutoverPhase,)
+    evidence = PatternAbsent(r"agent-comms-commander", ("src/agent_comms/skills/comms-commander",))
 
 
 OLD_LOG_READ = r"\bWireLog\b|wire_log"
@@ -192,15 +256,13 @@ class BusWriterPhase(VirtualBusPhase):
 
     after = (BusInterfacePhase,)
     evidence = PatternAbsent(
-        "append_private_unlocked",
+        "[a]ppend_private_unlocked",
         ("src/agent_comms/bus_publication.py", "src/agent_comms/publisher.py"),
     )
 
 
 class BusDeliveryReadersPhase(VirtualBusPhase):
-    """B1: delivery, wake, cursor and notification readers on ``seq``.
-
-    ``store_order`` keeps ``WireLog`` until C deletes the class, so it is not read here."""
+    """B1: delivery, wake, cursor and notification readers on ``seq``."""
 
     after = (BusWriterPhase,)
     evidence = PatternAbsent(
@@ -236,10 +298,13 @@ class BusHistoryReadersPhase(VirtualBusPhase):
 
 
 class BusCarryPhase(VirtualBusPhase):
-    """D: the one carry of the committed history into the bus database."""
+    """D: the one carry of the committed history into the bus database.
+
+    Done once the JSONL history writer the carry read from is gone: the bus database is
+    then the only store, and the finished carry is deleted rather than kept as evidence."""
 
     after = (BusWriterPhase,)
-    evidence = PatternPresent(r"bus\.sqlite3|Bus\.path_in", ("tools/cutover",))
+    evidence = PathsAbsent(("src/agent_comms/wire_log.py",))
 
 
 class BusWatchedPhase(VirtualBusPhase):
@@ -268,39 +333,35 @@ class BusDeletionPhase(VirtualBusPhase):
                     "src/agent_comms/wire_record.py",
                 )
             ),
-            PatternAbsent(
-                r"bus\.jsonl|bus_meta|_wire_lock_path|has_private_wire_fields|/ \"wire\""
-            ),
+            BusStorageAbsent(),
         )
     )
 
 
 FLAG = r"(: ClassVar\[bool\])? = (True|False)$"
+LIFECYCLE_FLAGS = (
+    "terminal|failed|successful|pending|active|executing|unresolved|deferred|complete|completed"
+)
+CODEC_FLAGS = "accepts_null|opaque|external_json_shape|strict_fields|accepts_prompt"
+SMALL_FAMILY_FLAGS = "multiple_targets|preengagement_target|notification_changed|input_uncertain"
 
 
 class LifecycleFlagsPhase(MultipleInheritancePhase):
-    """1A."""
+    """1A: flags declared on classes; a function's local named ``complete`` is not one."""
 
-    evidence = PatternAbsent(
-        r"^\s+(terminal|failed|successful|pending|active|executing"
-        r"|unresolved|deferred|complete|completed)" + FLAG
-    )
+    evidence = ClassFlagsAbsent(rf"^\s+({LIFECYCLE_FLAGS})" + FLAG)
 
 
 class CodecFlagsPhase(MultipleInheritancePhase):
     """1B."""
 
-    evidence = PatternAbsent(
-        r"^\s+(accepts_null|opaque|external_json_shape|strict_fields|accepts_prompt)" + FLAG
-    )
+    evidence = PatternAbsent(rf"^\s+({CODEC_FLAGS})" + FLAG)
 
 
 class SmallFamilyFlagsPhase(MultipleInheritancePhase):
     """1C. ``GoalDisplay.visible`` stays by the commander's decision, so ``visible`` is not read."""
 
-    evidence = PatternAbsent(
-        r"^\s+(multiple_targets|preengagement_target|notification_changed|input_uncertain)" + FLAG
-    )
+    evidence = PatternAbsent(rf"^\s+({SMALL_FAMILY_FLAGS})" + FLAG)
 
 
 class TriggersPhase(MultipleInheritancePhase):
@@ -312,11 +373,86 @@ class TriggersPhase(MultipleInheritancePhase):
 
 
 class DuplicatesPhase(MultipleInheritancePhase):
-    """1E."""
+    """1E: the plan's eight exact groups; its three near groups need their readers traced."""
+
+    evidence = AllEvidence(
+        tuple(
+            NoExactCopies(names, tuple(f"src/agent_comms/{path}" for path in paths))
+            for names, paths in (
+                (
+                    ("__init__",),
+                    (
+                        "attempt_store.py",
+                        "cli_bridges/opencode.py",
+                        "cli_bridges/shared.py",
+                        "external_transcript.py",
+                        "recovery_reader.py",
+                    ),
+                ),
+                (
+                    ("captured_owner", "owner_identity"),
+                    (
+                        "cohort_schema.py",
+                        "coordination_tables/attempts.py",
+                        "native_input_record.py",
+                        "participant_store.py",
+                    ),
+                ),
+                (
+                    ("trigger_bodies",),
+                    ("coordination_response.py", "native_prompt_binding.py", "private_sidecar.py"),
+                ),
+                (
+                    ("__init__",),
+                    ("durable_turn.py", "execution_store.py", "exporting.py", "publisher.py"),
+                ),
+                (("wire_member",), ("pi_payloads.py", "field_codec.py")),
+                (
+                    (
+                        "_assert_response_schema",
+                        "assert_cohort_schema",
+                        "assert_native_runtime_schema",
+                        "require_schema",
+                    ),
+                    (
+                        "cohort_schema.py",
+                        "coordinated_runtime_schema.py",
+                        "coordination_response.py",
+                        "typed_table.py",
+                    ),
+                ),
+                (
+                    ("references",),
+                    (
+                        "coordination_tables/attempts.py",
+                        "coordination_tables/recovery.py",
+                        "coordination_tables/responses.py",
+                    ),
+                ),
+                (
+                    ("annotation_disclosure", "disclosure_for"),
+                    ("pi_payloads.py", "turn_context.py", "annotation_disclosure.py"),
+                ),
+            )
+        )
+    )
 
 
 class FieldDirectivesPhase(MultipleInheritancePhase):
-    """Batch 2."""
+    """Batch 2: the field groups and table mixins the plan names exist and each has members.
+    The bus groups are deleted by the virtual bus, and ``Addressed`` is the bus's own.
+    SchemaMeta has no shared field beyond SingletonRow.
+    Revisioned and ExecutionKeyed would reorder table columns because inherited fields
+    come first (typed_table.py:1480), violating the plan's stored DDL rule."""
+
+    evidence = ParentsShared(
+        names=(
+            "TurnItem",
+            "ClaimScoped",
+            "SingletonRow",
+            "WithoutRowid",
+        )
+    )
 
     after = (
         LifecycleFlagsPhase,
@@ -331,12 +467,26 @@ class OwnTypeChecksPhase(MultipleInheritancePhase):
     """Batch 3."""
 
     after = (FieldDirectivesPhase,)
+    evidence = OwnClassChecksAbsent()
 
 
 class InheritanceCleanupPhase(MultipleInheritancePhase):
-    """Batch 4."""
+    """Batch 4, the deletion closure: no capability shell left with one member, no member
+    restating its base's answer, no probe for a batch 1 flag, and no literal roster of
+    classes."""
 
     after = (OwnTypeChecksPhase,)
+    evidence = AllEvidence(
+        (
+            ParentsShared(paths=("src/agent_comms/lifecycle_capability.py",)),
+            RestatedMembersAbsent(),
+            PatternAbsent(
+                rf"\b(getattr|hasattr)\([^,()]+, *[\"']"
+                rf"({LIFECYCLE_FLAGS}|{CODEC_FLAGS}|{SMALL_FAMILY_FLAGS})[\"']"
+            ),
+            ClassRostersAbsent(families=(PlanPhase,)),
+        )
+    )
 
 
 class DeadModulesPhase(RemainingSlopPhase):
@@ -359,7 +509,22 @@ class TransitionScaffoldingPhase(RemainingSlopPhase):
 
 
 class AbsencePhase(RemainingSlopPhase):
-    """2.1."""
+    """2.1: the seven heaviest files first, measured by the census's absence probe."""
+
+    evidence = NoAbsenceProbes(
+        tuple(
+            f"src/agent_comms/{path}"
+            for path in (
+                "typed_table.py",
+                "backend.py",
+                "input_drain.py",
+                "turn_watchdog.py",
+                "commander/order.py",
+                "attempt_start.py",
+                "todos.py",
+            )
+        ),
+    )
 
 
 class TypeSwitchesPhase(RemainingSlopPhase):
@@ -369,10 +534,259 @@ class TypeSwitchesPhase(RemainingSlopPhase):
 
 
 class OrderSendPhase(RemainingSlopPhase):
-    """2.5."""
+    """2.5: ``send`` keeps only the dispatch; its parts move to the order types."""
+
+    evidence = NoGodFunction("src/agent_comms/commander/order.py", "send")
 
 
 class ExternalBoundariesPhase(RemainingSlopPhase):
     """Wave 3."""
 
     evidence = PatternAbsent(r"^\s*except Exception\b")
+
+
+class ThreadNameOwnersPhase(RemainingSlopPhase):
+    """4.1: the registry owns a thread's name; the coordinator keys by lookup."""
+
+    evidence = PatternAbsent(r"\bowner_thread\b")
+
+
+class TurnOwnerIdentityPhase(RemainingSlopPhase):
+    """4.5: a turn's owner is a ProcessIdentity, never a bare pid."""
+
+    evidence = PatternAbsent(r"\bowner_pid\b")
+
+
+class FormatIdentityPhase(RemainingSlopPhase):
+    """4.7: the FieldCodec-derived schema is a stored format's identity."""
+
+    evidence = PatternAbsent(
+        r"format_fingerprint|_canonical_schema|convert_format|source_fingerprints"
+    )
+
+
+class DirectoryFsyncPhase(RemainingSlopPhase):
+    """5.1: one atomic file owner; no caller passes an fsync flag."""
+
+    evidence = PatternAbsent(r"\bfsync_parent\b")
+
+
+class PlatformFactsPhase(RemainingSlopPhase):
+    """5.2: Platform owns private-mode checks."""
+
+    evidence = PatternAbsent(
+        r"\bos\.name\b",
+        (
+            "src/agent_comms/goal_history.py",
+            "src/agent_comms/goal_attempts.py",
+            "src/agent_comms/coordination_database.py",
+            "src/agent_comms/maintenance_barrier.py",
+        ),
+    )
+
+
+class HandPrecedencePhase(RemainingSlopPhase):
+    """6.1: the family's declaration order owns precedence, never an integer."""
+
+    evidence = PatternAbsent(
+        r"^\s*(precedence|priority|classification_priority|proof_order|action_order)"
+        r"(: ClassVar\[int\])? = [0-9]"
+    )
+
+
+class FailureReasonPhase(RemainingSlopPhase):
+    """6.2: TurnFailure members are the reason."""
+
+    after = (HandPrecedencePhase,)
+    evidence = PatternAbsent(r"\bFailureReason\b")
+
+
+class DeadToolsPhase(RemainingSlopPhase):
+    """8: unreferenced tools."""
+
+    evidence = PathsAbsent(
+        ("tools/codex_duplicate_execution_hook.py", "tools/prove_commander_dispatch.py")
+    )
+
+
+class MaintenanceGatePhase(RemainingSlopPhase):
+    """9.1: a carried file's kind refuses writers during maintenance; no hand-placed check."""
+
+    evidence = PatternAbsent(
+        r"assert_open_unlocked\(\)",
+        ("src/agent_comms/agent_activity.py", "src/agent_comms/wire_log.py"),
+    )
+
+
+class TranscriptHoldPhase(RemainingSlopPhase):
+    """9.3: the gate replaced the installer's transcript lock hold."""
+
+    evidence = PatternAbsent(r"transcripts_held|HOLD_TRANSCRIPTS", ("src/agent_comms/installer",))
+
+
+class InstallerFileIdentityPhase(RemainingSlopPhase):
+    """9.2: the installer identifies a file by its declaring RootFile type."""
+
+    after = (TranscriptHoldPhase,)
+    evidence = PatternAbsent(
+        r"rewritten: tuple\[str|endswith\(\(\"\.lock\"|name\[:-4\]",
+        ("src/agent_comms/installer",),
+    )
+
+
+class ContextRequestKeyPhase(RemainingSlopPhase):
+    """4.2: context requests are keyed by the incarnation lookup, never the current name."""
+
+    evidence = PatternAbsent(r"\bthread_name\b", ("src/agent_comms/context_store.py",))
+
+
+class TurnStatePhase(RemainingSlopPhase):
+    """4.4: a FinishedTurn member of the turn-record family owns the last finished turn."""
+
+    evidence = PatternAbsent(r"\blast_finished_turn_id\b")
+
+
+class WireRenamesPhase(RemainingSlopPhase):
+    """4.6: our own wire keys equal the field names; no old claim-scope spellings remain."""
+
+    evidence = PatternAbsent(r"WireName\(\"admission")
+
+
+class OwnedDispatchPhase(RemainingSlopPhase):
+    """5.4: MroDispatch replaces the inbox double dispatch; one compact JSON encoder."""
+
+    evidence = AllEvidence(
+        (
+            PatternAbsent(r"class TurnInboxReceiver\b"),
+            PatternAbsent(
+                r"""separators\s*=\s*\(\s*["'],["']\s*,\s*["']:["']\s*\)""",
+                ("src", ":!src/agent_comms/field_codec.py"),
+            ),
+            FunctionDeclared("compact", ("src/agent_comms/field_codec.py",)),
+        )
+    )
+
+
+class KindFamiliesPhase(RemainingSlopPhase):
+    """6.3: kinds are families whose members carry their behaviour and spelling."""
+
+    evidence = AllEvidence(
+        (
+            PatternAbsent(
+                r"class (TagAction|ExecutionOrigin|WhenBusy|ControlClassification"
+                r"|MembershipChange)\b"
+            ),
+            # SQLite's ViewKind(CatalogKind) is already a behavior-owning member.
+            PatternAbsent(r"class ViewKind\((StrEnum|Enum)\)"),
+        )
+    )
+
+
+class RostersPhase(RemainingSlopPhase):
+    """6.4: remove the known internal registries; external producer ABI stays independent."""
+
+    evidence = AllEvidence(
+        (
+            PatternAbsent(r"^\s*THREAD_CAPABILITIES\s*[:=]"),
+            ClassFlagsAbsent(r"^\s*serves_(new_)?threads\s*[:=]"),
+            *(
+                ClassFlagsAbsent(r"^\s*" + attribute + r"\s*[:=]", owners=(owner,))
+                for owner, attribute in (
+                    (Carry, "declared"),
+                    (RegistryPrivacy, "kinds"),
+                    (BirthlessIncarnation, "members"),
+                    (CliToolArguments, "types"),
+                    (PiEvent, "_start_phases"),
+                    (PiEvent, "_end_events"),
+                )
+            ),
+        )
+    )
+
+
+class RecordsPhase(RemainingSlopPhase):
+    """7: dead connectivity facets go; document updates return their result."""
+
+    evidence = AllEvidence(
+        (
+            PatternAbsent(r"[C]onnectivityFacet|[o]bserve_connectivity"),
+            PatternAbsent(
+                r"^\s*nonlocal\b",
+                (
+                    "src/agent_comms/read_ledger.py",
+                    "src/agent_comms/relationships.py",
+                    "src/agent_comms/shared_ledger.py",
+                    "src/agent_comms/input_disposition.py",
+                    "src/agent_comms/owner_lifecycle.py",
+                ),
+            ),
+        )
+    )
+
+
+class FleetAwarenessPhase(CommanderNativePhase, declared_name=None):
+    """Phase 10: fleet awareness (after the four plans)."""
+
+    after = (SkillPhase, BusDeletionPhase, InheritanceCleanupPhase, TransitionScaffoldingPhase)
+
+
+class OneHolderPerWorktreePhase(FleetAwarenessPhase):
+    """One holder per worktree, refused at order time."""
+
+    evidence = ClassDeclared("SharedWorktreeRefusal", ("src/agent_comms",))
+
+
+class DriftOverlapRulesPhase(FleetAwarenessPhase):
+    """Drift and overlap as standing rules."""
+
+    evidence = AllEvidence(
+        (
+            ClassDeclared("BranchBehindMain", ("src/agent_comms",)),
+            ClassDeclared("SharedFileBranches", ("src/agent_comms",)),
+        )
+    )
+
+
+class SpinningUnitPhase(FleetAwarenessPhase):
+    """Spinning as a UnitState member."""
+
+    evidence = ClassDeclared("SpinningUnit", ("src/agent_comms",))
+
+
+class UnpushedWorkPhase(FleetAwarenessPhase):
+    """Unpushed work as a standing rule."""
+
+    evidence = ClassDeclared("UnpushedBranch", ("src/agent_comms",))
+
+
+class EmptyPullRequestPhase(FleetAwarenessPhase):
+    """Empty PRs as a standing rule."""
+
+    evidence = ClassDeclared("EmptyPullRequest", ("src/agent_comms",))
+
+
+class DeliveryReviewPhase(FleetAwarenessPhase):
+    """Review is triggered by delivery."""
+
+    evidence = ClassDeclared("DeliveredHeadReview", ("src/agent_comms",))
+
+
+class LostToolsPhase(FleetAwarenessPhase):
+    """Lost tools are a bus fact."""
+
+    evidence = ClassDeclared("LostTools", ("src/agent_comms",))
+
+
+class FleetReplayPhase(FleetAwarenessPhase):
+    """Replaying the copied fleet state raises each incident from Core alone, once each, with no script."""
+
+    after = (
+        OneHolderPerWorktreePhase,
+        DriftOverlapRulesPhase,
+        SpinningUnitPhase,
+        UnpushedWorkPhase,
+        EmptyPullRequestPhase,
+        DeliveryReviewPhase,
+        LostToolsPhase,
+    )
+    evidence = FunctionDeclared("test_replay_raises_each_incident_once", ("tests",))

@@ -6,6 +6,8 @@ cancels one turn and kills one acquired scratch native child. Never replays inpu
 """
 from __future__ import annotations
 
+
+
 import argparse
 import asyncio
 from contextlib import asynccontextmanager
@@ -19,13 +21,14 @@ import sys
 from acp import RequestError, spawn_agent_process
 from acp.schema import TextContentBlock
 from agent_comms.acp import CommsAgent
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.session_load import ExistingSessionLoadPlan
 from agent_comms.storage_rules import StorageRoots
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.thread_model import DeclaredModel
+from agent_comms.threads import Thread
 
 
 class Observer:
@@ -79,10 +82,9 @@ async def journey(arguments):
                       AGENT_COMMS_NATIVE_CONFIG_DIR=str(Path.home() / '.pi/agent'),
                       PI_CODING_AGENT_DIR=str(Path.home() / '.pi/agent'))
     env = dict(os.environ)
-    comms = Comms(root)
-    comms.messaging.initialize_private_initial_protocol()
+    comms = wire(root)
     name = 'scratch-sleeper'
-    comms.registry.declare(replace(comms.registry.new_thread(
+    comms.registry.declare(replace(Thread(
         name, frozenset(), str(project), model=DeclaredModel(arguments.model), thinking_level=HighThinkingLevel),
         storage_roots=StorageRoots(scratch=stage)))
     agent = CommsAgent(comms, agent_bin=GivenBinary(arguments.native_launcher),
@@ -106,7 +108,7 @@ async def journey(arguments):
                     type='text', text=prompt)]))
                 await until(lambda: marker.exists() and marker.read_text() == 'running', operation)
                 assert target.exists(), 'Pi must acquire and execute write before sleeping'
-                acquired = comms.bus.log.claim_projection()[str(target)]
+                acquired = comms.bus.bus.claim_projection()[str(target)]
                 turn = comms.registry.require(name).require_turn_lease()
                 # The second connection executes Toad's actual initialize/load plan.
                 async with attachment(comms, project, name, env):
@@ -127,7 +129,7 @@ async def journey(arguments):
                     if outcome != 'failed':
                         raise
                 await until(lambda: not comms.registry.require(name).executing)
-                current = comms.bus.log.claim_projection().get(str(target))
+                current = comms.bus.bus.claim_projection().get(str(target))
                 row = dict(outcome=outcome, stop=stop, claim_remaining=current is not None,
                            acquired_seq=acquired.seq, actual_file=target.read_text(),
                            marker=marker.read_text(), turn=turn.turn_id)

@@ -15,11 +15,13 @@ from collections.abc import Iterator
 from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Literal
+
+from pydantic import JsonValue
 
 from agent_comms.participant_identity import ParticipantIdentity
 
-from .coordination_database import CoordinationStore
+from .locked_store import SQLiteFile
 from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,
@@ -35,13 +37,13 @@ from .native_arguments import NativeArguments, SelectedModel
 from .native_failures import NativePiUnavailable, NativeRequestFailure
 from .native_input_record import NativeInputCommit, NativeInputLocation
 from .native_package import MANIFEST, UNIT_INSTRUCTIONS, VerifiedNativePackage
-from .native_session_files import NativeSessionFiles
+from .native_session_files import NativeAgentSettings, NativeSessionFiles
 from .native_tool_call import NativeToolMode
 from .pi_vocabulary import NoThinkingOverride, PendingStopReason, ThinkingChoice
 from .private_path import (
     FileIdentity,
     FileRevision,
-    NativeSessionFileRole,
+    PrivateFileRole,
     TrustedAncestorRole,
 )
 from .typed_table import (
@@ -50,7 +52,7 @@ from .typed_table import (
     GuardedInserts,
     ImmutableRows,
     Index,
-    TypedTable,
+    WithoutRowid,
 )
 
 if TYPE_CHECKING:
@@ -103,10 +105,9 @@ class NativePiInputNotSent(NativePiUnavailable):
         self.attestation = attestation
         super().__init__(f"Native Pi failed before prompt claim_scope; input not sent: {error}")
 
-    @property
     def diagnostic_evidence(self):
         return {
-            **super().diagnostic_evidence,
+            **super().diagnostic_evidence(),
             "input_disposition": "not_sent",
             "initialization": self.attestation.diagnostic_evidence,
         }
@@ -134,9 +135,8 @@ class NativePiOperationFailed(NativePiUnavailable):
         self.event = event
         super().__init__("Native Pi refused an operation (see diagnostic)")
 
-    @property
-    def diagnostic_evidence(self) -> dict[str, str]:
-        return {**super().diagnostic_evidence, "operation": self.event.error}
+    def diagnostic_evidence(self) -> dict[str, object]:
+        return {**super().diagnostic_evidence(), "operation": self.event.error}
 
 
 def main() -> int:
@@ -215,7 +215,7 @@ class NativeContextRecord(NativeInputCommit):
 
 @dataclass(frozen=True, slots=True)
 class NativeContextJournal(
-    GuardedInserts, ImmutableRows, NativeContextRecord, TypedTable, DurableTables
+    GuardedInserts, ImmutableRows, NativeContextRecord, WithoutRowid, DurableTables
 ):
     """One proof declaration owns wire facts and the indexed durable journal."""
 
@@ -230,11 +230,10 @@ class NativeContextJournal(
     schema: Literal[2]
     type: Literal["context_committed"]
 
-    without_rowid = True
     indexes = (Index(("request_generation",)), Index(("session_id",)))
 
     @classmethod
-    def native_contract(cls) -> dict[str, Any]:
+    def native_contract(cls) -> dict[str, JsonValue]:
         """Generate the native writer's SQLite contract from this declaration."""
         table = cls.declared_name
         return {
@@ -263,11 +262,11 @@ class NativeContextJournal(
         with ExitStack() as ownership:
             try:
                 held = ownership.enter_context(closing(
-                    os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb")
+                    os.fdopen(PrivateFileRole.read(
+                        path, NativePiUnavailable("Native proof indexed evidence is unavailable")), "rb")
                 ))
                 before = os.fstat(held.fileno())
-                NativeSessionFileRole.require(before)
-                db = ownership.enter_context(closing(CoordinationStore.recovering_snapshot(path)))
+                db = ownership.enter_context(closing(SQLiteFile.recovering_snapshot(path)))
                 if cls.schema_differs(db):
                     raise NativePiUnavailable("Native proof requires offline durable conversion")
                 if FileIdentity.from_stat(before) != FileIdentity.from_stat(path.lstat()):
@@ -463,7 +462,7 @@ class NativePiRpcLaunch:
         """
         from .active_route import resolve_comms_route
 
-        package = resolve_comms_route(root).launch().package_for(command)
+        package = resolve_comms_route(root).launch().launched_package()
         cls._command_selection(command, runtime, package)
         return package
 
@@ -592,8 +591,7 @@ class NativePiRpcLaunch:
             raise NativePiUnavailable("Native Pi worktree is unavailable")
         # Native SettingsManager and AgentSession own tracked retry/compaction
         # policy. This directory isolates writable resources, not policy copies.
-        agent_dir = session_dir / ".native-pi-agent"
-        NativeSessionFiles.prepare_private_directory(agent_dir)
+        agent_dir = NativeAgentSettings.prepare_directory(session_dir)
         tool_arguments = selected_tool_mode.launch_arguments(package.path)
         arguments = [
             "--mode",
@@ -663,7 +661,7 @@ class PrivateEvidenceRead:
     record, then decode only beyond their consumed position. No history is hashed.
     """
 
-    def __init__(self, path, stream):
+    def __init__(self, path: Path, stream):
         self.path, self.stream = path, stream
         self.identity = FileIdentity.from_stat(os.fstat(stream.fileno()))
         self.prefix = UnverifiedNativeEvidencePrefix()
@@ -674,13 +672,13 @@ class PrivateEvidenceRead:
         return self.prefix.size
 
     @classmethod
-    def _open_stream(cls, path):
+    def _open_stream(cls, path: Path):
         stream = None
         try:
             if path != path.resolve(strict=True):
                 raise NativePiUnavailable("Native Pi evidence session path is not canonical")
-            stream = os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb")
-            NativeSessionFileRole.require(os.fstat(stream.fileno()))
+            stream = os.fdopen(PrivateFileRole.read(
+                path, NativePiUnavailable("Native Pi evidence file is unavailable")), "rb")
             return stream
         except FileNotFoundError as error:
             if stream is not None:
@@ -693,7 +691,7 @@ class PrivateEvidenceRead:
 
     @classmethod
     @contextmanager
-    def open(cls, path):
+    def open(cls, path: Path):
         source = cls(path, cls._open_stream(path))
         try:
             yield source
@@ -854,14 +852,15 @@ class PrivateEvidenceRead:
         Each observation fences the next: growth seen on the descriptor cannot
         be hidden by shrinking the named file back.
         """
+        refusal = NativePiUnavailable("Native Pi evidence has an unsafe ancestor")
         try:
-            TrustedAncestorRole.require_path(self.path.parent)
-        except (OSError, ValueError) as error:
-            raise NativePiUnavailable("Native Pi evidence has an unsafe ancestor") from error
+            TrustedAncestorRole.require_path(self.path.parent, refusal)
+        except OSError as error:
+            raise refusal from error
         # Detect replacement before classifying the old descriptor's now-zero
         # links: observing a new named source takes the existing reverify path.
         for info in (self.path.lstat(), os.fstat(self.stream.fileno())):
-            NativeSessionFileRole.require(info)
+            PrivateFileRole.require(info, RelationViolationError("Native Pi evidence file is not private"))
             observed = FileRevision.from_stat(info)
             if observed.identity != self.identity or (
                 observed != revision and observed.size <= revision.size
@@ -891,9 +890,9 @@ def read_tracked_input_commitment(
     """
     Id128Text.decode(input_id)
     session_file = Path(session_file).absolute()
-    from .native_entries import NativeInputEvidenceRead
+    from .native_entries import NativeEvidenceRead
 
-    with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
+    with NativeEvidenceRead.borrow(session_file, evidence) as evidence:
         evidence.observe()
         try:
             return CommittedInput(evidence.tracked(input_id).message.input_digest.require())

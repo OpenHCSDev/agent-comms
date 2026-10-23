@@ -2,22 +2,19 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from agent_comms.reason_codes import GivenReasonCode, NoReasonCode
 from agent_comms.assignment_states import EngagedAssignment
-from agent_comms.assignment_store import AssignmentStore
 from agent_comms.coordination_errors import (
     IdentityConflict,
     StaleRevision,
 )
 from agent_comms.coordination_results import AlreadyApplied, Applied
-from agent_comms.coordination_session import CoordinationSession
 from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
 from agent_comms.coordination_tables.executions import (
-    ExecutionOrigin,
+    ExecutionProvenance,
     ExecutionRecord,
 )
 from agent_comms.coordination_tables.responses import ResponseObligation
@@ -30,40 +27,31 @@ from agent_comms.obligation_states import (
     FailedResponse,
     PendingResponse,
 )
-from agent_comms.participant_store import ParticipantStore
 from agent_comms.recovery_reader import RecoveryReader
 
 if TYPE_CHECKING:
     from agent_comms.selected_source_batch import SelectedSource
 
 
-@dataclass(eq=False, repr=False)
-class ExecutionStore:
-    session: CoordinationSession
-    participants: ParticipantStore
-    assignments: AssignmentStore
-    snapshots: RecoveryReader
-
+class ExecutionStore(RecoveryReader):
     def create(
         self,
         execution_id: str,
-        origin: ExecutionOrigin,
+        origin: type[ExecutionProvenance],
         owner_lookup: str,
-        owner_thread: str,
         max_attempts: int,
         *,
         sources: tuple[SelectedSource, ...] = (),
     ) -> Applied[RecoverySnapshot] | AlreadyApplied[RecoverySnapshot]:
         with self.session.writing() as db:
             assignments = tuple(source.assignment for source in sources)
-            return self._create(db, execution_id, origin, owner_lookup, owner_thread, max_attempts, sources, assignments)
+            return self._create(db, execution_id, origin, owner_lookup, max_attempts, sources, assignments)
 
     def create_after_triage(
         self,
         execution_id: str,
-        origin: ExecutionOrigin,
+        origin: type[ExecutionProvenance],
         owner_lookup: str,
-        owner_thread: str,
         max_attempts: int,
         *,
         sources: tuple[SelectedSource, ...],
@@ -74,35 +62,29 @@ class ExecutionStore:
             assignments = tuple(source.assignment for source in sources)
             if assignments != settled:
                 raise StaleRevision("original claims changed after proved native settlement")
-            return self._create(db, execution_id, origin, owner_lookup, owner_thread, max_attempts, sources, assignments)
+            return self._create(db, execution_id, origin, owner_lookup, max_attempts, sources, assignments)
 
-    def _create(self, db, execution_id, origin, owner_lookup, owner_thread,
+    def _create(self, db, execution_id, origin, owner_lookup,
                 max_attempts, sources, assignments):
         """The single creation algorithm, under its caller's owning transaction."""
-        origin = ExecutionOrigin(origin)
         for source in sources:
             if source.store is not self.assignments:
                 raise IdentityConflict("execution source belongs to another assignment store")
         assignment_ids = tuple(source.assignment_id for source in sources)
-        if origin is ExecutionOrigin.WIRE and not sources:
-            raise IdentityConflict("wire execution requires ordered original sources")
-        if origin is not ExecutionOrigin.WIRE and sources:
-            raise IdentityConflict("claimless execution cannot bind claims")
+        origin.require_sources(sources)
         row = ExecutionRecord.one(self.session._connection, execution_id=execution_id)
         if row is not None:
-            snapshot = self.snapshots.get(execution_id)
+            snapshot = self.get(execution_id)
             e = snapshot.execution
             if (
                 e.origin,
                 e.owner_lookup,
-                e.owner_thread,
                 e.max_attempts,
                 tuple(sorted(row.exact_target for row in snapshot.obligations)),
                 tuple(link.assignment_id for link in snapshot.links),
             ) != (
                 origin,
                 owner_lookup,
-                owner_thread,
                 max_attempts,
                 tuple(sorted({source.delivery.message.exact_reply_target for source in sources})),
                 assignment_ids,
@@ -110,7 +92,7 @@ class ExecutionStore:
                 raise IdentityConflict("execution identity conflicts")
             return AlreadyApplied(snapshot)
         participant = self.participants.get(owner_lookup)
-        if not participant.committed or participant.owner_identity.owner_thread != owner_thread:
+        if not participant.committed:
             raise IdentityConflict("execution requires committed current owner")
         if not isinstance(max_attempts, int) or max_attempts <= 0:
             raise ValueError("max_attempts must be positive")
@@ -121,7 +103,6 @@ class ExecutionStore:
             execution_id=execution_id,
             origin=origin,
             lifecycle=QueuedExecution(),
-            owner_thread=owner_thread,
             owner_lookup=owner_lookup,
             revision=1,
             max_attempts=max_attempts,
@@ -164,13 +145,13 @@ class ExecutionStore:
                 now,
                 1,
             ).insert(db)
-        return Applied(self.snapshots.get(execution_id))
+        return Applied(self.get(execution_id))
 
     def mark_pending(
         self, execution_id: str, *, expected_revision: int
     ) -> Applied[RecoverySnapshot]:
         with self.session.writing() as db:
-            snapshot = self.snapshots.get(execution_id)
+            snapshot = self.get(execution_id)
             if snapshot.execution.revision != expected_revision:
                 raise StaleRevision("execution revision changed")
             if not snapshot.execution.lifecycle.queued:
@@ -183,7 +164,7 @@ class ExecutionStore:
                 revision=expected_revision + 1,
                 updated_at_ms=self.session.now(snapshot.execution.updated_at_ms),
             )
-            return Applied(self.snapshots.get(execution_id))
+            return Applied(self.get(execution_id))
 
     def fail_unstarted(
         self,
@@ -194,7 +175,7 @@ class ExecutionStore:
     ) -> Applied[RecoverySnapshot]:
         """Fail queued/pending work; v2 cannot resume a pre-attempt deferral."""
         with self.session.writing() as db:
-            before = self.snapshots.get(execution_id)
+            before = self.get(execution_id)
             execution = before.execution
             if execution.revision != expected_revision:
                 raise StaleRevision("execution revision changed")
@@ -233,4 +214,4 @@ class ExecutionStore:
                     revision=assignment.revision + 1,
                     updated_at_ms=self.session.now(assignment.updated_at_ms),
                 )
-            return Applied(self.snapshots.get(execution_id))
+            return Applied(self.get(execution_id))

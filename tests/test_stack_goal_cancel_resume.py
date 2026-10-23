@@ -1,4 +1,5 @@
 """Real native Pi and owner socket: cancelled goals need an explicit fresh grant."""
+from agent_comms.controller import SessionUpdateSink
 
 import asyncio
 import json
@@ -11,7 +12,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.goal_generation import BlockedGeneration, ReadyGeneration, ReservedGeneration
 from agent_comms.goals import Goal
-from agent_comms.goal_states import ActiveGoal, BlockedGoal, PausedGoal
+from agent_comms.goal_states import ActiveGoal, PausedGoal
 from agent_comms.input_attempt import StartedInput
 from agent_comms.runtime import RuntimeProxy, socket_path
 from compaction_loopback import LoopbackProvider
@@ -35,8 +36,8 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(tm
         first_chunk, continued = asyncio.Event(), asyncio.Event()
         updates = []
 
-        class Client:
-            async def session_update(self, session_id, update):
+        class Client(SessionUpdateSink):
+            async def publish_update(self, session_id, update):
                 value = SessionNotification(session_id=session_id, update=update).update.model_dump(
                     by_alias=True, exclude_none=True,
                 )
@@ -46,6 +47,7 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(tm
                     first_chunk.set()
                 if "FRESH_RESPONSE" in text:
                     continued.set()
+                return True
 
         provider = native.provider
         provider.text = "CANCELLED_RESPONSE"
@@ -87,14 +89,14 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(tm
                         "update_goal", status="active", goal_id=goal_id,
                         expected_revision=paused.revision,
                     )
-                blocked = comms.registry.require(session).goal
-                assert isinstance(blocked.state, BlockedGoal)
+                # The ledger's BlockedGeneration owns the block; the refusal writes no registry copy.
+                assert comms.registry.require(session).goal == paused
                 assert store.snapshot(goal_id) == failed
                 assert len(requests) == 1
                 provider.text = "FRESH_RESPONSE"
                 provider.completion_gate = finish_goal
                 retried = await proxy.request(
-                    "retry_goal", goal_id=goal_id, expected_revision=blocked.revision,
+                    "retry_goal", goal_id=goal_id, expected_revision=paused.revision,
                 )
                 assert isinstance(FieldCodec.decode(Goal, retried["goal"]).state, ActiveGoal)
                 await asyncio.wait_for(continued.wait(), 15)

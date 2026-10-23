@@ -11,9 +11,11 @@ from agent_comms.cli_bridges.shared import Binding, Watch
 from agent_comms.runtime_updates import ThreadOutput
 from agent_comms.cli_protocol import EarlierItems, WATCH_LINE
 from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.external_transcript import ExternalItemRow
 from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.threads import Thread
 
 
 def entry(name, timestamp):
@@ -38,7 +40,7 @@ async def test_pager_requests_two_older_pages_through_the_bridges_real_socket(tm
             if method == 'initialized':
                 continue
             if method == 'initialize':
-                result = {}
+                result = {'userAgent': 'codex/0.0.0'}
             elif method == 'thread/resume':
                 result = {'thread': {'id': 'thread', 'status': {'type': 'idle'}}}
             else:
@@ -55,8 +57,8 @@ async def test_pager_requests_two_older_pages_through_the_bridges_real_socket(tm
     await runner.setup()
     socket_path = tmp_path.parent / 'codex.sock'
     await web.UnixSite(runner, str(socket_path)).start()
-    comms = wire(tmp_path / 'root')
-    comms.registry.declare(comms.registry.new_thread('cli', frozenset(), str(tmp_path),
+    comms = installed_comms(tmp_path / 'root')
+    comms.registry.declare(Thread('cli', frozenset(), str(tmp_path),
                                                    execution=ExternalThreadExecution))
     transcript = comms.transcripts.external('cli')
     frames = asyncio.Queue()
@@ -116,7 +118,7 @@ async def test_pager_requests_two_older_pages_through_the_bridges_real_socket(tm
 async def test_rearmed_same_cursor_is_a_new_watch_request(tmp_path):
     from agent_comms.cli_bridges.codex_protocol import ItemsPage
     comms = wire(tmp_path / 'root')
-    comms.registry.declare(comms.registry.new_thread('cli', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('cli', frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external('cli')
     output = ThreadOutput(transcript, comms.agents)
     page = ItemsPage.model_validate({'data': [entry('new', 2000)], 'nextCursor': 'p1'}).publication()

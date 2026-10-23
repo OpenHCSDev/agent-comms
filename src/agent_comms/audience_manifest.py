@@ -9,7 +9,6 @@ and bind the value to the original committed envelope before runtime use.
 from __future__ import annotations
 
 import hashlib
-import json
 import math
 import re
 from collections.abc import Sequence
@@ -19,8 +18,9 @@ from typing import Final
 from agent_comms.coordination_contracts import MAX_IDENTIFIER_CHARS
 
 from .channel_targets import exact_stored_target
-from .field_codec import MalformedRecord, Sha256Text
+from .field_codec import FieldCodec, MalformedRecord, Sha256Text
 from .messages import Message
+from .projection_source import ProjectionSource
 
 AUDIENCE_VERSION: Final = 1
 MAX_RECIPIENTS: Final = 4096
@@ -43,8 +43,8 @@ def _bounded_text(value: str, field: str, *, thread_name: bool = False) -> None:
 
 def _canonical_json(value: object, *, limit: int) -> bytes:
     try:
-        encoded = json.dumps(
-            value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+        encoded = FieldCodec.compact(
+            value, sort_keys=True, ensure_ascii=False, allow_nan=False,
         ).encode("utf-8")
     except ValueError as error:  # NaN, or a lone surrogate the UTF-8 encoding refuses
         raise MalformedRecord("audience data cannot be canonically encoded") from error
@@ -58,7 +58,7 @@ def _digest(domain: bytes, payload: bytes) -> str:
 
 
 @dataclass(frozen=True, slots=True)
-class FrozenRecipient:
+class FrozenRecipient(ProjectionSource):
     """Stable coordination lookup paired with its send-time canonical name."""
 
     recipient_lookup: str
@@ -70,7 +70,7 @@ class FrozenRecipient:
 
 
 @dataclass(frozen=True, slots=True)
-class FrozenAudience:
+class FrozenAudience(ProjectionSource):
     """Immutable precommit snapshot of the full delivered audience, not a acknowledgement.
 
     Neither the digest nor direct construction attests a bus append. At recovery,
@@ -160,8 +160,6 @@ def freeze_audience(
     Mentions do not filter this set. Neither current tags nor view declarations are
     read here. A sequence assigned in memory is not proof of durable commitment.
     """
-    if not isinstance(prepared_message, Message):
-        raise TypeError("prepared_message must be a Message")
     if not isinstance(externally_captured_recipients, Sequence) or isinstance(
         externally_captured_recipients, (str, bytes)
     ):

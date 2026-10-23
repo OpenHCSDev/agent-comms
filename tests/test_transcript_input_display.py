@@ -1,4 +1,5 @@
 """Saved native input IDs bind transcript display to the owner's submitted intent."""
+from agent_comms.controller import SessionUpdateSink
 
 import json
 import sqlite3
@@ -6,12 +7,14 @@ import sqlite3
 import pytest
 
 from conftest import transcript_records
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.native_entries import TranscriptProjection
 from agent_comms.pi_payloads import PiMessage
+from agent_comms.threads import Thread
 
 GOAL_PROMPT = (
     "Persistent goal deadbeef: Read files until stopped.\n"
@@ -30,8 +33,8 @@ def saved_row(native_id, text, *, images=False, role="user"):
 
 
 def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_path):
-    comms = wire(tmp_path / "wire")
-    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path)))
+    comms = installed_comms(tmp_path / "wire")
+    comms.registry.declare(Thread('worker', frozenset(), str(tmp_path)))
     # These annotations are committed before sending, before Pi creates its first file.
     comms.transcripts.routes.record_input_display("a" * 32, None)
     comms.transcripts.routes.record_input_display(
@@ -84,7 +87,7 @@ def test_incomplete_durable_annotation_schema_is_not_repaired(tmp_path):
 
 @pytest.mark.asyncio
 async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_path):
-    comms = wire(tmp_path / "wire")
+    comms = installed_comms(tmp_path / "wire")
     session = tmp_path / "session.jsonl"
     session.write_text(
         "".join(
@@ -96,15 +99,16 @@ async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_p
             ]
         )
     )
-    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=SavedSessionFile(str(session))))
+    comms.registry.declare(Thread('worker', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(session), comms.root)))
     comms.transcripts.routes.record_input_display("a" * 32, None)
     comms.transcripts.routes.record_input_display("b" * 32, "test2")
     agent = CommsAgent(wire(comms.root))
     updates = []
 
-    class Client:
-        async def session_update(self, **kwargs):
+    class Client(SessionUpdateSink):
+        async def publish_update(self, **kwargs):
             updates.append(kwargs["update"])
+            return True
 
     try:
         await agent.sessions.transcript.replay("worker", client=Client())

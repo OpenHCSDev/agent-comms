@@ -1,4 +1,5 @@
 """Measured admission, not estimates; the claim also owns displayed waiting."""
+
 import asyncio
 import os
 import shutil
@@ -7,23 +8,24 @@ import pytest
 
 from agent_comms.activity import ActivityState
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.storage_room import (
     BuildRoomWork, RoomClaim, TestGateRoomWork, UnitStartRoomWork,
     WaitingRoomPhase,
 )
 from agent_comms.storage_rules import StorageRule, shell_storage_effects
 from agent_comms.thread_status import RunningThreadStatus
+from agent_comms.threads import Thread
 
 
 def copied_root(tmp_path):
-    original = Comms(tmp_path / 'original')
+    original = wire(tmp_path / 'original')
     for name in ('gate-one', 'gate-two'):
-        original.registry.declare(original.registry.new_thread(name, frozenset(), str(tmp_path),
+        original.registry.declare(Thread(name, frozenset(), str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid())), RunningThreadStatus())
     root = tmp_path / 'copied'
     shutil.copytree(original.root, root)
-    comms = Comms(root)
+    comms = wire(root)
     comms.registry.storage_rule = StorageRule(volume=tmp_path, floor_gib=0, memory_gib=0,
         checkout_base=tmp_path, scratch_base=tmp_path / 'scratch')
     return comms
@@ -47,6 +49,26 @@ async def test_cancelled_waiter_releases_only_its_own_claim(tmp_path):
     await asyncio.to_thread(first.finish)
     with rule.room_ledger.snapshot() as db:
         assert RoomClaim.count(db) == 0
+
+
+@pytest.mark.asyncio
+async def test_committed_release_wakes_a_waiter_without_os_refresh(tmp_path):
+    comms = copied_root(tmp_path)
+    rule = comms.registry.storage_rule
+    one, two = (comms.registry.require(name) for name in ('gate-one', 'gate-two'))
+    first = await rule.wait_for_room((BuildRoomWork,), one, comms.root)
+    waiting = asyncio.create_task(rule.wait_for_room((UnitStartRoomWork,), two, comms.root))
+    try:
+        await asyncio.sleep(0.05)
+        assert not waiting.done()
+        await asyncio.to_thread(first.finish)
+        second = await asyncio.wait_for(waiting, 0.5)
+        await asyncio.to_thread(second.finish)
+    finally:
+        if not waiting.done():
+            waiting.cancel()
+        await asyncio.gather(waiting, return_exceptions=True)
+        await asyncio.to_thread(first.finish)
 
 
 @pytest.mark.parametrize('command,kind', [

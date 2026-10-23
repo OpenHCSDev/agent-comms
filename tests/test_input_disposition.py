@@ -25,6 +25,7 @@ from agent_comms.input_origin import DeliveredInput, UndeliveredInput, WireInput
 from agent_comms.message_reference import MessageReference
 from agent_comms.text_digest import TextDigest
 from stored_inputs import stored_inputs
+from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize("invalid_text", [["list"], [], {"text": "dict"}, 7, False, None])
@@ -74,13 +75,13 @@ def test_unresolved_projection_follows_rename_without_private_receipts(tmp_path:
 
     comms = wire(tmp_path)
     comms.registry.declare(
-        comms.registry.new_thread(name='kid', tags=frozenset(), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+        Thread(name='kid', tags=frozenset(), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     store = InputDispositions(comms.root)
     store.record("bus:7", seq=7, owner="kid", claim_scope=1, target="#review", text="exact source")
     store.record("bus:8", seq=8, owner="peer", claim_scope=1, target="#review", text="other owner")
     store.bind("bus:7", claim_scope=1, turn_id="turn", native_id="a" * 32, text="private wrapper")
-    comms.threads.rename_managed_thread("kid", "new-kid", owner_pid=os.getpid())
+    comms.threads.rename_managed_thread("kid", "new-kid", owner=ProcessIdentity.capture(os.getpid()))
     expected = (UnresolvedInput(7, "#review", "exact source", "bus:7", "unknown"),)
     assert comms.goals.unresolved_inputs("new-kid") == expected
     assert comms.goals.unresolved_inputs("kid") == expected

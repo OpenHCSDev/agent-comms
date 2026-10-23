@@ -7,21 +7,23 @@ captured read; the wire, registry and input document remain the only authorities
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from abc import abstractmethod
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .input_attempt import StoredInput
-from .messages import Message
 from .message_reference import MessageReference
+from .messages import ClaimMessage, Message
 from .text_digest import TextDigest
 
 if TYPE_CHECKING:
+    from .bus import BusReader
     from .input_disposition import InputDispositions
     from .registry_document import RegistrySnapshot
+    from .thread_identity import ThreadIncarnation
     from .threads import Thread
 
 
@@ -170,7 +172,7 @@ class CurrentHumanConstraintTaskFact(HumanConstraintTaskFact,
 
 @dataclass(frozen=True)
 class ClaimTaskFact(ExactTaskFact):
-    source: Message
+    source: ClaimMessage
 
     def __post_init__(self) -> None:
         self.source.require_claim_transition()
@@ -214,6 +216,18 @@ class RetainedTaskFacts:
 
     facts: tuple[ExactTaskFact, ...]
 
+    @classmethod
+    def capture(cls, source: BusReader, owner: ThreadIncarnation) -> RetainedTaskFacts:
+        """Capture declared facts from one participant's immutable native read."""
+        lookup = owner.require_recorded().lookup
+        after = 0
+        facts: list[ExactTaskFact] = []
+        while records := source.conversation(lookup, after=after, descending=False):
+            facts.extend(fact for record in records for message in record.messages()
+                         for fact in message.retained_task_facts())
+            after = records[-1].seq
+        return cls(tuple(facts))
+
     @property
     def source_digest(self) -> TextDigest:
         """Describe this exact captured payload, never unrelated bus activity."""
@@ -232,15 +246,16 @@ class RetainedTaskFacts:
 
     @staticmethod
     def canonical_bytes(record: object) -> bytes:
-        return json.dumps(record, sort_keys=True, separators=(",", ":"),
-                          allow_nan=False).encode()
+        return FieldCodec.compact(record, sort_keys=True, allow_nan=False).encode()
 
-    def original_text_source(self, message: Message) -> Message | StoredInput:
-        originals = {reference: source for fact in self.facts
-                     for reference, source in fact.original_sources()}
-        if originals.get(message.reference) != message:
-            raise RelationViolationError("Authored source is outside this captured read")
-        return message.task.original_text_source(message, originals)
+    def original_text_source(self, reference: MessageReference) -> Message | StoredInput:
+        originals = {key: source for fact in self.facts
+                     for key, source in fact.original_sources()}
+        for fact in self.facts:
+            for message in fact.wire_sources():
+                if message.reference == reference:
+                    return message.task.original_text_source(message, originals)
+        raise RelationViolationError("Authored source is outside this captured read")
 
     def current_authored_lineages(self, owner: Thread, registry: RegistrySnapshot) -> tuple[tuple[Message, Message], ...]:
         """Resolve explicit original-reference lineage, never equal text or time.
@@ -269,7 +284,7 @@ class RetainedTaskFacts:
         """Classify the same original facts at the existing frozen source cut."""
         selected = self.current_authored_sources(owner, registry)
         for message in selected:
-            self.original_text_source(message)
+            self.original_text_source(message.reference)
         current = frozenset(message.reference for message in selected)
         return RetainedTaskFacts(tuple(fact.for_tasks(current).for_owner(owner, registry)
                                        for fact in self.facts))

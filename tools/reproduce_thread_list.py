@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 import argparse
 import faulthandler
 import json
@@ -11,7 +12,7 @@ from multiprocessing.synchronize import Event
 from pathlib import Path
 
 from agent_comms.cli_bridges.claude import ClaudeTranscript
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.storage_rules import StorageRoots
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.threads import Thread
@@ -29,7 +30,7 @@ def declaration(root: Path, name: str, created_at: float = 1) -> Thread:
 
 
 def writer(root: Path, stop: Event, result: Queue[int], imports: bool) -> None:
-    comms = Comms(root)
+    comms = wire(root)
     count = 0
     while not stop.is_set():
         name = f"writer-{count % 85}"
@@ -62,8 +63,7 @@ def main() -> None:
         faulthandler.dump_traceback_later(args.dump_after)
     root = args.root.resolve()
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
-    comms = Comms(root)
-    comms.messaging.initialize_private_initial_protocol()
+    comms = wire(root)
     event = dict(
         timestamp="2026-10-19T00:00:00Z",
         cwd=str(root),

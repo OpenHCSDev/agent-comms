@@ -1,3 +1,4 @@
+
 from bus_history import read_history
 import json
 from concurrent.futures import ProcessPoolExecutor
@@ -10,34 +11,36 @@ from agent_comms.relationships import (
     ChildrenRelationshipGroup, CollaboratingRelationshipGroup, InboundRelationshipGroup,
     OutboundRelationshipGroup, ParentRelationshipGroup, RelationshipEdit,
 )
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.display_order import LastActivityThreadSort
 from agent_comms.thread_text import ForkedParent, NoParent
 from agent_comms.tools import invoke_tool
+from agent_comms.threads import Thread
 
 
 def add_peer(root, peer):
-    Comms(root).relationships.edit(
+    wire(root).relationships.edit(
         "owner", RelationshipEdit.member_named("add"), peer, f"Working with {peer}"
     )
 
 
 def add_shared_peer(root, owner):
     other = "peer" if owner == "owner" else "owner"
-    Comms(root).relationships.edit(owner, RelationshipEdit.member_named("add"), other, f"From {owner}")
+    wire(root).relationships.edit(owner, RelationshipEdit.member_named("add"), other, f"From {owner}")
 
 
 def change_shared_peer(root, instruction):
     owner, action = instruction
     other = "peer" if owner == "owner" else "owner"
-    Comms(root).relationships.edit(owner, RelationshipEdit.member_named(action), other, "Race")
+    wire(root).relationships.edit(owner, RelationshipEdit.member_named(action), other, "Race")
 
 
 def setup_wire(tmp_path):
-    comms = Comms(tmp_path / "wire")
+    comms = installed_comms(tmp_path / "wire")
     for name, parent in (("origin", NoParent()), ("owner", ForkedParent("origin")), ("peer", NoParent()),
                          ("child", ForkedParent("owner"))):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path), parent=parent))
+        comms.registry.declare(Thread(name, frozenset({'team'}), str(tmp_path), parent=parent))
     return comms
 
 
@@ -56,7 +59,7 @@ def test_agent_tools_persist_one_mutual_contact_without_sending(tmp_path, monkey
     assert collaboration_rows(comms, "peer")[0].target == "owner"
     assert read_history(comms) == []
     assert comms.registry.snapshot() == before
-    reopened = Comms(comms.root)
+    reopened = wire(comms.root)
     original = reopened.relationships.collaborations("owner")[0]
     assert (
         reopened.relationships.edit("owner", RelationshipEdit.member_named("add"), "peer", "ignored")
@@ -83,7 +86,7 @@ def test_recent_contacts_survive_ack_and_do_not_infer_collaboration(tmp_path):
     comms.messaging.send("peer", "owner", "Direct input").message.message_id
     comms.messaging.send("peer", "#team", "Channel input").message.message_id
     comms.messaging.send("owner", "peer", "Output").message.message_id
-    messages = comms.bus.inbox("owner")
+    messages = comms.bus.inbox("owner").page.messages
     comms.messaging.acknowledge("owner", tuple(message.reference for message in messages))
     pending = comms.bus.pending_count("owner")
     snapshot = comms.relationships.snapshot("owner")
@@ -110,7 +113,7 @@ def test_alias_and_persisted_thread_sort(tmp_path):
         comms.relationships.collaborations("reviewer")[0].owner,
         comms.relationships.collaborations("reviewer")[0].peer,
     ) == ("reviewer", "renamed")
-    snapshot = Comms(comms.root).relationships.snapshot("renamed")
+    snapshot = wire(comms.root).relationships.snapshot("renamed")
     children = snapshot.groups_by_type[ChildrenRelationshipGroup]
     assert children.order is LastActivityThreadSort
     assert collaboration_rows(comms, "reviewer")[0].target == "renamed"
@@ -120,7 +123,7 @@ def test_concurrent_declaring_agents_do_not_lose_updates(tmp_path):
     comms = setup_wire(tmp_path)
     names = [f"worker-{index}" for index in range(8)]
     for name in names:
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     with ProcessPoolExecutor(max_workers=4) as pool:
         list(pool.map(add_peer, [comms.root] * len(names), names))
     assert {edge.peer for edge in comms.relationships.collaborations("owner")} == set(names)
@@ -187,7 +190,7 @@ def test_deleted_peer_survives_unrelated_edit_and_explicit_remove(tmp_path):
     comms.relationships.edit(
         "owner", RelationshipEdit.member_named("update"), "child", "Updated other task"
     )
-    reopened = Comms(comms.root)
+    reopened = wire(comms.root)
     persisted = {edge.peer: edge for edge in reopened.relationships.collaborations("owner")}
     assert persisted["peer"] == original
     missing = next(row for row in collaboration_rows(reopened) if row.target == "peer")
@@ -218,7 +221,7 @@ def test_reused_peer_name_does_not_rebind_or_overwrite_historical_work(tmp_path)
     comms.owners.stop("peer")
     comms.registry.remove("peer")
     comms.registry.declare(
-        comms.registry.new_thread('peer', frozenset(), str(tmp_path), created_at=old_peer.created_at + 1)
+        Thread('peer', frozenset(), str(tmp_path), created_at=old_peer.created_at + 1)
     )
 
     row = collaboration_rows(comms)[0]
@@ -251,7 +254,7 @@ def test_deleted_owner_edges_are_not_purged_or_inherited_by_new_owner(tmp_path):
     comms.registry.remove("owner")
     comms.relationships.edit("origin", RelationshipEdit.member_named("add"), "peer", "Independent work")
     comms.registry.declare(
-        comms.registry.new_thread('owner', frozenset(), str(tmp_path), created_at=original.owner_created + 1)
+        Thread('owner', frozenset(), str(tmp_path), created_at=original.owner_created + 1)
     )
     assert comms.relationships.collaborations("owner") == ()
     assert collaboration_rows(comms) == ()
@@ -358,7 +361,7 @@ def test_new_group_supplies_snapshot_choices_defaults_and_persistence(tmp_path):
         comms.relationships.set_order("owner", SortedInboundRelationshipGroup, LastActivityThreadSort)
         encoded = json.loads(comms.relationships.store.path.read_text())
         assert encoded["orders"][0]["group"] == "sorted_inbound"
-        reopened = Comms(comms.root).relationships.snapshot("owner")
+        reopened = wire(comms.root).relationships.snapshot("owner")
         assert FieldCodec.decode(type(reopened), FieldCodec.encode(reopened)) == reopened
     finally:
         RelationshipGroup.__registry__.pop(SortedInboundRelationshipGroup.declared_name)

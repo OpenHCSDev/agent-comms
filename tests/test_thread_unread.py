@@ -10,8 +10,9 @@ from multiprocessing import get_context
 
 import pytest
 
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.private_path import FileRevision
 from agent_comms.registry_document import DEFAULT_ROSTER
 from agent_comms.ui_model.unread import CappedReplyUnread, EmptyCappedReplyUnread, ReplyUnread
@@ -28,6 +29,7 @@ from agent_comms.view_unread import (
     TranscriptReply,
 )
 from native_unread_fixture import completed_counts, completed_snapshot
+from agent_comms.threads import Thread
 
 
 def append(path, role='assistant', content='Reply'):
@@ -46,9 +48,9 @@ def session(path, identity='session-test'):
 def setup_thread(tmp_path):
     source = tmp_path / 'session.jsonl'
     session(source)
-    comms = wire(tmp_path / 'wire')
-    comms.registry.declare(comms.registry.new_thread('worker', frozenset({'ci'}),
-        str(tmp_path), session_file=SavedSessionFile(str(source))))
+    comms = installed_comms(tmp_path / 'wire')
+    comms.registry.declare(Thread('worker', frozenset({'ci'}),
+        str(tmp_path), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
     return comms, source
 
 
@@ -110,7 +112,7 @@ def test_reply_counts_are_persistent_human_read_positions(tmp_path):
     assert completed_snapshot(comms, str(tmp_path / 'other-project')).thread_unread['worker'] == ReplyUnread(1)
     comms.messaging.send('worker', '#ci', 'Channel reply')
     comms.views.mark_user_view_read('#ci', worktree=str(tmp_path))
-    comms.messaging.acknowledge('worker', tuple(m.reference for m in comms.bus.inbox('worker')))
+    comms.messaging.acknowledge('worker', tuple(m.reference for m in comms.bus.inbox('worker').page.messages))
     assert completed_snapshot(comms, str(tmp_path)).thread_unread['worker'] == ReplyUnread(1)
 
 

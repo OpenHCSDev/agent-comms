@@ -1,29 +1,27 @@
-"""Include checked references to stored messages in the instruction file."""
+"""Bounded sequence references to the canonical bus, never delivery authority."""
 
-import json
 from dataclasses import dataclass
 
-from ..private_bus_checkpoint import DeliverySources
+from ..field_codec import FieldCodec
+from ..message_reference import MessageReference
 from ..turn_context import InstructionSegment, WireProvenance
 
 
 @dataclass(frozen=True, kw_only=True)
 class AwarenessSegment(InstructionSegment):
     bus: str
-    root_id: str
-    sources: tuple[DeliverySources, ...]
+    sources: tuple[MessageReference, ...]
 
     @classmethod
-    def capture(cls, path, root_id, sources):
-        return super().capture(tuple(WireProvenance(row.reference) for row in sources),
-                               bus=str(path), root_id=root_id, sources=sources)
+    def capture(cls, path, records):
+        sources = tuple(record.reference for record in records)
+        return super().capture(tuple(WireProvenance(reference) for reference in sources),
+                               bus=str(path), sources=sources)
 
     def values(self):
-        return {"pointers": json.dumps({
-            "bus": self.bus, "root_id": self.root_id,
-            "sources": [{"seq": row.seq, "message_id": row.message_id,
-                         "offset": row.offset, "length": row.length} for row in self.sources],
-        }, ensure_ascii=True, separators=(",", ":"))}
+        return {"pointers": FieldCodec.compact({
+            "bus": self.bus, "sources": [FieldCodec.encode(source) for source in self.sources],
+        }, ensure_ascii=True)}
 
 
 @dataclass(frozen=True, kw_only=True)

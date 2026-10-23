@@ -7,7 +7,7 @@ Without that adapter these tests prove the Pi/ACP path, NOT Toad rendering.
 """
 
 from __future__ import annotations
-from agent_comms.native_package import pinned_native_package
+from agent_comms.controller import SessionUpdateSink
 
 import asyncio
 import importlib.util
@@ -26,26 +26,26 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
+from acp.schema import PromptRequest, TextContentBlock
 
 from agent_comms.acp_extension import (
     McpClientAcknowledgementUpdate,
     TurnChangedUpdate,
     decode_updates,
 )
-from agent_comms.comms import wire
 from agent_comms.child_process import SpawnedProcess
+from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
-from agent_comms.runtime import RuntimeProxy
 from agent_comms.native_arguments import GivenArguments, GivenBinary
+from agent_comms.runtime import RuntimeProxy
 from delivery_owner_fixture import canonical_agent
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX PTY acceptance")
 TIMEOUT = 40
 
 
-def _node_run(node, env, script, cwd, artifact):
-    native_package = pinned_native_package()
+def _node_run(native_package, node, env, script, cwd, artifact):
     command = [
         node, "--no-global-search-paths",
         "--import", str(native_package / "dist/agent-comms-import-fence.mjs"),
@@ -124,6 +124,7 @@ def _prepare(root, native_package):
     }
     api = native_package / "dist" / "index.js"
     _node_run(
+        native_package,
         node,
         env,
         f"import {{ProjectTrustStore}} from {json.dumps(api.as_uri())};"
@@ -132,6 +133,7 @@ def _prepare(root, native_package):
         root / "project-trust",
     )
     digest = _node_run(
+        native_package,
         node,
         env,
         "import {declarationDigest,parseNativeConfig} from "
@@ -142,6 +144,7 @@ def _prepare(root, native_package):
     )
     # Initial fixture setup uses the real package writer, never a Toad ledger.
     _node_run(
+        native_package,
         node,
         env,
         "import {recordProjectDecision} from "
@@ -342,12 +345,12 @@ async def _observer(case, root):
 
 
 @pytest.mark.parametrize("case", ["allow", "no_controller", "revoke_midturn", "disconnect"])
-async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
+async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, request):
     binary = os.environ.get("AC_MCP_NATIVE_BIN")
     if not binary:
         pytest.skip("Set AC_MCP_NATIVE_BIN to an explicitly prepared native Pi launcher")
     assert binary == "pi" or (Path(binary).is_absolute() and os.access(binary, os.X_OK))
-    native_package = pinned_native_package()
+    native_package = request.getfixturevalue("pinned_native")
     package, node, agent, project, digest, starts, calls, env = _prepare(
         tmp_path, native_package
     )
@@ -363,7 +366,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
         json.dumps(
             {
                 "launcher": binary,
-                "nativePackage": str(pinned_native_package()),
+                "nativePackage": str(native_package),
                 "package": str(package),
                 "case": case,
             }
@@ -422,17 +425,19 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                     AGENT_COMMS_NATIVE_CONFIG_DIR=str(agent),
                 )
 
-                class Audit:
-                    async def session_update(self, session_id, update):
+                class Audit(SessionUpdateSink):
+                    async def publish_update(self, session_id, update):
                         row = {
                             "sessionId": session_id,
                             "update": update.model_dump(mode="json", by_alias=True, exclude_none=True),
                         }
                         updates.append(row)
+                        return True
 
-                class Attachment:
-                    async def session_update(self, session_id, update):
+                class Attachment(SessionUpdateSink):
+                    async def publish_update(self, session_id, update):
                         nonlocal attachment_turn
+                        update = update.model_dump(mode="json", by_alias=True, exclude_none=True)
                         if observer:
                             await observer.session_update(session_id=session_id, update=update)
                         for fact in decode_updates(update.get("_meta")):
@@ -451,6 +456,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                                 elif attachment_turn is not None:
                                     assert fact.state.matches(attachment_turn.active.id)
                                     attachment_settled.set()
+                        return True
 
                     async def request_permission(self, **kwargs):
                         permissions.append(kwargs)
@@ -478,7 +484,8 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                     try:
                         task = asyncio.create_task(
                             owner.prompt(
-                                session_id, [{"type": "text", "text": "Run fixture echo once."}]
+                                session_id,
+                                [TextContentBlock(type="text", text="Run fixture echo once.")],
                             )
                         )
                     finally:
@@ -486,7 +493,13 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                 else:
                     task = asyncio.create_task(
                         proxy.request(
-                            "prompt", prompt=[{"type": "text", "text": "Run fixture echo once."}]
+                            "prompt",
+                            request=PromptRequest(
+                                session_id=session_id,
+                                prompt=[
+                                    TextContentBlock(type="text", text="Run fixture echo once.")
+                                ],
+                            ),
                         )
                     )
                     await asyncio.wait_for(entered.wait(), TIMEOUT)

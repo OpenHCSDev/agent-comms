@@ -13,11 +13,13 @@ from typing import TYPE_CHECKING, Annotated
 
 from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import Participants
-from agent_comms.private_runtime_schema import PrivateRuntimeSchema
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
-from .field_codec import FieldCodec, MalformedRecord, NativeContext, WireName
+from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec, MalformedRecord, NativeContext
 from .native_claim_epoch import NativeClaimEpoch, UnrecordedNativeClaim
+from .tool_denial import SelectedToolDenied
 from .native_input_record import (
     NativeColumn,
     NativeInputContext,
@@ -25,6 +27,7 @@ from .native_input_record import (
     NativeInputLocation,
     NativeInputPosition,
     NativeInputRecord,
+    TriageNativeExecution,
     NativeStageStorage,
     NumberNativeColumn,
     RecordedNativePosition,
@@ -38,8 +41,8 @@ from .selected_triage import (
     TriageDecisionRecord,
 )
 from .typed_table import (
+    TableReference,
     Column,
-    DurableTables,
     FinalizedColumn,
     FrozenColumn,
     IntegerStorage,
@@ -47,12 +50,12 @@ from .typed_table import (
     NoDelete,
     NonDecreasing,
     RequiredUpdateColumns,
-    SharedFileTables,
     StableReferenceColumns,
     TextStorage,
     TypedRow,
-    TypedTable,
+    WithoutRowid,
     WriteOnceColumns,
+    sql_literal,
 )
 
 if TYPE_CHECKING:
@@ -60,24 +63,11 @@ if TYPE_CHECKING:
     from .native_session_reopen import NativeSessionIdentity
 
 
-class NativeRuntimeTable(SharedFileTables, DurableTables, PrivateRuntimeSchema):
+class NativeRuntimeTable(PrivateCoordinatorTable):
     """Capability identifying the native-runtime schema's declared tables."""
 
     __slots__ = ()
     schema_error = PublicationActivationBlocked
-
-    @classmethod
-    def install(cls, store) -> None:
-        from .coordinated_runtime_schema import install_native_runtime_schema
-
-        install_native_runtime_schema(store)
-
-    @classmethod
-    def schema_rows(cls) -> tuple[type[TypedTable], ...]:
-        # Importing it declares the family's last table.
-        from . import triage_native_sources  # noqa: F401
-
-        return super().schema_rows()
 
 
 @dataclass(frozen=True)
@@ -97,8 +87,28 @@ class NativeRuntimeInput(
     NativeInputRecord,
     NativeInputContext,
     NativeRuntimeTable,
-    TypedTable,
+    WithoutRowid,
 ):
+    @classmethod
+    def notification_context_sql(cls) -> str:
+        """Native context evidence for the caller's bounded assignment window ``w``."""
+        triage_stage = sql_literal(TriageNativeExecution)
+        return (
+            "WITH member AS MATERIALIZED (SELECT m.input_id,m.assignment_id,m.ordinal "
+            f"FROM ({cls.source_membership_sql()}) m "
+            "WHERE m.assignment_id IN (SELECT assignment_id FROM w)) "
+            "SELECT w.assignment_id,"
+            f"EXISTS (SELECT 1 FROM {cls.declared_name} n "
+            "JOIN member ON member.input_id=n.input_id "
+            "WHERE member.assignment_id=w.assignment_id "
+            f"AND n.stage={triage_stage} AND n.session_entry_id IS NULL) AS triage_inflight,"
+            f"(SELECT n.committed_at_ms FROM {cls.declared_name} n "
+            "JOIN member ON member.input_id=n.input_id "
+            "WHERE member.assignment_id=w.assignment_id AND n.session_entry_id IS NOT NULL "
+            f"ORDER BY CASE n.stage WHEN {triage_stage} THEN 0 ELSE 1 END,"
+            "member.ordinal,n.input_id LIMIT 1) AS context_committed_at_ms FROM w"
+        )
+
     write_once_columns = ('sent_owner_claimed_generation', 'session_id', 'session_file')
     finalized_column = 'session_entry_id'
     required_update_columns = ('sent_owner_claimed_generation',)
@@ -245,17 +255,15 @@ class NativeRuntimeInput(
     execution_id: Annotated[
         NativeColumn,
         FrozenColumn(
-            references=(ExecutionRecord, "execution_id"), storage=TextStorage, nullable=True
+            references=TableReference(ExecutionRecord, ("execution_id",)), storage=TextStorage, nullable=True
         ),
     ]
     attempt_ordinal: Annotated[NativeColumn, FrozenColumn(storage=IntegerStorage, nullable=True)]
-    owner_lookup: Annotated[str, FrozenColumn(references=(Participants, "participant_lookup"))]
-    owner_thread: Annotated[str, FrozenColumn()]
+    owner_lookup: Annotated[str, FrozenColumn(references=TableReference(Participants, ("participant_lookup",)))]
     owner_generation: Annotated[int, FrozenColumn(check="owner_generation>0")]
     owner_token_digest: Annotated[str, FrozenColumn(check="length(owner_token_digest)=64")]
     sent_owner_claimed_generation: Annotated[
         NativeClaimEpoch,
-        WireName("sent_owner_admission_generation"),
         Column(
             record_key=True,
             check="{sent_owner_claimed_generation}>0",
@@ -279,7 +287,6 @@ class NativeRuntimeInput(
         Column(check=RecordedTriageText.sql_constraint("verdict"), storage=TextStorage, nullable=True),
     ] = AbsentTriageDecisionRecord()
 
-    without_rowid = True
     unique = (("execution_id", "attempt_ordinal"),)
     checks = (
         "(stage='triage' AND execution_id IS NULL AND attempt_ordinal IS NULL) OR "
@@ -326,6 +333,63 @@ class NativeRuntimeInput(
         if updated.rowcount != 1:
             raise StaleFence("native proof was previously committed")
 
+class SelectedSlotState(DeclaredFamily, affix="Slot"):
+    """Consumption is irreversible; only a matching live terminal can acknowledge it."""
+
+    @classmethod
+    def acknowledge(cls) -> type[SelectedSlotState]:
+        raise SelectedToolDenied("Selected tool terminal was already acknowledged; no retry")
+
+    @classmethod
+    def require_acknowledged(cls) -> None:
+        raise SelectedToolDenied("Selected tool outcome UNKNOWN; no terminal acknowledgement")
+
+
+class ConsumedSlot(SelectedSlotState):
+    @classmethod
+    def acknowledge(cls) -> type[SelectedSlotState]:
+        return AcknowledgedSlot
+
+
+class AcknowledgedSlot(SelectedSlotState):
+    @classmethod
+    def require_acknowledged(cls) -> None:
+        pass
+
+
+@dataclass(frozen=True)
+class SelectedToolSlot(NativeRuntimeTable, WithoutRowid):
+    """The consumed slot and its live terminal acknowledgement, in one transaction store."""
+
+    input_id: Annotated[str, FrozenColumn(primary_key=True)]
+    call_id: Annotated[str, FrozenColumn()]
+    state: type[SelectedSlotState] = ConsumedSlot
+
+    @classmethod
+    def consume(
+        cls, db: sqlite3.Connection, input_id: str, call_id: str,
+    ) -> None:
+        if cls(input_id, call_id).insert_if_absent(db).rowcount != 1:
+            raise SelectedToolDenied("Selected tool input already consumed; outcome may be UNKNOWN")
+
+    def require_call(self, call_id: str) -> None:
+        if self.call_id != call_id:
+            raise SelectedToolDenied("Selected tool has no matching terminal acknowledgement")
+
+    def acknowledge(self, db: sqlite3.Connection, call_id: str) -> None:
+        self.require_call(call_id)
+        state = self.state.acknowledge()
+        where, parameters = self._condition(
+            "1", (), {"input_id": self.input_id, "state": self.state},
+        )
+        if self.update(db, where=where, parameters=parameters, state=state).rowcount != 1:
+            raise SelectedToolDenied("Selected tool terminal changed; outcome UNKNOWN; no retry")
+
+    def verify(self, call_id: str) -> None:
+        self.require_call(call_id)
+        self.state.require_acknowledged()
+
+
 @dataclass(frozen=True)
 class CurrentNativeCursor(
     MonotoneColumns,
@@ -333,7 +397,7 @@ class CurrentNativeCursor(
     NoDelete,
     NativeInputContext,
     NativeRuntimeTable,
-    TypedTable,
+    WithoutRowid,
 ):
     column_orders = (NonDecreasing(("covered_seq", "injected_seq")),)
     reference_column = 'injected_seq'
@@ -351,13 +415,11 @@ class CurrentNativeCursor(
         ),
     ]
     recipient_lookup: Annotated[
-        str, FrozenColumn(primary_key=True, references=(Participants, "participant_lookup"))
+        str, FrozenColumn(primary_key=True, references=TableReference(Participants, ("participant_lookup",)))
     ]
-    owner_thread: Annotated[str, FrozenColumn(check="owner_thread<>''")]
     owner_generation: Annotated[int, FrozenColumn(primary_key=True, check="owner_generation>0")]
     owner_claimed_generation: Annotated[
         int,
-        WireName("owner_admission_generation"),
         FrozenColumn(record_key=True, primary_key=True, check="{owner_claimed_generation}>0"),
     ]
 
@@ -365,7 +427,7 @@ class CurrentNativeCursor(
     def owner_identity(self):
         from .coordination_tables.participants import OwnerGenerations
 
-        return OwnerGenerations(owner_lookup=self.recipient_lookup, owner_thread=self.owner_thread, generation=self.owner_generation)
+        return OwnerGenerations(owner_lookup=self.recipient_lookup,  generation=self.owner_generation)
 
     covered_seq: Annotated[int, Column(check="covered_seq>=0")]
     injected_seq: Annotated[
@@ -373,7 +435,7 @@ class CurrentNativeCursor(
     ]
     input_id: Annotated[
         NativeColumn,
-        Column(references=(NativeRuntimeInput, "input_id"), storage=TextStorage, nullable=True),
+        Column(references=TableReference(NativeRuntimeInput, ("input_id",)), storage=TextStorage, nullable=True),
         NativeContext(str),
     ]
     stage: Annotated[
@@ -386,7 +448,6 @@ class CurrentNativeCursor(
     session_id: Annotated[NativeColumn, NativeContext(str), Column(storage=TextStorage, nullable=True)]
     request_generation: Annotated[NativeColumn, NativeContext(int), Column(storage=IntegerStorage, nullable=True)]
 
-    without_rowid = True
     checks = (
         "(injected_seq=0 AND input_id IS NULL AND stage IS NULL "
         "AND session_id IS NULL AND request_generation IS NULL) OR "

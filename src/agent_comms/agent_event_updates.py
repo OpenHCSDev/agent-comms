@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING
 
 from acp.schema import (
     AgentMessageChunk,
@@ -31,10 +31,8 @@ from .tool_results import tool_result_content
 from .transcript_updates import TranscriptUpdate
 
 if TYPE_CHECKING:
-    from acp.agent.connection import AgentSideConnection
-
+    from .controller import SessionUpdateSink
     from .routing import MessageRoute
-    from .runtime import RuntimeServer, SocketClient
     from .turn_effects import TurnEffects
 
 
@@ -42,7 +40,7 @@ if TYPE_CHECKING:
 class AcpEventConsumer(MroDispatch):
     agent: TurnEffects
     session_id: str
-    client: AgentSideConnection | RuntimeServer | SocketClient
+    client: SessionUpdateSink
 
     @handles(TranscriptUpdate)
     async def transcript(self, event: TranscriptUpdate) -> None:
@@ -60,7 +58,7 @@ class AcpEventConsumer(MroDispatch):
     @handles(events.Chunk, events.Notice)
     async def text(self, event: events.Chunk | events.Notice) -> None:
         if event.text:
-            await self.client.session_update(
+            await self.client.publish_update(
                 session_id=self.session_id, update=self.text_update(event.text)
             )
 
@@ -72,12 +70,12 @@ class AcpEventConsumer(MroDispatch):
             session_update="tool_call",
             tool_call_id=event.id,
             title=event.title or event.name or "tool",
-            kind=cast(Any, event.kind),
+            kind=event.kind,
             status="in_progress",
         )
         if event.args is not None:
             start_update.raw_input = event.args
-        await client.session_update(
+        await client.publish_update(
             session_id=session_id,
             update=start_update,
         )
@@ -99,7 +97,7 @@ class AcpEventConsumer(MroDispatch):
                     content=TextContentBlock(type="text", text=output),
                 )
             ]
-        await client.session_update(session_id=session_id, update=progress_update)
+        await client.publish_update(session_id=session_id, update=progress_update)
 
     @handles(events.ToolEnd)
     async def on_tool_end(self, event: events.ToolEnd) -> None:
@@ -114,13 +112,13 @@ class AcpEventConsumer(MroDispatch):
                 for item in tool_result_content(event.id, event.output or "", event.diff, event.sent_message)
             ],
         )
-        await client.session_update(session_id=session_id, update=end_update)
+        await client.publish_update(session_id=session_id, update=end_update)
 
     @handles(events.Thinking)
     async def on_thinking(self, event: events.Thinking) -> None:
         session_id = self.session_id
         client = self.client
-        await client.session_update(
+        await client.publish_update(
             session_id=session_id,
             update=AgentThoughtChunk(
                 session_update="agent_thought_chunk",
@@ -134,7 +132,7 @@ class AcpEventConsumer(MroDispatch):
 
     @handles(ContextUsage)
     async def on_context_usage(self, usage: ContextUsage) -> None:
-        await self.client.session_update(
+        await self.client.publish_update(
             session_id=self.session_id,
             update=UsageUpdate(session_update="usage_update", used=usage.used, size=usage.size),
         )
@@ -148,7 +146,7 @@ class AcpEventConsumer(MroDispatch):
         self, event: events.CompactionEvent
     ) -> None:
         await self.agent.turns.observe_compaction(self.session_id, event)
-        await self.client.session_update(
+        await self.client.publish_update(
             session_id=self.session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
@@ -164,7 +162,7 @@ class AcpEventConsumer(MroDispatch):
 
     @handles(events.PromptCancelled)
     async def on_cancelled(self, event):
-        await self.client.session_update(
+        await self.client.publish_update(
             session_id=self.session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
@@ -184,7 +182,7 @@ class TurnEventConsumer(AcpEventConsumer):
             partial(self.agent.turns.owns_turn, self.session_id, self.turn_id)
         ):
             return
-        await self.client.session_update(
+        await self.client.publish_update(
             session_id=self.session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",

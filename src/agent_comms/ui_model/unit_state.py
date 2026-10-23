@@ -18,21 +18,18 @@ from typing import TYPE_CHECKING, ClassVar, Self
 from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.field_codec import MalformedRecord
 from agent_comms.goal_presentation import GoalSnapshot
-from agent_comms.goals import GitCommandFailed
 from agent_comms.messages import Message
 from agent_comms.native_failures import NativePiUnavailable
+from agent_comms.repo import GitCommandError
 from agent_comms.standing_rules import StandingRule, UndatedStandingRule
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.thread_status import ThreadStatus
 from agent_comms.todos import (
     MergedProgress,
     NoCommitProgress,
-    OrderClaim,
     OrderProgress,
-    PresentCheckout,
+    ProgressRead,
     ProgressSource,
-    PullRequests,
-    SendBackVerdict,
     Todo,
 )
 from agent_comms.transcript_events import OrderCall, TurnDigest
@@ -41,6 +38,7 @@ from agent_comms.work_branches import WorkBranchError
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
+    from agent_comms.heartbeat_frame import HeartbeatFrame
     from agent_comms.threads import Thread
 
 
@@ -51,7 +49,7 @@ class UnitObservation:
     comms: Comms
     thread: Thread
     todos: tuple[Todo, ...]
-    pulls: PullRequests
+    pulls: ProgressRead
     questions: tuple[Message, ...]
     now: float
     presence: ThreadStatus
@@ -97,8 +95,9 @@ class UnitObservation:
 
     def require_read(self) -> None:
         if self.todos:
+            self.pulls.branch_difference(self.thread.project_path)
             for path in self.comms.registry.storage_rule.checkout_paths(self.thread):
-                PresentCheckout(path).require_read()
+                self.pulls.checkout(path).require_read()
         for source in self.sources:
             source.checkout.require_read()
 
@@ -132,7 +131,7 @@ class UnitState(UndatedStandingRule, declared_name=None):
 
     @classmethod
     def scan_observed(
-        cls, comms: Comms, commander: str, observed: Sequence[UnitState]
+        cls, comms: Comms, commander: str, observed: Sequence[UnitState], frame: HeartbeatFrame
     ) -> tuple[Self, ...]:
         # States are already read; ordinary scans consume them rather than emit them again.
         return ()
@@ -143,7 +142,7 @@ class UnitState(UndatedStandingRule, declared_name=None):
             return next(state for member in cls.worst_first() for state in member.derive(source))
         except (
             OSError,
-            GitCommandFailed,
+            GitCommandError,
             WorkBranchError,
             TimeoutExpired,
             NativePiUnavailable,
@@ -155,39 +154,20 @@ class UnitState(UndatedStandingRule, declared_name=None):
 
     @classmethod
     def observations(
-        cls, comms: Comms, commander: str, pulls: PullRequests
+        cls, comms: Comms, commander: str, pulls: ProgressRead
     ) -> tuple[UnitObservation, ...]:
         snapshot, now = comms.registry.snapshot(), time.time()
         held = StandingRule.holders(comms, commander)
-        for owner in held:
-            if snapshot.require(owner.name).incarnation != owner:
-                raise ValueError("Held order owner incarnation changed")
         requests = pulls.register(tuple(todo for todos in held.values() for todo in todos))
-        asks = UnansweredUnitAsks.for_orders(
-            comms, commander, StandingRule.todos(comms, commander), now
-        )
-        # Claim originals come from one read here, so no unit's questions read can fail alone.
-        claims = OrderClaim.originals(
-            comms,
-            {
-                owner: tuple(claim for todo in todos for claim in todo.order.commander_claims())
-                for owner, todos in held.items()
-            },
-        )
+        with comms.bus.bus.reading() as source:
+            questions = UnansweredUnitAsks.for_orders(source, snapshot, commander, held, now)
         readings = tuple(
             UnitObservation(
                 comms,
                 thread,
                 tuple(held.get(thread.incarnation, ())),
                 requests,
-                (
-                    *(
-                        message
-                        for message in asks
-                        if snapshot.canonical_name(message.sender) == thread.name
-                    ),
-                    *claims.get(thread.incarnation, ()),
-                ),
+                questions.get(thread.incarnation, ()),
                 now,
                 snapshot.status(thread.name),
                 comms.agents.is_working(thread.incarnation, snapshot),
@@ -209,7 +189,7 @@ class UnitState(UndatedStandingRule, declared_name=None):
         return tuple(reading for reading in readings if reading.thread.incarnation in eligible)
 
     @classmethod
-    def current(cls, comms: Comms, commander: str, pulls: PullRequests) -> tuple[UnitState, ...]:
+    def current(cls, comms: Comms, commander: str, pulls: ProgressRead) -> tuple[UnitState, ...]:
         states = tuple(cls.read(source) for source in cls.observations(comms, commander, pulls))
         return tuple(
             state for member in cls.worst_first() for state in states if isinstance(state, member)
@@ -229,7 +209,7 @@ class UnitState(UndatedStandingRule, declared_name=None):
     def attention(self) -> bool:
         return False
 
-    def merged_orders(self, comms: Comms, pulls: PullRequests) -> tuple[Todo, ...]:
+    def merged_orders(self, comms: Comms, pulls: ProgressRead) -> tuple[Todo, ...]:
         return tuple(
             closed
             for problem in self.orders
@@ -284,7 +264,7 @@ class Unreadable(NeedsCommanderAttention, UnitState):
     def readable_units(self) -> tuple[ThreadIncarnation, ...]:
         return ()
 
-    def merged_orders(self, comms: Comms, pulls: PullRequests) -> tuple[Todo, ...]:
+    def merged_orders(self, comms: Comms, pulls: ProgressRead) -> tuple[Todo, ...]:
         # The card reports the failure; a merge read must not retry that source.
         return ()
 
@@ -381,10 +361,10 @@ class Spinning(NeedsCommanderAttention, PendingWorkState, UnitState):
     @classmethod
     def matches(cls, source: UnitObservation) -> bool:
         sends = sorted(
-            verdict.at.recorded_at("A send-back")
+            at
             for todo in source.pending
             for verdict in todo.verdicts
-            if isinstance(verdict, SendBackVerdict)
+            for at in verdict.send_back_times()
         )
         calls = source.calls
         repeats = len(calls) >= 2 and calls[-1].digest == calls[-2].digest

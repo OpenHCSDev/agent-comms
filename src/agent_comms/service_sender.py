@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
-from .registration import Registration
 from .thread_execution import ExternalThreadExecution
+from .threads import Thread
+
+if TYPE_CHECKING:
+    from .registration import Registration
 
 
 class ServiceSender:
@@ -16,7 +19,7 @@ class ServiceSender:
         """Declare the service sender before its first publication."""
         if cls.sender not in registry:
             registry.declare(
-                registry.new_thread(
+                Thread(
                     cls.sender,
                     frozenset(),
                     str(registry.store.path.parent),

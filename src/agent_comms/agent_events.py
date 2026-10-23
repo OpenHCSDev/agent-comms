@@ -7,9 +7,11 @@ ACP publication constructs SDK updates directly from these declared fields.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from functools import partial
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, ClassVar
+
+from acp.schema import ToolKind
 
 from .acp_failure import (
     FailedNativeTurnOutcome,
@@ -22,12 +24,13 @@ from .acp_failure import (
 )
 from .turn_terminal import FailedGoalTurn
 from .turn_goal_account import OriginGoalSettlement, VerifiedGoalSettlement
-from .diagnostics import FailureReason, terminal_failure_reason
+from .turn_failure import BackendFailed, TurnFailure
 from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
 from .field_codec import NullMember
 from .input_attempt import InputAttempt
 from .mro_dispatch import MroDispatch, handles
+from .native_failures import NativePiUnavailable
 from .pi_counts import PiCount, UnreportedCount
 from .thread_model import ThreadModel, UndeclaredModel
 from .pi_payloads import McpLiveAcknowledgement, PiDiagnostic, PiRequestId, PiUsage
@@ -62,6 +65,12 @@ class AgentEvent(ABC):
     @abstractmethod
     def __init__(self) -> None:
         """Concrete dataclass declarations supply their own payload constructor."""
+
+    def require_preparation_success(self) -> None:
+        pass
+
+    def retain_terminal(self, turn) -> None:
+        pass
 
 
 class GoalChange(ABC):
@@ -194,7 +203,7 @@ class ToolEvent(AgentEvent):
 class ToolStart(ToolEvent):
     title: str = ""
     args: object = None
-    kind: str = "other"
+    kind: ToolKind = "other"
 
     @classmethod
     def from_call(cls, call_id: str, name: str, arguments: object) -> ToolStart:
@@ -258,11 +267,18 @@ class CompactionEnd(CompactionEvent):
 class Done(AgentEvent, FailedGoalTurn):
     text: str
     ok: bool
-    reason_code: str | None = None
-    diagnostic: dict[str, Any] | None = None
+    failure: TurnFailure | None = None
+    diagnostic: dict[str, int] | None = None
     outcome: NativeTurnOutcome = field(default_factory=UnresolvedNativeTurnOutcome)
     # Immutable completion snapshot of TurnOutput's already decoded result.
     retry_result: ProviderRetryResult | None = None
+
+    def require_preparation_success(self) -> None:
+        if not self.ok:
+            raise NativePiUnavailable(self.text)
+
+    def retain_terminal(self, turn) -> None:
+        turn.terminal = self
 
     def resolve(
         self, error: Error | None, document: InputDocument, original: OriginalTurnInput,
@@ -272,8 +288,12 @@ class Done(AgentEvent, FailedGoalTurn):
         return replace(self, outcome=outcome)
 
     @property
-    def failure_reason(self) -> FailureReason:
-        return terminal_failure_reason(asdict(self))
+    def failure_kind(self) -> type[TurnFailure]:
+        return BackendFailed if self.failure is None else type(self.failure)
+
+    @property
+    def reason_code(self) -> str | None:
+        return None if self.ok else self.failure_kind.declared_name
 
     def failure_observation(self, account, permit, captured):
         return None if self.ok else super().failure_observation(account, permit, captured)

@@ -8,12 +8,13 @@ from typing import TYPE_CHECKING, Annotated
 
 
 from .bus_publication import HumanOrigin
+from .controller import UNBOUND_CONTROLLER
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import Id128Text, WireName
+from .field_codec import Id128Text
 from .goals import GoalCheckpoint
 from .message_reference import MessageReference
-from .thread_identity import ClaimedIdentity
+from .thread_identity import ClaimScoped, ClaimedIdentity
 from .turn_context import Provenance
 
 if TYPE_CHECKING:
@@ -111,7 +112,7 @@ class WireInputOrigin(InputOrigin):
 
 
 @dataclass(frozen=True)
-class HumanInputOrigin(InputOrigin):
+class HumanInputOrigin(InputOrigin, ClaimScoped):
     """Same cooperative local USER contract as the original wire publisher.
 
     The attached controller proves only who holds the transport. This USER
@@ -120,38 +121,40 @@ class HumanInputOrigin(InputOrigin):
 
     root_id: Annotated[str, Id128Text]
     author: HumanOrigin
-    claim_scope: Annotated[ClaimedIdentity, WireName("admission")]
     project: str
     goal: GoalCheckpoint
 
     @classmethod
     def capture(cls, comms: Comms, claim_scope: ClaimedIdentity) -> HumanInputOrigin:
         from .active_route import guard_original_root_write
-        from .store_files import _store_lock
 
-        with guard_original_root_write(comms.root), _store_lock(comms._wire_lock_path):
-            snapshot = comms.registry.snapshot()
+        with guard_original_root_write(comms.root), comms.registry.store.locked():
+            snapshot = comms.registry.store.read_snapshot_unlocked()
             owner = snapshot.require_active(claim_scope.incarnation.name)
             if snapshot.claimed_identity(owner.name) != claim_scope:
                 raise RelationViolationError("User input attachment changed before capture")
-            root_id = comms.bus.log.read_metadata_unlocked().root_id
+            root_id = comms.registry.store.private_guard_unlocked().namespace
             root_id = Id128Text.decode(root_id)
-            user = comms.messaging._user_identity_under_wire_lock(owner.worktree)
-            return cls(root_id, HumanOrigin(user.name, user.created_at, user.worktree),
-                       claim_scope, owner.worktree, owner.goal.captured)
+            user = comms.messaging.user_identity(owner.worktree)
+            return cls(
+                root_id=root_id, author=HumanOrigin.of(user),
+                claimed_identity=claim_scope, project=owner.worktree, goal=owner.goal.captured,
+            )
 
     @property
     def reply_target(self) -> str:
         return self.author.sender
 
     def require_ingress(self, comms, snapshot, claim_scope, controller):
-        from .runtime import UNBOUND_CONTROLLER
-
         if controller is None or controller is UNBOUND_CONTROLLER:
             raise RelationViolationError("User input origin requires its attached ACP controller")
-        if self.root_id != comms.bus.log.read_metadata_unlocked().root_id:
-            raise RelationViolationError("User input origin belongs to another wire root")
-        if self.claim_scope != claim_scope:
+        from .store_files import SharedLock
+
+        with comms.registry.store.locked(mode=SharedLock()):
+            comms.registry.store.private_guard_unlocked().require_root(
+                self.root_id, RelationViolationError("User input origin belongs to another native namespace"),
+            )
+        if self.claimed_identity != claim_scope:
             raise RelationViolationError("User input origin attachment changed")
         self.author.require_registered(snapshot)
         owner = snapshot.require_active(claim_scope.incarnation.name)
@@ -167,12 +170,12 @@ class HumanInputOrigin(InputOrigin):
         return self
 
     def applies(self, owner: Thread, snapshot: RegistrySnapshot) -> bool:
-        return (self.claim_scope.incarnation.resolved(snapshot) == owner.incarnation
+        return (self.claimed_identity.incarnation.resolved(snapshot) == owner.incarnation
                 and (self.project, self.goal) == (owner.worktree, owner.goal.captured))
 
     def matches_owner(self, recorded_name, incarnation):
         """The captured original birth survives a rename, unlike a neutral name."""
-        authorized = self.claim_scope.incarnation.require_recorded()
+        authorized = self.claimed_identity.incarnation.require_recorded()
         original = incarnation.require_recorded()
         return (recorded_name == authorized.name
                 and authorized.created_at == original.created_at)

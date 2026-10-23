@@ -1,13 +1,10 @@
-import subprocess
-import sys
-import textwrap
 from abc import abstractmethod
 from dataclasses import dataclass
 
 import pytest
 from metaclass_registry import DuplicateRegistryKeyError
 
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.declared_family import DeclaredFamily, DeclaredOrder
 
 
 class SampleFamily(DeclaredFamily, affix="Case"):
@@ -41,6 +38,7 @@ def test_golden_names_decode_capability_and_slots_identity():
     assert SampleFamily.member_named("http_ready") is HTTPReadyCase
     assert SampleFamily.members_with(Capability) == (HTTPReadyCase,)
     assert HTTPReadyCase(3).execute() == 3
+    assert HTTPReadyCase.declared_position() < CustomCase.declared_position()
     with pytest.raises(TypeError):
         AbstractCase()
     with pytest.raises(ValueError):
@@ -136,31 +134,34 @@ def test_independent_families_and_inherited_names_are_derived():
             pass
 
 
-def test_checkpoint_schema_query_stays_local_but_external_names_still_discover():
-    result = subprocess.run(
-        [sys.executable, "-c", textwrap.dedent("""
-            import os, sqlite3, sys, tempfile
-            import agent_comms.private_bus_checkpoint as checkpoint
-            from agent_comms.typed_table import TypedTable
+def test_ordered_family_views_have_one_declaration_module():
+    from agent_comms.acp_failure import ACPFailure
+    from agent_comms.native_input_record import NativeInputExecution
+    from agent_comms.todos import FoundProgress
+    from agent_comms.tools import ToolRequest
+    from agent_comms.turn_failure import TurnFailure
 
-            # A real checkpoint schema can be installed and decoded with only
-            # its owner's declarations, without loading ACP under a bus lock.
-            tables = TypedTable.members_with(checkpoint.CheckpointTable)
-            assert checkpoint.CheckedPrefix in tables
-            with sqlite3.connect(':memory:') as db, tempfile.TemporaryFile() as source:
-                for table in tables:
-                    table.create(db)
-                checked_prefix = checkpoint.CheckedPrefix.capture(
-                    '0' * 32, checkpoint.FileRevision.from_file(source), 0, bytes(32), '0' * 64)
-                checked_prefix.insert(db)
-                assert checkpoint._saved(db) == checked_prefix.witness()
-            assert 'agent_comms.acp' not in sys.modules
+    for family in (TurnFailure, FoundProgress, ACPFailure, NativeInputExecution, ToolRequest):
+        assert {member.__module__ for member in family.members_with(family)} == {family.__module__}
 
-            # Schema-report's external-name boundary still acquires the full
-            # distributed family; this change must not hide unloaded tables.
-            row = TypedTable.member_named('native_runtime_input')
-            assert row.declared_name == 'native_runtime_input'
-        """)],
-        capture_output=True, text=True, timeout=30,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
+
+def test_plain_order_uses_the_first_rank_in_the_mro_and_requires_a_rank():
+    class Rank(DeclaredOrder):
+        pass
+
+    class First(Rank):
+        pass
+
+    class Second(Rank):
+        pass
+
+    class Selected(Second):
+        pass
+
+    class Override(First, Selected):
+        pass
+
+    assert Rank.position_of(First) < Rank.position_of(Selected)
+    assert Rank.position_of(Override) == Rank.position_of(First)
+    with pytest.raises(ValueError):
+        Rank.position_of(object)

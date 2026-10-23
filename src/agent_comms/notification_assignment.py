@@ -7,10 +7,9 @@ from abc import abstractmethod
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn
 
 from .audience_manifest import FrozenRecipient
-from .coordination_schema import CoordinatorTable
 from .coordination_tables.assignments import WakeAssignment
 from .coordination_tables.publications import PublicationEvidence
 from .declared_family import DeclaredFamily
@@ -23,12 +22,17 @@ from .notification_progress import (
     SentProgress,
     ShownToModelProgress,
 )
-from .typed_table import BooleanStorage, TypedRow, sql_literal
+from .typed_table import BooleanStorage, TypedRow
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+    from typing import Self
+
     from .agent_activity import RecipientActivity
-    from .bus_publication import CommittedDelivery
+    from .bus_publication import Delivered
+    from .coordination_database import InvalidStore, MissingStore
     from .presentation import MessageNotification
+    from .private_registry_guard import RegistryPrivacy
     from .wake_policy import RecipientDecision
 
 
@@ -46,7 +50,7 @@ class AssignmentContextEvidence(DeclaredFamily, affix="ContextEvidence"):
 
 
 class NotShownContextEvidence(AssignmentContextEvidence):
-    def progress(self, *, pending_at_ms, queued):
+    def progress(self, *, pending_at_ms: int, queued: bool) -> AssignmentProgress:
         progress = QueuedProgress if queued else SentProgress
         return progress(pending_at_ms)
 
@@ -57,13 +61,13 @@ class ShownContextEvidence(AssignmentContextEvidence):
 
     committed_at_ms: int
 
-    def progress(self, *, pending_at_ms, queued):
+    def progress(self, *, pending_at_ms: int, queued: bool) -> AssignmentProgress:
         return ShownToModelProgress(self.committed_at_ms)
 
 
 @dataclass(frozen=True)
 class AssignmentResponse(DeclaredFamily, affix="Response"):
-    def recorded(self, message) -> AssignmentResponse:
+    def recorded(self, message: Delivered) -> AssignmentResponse:
         return self
 
     @classmethod
@@ -91,15 +95,15 @@ class AssignmentResponse(DeclaredFamily, affix="Response"):
 
 
 class UnansweredResponse(AssignmentResponse):
-    def recorded(self, message):
+    def recorded(self, message: Delivered) -> AssignmentResponse:
         return AnsweredResponse(
             message.reference, int(message.timestamp * 1000)
         )
 
-    def completed_notification(self, progress, notification):
+    def completed_notification(self, progress: AssignmentProgress, notification: MessageNotification) -> MessageNotification:
         return progress.read_notification(notification)
 
-    def delivered_notification(self, notification, delivered_at_ms):
+    def delivered_notification(self, notification: MessageNotification, delivered_at_ms: int) -> MessageNotification:
         return replace(
             notification,
             state=ShownToModelProgress(delivered_at_ms),
@@ -112,12 +116,12 @@ class AnsweredResponse(AssignmentResponse):
     reference: MessageReference
     received_at_ms: int
 
-    def completed_notification(self, progress, notification):
+    def completed_notification(self, progress: AssignmentProgress, notification: MessageNotification) -> MessageNotification:
         return progress.answered_notification(
             notification, self.reference, self.received_at_ms
         )
 
-    def delivered_notification(self, notification, delivered_at_ms):
+    def delivered_notification(self, notification: MessageNotification, delivered_at_ms: int) -> MessageNotification:
         return replace(
             notification,
             state=AnsweredProgress(ShownToModelProgress(delivered_at_ms)),
@@ -133,16 +137,16 @@ class AssignmentActivity:
     progress: AssignmentProgress
     response: AssignmentResponse
 
-    def pending_notification(self, notification, queued_at_ms):
+    def pending_notification(self, notification: MessageNotification, queued_at_ms: int) -> MessageNotification:
         return self.progress.selected_notification(notification, busy=False)
 
-    def completed_notification(self, notification):
+    def completed_notification(self, notification: MessageNotification) -> MessageNotification:
         return self.response.completed_notification(self.progress, notification)
 
-    def delivered_notification(self, notification, delivered_at_ms):
+    def delivered_notification(self, notification: MessageNotification, delivered_at_ms: int) -> MessageNotification:
         return self.response.delivered_notification(notification, delivered_at_ms)
 
-    def recorded_response(self, message):
+    def recorded_response(self, message: Delivered) -> Self:
         return replace(self, response=self.response.recorded(message))
 
 
@@ -167,8 +171,8 @@ class AssignmentActivityEvidence(TypedRow):
         }
 
     @classmethod
-    def _decode_row(cls, row, positions) -> AssignmentActivityEvidence:
-        def column(name):
+    def _decode_row(cls, row, positions: Mapping[str, int]) -> AssignmentActivityEvidence:
+        def column(name: str):
             return row[positions[name]]
 
         return cls(
@@ -205,7 +209,7 @@ class UnrecordedNotificationSource(NotificationSource):
     recipient: FrozenRecipient
     decision: RecipientDecision
 
-    def project(self, observation: RecipientActivity, sender_lookup: str):
+    def project(self, observation: RecipientActivity, sender_lookup: str) -> MessageNotification:
         return self.decision.initial_notification(
             self.recipient, sender_lookup, observation=observation)
 
@@ -214,7 +218,7 @@ class UnrecordedNotificationSource(NotificationSource):
 class NotificationAssignmentRead:
     """Assignment rows captured from one caller-owned coordination snapshot."""
 
-    sources: tuple[CommittedDelivery, ...]
+    sources: tuple[Delivered, ...]
     rows: tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...]
 
     def resolve(self, root: Path) -> tuple[NotificationAssignment, ...]:
@@ -236,8 +240,8 @@ class NotificationAssignment(NotificationSource):
 
     @classmethod
     def for_deliveries(
-        cls, originals: Iterable[CommittedDelivery], records: Iterable[NotificationAssignment],
-    ) -> Iterator[tuple[CommittedDelivery, tuple[NotificationSource, ...]]]:
+        cls, originals: Iterable[Delivered], records: Iterable[NotificationAssignment],
+    ) -> Iterator[tuple[Delivered, tuple[NotificationSource, ...]]]:
         """Match notification assignments to messages and their recorded recipients."""
         by_recipient = {}
         for record in records:
@@ -255,7 +259,7 @@ class NotificationAssignment(NotificationSource):
 
     @classmethod
     def _recorded_conversation_responses(
-        cls, root: Path, sources: tuple[CommittedDelivery, ...],
+        cls, root: Path, sources: tuple[Delivered, ...],
         rows: tuple[NotificationAssignment, ...],
     ) -> tuple[NotificationAssignment, ...]:
         eligible = tuple(
@@ -263,16 +267,16 @@ class NotificationAssignment(NotificationSource):
         )
         if not eligible:
             return rows
-        from .wire_log import WireLog
+        from .bus import Bus
 
         originals = {original.message.reference: original for original in sources}
-        with WireLog(WireLog.path_in(root)).checked_read() as source:
-            # Capture under the lock; decoding runs after it is released.
-            captured = source.replies(tuple({row.assignment.source for row in eligible}))
-        replies: dict[MessageReference, list[CommittedDelivery]] = {}
-        for reply in captured:
-            for answered in reply.message.answers:
-                replies.setdefault(answered, []).append(reply)
+        captured = Bus(Bus.path_in(root)).replies(
+            tuple({row.assignment.source for row in eligible}))
+        replies: dict[MessageReference, list[Delivered]] = {}
+        for record in captured:
+            for reply in record.deliveries():
+                for answered in reply.message.answers:
+                    replies.setdefault(answered, []).append(reply)
         resolved = []
         for row in rows:
             if row.assignment.lifecycle.records_conversation_response:
@@ -288,7 +292,8 @@ class NotificationAssignment(NotificationSource):
 
     @classmethod
     def capture(
-        cls, connection: sqlite3.Connection, sources: Sequence[CommittedDelivery]
+        cls, connection: sqlite3.Connection, sources: Sequence[Delivered],
+        privacy: RegistryPrivacy,
     ) -> NotificationAssignmentRead:
         """Capture detached assignment evidence for one bounded window of originals
         from the caller's SQLite snapshot."""
@@ -300,12 +305,8 @@ class NotificationAssignment(NotificationSource):
         if not sources:
             return NotificationAssignmentRead((), ())
         from .coordination_tables.executions import CurrentExecutions
-        from .native_input_record import TriageNativeExecution
-        from .native_runtime_input import NativeRuntimeInput
-
-        CoordinatorTable.require_schema(connection)
+        privacy.coordinator_schema().require_schema(connection)
         columns = ",".join(f"w.{name}" for name in WakeAssignment.columns())
-        triage_stage = sql_literal(TriageNativeExecution)
         # The window's assignments and their native-input membership are each
         # selected once; membership has no assignment index, so it is built
         # for these assignments only, not once per row and per column.
@@ -313,22 +314,13 @@ class NotificationAssignment(NotificationSource):
             connection.execute(
                 f"WITH w AS MATERIALIZED (SELECT * FROM {WakeAssignment.declared_name} "
                 f"WHERE wire_seq IN ({','.join('?' for _ in sources)})), "
-                "member AS MATERIALIZED (SELECT m.input_id,m.assignment_id,m.ordinal "
-                f"FROM ({NativeRuntimeInput.source_membership_sql()}) m "
-                "WHERE m.assignment_id IN (SELECT assignment_id FROM w)) "
-                f"SELECT {columns}, EXISTS (SELECT 1 FROM {NativeRuntimeInput.declared_name} n "
-                "JOIN member ON member.input_id=n.input_id "
-                "WHERE member.assignment_id=w.assignment_id "
-                f"AND n.stage={triage_stage} AND n.session_entry_id IS NULL) "
-                "AS triage_inflight, pointer.execution_id AS current_execution_id, "
-                f"(SELECT n.committed_at_ms FROM {NativeRuntimeInput.declared_name} n "
-                "JOIN member ON member.input_id=n.input_id "
-                "WHERE member.assignment_id=w.assignment_id AND n.session_entry_id IS NOT NULL "
-                f"ORDER BY CASE n.stage WHEN {triage_stage} THEN 0 ELSE 1 END,"
-                "member.ordinal,n.input_id LIMIT 1) AS context_committed_at_ms, "
+                f"context AS MATERIALIZED ({privacy.notification_context_sql(connection)}) "
+                f"SELECT {columns},context.triage_inflight,"
+                "pointer.execution_id AS current_execution_id,context.context_committed_at_ms,"
                 "p.seq AS response_seq, p.message_id AS response_message_id, "
                 "p.received_at_ms AS response_received_at_ms "
                 "FROM w "
+                "JOIN context ON context.assignment_id=w.assignment_id "
                 f"LEFT JOIN {CurrentExecutions.declared_name} pointer "
                 "ON pointer.owner_lookup=w.recipient_lookup "
                 f"LEFT JOIN {PublicationEvidence.declared_name} p "
@@ -342,22 +334,28 @@ class NotificationAssignment(NotificationSource):
 
     @classmethod
     def read(
-        cls, root: Path, sources: Sequence[CommittedDelivery]
+        cls, root: Path, sources: Sequence[Delivered]
     ) -> NotificationAssignmentRead:
         """Capture assignment evidence through the single observing connection owner."""
         from .coordination_database import CoordinationStore
+        from .private_registry_guard import RegistryPrivacy
 
+        privacy = RegistryPrivacy.capture(root)
         with CoordinationStore.observed(CoordinationStore.path_in(root)).observing(
-            cls, sources
+            cls, sources, privacy,
         ) as result:
             return result
 
     @classmethod
-    def missing_store(cls, store, sources):
-        return NotificationAssignmentRead(tuple(sources), ())
+    def missing_store(
+        cls, store: MissingStore, sources: Sequence[Delivered], privacy: RegistryPrivacy,
+    ) -> NotificationAssignmentRead:
+        return privacy.missing_notification_assignments(sources)
 
     @classmethod
-    def invalid_store(cls, store, sources):
+    def invalid_store(
+        cls, store: InvalidStore, sources: Sequence[Delivered], privacy: RegistryPrivacy,
+    ) -> NoReturn:
         raise ValueError(f"Channel notification status unavailable: {store.failure_reason}")
 
     @property

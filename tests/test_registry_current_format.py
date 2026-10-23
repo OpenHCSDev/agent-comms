@@ -14,6 +14,7 @@ from agent_comms.goal_states import BlockedGoal, GoalState
 from agent_comms.goals import Goal
 from agent_comms.registration import Registration
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.threads import Thread
 
 
 def test_goal_family_survives_registry_and_history_reopen(tmp_path):
@@ -25,7 +26,7 @@ def test_goal_family_survives_registry_and_history_reopen(tmp_path):
             if state_type is BlockedGoal else state_type()
         )
         goal = Goal("Keep the objective", name, published_seq=0, state=state)
-        owner = registry.new_thread(name, frozenset(), str(tmp_path), goal=goal)
+        owner = Thread(name, frozenset(), str(tmp_path), goal=goal)
         registry.register(owner)
         assert FieldCodec.decode(Goal, goal.to_wire()) == goal
         reopened = Registration(registry.store.path)
@@ -56,9 +57,9 @@ for name in GoalState.names():
 def test_incomplete_saved_identity_cannot_authorize_an_owner(tmp_path):
     path = tmp_path / "registry.json"
     registry = Registration(path)
-    registry.register(registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
+    registry.register(Thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     raw = json.loads(path.read_text())
-    for field in ("owners", "admissions"):
+    for field in ("owners", "claims"):
         incomplete = dict(raw)
         incomplete.pop(field)
         path.write_text(json.dumps(incomplete))
@@ -75,8 +76,8 @@ def test_incomplete_saved_identity_cannot_authorize_an_owner(tmp_path):
 def test_retained_colliding_creation_dates_remain_readable(tmp_path):
     path = tmp_path / "registry.json"
     registry = Registration(path)
-    registry.register(registry.new_thread('one', frozenset(), str(tmp_path)))
-    registry.register(registry.new_thread('two', frozenset(), str(tmp_path)))
+    registry.register(Thread('one', frozenset(), str(tmp_path)))
+    registry.register(Thread('two', frozenset(), str(tmp_path)))
     raw = json.loads(path.read_text())
     raw["threads"]["two"]["created_at"] = raw["threads"]["one"]["created_at"]
     path.write_text(json.dumps(raw))

@@ -12,38 +12,75 @@ from agent_comms.registry_document import RegistryDocument
 from agent_comms.runtime_requests import ProjectRuntimeRequest
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.maintenance_barrier import (
-    InstallingPhase, MaintenanceOperator, PausedPhase, ReadyPhase,
+    InstallingPhase, MaintenanceHeldError, MaintenanceOperator, PausedPhase,
 )
-from agent_comms.thread_status import NoBridgeThreadStatus
-from agent_comms.thread_text import GivenThreadText, SavedSessionFile
+from agent_comms.thread_text import GivenThreadText
+from agent_comms.session_file import RegistrySessionLocation
+from agent_comms.threads import Thread
 
 
 @pytest.mark.parametrize('phases', [(), (PausedPhase,), (PausedPhase, InstallingPhase)])
-def test_bridge_releases_during_maintenance_without_allowing_a_new_owner(tmp_path, phases):
+def test_bridge_cannot_write_the_registry_during_maintenance(tmp_path, phases):
     comms = wire(tmp_path)
     registry = comms.registry
-    registry.declare(registry.new_thread(
+    registry.declare(Thread(
         'bridge', frozenset(), str(tmp_path), execution=ExternalThreadExecution,
     ))
     gate = comms.owners.maintenance
     process = ProcessIdentity.capture(os.getpid())
-    with registry.external_process('bridge', process):
-        hold = gate.begin(MaintenanceOperator.current())
-        for phase in phases:
-            hold = gate.advance(hold, phase)
-        with pytest.raises(RelationViolationError):
-            registry.register(registry.require('bridge'), new_owner=True)
-    assert registry.require('bridge').process_identity == NoProcess()
-    assert registry.status('bridge') == NoBridgeThreadStatus()
+    with pytest.raises(MaintenanceHeldError):
+        with registry.external_process('bridge', process):
+            hold = gate.begin(MaintenanceOperator.current())
+            for phase in phases:
+                hold = gate.advance(hold, phase)
+            with pytest.raises(RelationViolationError):
+                registry.register(registry.require('bridge'), new_owner=True)
+    assert registry.require('bridge').process_identity == process
     assert gate.read() == hold
     with pytest.raises(RelationViolationError):
         with registry.external_process('bridge', process):
             pytest.fail('A new bridge entered during maintenance')
-    while hold.phase is not ReadyPhase:
-        hold = gate.advance(hold, hold.phase.successors()[0])
-    with registry.external_process('bridge', process):
-        assert registry.require('bridge').process_identity == process
-    assert registry.require('bridge').process_identity == NoProcess()
+
+
+def test_concurrent_starters_reserve_one_current_owner(tmp_path):
+    import subprocess
+    import sys
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    from contextlib import ExitStack
+
+    registry = wire(tmp_path).registry
+    original = registry.declare(Thread("owner", frozenset(), str(tmp_path)))
+    title = GivenThreadText("metadata changed during launch preparation")
+    registry.register(replace(original, title=title))
+    before = registry.snapshot()
+    ready = threading.Barrier(2)
+
+    def reserve(process):
+        ready.wait(timeout=5)
+        return registry.reserve_owner(original, process)
+
+    with ExitStack() as children, ThreadPoolExecutor(max_workers=2) as workers:
+        processes = tuple(children.enter_context(subprocess.Popen(
+            (sys.executable, "-c", "import sys; sys.stdin.buffer.read()"),
+            stdin=subprocess.PIPE,
+        )) for _ in range(2))
+        attempts = tuple(workers.submit(reserve, ProcessIdentity.capture(child.pid))
+                         for child in processes)
+        accepted, refused = [], []
+        for attempt in attempts:
+            try:
+                accepted.append(attempt.result(timeout=10))
+            except RelationViolationError as error:
+                refused.append(error)
+        assert len(accepted) == len(refused) == 1
+        (owner,) = accepted
+        current = registry.require("owner")
+        assert current == owner.thread and current.title == title
+        assert current.process_identity in tuple(ProcessIdentity.capture(child.pid)
+                                                for child in processes)
+        assert owner.claimed_generation == before.claim_generation("owner") + 1
+        assert registry.snapshot().claim_generation("owner") == owner.claimed_generation
 
 
 def test_claim_attach_and_reload_preserve_the_captured_process(tmp_path):
@@ -69,13 +106,13 @@ def test_claim_attach_and_reload_preserve_the_captured_process(tmp_path):
     saved = restored.threads[owner.name]
     assert saved.process_identity == NoProcess() and not saved.executing
     assert saved.incarnation == owner.incarnation
-    assert saved.session_file == SavedSessionFile(str(session))
+    assert saved.session_file == RegistrySessionLocation.from_path(str(session), comms.root)
 
 
 def test_same_pid_different_birth_advances_both_authority_domains(tmp_path):
     comms = wire(tmp_path)
     identity = ProcessIdentity.capture(os.getpid())
-    owner = comms.registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=identity)
+    owner = Thread('owner', frozenset(), str(tmp_path), process_identity=identity)
     comms.registry.declare(owner)
     before = comms.registry.snapshot()
     stale = replace(identity, start_time=identity.start_time + 1)
@@ -89,13 +126,13 @@ def test_same_pid_different_birth_advances_both_authority_domains(tmp_path):
     with pytest.raises(RelationViolationError):
         comms.registry.lease_local_turn(owner.name, "reused-pid")
     with pytest.raises(RelationViolationError):
-        comms.threads.rename_managed_thread(owner.name, "renamed", owner_pid=os.getpid())
+        comms.threads.rename_managed_thread(owner.name, "renamed", owner=ProcessIdentity.capture(os.getpid()))
     assert identity.alive()
 
 
 def test_project_request_entry_retains_original_birth_across_rename(tmp_path):
     comms = wire(tmp_path)
-    owner = comms.registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+    owner = Thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(owner)
     request = ProjectRuntimeRequest.for_native(
         comms.registry.snapshot(), comms.registry.require("owner")
@@ -121,7 +158,7 @@ def test_active_executor_cannot_be_replaced_by_same_pid_different_birth(tmp_path
     with pytest.raises(RelationViolationError):
         comms.registry.declare(replace(owner, process_identity=stale))
     assert comms.registry.require(owner.name) == leased
-    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path), title=GivenThreadText('metadata')))
+    comms.registry.declare(Thread('owner', frozenset(), str(tmp_path), title=GivenThreadText('metadata')))
     current = comms.registry.require(owner.name)
     assert current.process_identity == identity and current.turn_record == leased.turn_record
     assert current.turn_record.read().id == 'active-turn'

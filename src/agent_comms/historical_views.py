@@ -12,11 +12,13 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .bus import Bus
+from .channel_targets import NamedTarget, ThreadTarget
 from .channels import Channel
 from .coordination_errors import HistoricalSourceChanged
 from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec
-from .locked_store import DurableFile, RegistryFile, RootFile
+from .locked_store import DurableFile, LockedFile, RegistryFile, RootFile
 from .message_page import (
     NEWEST_PAGE,
     ConversationMessagePageRequest,
@@ -25,9 +27,8 @@ from .message_page import (
     PageBounds,
 )
 from .messages import Message
-from .page_traversal import HistoryCursor, NewerTraversal, OlderTraversal
-from .private_path import FileIdentity, FileObservation, FileRevision, PresentPath
-from .private_registry_guard import PrivateRegistryGuard
+from .page_traversal import HistoryCursor, OlderTraversal
+from .private_path import FileObservation, FileRevision, ObservedPath
 from .read_basis import (
     AnonymousViewer,
     ChannelDisplayIdentity,
@@ -46,10 +47,9 @@ from .recorded_bus import RecordedBusIdentity
 from .registration import Registration
 from .registry_provenance import RegistryProvenance
 from .revision_views import BusSourceView
-from .store_files import _atomic_write_text, _iter_jsonl_records, _store_lock
-from .thread_identity import ThreadProvenance, UnrecordedThreadIncarnation
-from .wire_log import WireLog
-from .wire_metadata import ArchivedAccess, WireMetadata
+from .store_files import AtomicFile, SourceTier
+from .thread_identity import UnrecordedThreadIncarnation
+from .threads import ThreadProvenance
 
 if TYPE_CHECKING:
     from .catalog_document import CatalogDocument
@@ -61,7 +61,9 @@ if TYPE_CHECKING:
 class HistoryView(ABC):
     """A requested view binds its predicate once to each original registry."""
 
-    viewer: DisplayViewer = AnonymousViewer()
+    @property
+    def viewer(self) -> DisplayViewer:
+        return AnonymousViewer()
 
     def live_page(self, presentation: BusPresentation, bounds: PageBounds) -> MessagePage:
         """Bind the query to the bus owner's snapshot and read that exact source."""
@@ -83,6 +85,9 @@ class HistoryView(ABC):
 class ConversationObservation:
     """A first observation has no selection and therefore always reads."""
 
+    def matches_stores(self, stores: WireRevision) -> bool:
+        return False
+
     def capture(self, stores: WireRevision,
                 read: Callable[[], ConversationRevision]) -> ConversationRevision:
         return read()
@@ -97,6 +102,9 @@ class ConversationRevision(ConversationObservation):
 
     stores: WireRevision
     selection: DisplayIdentity
+
+    def matches_stores(self, stores: WireRevision) -> bool:
+        return self.stores == stores
 
     def capture(self, stores: WireRevision,
                 read: Callable[[], ConversationRevision]) -> ConversationRevision:
@@ -120,29 +128,31 @@ class ConversationHistoryView:
         return page.selection.identity == earlier.selection.identity
 
     @classmethod
-    def revision(cls, views: HistoryViews, target: str, earlier: ConversationObservation,
+    def revision(cls, views: HistoryViews, target: NamedTarget,
+                 earlier: ConversationObservation,
                  *, worktree: str) -> ConversationRevision:
         return earlier.capture(
             views.revision(), partial(cls._read_revision, views, target, worktree))
 
     @classmethod
-    def _read_revision(cls, views: HistoryViews, target: str,
+    def _read_revision(cls, views: HistoryViews, target: NamedTarget,
                        worktree: str) -> ConversationRevision:
         worktree = str(Path(worktree).resolve())
         viewer = views.messaging.user_identity(worktree).name
-        with views.registry.store.reading(views.bus, views.bus.log, views.channels.catalog):
+        with views.registry.store.reading(views.channels.catalog):
             snapshot = views.registry.store.read_snapshot_unlocked()
             stores = views.revision()
             return ConversationRevision(
                 stores, cls._selection(
-                    views, snapshot, views.channels.catalog._read_unlocked(), viewer, target, worktree, stores.history,
+                    views, snapshot, views.channels.catalog._read_unlocked(), viewer, target, worktree,
+                    FileRevision.capture(views.bus.history.path),
                 ),
             )
 
     @classmethod
     @abstractmethod
     def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
-                   viewer: str, target: str, worktree: str,
+                   viewer: str, target: NamedTarget, worktree: str,
                    history_revision: FileObservation) -> DisplayIdentity: ...
 
     def page_request(self, scope, bounds: PageBounds) -> MessagePageRequest:
@@ -164,13 +174,13 @@ class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
 
     @classmethod
     def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
-                   viewer: str, target: str, worktree: str,
+                   viewer: str, target: NamedTarget, worktree: str,
                    history_revision: FileObservation) -> ChannelDisplayIdentity:
         with views.bus.opened_activity() as activity:
-            channel = catalog.require_channel(target, activity)
+            channel = catalog.require_channel(target.selected_name(snapshot), activity)
         return ChannelDisplayIdentity(
             viewer=snapshot.require(viewer).incarnation,
-            bus_identity=RecordedBusIdentity.capture(views.bus.log.path),
+            bus_identity=RecordedBusIdentity.capture(views.bus.bus.path),
             scope=channel.display_scope(snapshot), history_revision=history_revision,
         )
 
@@ -184,10 +194,11 @@ class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
 @dataclass(frozen=True, slots=True)
 class DMHistory(HistoryView):
     first: str
-    second: str
+    second: ThreadTarget
 
     def capture(self, snapshot: RegistryProvenance) -> DMDisplayScope:
-        return DMDisplayScope.capture(self.first, self.second, snapshot)
+        return DMDisplayScope.capture(
+            self.first, self.second.selected_name(snapshot), snapshot)
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,19 +207,20 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
 
     @classmethod
     def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
-                   viewer: str, target: str, worktree: str,
+                   viewer: str, target: NamedTarget, worktree: str,
                    history_revision: FileObservation) -> DMDisplayIdentity:
+        name = target.selected_name(snapshot)
         try:
-            peer = snapshot.participant(target).incarnation
+            peer = snapshot.participant(name).incarnation
         except UnregisteredThreadError:
-            peer = UnrecordedThreadIncarnation(snapshot.canonical_name(target))
+            peer = UnrecordedThreadIncarnation(name)
         root = views.root.stat()
         return DMDisplayIdentity(
             root_identity=(root.st_dev, root.st_ino),
-            bus_identity=RecordedBusIdentity.capture(views.bus.log.path),
-            worktree=worktree, requested_peer=target,
+            bus_identity=RecordedBusIdentity.capture(views.bus.bus.path),
+            worktree=worktree, requested_peer=target.name,
             viewer=snapshot.require(viewer).incarnation, peer=peer,
-            scope=DMDisplayScope.capture(viewer, target, snapshot), history_revision=history_revision,
+            scope=DMDisplayScope.capture(viewer, name, snapshot), history_revision=history_revision,
         )
 
     @property
@@ -219,12 +231,15 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
         from .read_basis import DMDisplayBasis
 
         bus = presentation.bus
-        if self.second not in presentation.registry and bus.history.threads(self.second):
+        with presentation.registry.store.reading_snapshot() as snapshot:
+            peer = self.second.selected_name(snapshot)
+            missing = peer not in snapshot.threads
+        if missing and bus.history.threads(peer):
             return MessagePage((), False, False, NoDisplaySelection())
         return DMDisplayBasis.fetch_page(
             bus,
             presentation.registry,
-            bus.log.path.parent,
+            bus.bus.path.parent,
             self.first,
             self.second,
             worktree=self.worktree,
@@ -238,24 +253,41 @@ class HistorySource:
 
     root: str
     original_root: str
-    wire_root_id: str
     bus_identity: RecordedBusIdentity
-    size: int
-    snapshot_bus_revision: FileObservation
+    snapshot_bus_identity: RecordedBusIdentity
+    snapshot_bus_revision: int
     snapshot_registry_revision: FileObservation
     provenance: RegistryProvenance
+
+    def __post_init__(self) -> None:
+        # Archived transcripts stay with the original root; the snapshot copies no sessions.
+        object.__setattr__(self, "provenance", self.provenance.bound_to(Path(self.original_root)))
 
     @property
     def key(self) -> str:
         return self.root
 
+    @classmethod
+    def capture_original(cls, root: Path, provenance: RegistryProvenance) -> HistorySource:
+        """Capture the same owned source facts used to validate a sealed archive."""
+        identity = RecordedBusIdentity.capture(Bus.path_in(root))
+        return cls(
+            str(root), str(root), identity, identity, Bus(Bus.path_in(root)).revision(),
+            FileRevision.capture(RegistryFile.path_in(root)), provenance,
+        )
+
     def validate(self) -> None:
         root = Path(self.root)
-        if (
-            FileRevision.capture(WireLog.path_in(root)) != self.snapshot_bus_revision
-            or FileRevision.capture(RegistryFile.path_in(root)) != self.snapshot_registry_revision
-        ):
-            raise ValueError("Historical snapshot changed; restore it before browsing")
+        error = ValueError("Historical snapshot changed; restore it before browsing")
+        if not self.snapshot_bus_identity.matches(ObservedPath.at(Bus.path_in(root))):
+            raise error
+        current = replace(
+            self,
+            snapshot_bus_revision=Bus(Bus.path_in(root)).revision(),
+            snapshot_registry_revision=FileRevision.capture(RegistryFile.path_in(root)),
+        )
+        if current != self:
+            raise error
 
     def acknowledge(self, displayed: DisplayBasis) -> None:
         """Validate this archived source before updating its own read ledger."""
@@ -268,12 +300,8 @@ class HistorySource:
         if self.root != str(root) or self.original_root != str(root):
             raise ValueError("Recorded provenance belongs to another original source")
         self.validate()
-        log = WireLog(WireLog.path_in(root))
-        info = log.path.stat()
-        if (log.read_metadata_unlocked(required=True).root_id != self.wire_root_id
-                or not self.bus_identity.matches(PresentPath(FileIdentity.from_stat(info)))
-                or info.st_size != self.size):
-            raise ValueError("Recorded provenance lost original wire ownership")
+        if not self.bus_identity.matches(ObservedPath.at(Bus.path_in(root))):
+            raise ValueError("Recorded provenance lost original bus ownership")
 
     @classmethod
     def require(cls, sources: tuple[HistorySource, ...], key: str) -> HistorySource:
@@ -293,7 +321,7 @@ class HistorySource:
             raise HistoricalSourceChanged("Historical source changed; refresh history")
         root = Path(self.root)
         result = MessageNotification.read_references(
-            WireLog(WireLog.path_in(root)), references,
+            Bus(Bus.path_in(root)), references,
             partial(MessageNotification.recorded_delivery_window, root, self.provenance),
         )
         self.validate()
@@ -338,7 +366,7 @@ class HistoricalMessage(Message):
 
     @property
     def view_cursor(self) -> HistoryCursor:
-        return HistoryCursor(self.source.key, self.seq)
+        return HistoryCursor(source=self.source.key, sequence=self.seq)
 
     @property
     def view_key(self) -> tuple[str, int]:
@@ -353,7 +381,6 @@ class HistoricalMessage(Message):
         return {
             "history": {
                 "source": self.source.original_root,
-                "wire_root_id": self.source.wire_root_id,
                 "bus_identity": FieldCodec.encode(self.source.bus_identity),
                 "sender_created_at": self.sender_created_at,
                 "target_created_at": self.target_created_at,
@@ -371,7 +398,7 @@ class HistoricalThread:
     thread: ThreadProvenance
 
 
-class HistoryArchive(DurableFile):
+class HistoryArchive(DurableFile, LockedFile, SourceTier):
     """Ordered immutable source snapshots; never a delivery/launch authority."""
 
     filename = "history_sources.json"
@@ -382,12 +409,23 @@ class HistoryArchive(DurableFile):
 
     @classmethod
     def files_in(cls, root: Path) -> frozenset[Path]:
+        """Archived roots are found by where attach puts them, never by decoding the
+        catalogue: a copy of a root in an older shape must copy before any carry reads it."""
         declared = super().files_in(root)
-        for source in cls(WireLog.path_in(root)).sources():
-            archived = Path(source.root)
-            if archived.is_relative_to(root):
-                declared |= RootFile.paths_in(archived)
+        for archived in cls.archived_roots(root):
+            declared |= RootFile.paths_in(archived)
         return declared
+
+    @staticmethod
+    def archive_directory(root: Path) -> Path:
+        return root / "history"
+
+    @classmethod
+    def archived_roots(cls, directory: Path) -> tuple[Path, ...]:
+        archives = cls.archive_directory(directory)
+        if not archives.is_dir():
+            return ()
+        return tuple(sorted(path for path in archives.iterdir() if path.is_dir()))
 
     def sources(self) -> tuple[HistorySource, ...]:
         with self.read_sources() as sources:
@@ -426,89 +464,60 @@ class HistoryArchive(DurableFile):
 
         from .catalog_store import ChannelCatalog
         from .historical_views import HistorySource
-        from .private_bus_checkpoint import install_private_bus_checkpoint
         from .transcript_routes import TranscriptRoutes
 
         source_root = source_root.resolve()
         if source_root == self.bus_path.parent.resolve():
             raise ValueError("The live bus cannot be its own history source")
-        with _store_lock(self.path):
+        with self.locked():
             sources = self.sources()
             existing = next((s for s in sources if s.original_root == str(source_root)), None)
             if existing is not None:
                 return existing
-            parent = self.bus_path.parent / "history"
+            parent = self.archive_directory(self.bus_path.parent)
             parent.mkdir(mode=0o700, exist_ok=True)
             stage = Path(tempfile.mkdtemp(prefix="source-", dir=parent))
             try:
                 paths = [
                     source_root / name
                     for name in (
-                        WireLog.filename,
                         RegistryFile.filename,
                         ChannelCatalog.filename,
-                        WireMetadata.filename,
                     )
                 ]
-                revisions = tuple(FileRevision.capture(path) for path in paths)
+                catalog_path = ChannelCatalog.path_in(source_root)
+                catalog_revision = FileRevision.capture(catalog_path)
+                original_bus = Bus(Bus.path_in(source_root))
                 if source_read is None:
-                    with Registration(RegistryFile.path_in(source_root)).store.reading() as original:
-                        provenance = RegistryProvenance.capture(original)
+                    with Registration(RegistryFile.path_in(source_root)).store.reading() as registry:
+                        original = HistorySource.capture_original(
+                            source_root, RegistryProvenance.capture(registry),
+                        )
                 else:
                     source_read.require_original(source_root)
-                    provenance = source_read.provenance
-                archived = WireLog(WireLog.path_in(stage))
-                # Lock the empty stage before copying its marker. Once marked,
-                # ordinary reads correctly require the not-yet-built index.
-                with archived.locked():
-                    for path in paths:
-                        if path.exists():
-                            shutil.copy2(path, stage / path.name)
-                    TranscriptRoutes(source_root).retain(stage)
-                    if revisions != tuple(FileRevision.capture(path) for path in paths):
-                        raise ValueError("Historical source changed during snapshot; retry")
-                    if source_read is not None:
-                        source_read.require_original(source_root)
-                    bus_info = paths[0].stat() if paths[0].exists() else None
-                    if bus_info is None:
-                        archived.path.touch()
-                    marker = archived.read_metadata_unlocked(required=True)
-                    marker.claimed_after_seq = marker.last_seq
-                    marker.access = ArchivedAccess()
-                    marker.unseal()
-                    guard = PrivateRegistryGuard(RegistryFile.path_in(stage), marker.root_id)
-                    guard.create_pending()
-                    archived.write_metadata_unlocked(marker)
-                    # The installer borrows this real stage lock; it never opens
-                    # the incomplete archive through the ordinary read barrier.
-                    install_private_bus_checkpoint(archived, _bus_locked=True)
-                    guard.commit_initial()
+                    original = source_read
+                archived = Bus(Bus.path_in(stage))
+                original_bus.backup(archived.path)
+                for path in paths:
+                    if path.exists():
+                        shutil.copy2(path, stage / path.name)
+                TranscriptRoutes(source_root).retain(stage)
+                Registration(RegistryFile.path_in(stage)).store.mark_historical()
+                original.require_original(source_root)
+                error = ValueError("Historical source changed during snapshot; retry")
+                if FileRevision.capture(catalog_path) != catalog_revision:
+                    raise error
+                if archived.revision() != original.snapshot_bus_revision:
+                    raise error
                 source = HistorySource(
-                    str(stage.resolve()),
-                    str(source_root),
-                    marker.root_id,
-                    RecordedBusIdentity.capture(WireLog.path_in(source_root)),
-                    bus_info.st_size if bus_info else 0,
-                    FileRevision.capture(WireLog.path_in(stage)),
-                    FileRevision.capture(RegistryFile.path_in(stage)),
-                    provenance,
+                    str(stage.resolve()), str(source_root),
+                    original.bus_identity, RecordedBusIdentity.capture(archived.path),
+                    original.snapshot_bus_revision,
+                    FileRevision.capture(RegistryFile.path_in(stage)), original.provenance,
                 )
-                declarations = source.provenance.threads
-                from .wire_record import WireRecord
-
-                previous = 0
-                for record, size in _iter_jsonl_records(WireLog.path_in(stage)):
-                    decoded = WireRecord.public_from_wire(record)
-                    for message, _ in decoded.page_records(size, marker):
-                        if message.seq <= previous:
-                            raise ValueError("Historical source has nonascending sequences")
-                        previous = message.seq
-                if not declarations:
+                if not source.provenance.threads:
                     raise ValueError("Historical source has no identity declarations")
-                _atomic_write_text(
-                    self.path,
-                    json.dumps([FieldCodec.encode(item) for item in (*sources, source)]),
-                )
+                AtomicFile(self.path).write_text(json.dumps([FieldCodec.encode(item) for item in (*sources, source)]))
                 return source
             except BaseException:
                 shutil.rmtree(stage)
@@ -531,15 +540,13 @@ class HistoryArchive(DurableFile):
             request = view.page_request(view.capture(snapshot), current)
             current_snapshot = presentation.registry.snapshot()
             document = presentation.bus.reads.read()
-            with WireLog(WireLog.path_in(Path(source.root))).opened_wire_snapshot() as opened:
-                def read(page_index):
-                    raw = request.indexed(page_index, opened)
-                    projected = replace(raw, messages=tuple(
-                        HistoricalMessage.project(message, source, index, snapshot)
-                        for message in raw.messages))
-                    return replace(projected, selection=view.viewer.historical_selection(
-                        projected, presentation, source, opened, page_index, document, current_snapshot))
-                page = opened.query_page_index(read)
+            opened = Bus(Bus.path_in(Path(source.root)))
+            raw = request.read_opened(opened)
+            projected = replace(raw, messages=tuple(
+                HistoricalMessage.project(message, source, index, snapshot)
+                for message in raw.messages))
+            page = replace(projected, selection=view.viewer.historical_selection(
+                projected, presentation, source, opened, document, current_snapshot))
             if page.messages:
                 return replace(
                     page,
@@ -557,8 +564,7 @@ class HistoryArchive(DurableFile):
             part = self._source_page(view, presentation, following)
             if part.selection.history_revision != page.selection.history_revision:
                 raise HistoricalSourceChanged("Historical sources changed; reload history")
-            if not bounds.fits(len(page.messages) + len(part.messages),
-                                 page.bytes_read + part.bytes_read):
+            if not bounds.fits(len(page.messages) + len(part.messages)):
                 break
             bounds.traversal.append(pages, part)
             page = MessagePage.combine(tuple(pages))
@@ -571,32 +577,40 @@ class HistoryArchive(DurableFile):
         if not self.sources() and not historical:
             return view.live_page(presentation, bounds)
         history_revision = FileRevision.capture(self.path)
-        if not historical:
-            page = view.live_page(presentation, bounds)
-            if page.messages or isinstance(bounds.traversal, NewerTraversal):
-                return replace(
-                    page,
-                    has_older=page.has_older or bool(self.sources()),
-                    selection=replace(page.selection, history_revision=history_revision),
-                )
-        history = self.page(
-            view, presentation, bounds if historical else replace(bounds, traversal=OlderTraversal())
-        )
-        if history.messages:
-            latest = view.live_page(presentation, PageBounds(limit=1))
-            return replace(
-                history,
-                selection=replace(history.selection, history_revision=history_revision),
-                has_newer=history.has_newer or bool(latest.messages),
+        def historical_page() -> MessagePage:
+            history = self.page(
+                view, presentation, bounds if historical else replace(bounds, traversal=OlderTraversal())
             )
-        if historical and isinstance(bounds.traversal, NewerTraversal):
-            live = view.live_page(presentation, replace(bounds, traversal=NewerTraversal()))
-            return replace(live, selection=replace(live.selection, history_revision=history_revision))
-        selected = history if historical else page
-        return replace(selected, selection=replace(selected.selection, history_revision=history_revision))
+            if history.messages:
+                latest = view.live_page(presentation, PageBounds(limit=1))
+                return replace(
+                    history,
+                    selection=replace(history.selection, history_revision=history_revision),
+                    has_newer=history.has_newer or bool(latest.messages),
+                )
+            selected = history if historical else page
+            result = replace(selected, selection=replace(selected.selection, history_revision=history_revision))
+            if historical:
+                return bounds.traversal.after_exhausted_history(
+                    lambda traversal: view.live_page(presentation, replace(bounds, traversal=traversal)),
+                    result,
+                )
+            return result
+
+        if historical:
+            return historical_page()
+        page = view.live_page(presentation, bounds)
+        return bounds.traversal.source_page(
+            replace(
+                page,
+                has_older=page.has_older or bool(self.sources()),
+                selection=replace(page.selection, history_revision=history_revision),
+            ),
+            historical_page,
+        )
 
     def threads(self, name: str | None = None) -> tuple[HistoricalThread, ...]:
-        result = []
+        result: list[HistoricalThread] = []
         for source in self.sources():
             source.validate()
             result.extend(HistoricalThread(source, thread)

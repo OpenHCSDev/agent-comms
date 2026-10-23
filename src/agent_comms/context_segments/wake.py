@@ -8,7 +8,6 @@ has no bus/registry/SQLite reads, inbox cursor, or model-launch operation.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 
 from agent_comms.coordination_tables.assignments import WakeAssignment
@@ -16,7 +15,7 @@ from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.field_codec import FieldCodec
 from agent_comms.presentation import SentMessageOutcome
 
-from ..bus_publication import CommittedDelivery
+from ..bus_publication import Delivered
 from ..threads import Thread
 from ..turn_context import (
     InstructionFile,
@@ -33,7 +32,7 @@ from .wake_values import WakeWorkContext
 class SelectedWakeSegment(InstructionSegment):
     """Original sealed sources and their captured owner, never wake authority."""
 
-    sources: tuple[tuple[CommittedDelivery, WakeAssignment], ...]
+    sources: tuple[tuple[Delivered, WakeAssignment], ...]
     owner: Thread
     obligations: tuple[ResponseObligation, ...]
     relevance: InstructionFile
@@ -41,6 +40,13 @@ class SelectedWakeSegment(InstructionSegment):
     work_context: WakeWorkContext
 
     sent_limit = 5
+
+    @classmethod
+    def wire_sources(cls, original):
+        """The selected originals and the owner's own sent outcomes; their sender tells them
+        apart."""
+        return tuple(source for provenance in original.provenance
+                     for source in provenance.bus_references())
 
     @classmethod
     def capture(cls, sources, owner, goals, *, obligations=(), sent_outcomes=()):
@@ -94,16 +100,8 @@ class SelectedWakeSegment(InstructionSegment):
                     "body": initial.message.body,
                 }
             )
-        selected_line = json.dumps(
-            selected,
-            ensure_ascii=True,
-            separators=(",", ":"),
-        )
-        work_context = json.dumps(
-            FieldCodec.encode(self.work_context),
-            ensure_ascii=True,
-            separators=(",", ":"),
-        )
+        selected_line = FieldCodec.compact(selected, ensure_ascii=True)
+        work_context = FieldCodec.compact(FieldCodec.encode(self.work_context), ensure_ascii=True)
         sent_values = []
         for outcome in self.sent_outcomes:
             message, reference = outcome.message, outcome.answer
@@ -117,11 +115,7 @@ class SelectedWakeSegment(InstructionSegment):
                     FieldCodec.encode(reference) if reference is not None else None
                 ),
             })
-        sent_outcomes = json.dumps(
-            sent_values,
-            ensure_ascii=True,
-            separators=(",", ":"),
-        )
+        sent_outcomes = FieldCodec.compact(sent_values, ensure_ascii=True)
         return dict(
             count=len(selected),
             selected=selected_line,
@@ -135,7 +129,7 @@ class SelectedWakeSegment(InstructionSegment):
 class DeliveredMessageSegment(InstructionSegment):
     """One committed message handed to its recipient's already running turn."""
 
-    source: CommittedDelivery
+    source: Delivered
     assignment: WakeAssignment
     owner: Thread
 
@@ -148,15 +142,13 @@ class DeliveredMessageSegment(InstructionSegment):
         self.assignment.require_selected_source(self.source, self.owner)
         message = self.source.message
         return dict(
-            message=json.dumps(
+            message=FieldCodec.compact(
                 {
                     "source_seq": self.assignment.wire_seq,
                     "sender": message.sender,
                     "target": message.target,
                     "audience": self.assignment.audience.value,
                     "body": message.body,
-                },
-                ensure_ascii=True,
-                separators=(",", ":"),
+                }, ensure_ascii=True,
             )
         )

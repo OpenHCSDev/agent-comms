@@ -1,6 +1,25 @@
+import os
+
 import pytest
 
+from agent_comms.installer.refusals import UpgradeRefused
+from agent_comms.installer.commands import InstallCommands
+from agent_comms.installer.probes.packages import InstalledPackagesProbe
+from agent_comms.installer.interpreter_operation import RetainedProgram, SourceProgram
 from agent_comms.installer.runtime_resolution import ResolvedLock, RuntimeResolution
+from agent_comms.launch_runtime import LaunchRuntime
+
+
+@pytest.mark.parametrize("program", [SourceProgram(), RetainedProgram.current()])
+def test_package_probe_entry_uses_one_declaration_before_refusing_build_identity(program):
+    runtime = LaunchRuntime.running()
+    with InstallCommands() as commands, pytest.raises(
+            UpgradeRefused, match="Core is editable|wheel stamp does not name"):
+        commands.probe(
+            InstalledPackagesProbe("not-a-built-wheel"), runtime.interpreter,
+            env=runtime.environment(os.environ),
+            program=program,
+        )
 
 
 def manifest(core="core", toad="toad", wheel="old-wheel"):
@@ -24,6 +43,16 @@ def manifest(core="core", toad="toad", wheel="old-wheel"):
             },
         }
     )
+
+
+def test_installed_package_probe_transports_the_declared_records_and_source_cases():
+    original = manifest().packages
+    probe = InstalledPackagesProbe("core")
+    decoded = probe.decode_answer(probe.encode_answer(original))
+    assert decoded == original
+    assert {name: record.pin() for name, record in decoded.items()} == {
+        name: record.pin() for name, record in original.items()
+    }
 
 
 def lock():

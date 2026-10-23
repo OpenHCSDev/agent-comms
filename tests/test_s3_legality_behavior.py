@@ -13,7 +13,7 @@ from agent_comms.coordination_errors import IntegrityViolationError
 from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.attempts import ReplayFact
 from agent_comms.coordination_tables.executions import ReplayAssessments
-from agent_comms.coordination_tables.executions import ExecutionOrigin
+from agent_comms.coordination_tables.executions import ExecutionProvenance, AcpOrigin
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
     PublicationEvidence,
@@ -40,7 +40,7 @@ def members(family, capability=object):
 @pytest.fixture
 def pending(tmp_path):
     with ready(tmp_path / "rules.sqlite3") as store:
-        value = store.snapshots.get("exec")
+        value = store.get("exec")
         assert FieldCodec.decode(RecoverySnapshot, FieldCodec.encode(value)) == value
         yield value
 
@@ -49,7 +49,7 @@ def pending(tmp_path):
 def active(tmp_path):
     with ready(tmp_path / "active.sqlite3") as store:
         started(store)
-        value = store.snapshots.get("exec")
+        value = store.get("exec")
         assert value.is_current
         yield value
 
@@ -119,7 +119,7 @@ def test_execution_numeric_time_and_route_boundaries(pending):
         rejected(row, "must be positive", **{field: 0})
     rejected(row, "timestamps", created_at_ms=-1)
     rejected(row, "timestamps", updated_at_ms=row.created_at_ms - 1)
-    for origin in ExecutionOrigin:
+    for origin in ExecutionProvenance.members_with(ExecutionProvenance):
         assert replace(row, origin=origin).origin is origin
     route = pending.obligations[0]
     rejected(route, "exact_target", exact_target=None)
@@ -239,7 +239,7 @@ def test_snapshot_wire_claimless_and_exact_routes(pending):
     rejected(
         pending,
         "claimless snapshots",
-        execution=replace(pending.execution, origin=ExecutionOrigin.ACP),
+        execution=replace(pending.execution, origin=AcpOrigin),
     )
     rejected(
         pending,

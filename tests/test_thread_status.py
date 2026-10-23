@@ -4,13 +4,16 @@ import json
 import os
 import subprocess
 import sys
+import time
 from dataclasses import replace
 
 import pytest
 
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.activity import Activity, ActivityState
 from agent_comms.comms import wire
+from conftest import installed_comms
+from agent_comms.cli_commands import ConfigureCliCommand
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.field_codec import FieldCodec
@@ -18,23 +21,26 @@ from agent_comms.presentation import CountedRead, ThreadView
 from agent_comms.registration import Registration
 from agent_comms.thread_status import (
     ArchivedThreadStatus,
-    CliInboxPresence,
     ConnectedThreadStatus,
     DeletingThreadStatus,
     NoBridgeThreadStatus,
+    HeartbeatThreadStatus,
     IdleThreadStatus,
+    ProcessThreadStatus,
     RunningThreadStatus,
     StoppedThreadStatus,
     ThreadStatus,
 )
 from agent_comms.thread_text import GivenThreadText
+from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
+from agent_comms.threads import Thread
 
 
 def test_captured_owner_presentation_survives_exit_until_fresh_acquisition(tmp_path):
     comms = wire(tmp_path)
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
     try:
-        thread = comms.registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(child.pid))
+        thread = Thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(child.pid))
         comms.registry.register(thread, RunningThreadStatus())
         view, = comms.views.thread_views()
         displayed = view.presentation
@@ -46,7 +52,8 @@ def test_captured_owner_presentation_survives_exit_until_fresh_acquisition(tmp_p
         assert view.presentation == displayed
         assert transferred.presentation == displayed
         fresh, = comms.views.thread_views()
-        assert fresh.presentation.summary == "Owner exited"
+        assert fresh.status == StoppedThreadStatus()
+        assert fresh.presentation.summary == "Stopped"
         assert not fresh.presentation.status.working
     finally:
         if child.poll() is None:
@@ -55,12 +62,16 @@ def test_captured_owner_presentation_survives_exit_until_fresh_acquisition(tmp_p
 
 
 @pytest.mark.parametrize("status", [member() for member in ThreadStatus.members_with(ThreadStatus)])
-def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status):
-    comms = wire(tmp_path)
+@pytest.mark.parametrize("age", [0.0, HeartbeatThreadStatus.max_age + 1])
+def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status, age):
+    comms = installed_comms(tmp_path)
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
     try:
-        thread = comms.registry.new_thread('owner', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(child.pid), title=GivenThreadText('Retained title'), session_file=SavedSessionFile('/retained/session.jsonl'), created_at=12.5)
+        thread = Thread('owner', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(child.pid), title=GivenThreadText('Retained title'), session_file=RegistrySessionLocation.from_path('/retained/session.jsonl', comms.root), created_at=12.5)
         comms.registry.register(thread, status)
+        with comms.registry.store.editing() as edit:
+            edit.document.last_seen[thread.name] = time.time() - age
+            edit.commit()
         before = comms.registry.snapshot()
         saved = comms.registry.store.path.read_bytes()
         raw = json.loads(saved)
@@ -68,7 +79,7 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status)
         assert raw["threads"]["owner"]["created_at"] == 12.5
         reopened = Registration(comms.registry.store.path)
         assert reopened.snapshot() == before
-        expected = status.registered(thread)
+        expected = status.declaration().registered(thread, before.seen_at(thread.name))
         assert reopened.status("owner") == expected
         assert FieldCodec.decode(ThreadStatus, FieldCodec.encode(status)) == status
         assert comms.views.thread_detail("owner", CountedRead()).to_wire()["status"] == expected.declared_name
@@ -92,12 +103,12 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status)
                     individual.require("owner")
         with pytest.raises(UnregisteredThreadError):
             comms.views.thread_presentations(("missing",)).require("missing")
-        if isinstance(status, CliInboxPresence):
-            assert reopened.status("owner") == ConnectedThreadStatus()
-            child.kill()
-            child.wait(timeout=5)
-            assert reopened.status("owner") == NoBridgeThreadStatus()
-            assert comms.registry.store.path.read_bytes() == saved
+        child.kill()
+        child.wait(timeout=5)
+        expected = status.declaration().registered(thread, before.seen_at(thread.name))
+        assert reopened.status("owner") == expected
+        assert comms.agents.is_live(thread.incarnation, reopened.snapshot()) == expected.running
+        assert comms.registry.store.path.read_bytes() == saved
     finally:
         child.kill()
         child.wait(timeout=5)
@@ -107,7 +118,7 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status)
 def test_live_owner_cannot_be_deleted_and_heartbeat_keeps_both_counters(tmp_path, status):
     registry = Registration(tmp_path / "registry.json")
     registry.register(
-        registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
+        Thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
         status,
     )
     before = registry.snapshot()
@@ -125,7 +136,7 @@ def test_live_owner_cannot_be_deleted_and_heartbeat_keeps_both_counters(tmp_path
 def test_reactivation_rotates_owner_and_claim_without_rebinding_history(tmp_path, status):
     registry = Registration(tmp_path / "registry.json")
     registry.register(
-        registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
+        Thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
         status,
     )
     before = registry.snapshot()
@@ -139,7 +150,7 @@ def test_reactivation_rotates_owner_and_claim_without_rebinding_history(tmp_path
 
 def test_delete_fence_rejects_metadata_and_presence_without_erasing_data(tmp_path):
     registry = Registration(tmp_path / "registry.json")
-    registry.register(registry.new_thread('owner', frozenset(), str(tmp_path)), StoppedThreadStatus())
+    registry.register(Thread('owner', frozenset(), str(tmp_path)), StoppedThreadStatus())
     registry.begin_delete("owner")
     before = registry.store.path.read_bytes()
     with pytest.raises(RelationViolationError):
@@ -156,7 +167,7 @@ def test_inactive_owner_survives_a_refused_viewer(tmp_path, status):
     from agent_comms.ui_model.status import ThreadStatusModel
 
     comms = wire(tmp_path)
-    comms.registry.register(comms.registry.new_thread('owner', frozenset(), str(tmp_path)), status)
+    comms.registry.register(Thread('owner', frozenset(), str(tmp_path)), status)
     view = comms.views.thread_presentations(('owner',)).views['owner']
     transferred = FieldCodec.decode(ThreadView, FieldCodec.encode(view)).presentation
     row = ThreadStatusModel.known('owner', transferred)
@@ -168,6 +179,8 @@ def test_inactive_owner_survives_a_refused_viewer(tmp_path, status):
 @pytest.mark.parametrize("status,listed,rename", [
     (RunningThreadStatus(), True, True),
     (IdleThreadStatus(), True, False),
+    (ProcessThreadStatus(), True, False),
+    (HeartbeatThreadStatus(), True, True),
     (ConnectedThreadStatus(), True, True),
     (NoBridgeThreadStatus(), True, True),
     (StoppedThreadStatus(), False, False),
@@ -183,6 +196,34 @@ def test_presence_owns_roster_membership_and_self_rename(status, listed, rename)
     else:
         with pytest.raises(RelationViolationError, match="Only a running thread"):
             status.require_self_rename()
+
+
+@pytest.mark.parametrize(("status", "allows_other_caller"), [
+    (RunningThreadStatus(), False),
+    (IdleThreadStatus(), False),
+    (StoppedThreadStatus(), True),
+    (ArchivedThreadStatus(), True),
+])
+def test_reconfiguration_keeps_caller_authority_across_renaming(tmp_path, status, allows_other_caller):
+    comms = wire(tmp_path)
+    comms.registry.declare(Thread("subject", frozenset(), str(tmp_path),
+                                  process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.declare(Thread("other", frozenset(), str(tmp_path)))
+    comms.registry.rename("subject", "renamed")
+    comms.registry.register(comms.registry.require("renamed"), status)
+    assert ThreadCaller("subject").may_reconfigure(comms, "renamed")
+    assert ThreadCaller("renamed").may_reconfigure(comms, "subject")
+    assert NoThreadCaller().may_reconfigure(comms, "subject") == allows_other_caller
+    assert ThreadCaller("other").may_reconfigure(comms, "renamed") == allows_other_caller
+
+
+@pytest.mark.parametrize("status", [RunningThreadStatus(), IdleThreadStatus()])
+def test_configure_command_keeps_active_configuration_in_its_session(tmp_path, status):
+    comms = wire(tmp_path)
+    comms.registry.register(Thread("subject", frozenset(), str(tmp_path),
+                                   process_identity=ProcessIdentity.capture(os.getpid())), status)
+    with pytest.raises(RelationViolationError, match="change its settings through its session"):
+        ConfigureCliCommand(name="subject").apply(comms)
 
 
 def test_roster_and_controls_keep_archived_threads_dormant():
@@ -206,7 +247,7 @@ def test_batch_source_rename_keeps_the_original_registry_fence(comms):
     from agent_comms.coordination_errors import StaleRevision
 
     comms.registry.register(
-        comms.registry.new_thread('alpha', frozenset(), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid())),
+        Thread('alpha', frozenset(), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid())),
         RunningThreadStatus(),
     )
     batch = comms.views.thread_presentations(("alpha",))

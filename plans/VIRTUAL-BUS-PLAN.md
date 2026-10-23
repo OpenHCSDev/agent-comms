@@ -88,10 +88,41 @@ Everything lands as one batch through the merge queue, drop-on-fail. Then one in
 
 Each phase, its predecessors and the evidence on `origin/main` that proves it done are declared in `src/agent_comms/plan_phases.py`; the commander's plan-idle rule and order refusals read that family, and accepting a task never marks a phase done.
 
-- `git grep -n "offset\|max_bytes\|bus.jsonl\|bus_meta\|_wire_lock_path\|has_private_wire_fields\|/ \"wire\"" src` returns no bus hits (the last pattern catches the hand-spelled `root / "wire"` lock path at about 20 sites).
+- `BusDeletionPhase.evidence` finds the five deleted modules absent and no known physical bus symbols, filename literals or lock-path expressions in Python source. Its AST check reads executable uses, including `/ "wire"`, `.with_name("wire")` and `.joinpath("wire")`, without matching prose or its own pattern declaration. This is a known-syntax screen; aliases and dynamically constructed paths still require source review. Remaining byte offsets and budgets are judged by their actual owner, since external native transcripts stay files.
 - The deleted modules are gone.
 - A process killed mid-publish leaves the whole message or none of it.
-- A reader that meets a held bus lock waits for it and never ends a turn (step C). Today `NativeSourceCursor._advance_proven` (`native_source_cursor.py:83`) takes the boundary with `blocking=False`, and with no contention allowance when no input is committed (`:79-80`). So any concurrent writer ends the turn with `BlockingIOError`: three times on core-5d8da75aa between 12:20 and 12:39 on 2026-10-21, with no install running.
+- Concurrent bus publication must not abort native cursor settlement. The current path is `CoordinatedTurn.cursor_status_for` → `CursorDelivery.advance` → `CursorOwner.advance_async` → `CursorOwner._advance_owned`. Bus reads use `Bus.observing` and SQLite snapshots; the cursor owner commits through the coordinator session's existing write transaction. `Coordination.run_async` runs this work through its worker with the default `StoreWait` contention policy. Qualify that path under competing writers within its bounded wait; no physical bus lock is reintroduced.
 - Every history converts with every record round-tripping.
 - On every machine: Toad pages history, delivery wakes units, claims hold, and a real message to a live agent is answered.
 - Lines deleted are reported first; the census confirms.
+
+Historical regression evidence: on core-5d8da75aa, the former
+`NativeSourceCursor._advance_proven` in `native_source_cursor.py` took its
+boundary with `blocking=False`, without contention allowance when no input
+was committed. Concurrent writers ended turns with `BlockingIOError` three
+times between 12:20 and 12:39 on 2026-10-21, with no install running. That
+class and file have since been deleted; the incident motivates the current
+contention obligation above, rather than describing a current source site.
+
+## Deletion checkpoint from the current integration branch
+
+At `acb2ddd0e`, all five old modules are already absent. Three physical bus locks
+remain: `NativeReplyPreparation.finished`, `SendRefusal.record`, and
+`CollaborationLedger.merge`. The last uses `.with_name("wire")`, which the old
+grep misses. The old grep also matches its own `bus_meta` pattern declaration,
+so its result does not establish whether physical bus uses remain.
+
+The deletion branch removes those locks through the existing owners. Unread
+publication keeps its local preparation lock, source revision check and SQLite
+write transaction; a busy SQLite writer leaves completed readers pending.
+Refusal recording keeps maintenance permission under the registry lock until
+its SQL transaction finishes. Ledger merge keeps the registered-author snapshot
+through the existing document update, in the declared registry-before-ledger
+lock order. None creates a replacement bus lock.
+
+The phase check reads committed source through `MainTree`. Its controls include
+the actual remaining path spellings, physical filenames and removed symbols,
+alongside comments and docstrings that describe deletion. This source checkpoint
+does not mark the phase complete on main or qualify an installed runtime. The
+merger still checks the affected copied native/Toad journey, including a fresh
+DM, its actual reply and tab return.

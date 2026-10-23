@@ -2,54 +2,373 @@
 
 from __future__ import annotations
 
+import agent_comms
+from .projection_source import ProjectionSource
+from .turn_origin import TurnOrigin
 import builtins
 import hashlib
 import re
+import sqlite3
 import time
-from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import dataclass, field, fields, replace
-from enum import StrEnum
+from types import ModuleType
+from abc import ABC, abstractmethod
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from contextlib import closing
+from dataclasses import Field, dataclass, field, fields, make_dataclass, replace
+from functools import cache
+from inspect import get_annotations
+from itertools import accumulate
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Type, cast, Annotated
+from typing import (
+    TYPE_CHECKING, Annotated, ClassVar, Self, Type, cast, dataclass_transform,
+    get_origin, get_type_hints,
+)
 
-from agent_comms.bus_tables import Addressed, BusCapability
-from agent_comms.response_acknowledgement import _canonical, public_envelope_digest
-from agent_comms.typed_table import Column
+from agent_comms.response_policy import InformationalPolicy, ResponseEligibility, ResponsePolicy
+from agent_comms.typed_table import (
+    AppendOnlyTables, Column, DerivedTables, DurableTables, ForeignKey, Index,
+    ProducedTable, SharedFileTables, TableReference, TypedRow, TypedTable,
+)
 
 from .change_report import FileLine, NoChangeReport, ReportEvidence
 from .channel_targets import CommandTarget
+from .coordination_errors import IdentityConflict
 from .declared_family import DeclaredFamily
-from .envelope_claim_transitions import ClaimTransition
+from .envelope_claim_transitions import (
+    ClaimOwner, ClaimProjection, ClaimTransition, ClaimTransitionError, ResourceClaim,
+    UnclaimedResource,
+)
 from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,
     InlineRecord,
-    MalformedRecord,
     NullMember,
-    compile_decoder,
-    projected,
     PublicationExclude,
     WireName,
     WireOmitDefault,
     WireOrder,
+    compile_decoder,
+    projected,
 )
 from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .page_traversal import LiveCursor, PageCursor
-from .response_policy import InformationalPolicy, ResponseEligibility
 from .task_sources import Decision, NoTaskAttachment, TaskAttachment
 from .thread_identity import AgentThreadRole, ThreadRole
 from .ui_model.message_category import InboundCategory, MessageCategory, OtherCategory
 from .wake_policy import BoundedTriageWake, PassiveWake
 
 if TYPE_CHECKING:
-    from .private_bus_checkpoint import ClaimCommits
+    from .bus_publication import Delivered
+    from .input_disposition import InputDispositions
+    from .historical_views import HistorySource
     from .retained_task_facts import ExactTaskFact
     from .threads import Thread
-    from .typed_table import TypedTable
 
 
-class MessageKind(DeclaredFamily, affix="Kind"):
+class BusTables(TypedTable, AppendOnlyTables, SharedFileTables, DurableTables, declared_name=None):
+    """Bus history cannot be rebuilt from another source."""
+
+
+class BusProjectionTables(ProducedTable, SharedFileTables, DerivedTables, declared_name=None):
+    """Reverse lookups are derived from the record, in its append transaction."""
+
+    @classmethod
+    def producer_package(cls) -> ModuleType:
+        return agent_comms
+
+    @classmethod
+    def create_schema(cls, db: sqlite3.Connection) -> None:
+        """Create/rebuild rows from history using the append projection owner."""
+        super().create_schema(db)
+        holders = ReplayedHolders()
+        for record in BusCapability.history(db):
+            record.project_into(db, holders)
+        holders.flush(db)
+
+
+@dataclass(frozen=True)
+class BusRow(BusTables):
+    seq: Annotated[int, Column(primary_key=True, auto_increment=True)]
+    kind: type[BusRecord]
+    at: float
+
+    @classmethod
+    def last_seq(cls, db: sqlite3.Connection) -> int:
+        return FieldCodec.decode(int, db.execute(
+            cls._sql(f'SELECT COALESCE(MAX({{seq}}), 0) FROM "{cls.declared_name}"')
+        ).fetchone()[0])
+
+    @classmethod
+    def next_seq(cls, db: sqlite3.Connection) -> int:
+        return FieldCodec.decode(int, db.execute(
+            "SELECT COALESCE((SELECT seq FROM sqlite_sequence WHERE name=?), 0) + 1",
+            (cls.declared_name,),
+        ).fetchone()[0])
+
+
+@dataclass(frozen=True)
+class ClaimOperations(BusProjectionTables):
+    """An acquisition's consumed operation refers to its original claim row."""
+
+    operation_id: Annotated[str, Column(primary_key=True)]
+    seq: int
+
+    @classmethod
+    def references(cls) -> tuple[ForeignKey, ...]:
+        return (ForeignKey(columns=("seq",), target=Claimed.table, target_columns=("seq",)),)
+
+    @classmethod
+    def used(cls, db: sqlite3.Connection, operation_id: str) -> bool:
+        return cls.exists(db, where="{operation_id} = ?", parameters=(operation_id,))
+
+
+@dataclass(frozen=True)
+class HeldResources(BusProjectionTables):
+    """Current membership references the canonical transition, never a copy."""
+
+    resource: Annotated[str, Column(primary_key=True)]
+    claim_seq: int
+
+    @classmethod
+    def references(cls) -> tuple[ForeignKey, ...]:
+        return (ForeignKey(columns=("claim_seq",), target=Claimed.table, target_columns=("seq",)),)
+
+    @classmethod
+    def owner_for(cls, db: sqlite3.Connection, resource: str) -> ResourceClaim:
+        originals = Claimed.table.select(
+            db, where=f'{{seq}}=(SELECT claim_seq FROM "{cls.declared_name}" WHERE resource=?)',
+            parameters=(resource,), row_type=Claimed,
+        )
+        return next((row.claim_transition.claimed(resource) for row in originals), UnclaimedResource())
+
+    @classmethod
+    def all_claims(cls, db: sqlite3.Connection) -> ClaimProjection:
+        return cls._project(db, cls.select(db), BusRow.last_seq(db))
+
+    @classmethod
+    def claims_for(
+        cls, db: sqlite3.Connection, resources: tuple[str, ...], through: int,
+    ) -> ClaimProjection:
+        marks = ",".join("?" for _ in resources)
+        return cls._project(db, cls.select(
+            db, where=f'{{resource}} IN ({marks})', parameters=resources,
+        ), through)
+
+    @classmethod
+    def _project(
+        cls, db: sqlite3.Connection, current: list[HeldResources], through: int,
+    ) -> ClaimProjection:
+        claim_table = Claimed.table
+        last_seq = FieldCodec.decode(int, db.execute(claim_table._sql(
+            f'SELECT COALESCE(MAX({{seq}}), 0) FROM "{claim_table.declared_name}" WHERE {{seq}} <= ?'
+        ), (through,)).fetchone()[0])
+        sequences = tuple({row.claim_seq for row in current})
+        marks = ",".join("?" for _ in sequences)
+        transitions = {row.claim_transition.seq: row.claim_transition for row in claim_table.select(
+            db, where=f'{{seq}} IN ({marks})', parameters=sequences, row_type=Claimed,
+        )}
+        return ClaimProjection(last_seq, {
+            row.resource: transitions[row.claim_seq].claimed(row.resource) for row in current
+        })
+
+    @classmethod
+    def project(
+        cls, db: sqlite3.Connection, transition: ClaimTransition, holders: ClaimHolders,
+    ) -> ClaimProjection:
+        """Validate before the original is inserted; the caller retains the writer."""
+        try:
+            transition.require_new_operation(lambda operation: ClaimOperations.used(db, operation))
+            return transition.project(holders.before(db, transition))
+        except (ClaimTransitionError, IdentityConflict) as error:
+            raise RelationViolationError("Committed claim transition is inconsistent.") from error
+
+    @classmethod
+    def apply(
+        cls, db: sqlite3.Connection, transition: ClaimTransition, projected: ClaimProjection,
+        holders: ClaimHolders,
+    ) -> None:
+        removed = transition.resources + transition.expired
+        marks = ",".join("?" for _ in removed)
+        cls.delete(db, where=f'{{resource}} IN ({marks})', parameters=removed)
+        for owner in projected.values():
+            cls(owner.resource, owner.seq).insert(db)
+        for operation_id in transition.operation_ids:
+            ClaimOperations(operation_id, transition.seq).insert(db)
+        holders.advance(removed, projected)
+
+
+class ProjectionPass(ABC, ProjectionSource):
+    """How one projection pass writes the rows its records derive: an append writes its
+    few rows at once."""
+
+    def write(self, db: sqlite3.Connection, row: TypedTable) -> None:
+        row.insert(db)
+
+    def flush(self, db: sqlite3.Connection) -> None:
+        """Rows written at once leave nothing to flush."""
+
+
+class ClaimHolders(ProjectionPass):
+    """The current holders a claim transition projects from, before it is applied."""
+
+    @abstractmethod
+    def before(self, db: sqlite3.Connection, transition: ClaimTransition) -> ClaimProjection: ...
+
+    def advance(self, removed: tuple[str, ...], projected: ClaimProjection) -> None:
+        """Held rows already record the applied transition."""
+
+
+class StoredHolders(ClaimHolders):
+    """One append reads the holders of its resources from their table."""
+
+    def before(self, db: sqlite3.Connection, transition: ClaimTransition) -> ClaimProjection:
+        return HeldResources.claims_for(db, transition.resources, transition.seq - 1)
+
+
+@dataclass
+class ReplayedHolders(ClaimHolders):
+    """An in-order rebuild carries the holders it already projected; it never rereads them.
+
+    Each owner was validated in the projection that produced it; only the subset a
+    transition projects from is validated again, as one ``ClaimProjection``.
+    """
+
+    last_seq: int = 0
+    owners: dict[str, ClaimOwner] = field(default_factory=dict)
+    rows: dict[str, list[tuple]] = field(default_factory=dict)
+    """Derived rows by insert statement; nothing in the rebuild reads them back before
+    ``flush``, which inserts each statement's rows with one ``executemany``."""
+
+    def write(self, db: sqlite3.Connection, row: TypedTable) -> None:
+        statement, values = row.insertion()
+        self.rows.setdefault(statement, []).append(values)
+
+    def flush(self, db: sqlite3.Connection) -> None:
+        for statement, values in self.rows.items():
+            db.executemany(statement, values)
+        self.rows.clear()
+
+    def before(self, db: sqlite3.Connection, transition: ClaimTransition) -> ClaimProjection:
+        return ClaimProjection(self.last_seq, {
+            resource: self.owners[resource]
+            for resource in transition.resources if resource in self.owners})
+
+    def advance(self, removed: tuple[str, ...], projected: ClaimProjection) -> None:
+        for resource in removed:
+            self.owners.pop(resource, None)
+        self.owners.update(projected)
+        self.last_seq = projected.last_seq
+
+
+@dataclass(frozen=True)
+class CapabilityRow(BusTables, declared_name=None):
+    """Every generated capability row belongs to one original bus sequence."""
+
+    seq: Annotated[int, Column(primary_key=True, references=TableReference(BusRow, ("seq",)))]
+
+
+class _CapabilityTable(ProjectionSource):
+    """A class's table is derived once, after its dataclass decorator has run."""
+
+    def __get__(self, instance: BusCapability | None, owner: type[BusCapability]) -> type[CapabilityRow]:
+        return self.for_class(owner)
+
+    @cache
+    def for_class(self, owner: type[BusCapability]) -> type[CapabilityRow]:
+        hints = get_type_hints(owner, include_extras=True)
+        return make_dataclass(
+            BusTables.__name__.removesuffix("Tables") + owner.__name__ + "Row",
+            [*((item.name, hints[item.name], item) for item in BusCapability.declared_fields(owner)),
+             *((name, hints[name], vars(owner)[name]) for name in get_annotations(owner)
+               if get_origin(hints[name]) is ClassVar and name in vars(owner))],
+            bases=(CapabilityRow,),
+            namespace={"__module__": owner.__module__},
+            frozen=True,
+        )
+
+
+@dataclass(frozen=True)
+class BusCapability(TypedRow, ProjectionSource):
+    """The hierarchy and each dataclass declaration own their table union."""
+
+    table = _CapabilityTable()
+
+    def deliveries(self) -> tuple[Delivered, ...]:
+        return ()
+
+    @classmethod
+    def declared_fields(cls, owner: type[BusCapability]) -> tuple[Field, ...]:
+        own = get_annotations(owner)
+        header_fields = {item.name for item in fields(BusRow)}
+        return tuple(item for item in fields(owner)
+                     if item.name in own and item.name not in header_fields)
+
+    @classmethod
+    @cache
+    def tables(cls) -> tuple[type[CapabilityRow], ...]:
+        return tuple(base.table for base in cls.__mro__
+                     if issubclass(base, BusCapability) and BusCapability.declared_fields(base))
+
+    def rows(self) -> tuple[CapabilityRow, ...]:
+        """Project declared Python fields without flattening their wire representations."""
+        return tuple(
+            FieldCodec.construct(table, {
+                item.name: getattr(self, item.name) for item in fields(table)
+            })
+            for table in self.tables())
+
+    @classmethod
+    def read_from(cls, db: sqlite3.Connection, seq: int) -> Self:
+        """Reconstruct this declared value from its own capability tables."""
+        rows = []
+        for table in cls.tables():
+            stored = table.select(db, seq=seq)
+            if not stored:
+                raise RelationViolationError(f"Bus row {seq} lacks {table.declared_name}")
+            rows.append(stored[0])
+        return cls.assembled(rows)
+
+    @classmethod
+    def assembled(cls, rows: Iterable[CapabilityRow]) -> Self:
+        """This declared value from one stored row of each of its capability tables."""
+        return FieldCodec.construct(cls, {
+            item.name: getattr(row, item.name) for row in rows for item in fields(row)})
+
+    @staticmethod
+    def history(db: sqlite3.Connection) -> Iterator[BusCapability]:
+        """Every record in sequence order from one joined cursor, each stored row decoded once."""
+        tables = TypedTable.members_with(CapabilityRow)
+        offsets = dict(zip(tables, accumulate(
+            (len(BusRow.columns()), *(len(table.columns()) for table in tables)))))
+        header = BusRow.qualified("seq")
+        with closing(db.execute(
+            f"SELECT {', '.join(row.qualified(*row.column_projection()) for row in (BusRow, *tables))} "
+            f'FROM "{BusRow.declared_name}" '
+            + " ".join(f'LEFT JOIN "{table.declared_name}" ON {table.qualified("seq")} = {header}'
+                       for table in tables)
+            + f" ORDER BY {header}"
+        )) as cursor:
+            for stored in cursor:
+                kind = BusRow.decode_at(stored, 0).kind
+                yield kind.assembled(table.decode_at(stored, offsets[table]) for table in kind.tables())
+
+    def projections(self) -> Iterator[TypedTable]:
+        return iter(())
+
+    def project_into(self, db: sqlite3.Connection, holders: ClaimHolders) -> None:
+        for row in self.projections():
+            holders.write(db, row)
+
+
+@dataclass(frozen=True)
+class Addressed(BusCapability):
+    sender: Annotated[str, WireName("from"), WireOrder(2)]
+    target: Annotated[str, WireName("to"), WireOrder(3), Column(index=True)]
+    indexes: ClassVar[tuple[Index, ...]] = (Index(("sender", "target", "seq")),)
+
+
+class MessageKind(DeclaredFamily, ProjectionSource, affix="Kind"):
     """A declared message kind; each member owns the validation it requires.
 
     Members are the kind themselves, never instances: the wire carries the
@@ -58,6 +377,12 @@ class MessageKind(DeclaredFamily, affix="Kind"):
     """
 
     conversation_message: ClassVar[bool] = True
+
+    @classmethod
+    def route_rows(cls, message):
+        from .bus_route_counts import BusRouteCounts
+
+        return (BusRouteCounts.from_message(message),)
 
     @classmethod
     def decode_message(cls, data: Mapping) -> Message:
@@ -81,6 +406,10 @@ class ClaimNoticeKind(MessageKind, declared_name="claim-notice"):
     """A claim-owner record, not a delivery to a reader."""
 
     conversation_message = False
+
+    @classmethod
+    def route_rows(cls, message):
+        return ()
 
     @classmethod
     def decode_message(cls, data: Mapping) -> Message:
@@ -153,26 +482,44 @@ class ChangeReportKind(SendableMessageKind, declared_name="change-report"):
         message.report.require_references_exist(worktree)
 
 
-class MembershipChange(StrEnum):
-    JOINED = "joined"
-    LEFT = "left"
+class MembershipTransition(DeclaredFamily, ProjectionSource, affix="Membership"):
+    @classmethod
+    def conversation_role(cls) -> MembershipConversationRole:
+        return MembershipConversationRole(cls)
 
-    def conversation_role(self):
-        return MembershipConversationRole(self)
+    @classmethod
+    def between(cls, previous: bool, current: bool) -> tuple[type[MembershipTransition], ...]:
+        return tuple(member for member in cls.members_with(cls) if member.applies(previous, current))
+
+    @staticmethod
+    @abstractmethod
+    def applies(previous: bool, current: bool) -> bool: ...
+
+
+class JoinedMembership(MembershipTransition):
+    @staticmethod
+    def applies(previous: bool, current: bool) -> bool:
+        return not previous and current
+
+
+class LeftMembership(MembershipTransition):
+    @staticmethod
+    def applies(previous: bool, current: bool) -> bool:
+        return previous and not current
 
 
 @dataclass(frozen=True, slots=True)
-class NoMembershipChange(NullMember):
+class NoMembershipChange(NullMember, ProjectionSource):
     def conversation_role(self):
         return ConversationRole()
 
 
 @dataclass(frozen=True, slots=True)
-class MessageRoleWire:
+class MessageRoleWire(ProjectionSource):
     """The unchanged external fields, decoded once into a message role."""
 
     change: Annotated[
-        MembershipChange | NoMembershipChange,
+        type[MembershipTransition] | NoMembershipChange,
         WireName("membership"),
         WireOmitDefault(),
     ] = field(default_factory=NoMembershipChange)
@@ -183,8 +530,14 @@ class MessageRoleWire:
         return role.as_notice() if self.notice else role
 
 
-class MessageRole(InlineRecord):
+class MessageRole(InlineRecord, ProjectionSource):
     category: ClassVar[type[MessageCategory]]
+
+    @abstractmethod
+    def response_policy(self, message: Message) -> ResponsePolicy: ...
+
+    @abstractmethod
+    def as_historical(self) -> MessageRole: ...
 
     @classmethod
     def wire_record(cls):
@@ -217,12 +570,15 @@ class SendableRole(MessageRole, DeclaredFamily, affix="Role"):
     pass
 
 
-class InformationalMessage:
+class InformationalMessage(ProjectionSource):
     def response_policy(self, message):
         return InformationalPolicy.instance()
 
     def counts_as_conversation(self):
         return False
+
+    def activity_rows(self, message):
+        return ()
 
     def wake_mode(self, target, recipient, mentions, control):
         return PassiveWake()
@@ -241,6 +597,11 @@ class ConversationRole(SendableRole):
     def counts_as_conversation(self):
         return True
 
+    def activity_rows(self, message):
+        from .bus_activity_index import SentActivity
+
+        return (SentActivity(message.sender, message.timestamp),)
+
     def as_historical(self):
         return HistoricalConversationRole()
 
@@ -252,9 +613,7 @@ class ConversationRole(SendableRole):
         return (message.reference,) if message.type.conversation_message else ()
 
     def wake_mode(self, target, recipient, mentions, control):
-        if control.passive:
-            return PassiveWake()
-        return target.wake_policy(recipient, mentions)
+        return control.wake_mode(target, recipient, mentions)
 
 
 @dataclass(frozen=True, slots=True)
@@ -280,13 +639,13 @@ class NoticeRole(InformationalMessage, SendableRole):
 
 @dataclass(frozen=True)
 class Membership(InformationalMessage):
-    change: MembershipChange
+    change: type[MembershipTransition]
 
     def wire_fields(self):
         return replace(super().wire_fields(), change=self.change)
 
     def export_attributes(self):
-        return (*super().export_attributes(), f"membership={self.change.value}")
+        return (*super().export_attributes(), f"membership={self.change.declared_name}")
 
     def as_notice(self):
         return MembershipNoticeRole(self.change)
@@ -338,7 +697,7 @@ class HistoricalMembershipNoticeRole(HistoricalRole, MembershipNoticeRole, decla
 
 
 @dataclass(frozen=True, slots=True)
-class Message(Addressed, BusCapability):
+class Message(Addressed, BusCapability, TurnOrigin):
     """Declares one inter-thread message.
 
     The bus assigns ``seq`` (a monotonically increasing log position) at send
@@ -347,7 +706,7 @@ class Message(Addressed, BusCapability):
 
     body: Annotated[str, WireName("text"), WireOrder(6)]
     type: Annotated[builtins.type[MessageKind], WireOrder(5)]
-    timestamp: Annotated[float, WireName("ts"), WireOrder(4)] = (
+    timestamp: Annotated[float, WireName("ts"), WireOrder(4), Column(index=True)] = (
         field(default_factory=time.time)
     )
     seq: Annotated[int, WireOrder(0), PublicationExclude()] = (
@@ -374,6 +733,55 @@ class Message(Addressed, BusCapability):
     answers: Annotated[
         tuple[MessageReference, ...], WireOmitDefault(), WireOrder(14)
     ] = ()
+
+    def projections(self):
+        from .bus_activity_index import BusActivityIndex
+        from .bus_display_index import BusDisplayIndex
+        from .bus_tables import AnsweredSource, MessageIdentitySource
+
+        yield from super().projections()
+        yield BusActivityIndex.from_message(self, target=self.target)
+        participants = {self.sender, *CommandTarget.named(self.target).direct_names,
+                        *(mention.thread for mention in self.mentions)}
+        for participant in participants:
+            yield BusDisplayIndex.from_message(self, participant=participant)
+        yield from self.role.activity_rows(self)
+        yield from self.type.route_rows(self)
+        yield MessageIdentitySource(self.seq, self.message_id, self.sender)
+        for original in self.answers:
+            yield AnsweredSource(original, self.seq)
+
+    @classmethod
+    def from_message(cls, message: Message, **capabilities: object) -> Self:
+        return FieldCodec.construct(cls, {
+            **{item.name: getattr(message, item.name) for item in fields(Message)},
+            **capabilities,
+        })
+
+    @property
+    def sender_lookup(self) -> str:
+        """Public history has no frozen participant incarnation."""
+        return ""
+
+    @property
+    def message(self) -> Self:
+        return self
+
+    @classmethod
+    def envelope_type(cls) -> builtins.type[Message]:
+        """The public message declaration this class's values carry."""
+        return Message
+
+    @property
+    def envelope(self) -> Message:
+        public = self.envelope_type()
+        if type(self) is public:
+            return self
+        return FieldCodec.construct(public, {item.name: getattr(self, item.name)
+                                             for item in fields(public)})
+
+    def messages(self) -> tuple[Self, ...]:
+        return (self,)
 
     @property
     def text_size(self) -> int:
@@ -417,22 +825,13 @@ class Message(Addressed, BusCapability):
         """Retain display facts, never another root's resource-claim authority."""
         return self
 
-    def checkpoint_rows(self, previous_sequence: int):
-        """The envelope declares both publication and optional claim facts."""
-        from .private_bus_checkpoint import ClaimCommits, PublicMessages
-
-        yield PublicMessages(self.seq, previous_sequence, self.sender, self.message_id)
-        yield from self.claim_rows(ClaimCommits)
-
-    def claim_rows(self, table: type[ClaimCommits]) -> tuple[TypedTable, ...]:
-        return ()
-
     def require_claim_transition(self) -> ClaimTransition:
-        raise RelationViolationError("Original wire message has no claim transition")
+        raise RelationViolationError("Message has no claim transition")
 
     def retained_task_facts(self):
-        yield from self.sender_role.user_task_facts(self)
-        yield from self.task.retained_task_facts(self)
+        source = Message.from_message(self)
+        yield from self.sender_role.user_task_facts(source)
+        yield from self.task.retained_task_facts(source)
 
     def __post_init__(self) -> None:
         if not self.sender:
@@ -469,7 +868,9 @@ class Message(Addressed, BusCapability):
         ).hexdigest()[:12]
         return digest
 
-    history_source = None
+    @property
+    def history_source(self) -> HistorySource | None:
+        return None
 
     @property
     def display_metadata(self) -> dict:
@@ -481,38 +882,10 @@ class Message(Addressed, BusCapability):
 
     @classmethod
     def from_wire(cls, data: Mapping) -> Message:
-        from .bus_publication import PRIVATE_WIRE_FIELD
-
-        # ID is derived; private authority is independently validated by the bus.
-        public = {
-            key: value for key, value in data.items() if key not in ("id", PRIVATE_WIRE_FIELD)
-        }
+        # Content identity is derived from the declared message fields.
         plan = FieldCodec.field_plan(Message, 'type')
-        kind = cast(type[MessageKind], plan.value.decode(plan.raw(public)))
-        return kind.decode_message({"ts": 0.0, **public})
-
-    @classmethod
-    def from_committed_wire(cls, record: Mapping) -> Message:
-        """One strict public-envelope boundary for full, indexed and cohort readers."""
-        from .audience_manifest import MAX_WIRE_SEQ
-        from .bus_publication import PRIVATE_WIRE_FIELD
-
-        if not isinstance(record, Mapping):
-            raise MalformedRecord("Bus row is not an object.")
-        public = {key: value for key, value in record.items() if key != PRIVATE_WIRE_FIELD}
-        message = cls.from_wire(public)
-        if _canonical(public) != _canonical(message.to_wire()):
-            raise MalformedRecord("Noncanonical public bus envelope.")
-        if not 0 < message.seq <= MAX_WIRE_SEQ:
-            raise MalformedRecord("Bus sequence is outside the durable range.")
-        public_envelope_digest(public)
-        return message
-
-    def require_retained_claim(self, claimed_after_seq: int) -> None:
-        if self.seq > claimed_after_seq:
-            raise RelationViolationError(
-                "Unattested public initial exceeds the retained history boundary."
-            )
+        kind = cast(builtins.type[MessageKind], plan.value.decode(plan.raw(data)))
+        return kind.decode_message({"ts": 0.0, **data})
 
     def response_eligibility(
         self, audience: Sequence[str], *, aliases: Mapping[str, str] | None = None
@@ -531,22 +904,85 @@ class Message(Addressed, BusCapability):
         """The exact response destination owned by this opening message."""
         return CommandTarget.named(self.target).reply_target(self.sender)
 
+    autonomous: ClassVar[bool] = False
+
+    @property
+    def separate_turn(self) -> bool:
+        return self.role.response_policy(self).separate_turn
+
+    @property
+    def batch_target(self) -> str:
+        return self.exact_reply_target
+
+    def bus_keys(self, dispositions: InputDispositions, owner: Thread) -> tuple[str, ...]:
+        return (dispositions.bus_key(self, owner),)
+
     @property
     def reply_target(self) -> str | None:
         """An external sender may receive an automatic live reply."""
         return self.sender_role.reply_target(self)
 
 
+@dataclass_transform(frozen_default=True, kw_only_default=True)
+class BusRecord(Message, DeclaredFamily, affix="Record"):
+    """Every record declaration owns its frozen value and derived tables."""
+
+    def append_to(self, db: sqlite3.Connection, seq: int) -> int:
+        """The caller's transaction owns the sequence, including preserved history."""
+        BusRow.insert_values(db, seq=seq, kind=type(self), at=time.time())
+        stored = replace(self, seq=seq)
+        for row in stored.rows():
+            row.insert(db)
+        stored.project_into(db, StoredHolders())
+        return stored.seq
+
+    @property
+    def publication_snapshot(self) -> Message:
+        """Delivery capabilities are not message content in a publication intent."""
+        return Message.from_message(self).publication_snapshot
+
+    @classmethod
+    def envelope_type(cls) -> builtins.type[Message]:
+        """A record carries the envelope of the message declaration after it in the MRO."""
+        return super().envelope_type()
+
+    def to_wire(self) -> dict:
+        """The public envelope; delivery and publication capabilities stay in their tables."""
+        return self.envelope.to_wire()
+
+    def __init_subclass__(cls) -> None:
+        super().__init_subclass__()
+        dataclass(cls, frozen=True, kw_only=True)
+        cls.tables()
+
+
 @dataclass(frozen=True, kw_only=True)
-class ClaimMessage(Message):
-    """An original claim envelope, distinct from a fresh conversation message."""
+class Claimed(BusCapability):
+    """The transition attesting this row, stored in its append transaction."""
 
     claim_transition: Annotated[ClaimTransition, WireOrder(11)]
 
+    def require_claim_transition(self) -> ClaimTransition:
+        return self.claim_transition
+
+    def project_into(self, db: sqlite3.Connection, holders: ClaimHolders) -> None:
+        """Append and the shared derived rebuild replay this same original transition."""
+        super().project_into(db, holders)
+        projected = HeldResources.project(db, self.claim_transition, holders)
+        HeldResources.apply(db, self.claim_transition, projected, holders)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ClaimMessage(Claimed, Message):
+    """A claimed message binds its transition to its public envelope identity."""
+
     @classmethod
-    def of(cls, message: Message, transition: ClaimTransition) -> ClaimMessage:
-        return cls(**{item.name: getattr(message, item.name) for item in fields(Message)},
-                   claim_transition=transition)
+    def envelope_type(cls) -> builtins.type[Message]:
+        return ClaimMessage
+
+    @classmethod
+    def of(cls, message: Message, transition: ClaimTransition) -> Self:
+        return cls.from_message(message, claim_transition=transition)
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -563,16 +999,7 @@ class ClaimMessage(Message):
             "type": ClaimHistoryKind,
         })
 
-    def claim_rows(self, table: type[ClaimCommits]) -> tuple[TypedTable, ...]:
-        return (table(self.claim_transition),)
-
-    def require_claim_transition(self) -> ClaimTransition:
-        return self.claim_transition
-
     def retained_task_facts(self) -> Iterator[ExactTaskFact]:
         from .retained_task_facts import ClaimTaskFact
         yield from super().retained_task_facts()
-        yield ClaimTaskFact(self)
-
-    def require_retained_claim(self, claimed_after_seq: int) -> None:
-        """The envelope carries its own committed claim facts."""
+        yield ClaimTaskFact(ClaimMessage.of(self, self.claim_transition))

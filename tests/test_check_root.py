@@ -1,4 +1,6 @@
 """Selected check history is small, non-executable and scoped to the command."""
+
+
 import json
 from pathlib import Path
 import sys
@@ -7,20 +9,20 @@ import pytest
 
 from agent_comms.check_root import CheckRoot
 from agent_comms.cli import main
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript, UserTranscript
 from agent_comms.native_entries import NativeEntry
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
+from agent_comms.threads import Thread
 
 
 @pytest.fixture
-def source(scratch_root):
+def source(scratch_root, durable_home):
     root = scratch_root / "source"
-    c = Comms(root)
-    c.messaging.initialize_private_initial_protocol()
+    c = wire(root)
     for name in ("A", "B", "other"):
-        c.registry.declare(c.registry.new_thread(name, frozenset({"comms"}), str(scratch_root)),
+        c.registry.declare(Thread(name, frozenset({"comms"}), str(scratch_root)),
                            StoppedThreadStatus())
     c.messaging.send("A", "B", "old history is not a new input")
     c.registry.register(c.registry.require("other"), RunningThreadStatus())
@@ -52,7 +54,7 @@ def test_external_projection_preserves_event_clocks_or_refuses_unknown(source, s
         return
     external.finish(turn_id="saved", item_id="item", events=events)
     with CheckRoot(source, (owner.name,), root).open() as copied:
-        session = Path(copied.registry.require(owner.name).session_file)
+        session = Path(copied.registry.require(owner.name).runtime.path)
         rows = [NativeEntry.read(line) for line in session.read_bytes().splitlines()]
         assert [entry.message.text for entry in rows[1:]] == [event.text for event in events[:2]]
         assert [entry.timestamp.at.timestamp() for entry in rows[1:]] == [

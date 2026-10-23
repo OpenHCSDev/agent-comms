@@ -12,7 +12,8 @@ from .acp_extension import ContextAnnotatedUpdate, encode_updates
 from .coordination_database import CoordinationStore
 from .coordinator import Coordination
 from .working_memory_annotations import PreviouslyRequestedAnnotation, WorkingMemoryAnnotations
-from .working_memory_disclosure import DisclosureState, DisclosureWithheld
+from .annotation_disclosure import DisclosureWithheld
+from .working_memory_disclosure import DisclosureState
 from .working_memory_labels import QuestionVersion
 from .working_memory_policy import AnnotationPolicy
 from .working_memory_questions import KindQuestion
@@ -33,7 +34,7 @@ class AnnotationWorker:
 
     def start(self, policy, session_id, manifest, values):
         sessions = self.runtime.agent.sessions
-        publish = partial(self.runtime.session_update, session_id=session_id,
+        publish = partial(self.runtime.publish_update, session_id=session_id,
             _expected_client=sessions.client, _expected_thread=sessions.require(session_id),
             _expected_sockets=frozenset(self.runtime.clients.get(session_id, ())))
         task = self.runtime.background(self.run(policy, publish, manifest, values))
@@ -88,7 +89,7 @@ class AnnotationWorker:
                 try:
                     label = await self.answer(policy, manifest, segment, span, KindQuestion)
                     labels.append(label)
-                    for question in label.answer.follow_ups:
+                    for question in label.answer.follow_ups():
                         labels.append(await self.answer(policy, manifest, segment, span, question))
                 except AnnotationBudgetExhausted:
                     break

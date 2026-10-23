@@ -5,21 +5,29 @@ from agent_comms.field_codec import FieldCodec
 import json
 
 import pytest
+from acp.schema import PromptRequest, TextContentBlock
 
 from agent_comms.cli import build_parser, main
 from agent_comms.cli_commands import CliCommand
-from agent_comms.comms import Comms
-from agent_comms.native_arguments import ConfiguredBinary, GivenArguments, GivenBinary, InheritedArguments
+from agent_comms.comms import wire
 from agent_comms.history_result import (
     ChannelHistoryPageResult,
     DmHistoryPageResult,
     EverythingHistoryPageResult,
 )
 from agent_comms.messages import InfoKind
+from agent_comms.native_arguments import (
+    ConfiguredBinary,
+    GivenArguments,
+    GivenBinary,
+    InheritedArguments,
+)
 from agent_comms.pi_vocabulary import ServiceTier
 from agent_comms.runtime_requests import (
+    PromptRuntimeRequest,
     RuntimeRequest,
 )
+from agent_comms.threads import Thread
 
 
 def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch, tmp_path):
@@ -71,12 +79,13 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch, tmp_p
     "parameters",
     [
         {"action": "subscribe"},
-        {
-            "action": "prompt",
-            "prompt": [{"type": "text", "text": "hello"}],
-            "meta": {},
-            "controllerToken": "secret",
-        },
+        PromptRuntimeRequest(
+            thread="alias",
+            request=PromptRequest(
+                session_id="alias", prompt=[TextContentBlock(type="text", text="hello")]
+            ),
+            controller_token="secret",
+        ).to_wire(),
         {"action": "cancel"},
         {"action": "set_config_option", "config_id": "model", "value": "test/model"},
         {"action": "compact", "instructions": "focus"},
@@ -131,25 +140,24 @@ def test_invalid_runtime_parameters_use_canonical_decode_and_domain_errors(param
 @pytest.mark.parametrize(
     "arguments,result_type,per_root",
     [
-        (["history", "--target", "#team"], ChannelHistoryPageResult, 1),
-        (["history", "--target", "#any"], EverythingHistoryPageResult, 2),
-        (["history", "--target", "@alice", "--as", "bob"], DmHistoryPageResult, 1),
+        (["history", "#team"], ChannelHistoryPageResult, 1),
+        (["history", "#any"], EverythingHistoryPageResult, 2),
+        (["history", "alice", "--as", "bob"], DmHistoryPageResult, 1),
     ],
 )
 def test_normal_history_cli_keeps_migrated_content_and_source_identity(
     tmp_path, capsys, monkeypatch, arguments, result_type, per_root
 ):
-    old, live = Comms(tmp_path / "old"), Comms(tmp_path / "live")
+    old, live = wire(tmp_path / "old"), wire(tmp_path / "live")
     for comms in (old, live):
-        comms.messaging.initialize_private_initial_protocol()
         for name in ("alice", "bob"):
             comms.registry.declare(
-                old.registry.new_thread(name, frozenset({"team"}), str(tmp_path))
+                Thread(name, frozenset({"team"}), str(tmp_path))
             )
         comms.messaging.send("alice", "#team", f"{comms.root.name} channel").message.message_id
         comms.messaging.send("alice", "bob", f"{comms.root.name} direct").message.message_id
-    source = live.views.attach_history(old.root)
-    live_bus = (live.root / "bus.jsonl").read_bytes()
+    live.views.attach_history(old.root)
+    live_bus = live.bus.bus.revision()
     assert main(["--root", str(live.root), *arguments]) == 0
     rows = json.loads(capsys.readouterr().out)[result_type.messages_key]
     historical = [row for row in rows if "history" in row]
@@ -157,9 +165,8 @@ def test_normal_history_cli_keeps_migrated_content_and_source_identity(
     assert len(historical) == len(current) == per_root
     assert all(row["text"].startswith("old ") for row in historical)
     assert all(row["history"]["source"] == str(old.root) for row in historical)
-    assert all(row["history"]["wire_root_id"] == source.wire_root_id for row in historical)
     assert all(
         row["history"]["sender_created_at"] == old.registry.require("alice").created_at
         for row in historical
     )
-    assert (live.root / "bus.jsonl").read_bytes() == live_bus
+    assert live.bus.bus.revision() == live_bus

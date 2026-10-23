@@ -145,9 +145,7 @@ def materialize(source: Path, target: Path) -> None:
                     raise ValueError("MCP copy contains special file")
                 if size > 512 * 1024 * 1024:
                     raise ValueError("MCP copy byte limit exceeded")
-    subprocess.run(
-        ["cp", "-aL", "--no-preserve=links", "--reflink=auto", str(source), str(target)], check=True
-    )
+    shutil.copytree(source, target, symlinks=False)
     # Git checkouts inherit umask; copied directories own private build permissions,
     # never the execute bits of the checkout that happened to supply their bytes.
     for directory in (target, *target.rglob("*/")):
@@ -173,7 +171,7 @@ def main(package: Path, dependency_package: Path | None = None) -> None:
         # directory. The existing owner checks its current native tree pin.
         dependency_package = dependency_package.resolve(strict=True)
         subprocess.run(
-            [str(stack / "bin/native-source"), sys.executable, "verify", str(dependency_package)],
+            [str(stack / "bin/native-source"), sys.executable, "qualify", str(dependency_package)],
             env=environment,
             check=True,
         )

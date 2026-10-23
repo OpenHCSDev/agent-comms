@@ -30,7 +30,7 @@ from .native_input_owner import ParticipantOwner, RegistryOwner
 from .native_entries import NativeEvidenceScope
 from .native_pi import NativeContextProof, NativePiTerminalFailure, NativeTurnResult
 from .native_prompt_binding import bind_expected_prompt
-from .native_prompt_send import PromptBoundary, send_fenced_prompt
+from .native_prompt_send import PromptBoundary
 from .native_session_reopen import NativeSessionIdentity
 from .native_startup import NativeStartup
 from .native_tool_call import NativeToolMode
@@ -48,7 +48,6 @@ if TYPE_CHECKING:
     from .coordinated_runtime import SelectedExecution
     from .selected_participant import SelectedParticipant
     from .selected_session import SelectedSession
-from .private_registry_guard import _require_no_private_owner_rename
 from .private_send_stage import NativeSendStage
 
 
@@ -172,18 +171,18 @@ class PrivateSendClaim(PromptBoundary):
                 model=model,
                 thinking_level=self.owner.thread.thinking_level,
                 environment=self.owner.thread.native_environment(
-                    self.bus.log.path.parent, registry,
+                    self.bus.bus.path.parent, registry,
                     self.owner.thread.worktree,
                 ),
                 ingress=MaintenanceBarrier(self.bus._registry.store.path),
                 startup=NativeStartup(
-                    self.bus.log.path.parent,
+                    self.bus.bus.path.parent,
                     measurements=self.selected.cursor_delivery.measurements,
                 ),
                 selected_tool_mode=selected_tool_mode,
                 observe_event=observe_event,
                 request_observer=partial(
-                    record_request_progress, self.bus.log.path.parent, lease,
+                    record_request_progress, self.bus.bus.path.parent, lease,
                 ),
                 prompt_send_boundary=self,
                 execution=execution,
@@ -206,7 +205,7 @@ class PrivateSendClaim(PromptBoundary):
             raise
         finally:
             await Coordination.run_worker(partial(
-                record_acquisition_progress, self.bus.log.path.parent, lease,
+                record_acquisition_progress, self.bus.bus.path.parent, lease,
                 self.input_id, self.selected.cursor_delivery.measurements,
             ))
         async with self.selected.cursor_delivery.reading() as source_reads:
@@ -239,7 +238,7 @@ class PrivateSendClaim(PromptBoundary):
             with self.selected.cursor_delivery.measurements.operation("prompt_binding"):
                 authority.enter_context(self.stage.bound_prompt(
                     store, self.input_id, self.participant, self.wire_root_id,
-                    self.prompt.text, blocking=True,
+                    self.prompt.text,
                 ))
             with self.selected.cursor_delivery.measurements.operation("coordinator_exclusive"):
                 db = authority.enter_context(store.session.writing())
@@ -250,7 +249,6 @@ class PrivateSendClaim(PromptBoundary):
             if not self._once.acquire(blocking=False):
                 raise IdentityConflict("native send claim_scope cannot be reused")
             with self.selected.cursor_delivery.measurements.operation("claim_checks"):
-                _require_no_private_owner_rename(self.bus.log.path.parent)
                 self.owner.require_snapshot(
                     registry, "recipient registry owner changed before native send"
                 )
@@ -271,11 +269,9 @@ class PrivateSendClaim(PromptBoundary):
             # all of these operations have finished successfully.
 
     async def send_prompt(self, turn: TrackedTurnSession) -> None:
-        stdin = turn.native.proc.stdin
-        assert stdin is not None
         with turn.startup.measurements.operation("prompt_writer_join"):
-            await send_fenced_prompt(
-                stdin, turn.native.reader.encode(turn.command),
+            await turn.native.send_fenced(
+                turn.command,
                 partial(self.prompt_boundary, turn), measurements=turn.startup.measurements,
             )
 

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Annotated
 
 from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordination_schema import CoordinatorTable
+from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.participant_identity import ParticipantIdentity
 from agent_comms.typed_table import (
     Column,
@@ -15,11 +15,9 @@ from agent_comms.typed_table import (
     ForeignKey,
     FrozenColumn,
     GuardedColumns,
-    ImmutableRows,
     MonotoneColumns,
     NoDelete,
     NonDecreasing,
-    TypedTable,
 )
 
 
@@ -27,19 +25,18 @@ class OwnerRecord:
     """Stored owner components produce one coordinator identity, never live permission."""
 
     owner_lookup: str
-    owner_thread: str
     owner_generation: int
 
     @property
     def owner_identity(self) -> OwnerGenerations:
         return OwnerGenerations(
-            owner_lookup=self.owner_lookup, owner_thread=self.owner_thread,
+            owner_lookup=self.owner_lookup,
             generation=self.owner_generation,
         )
 
 
 @dataclass(frozen=True, kw_only=True)
-class Participants(MonotoneColumns, GuardedColumns, NoDelete, CoordinatorTable, TypedTable):
+class Participants(MonotoneColumns, GuardedColumns, NoDelete, CoordinatorRow):
 
     column_orders = (NonDecreasing(('committed',)),)
 
@@ -54,40 +51,28 @@ class Participants(MonotoneColumns, GuardedColumns, NoDelete, CoordinatorTable, 
             check="\n        length(participant_lookup) BETWEEN 1 AND 256\n    ",
         ),
     ]
-    display_name: Annotated[str, Column(check="length(display_name) BETWEEN 1 AND 256")]
     committed: bool
 
 @dataclass(frozen=True, kw_only=True)
-class ParticipantAliases(ImmutableRows, CoordinatorTable, TypedTable):
-    alias: Annotated[str, Column(primary_key=True, check="length(alias) BETWEEN 1 AND 256")]
-    participant_lookup: str
-    renamed_at_ms: Annotated[int, Column(check="renamed_at_ms >= 0")]
-
-    @classmethod
-    def references(cls):
-        return (ForeignKey(("participant_lookup",), Participants, ("participant_lookup",)),)
-
-@dataclass(frozen=True, kw_only=True)
 class OwnerGenerations(
-    CounterAdvance, NoDelete, ParticipantIdentity, CoordinatorTable, TypedTable
+    CounterAdvance, NoDelete, ParticipantIdentity, CoordinatorRow
 ):
 
     counter_column = 'generation'
 
     owner_lookup: Annotated[str, FrozenColumn(primary_key=True)]
-    owner_thread: Annotated[str, Column(check="length(owner_thread) BETWEEN 1 AND 256")]
     generation: Annotated[int, Column(check="generation > 0")]
 
     def require_recorded_owner(self, thread):
-        """Join original coordinator naming/birth; grant no live ownership."""
+        """Join the recorded incarnation; a rename does not change ownership."""
         expected = type(self)(owner_lookup=thread.incarnation.lookup,
-                              owner_thread=thread.name, generation=self.generation)
+                              generation=self.generation)
         if self != expected:
             raise IdentityConflict("Native input belongs to another recorded owner")
 
     @classmethod
     def references(cls):
-        return (ForeignKey(("owner_lookup",), Participants, ("participant_lookup",)),)
+        return (ForeignKey(columns=("owner_lookup",), target=Participants, target_columns=("participant_lookup",)),)
 
     @property
     def lookup(self) -> str:

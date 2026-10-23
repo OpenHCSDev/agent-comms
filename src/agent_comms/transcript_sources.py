@@ -7,36 +7,42 @@ A display cursor advances each only when that source's record is consumed.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Generator, Iterable, Iterator
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Self
 
 if TYPE_CHECKING:
-    from .native_transcript import NativeRecord
-    from .sent_message import PublishedSentMessage
-    from .transcript_events import TranscriptEvent
+    from .context_store import ContextStore
+    from .external_transcript import ExternalPageRow
+    from .message_reference import MessageReference
+    from .native_entries import TranscriptProjection
+    from .native_transcript import NativeRecord, NativeTranscript
+    from .threads import Thread, ThreadProvenance
+    from .turn_context import SegmentManifest
+    from .transcript_events import TextTranscript, TranscriptEvent
+    from .transcript_routes import TranscriptRoutes, _SessionRoutes
+    from .transcripts import NativeTranscriptCursor, TranscriptCursor
     from .turn_digests import TurnBound
 
-from .bus_publication import CommittedDelivery
+from .bus import Bus
+from .bus_publication import Delivered
 from .coordination_errors import StaleRevision, TranscriptChanged
 from .declared_family import DeclaredFamily
 from .field_codec import MalformedRecord
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .recorded_time import EventTime, UnrecordedEventTime
-from .routing import MessageRoute, TurnRouting
+from .routing import TurnRouting
+from .sent_message import PublishedSentMessage
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .transcript_events import (
-    AssistantTranscript,
     IncomingTranscript,
     SentTranscript,
     TurnDigest,
-    UserTranscript,
 )
 from .typed_table import StoreWriter
-from .wire_log import ConversationSourceWindowRequest, WireLog
 
 
 @dataclass(frozen=True)
@@ -56,30 +62,32 @@ class AssignedSourceIdentity:
 class WireFrontier(DeclaredFamily, affix="WireFrontier"):
     """The wire coordinate owns cursor construction, bounds and source authority."""
 
-    sequence: ClassVar[int] = 0
+    sequence: int
 
-    def cursor(self, session_file, offset):
+    def cursor(self, session_file: str, offset: int) -> NativeTranscriptCursor:
         from .transcripts import NativeTranscriptCursor
         return NativeTranscriptCursor(session_file, offset)
 
-    def at(self, sequence):
+    def at(self, sequence: int) -> Self:
         if sequence:
             raise MalformedRecord("Native-only cursor cannot advance an assigned wire source")
         return self
 
-    def within(self, parent):
+    def within(self, parent: WireFrontier) -> bool:
         return True
 
-    def contains(self, other):
+    def contains(self, other: AssignedSourceCursor) -> bool:
         return False
 
-    def require_source(self, identity):
+    def require_source(self, identity: AssignedSourceIdentity) -> None:
         """An unassigned position does not claim a particular wire source."""
 
-    def require_native(self):
+    def require_native(self) -> None:
         """An unassigned position carries only the native coordinate."""
 
-    def resolve_sent(self, messages):
+    def resolve_sent(
+        self, messages: tuple[SentTranscript, ...],
+    ) -> tuple[SentTranscript | PublishedSentMessage, ...]:
         return tuple(messages)
 
     def resolve_sent_messages(
@@ -92,27 +100,29 @@ class WireFrontier(DeclaredFamily, affix="WireFrontier"):
 
 @dataclass(frozen=True)
 class NoWireFrontier(WireFrontier):
-    pass
+    sequence = 0
 
 
 @dataclass(frozen=True)
 class AssignedSourceCursor(AssignedSourceIdentity, WireFrontier):
     sequence: int = field()
 
-    def cursor(self, session_file, offset):
+    def cursor(self, session_file: str, offset: int) -> NativeTranscriptCursor:
         from .transcripts import WireTranscriptCursor
         return WireTranscriptCursor(session_file, offset, self)
 
-    def within(self, parent):
+    def within(self, parent: WireFrontier) -> bool:
         return parent.contains(self)
 
-    def contains(self, other):
+    def contains(self, other: AssignedSourceCursor) -> bool:
         return self.same_publication_source(other) and other.sequence <= self.sequence
 
-    def require_native(self):
+    def require_native(self) -> None:
         raise TranscriptChanged()
 
-    def resolve_sent(self, messages):
+    def resolve_sent(
+        self, messages: tuple[SentTranscript, ...],
+    ) -> tuple[SentTranscript | PublishedSentMessage, ...]:
         return AssignedTranscriptSource.open(self.identity).resolve_sent(messages)
 
     @property
@@ -123,7 +133,7 @@ class AssignedSourceCursor(AssignedSourceIdentity, WireFrontier):
         if not self.same_publication_source(identity):
             raise TranscriptChanged()
 
-    def at(self, sequence: int) -> AssignedSourceCursor:
+    def at(self, sequence: int) -> Self:
         return replace(self, sequence=sequence)
 
 
@@ -132,31 +142,39 @@ class AssignedSourceWindow:
     """Conversation and sent sources captured with one acknowledgement frontier."""
 
     cursor: WireFrontier
-    sources: tuple[CommittedDelivery, ...]
-    sent_sources: tuple[CommittedDelivery, ...]
+    sources: tuple[Delivered, ...]
+    sent_sources: tuple[Delivered, ...]
 
 
 class TranscriptTraversal(ABC):
     @abstractmethod
-    def native(self, reader, cursor, through): ...
+    def native(self, reader: TranscriptSource, cursor: TranscriptCursor, through: TranscriptCursor) -> Generator[TranscriptRecord, None, None]: ...
 
     @abstractmethod
-    def predicate(self, sequence, through): ...
+    def source_rows(
+        self,
+        source: AssignedTranscriptSource,
+        sequence: int,
+        through: TranscriptCursor,
+        limit: int,
+    ) -> tuple[Delivered, ...]: ...
 
     @abstractmethod
-    def chooses_native(self, native_time, receipt_time): ...
+    def chooses_native(self, native_time: float | None, receipt_time: float) -> bool: ...
 
     @abstractmethod
-    def native_position(self, record): ...
+    def native_position(self, record: TranscriptRecord) -> int: ...
 
     @abstractmethod
-    def receipt_position(self, message): ...
+    def receipt_position(self, message: Delivered) -> int: ...
 
     @abstractmethod
-    def finish(self, records): ...
+    def finish(self, records: list[tuple[TranscriptEvent, ...]]) -> tuple[TranscriptEvent, ...]: ...
 
     @abstractmethod
-    def bounds(self, initial, consumed): ...
+    def bounds(
+        self, initial: TranscriptCursor, consumed: TranscriptCursor,
+    ) -> tuple[TranscriptCursor, TranscriptCursor]: ...
 
     def round_edges(self, batch: tuple["TranscriptEvent", ...]) -> tuple[set[str], set[str]]:
         """The tool-call ids a batch opens and closes, by traversal direction.
@@ -173,8 +191,17 @@ class TranscriptTraversal(ABC):
             {event.tool_call_id for event in batch if isinstance(event, closing)},
         )
 
-    def read_records(self, reader, project, sources, initial, frontier,
-                     *, max_messages, max_bytes):
+    def read_records(
+        self,
+        reader: TranscriptSource,
+        project,
+        sources: TranscriptSource,
+        initial: TranscriptCursor,
+        frontier: TranscriptCursor,
+        *,
+        max_messages: int,
+        max_bytes: int,
+    ) -> tuple[TranscriptCursor, list[tuple[TranscriptEvent, ...]]]:
         """Advance each file position only after reading the record at that position."""
         consumed, records, used = initial, [], 0
         # A tool round opened by an already appended record keeps the window open
@@ -205,8 +232,8 @@ class TranscriptTraversal(ABC):
                     or self.chooses_native(native_time, message.message.timestamp)
                 )
                 batch = events if choose_native else sources.events(message)
-                cost = record.size if choose_native else sum(event.text_size for event in batch)
-                if records and (len(records) >= max_messages or used + cost > max_bytes):
+                cost = record.size if choose_native else 0
+                if records and (len(records) >= max_messages or (choose_native and used + cost > max_bytes)):
                     if not open_rounds or round_grace >= self.round_grace_limit:
                         break
                     round_grace += 1
@@ -230,7 +257,7 @@ class TranscriptTraversal(ABC):
             projected.close()
             native.close()
 
-    def request_earlier(self, records, offset: int) -> bool:
+    def request_earlier(self, records: TranscriptSource, offset: int) -> bool:
         return records.request_earlier(offset)
 
     ascending = False
@@ -240,54 +267,71 @@ class TranscriptTraversal(ABC):
 
 
 class EarlierTranscript(TranscriptTraversal):
-    def native(self, reader, cursor, through):
+    def native(self, reader: TranscriptSource, cursor: TranscriptCursor, through: TranscriptCursor) -> Generator[TranscriptRecord, None, None]:
         return reader.reverse(cursor.offset)
 
-    def predicate(self, sequence, through):
-        return "w.seq<=?", (sequence,)
+    def source_rows(
+        self,
+        source: AssignedTranscriptSource,
+        sequence: int,
+        through: TranscriptCursor,
+        limit: int,
+    ) -> tuple[Delivered, ...]:
+        return source.rows(before=sequence + 1, limit=limit)
 
-    def chooses_native(self, native_time, receipt_time):
+    def chooses_native(self, native_time: float | None, receipt_time: float) -> bool:
         return native_time is None or native_time >= receipt_time
 
-    def native_position(self, record):
+    def native_position(self, record: TranscriptRecord) -> int:
         return record.start
 
-    def receipt_position(self, message):
+    def receipt_position(self, message: Delivered) -> int:
         return message.seq - 1
 
-    def finish(self, records):
+    def finish(self, records: list[tuple[TranscriptEvent, ...]]) -> tuple[TranscriptEvent, ...]:
         return tuple(event for record in reversed(records) for event in record)
 
-    def bounds(self, initial, consumed):
+    def bounds(
+        self, initial: TranscriptCursor, consumed: TranscriptCursor,
+    ) -> tuple[TranscriptCursor, TranscriptCursor]:
         return consumed, initial
 
 
 class LaterTranscript(TranscriptTraversal):
-    def request_earlier(self, records, offset: int) -> bool:
+    def request_earlier(self, records: TranscriptSource, offset: int) -> bool:
         return False
 
     ascending = True
     descending_rounds = False
 
-    def native(self, reader, cursor, through):
+    def native(self, reader: TranscriptSource, cursor: TranscriptCursor, through: TranscriptCursor) -> Generator[TranscriptRecord, None, None]:
         return reader.forward(cursor.offset, through.offset)
 
-    def predicate(self, sequence, through):
-        return "w.seq>? AND w.seq<=?", (sequence, through.wire.sequence)
+    def source_rows(
+        self,
+        source: AssignedTranscriptSource,
+        sequence: int,
+        through: TranscriptCursor,
+        limit: int,
+    ) -> tuple[Delivered, ...]:
+        return source.rows(after=sequence, before=through.wire.sequence + 1,
+                           ascending=True, limit=limit)
 
-    def chooses_native(self, native_time, receipt_time):
+    def chooses_native(self, native_time: float | None, receipt_time: float) -> bool:
         return native_time is None or native_time <= receipt_time
 
-    def native_position(self, record):
+    def native_position(self, record: TranscriptRecord) -> int:
         return record.end
 
-    def receipt_position(self, message):
+    def receipt_position(self, message: Delivered) -> int:
         return message.seq
 
-    def finish(self, records):
+    def finish(self, records: list[tuple[TranscriptEvent, ...]]) -> tuple[TranscriptEvent, ...]:
         return tuple(event for record in records for event in record)
 
-    def bounds(self, initial, consumed):
+    def bounds(
+        self, initial: TranscriptCursor, consumed: TranscriptCursor,
+    ) -> tuple[TranscriptCursor, TranscriptCursor]:
         return initial, consumed
 
 
@@ -344,8 +388,14 @@ class TranscriptSource:
     def request_earlier(self, offset: int) -> bool:
         return False
 
-    async def watch_requests(self, emit) -> None:
+    async def watch_requests(self, emit: Callable[[ExternalPageRow], None]) -> None:
         """Sources without a harness continuation have no bridge requests."""
+
+    def recorded_contexts(
+        self, contexts: ContextStore, entry_ids: tuple[str, ...],
+    ) -> dict[str, SegmentManifest]:
+        """Only a native journal records a context manifest per input entry."""
+        return {}
 
     def turns(self, bound: TurnBound) -> tuple[TurnDigest, ...]:
         """Read input-bounded turns under one original record-source cut."""
@@ -364,9 +414,11 @@ class TranscriptSource:
         pending: list[NativeRecord] = []
         for record in records:
             pending.append(record)
-            if record.project(lambda original: original.entry.input_boundary):
-                yield TurnDigest(record.entry.require_entry_id(), tuple(
-                    event for original in reversed(pending) for event in original.events))
+            for digest in record.project(lambda original: (
+                TurnDigest(original.entry.require_entry_id(), tuple(
+                    event for source in reversed(pending) for event in source.events)),
+            ) if original.entry.input_boundary else ()):
+                yield digest
                 pending.clear()
 
     def current_draft(self, root: Path, incarnation: ThreadIncarnation) -> TranscriptDraft:
@@ -378,44 +430,60 @@ class TranscriptSource:
         from .external_transcript import ExternalTranscript
         return ExternalTranscript(root, incarnation).snapshot()
 
-    def publication_revision(self, root, recipient):
+    def publication_revision(self, root: Path, recipient: RecordedThreadIncarnation):
         return PublishedReplyRevision(0, 0)
 
     @contextmanager
-    def projection(self, source, routes):
-        def project(records, *, max_records, max_bytes):
+    def projection(self, source: TranscriptSource, routes: TranscriptRoutes):
+        def project(records, *, max_records: int, max_bytes: int):
             return ((record, record.events) for record in records)
         yield project
 
-    def sent_messages(self, references):
+    def sent_messages(self, references: Iterable[MessageReference]) -> dict[MessageReference, Delivered]:
         return {}
 
-    def resolve_sent(self, messages):
+    def resolve_sent(self, messages: tuple[SentTranscript, ...]):
         """Records without a sender assignment cannot qualify Send reports."""
         return self.frontier.resolve_sent(messages)
 
     frontier = NoWireFrontier()
 
-    def window(self, *, limit=1, sent_limit=0) -> AssignedSourceWindow:
+    def window(self, *, limit: int = 1, sent_limit: int = 0) -> AssignedSourceWindow:
         return AssignedSourceWindow(self.frontier, (), ())
 
-    def require_cursor(self, cursor):
+    def require_cursor(self, cursor: TranscriptCursor) -> None:
         cursor.wire.require_native()
 
-    def page_rows(self, traversal, sequence, through, *, limit):
+    def page_rows(
+        self,
+        traversal: TranscriptTraversal,
+        sequence: int,
+        through: TranscriptCursor,
+        *,
+        limit: int,
+    ) -> Iterator[Delivered]:
         return iter(())
 
-    def reply_revision(self, records):
+    def reply_revision(self, records: TranscriptSource) -> PublishedReplyRevision:
         return PublishedReplyRevision(0, 0)
 
-    def native_records(self, fragments, routes, reader):
+    def native_records(
+        self,
+        fragments: Iterator[tuple[NativeRecord, ...]],
+        routes: _SessionRoutes,
+        reader: NativeTranscript,
+    ) -> Iterator[tuple[NativeRecord, tuple[TranscriptEvent, ...]]]:
         for fragment in fragments:
             for record in fragment:
                 yield record, record.project(lambda original: self.native_events(
                     original, routes, original.entry.events, (),
                 ))
 
-    def native_events(self, record, routes, project_events, references):
+    def native_events(
+        self, record: NativeRecord, routes: _SessionRoutes,
+        project_events: Callable[[TranscriptProjection], Iterable[TranscriptEvent]],
+        references: tuple[MessageReference, ...],
+    ) -> tuple[TranscriptEvent, ...]:
         from .native_entries import TranscriptProjection
 
         entry = record.entry
@@ -428,22 +496,22 @@ class TranscriptSource:
 class AssignedTranscriptSource(TranscriptSource):
     root: Path
     recipient: RecordedThreadIncarnation
-    log: WireLog
+    bus: Bus
 
     @classmethod
-    def for_thread(cls, root, thread, log):
-        return cls(root, thread.incarnation.require_recorded(), log)
+    def for_thread(cls, root: Path, thread: Thread, bus: Bus) -> Self:
+        return cls(root, thread.incarnation.require_recorded(), bus)
 
     @classmethod
     def open(cls, identity: AssignedSourceIdentity):
         """Open only the recorded wire, without current registry or SQL authority."""
         root = Path(identity.root)
         return identity.recipient.recorded_or(
-            lambda recorded: cls(root, recorded, WireLog(WireLog.path_in(root))),
+            lambda recorded: cls(root, recorded, Bus(Bus.path_in(root))),
             TranscriptSource,
         )
 
-    def assignments(self, references):
+    def assignments(self, references: Iterable[MessageReference]) -> dict[MessageReference, Delivered]:
         references = tuple(references)
         if not references:
             return {}
@@ -451,79 +519,84 @@ class AssignedTranscriptSource(TranscriptSource):
             sequences=tuple(reference.seq for reference in references), limit=len(references),
         )}
 
-    def sent_messages(self, references):
+    def sent_messages(self, references: Iterable[MessageReference]) -> dict[MessageReference, Delivered]:
         return {reference: original.message
                 for reference, original in self.assignments(references).items()
                 if original.audience.sender_lookup == self.recipient.lookup}
 
-    def resolve_sent(self, messages):
+    def resolve_sent(
+        self, messages: tuple[SentTranscript, ...],
+    ) -> tuple[SentTranscript | PublishedSentMessage, ...]:
         """Qualify reports against exact full rows in one bounded wire read.
 
         A report is not publication evidence. Keep it unchanged unless this
         sender's frozen assignments supply its reference, body, time and route.
         Missing births cannot select an assignment, even if a name matches.
         """
-        from .sent_message import PublishedSentMessage
-
         messages = tuple(messages)
         originals = self.sent_messages(message.source for message in messages)
         scope = AssignedSourceIdentity(str(self.root), self.recipient)
         return tuple(
-            PublishedSentMessage(message, scope)
-            if (original := originals.get(message.source)) is not None
-            and message.matches(original) else message
+            PublishedSentMessage.from_originals(message, scope, originals)
             for message in messages
         )
 
-    def require_cursor(self, cursor):
+    def require_cursor(self, cursor: TranscriptCursor) -> None:
         cursor.wire.require_source(AssignedSourceIdentity(str(self.root), self.recipient))
 
     @classmethod
-    def for_recorded(cls, root, thread, log, records):
+    def for_recorded(cls, root: Path, thread: ThreadProvenance, bus: Bus, records: TranscriptSource):
         """Only the original recorded birth can select frozen assignments."""
         return thread.incarnation.recorded_or(
-            lambda recorded: cls(root, recorded, log), lambda: records
+            lambda recorded: cls(root, recorded, bus), lambda: records
         )
 
     def rows(
-        self, predicate="1", parameters=(), *, limit=1, ascending=False,
-        sequences: tuple[int, ...] = (),
-    ) -> Iterator[CommittedDelivery]:
-        request = ConversationSourceWindowRequest(
-            predicate=predicate, parameters=parameters, limit=limit, ascending=ascending,
-            sequences=sequences,
+        self, *, before: int | None = None, after: int = 0, limit: int = 1,
+        ascending: bool = False, sequences: tuple[int, ...] = (),
+    ) -> tuple[Delivered, ...]:
+        return tuple(
+            delivery for record in self.bus.conversation(
+                self.recipient.lookup, before=before, after=after, limit=limit,
+                descending=not ascending, sequences=sequences,
+            ) for delivery in record.deliveries()
         )
-        return request.capture_many(self.log, self.recipient.lookup, (request,))[0]
 
     @property
     def frontier(self):
-        lookup = self.recipient.lookup
+        rows = self.rows(limit=1)
         return AssignedSourceCursor(
-            str(self.root), self.recipient,
-            ConversationSourceWindowRequest.frontier(self.log, lookup),
+            str(self.root), self.recipient, rows[0].seq if rows else 0,
         )
 
-    def window(self, *, limit=1, sent_limit=0) -> AssignedSourceWindow:
-        """Read conversation messages, sent messages and their end position together."""
-        lookup = self.recipient.lookup
-        conversation_request = ConversationSourceWindowRequest(limit=limit, ascending=False)
-        sent_request = ConversationSourceWindowRequest(
-            predicate="w.sender_lookup=?", parameters=(lookup,), limit=sent_limit, ascending=False,
+    def window(self, *, limit: int = 1, sent_limit: int = 0) -> AssignedSourceWindow:
+        """The same sequence cut bounds both conversation and sender pages."""
+        before = self.bus.revision() + 1
+        rows = self.rows(before=before, limit=limit)
+        sent = tuple(
+            delivery for record in self.bus.sent(
+                self.recipient.lookup, before=before, limit=sent_limit,
+            ) for delivery in record.deliveries()
         )
-        conversation, sent = conversation_request.capture_many(
-            self.log, lookup, (conversation_request, sent_request)
-        )
-        rows = tuple(conversation)
-        cursor = AssignedSourceCursor(
-            str(self.root), self.recipient, rows[0].message.seq if rows else 0
-        )
-        return AssignedSourceWindow(cursor, rows, tuple(sent))
+        newest = max((row.seq for row in (*rows, *sent)), default=0)
+        cursor = AssignedSourceCursor(str(self.root), self.recipient, newest)
+        return AssignedSourceWindow(cursor, rows, sent)
 
-    def page_rows(self, traversal, sequence, through, *, limit):
-        predicate, parameters = traversal.predicate(sequence, through)
-        return self.rows(predicate, parameters, ascending=traversal.ascending, limit=limit)
+    def page_rows(
+        self,
+        traversal: TranscriptTraversal,
+        sequence: int,
+        through: TranscriptCursor,
+        *,
+        limit: int,
+    ) -> Iterator[Delivered]:
+        return iter(traversal.source_rows(self, sequence, through, limit))
 
-    def native_events(self, record, routes, project_events, references):
+    def native_events(
+        self, record: NativeRecord, routes: _SessionRoutes,
+        project_events: Callable[[TranscriptProjection], Iterable[TranscriptEvent]],
+        references: tuple[MessageReference, ...],
+    ) -> tuple[TranscriptEvent, ...]:
         entry = record.entry
         routing = routes.get(entry.id)
         events = super().native_events(record, routes, project_events, references)
@@ -532,40 +605,31 @@ class AssignedTranscriptSource(TranscriptSource):
             for refs in (routing.publications if routing is not None else (), references)
         )
 
-        result = []
-        for event in events:
-            if published and isinstance(event, AssistantTranscript):
-                continue
-            # An assigned request has one original wire record in this source.
-            # Its native prompt is a consumer of that record, not another input.
-            if isinstance(event, UserTranscript) and event.routed:
-                requests = event.routing.requests
-                originals = self.assignments(requests)
-                remaining = tuple(reference for reference in requests if reference not in originals)
-                if not remaining:
-                    continue
-                event = replace(event, routing=TurnRouting(remaining, event.routing.reply))
-            result.append(event)
-        return tuple(result)
+        return tuple(retained for event in events
+                     for retained in event.for_assigned_source(self, published))
 
-    def events(self, original):
-        message = original.message
+    def events(self, original: Delivered) -> tuple[TextTranscript, ...]:
         if original.audience.sender_lookup == self.recipient.lookup:
             return (
-                SentTranscript.from_message(message),
+                SentTranscript.from_message(original),
             )
         return (
-            IncomingTranscript(message=message, reader=self.recipient.name),
+            IncomingTranscript.of(original, reader=self.recipient.name),
         )
 
 
 class LiveAssignedTranscriptSource(AssignedTranscriptSource):
     """Live publication evidence is additional to original wire assignments."""
 
-    def reply_revision(self, records):
+    def reply_revision(self, records: TranscriptSource) -> PublishedReplyRevision:
         return records.publication_revision(self.root, self.recipient)
 
-    def native_records(self, fragments, routes, reader):
+    def native_records(
+        self,
+        fragments: Iterator[tuple[NativeRecord, ...]],
+        routes: _SessionRoutes,
+        reader: NativeTranscript,
+    ) -> Iterator[tuple[NativeRecord, tuple[TranscriptEvent, ...]]]:
         """Native ancestry precedes one atomic SQL read per bounded fragment."""
         from .transcripts import TranscriptRead
 

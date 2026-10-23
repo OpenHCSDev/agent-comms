@@ -2,15 +2,15 @@ import pytest
 
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.channels import BuiltinChannelView
-from agent_comms.comms import wire
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.threads import Thread
+from conftest import installed_comms
 
 
 def test_all_is_the_only_global_target(tmp_path):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     for name in ("sender", "first", "second"):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     with pytest.raises(ValueError):
         BuiltinChannelView.member_named("broadcast")
     with pytest.raises(UnregisteredThreadError):
@@ -21,7 +21,7 @@ def test_all_is_the_only_global_target(tmp_path):
     assert global_message.target == "#all"
     assert comms.bus.pending_count("first") == comms.bus.pending_count("second") == 1
 
-    comms.registry.declare(comms.registry.new_thread('broadcast', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('broadcast', frozenset(), str(tmp_path)))
     direct = comms.messaging.send("sender", "broadcast", "ordinary named recipient").message
     assert direct.target == "broadcast"
     assert comms.bus.pending_count("first") == comms.bus.pending_count("second") == 1

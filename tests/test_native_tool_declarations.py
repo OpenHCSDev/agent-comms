@@ -1,5 +1,6 @@
 """One tool declaration controls presentation without granting coding authority."""
 
+
 from conftest import transcript_records
 from dataclasses import dataclass
 import asyncio
@@ -11,7 +12,8 @@ from acp.schema import ToolCallStart
 
 import agent_comms.agent_events as events
 from agent_comms.agent_event_updates import AcpEventConsumer
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
+from agent_comms.acp import SdkSessionConnection
 from agent_comms.native_tools import BashTool, CodingTool, EditTool, ReadTool, WriteTool
 from agent_comms.tool_declaration import ReplacementEdit
 from agent_comms.tool_declaration import ToolDeclaration, UndeclaredTool
@@ -87,7 +89,7 @@ async def test_pattern_search_metadata_reaches_official_acp(acp_tools, name, lab
 ])
 def test_recorded_metadata_does_not_require_an_executable_request(name, label, kind):
     from agent_comms.native_tool_call import CodingCall
-    from agent_comms.native_tool_call import SelectedToolDenied
+    from agent_comms.tool_denial import SelectedToolDenied
     from agent_comms.transcript_events import ToolEndTranscript, ToolStartTranscript
 
     foreign = {"file_path": "external.txt"}
@@ -166,7 +168,8 @@ def test_core_commands_share_native_identity_without_changing_external_decode():
 
 def test_native_call_fields_are_not_model_arguments():
     from agent_comms.field_codec import FieldCodec
-    from agent_comms.native_tool_call import CodingCall, SelectedToolDenied
+    from agent_comms.native_tool_call import CodingCall
+    from agent_comms.tool_denial import SelectedToolDenied
 
     arguments = {"path": "file.py", "content": "value"}
     call = CodingCall.decode("owned-call", "write", arguments)
@@ -181,7 +184,7 @@ def test_native_call_fields_are_not_model_arguments():
 
 @pytest.fixture
 async def acp_tools(tmp_path):
-    owner = canonical_agent(Comms(tmp_path / "sdk-wire"), auto_wake=False)
+    owner = canonical_agent(wire(tmp_path / "sdk-wire"), auto_wake=False)
     received = asyncio.Queue()
 
     class Client(acp.Client):
@@ -194,7 +197,11 @@ async def acp_tools(tmp_path):
         task = asyncio.current_task()
         connections.add(task)
         try:
-            await acp.run_agent(owner, writer, reader)
+            connection = SdkSessionConnection(owner, writer, reader, listening=False)
+            try:
+                await connection.listen()
+            finally:
+                await asyncio.shield(connection.close())
         finally:
             writer.close()
             await writer.wait_closed()

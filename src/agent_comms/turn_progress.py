@@ -14,26 +14,26 @@ from acp.schema import (
 )
 
 from . import agent_events as events
-from .agent_event_updates import RoutedTurnEventConsumer, TurnEventConsumer
 from .acp_extension import LiveQueueScope, TranscriptChangedUpdate, encode_updates
 from .acp_failure import NativeTurnOutcome
-from .thread_identity import ClaimedIdentity
+from .agent_event_updates import RoutedTurnEventConsumer, TurnEventConsumer
 from .comms import Comms
 from .context_store import UNREAD_CONTEXT, ContextPrior
 from .coordinator import Coordination
 from .diagnostics import PublicationMeasurements, record_request_progress, record_terminal_failure
 from .messages import AlertKind, NoticeRole
-from .send_result import SendResult
 from .mro_dispatch import MroDispatch, handles
-from .turn_phase import PublishingPhase
+from .send_result import SendResult
+from .thread_identity import ClaimedIdentity
 from .transcript_updates import TurnTranscriptUpdate
 from .turn_lease import TurnState
+from .turn_phase import PublishingPhase
 
 if TYPE_CHECKING:
+    from .owned_turn import OwnedTurn
     from .session_lifecycle import SessionLifecycle
     from .turn_effects import TurnEffects
     from .turn_goal_account import TurnGoalAccount
-    from .owned_turn import OwnedTurn
 
 
 @dataclass(kw_only=True)
@@ -114,16 +114,16 @@ class TurnProgress(events.AgentEventConsumer):
 
     @handles(events.ContextObserved)
     async def observe_context(self, event):
+        await Coordination.run_worker(partial(
+            self.comms.registry.observe_offered_tools,
+            self.thread.incarnation, event.context.offered_tools,
+        ))
         self.context_prior = await event.context.record(
             self.comms.contexts, self.context_prior, self.thread, self.turn_lease
         )
         self.runtime.agent.annotations.observe(
             self.session_id, self.context_prior.value, event.context.values
         )
-
-    @property
-    def comms(self) -> Comms:
-        return self._comms
 
     @property
     def thread_name(self) -> str:
@@ -219,10 +219,10 @@ class TurnProgress(events.AgentEventConsumer):
     async def input_started(self, event: events.InputStarted) -> None:
         await event.captured(self.inputs, self.session_id).started(
             self.inputs, self.session_id,
-            LiveQueueScope(self.session_id, ClaimedIdentity(
+            LiveQueueScope(session_id=self.session_id, claimed_identity=ClaimedIdentity(
                 self.turn_lease.identity.incarnation,
                 self.turn_lease.claimed_generation,
-            ), self.thread.require_process().pid),
+            ), owner=self.thread.require_process()),
         )
 
     async def before_native_metadata(self, event: events.NativeMetadataObservation) -> None:
@@ -272,10 +272,9 @@ class TurnProgress(events.AgentEventConsumer):
             return
         with self.publication_measurements.measuring():
             published = await self.consumer.dispatch(publication)
-        if isinstance(published, events.Done):
-            # ACP publication may replace Done with its notification acknowledgement;
-            # terminal consumers retain that exact completed outcome.
-            self.turn.terminal = published
+        # ACP publication may replace Done with its notification acknowledgement;
+        # terminal consumers retain that exact completed outcome.
+        published.retain_terminal(self.turn)
         await self.publication.dispatch(published)
 
     def publish_success(self) -> tuple[SendResult, ...]:
@@ -322,7 +321,8 @@ class TurnProgress(events.AgentEventConsumer):
                 self.comms.root,
                 turn_id=self.turn_lease.turn_id,
                 thread=self.thread_name,
-                event=vars(terminal),
+                failure=terminal.failure_kind,
+                measurements=terminal.diagnostic,
                 sequences=(),
             )
             results = []
@@ -349,7 +349,7 @@ class TurnProgress(events.AgentEventConsumer):
         ))
         checkpoint = await Coordination.run_worker(partial(
             self.comms.transcripts.transcript_checkpoint, self.thread_name))
-        await self.runtime.session_update(
+        await self.runtime.publish_update(
             session_id=self.session_id,
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",

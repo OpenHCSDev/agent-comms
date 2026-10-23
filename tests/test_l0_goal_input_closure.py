@@ -25,19 +25,23 @@ from agent_comms.goal_waits import GoalWait, GoalWaits
 from agent_comms.goals import Goal
 from agent_comms.input_disposition import InputDispositions
 from stored_inputs import stored_inputs
+from agent_comms.threads import Thread
 
 
 def register(comms, name):
     comms.registry.declare(
-        comms.registry.new_thread(name, frozenset(), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid()))
+        Thread(name, frozenset(), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid()))
     )
 
 
 def test_unknown_reason_survives_real_history_without_inventing_provenance(tmp_path):
     comms = wire(tmp_path)
     register(comms, "owner")
-    goal = Goal(
-        "Retained objective", "retained", published_seq=0, progress="Unrelated progress", state=UnrecordedBlockGoal()
+    # Goals creates the goal and its generation; the carried record supplies a block whose
+    # reason and provenance were never recorded, which no live transition produces.
+    set_goal = comms.goals.update_goal("owner", SetGoalAction(text="Retained objective"))
+    goal = replace(
+        set_goal, progress="Unrelated progress", mention_source=None, state=UnrecordedBlockGoal()
     )
     comms.registry.register(replace(comms.registry.require("owner"), goal=goal))
     history = comms.goals.goal_history("owner")
@@ -117,7 +121,7 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
     store.record(
         key, seq=message.seq, owner="owner", claim_scope=claim_scope, target="owner", text=message.body
     )
-    messages = comms.bus.inbox("owner")
+    messages = comms.bus.inbox("owner").page.messages
     comms.messaging.acknowledge("owner", tuple(message.reference for message in messages))
     action = StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("peer",))
     with pytest.raises(ValueError):
