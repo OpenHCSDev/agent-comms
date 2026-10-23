@@ -18,8 +18,8 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_history import GoalHistoryEntry, GoalHistoryStore
 from agent_comms.goals import Goal, UnorderedGoalOrder
-from agent_comms.installer.carry import Carried, Carry
 from agent_comms.historical_views import HistoryArchive
+from agent_comms.installer.carry import Carried, Carry
 from agent_comms.lifecycle_capability import Complete
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.owner_requests import (
@@ -41,6 +41,7 @@ from agent_comms.typed_table import (
     TypedTable,
     WriterOwnedFile,
 )
+
 from .carry_bus_history import BusHistory, CarryCatalogSource
 
 
@@ -119,9 +120,14 @@ class OwnerRequests(Carry):
 
     def backup_files(self) -> tuple[Path, ...]:
         sources = CarryCatalogSource.read(self.root, self.original_root)
-        roots = (self.root, *(source.mapped_root(self.root, self.original_root) for source in sources))
-        paths = (HistoryArchive.path_in(self.root),
-                 *(path for root in roots for path in self.root_files(root)))
+        roots = (
+            self.root,
+            *(source.mapped_root(self.root, self.original_root) for source in sources),
+        )
+        paths = (
+            HistoryArchive.path_in(self.root),
+            *(path for root in roots for path in self.root_files(root)),
+        )
         for path in paths:
             self.require_confined(self.root, path)
         return tuple(path for path in paths if path.exists())
@@ -151,10 +157,15 @@ class OwnerRequests(Carry):
                     source = source.carried_registry(mapped)
                     resealed = True
                 rebound.append(source)
-            rewritten = [str(root.relative_to(self.root) / name)
-                         for root, result in results for name in result.rewritten]
+            rewritten = [
+                str(root.relative_to(self.root) / name)
+                for root, result in results
+                for name in result.rewritten
+            ]
             if resealed:
-                _atomic_write_text(HistoryArchive.path_in(self.root), json.dumps(FieldCodec.encode(tuple(rebound))))
+                _atomic_write_text(
+                    HistoryArchive.path_in(self.root), json.dumps(FieldCodec.encode(tuple(rebound)))
+                )
                 rewritten.append(HistoryArchive.filename)
             detail: dict[str, int] = {}
             for _, result in results:
@@ -352,7 +363,9 @@ class OwnerRequests(Carry):
                         rewritten.append(str(path.relative_to(root)))
                 if todo_changed:
                     TodoStore.publish_change(todo_path)
-                    rewritten.extend(str(path.relative_to(root)) for path in TodoStore.source_paths(root))
+                    rewritten.extend(
+                        str(path.relative_to(root)) for path in TodoStore.source_paths(root)
+                    )
                 if current:
                     registry._write_unlocked(raw)
                     rewritten.extend(str(path.relative_to(root)) for path in registry.written)
