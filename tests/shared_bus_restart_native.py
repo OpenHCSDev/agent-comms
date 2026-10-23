@@ -973,7 +973,8 @@ async def run(arguments):
                     store.participants.register(audience.recipient_lookup, committed=True)
                 accept_delivery_cohort(service.bus, root_id, cutover.originals[0].seq, store)
         else:
-            result = await asyncio.to_thread(service.owners.restart_owners,OwnersNamed(tuple(names)),cutover=cutover)
+            result = await asyncio.to_thread(
+                service.owners.restart_owners, OwnersNamed(tuple(names)), cutover=cutover)
             assert len(result)==len(names)
             assert all(not owner.process_alive for owner in originals)
         if not arguments.contention or arguments.cancel_before_grant:
