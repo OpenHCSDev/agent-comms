@@ -45,7 +45,7 @@ from agent_comms.message_reference import MessageReference
 from agent_comms.response_acknowledgement import (
     canonical_publication_key,
 )
-from agent_comms.typed_table import RowNotFoundError, SQLiteTableName, TypedTable
+from agent_comms.typed_table import ProjectionProducer, RowNotFoundError, SQLiteTableName, TypedTable
 from bus_record_fixture import publication_processes, record_from
 
 
@@ -122,6 +122,29 @@ def test_changed_message_producer_rebuilds_real_projection_with_identical_ddl(tm
     repeated = replay()
     assert repeated["policy"] == "InformationalPolicy"
     assert not repeated["reconciled"] and repeated["row_writes"] == 0
+    # A changed producer that fails during replay cannot bless the old rows as current.
+    producer.write_text(original.replace(producing_call, "1 / 0"))
+    with pytest.raises(subprocess.CalledProcessError) as failed:
+        replay()
+    assert "ZeroDivisionError" in failed.value.stderr
+    with sqlite3.connect(database) as stored:
+        assert ProjectionProducer.require(
+            stored, projection=MessageIdentitySource.declared_name).identity == changed["producer"]
+        assert MessageIdentitySource.require(stored, seq=1).response_policy.__name__ == "InformationalPolicy"
+    producer.write_text(original.replace(producing_call, "InformationalPolicy.instance()"))
+    recovered = replay()
+    assert not recovered["reconciled"] and recovered["row_writes"] == 0
+    (tmp_path / "producer-replay.json").write_text(json.dumps({
+        "initial_policy": built["policy"],
+        "changed_policy": changed["policy"],
+        "same_ddl": changed["ddl"] == built["ddl"],
+        "same_durable_message": changed["source"] == built["source"],
+        "changed_producer": changed["producer"] != built["producer"],
+        "rebuild_writes": changed["row_writes"],
+        "unchanged_reopen_writes": repeated["row_writes"],
+        "failed_replay": "rolled back rows and producer witness",
+        "recovered_reopen_writes": recovered["row_writes"],
+    }, indent=2))
 
 
 @pytest.mark.parametrize("declaration", BusRecord.members_with(BusRecord))
