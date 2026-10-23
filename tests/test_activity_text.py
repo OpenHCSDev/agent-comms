@@ -16,7 +16,8 @@ from agent_comms.ui_model.sidebar import SidebarModel
 from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_events import ToolExecutionStart
 from agent_comms.thread_execution import ExternalThreadExecution
-from agent_comms.turn_phase import IdlePhase, ModelWaitPhase, ToolRunningPhase
+from agent_comms.pi_payloads import CodelessProviderDiagnosticError
+from agent_comms.turn_phase import FailedPhase, IdlePhase, ModelWaitPhase, ToolRunningPhase
 
 
 @pytest.mark.parametrize("length", [0, Activity.detail_limit - 1, Activity.detail_limit,
@@ -73,6 +74,21 @@ def test_native_status_reads_long_preparation_first_and_parallel_tools(comms):
             assert activity.detail.startswith(f"tool_{index}_")
             assert len(activity.detail) == Activity.detail_limit
             assert phase.summary == title
+    finally:
+        comms.agents.finish_turn(lease)
+
+
+def test_a_provider_failure_shows_its_phase_and_leaves_the_turn_to_its_owner(comms):
+    thread = comms.registry.declare(comms.registry.new_thread('provider-failure', frozenset(), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid())))
+    lease = comms.agents.begin_turn(thread.name, "provider-failure").turn_lease
+    try:
+        failed = FailedPhase(error=CodelessProviderDiagnosticError("WebSocket error"))
+        comms.agents.observe_native_phase(lease, failed)
+        owner = comms.registry.require(thread.name)
+        assert owner.turn_state.active.phase == failed
+        # The owner still holds its turn, so it can report the provider's error.
+        assert owner.require_turn_lease() == lease
+        assert comms.agents.observe_native_phase(lease, ModelWaitPhase()) == ()
     finally:
         comms.agents.finish_turn(lease)
 

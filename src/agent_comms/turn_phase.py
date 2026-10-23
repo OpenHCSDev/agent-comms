@@ -160,8 +160,11 @@ class IdlePhase(ActivityWord, TurnPhase):
 
 
 @dataclass(frozen=True, kw_only=True)
-class FailedPhase(IdlePhase):
+class FailedPhase(ClosingTurn, TurnPhase):
+    """The provider failed this turn; its owner reports the error and ends the turn."""
+
     error: ProviderDiagnosticError
+    label = "Provider failed"
 
 
 class CancellingPhase(ClosingTurn, TurnPhase):
