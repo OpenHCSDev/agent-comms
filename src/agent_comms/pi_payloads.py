@@ -195,8 +195,7 @@ class PiPayload(ExternalField):
 
     @classmethod
     def decode_external_value(cls, value: object, record: Mapping[str, object]) -> object:
-        if not isinstance(value, dict):
-            raise MalformedRecord(f"Expected {cls.__name__} object")
+        value = FieldCodec.decode(dict[str, object], value)
         member = cls.wire_member(value)
         return FieldCodec.construct(member, member.decode_fields(value, {}))
 
@@ -310,8 +309,8 @@ class ProviderRetryOutcome(PiPayload, DeclaredFamily, affix="ProviderRetry"):
             ) from error
         if success:
             return SucceededProviderRetry
-        final_error = value.get("finalError")
-        if not isinstance(final_error, str) or not final_error.strip():
+        final_error = FieldCodec.decode(str, value.get("finalError"))
+        if not final_error.strip():
             raise MalformedRecord("Failed provider retry end requires finalError")
         return FailedProviderRetry
 

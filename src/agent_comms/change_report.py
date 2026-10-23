@@ -19,6 +19,7 @@ from pydantic import JsonValue
 from agent_comms.errors import ToolRefusedError
 
 from .field_codec import (
+    FieldCodec,
     MalformedRecord,
     NullMember,
     RecordMember,
@@ -178,8 +179,7 @@ class FileLine(WireValue, SourceReference):
 
     @classmethod
     def from_wire(cls, data: JsonValue) -> FileLine:
-        if not isinstance(data, str):
-            raise MalformedRecord("Expected a 'file.py:line' string.")
+        data = FieldCodec.decode(str, data)
         file, separator, line = data.rpartition(":")
         if not separator or not file or not line.isdigit():
             raise ValueError(f"Expected a 'file.py:line' reference, received {data!r}")

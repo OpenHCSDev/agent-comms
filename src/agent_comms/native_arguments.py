@@ -37,6 +37,12 @@ class NativeArgument(DeclaredFamily, affix="Argument"):
     def apply_thinking(self, current: type[ThinkingChoice]) -> type[ThinkingChoice]:
         return current
 
+    def option_value(self, option: type[ValueArgument]) -> str | None:
+        return None
+
+    def without_option(self, option: type[OptionArgument]) -> tuple[NativeArgument, ...]:
+        return (self,)
+
 
 @dataclass(frozen=True)
 class ExternalArgument(NativeArgument):
@@ -57,6 +63,9 @@ class OptionArgument(NativeArgument):
     @classmethod
     @abstractmethod
     def consume(cls, inline: str | None, arguments: Iterator[str]) -> OptionArgument: ...
+
+    def without_option(self, option: type[OptionArgument]) -> tuple[NativeArgument, ...]:
+        return () if self.flag() == option.flag() else (self,)
 
 
 class NamedOption(OptionArgument):
@@ -89,6 +98,9 @@ class ValueArgument(ValueOption):
     @property
     def argv(self) -> tuple[str, ...]:
         return self.flag(), self.value
+
+    def option_value(self, option: type[ValueArgument]) -> str | None:
+        return self.value if self.flag() == option.flag() else None
 
 
 class ProviderArgument(NamedOption, ValueArgument):
@@ -300,7 +312,8 @@ class NativeArguments:
 
     def value(self, member: type[ValueArgument]) -> str | None:
         return next(
-            (entry.value for entry in reversed(self.entries) if isinstance(entry, member)), None
+            (value for entry in reversed(self.entries)
+             if (value := entry.option_value(member)) is not None), None
         )
 
     def loads(self, extension: Path) -> bool:
@@ -320,9 +333,9 @@ class NativeArguments:
             selected = entry.apply_thinking(selected)
         return selected
 
-    def replace(self, member: type[NativeArgument], *entries: NativeArgument) -> NativeArguments:
+    def replace(self, member: type[OptionArgument], *entries: NativeArgument) -> NativeArguments:
         return NativeArguments(
-            tuple(entry for entry in self.entries if not isinstance(entry, member)) + entries
+            tuple(kept for entry in self.entries for kept in entry.without_option(member)) + entries
         )
 
     def with_model(self, selected: str) -> NativeArguments:

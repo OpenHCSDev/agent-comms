@@ -249,10 +249,7 @@ class ThreadSection:
     plan: FieldPlan
 
     def rows(self, raw: Mapping[str, object]) -> dict[str, object]:
-        rows = raw.get(self.plan.key)
-        if not isinstance(rows, dict):
-            raise MalformedRecord(f"registry section {self.plan.key} must be an object")
-        return rows
+        return FieldCodec.decode(dict[str, object], raw.get(self.plan.key))
 
     def decoded(self, document: object) -> MutableMapping[str, object]:
         rows = self.plan.current(document)
@@ -528,8 +525,6 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
                 document = FieldCodec.decode(cls, raw)
             else:
                 earlier_raw, decoded = earlier
-                if not isinstance(raw, dict):
-                    raise MalformedRecord("registry document must be an object")
                 kept = tuple(
                     (section, section.kept(raw, earlier_raw, decoded))
                     for section in cls.thread_sections()

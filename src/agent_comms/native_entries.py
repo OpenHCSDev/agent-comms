@@ -530,9 +530,7 @@ class MessageEntry(NativeEntry):
 
     @classmethod
     def input_evidence(cls, raw: dict) -> tuple[NativeEntry, ...]:
-        message = raw.get("message")
-        if not isinstance(message, dict):
-            raise MalformedRecord("Native message evidence requires an object")
+        message = FieldCodec.decode(dict[str, object], raw.get("message"))
         if message.get("inputId") is not None:
             # Same strict original user/content/digest decoding, including the
             # rejection of tracked IDs hidden in another message role.

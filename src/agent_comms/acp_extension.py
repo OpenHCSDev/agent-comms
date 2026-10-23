@@ -139,13 +139,10 @@ def decode_updates(metadata: object) -> tuple[AgentCommsUpdate, ...]:
     """Decode facts once at ACP ingress, rejecting unknown kinds and fields."""
     if metadata is None:
         return ()
-    if not isinstance(metadata, dict):
-        raise MalformedRecord("ACP metadata must be an object")
+    metadata = FieldCodec.decode(dict[str, object], metadata)
     if "agentComms" not in metadata:
         return ()
     extension = metadata["agentComms"]
-    if not isinstance(extension, dict):
-        raise ValueError("Comms metadata must be an object")
     return FieldCodec.decode(UpdateBatch, extension).updates
 
 
@@ -747,12 +744,12 @@ def decode_request(metadata: object = None, **expanded) -> CommsRequest:
     """ACP SDK keyword expansion is normalized here, once, before dispatch."""
     if metadata is None:
         metadata = {}
-    if not isinstance(metadata, dict):
-        raise MalformedRecord("ACP metadata must be an object")
+    metadata = FieldCodec.decode(dict[str, object], metadata)
     extension = expanded.get("agentComms", metadata.get("agentComms"))
     if extension is None:
         return QueuePromptRequest()
-    if not isinstance(extension, dict) or set(extension) != {"request"}:
+    extension = FieldCodec.decode(dict[str, object], extension)
+    if set(extension) != {"request"}:
         raise MalformedRecord("Comms metadata requires one declared request")
     return FieldCodec.decode(CommsRequest, extension["request"])
 
