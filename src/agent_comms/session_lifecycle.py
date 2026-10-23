@@ -33,6 +33,7 @@ from .acp_extension import (
 from .comms import Comms
 from .child_process import join_retirement
 from .coordinator import Coordination
+from .controller import AcpController
 from .errors import RelationViolationError
 from .config_options import SessionConfigOptions
 from .native_arguments import NativeArguments
@@ -66,7 +67,7 @@ class SessionLifecycle:
         # A launcher registers this process as the owner before it starts, so
         # this process owns that registration even if it never binds a session.
         self.launched_owners: set[str] = set()
-        self.client: Any = None
+        self.client: AcpController | None = None
         self.titles: dict[str, str] = {}
         self.display_titles: dict[str, ThreadText] = {}
         self.worktrees: dict[str, str] = {}
