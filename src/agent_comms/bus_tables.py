@@ -1,75 +1,33 @@
-"""Bus field declarations, independent of Message and publication lifetimes."""
+"""Bus query projections over the message-owned record and capability declarations."""
 
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Iterable, Iterator
-from abc import ABC, abstractmethod
-from contextlib import closing
-from dataclasses import Field, dataclass, field, fields, make_dataclass
-from functools import cache
-from inspect import get_annotations
-from itertools import accumulate
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self, get_origin, get_type_hints
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Annotated
 
 from agent_comms import messages
-from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.envelope_claim_transitions import (
-    ClaimOwner,
-    ClaimProjection,
-    ClaimTransition,
-    ClaimTransitionError,
-    ResourceClaim,
-    UnclaimedResource,
-)
-from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec, WireName, WireOrder
+from agent_comms.field_codec import FieldCodec
 from agent_comms.message_reference import MessageReference
 from agent_comms.typed_table import (
-    TableReference,
-    AppendOnlyTables,
     Column,
     ComposedSchemas,
-    DerivedTables,
-    DurableTables,
-    ForeignKey,
     Index,
-    ProducedRow,
     ProjectionProducerTables,
-    SharedFileTables,
-    TypedRow,
     TypedTable,
     sql_literal,
 )
 
 if TYPE_CHECKING:
-    from .bus_publication import Delivered
     from .read_basis import RepliesDisplayScope
 
 
-class BusTables(SharedFileTables, DurableTables, AppendOnlyTables):
-    """Bus history cannot be rebuilt from another source."""
-
-
-class BusProjectionTables(ProducedRow, SharedFileTables, DerivedTables):
-    """Reverse lookups are derived from the record, in its append transaction."""
-
-    @classmethod
-    def create_schema(cls, db: sqlite3.Connection) -> None:
-        """Create/rebuild rows from history using the append projection owner."""
-        super().create_schema(db)
-        holders = ReplayedHolders()
-        for record in BusCapability.history(db):
-            record.project_into(db, holders)
-        holders.flush(db)
-
-
-class BusSchema(ComposedSchemas, BusTables, ProjectionProducerTables, BusProjectionTables):
+class BusSchema(ComposedSchemas, messages.BusTables, ProjectionProducerTables, messages.BusProjectionTables):
     """One file reconciles its declared families using each family's carry policy."""
 
 
 @dataclass(frozen=True)
-class ParticipantSource(TypedTable, BusProjectionTables, declared_name=None):
+class ParticipantSource(TypedTable, messages.BusProjectionTables, declared_name=None):
     """A recorded participant's positions in actual frozen deliveries."""
 
     lookup: Annotated[str, Column(primary_key=True)]
@@ -135,7 +93,7 @@ class DirectReplySource(AwaitingAnswerSource, declared_name=None):
 
 
 @dataclass(frozen=True)
-class MessageIdentitySource(MessageReference, TypedTable, BusProjectionTables):
+class MessageIdentitySource(MessageReference, TypedTable, messages.BusProjectionTables):
     """A record's existing reference, searchable without recomputing its content hash."""
 
     sender: str
@@ -155,7 +113,7 @@ class MessageIdentitySource(MessageReference, TypedTable, BusProjectionTables):
 
 
 @dataclass(frozen=True)
-class AnsweredSource(TypedTable, BusProjectionTables):
+class AnsweredSource(TypedTable, messages.BusProjectionTables):
     original: Annotated[MessageReference, Column(primary_key=True)]
     seq: Annotated[int, Column(primary_key=True)]
 
@@ -218,7 +176,7 @@ class AnsweredSource(TypedTable, BusProjectionTables):
             *requesters, since, before, upper, *(kind.declared_name for kind in kinds),
             *eligibility, *responders, limit,
         ))
-        headers = (BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in sequences)
+        headers = (messages.BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in sequences)
         return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
     @classmethod
@@ -261,7 +219,7 @@ class AnsweredSource(TypedTable, BusProjectionTables):
             db, scope, since,
             'SELECT seq FROM matches ORDER BY seq DESC LIMIT 1',
         )
-        headers = (BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in sequences)
+        headers = (messages.BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in sequences)
         return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
     @classmethod
@@ -274,283 +232,3 @@ class AnsweredSource(TypedTable, BusProjectionTables):
             'SELECT COALESCE(MAX(timestamp),0.0) FROM matches',
         ).fetchone()
         return FieldCodec.decode(float, row[0])
-
-
-@dataclass(frozen=True)
-class BusRow(TypedTable, BusTables):
-    seq: Annotated[int, Column(primary_key=True, auto_increment=True)]
-    kind: type[messages.BusRecord]
-    at: float
-
-    @classmethod
-    def last_seq(cls, db: sqlite3.Connection) -> int:
-        return FieldCodec.decode(int, db.execute(
-            cls._sql(f'SELECT COALESCE(MAX({{seq}}), 0) FROM "{cls.declared_name}"')
-        ).fetchone()[0])
-
-    @classmethod
-    def next_seq(cls, db: sqlite3.Connection) -> int:
-        return FieldCodec.decode(int, db.execute(
-            "SELECT COALESCE((SELECT seq FROM sqlite_sequence WHERE name=?), 0) + 1",
-            (cls.declared_name,),
-        ).fetchone()[0])
-
-
-@dataclass(frozen=True)
-class ClaimOperations(TypedTable, BusProjectionTables):
-    """An acquisition's consumed operation refers to its original claim row."""
-
-    operation_id: Annotated[str, Column(primary_key=True)]
-    seq: int
-
-    @classmethod
-    def references(cls) -> tuple[ForeignKey, ...]:
-        return (ForeignKey(columns=("seq",), target=messages.Claimed.table, target_columns=("seq",)),)
-
-    @classmethod
-    def used(cls, db: sqlite3.Connection, operation_id: str) -> bool:
-        return cls.exists(db, where="{operation_id} = ?", parameters=(operation_id,))
-
-
-@dataclass(frozen=True)
-class HeldResources(TypedTable, BusProjectionTables):
-    """Current membership references the canonical transition, never a copy."""
-
-    resource: Annotated[str, Column(primary_key=True)]
-    claim_seq: int
-
-    @classmethod
-    def references(cls) -> tuple[ForeignKey, ...]:
-        return (ForeignKey(columns=("claim_seq",), target=messages.Claimed.table, target_columns=("seq",)),)
-
-    @classmethod
-    def owner_for(cls, db: sqlite3.Connection, resource: str) -> ResourceClaim:
-        originals = messages.Claimed.table.select(
-            db, where=f'{{seq}}=(SELECT claim_seq FROM "{cls.declared_name}" WHERE resource=?)',
-            parameters=(resource,), row_type=messages.Claimed,
-        )
-        return next((row.claim_transition.claimed(resource) for row in originals), UnclaimedResource())
-
-    @classmethod
-    def all_claims(cls, db: sqlite3.Connection) -> ClaimProjection:
-        return cls._project(db, cls.select(db), BusRow.last_seq(db))
-
-    @classmethod
-    def claims_for(
-        cls, db: sqlite3.Connection, resources: tuple[str, ...], through: int,
-    ) -> ClaimProjection:
-        marks = ",".join("?" for _ in resources)
-        return cls._project(db, cls.select(
-            db, where=f'{{resource}} IN ({marks})', parameters=resources,
-        ), through)
-
-    @classmethod
-    def _project(
-        cls, db: sqlite3.Connection, current: list[HeldResources], through: int,
-    ) -> ClaimProjection:
-        claim_table = messages.Claimed.table
-        last_seq = FieldCodec.decode(int, db.execute(claim_table._sql(
-            f'SELECT COALESCE(MAX({{seq}}), 0) FROM "{claim_table.declared_name}" WHERE {{seq}} <= ?'
-        ), (through,)).fetchone()[0])
-        sequences = tuple({row.claim_seq for row in current})
-        marks = ",".join("?" for _ in sequences)
-        transitions = {row.claim_transition.seq: row.claim_transition for row in claim_table.select(
-            db, where=f'{{seq}} IN ({marks})', parameters=sequences, row_type=messages.Claimed,
-        )}
-        return ClaimProjection(last_seq, {
-            row.resource: transitions[row.claim_seq].claimed(row.resource) for row in current
-        })
-
-    @classmethod
-    def project(
-        cls, db: sqlite3.Connection, transition: ClaimTransition, holders: ClaimHolders,
-    ) -> ClaimProjection:
-        """Validate before the original is inserted; the caller retains the writer."""
-        try:
-            transition.require_new_operation(lambda operation: ClaimOperations.used(db, operation))
-            return transition.project(holders.before(db, transition))
-        except (ClaimTransitionError, IdentityConflict) as error:
-            raise RelationViolationError("Committed claim transition is inconsistent.") from error
-
-    @classmethod
-    def apply(
-        cls, db: sqlite3.Connection, transition: ClaimTransition, projected: ClaimProjection,
-        holders: ClaimHolders,
-    ) -> None:
-        removed = transition.resources + transition.expired
-        marks = ",".join("?" for _ in removed)
-        cls.delete(db, where=f'{{resource}} IN ({marks})', parameters=removed)
-        for owner in projected.values():
-            cls(owner.resource, owner.seq).insert(db)
-        for operation_id in transition.operation_ids:
-            ClaimOperations(operation_id, transition.seq).insert(db)
-        holders.advance(removed, projected)
-
-
-class ProjectionPass(ABC):
-    """How one projection pass writes the rows its records derive: an append writes its
-    few rows at once."""
-
-    def write(self, db: sqlite3.Connection, row: TypedTable) -> None:
-        row.insert(db)
-
-    def flush(self, db: sqlite3.Connection) -> None:
-        """Rows written at once leave nothing to flush."""
-
-
-class ClaimHolders(ProjectionPass):
-    """The current holders a claim transition projects from, before it is applied."""
-
-    @abstractmethod
-    def before(self, db: sqlite3.Connection, transition: ClaimTransition) -> ClaimProjection: ...
-
-    def advance(self, removed: tuple[str, ...], projected: ClaimProjection) -> None:
-        """Held rows already record the applied transition."""
-
-
-class StoredHolders(ClaimHolders):
-    """One append reads the holders of its resources from their table."""
-
-    def before(self, db: sqlite3.Connection, transition: ClaimTransition) -> ClaimProjection:
-        return HeldResources.claims_for(db, transition.resources, transition.seq - 1)
-
-
-@dataclass
-class ReplayedHolders(ClaimHolders):
-    """An in-order rebuild carries the holders it already projected; it never rereads them.
-
-    Each owner was validated in the projection that produced it; only the subset a
-    transition projects from is validated again, as one ``ClaimProjection``.
-    """
-
-    last_seq: int = 0
-    owners: dict[str, ClaimOwner] = field(default_factory=dict)
-    rows: dict[str, list[tuple]] = field(default_factory=dict)
-    """Derived rows by insert statement; nothing in the rebuild reads them back before
-    ``flush``, which inserts each statement's rows with one ``executemany``."""
-
-    def write(self, db: sqlite3.Connection, row: TypedTable) -> None:
-        statement, values = row.insertion()
-        self.rows.setdefault(statement, []).append(values)
-
-    def flush(self, db: sqlite3.Connection) -> None:
-        for statement, values in self.rows.items():
-            db.executemany(statement, values)
-        self.rows.clear()
-
-    def before(self, db: sqlite3.Connection, transition: ClaimTransition) -> ClaimProjection:
-        return ClaimProjection(self.last_seq, {
-            resource: self.owners[resource]
-            for resource in transition.resources if resource in self.owners})
-
-    def advance(self, removed: tuple[str, ...], projected: ClaimProjection) -> None:
-        for resource in removed:
-            self.owners.pop(resource, None)
-        self.owners.update(projected)
-        self.last_seq = projected.last_seq
-
-
-@dataclass(frozen=True)
-class CapabilityRow(TypedTable, BusTables, declared_name=None):
-    """Every generated capability row belongs to one original bus sequence."""
-
-    seq: Annotated[int, Column(primary_key=True, references=TableReference(BusRow, ("seq",)))]
-
-
-class _CapabilityTable:
-    """A class's table is derived once, after its dataclass decorator has run."""
-
-    def __get__(self, instance: BusCapability | None, owner: type[BusCapability]) -> type[CapabilityRow]:
-        return self.for_class(owner)
-
-    @cache
-    def for_class(self, owner: type[BusCapability]) -> type[CapabilityRow]:
-        hints = get_type_hints(owner, include_extras=True)
-        return make_dataclass(
-            BusTables.__name__.removesuffix("Tables") + owner.__name__ + "Row",
-            [*((item.name, hints[item.name], item) for item in BusCapability.declared_fields(owner)),
-             *((name, hints[name], vars(owner)[name]) for name in get_annotations(owner)
-               if get_origin(hints[name]) is ClassVar and name in vars(owner))],
-            bases=(CapabilityRow,),
-            namespace={"__module__": owner.__module__},
-            frozen=True,
-        )
-
-
-@dataclass(frozen=True)
-class BusCapability(TypedRow):
-    """The hierarchy and each dataclass declaration own their table union."""
-
-    table = _CapabilityTable()
-
-    def deliveries(self) -> tuple[Delivered, ...]:
-        return ()
-
-    @classmethod
-    def declared_fields(cls, owner: type[BusCapability]) -> tuple[Field, ...]:
-        own = get_annotations(owner)
-        header_fields = {item.name for item in fields(BusRow)}
-        return tuple(item for item in fields(owner)
-                     if item.name in own and item.name not in header_fields)
-
-    @classmethod
-    @cache
-    def tables(cls) -> tuple[type[CapabilityRow], ...]:
-        return tuple(base.table for base in cls.__mro__
-                     if issubclass(base, BusCapability) and BusCapability.declared_fields(base))
-
-    def rows(self) -> tuple[CapabilityRow, ...]:
-        """Project declared Python fields without flattening their wire representations."""
-        return tuple(
-            FieldCodec.construct(table, {
-                item.name: getattr(self, item.name) for item in fields(table)
-            })
-            for table in self.tables())
-
-    @classmethod
-    def read_from(cls, db: sqlite3.Connection, seq: int) -> Self:
-        """Reconstruct this declared value from its own capability tables."""
-        rows = []
-        for table in cls.tables():
-            stored = table.select(db, seq=seq)
-            if not stored:
-                raise RelationViolationError(f"Bus row {seq} lacks {table.declared_name}")
-            rows.append(stored[0])
-        return cls.assembled(rows)
-
-    @classmethod
-    def assembled(cls, rows: Iterable[CapabilityRow]) -> Self:
-        """This declared value from one stored row of each of its capability tables."""
-        return FieldCodec.construct(cls, {
-            item.name: getattr(row, item.name) for row in rows for item in fields(row)})
-
-    @staticmethod
-    def history(db: sqlite3.Connection) -> Iterator[BusCapability]:
-        """Every record in sequence order from one joined cursor, each stored row decoded once."""
-        tables = TypedTable.members_with(CapabilityRow)
-        offsets = dict(zip(tables, accumulate(
-            (len(BusRow.columns()), *(len(table.columns()) for table in tables)))))
-        header = BusRow.qualified("seq")
-        with closing(db.execute(
-            f"SELECT {', '.join(row.qualified(*row.column_projection()) for row in (BusRow, *tables))} "
-            f'FROM "{BusRow.declared_name}" '
-            + " ".join(f'LEFT JOIN "{table.declared_name}" ON {table.qualified("seq")} = {header}'
-                       for table in tables)
-            + f" ORDER BY {header}"
-        )) as cursor:
-            for stored in cursor:
-                kind = BusRow.decode_at(stored, 0).kind
-                yield kind.assembled(table.decode_at(stored, offsets[table]) for table in kind.tables())
-
-    def projections(self) -> Iterator[TypedTable]:
-        return iter(())
-
-    def project_into(self, db: sqlite3.Connection, holders: ClaimHolders) -> None:
-        for row in self.projections():
-            holders.write(db, row)
-
-@dataclass(frozen=True)
-class Addressed(BusCapability):
-    sender: Annotated[str, WireName("from"), WireOrder(2)]
-    target: Annotated[str, WireName("to"), WireOrder(3), Column(index=True)]
-    indexes: ClassVar[tuple[Index, ...]] = (Index(("sender", "target", "seq")),)

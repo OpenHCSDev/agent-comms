@@ -6,7 +6,7 @@ import sqlite3
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated, Self
 
-from .bus_tables import BusProjectionTables
+from .messages import BusProjectionTables
 from .typed_table import Column, TypedTable
 
 if TYPE_CHECKING:

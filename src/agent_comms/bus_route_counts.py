@@ -5,8 +5,8 @@ import json
 from dataclasses import dataclass
 from typing import Annotated, ClassVar
 
-from .bus_tables import BusProjectionTables, BusRow, ReceivedSource
-from .messages import Message
+from .bus_tables import ReceivedSource
+from .messages import BusProjectionTables, BusRow, Message
 from .read_basis import ReadCursor
 from .typed_table import Column, Index, TypedRow, TypedTable
 

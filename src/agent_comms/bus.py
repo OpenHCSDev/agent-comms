@@ -19,17 +19,24 @@ from agent_comms.bus_display_index import BusDisplayIndex
 from agent_comms.bus_publication import Delivered, KeyedPublication
 from agent_comms.bus_route_counts import RouteCounts
 from agent_comms.bus_tables import (
-    Addressed,
     AnsweredSource,
-    BusRow,
     BusSchema,
-    ClaimOperations,
     DirectReplySource,
-    HeldResources,
     MessageIdentitySource,
     ParticipantSource,
     ReceivedSource,
     SentSource,
+)
+from agent_comms.messages import (
+    Addressed,
+    BusRow,
+    ClaimOperations,
+    HeldResources,
+    BusRecord,
+    Claimed,
+    ClaimMessage,
+    Message,
+    MessageKind,
 )
 from agent_comms.envelope_claim_transitions import (
     ClaimOwner,
@@ -42,7 +49,6 @@ from agent_comms.errors import CommittedMessageError, RelationViolationError, Un
 from agent_comms.field_codec import FieldCodec
 from agent_comms.locked_store import BusFile, SQLiteFile, StoreCommittedError
 from agent_comms.message_reference import MessageReference
-from agent_comms.messages import BusRecord, Claimed, ClaimMessage, Message, MessageKind
 from agent_comms.private_path import FileIdentity, PresentPath
 from agent_comms.read_basis import ChannelDisplayScope, ReadCursor, RepliesDisplayScope
 from agent_comms.typed_table import CarriedWriter, ReconciledFile, SQLiteDatabase, WalStore
