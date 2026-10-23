@@ -133,6 +133,22 @@ Three audits, one per catalog rung group, each finding read in the code and chec
 - `RecoveryCondition` matching a lifecycle by `declared_name` string equality across two families (`recovery_states.py:21-26`): `issubclass`.
 
 **6.4 Rosters and registries beside families (MEMB-1/2/4, about 120).**
+
+Backend capability slice (integration base `acb2ddd0e`, 2026-10-23):
+`THREAD_CAPABILITIES`, the two serving flags and `validate_backends` independently
+state which backend may serve threads. `ThreadServingBackend` will inherit
+`Steers` and `Compacts`; `NewThreadBackend` will own new-thread selection from
+the declared family. Capability bases must precede `AgentBackend`, whose
+concrete refusal method would otherwise hide the abstract turn obligation.
+Location attachment moves to sealing the concrete declarations, retaining one
+backend per location and avoiding mutation by an incomplete declaration.
+NRA census covers 1,528 Core/hooks/tools/tests and paired Toad modules:
+6,973 original classes, 6,752 projected classes, zero parse omissions; the
+221 unprojected originals remain visible. Source evidence is not a behavior
+proof. The independent Pi producer/converter event comparison is retained;
+deriving expected producer events from the converters would erase its check.
+This slice does not close `RostersPhase` or edit its evidence declaration.
+
 - Five hand-rolled `__init_subclass__` registries: `Carry.declared` (`installer/carry.py:45-54`), `ThreadRename.kinds` (`thread_management.py:557-567`, gone with 4.1), `BirthlessIncarnation.members` (`thread_identity.py:185-192`), `CliToolArguments.types` (`tool_calls.py:89-95`), `_start_phases`/`_end_events` (`pi_events.py:59-93`): `DeclaredFamily` or attributes through the MRO.
 - `PI_0_85_1_EVENT_KINDS`, 36 names re-typed beside `NativePiEvent.known_kinds()` (`pi_native_backend.py:63-81`, check at `agent_backend.py:428`): derive the union; the equality check goes.
 - `THREAD_CAPABILITIES` plus `serves_threads`/`serves_new_threads` flags plus `validate_backends` probing with `getattr` (`agent_backend.py:358-466`): `ThreadServingBackend(AgentBackend, Steers, Compacts)` and `NewThreadBackend`; ABC instantiation enforces the roles.
