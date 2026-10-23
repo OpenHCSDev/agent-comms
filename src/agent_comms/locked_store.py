@@ -460,13 +460,6 @@ class RegistryFile(DurableFile, WireWakeFile):
         return copied
 
 
-class RetiredCommanderFile(DurableFile):
-    """The retired commander file that tools/cutover/carry_commander_project.py consumes.
-    The practice copy holds declared files only, so an undeclared input made the practice
-    carry find nothing while the live carry deleted it. Deleted with that carry."""
-
-    __slots__ = ()
-    filename = "commander.json"
 
 
 class StoreContention(ABC):

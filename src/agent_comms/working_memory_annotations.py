@@ -7,7 +7,6 @@ from pathlib import Path
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .coordination_tables.annotations import AnnotationRequestsRow, SpanAnnotationsRow
-from .coordination_schema import CoordinatorTable
 from .working_memory_labels import CalibrationReport, ClassifierVersion, HumanLabel, ModelLabel, QuestionVersion
 from .working_memory_requests import CompletedAnnotationOutcome, DisclosureRequest, SubmittedAnnotationOutcome
 
@@ -30,8 +29,9 @@ class WorkingMemoryAnnotations:
     @contextmanager
     def reading(path):
         """Borrow one original committed snapshot; readers never install a store."""
+        schema = CoordinationStore.schema_at(Path(path))
         with CoordinationStore.observing(Path(path)) as db:
-            CoordinatorTable.require_schema(db)
+            schema.require_schema(db)
             yield db
 
     @classmethod

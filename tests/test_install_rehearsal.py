@@ -7,7 +7,6 @@ installer. These checks rehearse an already-current bus format through the CLI:
 launch, target tree, staged stack build, carried practice copy and the outgoing
 runtime's owner probe. The outgoing package uses this source; the isolated target
 records a distinct incoming revision while retaining every declared carry dependency.
-The predecessor-history carry has its own real-writer fixture in test_carry_bus_history.
 """
 from __future__ import annotations
 
@@ -26,6 +25,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.history_result import ChannelHistoryPageResult
 from agent_comms.installer.backup import bus_files
 from agent_comms.installer.commands import InstallCommands
+from agent_comms.installer.interpreter_operation import InstalledProgram, PrepareProducerDigestsProbe
 from agent_comms.installer.practice import TestHome
 from agent_comms.installer.upgrade import (
     CarriedRehearsal,
@@ -92,6 +92,52 @@ def install_checkout(tmp_path_factory) -> Path:
                     "-c", "user.email=installer@example.invalid", "commit", "--allow-empty",
                     "-qm", "Record the incoming installer qualification revision"], check=True)
     return checkout
+
+
+def test_runtime_producer_digests_ignore_foreign_source(installed_home, tmp_path):
+    """A dirty review checkout may read through the runtime interpreter, never publish its digests."""
+    home = Path(installed_home["HOME"])
+    runtime = LaunchRuntime((home / ".local/share/agent-comms/current").resolve() / "bin/python")
+    foreign = tmp_path / "review"
+    subprocess.run(["git", "clone", "--shared", "-q", REPOSITORY, foreign], check=True)
+    Checkout(foreign).prepare()
+    source = foreign / "src/agent_comms/messages.py"
+    source.write_text(source.read_text().replace(
+        '"""Reverse lookups are derived from the record, in its append transaction."""',
+        '"""A dirty review changes this producer declaration."""', 1))
+    environment = {**installed_home, "PYTHONPATH": str(foreign / "src")}
+    with InstallCommands() as commands:
+        commands.probe(PrepareProducerDigestsProbe(), runtime.interpreter, cwd=home,
+                       env=runtime.environment(environment), program=InstalledProgram())
+        diagnostics = "\n".join(worker.errors() for worker in commands.workers.values())
+        assert f"install: producer digests from {runtime.package_root / '__init__.py'}" in diagnostics
+        print(diagnostics)
+    path = runtime.prefix / "agent-comms-producers.json"
+    original = path.read_bytes()
+    read = """
+import json
+import agent_comms
+from agent_comms import cli
+from agent_comms.messages import BusProjectionTables
+from agent_comms.package_stamp import STAMP
+from agent_comms.typed_table import ProjectionProducer
+rows = BusProjectionTables.projection_rows()
+print(json.dumps({'source': agent_comms.__file__, 'stamp': type(STAMP).__name__,
+                  'computed': {row.declared_name: row.producer_digest() for row in rows},
+                  'read': ProjectionProducer.digests_for(rows)}))
+"""
+    own = json.loads(subprocess.check_output(
+        [runtime.interpreter, "-I", "-c", read], env=installed_home, text=True))
+    assert own["stamp"] == "WheelStamp"
+    assert own["computed"] == own["read"] == json.loads(original)["digests"]
+    reviewed = json.loads(subprocess.check_output(
+        [runtime.interpreter, "-P", "-c", read], cwd=foreign, env=environment, text=True))
+    assert reviewed["stamp"] == "CheckoutStamp"
+    assert Path(reviewed["source"]).is_relative_to(foreign)
+    assert reviewed["computed"] == reviewed["read"]
+    assert reviewed["read"] != own["read"]
+    assert path.read_bytes() == original
+    print(json.dumps({"runtime": own, "review": reviewed, "file_unchanged": True}))
 
 
 def drop_one_index(root: Path) -> Path:

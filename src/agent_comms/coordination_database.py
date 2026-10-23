@@ -127,7 +127,8 @@ class CoordinationStore(CarriedWriter, ReconciledFile):
         return self.writer(self.path, contention, isolation_level=None)
 
     def _initialize_schema(self) -> None:
-        self.table_schema().install_schema(self._connection, self.schema_change(self.path))
+        """The root's own composition of this file decides its schema and its strays."""
+        self.schema_at(self.path).install_schema(self._connection, self.schema_change(self.path))
 
     def _configure_connection(self) -> None:
         for row_type in CoordinatorTable.declarations():

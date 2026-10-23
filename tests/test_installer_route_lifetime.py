@@ -5,7 +5,6 @@ import errno
 import fcntl
 import json
 import os
-import subprocess
 
 import pytest
 
@@ -28,7 +27,6 @@ from agent_comms.installer.interpreter_operation import InstalledProgram
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.recorded_bus import RecordedBusIdentity
 from bus_record_fixture import prepare_native_comms
-from test_carry_bus_history import OUTGOING_V2, predecessor_history
 
 
 @pytest.fixture
@@ -147,35 +145,15 @@ def test_unknown_publication_is_still_owned_by_rollback(tmp_path, route_bus, had
         assert not path.exists()
 
 
-def test_staged_probe_reads_the_published_route(tmp_path):
+def test_staged_probe_reads_the_published_route(tmp_path, route_bus):
     runtime = LaunchRuntime.running()
     home = tmp_path / "outgoing-home"
-    generated = predecessor_history(tmp_path, revision=OUTGOING_V2)
-    root = generated / "destination"
-    outgoing = tmp_path / "publisher"
+    root = route_bus.root
     environment = {
         **runtime.child_environment(runtime.environment(os.environ)), "HOME": str(home),
     }
-    # The outgoing tree only writes its old record; the staged reader refuses it.
-    writer = """from pathlib import Path
-import json,sys
-from agent_comms.active_route import ActiveRoute, active_route_path
-from agent_comms.wire_log import WireLog
-root=Path(sys.argv[1])
-route=ActiveRoute(root, WireLog(WireLog.path_in(root)).read_metadata_unlocked().root_id)
-path=active_route_path()
-path.parent.mkdir(mode=0o700,parents=True)
-path.write_text(json.dumps(route.to_record()))
-path.chmod(0o600)
-"""
-    written = subprocess.run(
-        (runtime.interpreter, "-P", "-c", writer, root),
-        env={**environment, "PYTHONPATH": str(outgoing / "src")},
-        cwd=tmp_path, capture_output=True, text=True, timeout=60,
-    )
-    assert written.returncode == 0, written.stdout + written.stderr
     path = home / ".local/state/agent-comms/active-route.json"
-    assert json.loads(path.read_text())["version"] == 2
+    old_route(path, route_bus)
     with InstallCommands() as commands:
         selected = commands.probe(
             SelectedRouteProbe(), runtime.interpreter, env=environment, cwd=tmp_path,

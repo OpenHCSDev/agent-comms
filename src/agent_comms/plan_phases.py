@@ -298,10 +298,13 @@ class BusHistoryReadersPhase(VirtualBusPhase):
 
 
 class BusCarryPhase(VirtualBusPhase):
-    """D: the one carry of the committed history into the bus database."""
+    """D: the one carry of the committed history into the bus database.
+
+    Done once the JSONL history writer the carry read from is gone: the bus database is
+    then the only store, and the finished carry is deleted rather than kept as evidence."""
 
     after = (BusWriterPhase,)
-    evidence = PatternPresent(r"bus\.sqlite3|Bus\.path_in", ("tools/cutover",))
+    evidence = PathsAbsent(("src/agent_comms/wire_log.py",))
 
 
 class BusWatchedPhase(VirtualBusPhase):
