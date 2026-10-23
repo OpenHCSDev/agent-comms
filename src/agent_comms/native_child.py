@@ -123,11 +123,21 @@ class PiChild:
         return response.data.require_payload()
 
     @property
-    def retired(self) -> bool:
+    def retirement_result(self) -> ChildOutcome | BaseException | None:
+        """The original completed shutdown result; pending work has no result."""
         job = self._close_job
-        if job is None or not job.done():
-            return False
-        return not job.cancelled() and job.exception() is None and isinstance(job.result(), ChildOutcome)
+        if job is None or not job.done() or job.cancelled():
+            return None
+        return job.exception() or job.result()
+
+    @property
+    def retired(self) -> bool:
+        return isinstance(self.retirement_result, ChildOutcome)
+
+    @property
+    def release_failure(self) -> BaseException | None:
+        result = self.retirement_result
+        return result if isinstance(result, BaseException) else None
 
     def forward_input(self, operation: Callable[[], Coroutine[None, None, None]]) -> None:
         self.forwarding = self.forwarding.start(operation)
