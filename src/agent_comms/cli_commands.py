@@ -1729,8 +1729,9 @@ class InstallCliCommand(CliCommand):
 
         return InstallRun.start(self, route.root).launch(output)
 
-    def apply(self, ctx: Comms) -> CliResult:
-        """The install child's last step, on the bus it carried or created."""
+    def apply(self, ctx: Comms) -> InstallResult:
+        """The install's last step, on the bus it carried or created, run by that bus's
+        runtime (HarnessesProbe)."""
         home = Path.home()
         snapshot = ctx.registry.snapshot()
         project = self.commander.configured(snapshot.commander_project, self.repos, snapshot)
