@@ -31,7 +31,7 @@ from agent_comms.selected_claim import (
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
 from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordination_tables.executions import ExecutionOrigin
+from agent_comms.coordination_tables.executions import ExecutionProvenance, WireOrigin
 from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim, NativeClaim, WakeClaim
 from agent_comms.coordination_session import NativeBoundary
@@ -104,7 +104,7 @@ def selected_turn(private_comms, private_directory):
         )
         person = store.participants.get(lookup)
         store.create(
-            "execution", ExecutionOrigin.WIRE, lookup, owner.name, 1,
+            "execution", WireOrigin, lookup, owner.name, 1,
             sources=(SelectedSource(assignment.assignment_id, store.assignments, initial),),
         )
         snapshot = store.get("execution")

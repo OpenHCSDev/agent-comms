@@ -30,7 +30,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import RecoveryBlocked
 from agent_comms.coordination_tables.attempts import ReplayFact
-from agent_comms.coordination_tables.executions import CurrentExecutions, ExecutionOrigin
+from agent_comms.coordination_tables.executions import CurrentExecutions, ExecutionProvenance, WireOrigin
 from agent_comms.cursor_publication import CursorDelivery
 from agent_comms.native_input_record import FullNativeExecution, NumberNativeColumn, TextNativeColumn
 from agent_comms.selected_participant import SelectedParticipant
@@ -55,7 +55,7 @@ async def release_starting_attempt(directory):
         ) as participant:
             assert participant is not None
             created = store.create(
-                participant.batch.execution_id, ExecutionOrigin.WIRE,
+                participant.batch.execution_id, WireOrigin,
                 participant.lookup, participant.owner.thread.name, 1,
                 sources=participant.batch.sources,
             ).value

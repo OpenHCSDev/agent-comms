@@ -10,7 +10,7 @@ from agent_comms.assignment_states import AssignmentState, EngagedAssignment, Fu
 from agent_comms.attempt_states import SucceededAttempt
 from agent_comms.coordination_errors import IntegrityViolationError
 from agent_comms.coordination_tables.assignments import WakeAssignment
-from agent_comms.coordination_tables.executions import ExecutionOrigin, ExecutionRecord
+from agent_comms.coordination_tables.executions import ExecutionProvenance, ExecutionRecord, WireOrigin, AcpOrigin
 from agent_comms.execution_states import (
     ActiveExecution,
     ExecutionState,
@@ -43,7 +43,7 @@ def test_state_data_cannot_be_attached_to_wrong_variant():
 def test_record_replacement_uses_only_nominal_state():
     record = ExecutionRecord(
         execution_id="e",
-        origin=ExecutionOrigin.ACP,
+        origin=AcpOrigin,
         lifecycle=PendingExecution(),
         owner_thread="t",
         owner_lookup="o",
@@ -120,7 +120,7 @@ def test_new_response_state_roundtrips_real_store(tmp_path):
             store.participants.register("p", "owner", "owner", committed=True)
             with store.session.writing() as db:
                 ExecutionRecord(
-                    execution_id="e", origin=ExecutionOrigin.WIRE,
+                    execution_id="e", origin=WireOrigin,
                     lifecycle=QueuedExecution(), owner_thread="owner", owner_lookup="p",
                     revision=1, max_attempts=2, reason_code=NoReasonCode(),
                     created_at_ms=0, updated_at_ms=0,

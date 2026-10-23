@@ -26,7 +26,7 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.coordination_response import LiveResponseOwner, prepare_fenced_response, publish_fenced_response, resolve_existing_response
 from agent_comms.coordination_results import AlreadyApplied
-from agent_comms.coordination_tables.executions import ExecutionOrigin
+from agent_comms.coordination_tables.executions import ExecutionProvenance, WireOrigin
 from agent_comms.coordinator import Coordination
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.execution_states import CompletedExecution
@@ -97,7 +97,7 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
     assert reply_target is not None
     store.create(
         "exec",
-        ExecutionOrigin.WIRE,
+        WireOrigin,
         recipient.recipient_lookup,
         "owner",
         1,

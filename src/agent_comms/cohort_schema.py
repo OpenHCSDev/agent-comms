@@ -336,11 +336,9 @@ class AwarenessClaimGenerations(
 
     def require_obligation(self, execution, link, assignment, obligation) -> None:
         """Captured ownership and the reply's original relational key agree."""
-        from .coordination_tables.executions import ExecutionOrigin
         from .wake_candidate_index import ProjectionUnavailableError
 
-        if execution.origin is not ExecutionOrigin.WIRE:
-            raise ProjectionUnavailableError("open obligation has no wire origin")
+        execution.origin.require_obligation()
         original_owner = OwnerGenerations(
             owner_lookup=execution.owner_lookup, owner_thread=execution.owner_thread,
             generation=self.owner_generation,

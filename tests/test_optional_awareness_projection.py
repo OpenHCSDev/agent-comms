@@ -24,7 +24,7 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.assignment_states import EngagedAssignment
 from agent_comms.wake_policy import FullWake
-from agent_comms.coordination_tables.executions import ExecutionOrigin
+from agent_comms.coordination_tables.executions import ExecutionProvenance, WireOrigin
 from agent_comms.coordinator import Coordination
 from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
 from agent_comms.registration import Registration
@@ -115,7 +115,7 @@ def test_selected_decision_and_open_obligation_are_both_source_cited(tmp_path: P
         owner = _owner(comms, "member000")
         store.create(
             "reply000",
-            ExecutionOrigin.WIRE,
+            WireOrigin,
             assignment.recipient_lookup,
             owner.name,
             1,
@@ -169,7 +169,7 @@ def test_open_obligation_budget_cannot_be_hidden_by_selected_cursor(tmp_path: Pa
         for number, (assignment, delivery) in enumerate(((old_claim, older), (new_claim, newer))):
             store.create(
                 f"reply{number}",
-                ExecutionOrigin.WIRE,
+                WireOrigin,
                 assignment.recipient_lookup,
                 owner.name,
                 1,
@@ -229,7 +229,7 @@ def test_fresh_gen2_selected_and_old_pending_obligation_are_scoped(tmp_path: Pat
         old, old_claim = _accepted(comms, store, root_id, "member000", "old pending")
         store.create(
             "old-reply",
-            ExecutionOrigin.WIRE,
+            WireOrigin,
             old_claim.recipient_lookup,
             "member000",
             1,
@@ -415,7 +415,7 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
         owner = _owner(comms, "member000")
         store.create(
             "wire-awareness-reply",
-            ExecutionOrigin.WIRE,
+            WireOrigin,
             assignment.recipient_lookup,
             owner.name,
             1,

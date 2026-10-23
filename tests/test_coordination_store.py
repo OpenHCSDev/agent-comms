@@ -51,7 +51,7 @@ from agent_comms.coordination_tables.executions import (
     ReplayAssessment,
     ReplayAssessments,
 )
-from agent_comms.coordination_tables.executions import ExecutionOrigin
+from agent_comms.coordination_tables.executions import ExecutionProvenance, WireOrigin, AcpOrigin, GoalOrigin
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
 )
@@ -99,12 +99,12 @@ def wire_source(db, assignment_id: str, original: Message, mode: WakePolicy):
 
 
 def ready(
-    path: Path, *, origin: ExecutionOrigin = ExecutionOrigin.WIRE, max_attempts: int = 2
+    path: Path, *, origin: type[ExecutionProvenance] = WireOrigin, max_attempts: int = 2
 ) -> StandaloneCoordination:
     db = store(path)
     sources = ()
     assert isinstance(db.participants.register("owner", "Owner", "thread", committed=True), Applied)
-    if origin is ExecutionOrigin.WIRE:
+    if origin is WireOrigin:
         original = Message("owner", "Owner", "Original request", InfoKind, timestamp=1.0, seq=1)
         db.assignments.accept(
             WakeAssignment(
@@ -280,7 +280,7 @@ def test_claim_execution_idempotency_and_rollback(db_path: Path) -> None:
     original = Message("owner", "Owner", "Original request", InfoKind, timestamp=1.0, seq=1)
     replay = db.create(
         "exec",
-        ExecutionOrigin.WIRE,
+        WireOrigin,
         "owner",
         "thread",
         2,
@@ -292,7 +292,7 @@ def test_claim_execution_idempotency_and_rollback(db_path: Path) -> None:
     with pytest.raises(IdentityConflict):
         db.create(
             "exec",
-            ExecutionOrigin.WIRE,
+            WireOrigin,
             "owner",
             "thread",
             2,
@@ -400,7 +400,7 @@ def test_claim_preengagement_and_mixed_engagement_rollback(db_path: Path) -> Non
         with pytest.raises((IdentityConflict, sqlite3.IntegrityError)):
             db.create(
                 "exec",
-                ExecutionOrigin.WIRE,
+                WireOrigin,
                 "owner",
                 "thread",
                 2,
@@ -503,7 +503,7 @@ def test_token_digest_is_global_and_only_digest_persists(db_path: Path) -> None:
     with ready(db_path) as db:
         token, _ = started(db)
         db.participants.register("other", "Other", "other-thread", committed=True)
-        db.create("other-exec", ExecutionOrigin.GOAL, "other", "other-thread", 1)
+        db.create("other-exec", GoalOrigin, "other", "other-thread", 1)
         db.mark_pending("other-exec", expected_revision=1)
         with pytest.raises(IdentityConflict):
             db.start(
@@ -529,7 +529,7 @@ def test_settled_snapshot_encodes_recovery_kind_separately_from_table(db_path: P
 
     with store(db_path) as db:
         db.participants.register("owner", "Owner", "thread", committed=True)
-        db.create("exec", ExecutionOrigin.ACP, "owner", "thread", 1)
+        db.create("exec", AcpOrigin, "owner", "thread", 1)
         db.mark_pending("exec", expected_revision=1)
         _, fence = started(db)
         fence = final_evidence(db, fence)
@@ -551,7 +551,7 @@ def test_settled_snapshot_encodes_recovery_kind_separately_from_table(db_path: P
 
 
 def test_nonpublication_claimless_atomic_settlement(db_path: Path) -> None:
-    with ready(db_path, origin=ExecutionOrigin.ACP) as db:
+    with ready(db_path, origin=AcpOrigin) as db:
         _, fence = started(db)
         fence = final_evidence(db, fence)
         settled = db.settle_nonpublication(

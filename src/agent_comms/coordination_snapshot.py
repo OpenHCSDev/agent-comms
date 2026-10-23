@@ -23,7 +23,6 @@ from agent_comms.coordination_tables.attempts import (
 )
 from agent_comms.coordination_tables.executions import (
     CurrentExecutions,
-    ExecutionOrigin,
     ExecutionRecord,
     NoPointedAttempt,
     NoPointedExecution,
@@ -208,11 +207,7 @@ class RecoverySnapshot:
             raise IntegrityViolationError("snapshot current pointer is inconsistent")
 
     def validate_response_route(self) -> None:
-        if self.execution.origin is ExecutionOrigin.WIRE:
-            if not self.assignments or not self.obligations:
-                raise IntegrityViolationError("wire snapshots require original obligations")
-        elif self.obligations or self.assignments:
-            raise IntegrityViolationError("claimless snapshots cannot have claims or obligations")
+        self.execution.origin.validate_routes(self.assignments, self.obligations)
         expected = {row.lifecycle.exact_target for row in self.assignments}
         targets = tuple(row.exact_target for row in self.obligations)
         if len(set(targets)) != len(targets) or set(targets) != expected:

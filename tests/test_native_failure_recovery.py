@@ -19,7 +19,7 @@ import pytest
 from agent_comms.attempt_recovery import RecoveryMonitorCapability
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import IdentityConflict, RecoveryBlocked
-from agent_comms.coordination_tables.executions import ExecutionOrigin
+from agent_comms.coordination_tables.executions import ExecutionProvenance, WireOrigin
 from agent_comms.coordinator import Coordination
 from agent_comms.cursor_publication import CursorDelivery
 from agent_comms.declared_family import DeclaredFamily
@@ -130,7 +130,7 @@ async def release_native_input(directory: Path, history: type[NativeSendHistory]
             ) as participant:
                 assert participant is not None
                 created = store.create(
-                    participant.batch.execution_id, ExecutionOrigin.WIRE,
+                    participant.batch.execution_id, WireOrigin,
                     participant.lookup, participant.owner.thread.name, 1,
                     sources=participant.batch.sources,
                 ).value

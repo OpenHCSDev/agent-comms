@@ -650,9 +650,15 @@ class OwnedDispatchPhase(RemainingSlopPhase):
 class KindFamiliesPhase(RemainingSlopPhase):
     """6.3: kinds are families whose members carry their behaviour and spelling."""
 
-    evidence = PatternAbsent(
-        r"class (TagAction|ExecutionOrigin|WhenBusy|MessageControl|MembershipTransition"
-        r"|ViewKind)\b"
+    evidence = AllEvidence(
+        (
+            PatternAbsent(
+                r"class (TagAction|ExecutionOrigin|WhenBusy|ControlClassification"
+                r"|MembershipChange)\b"
+            ),
+            # SQLite's ViewKind(CatalogKind) is already a behavior-owning member.
+            PatternAbsent(r"class ViewKind\((StrEnum|Enum)\)"),
+        )
     )
 
 
