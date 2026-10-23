@@ -573,15 +573,14 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
             self.status(thread.name).require_mutable(thread.name)
         previous = self.threads.get(thread.name)
         if previous is not None:
+            thread = thread.preserve_registration_history(previous)
             change = UpdatedRegistration(
                 thread=thread,
                 status=status,
                 previous=previous,
                 previous_status=self.status(thread.name),
             )
-            change = change.restarted() if new_owner else change
-            return replace(change, thread=thread.preserve_registration_history(
-                previous, restarting=change.changes_owner))
+            return change.restarted() if new_owner else change
         if any(existing.created_at == thread.created_at for existing in self.threads.values()):
             used = {existing.created_at for existing in self.threads.values()}
             thread = replace(thread, created_at=thread.created_at.distinct_from(used))

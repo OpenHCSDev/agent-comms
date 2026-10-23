@@ -9,6 +9,7 @@ from agent_comms.session_file import SavedSessionFile
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
 from agent_comms.registration import Registration
+from agent_comms.thread_identity import ReportedTools, ToolName, UnreportedTools
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.turn_lease import NoFinishedTurn
 from agent_comms.thread_text import GivenThreadText
@@ -51,6 +52,32 @@ def test_registration_transition_preserves_or_revokes_exact_lease(tmp_path, tran
     released, completion = registry.release_turn(lease)
     assert released == preserves_record
     assert (completion != NoFinishedTurn()) == (preserves_record and not advances_owner)
+
+
+def tools(version, *names):
+    return ReportedTools(version, frozenset(ToolName(name) for name in names))
+
+
+@pytest.mark.parametrize('restart, before, after, lost', [
+    ('new-owner', tools('1', 'a', 'b'), tools('1', 'a'), ('missing tools b; runtime 1',)),
+    ('stop-start', tools('1', 'a', 'b'), tools('1', 'a'), ('missing tools b; runtime 1',)),
+    ('stop-stop-start', tools('1', 'a', 'b'), tools('1', 'a'), ('missing tools b; runtime 1',)),
+    ('stop-start', tools('1', 'a', 'b'), tools('1', 'a', 'b'), ()),
+    ('new-owner', UnreportedTools('1'), UnreportedTools('1'), ()),
+    ('new-owner', UnreportedTools('1'), UnreportedTools('2'), ('runtime 1 -> 2, tool set unreported',)),
+])
+def test_owner_restart_compares_tools_with_last_real_record(tmp_path, restart, before, after, lost):
+    registry = Registration(tmp_path / 'registry.json')
+    registry.register(registry.new_thread('owner', frozenset(), str(tmp_path)))
+    registry.observe_offered_tools(registry.require('owner').incarnation, before)
+    stops = restart.count('stop')
+    for _ in range(stops):
+        registry.register(registry.require('owner'), status=StoppedThreadStatus())
+    registry.register(registry.require('owner'), new_owner=True)
+    current = registry.require('owner')
+    assert current.offered_before_restart == before
+    registry.observe_offered_tools(current.incarnation, after)
+    assert registry.require('owner').lost_tools() == lost
 
 
 def test_rename_preserves_exact_turn_release_but_not_reused_identity(tmp_path):
