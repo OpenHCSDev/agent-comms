@@ -412,8 +412,11 @@ class MaintenanceBarrier(MaintenanceIngress):
     def begin(self, operator: MaintenanceOperator) -> MaintenanceState:
         """Hold new turns before fleet drain; an uncertain write stays closed."""
         with _store_lock(self.registry_path):
-            current = self.current_unlocked()
-            current.require_open()
+            current = self._current_unlocked()
+            # A successor takes an abandoned hold without briefly reopening
+            # ingress or making the owner repeat its install command.
+            if not current.phase.holder_dead(current):
+                current.require_open()
             hold = MaintenanceState(version=2, root=str(self.registry_path.parent.resolve()),
                                     generation=current.generation + 1, operator=operator,
                                     nonce=Id128Text.mint(), phase=DrainingPhase)
