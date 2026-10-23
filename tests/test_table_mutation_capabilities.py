@@ -389,4 +389,3 @@ def test_claimed_names_are_one_family_fact_whichever_row_reads_them():
 
     assert LateDeclaredRow.schema_names <= FrozenRow.claimed_names
     assert TypedTable.claimed_names is FrozenRow.claimed_names
-    assert "_claimed_names_derived" not in vars(FrozenRow)

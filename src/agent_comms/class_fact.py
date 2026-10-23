@@ -25,7 +25,7 @@ class ClassFact[Owner, Value]:
     def __get__(self, instance: object, owner: type[Owner]) -> Value:
         holder = self.holder(owner)
         if self.slot not in holder.__dict__:
-            setattr(holder, self.slot, self.derive(holder))
+            setattr(holder, self.slot, self.derive(owner))
         value: Value = holder.__dict__[self.slot]
         return value
 
@@ -38,7 +38,7 @@ class ClassFact[Owner, Value]:
 
 class FamilyFact[Owner, Value](ClassFact[Owner, Value]):
     """A fact about the whole family: the class declaring it holds the one value,
-    whichever member it is read through, so no member keeps a copy of its own."""
+    derived from whichever member reads it first, so no member keeps a copy of its own."""
 
     def __set_name__(self, owner: type[Owner], name: str) -> None:
         super().__set_name__(owner, name)
@@ -50,7 +50,11 @@ class FamilyFact[Owner, Value](ClassFact[Owner, Value]):
     @staticmethod
     def forget_declared(member: type) -> None:
         """Forget every family fact ``member`` inherits, so the next read counts it."""
-        inherited = [fact for base in member.__mro__ for fact in vars(base).values()
-                     if isinstance(fact, FamilyFact)]
+        inherited = [
+            fact
+            for base in member.__mro__
+            for fact in vars(base).values()
+            if isinstance(fact, FamilyFact)
+        ]
         for fact in inherited:
             fact.forget(member)

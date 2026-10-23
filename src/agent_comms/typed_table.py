@@ -1492,11 +1492,11 @@ class DeclaredSchemaFacts:
 
     @FamilyFact
     @staticmethod
-    def claimed_names(cls: type[DeclaredSchemaFacts]) -> frozenset[str]:
-        """Every object name any row of the family declares, held once on this class;
-        each new row declaration forgets it, so it always covers the whole registry."""
-        return frozenset(name for row in TypedTable.members_with(TypedTable)
-                         for name in row.schema_names)
+    def claimed_names(cls: type[TypedTable]) -> frozenset[str]:
+        """Every object name any row of the reading row's family declares, held once on
+        this class; each new row declaration forgets it, so it covers the whole registry."""
+        root = cast(type[TypedTable], cls.family_root())
+        return frozenset(name for row in root.members_with(root) for name in row.schema_names)
 
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()
