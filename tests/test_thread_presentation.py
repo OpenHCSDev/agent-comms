@@ -125,3 +125,14 @@ def test_input_delivery_keeps_its_explanation_and_original_work(working):
     shown = failed.presentation(ordinary)
     assert shown.status.details == ("Original read failure",)
     assert shown.summary == (ordinary.summary if working else "Original read failure")
+
+
+def test_delivery_history_changes_between_unread_and_read_with_notices():
+    unread = DeliveryView()
+    read = ReadDeliveryView(DeliveryOverview(
+        inputs=(), historical_count=3, dismissed_historical_count=0, historical_inputs=(),
+        current_scope=UnobservedInputDeliveryScope,
+    ))
+    assert unread.history_changed(read)
+    assert read.history_changed(unread)
+    assert not unread.history_changed(DeliveryView())

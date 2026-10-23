@@ -97,11 +97,12 @@ class DeliveryView:
     def historical_records(self) -> tuple[HistoricalInput, ...]:
         return ()
 
-    def history_changed(self, other: DeliveryView) -> bool:
-        return False
+    @property
+    def history_counts(self) -> tuple[int, int]:
+        return (0, 0)
 
-    def history_changed_from(self, other: ReadDeliveryView) -> bool:
-        return False
+    def history_changed(self, other: DeliveryView) -> bool:
+        return self.history_counts != other.history_counts
 
 
 @dataclass(frozen=True)
@@ -162,10 +163,6 @@ class ReadDeliveryView(DeliveryView):
     def historical_records(self) -> tuple[HistoricalInput, ...]:
         return self.overview.historical_inputs
 
-    def history_changed(self, other: DeliveryView) -> bool:
-        return other.history_changed_from(self)
-
-    def history_changed_from(self, other: ReadDeliveryView) -> bool:
-        return (self.overview.historical_count, self.overview.dismissed_historical_count) != (
-            other.overview.historical_count, other.overview.dismissed_historical_count
-        )
+    @property
+    def history_counts(self) -> tuple[int, int]:
+        return (self.overview.historical_count, self.overview.dismissed_historical_count)
