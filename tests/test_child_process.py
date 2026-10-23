@@ -7,7 +7,7 @@ import os
 import subprocess
 import sys
 import time
-from contextlib import closing, nullcontext
+from contextlib import closing, contextmanager, nullcontext
 from dataclasses import replace
 from pathlib import Path
 
@@ -25,6 +25,7 @@ from agent_comms.child_process import (
     ObservedProcess,
     Platform,
     ProcessIdentity,
+    STOP_GRACE_SECONDS,
     SpawnedProcess,
     SynchronousProcess,
     TimedOutOutcome,
@@ -48,14 +49,16 @@ def test_wait_any_exit_returns_before_another_member_exits() -> None:
         last.close()
 
 
-def test_wait_any_exit_refuses_reused_identity_and_handles_exited_member() -> None:
+def test_wait_any_exit_returns_for_reused_identity_and_exited_member() -> None:
     child = SpawnedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
     platform = Platform.current()
     try:
-        with pytest.raises(IdentityMismatchError):
-            platform.wait_any_exited(
-                (replace(child.identity, start_time=child.identity.start_time + 1),), 10,
-            )
+        # Another incarnation at the pid means the awaited member already exited.
+        started = time.monotonic()
+        platform.wait_any_exited(
+            (replace(child.identity, start_time=child.identity.start_time + 1),), 10,
+        )
+        assert time.monotonic() - started < 5
         assert child.alive()
     finally:
         child.close()
@@ -74,12 +77,23 @@ def test_stop_batch_shares_one_force_deadline() -> None:
         for child in children:
             assert child.process.stdout is not None
             assert child.process.stdout.readline() == b"ready\n"
-        started = time.monotonic()
+        signalled: dict[int, list[float]] = {index: [] for index in range(len(children))}
+
+        def recording(index: int):
+            @contextmanager
+            def guard():
+                signalled[index].append(time.monotonic())
+                yield
+            return guard
+
         outcomes = SynchronousProcess.stop_together(
-            tuple((child, nullcontext) for child in children)
+            tuple((child, recording(index)) for index, child in enumerate(children))
         )
-        assert time.monotonic() - started < 3.5
         assert all(isinstance(outcome, ForcedStopOutcome) for outcome in outcomes)
+        # Each plan's first guarded signal is the graceful pass, its second the force.
+        # One shared deadline forces both within one grace period, whatever the load.
+        forced = [times[1] for times in signalled.values()]
+        assert max(forced) - min(forced) < STOP_GRACE_SECONDS
         assert all(child.retired for child in children)
     finally:
         for child in children:

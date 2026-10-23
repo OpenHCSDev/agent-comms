@@ -414,7 +414,8 @@ class Platform(DeclaredFamily, affix="Platform"):
         raise NotImplementedError('This platform does not expose exact parent identities')
 
     async def wait_exited(self, identity: ProcessIdentity) -> None:
-        raise NotImplementedError('This platform does not expose process exit observation')
+        """Wait for one incarnation's exit; members with a loop-readable handle override this."""
+        await asyncio.to_thread(self.wait_any_exited, (identity,), math.inf)
 
     @abstractmethod
     def wait_any_exited(
@@ -588,7 +589,7 @@ class LinuxPlatform(PidfdHandles, PosixPlatform):
                 except ProcessLookupError:
                     return
                 if current != identity:
-                    raise IdentityMismatchError(identity.pid)
+                    return  # Another incarnation holds the pid: this member exited.
                 pending.register(descriptor, select.POLLIN)
             pending.poll(None if math.isinf(timeout) else max(0, math.ceil(timeout * 1000)))
         finally:
@@ -720,7 +721,7 @@ class DarwinPlatform(PosixPlatform):
                 except ProcessLookupError:
                     return
                 if current != identity:
-                    raise IdentityMismatchError(identity.pid)
+                    return  # Another incarnation holds the pid: this member exited.
             try:
                 returned = pending.control(
                     events, 1, None if math.isinf(timeout) else max(0, timeout),
@@ -890,7 +891,7 @@ class Win32Platform(Platform):
                     except ProcessLookupError:
                         return
                     if current != identity:
-                        raise IdentityMismatchError(identity.pid)
+                        return  # Another incarnation holds the pid: this member exited.
                     registered = ctypes.c_void_p()
                     if not self.kernel.RegisterWaitForSingleObject(
                         ctypes.byref(registered), handle, callback, None, 0xFFFFFFFF, 8,
@@ -2039,7 +2040,7 @@ class ObservedProcess(SynchronousProcess):
         return DetachedExitOutcome()
 
     async def wait(self) -> ChildOutcome:
-        await asyncio.to_thread(self.platform.wait_any_exited, (self.identity,), math.inf)
+        await self.platform.wait_exited(self.identity)
         return self.reap()
 
 
@@ -2127,7 +2128,7 @@ class SpawnedProcess(SynchronousProcess):
         return ChildOutcome.from_returncode(self.process.wait(timeout=STOP_GRACE_SECONDS))
 
     async def wait(self) -> ChildOutcome:
-        await asyncio.to_thread(self.platform.wait_any_exited, (self.identity,), math.inf)
+        await self.platform.wait_exited(self.identity)
         return self.reap()
 
     def close_streams(self) -> None:
