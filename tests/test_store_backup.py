@@ -6,7 +6,7 @@ from contextlib import closing
 
 import pytest
 
-from agent_comms.installer.backup import BackupName, NoBackup, StoreBackup
+from agent_comms.installer.backup import BackupName, StoreBackup
 from agent_comms.coordination_database import (
     CoordinationStore, InvalidStore, MissingStore, ReadableStore,
 )
@@ -216,18 +216,22 @@ def test_backup_retention_preserves_restored_archives(tmp_path):
     assert (archive / 'saved').read_text() == 'restored evidence'
 
 
-def test_runtime_only_backup_retains_without_a_spill_directory(tmp_path):
+@pytest.mark.parametrize('had_route', (False, True))
+def test_route_only_backup_restores_contents_or_absence(tmp_path, had_route):
     root = tmp_path / 'wire'
-    spill_dir = tmp_path / 'missing-spill'
-    backup = StoreBackup.take(root, tmp_path / 'no-route.json', (), spill_dir)
-
-    assert isinstance(backup, NoBackup)
-    assert backup.spill_directory(spill_dir) == spill_dir
-    assert backup.retain(spill_dir) == ()
+    root.mkdir()
+    route = tmp_path / 'route.json'
+    if had_route:
+        route.write_text('original route')
+    spill_dir = tmp_path / 'spill'
+    backup = StoreBackup.take(root, route, (), spill_dir)
     assert backup.original()
+
+    route.write_text('changed route')
+    assert not backup.original()
     backup.restore()
-    assert backup.report().backup == 'none'
-    assert backup.report().bytes == 0
-    assert not spill_dir.exists()
-    assert not root.exists()
+    assert backup.original()
+    assert route.exists() == had_route
+    if had_route:
+        assert route.read_text() == 'original route'
 

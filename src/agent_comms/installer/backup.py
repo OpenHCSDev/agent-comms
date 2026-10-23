@@ -186,7 +186,7 @@ class ResourceBackup(ABC):
 
 @dataclass
 class StoreBackup(ResourceBackup):
-    """Snapshot declared databases through SQLite; restore only the selected files."""
+    """Snapshot selected stores and the route, including its original absence."""
     root: Path
     route: Path
     path: Path
@@ -211,13 +211,20 @@ class StoreBackup(ResourceBackup):
         return archived
 
     def restore_route(self) -> None:
-        if (self.path / 'active-route.json').exists():
-            shutil.copy2(self.path / 'active-route.json', self.route)
+        saved = self.path / 'active-route.json'
+        if saved.exists():
+            _atomic_write_text(self.route, saved.read_text(), fsync_parent=True)
+        else:
+            self.route.unlink(missing_ok=True)
+
+    def route_original(self) -> bool:
+        saved = self.path / 'active-route.json'
+        if not saved.exists():
+            return not self.route.exists()
+        return self.route.exists() and self.route.read_bytes() == saved.read_bytes()
 
     @classmethod
-    def take(cls, root: Path, route: Path, files: tuple[Path, ...], spill_dir: Path) -> ResourceBackup:
-        if not files:
-            return NoBackup()
+    def take(cls, root: Path, route: Path, files: tuple[Path, ...], spill_dir: Path) -> StoreBackup:
         path = spill_dir / BackupName.now(root).value
         backup = cls(root, route, path)
         selected = tuple(str(file.relative_to(root)) for file in files)
@@ -322,7 +329,7 @@ class StoreBackup(ResourceBackup):
         if not (self.path / 'files.json').exists():
             return False
         saved = self.files()
-        return all(self.file_original(name, saved)
+        return self.route_original() and all(self.file_original(name, saved)
                    for name in json.loads((self.path / 'selected.json').read_text()))
 
     def restore(self) -> None:
@@ -351,29 +358,6 @@ class StoreBackup(ResourceBackup):
             os.fsync(directory)
         finally:
             os.close(directory)
+        self.restore_route()
         if not self.original():
             raise UpgradeRefused('Selected stores differ after backup restoration')
-        self.restore_route()
-
-
-class NoBackup(ResourceBackup):
-    """A runtime-only install owns no files, paths or snapshot operations."""
-
-    def spill_directory(self, configured: Path) -> Path:
-        return configured
-
-    def retain(self, spill_dir: Path) -> tuple[Path, ...]:
-        return ()
-
-    def original(self) -> bool:
-        return True
-
-    def restore(self) -> None:
-        pass
-
-    def report(self) -> BackupReport:
-        return BackupReport(self.description, 0)
-
-    @property
-    def description(self) -> str:
-        return 'none'
