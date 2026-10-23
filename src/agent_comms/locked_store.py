@@ -19,6 +19,7 @@ from pathlib import Path
 from pkgutil import walk_packages
 from typing import Any, ClassVar, Generic, Self, TypeVar
 
+from .child_process import Platform
 from .coordination_errors import CoordinationReadUnavailable
 from .field_codec import FieldCodec, MalformedRecord
 from .store_files import (
@@ -86,7 +87,6 @@ class JsonDocument(ABC, Generic[T]):
         """
         fd, staged = StoreOwner.stage_file(self.path)
         backup = StoreOwner.rollback_file(staged)
-        directory_fd = None
         published = False
         had_original = False
         keep_backup = False
@@ -100,10 +100,6 @@ class JsonDocument(ABC, Generic[T]):
                 output.flush()
                 os.chmod(staged, mode)
                 os.fsync(output.fileno())
-            if os.name == "posix":
-                directory_fd = os.open(
-                    self.path.parent, os.O_RDONLY | os.O_DIRECTORY
-                )
             try:
                 os.link(self.path, backup)
                 had_original = True
@@ -111,8 +107,7 @@ class JsonDocument(ABC, Generic[T]):
                 pass
             os.replace(staged, self.path)
             published = True
-            if directory_fd is not None:
-                os.fsync(directory_fd)
+            Platform.current().sync_directory(self.path.parent)
             # A failed backup cleanup is still a failed update: retain the old
             # inode until unlink succeeds so the exception path can restore it.
             backup.unlink(missing_ok=True)
@@ -128,12 +123,9 @@ class JsonDocument(ABC, Generic[T]):
                         raise
                 else:
                     self.path.unlink()
-                if directory_fd is not None:
-                    os.fsync(directory_fd)
+                Platform.current().sync_directory(self.path.parent)
             raise
         finally:
-            if directory_fd is not None:
-                os.close(directory_fd)
             staged.unlink(missing_ok=True)
             if not keep_backup:
                 backup.unlink(missing_ok=True)

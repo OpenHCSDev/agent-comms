@@ -22,15 +22,6 @@ from .errors import RelationViolationError
 from .field_codec import NullMember, RecordMember, SubclassUnion
 
 
-def fsync_directory(path: Path) -> None:
-    """Make a directory's entries durable without following a final symlink."""
-    descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
-
-
 @dataclass(frozen=True, slots=True)
 class FileIdentity:
     device: int

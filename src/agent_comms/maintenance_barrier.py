@@ -18,7 +18,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal, Self
 
-from .child_process import ProcessIdentity
+from .child_process import Platform, ProcessIdentity
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, ToolRefusedError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
@@ -336,8 +336,7 @@ class MaintenanceBarrier(MaintenanceIngress):
             info = os.fstat(descriptor)
             if (
                 not stat.S_ISREG(info.st_mode)
-                or (os.name == "posix" and info.st_uid != os.geteuid())
-                or (os.name == "posix" and stat.S_IMODE(info.st_mode) != 0o600)
+                or not Platform.current().is_private(info, 0o600)
                 or info.st_nlink != 1
                 or info.st_size > 4096
             ):
@@ -407,8 +406,8 @@ class MaintenanceBarrier(MaintenanceIngress):
         marker_text = json.dumps(FieldCodec.encode(marker), sort_keys=True)
         state_text = json.dumps(FieldCodec.encode(hold), sort_keys=True)
         # The marker leads so an interrupted replacement still holds new turns.
-        _atomic_write_text(self.marker_path, marker_text, fsync_parent=True)
-        _atomic_write_text(self.state_path, state_text, fsync_parent=True)
+        _atomic_write_text(self.marker_path, marker_text)
+        _atomic_write_text(self.state_path, state_text)
 
     def begin(self, operator: MaintenanceOperator) -> MaintenanceState:
         """Hold new turns before fleet drain; an uncertain write stays closed."""

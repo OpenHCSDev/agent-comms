@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms_hooks import ClaudeHookProgram
 
+from .child_process import Platform
 from .declared_family import DeclaredFamily
 from .thread_execution import ExternalThreadExecution
 
@@ -34,11 +35,7 @@ def replace_link(link: Path, target: Path) -> None:
     try:
         temporary.symlink_to(target)
         os.replace(temporary, link)
-        directory = os.open(link.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
+        Platform.current().sync_directory(link.parent)
     finally:
         temporary.unlink(missing_ok=True)
 
