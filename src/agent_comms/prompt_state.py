@@ -67,7 +67,7 @@ class UnwrittenPrompt(PromptState, TurnInboxItem):
     async def deliver_to(self, inputs, session):
         def write():
             session.grant_prompt()
-            session.native.proc.stdin.write(session.native.reader.encode(session.command))
+            session.native.send(session.command)
         async with MaintenanceBarrier(RegistryFile.path_in(session.startup.root)).ingress_async() as status:
             with status.phase.send_new(session.send_boundary, None, session.command.input_id, session.command.message) as outcome:
                 completion = outcome.dispatch(inputs, session, self, write)

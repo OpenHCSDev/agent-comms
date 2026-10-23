@@ -1525,12 +1525,25 @@ class AttachedChild(ChildProcess):
                 raise
         return child
 
-    async def write(self, data: bytes) -> None:
-        """Write to this still-running child's input and observe transport backpressure."""
+    def send(self, data: bytes) -> None:
+        """Write synchronously while this child's input still exists and it runs."""
         if self.stdin is None or self.returncode is not None:
             raise BrokenPipeError
         self.stdin.write(data)
+
+    async def drain(self) -> None:
         await self.stdin.drain()
+
+    async def write(self, data: bytes) -> None:
+        """Write to this still-running child's input and observe transport backpressure."""
+        self.send(data)
+        await self.drain()
+
+    async def send_fenced(self, data: bytes, boundary, *, measurements) -> None:
+        """Keep the independent raw writer on this child's original input."""
+        from .native_prompt_send import send_fenced_prompt
+
+        await send_fenced_prompt(self.stdin, data, boundary, measurements=measurements)
 
     @property
     def returncode(self) -> int | None:

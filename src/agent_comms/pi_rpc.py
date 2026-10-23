@@ -71,10 +71,10 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
         except asyncio.QueueShutDown:
             return reading.result()
 
-    async def request(self, command, writer):
+    async def request(self, command, child):
         if self._read_task is None:
-            return await command.exchange(self, writer, strict=True, on_event=self.event_type.unowned_event)
-        async with command.pending_response(self, writer) as future:
+            return await command.exchange(child, strict=True, on_event=self.event_type.unowned_event)
+        async with command.pending_response(child) as future:
             await asyncio.wait((future, self._read_task), return_when=asyncio.FIRST_COMPLETED)
             response = future.result() if future.done() else self._read_task.result()
             if response is None:

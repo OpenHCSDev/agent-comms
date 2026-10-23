@@ -414,9 +414,8 @@ class NativeSession(MroDispatch, ABC):
         abort_deadline = self.loop.time() + max(0.0, self.rpc_abort_grace)
         try:
             remaining = max(0.0, abort_deadline - self.loop.time())
-            await asyncio.wait_for(self.native.proc.write(
-                self.native.reader.encode(commands.Abort(id=RequestId("agent-comms-watchdog")))
-            ), timeout=remaining)
+            self.native.send(commands.Abort(id=RequestId("agent-comms-watchdog")))
+            await asyncio.wait_for(self.native.drain(), timeout=remaining)
             while remaining := max(0.0, abort_deadline - self.loop.time()):
                 response = await asyncio.wait_for(
                     self.native.reader.readline(), timeout=remaining
@@ -487,7 +486,8 @@ class NativeSession(MroDispatch, ABC):
                 async with self.native.failures():
                     self.output.sensitive |= self.native.sensitive_diagnostics
                     try:
-                        await self.native.proc.write(self.native.reader.encode(self.native.attestation.request))
+                        self.native.send(self.native.attestation.request)
+                        await self.native.drain()
                     except (BrokenPipeError, ConnectionResetError):
                         pass
                     await self.initialize_rpc()

@@ -39,7 +39,6 @@ class TurnOrigin(ABC):
     @abstractmethod
     def autonomous(self) -> bool: ...
 
-    @property
     @abstractmethod
     def messages(self) -> tuple[Message, ...]: ...
 
@@ -52,7 +51,9 @@ class NoTurnOrigin(NullMember, TurnOrigin):
 
     separate_turn = False
     autonomous = True
-    messages = ()
+
+    def messages(self) -> tuple[Message, ...]:
+        return ()
 
     @property
     def batch_target(self) -> NoTurnOrigin:

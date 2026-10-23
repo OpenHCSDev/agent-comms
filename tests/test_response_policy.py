@@ -58,7 +58,7 @@ def test_autonomous_turns_keep_message_batches_and_delivery_keys_separate(tmp_pa
 
     owner = thread_registration.new_thread("owner", frozenset(), str(tmp_path))
     dispositions = InputDispositions(tmp_path)
-    assert goal.origin.messages == ()
+    assert goal.origin.messages() == ()
     assert goal.origin.bus_keys(dispositions, owner) == ()
-    assert first.origin.messages == (first.origin,)
+    assert first.origin.messages() == (first.origin,)
     assert first.origin.bus_keys(dispositions, owner) == (dispositions.bus_key(first.origin, owner),)

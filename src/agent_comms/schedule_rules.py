@@ -105,7 +105,7 @@ class WakeScheduleCheck(SessionScheduleCheck):
                         session_id,
                         inputs.sessions.require(session_id),
                         "\n\n".join(turn.prompt for turn in pending),
-                        origins=tuple(origin for turn in pending for origin in turn.origin.messages),
+                        origins=tuple(origin for turn in pending for origin in turn.origin.messages()),
                         autonomous_goal=len(pending) == 1 and pending[0].autonomous_goal,
                         dependency_wait_id=pending[0].goal_wait_id,
                     )

@@ -572,10 +572,6 @@ class Message(Addressed, BusCapability, TurnOrigin):
     def batch_target(self) -> str:
         return self.exact_reply_target
 
-    @property
-    def messages(self) -> tuple[Message, ...]:
-        return (self,)
-
     def bus_keys(self, dispositions: InputDispositions, owner: Thread) -> tuple[str, ...]:
         return (dispositions.bus_key(self, owner),)
 
