@@ -187,7 +187,7 @@ class WireNonNull(FlagDirective, NullPolicy):
 def default_holds_value(declared: Field) -> bool:
     """A dataclass spells a declared ``= None`` default as None; that, or a declared null
     member, is a default holding no value."""
-    return declared.default is not None and not isinstance(declared.default, NullMember)
+    return declared.default is not None and NullPresence.holds_value(declared.default)
 
 
 class DefaultNonNull(NullPolicy):
@@ -655,7 +655,7 @@ class NullMemberOmission(DeclaredFieldPlan):
     """A declared null member is absent from the wire, as its key's absence."""
 
     def omitted(self, value: object) -> bool:
-        return isinstance(value, NullMember) or super().omitted(value)
+        return not NullPresence.holds_value(value) or super().omitted(value)
 
 
 class MissingNoneFieldPlan(NullMemberOmission):
@@ -1056,6 +1056,42 @@ class NullMember(ExternalField, AcceptsNull, WireValue):
     @classmethod
     def schema(cls) -> dict[str, object]:
         return FieldCodec.value_schema(type(None))
+
+
+class NullPresence(MroDispatch):
+    """Whether an arbitrary field value is a declared null member."""
+
+    @classmethod
+    def holds_value(cls, value: object) -> bool:
+        return cls.handler_for(type(value))(value)
+
+    @handles(NullMember)
+    @staticmethod
+    def null_member(value: NullMember) -> bool:
+        return False
+
+    @handles(object)
+    @staticmethod
+    def ordinary(value: object) -> bool:
+        return True
+
+
+class RecordTag(MroDispatch):
+    """The family owns its tag; an ordinary record has none."""
+
+    @classmethod
+    def of(cls, value: object) -> dict[str, object]:
+        return cls.handler_for(type(value))(value)
+
+    @handles(DeclaredFamily)
+    @staticmethod
+    def family(value: DeclaredFamily) -> dict[str, object]:
+        return value.record_tag()
+
+    @handles(object)
+    @staticmethod
+    def ordinary(value: object) -> dict[str, object]:
+        return {}
 
 
 class RecordMember(WireValue):
@@ -1512,7 +1548,7 @@ class FieldCodec(MroDispatch, Sealed):
 
     @staticmethod
     def _tag(value: object) -> dict[str, object]:
-        return value.record_tag() if isinstance(value, DeclaredFamily) else {}
+        return RecordTag.of(value)
 
     @classmethod
     def encode_fields(cls, value: object) -> dict[str, object]:
