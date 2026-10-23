@@ -36,6 +36,7 @@ from agent_comms.child_process import (
     StreamingChildStdio,
 )
 from agent_comms.cli_protocol import (
+    CliArguments,
     DeliveredOutcome,
     EmittedOutcome,
     FilteredOutcome,
@@ -205,7 +206,7 @@ class Options:
             command = commands.add_parser(operation.__name__.lower(), parents=[common])
             operation.add_arguments(command)
             command.set_defaults(operation=operation)
-        arguments = parser.parse_args(namespace=SendArguments())
+        arguments = parser.parse_args(namespace=CliArguments())
         arguments.operation = arguments.operation.from_arguments(arguments)
         arguments.binding = arguments.operation.binding(arguments)
         return cls(**{declared.name: vars(arguments)[key]
@@ -436,10 +437,6 @@ class CatalogTargetField(ChoiceTargetField):
     def value_schema(self) -> dict[str, object]:
         return {**FieldCodec.value_schema(self.annotation),
                 'configuration': FieldCodec.encode(self.catalog)}
-
-
-class SendArguments(argparse.Namespace):
-    command: str
 
 
 @dataclass(frozen=True, kw_only=True)

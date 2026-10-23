@@ -35,7 +35,7 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import TYPE_CHECKING, Any, ClassVar, NoReturn
+from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar, NoReturn, TextIO
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -1844,7 +1844,7 @@ class SpawnedProcess(SynchronousProcess):
         *,
         cwd: str | Path | None = None,
         env: Mapping[str, str] = INHERITED_ENVIRONMENT,
-        output: Any = subprocess.DEVNULL,
+        output: int | BinaryIO | TextIO = subprocess.DEVNULL,
         runtime: LaunchRuntime = LaunchRuntime.running(),
         lifetime: type[ChildLifetime] = DiesWithLauncherLifetime,
     ) -> Generator[SpawnedProcess]:

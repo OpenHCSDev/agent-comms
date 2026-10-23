@@ -8,8 +8,10 @@ from collections.abc import Iterable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar
 from uuid import uuid4
+
+from pydantic import JsonValue
 
 from .agent_backend import StreamingInputPolicy
 from . import agent_events as events
@@ -107,13 +109,13 @@ class PiCommand(DeclaredFamily):
                 event.correlate_or_deliver(channel, on_event)
             return future.result()
 
-    def to_rpc(self) -> dict[str, Any]:
+    def to_rpc(self) -> dict[str, JsonValue]:
         data = FieldCodec.encode(self)
         data["type"] = data.pop("kind")
         return data
 
     @classmethod
-    def from_wire(cls, value: dict[str, Any]) -> PiCommand:
+    def from_wire(cls, value: dict[str, JsonValue]) -> PiCommand:
         data = dict(value)
         kind = data.pop("type", None)
         try:
@@ -160,9 +162,9 @@ class ExactResponse:
 @dataclass(frozen=True, kw_only=True)
 class UnknownCommand(PiCommand):
     response_payload = UnknownData
-    wire: dict[str, Any]
+    wire: dict[str, JsonValue]
 
-    def to_rpc(self) -> dict[str, Any]:
+    def to_rpc(self) -> dict[str, JsonValue]:
         return dict(self.wire)
 
 

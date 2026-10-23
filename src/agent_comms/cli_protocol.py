@@ -1,6 +1,7 @@
 """Declared JSON boundaries shared by Core's CLI and external CLI adapters."""
 from __future__ import annotations
 
+import argparse
 import asyncio
 import builtins
 from abc import ABC, abstractmethod
@@ -40,6 +41,10 @@ async def raise_child_exit(child: AttachedChild, reason: str) -> NoReturn:
     await child.wait()
     tail = await child.stderr_tail(max_bytes=8192)
     raise ChildProcessError(f'Core watch ended, exit {child.returncode}\n{reason}\n{tail}')
+
+
+class CliArguments(argparse.Namespace):
+    command: str
 
 
 class TimestampedWire(WireModel):

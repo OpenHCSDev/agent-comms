@@ -84,7 +84,7 @@ class FamilyMeta(AutoRegisterMeta, ABCMeta):
             if is_root or root is not None
             else None
         )
-        cls: Any = super().__new__(
+        cls: type[DeclaredFamily] = super().__new__(
             mcs, name, bases, namespace, registry_config=config, **class_options
         )
         cls._family_root = cls if is_root else root

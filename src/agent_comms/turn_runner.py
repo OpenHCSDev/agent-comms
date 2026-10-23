@@ -11,6 +11,7 @@ from acp.exceptions import RequestError
 from acp.schema import (
     PromptResponse,
 )
+from pydantic import JsonValue
 
 from . import agent_events as events
 from .agent_backend import AgentBackend
@@ -27,7 +28,7 @@ from .goal_actions import (
     PausedGoalAction,
 )
 from .goal_scheduler import GoalScheduler
-from .image_inputs import prompt_images
+from .image_inputs import ImageInput, prompt_images
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from .messages import Message
 from .mro_dispatch import MroDispatch, handles
@@ -42,7 +43,7 @@ from .runtime import (
 )
 from .threads import Thread
 from .transcript_updates import TurnTranscriptUpdate
-from .turn_effects import TurnEffects
+from .turn_effects import PromptBlock, TurnEffects
 from .turn_lease import TurnLeaseFence, TurnState
 from .turn_phase import CancellingPhase, TurnPhase
 from .turn_terminal import EndedWithoutResult, TurnInterruption, TurnTerminal
@@ -173,7 +174,7 @@ class TurnRunner:
         return context.require_session_file(thread.runtime.path)
 
     async def prompt_owned(
-        self, session_id: str, prompt: list[Any], *, display_text: str | None = None,
+        self, session_id: str, prompt: list[PromptBlock], *, display_text: str | None = None,
         input_id: str | None = None,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> PromptResponse:
@@ -234,7 +235,7 @@ class TurnRunner:
                 actor=OwnerInvocable,
             )
 
-    async def cancel(self, session_id: str, **kwargs: Any) -> None:
+    async def cancel(self, session_id: str, **kwargs: JsonValue) -> None:
         if session_id in self.sessions.proxies:
             await self.sessions.proxies[session_id].request("cancel")
             return
@@ -424,7 +425,7 @@ class TurnRunner:
         task: str,
         *,
         origins: tuple[Message, ...] = (),
-        images: tuple[Any, ...] = (),
+        images: tuple[ImageInput, ...] = (),
         original_keys: tuple[str, ...] = (),
         initial_display_text: str | None = None,
         autonomous_goal: bool = False,
