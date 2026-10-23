@@ -1,3 +1,4 @@
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.acp_failure import ACPFailure
 
 """Declared extension decoding is strict and shares its owner with consumers."""
@@ -53,7 +54,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
     comms.registry.declare(comms.registry.new_thread('pilot', frozenset(), str(tmp_path)))
     read = comms.transcripts.capture_page_read("pilot")
     owner = ClaimedIdentity(RecordedThreadIncarnation("pilot", 1.0), 1)
-    queue_scope = LiveQueueScope("pilot", owner, 123)
+    queue_scope = LiveQueueScope("pilot", owner, ProcessIdentity(123, 1))
     samples = (
         ContextAnnotatedUpdate(
             ContextManifest(
@@ -65,7 +66,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
         SelectedWriteAcceptedUpdate("operation", 1, "claim"),
         CursorAdvancedUpdate(
             CursorEnvelope(
-                LiveCursorScope("pilot", "a" * 32, owner, 123), 1, UnavailableCursorObservation()
+                LiveCursorScope("pilot", "a" * 32, owner, ProcessIdentity(123, 1)), 1, UnavailableCursorObservation()
             )
         ),
         QueueChangedUpdate(queue_scope, 1, AvailableQueueProjection((QueueItem("input", "text"),))),
@@ -73,7 +74,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
         CoordinationChangedUpdate(
             owner.incarnation,
             "/home/ts/wt/pilot",
-            123,
+            ProcessIdentity(123, 1),
             "/home/ts/wt/pilot",
             "openai-codex/gpt-6.1-sol",
             None,
@@ -91,7 +92,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
         McpClientAcknowledgementUpdate(
             "turn", McpLiveAcknowledgement(1, "pi-mcp-client", "a" * 32, "running", "turn", ())
         ),
-        TurnChangedUpdate(TurnState(ActiveTurn("turn", 123, started_at=1.0))),
+        TurnChangedUpdate(TurnState(ActiveTurn("turn", ProcessIdentity(123, 1), started_at=1.0))),
         TurnChangedUpdate(TurnState(finished_turn_id="turn")),
         TextRouteUpdate(None),
         TranscriptChangedUpdate(NativeTranscriptCursor("session.jsonl", 42)),

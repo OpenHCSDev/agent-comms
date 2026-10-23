@@ -207,8 +207,8 @@ def test_claim_scope_cannot_decode_a_registry_process_owner(tmp_path):
     assert claim_scope.claimed_generation != registry_owner.generation
     original_binding = snapshot.owner_binding("owner")
     assert not original_binding.superseded_by(snapshot.owner_binding("owner"))
-    for scope in (LiveQueueScope("official-session", claim_scope, owner.require_process().pid),
-                  LiveCursorScope("official-session", "a" * 32, claim_scope, owner.require_process().pid)):
+    for scope in (LiveQueueScope("official-session", claim_scope, owner.require_process()),
+                  LiveCursorScope("official-session", "a" * 32, claim_scope, owner.require_process())):
         encoded = FieldCodec.encode(scope)
         assert FieldCodec.decode(type(scope), encoded) == scope
         encoded["claim_scope"] = FieldCodec.encode(registry_owner)

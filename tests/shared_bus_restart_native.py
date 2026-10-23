@@ -302,7 +302,7 @@ async def configured_pure_channel(arguments):
                                         assert cursor.reference == native.reference
                                         assert native.sent_owner_claimed_generation.matches(cursor.owner_claimed_generation)
                                         assert cursor.injected_seq >= originals[-1].seq
-                                        assert fact.envelope.scope.owner_pid == service.registry.require(native.owner_thread).pid
+                                        assert fact.envelope.scope.owner == service.registry.require(native.owner_thread).require_process()
                                         published_coverage[native.owner_thread] = fact.envelope
                         # Original completion and informational ACP publication
                         # are separate asynchronous boundaries. Await the actual

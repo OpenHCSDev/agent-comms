@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import BinaryIO, ClassVar
 
+from .child_process import Platform
 from .channels import Channel
 from .cli_result import CliResult
 from .declared_family import DeclaredFamily
@@ -541,9 +542,4 @@ class WireTranscriptExporter:
                 raise FileExistsError(
                     f"Wire-export destination {str(destination)!r} already exists."
                 ) from None
-        if os.name != "nt":
-            directory = os.open(destination.parent, os.O_RDONLY)
-            try:
-                os.fsync(directory)
-            finally:
-                os.close(directory)
+        Platform.current().sync_directory(destination.parent)

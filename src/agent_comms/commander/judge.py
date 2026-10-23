@@ -1,7 +1,7 @@
 """The commander's verdict on every unit edit, judged against the order that unit is carrying out.
 
-A send-back's --roast is posted to its verdict's audience with the quoted slop line, so the
-unit learns what was stupid and nobody repeats it; a send-back without a roast is refused.
+A send-back records its quoted slop and replacement in the native verdict reason.
+Core publishes that recorded reason once; this command adds no separate roast post.
 --serves quotes the order Todo, which also owns every verdict.
 
 A verdict is a set of semantic claims the tool can falsify: --serves must be words from
@@ -106,17 +106,6 @@ def show(ctx, pending: list[Edit]) -> None:
     print(f'{len(pending)} unjudged')
 
 
-def roast(ctx, audience, thread, lines, text, fix, slop):
-    """Every send-back is a lesson, sent to its verdict's audience: the quoted slop,
-    the required fact it restates and the declaration that derives it (the OOPSLA paper's definition), why that is
-    stupid, and what replaces it."""
-    body = (f'{thread}, this is stupid slop and it is going back:\n'
-            + '\n'.join(f'    {l.strip()}' for l in lines)
-            + f'\nThe slop: {slop.render()}'
-            + f'\nWhy it is stupid: {text}\nWhat replaces it: {fix}\nNobody writes this again.')
-    print(f'roast sent to {", ".join(audience.threads)}: ' + ctx.post(audience, body))
-
-
 def alarm(ctx):
     while True:
         late = [edit for edit in Edit.unjudged(ctx.comms, ctx.commander)
@@ -210,9 +199,6 @@ class VerdictVerb(JudgeVerb):
     @abstractmethod
     def check_edits(self, edits: list[Edit]) -> None: ...
 
-    @abstractmethod
-    def report(self, ctx: order.Commander, todos: tuple[Todo, ...]) -> None: ...
-
     def run(self, ctx: order.Commander) -> None:
         if len(self.why.split()) < 6:
             sys.exit('Refused: state which intent the edit serves or violates, and why (6+ words).')
@@ -241,7 +227,6 @@ class VerdictVerb(JudgeVerb):
             current[todo.id] = result.todo
         left = len(Edit.unjudged(ctx.comms, ctx.commander))
         print(f'{self.declared_name}: {len(ids)} edits; {left} still unjudged')
-        self.report(ctx, tuple(current.values()))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -279,10 +264,6 @@ class OkVerb(VerdictVerb):
                 sys.exit(f'Refused: edit {edit.id} adds forwarders {added[:5]}; it goes back with judge back, never ok')
             AcceptedVerdict.require_branches(edit.branches_added(), self.no_owner)
 
-    def report(self, ctx: order.Commander, todos: tuple[Todo, ...]) -> None:
-        pass
-
-
 @dataclass(frozen=True, kw_only=True)
 class SupersededVerb(VerdictVerb):
     help = "the task moved to another unit; these edits are neither ok nor sent back"
@@ -302,10 +283,6 @@ class SupersededVerb(VerdictVerb):
     def check_edits(self, edits: list[Edit]) -> None:
         pass
 
-    def report(self, ctx: order.Commander, todos: tuple[Todo, ...]) -> None:
-        pass
-
-
 @dataclass(frozen=True, kw_only=True)
 class DroppedVerb(VerdictVerb):
     help = "the unit discarded these edits; Core settles them only if git holds them on no ref"
@@ -318,13 +295,9 @@ class DroppedVerb(VerdictVerb):
     def check_edits(self, edits: list[Edit]) -> None:
         pass
 
-    def report(self, ctx: order.Commander, todos: tuple[Todo, ...]) -> None:
-        pass
-
-
 @dataclass(frozen=True, kw_only=True)
 class BackVerb(VerdictVerb):
-    help = "send the edit back; the roast is posted to the verdict's audience"
+    help = "send the edit back; Core publishes the recorded reason once"
     # A bare annotation would inherit VerdictVerb's default; field() keeps it required.
     problem: Annotated[
         str,
@@ -360,7 +333,11 @@ class BackVerb(VerdictVerb):
     def operation(self, ctx: order.Commander, todo: Todo, edit: Edit) -> SendBackVerdict:
         return SendBackVerdict(todo.revision, ctx.actor_identity,
                                todo.held(), edit.id,
-                               reason=StrikeReason(f'{todo.id} edit sent back: {self.why}'),
+                               reason=StrikeReason("\n".join((
+                                   self.why, self.roast,
+                                   *(f"    {line.strip()}" for line in self.lines),
+                                   self.slop().render(), f"What replaces it: {self.fix}",
+                               ))),
                                evidence=(FileLine.from_wire(self.at),))
 
     def check_edits(self, edits: list[Edit]) -> None:
@@ -371,16 +348,6 @@ class BackVerb(VerdictVerb):
         self.slop()
         order.refuse(self.roast, BluntText)
         order.refuse(' '.join((self.why, self.roast, self.fix)), *order.OUTGOING)
-
-    def report(self, ctx: order.Commander, todos: tuple[Todo, ...]) -> None:
-        for todo in todos:
-            audience = todo.verdicts[-1].audience.of(todo.held().owner, todo)
-            roast(ctx, audience, todo.holder, self.lines, self.roast, self.fix, self.slop())
-            line = (f'{time.strftime("%Y-%m-%d %H:%M")} {todo.holder} '
-                    f'(strike {todo.strike_count} on {todo.id}; caught by {ctx.actor_name} at review): '
-                    f'{todo.strikes[-1].reason}')
-            ctx.on_record(line, 'Send-back', audience)
-
 
 def main(args, ctx):
     JudgeVerb.parse(args or ['show']).apply(ctx)

@@ -14,6 +14,7 @@ from traceback import TracebackException
 from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
+from .child_process import Platform
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .locked_store import DurableFile, PatternFile
 from .store_files import _atomic_write_text
@@ -275,11 +276,6 @@ class DiagnosticDocument(DurableFile, PatternFile):
     def write(cls, root: Path, name: str, document: dict) -> Path:
         path = cls.path_in(root, name=name)
         path.parent.mkdir(mode=0o700, exist_ok=True)
-        if os.name == "posix":
-            fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
-            try:
-                os.fsync(fd)
-            finally:
-                os.close(fd)
-        _atomic_write_text(path, json.dumps(document, indent=2) + "\n", fsync_parent=True)
+        Platform.current().sync_directory(root)
+        _atomic_write_text(path, json.dumps(document, indent=2) + "\n")
         return path.resolve()
