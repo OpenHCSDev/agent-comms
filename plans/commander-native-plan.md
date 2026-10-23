@@ -213,23 +213,33 @@ The fix is one derived model with four renderers. **Core is the engine, Toad is 
 
 ### Current control-plane work: heartbeat source identity (2026-10-23)
 
-`HeartbeatSilent.violations` currently reads the newest row in the two-way DM
-conversation and then checks its sender. A commander reply after the last beat
-therefore hides a silent heartbeat. The existing display-scope family will own
-the one-way service-to-commander predicate, applied before the bounded SQL page.
-The bus remains the liveness authority. `CommanderHeartbeat.requested_by` derives
+Before this repair, `HeartbeatSilent.violations` read the newest row in the
+two-way DM conversation and then checked its sender. A commander reply after
+the last beat therefore hid a silent heartbeat. `BusReader.latest_addressed`
+now selects one candidate per exact service/commander alias pair through the
+existing typed table query, then decodes only the newest message. `Addressed`
+declares its compound sender/target/sequence index; registry provenance supplies
+the aliases. Ordinary DM display scopes retain their original contract.
+`CommanderHeartbeat.requested_by` derives
 live eligibility and the oldest open request from `OwnerRequestStore`; the shared
 silence scan derives its grace from that request and the latest actual beat.
 `HeartbeatNotStarted` and `MissedHeartbeat` own their distinct evidence and wording.
 A newer request, service registration, commander reply or rename cannot erase the
 older debt. No parallel timestamp, ping store or scheduler is added.
 
-Draft #2624 is stacked on the published owner-request port #2621. The directional
-scope has its own commit; never-started handling follows in a separate commit.
-Seventeen focused copied-bus/request/page/channel checks pass (5.73 seconds),
-including the real rename and frozen scope family. Installed full-session/parity
-acceptance and the complete control-plane phase remain open. The source and
-consumer census has zero parse omissions; unprojected declarations remain visible.
+Draft #2624 is stacked on the published owner-request port #2621. Eighteen
+focused copied-bus/request/page/channel/source checks pass (7.54 seconds),
+including the newest beat across both participants' renames and later reverse
+replies. On the retained 19,189-record bus copy, an absent service with aliases
+takes 76 SQLite instructions after index reconciliation versus 45,088 before;
+both return no message. All exact-pair queries use the declared covering index.
+Reconciliation preserves every bus sequence and both bus/address row counts;
+integrity and foreign-key checks pass, and a repeated reconciliation is a no-op.
+Its current unconditional projection rebuild costs 39.83 seconds even for this
+index-only change; that installer/schema defect remains open with the commander.
+Installed full-session/parity acceptance and the complete control-plane phase
+remain open. The source census has zero parse omissions; unprojected declarations
+remain visible.
 
 ### Phase 8: cutover
 

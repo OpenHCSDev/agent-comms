@@ -20,7 +20,7 @@ from agent_comms.messages import Message
 from agent_comms.owner_requests import OwnerRequestId
 from agent_comms.phase_evidence import PlanReading
 from agent_comms.plan_phases import PlanPhase
-from agent_comms.read_basis import DirectedDMDisplayScope, RepliesDisplayScope
+from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.standing_rules import (
@@ -361,8 +361,9 @@ class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, declared_name=
         request, = requests
         beats = ()
         if snapshot.canonical_name(CommanderHeartbeat.sender) in snapshot.threads:
-            scope = DirectedDMDisplayScope.capture(CommanderHeartbeat.sender, thread.name, snapshot)
-            beats = scope.records(comms.bus.bus, descending=True, limit=1)
+            beats = comms.bus.bus.latest_addressed(
+                snapshot.names_for(CommanderHeartbeat.sender), snapshot.names_for(thread.name),
+            )
         found = (tuple(MissedHeartbeat(
             since=max(request.created_at, beat.timestamp) + cls.seconds, beat=beat.seq,
         ) for beat in beats) if beats else (

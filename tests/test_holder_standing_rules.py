@@ -612,6 +612,15 @@ def test_first_heartbeat_is_owed_from_the_oldest_open_request_then_survives_rena
     silent, = HeartbeatSilent.violations(held_bus, "renamed-lead")
     assert isinstance(silent, MissedHeartbeat) and silent.beat == fresh.seq
     assert silent.since == fresh.timestamp + HeartbeatSilent.seconds
+    newer = held_bus.bus.publisher.publish_ordinary(Message(
+        sender="renamed-heartbeat", target="renamed-lead", body="Heartbeat after both renames",
+        type=InfoKind, timestamp=time.time(),
+    ), origin=AgentOrigin())
+    assert HeartbeatSilent.violations(held_bus, "renamed-lead") == ()
+    monkeypatch.setattr(time, "time", lambda: newer.timestamp + HeartbeatSilent.seconds + 1)
+    held_bus.messaging.send("renamed-lead", "renamed-heartbeat", "Read the new beat too")
+    latest, = HeartbeatSilent.violations(held_bus, "renamed-lead")
+    assert isinstance(latest, MissedHeartbeat) and latest.beat == newer.seq
 
 
 def test_one_answer_covers_an_escalation_burst_sent_before_it(held_bus):
