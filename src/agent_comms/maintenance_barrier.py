@@ -228,21 +228,20 @@ class MaintenanceHolder:
     def outside(environment: Mapping[str, str]) -> dict[str, str]:
         """``environment`` as a child that outlives holds starts with it: it takes each
         request's holder from the request, never from its launch."""
-        return {name: value for name, value in environment.items() if name != HOLDER_NONCE}
+        child = dict(environment)
+        child.pop(HOLDER_NONCE, None)
+        return child
 
     @contextmanager
     def acting(self) -> Iterator[Self]:
         """This process, and every child it starts, acts as this holder while the block
         lasts, restoring its previous holder afterward."""
-        previous = os.environ.get(HOLDER_NONCE)
+        previous = MaintenanceHolder.current()
         os.environ[HOLDER_NONCE] = self.nonce
         try:
             yield self
         finally:
-            if previous is None:
-                os.environ.pop(HOLDER_NONCE, None)
-            else:
-                os.environ[HOLDER_NONCE] = previous
+            os.environ[HOLDER_NONCE] = previous.nonce
 
 
 class MaintenanceStatus:
