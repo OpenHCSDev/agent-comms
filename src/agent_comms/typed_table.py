@@ -13,13 +13,15 @@ import json
 import os
 import re
 import sqlite3
+import sys
 import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum, IntFlag
-from functools import lru_cache
+from functools import cache, lru_cache
+from inspect import getsource
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
@@ -913,7 +915,8 @@ class ComposedSchemas:
     @classmethod
     def carry_schema(cls, db: sqlite3.Connection) -> None:
         for family in cls.schema_families():
-            family.carry_schema(db)
+            if family.schema_differs(db):
+                family.carry_schema(db)
 
 
 class RowMutation(Enum):
@@ -1371,13 +1374,19 @@ class DerivedTables(TableSchema):
     __slots__ = ()
 
     @classmethod
-    def projection_rows(cls) -> tuple[type[TypedTable], ...]:
-        return tuple(row for row in cls.schema_rows() if issubclass(row, ProducedRow))
+    def projection_rows(cls) -> tuple[type[ProducedTable], ...]:
+        return tuple(row for row in cls.schema_rows() if issubclass(row, ProducedTable))
 
     @classmethod
     def schema_differs(cls, db: sqlite3.Connection) -> bool:
         return (super().schema_differs(db)
                 or not ProjectionProducer.matches(db, cls.projection_rows()))
+
+    @classmethod
+    def reconcile_schema(cls, db: sqlite3.Connection, change: SchemaChange) -> bool:
+        changed = super().reconcile_schema(db, change)
+        refreshed = ProjectionProducer.verify_build(db, cls.projection_rows(), change)
+        return changed or refreshed
 
     @classmethod
     def create_schema(cls, db: sqlite3.Connection) -> None:
@@ -1411,12 +1420,21 @@ class DurableTables(TableSchema):
         cls.derive_schema(db)
 
 
-class ProjectionProducerTables(SharedFileTables, DurableTables):
-    """The producer declaration last committed with each rebuilt projection."""
+class ProjectionProducerTables(SharedFileTables, DerivedTables):
+    """Verification metadata recreated with its projections when its schema changes."""
 
 
-class ProducedRow:
-    """Rows rebuilt whenever the installed Core build changes."""
+class ProducedRow(ABC):
+    """Rows rebuilt when their declared producing modules change."""
+
+    @classmethod
+    @abstractmethod
+    def producer_classes(cls) -> tuple[type[DeclaredFamily], ...]:
+        """The record family's declarations that implement this projection's production."""
+
+    @classmethod
+    @abstractmethod
+    def producer_digest(cls) -> str: ...
 
 
 @lru_cache(maxsize=4)
@@ -1524,7 +1542,7 @@ class TypedTable(
     @classmethod
     def _sql(cls, expression: str) -> str:
         for item in cls._columns():
-            expression = expression.replace("{" + item.name + "}", item.wire_name)
+            expression = expression.replace("{" + item.name + "}", _identifier(item.wire_name))
         return expression
 
     @classmethod
@@ -1940,23 +1958,72 @@ class TypedTable(
         )
 
 
+class ProducedTable(ProducedRow, TypedTable, declared_name=None):
+    """A named table whose producing family owns one source commitment."""
+
+    @classmethod
+    def producer_digest(cls) -> str:
+        for family in cls.__mro__:
+            if issubclass(family, ProducedTable) and "producer_classes" in vars(family):
+                return family._producer_digest()
+        raise TypeError(f"{cls.__name__} has no producing family declaration")
+
+    @classmethod
+    @cache
+    def _producer_digest(cls) -> str:
+        producers = cls.producer_classes()
+        modules = {
+            cls.__module__,
+            *(row.__module__ for row in cls.members_with(cls)),
+            *(owner.__module__ for producer in producers
+              for owner in producer.__mro__ if owner is not object),
+        }
+        source = "\0".join(getsource(sys.modules[name]) for name in sorted(modules))
+        return hashlib.sha256(source.encode()).hexdigest()
+
+
 @dataclass(frozen=True)
 class ProjectionProducer(TypedTable, ProjectionProducerTables):
     projection: Annotated[str, Column(primary_key=True)]
     commit: str
+    producer_digest: str
 
     @classmethod
-    def records_for(cls, rows: tuple[type[TypedTable], ...]) -> tuple[Self, ...]:
-        return tuple(cls(row.declared_name, STAMP.commit()) for row in rows)
+    def records_for(cls, rows: tuple[type[ProducedTable], ...]) -> tuple[Self, ...]:
+        commit = STAMP.commit()
+        return tuple(cls(row.declared_name, commit, row.producer_digest()) for row in rows)
+
+    def verifies(self, row: type[ProducedTable], commit: str) -> bool:
+        return self.commit == commit or self.producer_digest == row.producer_digest()
 
     @classmethod
-    def matches(cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...]) -> bool:
+    def matches(cls, db: sqlite3.Connection, rows: tuple[type[ProducedTable], ...]) -> bool:
         if not rows:
             return True
         if not cls.present(db):
             return False
         stored = {record.projection: record for record in cls.select(db)}
-        return all(stored.get(record.projection) == record for record in cls.records_for(rows))
+        commit = STAMP.commit()
+        return all(row.declared_name in stored and stored[row.declared_name].verifies(row, commit)
+                   for row in rows)
+
+    @classmethod
+    def verify_build(cls, db: sqlite3.Connection, rows: tuple[type[ProducedTable], ...],
+                     change: SchemaChange) -> bool:
+        """After schema verification, record the current build without rebuilding its rows."""
+        if not rows:
+            return False
+        commit = STAMP.commit()
+        names = tuple(row.declared_name for row in rows)
+        marks = ",".join("?" for _ in names)
+        where = f"{{commit}} != ? AND {{projection}} IN ({marks})"
+        parameters = (commit, *names)
+        if not cls.exists(db, where=where, parameters=parameters):
+            return False
+        change.require()
+        with SQLiteFile.write_transaction(db):
+            cls.update(db, where=where, parameters=parameters, commit=commit)
+        return True
 
 
 class StoreWriter(PublishedSQLiteFile, FileStore):

@@ -22,12 +22,13 @@ if TYPE_CHECKING:
     from .read_basis import RepliesDisplayScope
 
 
-class BusSchema(ComposedSchemas, messages.BusTables, ProjectionProducerTables, messages.BusProjectionTables):
+class BusSchema(ComposedSchemas, messages.BusTables, ProjectionProducerTables, messages.BusProjectionTables,
+                declared_name=None):
     """One file reconciles its declared families using each family's carry policy."""
 
 
 @dataclass(frozen=True)
-class ParticipantSource(TypedTable, messages.BusProjectionTables, declared_name=None):
+class ParticipantSource(messages.BusProjectionTables, declared_name=None):
     """A recorded participant's positions in actual frozen deliveries."""
 
     lookup: Annotated[str, Column(primary_key=True)]
@@ -93,7 +94,7 @@ class DirectReplySource(AwaitingAnswerSource, declared_name=None):
 
 
 @dataclass(frozen=True)
-class MessageIdentitySource(MessageReference, TypedTable, messages.BusProjectionTables):
+class MessageIdentitySource(MessageReference, messages.BusProjectionTables):
     """A record's existing reference, searchable without recomputing its content hash."""
 
     sender: str
@@ -113,7 +114,7 @@ class MessageIdentitySource(MessageReference, TypedTable, messages.BusProjection
 
 
 @dataclass(frozen=True)
-class AnsweredSource(TypedTable, messages.BusProjectionTables):
+class AnsweredSource(messages.BusProjectionTables):
     original: Annotated[MessageReference, Column(primary_key=True)]
     seq: Annotated[int, Column(primary_key=True)]
 

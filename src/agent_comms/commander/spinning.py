@@ -3,7 +3,6 @@
 from dataclasses import dataclass, field
 from typing import ClassVar, Self
 
-from agent_comms.comms import Comms
 from agent_comms.standing_rules import HeldBranch, HeldBranchRule
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.turn_digests import OrderToolCallCountRead, TurnsSince
@@ -23,7 +22,7 @@ class SpinningUnit(HeldBranchRule):
     minutes: ClassVar[int] = 20
 
     @classmethod
-    def derive(cls, comms: Comms, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
+    def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
         found = []
         for held in branches:
             source = held.source
@@ -32,7 +31,7 @@ class SpinningUnit(HeldBranchRule):
             if elapsed < cls.minutes:
                 continue
             count = OrderToolCallCountRead(
-                comms.root, source.thread, TurnsSince(since), held.todo,
+                source.comms.root, source.thread, TurnsSince(since), held.todo,
             ).read()
             if count >= cls.calls:
                 found.append(cls(held.problem, held.holder, count, elapsed, held.difference.head))
