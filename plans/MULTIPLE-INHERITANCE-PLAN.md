@@ -48,8 +48,11 @@ The 21 focused checks include a connected external bridge whose old owner is
 revoked while its status remains connected, plus repeated inactive withdrawals
 that retain the owner generation. Source evidence is in
 `/home/ts/.cache/agent-scratch/mi-owner-withdrawal-trace.json` (NRA inventory: 461
-production modules, zero parse omissions). This checkpoint is pushed, not installed;
-remaining active consumers and the rest of phase 1A are unfinished.
+production modules, zero parse omissions). It is included in merged Core
+`69c5b0e4e`, paired with merged Toad `dab0047a4`. The actual installation failed on
+the unconverted v2 active route and rolled back to Core `d9ce9cd` / Toad `a5c`.
+PR #2633 owns that route repair through actual installation and a fresh reply;
+paired installed qualification and the rest of phase 1A remain open.
 
 **1B, `CodecFlagsPhase`.** Extend `FieldCodec`'s existing field representations and dispatch. The original candidates were `accepts_null`, `opaque`, `external_json_shape`, `strict_fields` and `accepts_prompt`. Reuse the capabilities that already own these decisions; remove remaining competing readers and declarations. A remaining wire tag belongs to the existing declared wire family, not another handwritten tag roster.
 

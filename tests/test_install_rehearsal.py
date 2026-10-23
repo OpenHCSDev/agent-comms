@@ -11,8 +11,8 @@ The predecessor-history carry has its own real-writer fixture in test_carry_bus_
 """
 from __future__ import annotations
 
-import os
 import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -21,9 +21,9 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.field_codec import FieldCodec
 from agent_comms.cli_commands import HistoryCliCommand
 from agent_comms.comms import Comms
+from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.backup import bus_files
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.practice import TestHome
@@ -76,9 +76,10 @@ def installed_home(tmp_path_factory) -> dict[str, str]:
     return environment
 
 
-@pytest.fixture
-def install_checkout(tmp_path) -> Path:
-    checkout = tmp_path / "checkout"
+@pytest.fixture(scope="module")
+def install_checkout(tmp_path_factory) -> Path:
+    """Unchanged targets reuse one built revision; fault cases restore this checkout."""
+    checkout = tmp_path_factory.mktemp("install-checkout") / "checkout"
     subprocess.run(["git", "clone", "--shared", "-q", REPOSITORY, checkout], check=True)
     Checkout(checkout).prepare()
     subprocess.run(["git", "-C", checkout, "-c", "user.name=Installer test",
@@ -181,6 +182,56 @@ class Fault(Carry):
     assert subprocess.check_output(["git", "-C", checkout, "rev-parse", "HEAD"], text=True).strip() == current
     MaintenanceBarrier(RegistryStore.at(comms.root).path).read().phase.new_sends.require_open()
     assert comms.registry.require("worker").name == "worker"
+
+
+@pytest.mark.timeout(280)
+def test_failed_publication_restores_absent_route_without_store_changes(
+        private_comms, installed_home, install_checkout, tmp_path):
+    checkout = install_checkout
+    declare_test_bus(private_comms, channels=("comms",))
+    current = subprocess.check_output(
+        ["git", "-C", checkout, "rev-parse", "HEAD"], text=True).strip()
+    manifest = checkout / "pyproject.toml"
+    manifest.write_text(manifest.read_text().replace(
+        "[project.scripts]\n",
+        '[project.scripts]\nroute-publication-fault = "agent_comms.cli:main"\n', 1))
+    subprocess.run(["git", "-C", checkout, "add", manifest], check=True)
+    subprocess.run(["git", "-C", checkout, "-c", "user.name=Installer test",
+                    "-c", "user.email=installer@example.invalid", "commit", "-qm",
+                    "Expose a publication failure after the route is rebound"], check=True)
+    target = subprocess.check_output(
+        ["git", "-C", checkout, "rev-parse", "HEAD"], text=True).strip()
+    subprocess.run(["git", "-C", checkout, "checkout", "--detach", "-q", current], check=True)
+
+    home = tmp_path / "publication-home"
+    uv = home / ".local/state/agent-comms/upgrade-bus/uv"
+    uv.parent.mkdir(mode=0o700, parents=True)
+    uv.symlink_to(Path(installed_home["HOME"]) / ".local/state/agent-comms/upgrade-bus/uv")
+    outgoing = (Path(installed_home["HOME"]) / ".local/share/agent-comms/current").resolve()
+    pointer = home / ".local/share/agent-comms/current"
+    pointer.parent.mkdir(mode=0o700, parents=True)
+    pointer.symlink_to(outgoing, target_is_directory=True)
+    blocker = home / ".local/bin/route-publication-fault"
+    blocker.parent.mkdir(mode=0o700, parents=True)
+    blocker.write_text("An owner file that publication must preserve")
+    route = home / ".local/state/agent-comms/active-route.json"
+    assert not route.exists()
+
+    completed = subprocess.run(
+        [pointer / "bin/agent-comms", "--root", private_comms.root, "install",
+         "--checkout", checkout, "--to", target, "--project", checkout,
+         "--spill-dir", tmp_path / "backups"], cwd=checkout,
+        env={**installed_home, "HOME": str(home)}, capture_output=True, text=True, timeout=270,
+    )
+    assert completed.returncode != 0
+    assert "Install rolled back:" in completed.stderr, completed.stderr
+    assert "route-publication-fault" in completed.stderr
+    assert not route.exists()
+    assert pointer.resolve() == outgoing
+    assert blocker.read_text() == "An owner file that publication must preserve"
+    assert subprocess.check_output(
+        ["git", "-C", checkout, "rev-parse", "HEAD"], text=True).strip() == current
+    MaintenanceBarrier(RegistryStore.at(private_comms.root).path).read().phase.new_sends.require_open()
 
 
 @pytest.mark.timeout(280)
