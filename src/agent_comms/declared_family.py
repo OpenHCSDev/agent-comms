@@ -94,8 +94,10 @@ class DeclaredOrder(ABC):
     @classmethod
     def position_of(cls, member: type) -> int:
         declarations = cls.__subclasses__()
-        rank, = (base for base in declarations if issubclass(member, base))
-        return declarations.index(rank)
+        for base in member.__mro__:
+            if base in declarations:
+                return declarations.index(base)
+        raise ValueError(f"{member.__name__} has no {cls.__name__} rank base")
 
 
 class DeclaredFamily(ABC, metaclass=_FamilyMeta):

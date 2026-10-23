@@ -145,7 +145,7 @@ def test_ordered_family_views_have_one_declaration_module():
         assert {member.__module__ for member in family.members_with(family)} == {family.__module__}
 
 
-def test_plain_order_requires_exactly_one_rank_and_derives_its_position():
+def test_plain_order_uses_the_first_rank_in_the_mro_and_requires_a_rank():
     class Rank(DeclaredOrder):
         pass
 
@@ -158,10 +158,10 @@ def test_plain_order_requires_exactly_one_rank_and_derives_its_position():
     class Selected(Second):
         pass
 
-    class Ambiguous(First, Second):
+    class Override(First, Selected):
         pass
 
     assert Rank.position_of(First) < Rank.position_of(Selected)
-    for member in (object, Ambiguous):
-        with pytest.raises(ValueError):
-            Rank.position_of(member)
+    assert Rank.position_of(Override) == Rank.position_of(First)
+    with pytest.raises(ValueError):
+        Rank.position_of(object)

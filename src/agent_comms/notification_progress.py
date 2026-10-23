@@ -5,6 +5,7 @@ from abc import abstractmethod
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
+from .declared_family import DeclaredOrder
 from .message_reference import MessageReference
 from .thread_presentation import ThreadPresentationStatus, WorkingThreadPresentationStatus
 
@@ -12,12 +13,30 @@ if TYPE_CHECKING:
     from .presentation import MessageNotification
 
 
+class DeliveryRank(DeclaredOrder):
+    """Notification rank is selected by the first rank base in the progress MRO."""
+
+
+class ActiveDelivery(DeliveryRank):
+    pass
+
+
+class SettledDelivery(DeliveryRank):
+    pass
+
+
+class WaitingDelivery(DeliveryRank):
+    pass
+
+
 class DeliveryProgress(ThreadPresentationStatus):
     label: ClassVar[str] = "Sent"
-    priority: ClassVar[int] = 3
     detail: ClassVar[str] = ""
     delivered: ClassVar[bool]
     read: ClassVar[bool]
+
+    def rank(self) -> int:
+        return DeliveryRank.position_of(type(self))
 
     def notification_label(self, notification: MessageNotification) -> str:
         return self.label
@@ -28,22 +47,20 @@ class PendingDelivery:
     read: ClassVar[bool] = False
 
 
-class ReadDelivery:
+class ReadDelivery(SettledDelivery):
     label: ClassVar[str] = "Read"
-    priority: ClassVar[int] = 2
     delivered: ClassVar[bool] = True
     read: ClassVar[bool] = True
 
 
 @dataclass(frozen=True)
-class UnrecordedProgress(PendingDelivery, DeliveryProgress):
+class UnrecordedProgress(WaitingDelivery, PendingDelivery, DeliveryProgress):
     """No recipient delivery has been recorded."""
 
 
 @dataclass(frozen=True)
-class AcknowledgedProgress(DeliveryProgress):
+class AcknowledgedProgress(SettledDelivery, DeliveryProgress):
     label = "Acknowledged"
-    priority = 2
     delivered: ClassVar[bool] = True
     read: ClassVar[bool] = False
 
@@ -54,7 +71,7 @@ class HumanReadProgress(ReadDelivery, DeliveryProgress):
 
 
 @dataclass(frozen=True)
-class ContextualProgress(DeliveryProgress):
+class ContextualProgress(WaitingDelivery, DeliveryProgress):
     """A lifecycle label surrounds the original proof without copying its facts."""
     proof: DeliveryProgress
 
@@ -72,9 +89,8 @@ class PassiveProgress(ContextualProgress):
     detail = "Available as context; no automatic response requested."
 
 
-class IgnoredProgress(ContextualProgress):
+class IgnoredProgress(SettledDelivery, ContextualProgress):
     label = ReadDelivery.label
-    priority = ReadDelivery.priority
 
     def notification_label(self, notification):
         return self.proof.notification_label(notification)
@@ -88,13 +104,12 @@ class FailedProgress(ContextualProgress):
     label = "Failed"
 
 
-class EngagedProgress(ContextualProgress, WorkingThreadPresentationStatus):
-    priority = 1
+class EngagedProgress(ActiveDelivery, ContextualProgress, WorkingThreadPresentationStatus):
+    pass
 
 
-class AnsweredProgress(ContextualProgress):
+class AnsweredProgress(SettledDelivery, ContextualProgress):
     label = "Answered"
-    priority = 2
 
     def notification_label(self, notification):
         return notification.timed_state(self.label, notification.answered_at_ms)
@@ -130,7 +145,7 @@ class AssignmentProgress(DeliveryProgress):
 
 
 @dataclass(frozen=True)
-class SentProgress(PendingDelivery, AssignmentProgress):
+class SentProgress(WaitingDelivery, PendingDelivery, AssignmentProgress):
     sent_at_ms: int
 
     @property
@@ -147,14 +162,13 @@ class SentProgress(PendingDelivery, AssignmentProgress):
         raise ValueError("Read notification has no model-context proof")
 
 
-class SendingProgress(SentProgress, WorkingThreadPresentationStatus):
-    priority = 1
+class SendingProgress(ActiveDelivery, SentProgress, WorkingThreadPresentationStatus):
+    pass
 
 
 @dataclass(frozen=True)
-class QueuedProgress(SentProgress):
+class QueuedProgress(ActiveDelivery, SentProgress):
     label = "Queued"
-    priority = 1
 
 
 @dataclass(frozen=True)
@@ -176,13 +190,13 @@ class ShownToModelProgress(ReadDelivery, AssignmentProgress):
         return replace(notification, state=self)
 
 
-class SelectedReadProgress(ShownToModelProgress):
-    priority = 1
+class SelectedReadProgress(ActiveDelivery, ShownToModelProgress):
+    pass
 
 
 class ReadingProgress(SelectedReadProgress, WorkingThreadPresentationStatus):
     pass
 
 
-class InterruptedReadProgress(ShownToModelProgress):
-    priority = 3
+class InterruptedReadProgress(WaitingDelivery, ShownToModelProgress):
+    pass
