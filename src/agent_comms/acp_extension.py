@@ -41,7 +41,7 @@ from .native_runtime_input import CurrentNativeCursor
 from .owner_protocol import IncompatibleOwner
 from .pi_payloads import McpLiveAcknowledgement
 from .routing import MessageRoute
-from .thread_identity import ClaimedIdentity, ThreadIncarnation
+from .thread_identity import ClaimScoped, ThreadIncarnation
 from .tool_result import DeclaredReply
 from .transcripts import TranscriptCursor, TranscriptPage, TranscriptReadIdentity
 from .turn_context import ContextManifest
@@ -196,10 +196,9 @@ class AttachmentScope(AcceptsNull, ExternalJsonShape, WireValue):
         raise ValueError('Attachment has no live local owner scope.')
 
 
-class LiveAttachmentScope(AttachmentScope):
+class LiveAttachmentScope(AttachmentScope, ClaimScoped):
     """Logical ACP attachment and executor evidence have separate identities."""
     session_id: str
-    claimed_identity: ClaimedIdentity
     owner: ProcessIdentity
 
     @property
@@ -300,7 +299,6 @@ class NoCursorScope(CursorScope):
 class LiveCursorScope(CursorScope, LiveAttachmentScope):
     session_id: str
     wire_root_id: str
-    claimed_identity: ClaimedIdentity
     owner: ProcessIdentity
 
     def __post_init__(self):
@@ -442,7 +440,6 @@ class NoQueueScope(QueueScope):
 @dataclass(frozen=True)
 class LiveQueueScope(QueueScope, LiveAttachmentScope):
     session_id: str
-    claimed_identity: ClaimedIdentity
     owner: ProcessIdentity
 
     @property

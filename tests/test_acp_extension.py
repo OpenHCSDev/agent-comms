@@ -54,7 +54,9 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
     comms.registry.declare(comms.registry.new_thread('pilot', frozenset(), str(tmp_path)))
     read = comms.transcripts.capture_page_read("pilot")
     owner = ClaimedIdentity(RecordedThreadIncarnation("pilot", 1.0), 1)
-    queue_scope = LiveQueueScope("pilot", owner, ProcessIdentity(123, 1))
+    queue_scope = LiveQueueScope(
+        session_id="pilot", claimed_identity=owner, owner=ProcessIdentity(123, 1),
+    )
     samples = (
         ContextAnnotatedUpdate(
             ContextManifest(
@@ -66,7 +68,9 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
         SelectedWriteAcceptedUpdate("operation", 1, "claim"),
         CursorAdvancedUpdate(
             CursorEnvelope(
-                LiveCursorScope("pilot", "a" * 32, owner, ProcessIdentity(123, 1)), 1, UnavailableCursorObservation()
+                LiveCursorScope(session_id="pilot", wire_root_id="a" * 32,
+                                claimed_identity=owner, owner=ProcessIdentity(123, 1)),
+                1, UnavailableCursorObservation()
             )
         ),
         QueueChangedUpdate(queue_scope, 1, AvailableQueueProjection((QueueItem("input", "text"),))),

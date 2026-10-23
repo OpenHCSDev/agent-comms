@@ -316,9 +316,9 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
         except RelationViolationError:
             return NoCursorScope()
         return LiveCursorScope(
-            session_id, self.namespace,
-            ClaimedIdentity(owner.thread.incarnation, owner.claimed_generation),
-            owner.thread.require_process(),
+            session_id=session_id, wire_root_id=self.namespace,
+            claimed_identity=ClaimedIdentity(owner.thread.incarnation, owner.claimed_generation),
+            owner=owner.thread.require_process(),
         )
 
     async def cursor_metadata(

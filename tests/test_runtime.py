@@ -88,10 +88,10 @@ def test_owner_cursor_scope_rebases_only_attachment_session_alias():
     fact = CursorAdvancedUpdate(
         CursorEnvelope(
             LiveCursorScope(
-                "canonical",
-                "a" * 32,
-                ClaimedIdentity(RecordedThreadIncarnation("canonical", 1000.0), 3),
-                ProcessIdentity(1234, 1),
+                session_id="canonical",
+                wire_root_id="a" * 32,
+                claimed_identity=ClaimedIdentity(RecordedThreadIncarnation("canonical", 1000.0), 3),
+                owner=ProcessIdentity(1234, 1),
             ),
             7,
             EmptyCursorObservation(),
