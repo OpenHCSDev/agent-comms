@@ -31,7 +31,7 @@ from agent_comms.installer.interpreter_operation import (
 from agent_comms.installer.refusals import InterpreterWorkerDied, UpgradeRefused
 from agent_comms.launch_runtime import RestoredRuntime
 from agent_comms.maintenance_barrier import MaintenanceHolder
-from agent_comms.repo import Repo
+from agent_comms.repo import GitCommandError, Repo
 
 
 @dataclass(frozen=True)
@@ -173,7 +173,10 @@ class InstallCommands:
     def git(self, checkout: Path, *args: str) -> str:
         """Git through the one runner (``Repo.git``), timed like every install command."""
         with self.timing(GitPhase(f"git -C {checkout} {' '.join(args)}")):
-            return Repo.git(checkout, *args)
+            try:
+                return Repo.git(checkout, *args)
+            except GitCommandError as error:
+                raise UpgradeRefused(str(error)) from error
 
     def probe[Answer](self, probe: RuntimeProbe[Answer], python: Path, *,
                       cwd: Path = Path(), env: Mapping[str, str] = os.environ,
