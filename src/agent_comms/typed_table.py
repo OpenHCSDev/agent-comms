@@ -13,7 +13,6 @@ import json
 import os
 import re
 import sqlite3
-import sys
 import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
@@ -2047,57 +2046,16 @@ class ProducedTable(ProducedRow, TypedTable, declared_name=None):
 
 
 @dataclass(frozen=True)
-class BuiltDigests:
-    """The producer digest of each projection one build computed, by its declared name."""
-
-    digests: dict[str, str]
-
-
-@dataclass(frozen=True)
-class BuildProducerDigests:
-    """The file holding one build's BuiltDigests, beside its interpreter.
-
-    Only installation publishes this file, using the staged interpreter's own source.
-    Readers cannot fill missing entries from a checkout imported into that interpreter.
-    """
-
-    path: Path
-
-    @classmethod
-    @cache
-    def current(cls) -> BuildProducerDigests:
-        return cls(Path(sys.prefix) / "agent-comms-producers.json")
-
-    def digests(self, rows: tuple[type[ProducedTable], ...]) -> dict[str, str]:
-        """Read the digests the installer computed from this runtime's own source."""
-        built = self.stored()
-        missing = sorted(row.declared_name for row in rows
-                         if row.declared_name not in built.digests)
-        if missing:
-            raise RuntimeError(
-                f"Runtime {sys.prefix} has no producer digests for {missing}; "
-                "run 'agent-comms install' to prepare the runtime")
-        return {row.declared_name: built.digests[row.declared_name] for row in rows}
-
-    def stored(self) -> BuiltDigests:
-        if not self.path.is_file():
-            raise RuntimeError(
-                f"Runtime {sys.prefix} has no producer digest file {self.path}; "
-                "run 'agent-comms install' to prepare the runtime")
-        return FieldCodec.decode(BuiltDigests, FieldCodec.parse(self.path.read_bytes()))
-
-
-@dataclass(frozen=True)
 class ProjectionProducer(TypedTable, ProjectionProducerTables):
     projection: Annotated[str, Column(primary_key=True)]
     producer_digest: str
 
     @staticmethod
     def digests_for(rows: tuple[type[ProducedTable], ...]) -> dict[str, str]:
-        return STAMP.producer_digests(
+        digests = STAMP.producer_digests(
             {row.declared_name: row.producer_digest for row in rows},
-            lambda: BuildProducerDigests.current().digests(rows),
         )
+        return {row.declared_name: digests[row.declared_name] for row in rows}
 
     @classmethod
     def records_for(cls, rows: tuple[type[ProducedTable], ...]) -> tuple[Self, ...]:

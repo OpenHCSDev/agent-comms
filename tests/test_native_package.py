@@ -129,7 +129,7 @@ def launcher(tmp_path):
     source.mkdir(parents=True)
     shutil.copytree(repo / 'src/agent_comms', source, dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns('__pycache__'))
-    WheelStamp(STAMP.commit()).write(source / 'package_stamp.py')
+    WheelStamp(STAMP.commit(), STAMP.producer_digests({})).write(source / 'package_stamp.py')
     # The environment `uv sync --project stack` installs: this checkout's agent_comms, editable,
     # with its dependencies.
     interpreter = stack / ".venv/bin/python"
