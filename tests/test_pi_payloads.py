@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Mapping
+from dataclasses import dataclass
 
 import pytest
 
@@ -30,6 +31,36 @@ from agent_comms.thread_model import DeclaredModel, UndeclaredModel
 
 def decode(record):
     return PiRpcChannel.decode_record((json.dumps(record) + "\n").encode(), strict=True)
+
+
+def test_single_external_member_is_derived_and_requires_one_provided_case():
+    from agent_comms.declared_family import DeclaredFamily
+    from agent_comms.field_codec import ExternalNullMember, SingleExternalMember
+    from agent_comms.pi_payloads import PiPayload
+
+    class Choice(SingleExternalMember, PiPayload, DeclaredFamily, affix="Choice"):
+        pass
+
+    @dataclass(frozen=True)
+    class MissingChoice(ExternalNullMember, Choice):
+        pass
+
+    assert Choice.from_wire(None) == MissingChoice()
+    with pytest.raises(ValueError, match="not enough values"):
+        Choice.from_wire({})
+
+    @dataclass(frozen=True)
+    class ProvidedChoice(Choice):
+        pass
+
+    assert Choice.from_wire({}) == ProvidedChoice()
+
+    @dataclass(frozen=True)
+    class AnotherChoice(Choice):
+        pass
+
+    with pytest.raises(ValueError, match="too many values"):
+        Choice.from_wire({})
 
 
 @pytest.mark.parametrize("command", ["switch_session"])
