@@ -76,8 +76,6 @@ class UnwrittenPrompt(PromptState, TurnInboxItem):
 class PreparedSession(UnwrittenPrompt):
     """An idle-session preparation owns no user prompt."""
 
-    acknowledged = False
-
     def permits_retention(self, session: NativeSession) -> bool:
         return session.output.clean
 

@@ -7,21 +7,35 @@ that phase. Native turn ownership remains S2's; these are durable observations.
 from __future__ import annotations
 
 from abc import abstractmethod
-from dataclasses import field, dataclass, replace
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
-from .coordination_errors import IdentityConflict, IntegrityViolationError, RecoveryBlocked
+from .coordination_errors import (
+    IdentityConflict,
+    IntegrityViolationError,
+    RecoveryBlocked,
+    ResponseClaimBlocked,
+)
+from .coordinator_vocabulary import CoordinatorVocabulary
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Failed, Terminal
-from .coordination_errors import ResponseClaimBlocked
 
 if TYPE_CHECKING:
     from .coordination_tables.attempts import ReplayFact
 
 
 @dataclass(frozen=True)
-class AttemptState(DeclaredFamily, LifecycleState, affix="Attempt"):
+class AttemptState(DeclaredFamily, LifecycleState, CoordinatorVocabulary, affix="Attempt"):
+    @classmethod
+    def sql_vocabulary(cls) -> dict[str, str]:
+        return dict(
+            attempt_names=cls.sql_values(cls.names()),
+            terminal_attempt_names=cls.sql_members(cls.members_with(Terminal)),
+            failed_attempt_phases=cls.sql_members(cls.members_with(Failed)),
+            retry_attempt_phases=cls.sql_members(cls.members_with(RetryPredecessor)),
+        )
+
     def permits_retry(self) -> bool:
         return False
 

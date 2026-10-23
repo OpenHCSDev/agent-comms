@@ -14,26 +14,26 @@ from acp.schema import (
 )
 
 from . import agent_events as events
-from .agent_event_updates import RoutedTurnEventConsumer, TurnEventConsumer
 from .acp_extension import LiveQueueScope, TranscriptChangedUpdate, encode_updates
 from .acp_failure import NativeTurnOutcome
-from .thread_identity import ClaimedIdentity
+from .agent_event_updates import RoutedTurnEventConsumer, TurnEventConsumer
 from .comms import Comms
 from .context_store import UNREAD_CONTEXT, ContextPrior
 from .coordinator import Coordination
 from .diagnostics import PublicationMeasurements, record_request_progress, record_terminal_failure
 from .messages import AlertKind, NoticeRole
-from .send_result import SendResult
 from .mro_dispatch import MroDispatch, handles
-from .turn_phase import PublishingPhase
+from .send_result import SendResult
+from .thread_identity import ClaimedIdentity
 from .transcript_updates import TurnTranscriptUpdate
 from .turn_lease import TurnState
+from .turn_phase import PublishingPhase
 
 if TYPE_CHECKING:
+    from .owned_turn import OwnedTurn
     from .session_lifecycle import SessionLifecycle
     from .turn_effects import TurnEffects
     from .turn_goal_account import TurnGoalAccount
-    from .owned_turn import OwnedTurn
 
 
 @dataclass(kw_only=True)
@@ -124,10 +124,6 @@ class TurnProgress(events.AgentEventConsumer):
         self.runtime.agent.annotations.observe(
             self.session_id, self.context_prior.value, event.context.values
         )
-
-    @property
-    def comms(self) -> Comms:
-        return self._comms
 
     @property
     def thread_name(self) -> str:
