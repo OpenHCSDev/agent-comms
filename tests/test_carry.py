@@ -29,6 +29,7 @@ from agent_comms.installer.carry import (
 )
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.commands import InstallCommands
+from agent_comms.installer.phase import CarryPhase
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.installer.upgrade import (
     BackedUpMigration,
@@ -106,7 +107,7 @@ def test_pending_uses_one_worker_on_a_real_bus(comms, stack, private_directory, 
     (tree.path / "tools").symlink_to(REPO / "tools", target_is_directory=True)
     practice = PracticeBus(private_directory / "practice",
                            PracticeCopy(comms.root, private_directory / "practice" / "bus"),
-                           comms.root, private_directory / "spill")
+                           comms.root, private_directory / "spill", stack.commands.clock)
     if pending:
         # ParkedThreads must run before CommanderProjectCarry can decode this.
         (comms.root / "commander.json").write_text('{"parked": []}')
@@ -117,13 +118,13 @@ def test_pending_uses_one_worker_on_a_real_bus(comms, stack, private_directory, 
         if answer.changed:
             position = index
             break
-    before = len(stack.commands.ran)
+    before = len(stack.commands.clock.phases)
     assert practice.pending(chain, stack, tree) == chain.steps[position:]
-    commands = stack.commands.ran[before:]
-    assert len(commands) == 1
-    assert "-m agent_comms.installer.step_worker " in commands[0].command
+    phases = stack.commands.clock.phases[before:]
+    assert phases[0].phase == CarryPhase(FirstPendingOperation.declared_name)
+    assert len(phases) == 1 + min(position + 1, len(chain.steps))
     assert practice.pending(CarryChain(()), stack, tree) == ()
-    assert len(stack.commands.ran) == before + 1
+    assert len(stack.commands.clock.phases) == before + len(phases)
     assert not practice.copy.copied
 
 def record_source(version: int, fields: str) -> str:

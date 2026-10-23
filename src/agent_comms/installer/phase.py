@@ -5,7 +5,7 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from threading import RLock
+from threading import Lock
 
 from agent_comms.declared_family import DeclaredFamily
 
@@ -31,7 +31,7 @@ class InstallPhase(DeclaredFamily, affix="Phase"):
         finally:
             with clock.lock:
                 measured.elapsed_seconds = clock.advance() - started
-                clock.active.remove(measured)
+                clock.active[:] = [active for active in clock.active if active is not measured]
 
 
 class InstallRunPhase(InstallPhase):
@@ -90,7 +90,7 @@ class TreeClosePhase(InstallPhase):
     """Retire the target worktree and the install's scratch directory."""
 
 
-@dataclass(eq=False)
+@dataclass
 class PhaseTiming:
     phase: InstallPhase
     seconds: float = 0.0
@@ -114,7 +114,7 @@ class InstallClock:
 
     phases: list[PhaseTiming] = field(default_factory=list)
     active: list[PhaseTiming] = field(default_factory=list, init=False)
-    lock: RLock = field(default_factory=RLock, init=False)
+    lock: Lock = field(default_factory=Lock, init=False)
     previous: float = field(default_factory=time.monotonic, init=False)
 
     def advance(self) -> float:
@@ -123,3 +123,11 @@ class InstallClock:
             self.active[-1].seconds += now - self.previous
         self.previous = now
         return now
+
+    def include(self, phases: list[PhaseTiming], worker: PhaseTiming) -> None:
+        """The serial carry worker measured part of this run already: replace that
+        part of its parent's seconds, rather than counting the subprocess twice."""
+        with self.lock:
+            self.advance()
+            worker.seconds -= sum(phase.seconds for phase in phases)
+            self.phases.extend(phases)

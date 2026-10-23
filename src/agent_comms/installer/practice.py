@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -21,17 +20,16 @@ from agent_comms.storage_rules import StorageRule
 @dataclass(frozen=True)
 class PracticeMeasurement:
     bytes: int
-    seconds: float
 
     @classmethod
-    def of(cls, copy: Path, seconds: float, floor: float) -> PracticeMeasurement:
+    def of(cls, copy: Path, floor: float) -> PracticeMeasurement:
         """Refuse a copy without room for the rehearsal's second copy above the disk floor. The
         free space is what a copy can cost; a fixed byte cap beside it refused a 3.01 GiB bus
         with 29 GiB free and stopped install 45."""
         size = sum(path.stat().st_size for path in copy.rglob("*") if path.is_file())
         if shutil.disk_usage(copy.parent).free < 2 * size + floor:
             raise UpgradeRefused(f"Insufficient free space for rehearsal of {size} copied bytes")
-        return cls(size, seconds)
+        return cls(size)
 
 
 @dataclass(frozen=True)
@@ -101,14 +99,12 @@ class PracticeCopy:
     root: Path
     path: Path
     copied: dict[Path, Path] = field(default_factory=dict)
-    seconds: float = 0.0
 
     def include(self, paths: tuple[Path, ...]) -> None:
         floor = StorageRule.load(self.root).floor_gib * 2**30
         self.path.mkdir(mode=0o700, parents=True, exist_ok=True)
         if shutil.disk_usage(self.path.parent).free < floor:
             raise UpgradeRefused("Insufficient free space before building the practice copy")
-        started = time.monotonic()
         witnesses = set(MaintenanceBarrier(RegistryFile.path_in(self.root)).witness_paths)
         for resource, owner in RootFile.owned_files(self.root, paths).items():
             source = self.root / resource.path
@@ -117,7 +113,6 @@ class PracticeCopy:
             target = self.path / resource.path
             target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             self.copied.update((member, source) for member in owner.copy_group(source, target))
-        self.seconds += time.monotonic() - started
 
     def retain(self, paths: tuple[Path, ...]) -> None:
         """Discard inputs used only to establish that an earlier carry was finished."""
@@ -130,4 +125,4 @@ class PracticeCopy:
     @property
     def measurement(self) -> PracticeMeasurement:
         return PracticeMeasurement.of(
-            self.path, self.seconds, StorageRule.load(self.root).floor_gib * 2**30)
+            self.path, StorageRule.load(self.root).floor_gib * 2**30)

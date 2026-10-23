@@ -22,7 +22,7 @@ from agent_comms.installer.interpreter_operation import (
     RuntimeProbe,
     SourceProgram,
 )
-from agent_comms.installer.phase import CommandPhase, GitPhase, InstallClock, InstallPhase, ProbePhase, WorkerClosePhase
+from agent_comms.installer.phase import CommandPhase, GitPhase, InstallClock, InstallPhase, PhaseTiming, ProbePhase, WorkerClosePhase
 from agent_comms.launch_runtime import RestoredRuntime
 from agent_comms.maintenance_barrier import MaintenanceHolder
 from agent_comms.repo import Repo
@@ -146,17 +146,22 @@ class InstallCommands:
         self.close()
 
     @contextmanager
-    def timing(self, phase: InstallPhase) -> Iterator[None]:
+    def timing(self, phase: InstallPhase) -> Iterator[PhaseTiming]:
         print("+", phase.label(), file=sys.stderr, flush=True)
         with phase.running(self.clock) as measured:
-            yield
+            yield measured
         print("=", measured.line(), file=sys.stderr, flush=True)
 
     def run(self, *command: str | Path, cwd: Path = Path(),
             env: Mapping[str, str] = os.environ, label: str = "") -> str:
         with self.timing(CommandPhase(label or " ".join(map(str, command)))):
-            completed = subprocess.run([str(part) for part in command], cwd=cwd, env=env,
-                                       capture_output=True, text=True)
+            return self.execute(*command, cwd=cwd, env=env)
+
+    def execute(self, *command: str | Path, cwd: Path = Path(),
+                env: Mapping[str, str] = os.environ) -> str:
+        """Execute inside the caller's declared phase, without a second clock."""
+        completed = subprocess.run([str(part) for part in command], cwd=cwd, env=env,
+                                   capture_output=True, text=True)
         if completed.returncode:
             raise UpgradeRefused(f"{command[0]} failed: {completed.stdout.strip()}\n"
                                  f"{completed.stderr.strip()}")

@@ -21,8 +21,9 @@ from typing import Annotated, ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import PathText
+from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.installer.interpreter_operation import InterpreterOperation
+from agent_comms.installer.phase import CarryPhase, InstallClock, PhaseTiming
 from agent_comms.locked_store import RootFile
 from agent_comms.repo import Repo
 
@@ -104,23 +105,28 @@ class CarryOperation[Answer](
     """One worker pass, with its answer type declared by the operation's run method."""
 
     @abstractmethod
-    def run(self, steps: tuple[Carry, ...]) -> tuple[Answer, ...]: ...
+    def run(self, steps: tuple[Carry, ...], clock: InstallClock) -> tuple[Answer, ...]: ...
 
 @dataclass(frozen=True)
 class MigrateOperation(CarryOperation[Carried]):
     apply: bool
 
-    def run(self, steps: tuple[Carry, ...]) -> tuple[Carried, ...]:
-        return tuple(step.carry(apply=self.apply) for step in steps)
+    def run(self, steps: tuple[Carry, ...], clock: InstallClock) -> tuple[Carried, ...]:
+        answers = []
+        for step in steps:
+            with CarryPhase(step.declared_name).running(clock):
+                answers.append(step.carry(apply=self.apply))
+        return tuple(answers)
 
 
 @dataclass(frozen=True)
 class FirstPendingOperation(CarryOperation[int]):
     """One position: stop before asking a step that needs a pending predecessor."""
 
-    def run(self, steps: tuple[Carry, ...]) -> tuple[int, ...]:
+    def run(self, steps: tuple[Carry, ...], clock: InstallClock) -> tuple[int, ...]:
         for position, step in enumerate(steps):
-            changed_count = step.carry(apply=False).changed
+            with CarryPhase(step.declared_name).running(clock):
+                changed_count = step.carry(apply=False).changed
             if changed_count:
                 return (position,)
         return (len(steps),)
@@ -128,8 +134,18 @@ class FirstPendingOperation(CarryOperation[int]):
 
 @dataclass(frozen=True)
 class RetireInputsOperation(CarryOperation[Carried]):
-    def run(self, steps: tuple[Carry, ...]) -> tuple[Carried, ...]:
-        return tuple(step.after_acceptance() for step in steps)
+    def run(self, steps: tuple[Carry, ...], clock: InstallClock) -> tuple[Carried, ...]:
+        answers = []
+        for step in steps:
+            with CarryPhase(step.declared_name).running(clock):
+                answers.append(step.after_acceptance())
+        return tuple(answers)
+
+
+@dataclass(frozen=True)
+class CarryReply:
+    answer: str
+    phases: list[PhaseTiming]
 
 
 @dataclass(frozen=True)
@@ -140,7 +156,9 @@ class CarryRequest:
     steps: tuple[Carry, ...]
 
     def run(self) -> str:
-        return self.operation.encode_answer(self.operation.run(self.steps))
+        clock = InstallClock()
+        answer = self.operation.encode_answer(self.operation.run(self.steps, clock))
+        return FieldCodec.compact(FieldCodec.encode(CarryReply(answer, clock.phases)))
 
 
 @dataclass(frozen=True)
