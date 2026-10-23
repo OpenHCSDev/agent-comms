@@ -3,7 +3,6 @@
 from __future__ import annotations
 from agent_comms.controller import SessionUpdateSink
 
-from agent_comms.bus import Bus
 from agent_comms.lifecycle_capability import Unresolved
 from agent_comms.queued_input import InitialInput
 import asyncio
@@ -298,7 +297,6 @@ async def _acp_threshold(root, project, session, native_bin, native_args, child_
     for key, value in child_env.items():
         monkeypatch.setenv(key, value)
     comms = wire(root / "wire")
-    Bus.install(Bus.path_in(comms.root))
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
     owner = CommsAgent(
         comms, agent_bin=GivenBinary(native_bin), agent_args=GivenArguments(tuple(native_args)), runtime_enabled=True,

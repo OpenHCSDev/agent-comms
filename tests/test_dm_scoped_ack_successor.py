@@ -137,7 +137,7 @@ def test_newest_page_mark_leaves_older_message_unread(tmp_path: Path):
     page = comms.views.dm_display_page(ThreadTarget("peer"), worktree=str(tmp_path), bounds=PageBounds(limit=1))
     assert page.messages == (newest,)
     _mark(comms, "peer", tmp_path, page)
-    assert comms.bus.inbox(viewer, CommandTarget.named("peer")) == [older]
+    assert comms.bus.inbox(viewer, CommandTarget.named("peer")).page.messages == (older,)
 
 
 def test_lifecycle_and_marker_lock_order_does_not_deadlock(tmp_path: Path):

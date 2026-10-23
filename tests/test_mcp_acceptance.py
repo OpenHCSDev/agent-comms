@@ -26,18 +26,19 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
+from acp.schema import PromptRequest, TextContentBlock
 
 from agent_comms.acp_extension import (
     McpClientAcknowledgementUpdate,
     TurnChangedUpdate,
     decode_updates,
 )
-from agent_comms.comms import wire
 from agent_comms.child_process import SpawnedProcess
+from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
-from agent_comms.runtime import RuntimeProxy
 from agent_comms.native_arguments import GivenArguments, GivenBinary
+from agent_comms.runtime import RuntimeProxy
 from delivery_owner_fixture import canonical_agent
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX PTY acceptance")
@@ -483,7 +484,8 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, request):
                     try:
                         task = asyncio.create_task(
                             owner.prompt(
-                                session_id, [{"type": "text", "text": "Run fixture echo once."}]
+                                session_id,
+                                [TextContentBlock(type="text", text="Run fixture echo once.")],
                             )
                         )
                     finally:
@@ -491,7 +493,13 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, request):
                 else:
                     task = asyncio.create_task(
                         proxy.request(
-                            "prompt", prompt=[{"type": "text", "text": "Run fixture echo once."}]
+                            "prompt",
+                            request=PromptRequest(
+                                session_id=session_id,
+                                prompt=[
+                                    TextContentBlock(type="text", text="Run fixture echo once.")
+                                ],
+                            ),
                         )
                     )
                     await asyncio.wait_for(entered.wait(), TIMEOUT)

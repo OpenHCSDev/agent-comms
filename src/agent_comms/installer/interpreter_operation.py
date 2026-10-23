@@ -170,13 +170,6 @@ class ClientImportsProbe(RuntimeProbe[None]):
         import_module("agent_comms.acp")
 
 
-class PackageRootProbe(RuntimeProbe[Path]):
-    def run(self) -> Annotated[Path, PathText]:
-        return Path(agent_comms.__file__).parent
-
-
-
-
 class PrepareNativeProbe(RuntimeProbe[None]):
     def run(self) -> None:
         from agent_comms.native_package import VerifiedNativePackage, pinned_native_package

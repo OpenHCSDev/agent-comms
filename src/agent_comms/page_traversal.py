@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from .field_codec import NullMember, RecordMember, SingleFieldValue, SubclassUnion
 
@@ -113,6 +113,13 @@ class PageTraversal(ABC):
     """Traversal order and edge meaning retain their original nominal cursor."""
 
     cursor: PageCursor
+    # The bus sequence order this traversal reads rows in.
+    seq_order: ClassVar[str]
+
+    @property
+    @abstractmethod
+    def upper(self) -> int | None:
+        """The exclusive newest sequence this page may hold; None leaves it unbounded."""
 
     def source_page(self, live: MessagePage, historical: Callable[[], MessagePage]) -> MessagePage:
         return live if live.messages else historical()
@@ -162,6 +169,12 @@ class PageTraversal(ABC):
 @dataclass(frozen=True, slots=True)
 class OlderTraversal(PageTraversal):
     cursor: PageCursor = NewestCursor()
+    seq_order = "DESC"
+
+    @property
+    def upper(self) -> int | None:
+        """The exclusive newest sequence this page may hold."""
+        return self.cursor.upper
 
     def source_indexes(self, start: int, count: int) -> range:
         return range(start, -1, -1)
@@ -191,6 +204,11 @@ class OlderTraversal(PageTraversal):
 @dataclass(frozen=True, slots=True)
 class NewerTraversal(PageTraversal):
     cursor: PageCursor = NewestCursor()
+    seq_order = "ASC"
+
+    @property
+    def upper(self) -> None:
+        return None
 
     def source_page(self, live: MessagePage, historical: Callable[[], MessagePage]) -> MessagePage:
         return live
