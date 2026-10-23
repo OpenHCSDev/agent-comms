@@ -7,16 +7,23 @@ import stat
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Annotated
 
+from .field_codec import PathText
+from .active_route import LocalRoute
+from .commander_heartbeat import CommanderObservation
+from .comms import Comms
+from .launch_runtime import LaunchRuntime
 from .locked_store import RegistryFile, RootFile
 from .maintenance_barrier import MaintenanceBarrier
+from .root_runtime import RootRuntime
 from .storage_rules import StorageRule
 
 
 @dataclass(frozen=True)
 class FleetRootCopy:
-    source: Path
-    root: Path
+    source: Annotated[Path, PathText]
+    root: Annotated[Path, PathText]
     captured_at: float
     bytes: int
 
@@ -24,7 +31,8 @@ class FleetRootCopy:
     def capture(cls, source: Path, into: Path) -> FleetRootCopy:
         """Read source files only; SQLite owners use their read-only backup path."""
         barrier = MaintenanceBarrier(RegistryFile.path_in(source))
-        before = barrier.assert_open_unlocked()
+        before = barrier._current_unlocked()
+        before.require_open()
         floor = StorageRule.load(source).floor_gib * 1024 ** 3
         paths = tuple(path for path in source.rglob("*")
                       if stat.S_ISREG(path.lstat().st_mode))
@@ -44,7 +52,15 @@ class FleetRootCopy:
             owner.copy_file(original, target)
             target.chmod(0o600)
             copied += target.stat().st_size
-        after = barrier.assert_open_unlocked()
+        after = barrier._current_unlocked()
+        after.require_open()
         if after != before:
             raise ValueError("Maintenance changed during fleet capture; discard this copy")
+        RootRuntime.publish(into, LaunchRuntime.running())
         return cls(source, into, time.time(), copied)
+
+    def observations(self) -> tuple[CommanderObservation, ...]:
+        comms = Comms(LocalRoute(self.root))
+        project = comms.registry.store.read().commander_project
+        return tuple(CommanderObservation.read(comms, commander)
+                     for commander in project.commanders(comms.registry.snapshot()))
