@@ -3114,28 +3114,19 @@ class DroppedVerdict(ToolCallVerdict):
         target = Path(self.path)
         if target.is_file() and all(line in target.read_text(errors="replace") for line in lines):
             self.refuse(str(target))
-        refs = self.git(checkout, "for-each-ref", "--format=%(objectname)",
-                        "refs/heads", "refs/remotes")
+        refs = Repo.git(checkout, "for-each-ref", "--format=%(objectname)",
+                        "refs/heads", "refs/remotes").splitlines()
         heads = [entry.removeprefix("HEAD ")
-                 for entry in self.git(checkout, "worktree", "list", "--porcelain")
+                 for entry in Repo.git(checkout, "worktree", "list", "--porcelain").splitlines()
                  if entry.startswith("HEAD ")]
         patterns = [arg for line in lines for arg in ("-e", line)]
-        found = self.git(checkout, "grep", "-F", "-l", "--all-match", *patterns,
-                         *sorted({*refs, *heads}), "--", f":(glob)**/{target.name}",
-                         allowed=(0, 1))
+        found = Repo.grep_files(checkout, "-F", "--all-match", *patterns,
+                                *sorted({*refs, *heads}), "--", f":(glob)**/{target.name}")
         if found:
             self.refuse(found[0].split(":", 1)[0])
 
     def refuse(self, holder: str) -> None:
         raise TodoError(f"Edit {self.tool_call_id} is still on {holder}; judge it ok or back.")
-
-    @staticmethod
-    def git(checkout: Path, *args: str, allowed: tuple[int, ...] = (0,)) -> list[str]:
-        ran = subprocess.run(("git", "-C", str(checkout), *args),
-                             capture_output=True, text=True, timeout=120)
-        if ran.returncode not in allowed:
-            raise TodoError(ran.stderr.strip() or f"git {args[0]} failed in {checkout}.")
-        return ran.stdout.splitlines()
 
     def judged(self, current: Todo) -> Todo:
         return current
