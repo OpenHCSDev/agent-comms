@@ -1,16 +1,16 @@
 """One query contract over the original native and external record owners."""
 
 import asyncio
-from contextlib import aclosing, suppress
+from contextlib import aclosing, redirect_stdout, suppress
 from datetime import datetime, timedelta
+import io
 import json
 import os
-import subprocess
-import sys
 
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.cli import main
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.shared import Binding, Options, Serve, Watch
 from agent_comms.comms import wire
@@ -33,13 +33,14 @@ def prepared(tmp_path):
 
 
 def endpoint(comms, name, window):
-    environment = {key: value for key, value in os.environ.items()
-                   if not key.startswith(('AGENT_COMMS_', 'PI_SESSION_', 'OPENCODE_SERVER_'))}
-    command = [sys.executable, '-m', 'agent_comms.cli', '--root', str(comms.root), 'tool',
-               '--tool', 'comms_turns', '--arguments', json.dumps(dict(thread=name, window=FieldCodec.encode(window)))]
-    result = subprocess.run(command, env=environment, text=True, capture_output=True,
-                            timeout=15, check=True)
-    return json.loads(result.stdout)
+    """The comms_turns tool through the command line's dispatcher; the conftest already clears a
+    managed runtime's environment, and test_cli proves the console script around it."""
+    output = io.StringIO()
+    with redirect_stdout(output):
+        code = main(['--root', str(comms.root), 'tool', '--tool', 'comms_turns', '--arguments',
+                     json.dumps(dict(thread=name, window=FieldCodec.encode(window)))])
+    assert code == 0, output.getvalue()
+    return json.loads(output.getvalue())
 
 
 def paged_answers(comms, name):

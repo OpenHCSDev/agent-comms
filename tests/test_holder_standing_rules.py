@@ -4,8 +4,6 @@ from agent_comms.channel_targets import CommandTarget
 import asyncio
 import json
 import os
-import subprocess
-import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
@@ -66,6 +64,7 @@ from agent_comms.todos import (
     TodoConflict,
 )
 from agent_comms.ui_model.unit_state import AwaitingCommander, Blocked, Detached, UnitState
+from cli_command import commander
 from conftest import declare_test_bus
 from native_backend_fixture import native_backend_fixture, wait_for
 from test_goal_execution import turn_on
@@ -569,9 +568,7 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
     order_file.write_text(json.dumps(FieldCodec.encode(document)))
 
     def cli(*arguments):
-        run = subprocess.run((sys.executable, '-c',
-            'from agent_comms.commander.cli import main; main()', '--config', str(CommanderConfig.path(durable_home)),
-            'order', *arguments), capture_output=True, text=True, timeout=90)
+        run = commander('--config', str(CommanderConfig.path(durable_home)), 'order', *arguments)
         assert run.returncode == 0, run.stdout + run.stderr
         print(run.stdout)
 
