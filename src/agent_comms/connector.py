@@ -209,7 +209,7 @@ class TokenGrant(DeclaredFamily, affix="Grant"):
     def redeemed(self, grants: ConnectorGrants) -> ConnectorGrants:
         """The grants with this credential spent; refuses a credential it does not hold."""
 
-    def exchange(self, grants: ConnectorGrants) -> tuple[ConnectorGrants, IssuedTokens]:
+    def exchange(self, grants: ConnectorGrants) -> DocumentChange[ConnectorGrants, IssuedTokens]:
         return self.redeemed(grants).issued(self.client_id)
 
 
@@ -667,10 +667,10 @@ class Connector:
         client_id = secrets.token_urlsafe(16)
         await asyncio.to_thread(
             self.store.update,
-            lambda grants: replace(
+            lambda grants: DocumentChange.to(replace(
                 grants,
                 clients=grants.clients | {client_id: RegisteredClient(registration.client_name)},
-            ),
+            )),
         )
         return web.json_response(FieldCodec.encode(ClientRegistrationReply(
             client_id=client_id, client_id_issued_at=int(time.time()),
@@ -689,17 +689,17 @@ class Connector:
         browser = request.cookies.get(TrustedBrowser.cookie_name, "")
         notices: list[AuthorizationRequest] = []
 
-        def decided(grants: ConnectorGrants) -> ConnectorGrants:
+        def decided(grants: ConnectorGrants) -> DocumentChange[ConnectorGrants, ConnectorGrants]:
             now = time.time()
             grants = grants.unexpired(now)
             if query.client_id not in grants.clients:
                 raise web.HTTPBadRequest(text="Unknown client.")
             if grants.trusts(browser):
-                return grants.code_issued(query, code, now)
+                return DocumentChange.to(grants.code_issued(query, code, now))
             if query.request_id not in grants.requests:
                 grants = grants.waiting(query, digest(approval), now)
                 notices.append(grants.requests[query.request_id])
-            return grants
+            return DocumentChange.to(grants)
 
         try:
             grants = await asyncio.to_thread(self.store.update, decided)
@@ -764,23 +764,21 @@ class Connector:
         """Consume the owner's POST and establish browser trust in the same update."""
         link = FieldCodec.decode(ApprovalLink, dict(request.match_info))
         code, browser = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
-        approved: list[AuthorizationQuery] = []
 
-        def consumed(grants: ConnectorGrants) -> ConnectorGrants:
+        def consumed(grants: ConnectorGrants) -> DocumentChange[ConnectorGrants, AuthorizationQuery]:
             now = time.time()
             held = grants.require_approval(link.request_id, link.secret, now)
-            approved.append(held.query)
-            return replace(
+            return DocumentChange(replace(
                 grants.unexpired(now).code_issued(held.query, code, now),
                 trusted_browsers=grants.trusted_browsers | {digest(browser): TrustedBrowser(now)},
-            )
+            ), held.query)
 
         try:
-            await asyncio.to_thread(self.store.update, consumed)
+            approved = await asyncio.to_thread(self.store.update, consumed)
         except ApprovalRefused as refusal:
             raise web.HTTPBadRequest(text=str(refusal)) from refusal
         response = web.HTTPFound(
-            approved[0].redirect(code),
+            approved.redirect(code),
             headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
         )
         response.set_cookie(
@@ -794,19 +792,12 @@ class Connector:
             grant = TokenGrant.received(await request.post())
         except MalformedRecord as error:
             return OAuthError("invalid_request", str(error)).response()
-        exchanged: list[IssuedTokens] = []
-
-        def spent(grants: ConnectorGrants) -> ConnectorGrants:
-            grants, response = grant.exchange(grants)
-            exchanged.append(response)
-            return grants
-
         try:
-            await asyncio.to_thread(self.store.update, spent)
+            exchanged = await asyncio.to_thread(self.store.update, grant.exchange)
         except OAuthError as refusal:
             return refusal.response()
         return web.json_response(
-            FieldCodec.encode(exchanged[0]), headers={"Cache-Control": "no-store"}
+            FieldCodec.encode(exchanged), headers={"Cache-Control": "no-store"}
         )
 
     @staticmethod

@@ -677,7 +677,7 @@ async def test_owner_browser_approval_lifecycle(client, store, comms):
         )},
     )))
     assert (await client.get(link.path, allow_redirects=False)).status == 400
-    store.update(lambda grants: DocumentChange.to(grants.issued(query.client_id)[0]))
+    store.update(lambda grants: grants.issued(query.client_id))
     assert not store.read().requests and "expired-code" not in store.read().codes
 
     waiting = await client.get("/authorize", params=FieldCodec.encode(query))

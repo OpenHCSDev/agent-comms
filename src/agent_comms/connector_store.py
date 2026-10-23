@@ -163,7 +163,7 @@ class ConnectorGrants:
             },
         )
 
-    def issued(self, client_id: str) -> tuple[ConnectorGrants, IssuedTokens]:
+    def issued(self, client_id: str) -> DocumentChange[ConnectorGrants, IssuedTokens]:
         """A new access and refresh token pair, dropping every expired grant and wait."""
         now = time.time()
         access, refresh = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
@@ -174,7 +174,7 @@ class ConnectorGrants:
             | {digest(access): IssuedAccess(client_id, expires_at=now + ACCESS_SECONDS)},
             refresh=current.refresh | {digest(refresh): client_id},
         )
-        return grants, IssuedTokens(access, refresh)
+        return DocumentChange(grants, IssuedTokens(access, refresh))
 
     def holds(self, token: str) -> bool:
         key = digest(token)
