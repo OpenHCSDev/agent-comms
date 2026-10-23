@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from typing import Annotated
 
 from agent_comms import field_codec
-from agent_comms.declared_verb import DeclaredVerb
 from agent_comms.command import Command
+from agent_comms.declared_verb import DeclaredVerb
 from agent_comms.native_package import (
     VerifiedNativePackage,
     install_declared_sources,

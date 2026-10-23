@@ -14,7 +14,7 @@ import sys
 import time
 import traceback
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager, suppress
 from dataclasses import dataclass, field, replace
 from datetime import datetime

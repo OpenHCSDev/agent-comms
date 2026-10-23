@@ -13,12 +13,6 @@ from agent_comms.field_codec import FieldCodec
 
 class DeclaredOptions:
     """The CLI adapter consumes FieldCodec's existing field plans."""
-    help: ClassVar[str]
-
-    @classmethod
-    def add_parser[P: argparse.ArgumentParser](
-            cls, subparsers: argparse._SubParsersAction[P]) -> None:
-        cls.add_arguments(subparsers.add_parser(FieldCodec.encode(cls), help=cls.help))
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
@@ -29,17 +23,30 @@ class DeclaredOptions:
         return FieldCodec.decode_arguments(cls, args)
 
 
-class DeclaredVerb(DeclaredOptions, DeclaredFamily, affix="Verb"):
+class DeclaredCommand(DeclaredOptions, DeclaredFamily):
+    """A family member that is one subcommand, named by its declared name."""
+
+    help: ClassVar[str]
+
+    @classmethod
+    def add_parser[P: argparse.ArgumentParser](
+        cls, subparsers: argparse._SubParsersAction[P]
+    ) -> None:
+        cls.add_arguments(subparsers.add_parser(cls.declared_name, help=cls.help))
+
+
+class DeclaredVerb(DeclaredCommand, affix="Verb"):
     """A command family parses the options declared by its members."""
 
     @classmethod
     def tool(cls) -> str:
-        return cls.__module__.rpartition('.')[2].replace('_', '-')
+        return cls.__module__.rpartition(".")[2].replace("_", "-")
 
     @classmethod
     def parse(cls, argv: Sequence[str]) -> Self:
         parser = argparse.ArgumentParser(
-            prog=cls.tool(), description=sys.modules[cls.__module__].__doc__,
+            prog=cls.tool(),
+            description=sys.modules[cls.__module__].__doc__,
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
         verbs = parser.add_subparsers(dest="command", required=True)
