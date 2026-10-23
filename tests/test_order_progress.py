@@ -1,6 +1,7 @@
 """An order's progress is read from its unit's checkout and PRs; no clock strikes or releases it.
 The commander's review timer comes back every window until delivery, and the unit never sees it."""
 
+
 from agent_comms.bus import Bus
 import json
 import os
@@ -12,12 +13,13 @@ import pytest
 from test_todos import order
 from source_revision_fixture import SourceRepository
 
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.native_tools import NativeRequestTools
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import ReviewTimerUp
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsTodoCreateTool
 from agent_comms.work_branches import WorkBranches
@@ -117,7 +119,7 @@ def held(tmp_path):
     root.mkdir(mode=0o700)
     source = SourceRepository.create(tmp_path / 'source')
     (root / 'storage.json').write_text(json.dumps({'checkout_base': str(tmp_path / 'wt')}))
-    comms = Comms(root)
+    comms = wire(root)
     Bus.install(Bus.path_in(comms.root))
     for name in ('lead', 'worker'):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
@@ -153,7 +155,8 @@ def test_the_review_timer_comes_back_every_window_until_delivery(held):
 
 
 def test_a_timer_up_tells_the_commander_to_judge_and_strikes_no_one():
-    up = ReviewTimerUp('P1', 'worker', 'order-P1', RecordedEventTime(1000.0))
+    up = ReviewTimerUp('P1', RecordedThreadIncarnation('worker', 1.0),
+                       'order-P1', RecordedEventTime(1000.0))
     clock = time.strftime('%H:%M:%S', time.localtime(1000.0))
     assert up.line() == f'TIMER UP: worker P1 at {clock}, order order-P1 -> read its diff and judge it'
     assert up.began() == 1000.0

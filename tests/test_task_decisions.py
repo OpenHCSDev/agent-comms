@@ -1,5 +1,6 @@
 """One original decision/correction journey through declared tools and wire ownership."""
 
+
 from agent_comms.channel_targets import CommandTarget
 
 from agent_comms.bus import Bus
@@ -61,7 +62,7 @@ def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms
     owner = comms.registry.declare(comms.registry.new_thread('recipient', frozenset({'team'}), str(comms.root)))
     comms.registry.declare(comms.registry.new_thread('unaddressed', frozenset(), str(comms.root)))
     exact = "Never replay UNKNOWN.\nUse original λ /artifacts/source; no substitute."
-    subject = comms.messaging.send_user_message("recipient", exact, worktree=owner.worktree)
+    subject = comms.messaging.send_user_message(CommandTarget.named('recipient'), exact, worktree=owner.worktree)
     original_rows = read_history(comms)
     assert owner.turn_lease == NoTurnLease()
     pin = comms.messaging.pin_user_constraint(owner.name, subject.reference, worktree=owner.worktree)
@@ -92,15 +93,15 @@ def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms
     renamed = comms.registry.require("renamed-recipient")
     assert comms.views.retained_context(renamed.name).retained.current_authored_sources(
         renamed, comms.registry.snapshot()) == (Message.from_message(pin),)
-    revised = comms.messaging.send_user_message(renamed.name, "Keep the corrected original path.",
+    revised = comms.messaging.send_user_message(CommandTarget.named(renamed.name), "Keep the corrected original path.",
         worktree=owner.worktree, task=UserTaskSupersession(CorrectionTaskChange(pin.reference)))
     assert comms.views.retained_context(renamed.name).retained.current_authored_sources(
         renamed, comms.registry.snapshot()) == (Message.from_message(revised),)
-    comms.messaging.send_user_message(renamed.name, "Drop that constraint.", worktree=owner.worktree,
+    comms.messaging.send_user_message(CommandTarget.named(renamed.name), "Drop that constraint.", worktree=owner.worktree,
         task=UserTaskDrop(CorrectionTaskChange(pin.reference)))
     assert comms.views.retained_context(renamed.name).retained.current_authored_sources(renamed, comms.registry.snapshot()) == ()
     # A new declaration can refer to equal wording only through its own identity.
-    second = comms.messaging.send_user_message(renamed.name, exact, worktree=owner.worktree)
+    second = comms.messaging.send_user_message(CommandTarget.named(renamed.name), exact, worktree=owner.worktree)
     new_pin = comms.messaging.pin_user_constraint(renamed.name, second.reference, worktree=owner.worktree)
     current = comms.views.retained_context(renamed.name).retained
     assert current.original_text_source(new_pin.reference) == Message.from_message(second) and second.reference != subject.reference
@@ -119,7 +120,7 @@ def test_user_pin_goal_scope_replacement_and_original_subject_fences(comms):
 
     Bus.install(Bus.path_in(comms.root))
     owner = comms.registry.declare(comms.registry.new_thread('recipient', frozenset(), str(comms.root), goal=Goal('Original goal', 'goal-one', published_seq=0)))
-    subject = comms.messaging.send_user_message(owner.name, "Use the original coordinates.",
+    subject = comms.messaging.send_user_message(CommandTarget.named(owner.name), "Use the original coordinates.",
                                                 worktree=owner.worktree)
     pin = comms.messaging.pin_user_constraint(owner.name, subject.reference, worktree=owner.worktree)
     assert isinstance(pin.task.scope, GoalTaskScope)
@@ -130,10 +131,10 @@ def test_user_pin_goal_scope_replacement_and_original_subject_fences(comms):
     from conftest import declare_test_bus
     declare_test_bus(comms, channels=("team",))
     with pytest.raises(RelationViolationError):
-        comms.messaging.send_user_message("#team", "wrong audience", worktree=owner.worktree, task=pin.task)
+        comms.messaging.send_user_message(CommandTarget.named('#team'), "wrong audience", worktree=owner.worktree, task=pin.task)
     assert read_history(comms) == before
     comms.registry.register(replace(owner, goal=Goal("Replacement goal", "goal-two", published_seq=0)))
-    new_subject = comms.messaging.send_user_message(owner.name, "Use the replacement coordinates.",
+    new_subject = comms.messaging.send_user_message(CommandTarget.named(owner.name), "Use the replacement coordinates.",
                                                     worktree=owner.worktree)
     with pytest.raises(RelationViolationError):
         comms.messaging.pin_user_constraint(owner.name, new_subject.reference, worktree=owner.worktree,
@@ -183,7 +184,7 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
     assert original.body in tuple(f.source.body for f in retained.facts)
     assert FieldCodec.decode(RetainedTaskFacts, FieldCodec.encode(retained)) == retained
     human = comms.messaging.send_user_message(
-        "#team", "Keep the original path; that peer correction is superseded.",
+        CommandTarget.named('#team'), "Keep the original path; that peer correction is superseded.",
         worktree=owner.worktree,
         task=UserTaskSupersession(CorrectionTaskChange(original.reference)))
     invoke_tool(comms, "comms_constraint", {
@@ -248,9 +249,9 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     with pytest.raises(ValueError):
         invoke_tool(comms, "comms_decision", request)
     assert read_history(comms) == before
-    from agent_comms.comms import Comms
+    from agent_comms.comms import wire
 
-    assert read_history(Comms(comms.root)) == rows
+    assert read_history(wire(comms.root)) == rows
 
 
 def test_equal_text_choices_keep_original_identity_through_rename_and_goal_replacement(comms, monkeypatch):
@@ -357,7 +358,7 @@ def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_ch
             Message(owner.name, "#team", "A peer is not the user", InfoKind, task=declaration), destination=CommandTarget.named("#team"), origin=AgentOrigin())
     assert read_history(comms) == before
     corrected = comms.messaging.send_user_message(
-        "#team", "Retract the old path choice. Never replay UNKNOWN.",
+        CommandTarget.named('#team'), "Retract the old path choice. Never replay UNKNOWN.",
         worktree=owner.worktree, task=declaration)
     assert corrected.task == declaration
     invoke_tool(comms, "comms_decision", {
@@ -372,9 +373,9 @@ def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_ch
     assert current.source == Message.from_message(corrected)
     assert FieldCodec.decode(RetainedTaskFacts, FieldCodec.encode(retained)) == retained
     assert original.task.chosen in retained.text and original.task.rejected[0] in retained.text
-    from agent_comms.comms import Comms
+    from agent_comms.comms import wire
 
-    reopened = Comms(comms.root)
+    reopened = wire(comms.root)
     assert read_history(reopened)[1] == corrected
 
 
@@ -397,7 +398,7 @@ def test_cross_audience_corrections_capture_only_eligible_owned_lineage(comms, m
     first = invoke_tool(comms, "comms_decision", request)
     original = read_history(comms)[0]
     supersession = comms.messaging.send_user_message(
-        "#team", "Retract that declared choice, without revealing its private text.",
+        CommandTarget.named('#team'), "Retract that declared choice, without revealing its private text.",
         worktree=owner.worktree,
         task=UserTaskSupersession(CorrectionTaskChange(original.reference)),
     )

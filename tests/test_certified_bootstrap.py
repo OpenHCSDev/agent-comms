@@ -1,12 +1,15 @@
 """Fresh roots refuse unproven source coverage and unconfigured native owners."""
 
+from agent_comms.channel_targets import CommandTarget
+
+
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 import os
 
 import pytest
 
 from agent_comms.acp import CommsAgent
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.channels import AnyChannel
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
@@ -25,7 +28,7 @@ def test_fresh_root_claims_source_gaps_and_empty_cursor(tmp_path, *, source_read
             comms.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
         ).since(UnstartedCursor(), source_reads=source_reads)
         assert empty.covered_seq == 0 and empty.injected_source_seqs == ()
-        sent = comms.messaging.send_user_message("bob", "fresh selected input", worktree=str(tmp_path))
+        sent = comms.messaging.send_user_message(CommandTarget.named('bob'), "fresh selected input", worktree=str(tmp_path))
         reader = SourceCoverage(
             comms.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
         )
@@ -35,15 +38,15 @@ def test_fresh_root_claims_source_gaps_and_empty_cursor(tmp_path, *, source_read
         selected = reader.since(UnstartedCursor(), source_reads=source_reads)
         assert selected.blocked_seq == sent.seq  # Selection cannot manufacture native proof.
         assert selected.covered_seq == 0 and selected.injected_source_seqs == ()
-        assert Comms(comms.root).bus.bus.revision() == sent.seq
+        assert wire(comms.root).bus.bus.revision() == sent.seq
 
 
 def test_truncated_coverage_cannot_hide_an_unproven_source(tmp_path, *, source_reads):
     comms, store, root_id, lookups = _root(tmp_path)
     with store:
         PrivateCoordinatorTable.install(store)
-        first = comms.messaging.send_user_message("bob", "first original", worktree=str(tmp_path))
-        second = comms.messaging.send_user_message("bob", "second original", worktree=str(tmp_path))
+        first = comms.messaging.send_user_message(CommandTarget.named('bob'), "first original", worktree=str(tmp_path))
+        second = comms.messaging.send_user_message(CommandTarget.named('bob'), "second original", worktree=str(tmp_path))
         reader = SourceCoverage(
             comms.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
         )
@@ -58,7 +61,7 @@ def test_truncated_coverage_cannot_hide_an_unproven_source(tmp_path, *, source_r
 
 
 async def test_unconfigured_acp_attach_refuses_before_creating_owner(tmp_path):
-    comms = Comms(tmp_path / "wire")
+    comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms)
     with pytest.raises(PublicationActivationBlocked):
         await agent.new_session(cwd=str(tmp_path))
@@ -70,7 +73,7 @@ async def test_unconfigured_acp_attach_refuses_before_creating_owner(tmp_path):
     reason="Prepared native package required; no provider request",
 )
 async def test_configured_acp_new_and_retained_attach_use_same_checked_root(tmp_path):
-    comms = prepare_native_comms(Comms(tmp_path / "wire"))
+    comms = prepare_native_comms(wire(tmp_path / "wire"))
     agent = CommsAgent(comms, auto_wake=False)
     try:
         fresh = await agent.new_session(cwd=str(tmp_path))

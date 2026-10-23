@@ -1,5 +1,6 @@
 """Authored archived deliveries use recorded owners, not live availability."""
 
+
 from agent_comms.bus import Bus
 from bus_record_fixture import prepare_native_comms
 
@@ -16,7 +17,7 @@ from agent_comms.assignment_states import (
     DeliveredAssignment,
     EngagedAssignment,
 )
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.coordination_errors import DMScopeChanged, SchemaVersionError
 from agent_comms.read_basis import HistoricalDisplay, ReadCursor
 from agent_comms.read_ledger import ReadLedger
@@ -28,7 +29,7 @@ SENDER = "sender"  # the notification carries its sender's lookup; these tests r
 
 @pytest.fixture
 def archived_notification(tmp_path, *, thread_registration):
-    old, live = (prepare_native_comms(Comms(tmp_path / name)) for name in ("old", "live"))
+    old, live = (prepare_native_comms(wire(tmp_path / name)) for name in ("old", "live"))
     for comms in (old, live):
         comms.registry.declare(thread_registration.new_thread('sender', frozenset(), str(tmp_path), created_at=10.0))
         comms.registry.declare(thread_registration.new_thread('reader', frozenset(), str(tmp_path), created_at=11.0, role=AgentThreadRole if comms is old else UserThreadRole))

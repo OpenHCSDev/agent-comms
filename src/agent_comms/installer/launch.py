@@ -23,15 +23,16 @@ from typing import Annotated, TextIO
 import agent_comms.installer
 from agent_comms.cli_bridges.shared import SessionBridgeResumes
 from agent_comms.cli_commands import InstallCliCommand, InstallResult
-from agent_comms.comms import client_wire
 from agent_comms.field_codec import FieldCodec, Id128Text, PathText
 from agent_comms.installer.backup import StoreBackup, UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.reporting import (
     FinishedInstall, InstallOutcome, RootWriter, UnfinishedInstall, UnpostedWriter,
 )
+from agent_comms.installer.harness_probe import HarnessesProbe
 from agent_comms.installer.upgrade import (
     RehearsedUpgrade,
+    Stack,
     TargetTree,
     Upgrade,
     upgrade,
@@ -68,23 +69,22 @@ class InstallReport(MroDispatch):
 
     @contextmanager
     def running(self, tree: TargetTree) -> Iterator[None]:
-        """The writer can run the target's CLI from ``tree``, so the tree closes after the
-        report is posted."""
-        with tree:
-            try:
+        """Every writer runs installed artifacts from outside ``tree``, so the report follows
+        the tree's cleanup and a cleanup failure is the install's failure."""
+        try:
+            with tree:
                 yield
-                lines = self.outcome.lines()
-            except BaseException as error:
-                failure = (*next(self.handlers_for(error))(error), *self.bridges.lines())
-                try:
-                    self.writer.post(failure)
-                except BaseException as publication_error:
-                    error.add_note(f"Install failure report also failed: {publication_error}")
-                    print(f"install: failure report also failed: {publication_error}",
-                          file=sys.stderr)
-                raise
-            else:
-                self.writer.post(lines)
+            lines = self.outcome.lines()
+        except BaseException as error:
+            failure = (*next(self.handlers_for(error))(error), *self.bridges.lines())
+            try:
+                self.writer.post(failure)
+            except BaseException as publication_error:
+                error.add_note(f"Install failure report also failed: {publication_error}")
+                print(f"install: failure report also failed: {publication_error}", file=sys.stderr)
+            raise
+        else:
+            self.writer.post(lines)
 
 
 @dataclass(frozen=True)
@@ -162,6 +162,5 @@ class InstallRun:
                        command.mode, command.retire, command.spill_dir, self.scratch,
                        self.harnesses, InstallReport())
 
-    def harnesses(self) -> InstallResult:
-        with client_wire(self.root) as comms:
-            return self.command.apply(comms)
+    def harnesses(self, stack: Stack) -> InstallResult:
+        return stack.probe(HarnessesProbe(self.root, self.command))

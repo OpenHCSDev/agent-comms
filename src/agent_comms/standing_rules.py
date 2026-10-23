@@ -32,8 +32,8 @@ if TYPE_CHECKING:
     from agent_comms.messages import Message
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.storage_rules import MemoryUse, StorageRule
-    from agent_comms.todos import OwnerRequest, Todo
-    from agent_comms.ui_model.unit_state import UnitState
+    from agent_comms.todos import OrderClaim, OwnerRequest, PullRequest, Todo
+    from agent_comms.ui_model.unit_state import UnitObservation, UnitState
 
 
 @dataclass(frozen=True)
@@ -187,9 +187,14 @@ class UndatedStandingRule(StandingRule, declared_name=None):
 class HeldBranch:
     """One open order joined to the holder's current recorded checkout."""
 
-    problem: str
+    todo: Todo
     holder: ThreadIncarnation
     difference: BranchDifference
+    source: UnitObservation = field(compare=False, repr=False)
+
+    @property
+    def problem(self) -> str:
+        return self.todo.id
 
 
 class HeldBranchRule(UndatedStandingRule, declared_name=None):
@@ -203,8 +208,8 @@ class HeldBranchRule(UndatedStandingRule, declared_name=None):
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState]) -> tuple[Self, ...]:
         branches = tuple(
-            HeldBranch(todo.id, unit, state.source.pulls.branch_difference(
-                state.source.thread.project_path))
+            HeldBranch(todo, unit, state.source.pulls.branch_difference(
+                state.source.thread.project_path), state.source)
             for state in observed for unit in state.readable_units() for todo in state.source.todos
         )
         ordered = tuple(sorted(branches, key=lambda held: (
@@ -370,13 +375,13 @@ class HeldOrderDue(IndependentStandingRule, DatedStandingRule, declared_name=Non
     """Each held order supplies one dated condition; the rule owns its wording."""
 
     problem: str
-    holder: str
+    holder: ThreadIncarnation
     order: str
     since: EventTime
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        return tuple(cls(todo.id, todo.held().owner, todo.order.checked().id, due)
+        return tuple(cls(todo.id, todo.held().owner_identity, todo.order.checked().id, due)
                      for todo, due in cls.conditions(comms, commander))
 
     @classmethod
@@ -398,8 +403,58 @@ class ReviewTimerUp(HeldOrderDue):
             actor, comms.registry, time.time())
 
     def line(self) -> str:
-        return (f"TIMER UP: {self.holder} {self.problem} at {self.since.clock()}, "
+        return (f"TIMER UP: {self.holder.name} {self.problem} at {self.since.clock()}, "
                 f"order {self.order} -> read its diff and judge it")
+
+
+@dataclass(frozen=True)
+class DeliveredHeadReview(DatedStandingRule):
+    """A recorded delivery waits on a review of its current ready PR head."""
+
+    problem: str
+    holder: ThreadIncarnation
+    order: str
+    repo: RepositoryName
+    pr: int
+    head: str
+    due_at: float
+    minutes: ClassVar[float] = 5
+
+    @classmethod
+    def for_head(
+        cls, problem: str, holder: ThreadIncarnation, order: str, claim: OrderClaim,
+        request: PullRequest, now: float,
+    ) -> tuple[Self, ...]:
+        due_at = claim.message.timestamp + cls.minutes * 60
+        if request.draft or request.has_head_review or now < due_at:
+            return ()
+        return (cls(problem, holder, order, claim.pull_request.repo,
+                    request.number, request.head, due_at),)
+
+    @classmethod
+    def scan_observed(
+        cls, comms: Comms, commander: str, observed: Sequence[UnitState],
+    ) -> tuple[Self, ...]:
+        pulls = next((state.source.pulls for state in observed), None)
+        now = time.time()
+        return tuple(
+            rule
+            for todo, claim, request in comms.goals.todos.claimed_heads_for_commander(
+                comms.registry.require(commander).incarnation, pulls,
+            )
+            for rule in cls.for_head(
+                todo.id, todo.held().owner_identity, todo.order.checked().id,
+                claim, request, now,
+            )
+        )
+
+    def began(self) -> float:
+        return self.due_at
+
+    def line(self) -> str:
+        return (f"DELIVERED HEAD NEEDS REVIEW: order {self.order} ({self.problem}), "
+                f"holder {self.holder.name}, {self.repo.to_wire()}#{self.pr} head {self.head} "
+                "-> commander reviews this head")
 
 
 @dataclass(frozen=True)

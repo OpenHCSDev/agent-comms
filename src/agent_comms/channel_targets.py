@@ -5,7 +5,7 @@ from .activity_clocks import ActivityClocks
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, ClassVar, overload
+from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
 from .errors import HumanSendRefusedError, RelationViolationError, UnregisteredThreadError
@@ -94,18 +94,8 @@ class CommandTarget(ABC):
     needs_channel_state: ClassVar[bool] = False
 
     @staticmethod
-    @overload
-    def named(name: str | NamedTarget) -> NamedTarget: ...
-
-    @staticmethod
-    @overload
-    def named(name: CommandTarget) -> CommandTarget: ...
-
-    @staticmethod
-    def named(name: str | CommandTarget) -> CommandTarget:
-        if isinstance(name, CommandTarget):
-            return name
-        if not isinstance(name, str) or not name:
+    def named(name: str) -> NamedTarget:
+        if not name:
             raise ValueError("Select a named target")
         name = name.removeprefix(ThreadTarget.sigil)
         if not name:

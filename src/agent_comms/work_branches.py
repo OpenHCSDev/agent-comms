@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import subprocess
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import cached_property
 from pathlib import Path
@@ -161,10 +161,27 @@ class ForgeQuery[Repository](ForgeAnswer):
 
 
 @dataclass(frozen=True)
+class UnpushedHead:
+    head: str
+    commits: int = field(compare=False)
+    upstream: str = field(compare=False)
+
+
+@dataclass(frozen=True)
+class BranchComparison:
+    base: str
+    head: str
+    paths: tuple[Path, ...]
+
+
+@dataclass(frozen=True)
 class WorkBranches:
     """One repository's branches with commits that main does not have."""
 
     checkout: Path
+    _remote_heads: dict[tuple[str, str], tuple[str, ...]] = field(
+        default_factory=dict, init=False, repr=False, compare=False,
+    )
     main: ClassVar[str] = "main"
     timeout: ClassVar[float] = 60.0
 
@@ -229,6 +246,59 @@ query($owner: String!, $name: String!, $after: String) {
         return bool(self.uncommitted()) or bool(
             self._run("git", "rev-list", "--max-count=1", "HEAD", "--not", "--remotes")
         )
+
+    def require_commits(self, remote: str, *commits: str) -> None:
+        """Fetch only comparison objects this checkout does not already hold."""
+        listed = self._run("git", "cat-file", "--batch-check",
+                           input="".join(f"{commit}\n" for commit in commits))
+        missing = tuple(line.removesuffix(" missing") for line in listed.splitlines()
+                        if line.endswith(" missing"))
+        if missing:
+            self._run("git", "fetch", "--quiet", "--no-tags", "--", remote, *missing)
+
+    def remote_heads(self, remote: str, reference: str) -> tuple[str, ...]:
+        key = remote, reference
+        if key not in self._remote_heads:
+            self._remote_heads[key] = tuple(line.split()[0] for line in self._run(
+                "git", "ls-remote", "--refs", remote, reference,
+            ).splitlines())
+        return self._remote_heads[key]
+
+    def pull_request_diff(self, base: str, head: str) -> BranchComparison:
+        published = self.remote_heads("origin", f"refs/heads/{base}")
+        if not published:
+            raise WorkBranchError(f"Origin has no pull request base {base!r} in {self.checkout}")
+        base_head, = published
+        self.require_commits("origin", base_head, head)
+        paths = tuple(Path(name) for name in self._run(
+            "git", "diff", "--name-only", "-z", f"{base_head}...{head}", "--",
+        ).split("\0") if name)
+        return BranchComparison(base_head, head, paths)
+
+    def unpushed(self, difference: BranchDifference) -> tuple[UnpushedHead, ...]:
+        """Compare this HEAD with its actual upstream, without trusting a stale tracking ref."""
+        head = difference.head
+        reference = f"refs/heads/{difference.branch}"
+        upstream = self._run("git", "for-each-ref", "--format=%(upstream)", reference).strip()
+        if upstream:
+            remote, remote_ref = self._run(
+                "git", "for-each-ref", "--format=%(upstream:remotename) %(upstream:remoteref)",
+                reference,
+            ).split()
+            # Git spells a local-branch upstream as remote "."; that is not publication.
+            published = self.remote_heads(remote, remote_ref) if remote != "." else ()
+            if published:
+                remote_head, = published
+                self.require_commits(remote, remote_head)
+                count = int(self._run("git", "rev-list", "--count", f"{remote_head}..{head}"))
+                return (UnpushedHead(head, count, upstream),) if count else ()
+        # Without a published upstream, count work absent from the other known remotes.
+        # A deleted upstream's stale tracking ref cannot count as publication.
+        remotes = tuple(ref for ref in self._run(
+            "git", "for-each-ref", "--format=%(refname)", "refs/remotes/",
+        ).splitlines() if ref != upstream)
+        count = int(self._run("git", "rev-list", "--count", head, "--not", *remotes))
+        return (UnpushedHead(head, count, upstream),) if count else ()
 
     @cached_property
     def repository(self) -> tuple[str, str]:

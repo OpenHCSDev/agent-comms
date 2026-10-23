@@ -11,6 +11,7 @@ The predecessor-history carry has its own real-writer fixture in test_carry_bus_
 """
 from __future__ import annotations
 
+
 import json
 import os
 import sqlite3
@@ -22,7 +23,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.cli_commands import HistoryCliCommand
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.backup import bus_files
 from agent_comms.installer.commands import InstallCommands
@@ -262,7 +263,7 @@ def test_installed_entry_reports_completion_after_target_source_retirement(
     assert completed.returncode == 0, completed.stderr
     result = FieldCodec.decode(Upgrade, FieldCodec.parse(completed.stdout))
     assert isinstance(result, InstalledUpgrade) and type(result.live) is live_kind
-    history = tuple(reversed(HistoryCliCommand(target="#comms").apply(Comms(root)).messages))
+    history = tuple(reversed(HistoryCliCommand(target="#comms").apply(wire(root)).messages))
     assert len(history) == (1 if fresh else 2)
     assert history[-1].sender == "installer"
     assert history[-1].body.startswith("Install finished")

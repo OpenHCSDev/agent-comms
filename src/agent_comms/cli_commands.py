@@ -76,7 +76,7 @@ from .commander.config import (
     KeptRepos,
     RepoChoice,
 )
-from .comms import Comms, client_wire
+from .comms import Comms
 from .registry_document import CommanderProject
 from .config_options import (
     ConfigOptions,
@@ -337,13 +337,13 @@ class TargetSelection(ABC):
     targets: tuple[CommandTarget, ...]
 
     @staticmethod
-    def decode(raw: CommandTarget | str | tuple[CommandTarget | str, ...], *, multiple: bool) -> TargetSelection:
+    def decode(raw: CommandTarget | tuple[CommandTarget, ...], *, multiple: bool) -> TargetSelection:
         if isinstance(raw, tuple):
             if not raw:
                 raise ValueError('Select at least one target')
-            names = tuple(dict.fromkeys(CommandTarget.named(item) for item in raw))
+            names = tuple(dict.fromkeys(raw))
             return (OneTarget if len(names) == 1 and not multiple else TargetBatch)(names)
-        return OneTarget((CommandTarget.named(raw),))
+        return OneTarget((raw,))
 
     def command_members(self, family: type[CliCommand]) -> tuple[type[CliCommand], ...]:
         """Derive menu membership from cardinality and declared capability."""
@@ -770,7 +770,7 @@ class MultipleTargets:
 
     @classmethod
     def selected_targets(
-        cls, raw: CommandTarget | str | tuple[CommandTarget | str, ...]
+        cls, raw: CommandTarget | tuple[CommandTarget, ...]
     ) -> TargetSelection:
         return TargetSelection.decode(raw, multiple=True)
 
@@ -831,7 +831,7 @@ class CliCommand[Answer: CliResult = CliResult](
         return (cls.declared_name, *arguments)
 
     @classmethod
-    def selected_targets(cls, raw: CommandTarget | str | tuple[CommandTarget | str, ...]) -> TargetSelection:
+    def selected_targets(cls, raw: CommandTarget | tuple[CommandTarget, ...]) -> TargetSelection:
         """Decode a CLI or menu target input once, before command execution."""
         return TargetSelection.decode(raw, multiple=False)
 
@@ -866,10 +866,10 @@ class CliCommand[Answer: CliResult = CliResult](
         return ()
 
     @classmethod
-    def bindings(cls, comms: Comms, target: CommandTarget | str, channel: str | None = None,
+    def bindings(cls, comms: Comms, target: CommandTarget, channel: str | None = None,
                  *, snapshot: RegistrySnapshot, catalog: CatalogDocument | None,
                  resolved) -> tuple[Self, ...]:
-        return CommandTarget.named(target).bindings(
+        return target.bindings(
             cls, comms, channel, resolved, snapshot=snapshot, catalog=catalog)
 
     @classmethod
@@ -920,8 +920,7 @@ class CliCommand[Answer: CliResult = CliResult](
         catalogs = ConfigOptions.configured()
         return tuple([await item.prepare(catalogs, self) for item in self.editable_fields])
 
-    def describe(self, comms: Comms, target: CommandTarget | str, project: str) -> TargetAction:
-        target = CommandTarget.named(target)
+    def describe(self, comms: Comms, target: CommandTarget, project: str) -> TargetAction:
         bound = self.for_editor(comms, target.name, project)
         channels = next((OneChannel(getattr(bound, item.name))
                          for item in bound.channel_fields()), NoChannel())
@@ -946,7 +945,7 @@ class CliCommand[Answer: CliResult = CliResult](
     def execute(self, route: CommsRoute, output: TextIO) -> int:
         """Open the bus this command reads, then run it; a command that must act before
         the bus opens overrides this."""
-        with client_wire(route) as comms:
+        with Comms.client(route) as comms:
             return self.run(comms, output)
 
     @classmethod
@@ -1183,7 +1182,7 @@ class UserSendCliCommand(WorktreeArgument, PublishingCliCommand, declared_name="
     body: Annotated[str, Argument(flags=("--body",))]
 
     def publish(self, ctx: Comms) -> CliResult:
-        message = ctx.messaging.send_user_message(self.target, self.body, worktree=self.worktree)
+        message = ctx.messaging.send_user_message(CommandTarget.named(self.target), self.body, worktree=self.worktree)
         return UserMessageSentResult(message.reference)
 
 
@@ -1344,7 +1343,7 @@ class SupersedeConstraintCliCommand(
     def apply(self, ctx: Comms) -> CliResult:
         from .task_sources import CorrectionTaskChange, UserTaskSupersession
 
-        message = ctx.messaging.send_user_message(self.thread, self.body, worktree=self.worktree,
+        message = ctx.messaging.send_user_message(CommandTarget.named(self.thread), self.body, worktree=self.worktree,
             task=UserTaskSupersession(CorrectionTaskChange(self.source)))
         return ConstraintSupersededResult(message.reference)
 
@@ -1362,7 +1361,7 @@ class DropConstraintCliCommand(WorktreeArgument, CliCommand, declared_name="drop
     def apply(self, ctx: Comms) -> CliResult:
         from .task_sources import CorrectionTaskChange, UserTaskDrop
 
-        message = ctx.messaging.send_user_message(self.thread,
+        message = ctx.messaging.send_user_message(CommandTarget.named(self.thread),
             f"Dropped constraint {self.source.seq}:{self.source.message_id}", worktree=self.worktree,
             task=UserTaskDrop(CorrectionTaskChange(self.source)))
         return ConstraintDroppedResult(message.reference)
@@ -1729,8 +1728,9 @@ class InstallCliCommand(CliCommand):
 
         return InstallRun.start(self, route.root).launch(output)
 
-    def apply(self, ctx: Comms) -> CliResult:
-        """The install child's last step, on the bus it carried or created."""
+    def apply(self, ctx: Comms) -> InstallResult:
+        """The install's last step, on the bus it carried or created, run by that bus's
+        runtime (HarnessesProbe)."""
         home = Path.home()
         snapshot = ctx.registry.snapshot()
         project = self.commander.configured(snapshot.commander_project, self.repos, snapshot)

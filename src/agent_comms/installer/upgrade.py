@@ -54,7 +54,7 @@ from agent_comms.cli_commands import (
 )
 from agent_comms.cli_protocol import CoreError
 from agent_comms.cli_result import CliResult
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText
@@ -599,7 +599,7 @@ class Stack:
             with self.commands.timing(verb):
                 completed = subprocess.run(
                     [str(self.python), "-m", cli.__name__, "--root", str(root), *invocation],
-                    cwd=self.checkout, env=self.environment(), capture_output=True, text=True)
+                    cwd=self.home, env=self.environment(), capture_output=True, text=True)
             try:
                 if not completed.returncode:
                     return FieldCodec.decode(command.result_type(),
@@ -755,7 +755,7 @@ class PracticeBus:
 
 def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice, mode: RunMode,
             retire: bool, spill_dir: Path, scratch: Path,
-            harnesses: Callable[[], InstallResult], report: InstallReport) -> Upgrade:
+            harnesses: Callable[[Stack], InstallResult], report: InstallReport) -> Upgrade:
     """``scratch`` holds the target's worktree the launcher runs this source from; this
     run owns it and removes it. A live run ends by registering the ``harnesses``."""
     commands = InstallCommands()
@@ -848,12 +848,12 @@ class Install[Rehearsed: Rehearsal](ABC):
             commands=tuple(self.staged.commands.ran))
 
     def finished(self, rehearsal: Rehearsed, bridges: SessionBridgeResumes,
-                 harnesses: Callable[[], InstallResult], report: InstallReport) -> InstalledUpgrade:
+                 harnesses: Callable[[Stack], InstallResult], report: InstallReport) -> InstalledUpgrade:
         rehearsed = self.reported(rehearsal)
         live_run = self.install(rehearsal, bridges, report)
         finished = InstalledUpgrade(
             rehearsed.source, rehearsed.target, rehearsed.root, rehearsed.pending,
-            rehearsed.rehearsal, live_run, harnesses(), commands=tuple(self.staged.commands.ran),
+            rehearsed.rehearsal, live_run, harnesses(self.staged), commands=tuple(self.staged.commands.ran),
             processes=RuntimeProcesses.observe(self.staged.runtime),
             bridge_resumes=tuple(bridges.outcomes))
         return (finished.extended(UnresumedUpgrade)
@@ -1124,7 +1124,7 @@ class FreshInstall(Install[FreshRehearsal]):
                                  self.target)
         Checkout(self.checkout).prepare()
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
-        Comms(self.root).registry.prepare_native_root()
+        wire(self.root).registry.prepare_native_root()
         Bus.install(Bus.path_in(self.root))
         report.writer = RuntimeWriter(self.root, self.staged, InstalledProgram())
         backup, selected_route = self.backed_up(())

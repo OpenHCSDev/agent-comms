@@ -1,11 +1,12 @@
 """Same-ID, explicitly requested goal resume through the public tool boundary."""
 
+
 import os
 
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.lifecycle_capability import Active
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
@@ -101,7 +102,7 @@ def test_replacing_or_clearing_goal_cannot_reset_turn_report_guard(comms, monkey
         "owner", ClearGoalAction(expect=GoalPrecondition(goal_id=replacement["id"]))
     )
     after_clear = invoke_tool(comms, "comms_set_goal", {"text": "after clear"})["goal"]
-    reopened = Comms(comms.root)
+    reopened = wire(comms.root)
     assert any(
         entry.reports_turn("same-assistant-turn")
         for entry in reopened.registry.goal_history("owner")
@@ -205,11 +206,11 @@ def test_same_value_goal_transition_bumps_durable_revision(comms, monkeypatch):
         "owner", BlockedGoalAction(expect=GoalPrecondition(goal_id=started["id"]), progress="same")
     )
     assert first is not None
-    second = Comms(comms.root).goals.update_goal(
+    second = wire(comms.root).goals.update_goal(
         "owner", BlockedGoalAction(expect=GoalPrecondition(goal_id=started["id"]), progress="same")
     )
     assert second is not None and second.revision == first.revision + 1
-    assert Comms(comms.root).registry.require("owner").goal == second
+    assert wire(comms.root).registry.require("owner").goal == second
 
 
 def test_exhausted_goal_revision_refuses_transition_without_write(comms):

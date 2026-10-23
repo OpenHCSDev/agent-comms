@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 from agent_comms.lifecycle_capability import Failed
 import asyncio
 import multiprocessing
@@ -27,7 +28,7 @@ from agent_comms.session_file import SavedSessionFile
 from functools import partial
 from native_backend_fixture import native_backend_fixture
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.coordination_errors import RecoveryBlocked
 from agent_comms.coordination_tables.attempts import ReplayFact
 from agent_comms.coordination_tables.executions import CurrentExecutions, ExecutionProvenance, WireOrigin
@@ -95,7 +96,7 @@ def released_starting(tmp_path):
 
 def recover_starting_owner(released_starting):
     """Use the owner recovery entrypoint; absence of an input never means unsent."""
-    comms = Comms(released_starting)
+    comms = wire(released_starting)
     owner = comms.registry.require("beta")
     with Coordination(released_starting / "coordination.sqlite3") as store:
         pointer = CurrentExecutions.require(store.session._connection, owner_lookup=owner.incarnation.lookup)
@@ -139,7 +140,7 @@ def running_successor(comms):
 
 
 def test_undispatched_original_recovers_beside_a_running_successor(released_starting):
-    comms = Comms(released_starting)
+    comms = wire(released_starting)
     successor = running_successor(comms)
     recover_starting_owner(released_starting)
     assert comms.registry.require("beta") == successor
@@ -149,7 +150,7 @@ def test_undispatched_original_recovers_beside_a_running_successor(released_star
 
 @pytest.mark.parametrize("argument", ["--session", "--session-dir"])
 def test_undispatched_owner_loss_refuses_a_live_native_child(released_starting, argument):
-    comms = Comms(released_starting)
+    comms = wire(released_starting)
     owner = comms.registry.require("beta")
     directory = released_starting / "native-sessions" / owner.incarnation.lookup
     session = directory / "undispatched.jsonl"
@@ -175,7 +176,7 @@ def test_undispatched_owner_loss_refuses_a_live_native_child(released_starting, 
 
 
 def test_observed_owner_loss_expires_with_its_boundary(released_starting):
-    owner = Comms(released_starting).registry.require("beta")
+    owner = wire(released_starting).registry.require("beta")
     with Coordination(released_starting / "coordination.sqlite3") as store:
         pointer = CurrentExecutions.require(store.session._connection, owner_lookup=owner.incarnation.lookup)
         execution_id = pointer.execution_id.require("fixture must hold a starting attempt")
@@ -195,7 +196,7 @@ async def test_launch_recovers_before_reserving_replacement_pid(
     provider_root = released_starting.parent / "provider"
     provider_root.mkdir(mode=0o700)
     async with native_backend_fixture(provider_root, package=native_runtime_package):
-        comms = Comms(released_starting)
+        comms = wire(released_starting)
         old = comms.registry.require("beta")
         with Coordination(released_starting / "coordination.sqlite3") as store:
             pointer = CurrentExecutions.require(store.session._connection, owner_lookup=old.incarnation.lookup)
@@ -221,7 +222,7 @@ async def test_launch_recovers_before_reserving_replacement_pid(
 
 
 def test_recover_owner_refuses_a_conflicting_input_identity(released_starting, capsys):
-    comms = Comms(released_starting)
+    comms = wire(released_starting)
     owner = comms.registry.require("beta")
     with Coordination(released_starting / "coordination.sqlite3") as store:
         pointer = CurrentExecutions.require(store.session._connection, owner_lookup=owner.incarnation.lookup)
@@ -291,7 +292,7 @@ def input_evidence(store):
 def test_stop_of_previously_released_dead_owner_settles_without_replay(released_unknown):
     process, exit_allowed, root, _root_id, execution_id, input_id = released_unknown
     leave(process, exit_allowed)
-    comms = Comms(root)
+    comms = wire(root)
     before_bus = comms.bus.bus.revision()
     with Coordination(str(root / "coordination.sqlite3")) as store:
         before_input = input_evidence(store)
@@ -365,7 +366,7 @@ def invalidate_release_scope(db, original):
 def test_abandon_requires_real_release(released_unknown, damage):
     process, exit_allowed, root, _root_id, execution_id, _input_id = released_unknown
     leave(process, exit_allowed)
-    releases = Comms(root).owners.releases
+    releases = wire(root).owners.releases
     original = releases.get("beta")
     with releases.writing() as db:
         damage(db, original)
@@ -378,7 +379,7 @@ def test_abandon_requires_real_release(released_unknown, damage):
 def test_dead_original_settles_unknown_beside_a_live_successor(released_unknown):
     process, exit_allowed, root, _root_id, execution_id, _input_id = released_unknown
     leave(process, exit_allowed)
-    comms = Comms(root)
+    comms = wire(root)
     successor = running_successor(comms)
     before_bus = comms.bus.bus.revision()
     with Coordination(root / "coordination.sqlite3") as store:
