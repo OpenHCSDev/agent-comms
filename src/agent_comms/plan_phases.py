@@ -651,7 +651,7 @@ class KindFamiliesPhase(RemainingSlopPhase):
     """6.3: kinds are families whose members carry their behaviour and spelling."""
 
     evidence = PatternAbsent(
-        r"class (TagAction|ExecutionOrigin|WhenBusy|ControlClassification|MembershipChange"
+        r"class (TagAction|ExecutionOrigin|WhenBusy|MessageControl|MembershipTransition"
         r"|ViewKind)\b"
     )
 

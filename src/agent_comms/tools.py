@@ -37,9 +37,9 @@ from agent_comms.todos import (
 
 from . import cli as comms_cli
 from .change_report import NoChangeReport, ReportEvidence
-from .channel_management import KeepThreadsTagDisposition, TagAction, TagDisposition
+from .channel_management import KeepThreadsTagDisposition, ListTagEdit, TagDisposition, TagEdit
 from agent_comms.channel_targets import ChannelTarget, CommandTarget, NamedTarget
-from .channels import AnyChannel, Channel, SavedView, ViewKind, ViewMatch, ViewPredicate
+from .channels import AnyChannel, Channel, SavedView, ViewMatch, ViewPredicate
 from .cli_commands import (
     ArchiveCliCommand,
     CliCommand,
@@ -629,19 +629,12 @@ class CommsTagsTool(ToolRequest):
         "List, create, rename, or delete tags. Renaming/deleting updates thread "
         "assignments and channel filters. Uncovered tags automatically have a channel."
     )
-    action: Annotated[TagAction, *tool_field("Operation")] = TagAction.LIST
-    name: Annotated[str, *tool_field("Tag name")] = ""
-    new_name: Annotated[str, *tool_field("Replacement tag for rename")] = ""
-    disposition: Annotated[TagDisposition, *tool_field("Tagged-thread operation")] = (
-        dataclasses.field(default_factory=KeepThreadsTagDisposition)
-    )
-    confirmed: Annotated[bool, *tool_field("Confirm thread archiving or deletion")] = (
-        False
+    edit: Annotated[TagEdit, *tool_field("Tag operation and its arguments")] = (
+        dataclasses.field(default_factory=ListTagEdit)
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> TagList:
-        tags = self.action.apply(comms.channels, self.name, self.new_name,
-                                disposition=self.disposition, confirmed=self.confirmed)
+        tags = self.edit.apply(comms.channels)
         return TagList(tuple(sorted(tags)))
 
 
@@ -703,13 +696,13 @@ class CommsSetViewTool(ToolRequest):
         " messages and never own channel history."
     )
     name: Annotated[str, *tool_field("View name without #")]
-    kind: Annotated[ViewKind, *tool_field("Projection kind")]
+    kind: Annotated[type[SavedView], *tool_field("Projection kind")]
     match: Annotated[type[ViewMatch], *tool_field("Tag predicate")]
     tags: Annotated[str, *tool_field("One or more comma-separated tags")]
 
     def apply(self, comms: Comms, caller: ToolCaller) -> SavedView:
         return comms.channels.set_saved_view(
-            SavedView(self.name, self.kind, ViewPredicate(self.match, _tag_set(self.tags))))
+            self.kind(self.name, ViewPredicate(self.match, _tag_set(self.tags))))
 
 
 @dataclass(frozen=True, kw_only=True)

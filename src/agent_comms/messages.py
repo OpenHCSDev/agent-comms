@@ -10,7 +10,6 @@ import time
 from abc import abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, fields, replace
-from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, Type, cast, dataclass_transform
 
@@ -162,12 +161,30 @@ class ChangeReportKind(SendableMessageKind, declared_name="change-report"):
         message.report.require_references_exist(worktree)
 
 
-class MembershipChange(StrEnum):
-    JOINED = "joined"
-    LEFT = "left"
+class MembershipTransition(DeclaredFamily, affix="Membership"):
+    @classmethod
+    def conversation_role(cls):
+        return MembershipConversationRole(cls)
 
-    def conversation_role(self):
-        return MembershipConversationRole(self)
+    @classmethod
+    def between(cls, previous: bool, current: bool) -> tuple[type[MembershipTransition], ...]:
+        return tuple(member for member in cls.members_with(cls) if member.applies(previous, current))
+
+    @staticmethod
+    @abstractmethod
+    def applies(previous: bool, current: bool) -> bool: ...
+
+
+class JoinedMembership(MembershipTransition):
+    @staticmethod
+    def applies(previous: bool, current: bool) -> bool:
+        return not previous and current
+
+
+class LeftMembership(MembershipTransition):
+    @staticmethod
+    def applies(previous: bool, current: bool) -> bool:
+        return previous and not current
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,7 +198,7 @@ class MessageRoleWire:
     """The unchanged external fields, decoded once into a message role."""
 
     change: Annotated[
-        MembershipChange | NoMembershipChange,
+        type[MembershipTransition] | NoMembershipChange,
         WireName("membership"),
         WireOmitDefault(),
     ] = field(default_factory=NoMembershipChange)
@@ -275,9 +292,7 @@ class ConversationRole(SendableRole):
         return (message.reference,) if message.type.conversation_message else ()
 
     def wake_mode(self, target, recipient, mentions, control):
-        if control.passive:
-            return PassiveWake()
-        return target.wake_policy(recipient, mentions)
+        return control.wake_mode(target, recipient, mentions)
 
 
 @dataclass(frozen=True, slots=True)
@@ -303,13 +318,13 @@ class NoticeRole(InformationalMessage, SendableRole):
 
 @dataclass(frozen=True)
 class Membership(InformationalMessage):
-    change: MembershipChange
+    change: type[MembershipTransition]
 
     def wire_fields(self):
         return replace(super().wire_fields(), change=self.change)
 
     def export_attributes(self):
-        return (*super().export_attributes(), f"membership={self.change.value}")
+        return (*super().export_attributes(), f"membership={self.change.declared_name}")
 
     def as_notice(self):
         return MembershipNoticeRole(self.change)

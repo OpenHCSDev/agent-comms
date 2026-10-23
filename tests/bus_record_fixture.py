@@ -14,7 +14,7 @@ from agent_comms.messages import ClaimMessage, ConversationRole, InfoKind, Messa
 from agent_comms.response_acknowledgement import (
     KeyedResponseAcknowledgement, canonical_publication_key, public_envelope_digest,
 )
-from agent_comms.wake import ControlClassification, resolve_wake_cohort
+from agent_comms.wake import MessageControl, resolve_wake_cohort, OrdinaryControl
 
 
 publication_processes = ForkServerContext()
@@ -58,9 +58,9 @@ def record_from(declaration, message, *, sender_lookup="a" * 32, recipient_looku
         capabilities.update(
             audience=audience,
             decisions=resolve_wake_cohort(
-                message, frozen_audience=audience, control=ControlClassification.ORDINARY
+                message, frozen_audience=audience, control=OrdinaryControl
             ),
-            control=ControlClassification.ORDINARY.value,
+            control=OrdinaryControl.declared_name,
         )
     if issubclass(declaration, KeyedPublication):
         capabilities["acknowledgement"] = KeyedResponseAcknowledgement(

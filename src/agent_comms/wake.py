@@ -7,28 +7,29 @@ a later bus-owned boundary must attest its durable commit before live use.
 
 from __future__ import annotations
 
-from enum import StrEnum
-
-
 from .audience_manifest import FrozenAudience, FrozenRecipient, freeze_audience
 from .channel_targets import CommandTarget, NamedTarget
+from .declared_family import DeclaredFamily
 from .messages import Message
-from .wake_policy import NoWakeDecision, RecipientDecision
+from .wake_policy import NoWakeDecision, PassiveWake, RecipientDecision
 
 
-class ControlClassification(StrEnum):
+class MessageControl(DeclaredFamily, affix="Control"):
     """Explicit system-control classification; not inferred from text or ACK type."""
 
-    ORDINARY = "ordinary"
-    SYSTEM_CONTROL = "system_control"
+    @classmethod
+    def wake_mode(cls, target, recipient, mentions):
+        return target.wake_policy(recipient, mentions)
 
-    @property
-    def passive(self) -> bool:
-        return self is self.SYSTEM_CONTROL
 
-    @property
-    def supports_initial(self) -> bool:
-        return self is self.ORDINARY
+class OrdinaryControl(MessageControl):
+    pass
+
+
+class SystemControl(MessageControl, declared_name="system_control"):
+    @classmethod
+    def wake_mode(cls, target, recipient, mentions):
+        return PassiveWake()
 
 
 def _require_stored(message: Message) -> None:
@@ -37,12 +38,10 @@ def _require_stored(message: Message) -> None:
 
 
 def _validated_context(
-    message: Message, frozen_audience: FrozenAudience, control: ControlClassification
+    message: Message, frozen_audience: FrozenAudience, control: type[MessageControl]
 ) -> tuple[NamedTarget, frozenset[str]]:
     """Check the full envelope exactly once before interpreting recipient rows."""
     _require_stored(message)
-    if type(control) is not ControlClassification:
-        raise TypeError("control must be an explicit ControlClassification.")
     if type(frozen_audience) is not FrozenAudience:
         raise TypeError("wake requires a FrozenAudience and FrozenRecipient.")
     if (
@@ -70,7 +69,7 @@ def _validated_context(
 def _member_decision(
     message: Message,
     recipient: FrozenRecipient,
-    control: ControlClassification,
+    control: type[MessageControl],
     target: NamedTarget,
     effective_mentions: frozenset[str],
 ) -> RecipientDecision:
@@ -85,7 +84,7 @@ def resolve_wake(
     *,
     recipient: FrozenRecipient,
     frozen_audience: FrozenAudience,
-    control: ControlClassification,
+    control: type[MessageControl],
 ) -> RecipientDecision | None:
     """Resolve one member; prefer resolve_wake_cohort for the full frozen N.
 
@@ -101,7 +100,7 @@ def resolve_wake(
 
 
 def resolve_wake_cohort(
-    message: Message, *, frozen_audience: FrozenAudience, control: ControlClassification
+    message: Message, *, frozen_audience: FrozenAudience, control: type[MessageControl]
 ) -> tuple[RecipientDecision, ...]:
     """Resolve ordered full N with one pure full-envelope check and no live lookup.
 

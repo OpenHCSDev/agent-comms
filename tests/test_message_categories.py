@@ -6,11 +6,7 @@ import pytest
 
 from agent_comms.bus_publication import Delivered
 from agent_comms.field_codec import FieldCodec
-from agent_comms.messages import (
-    Message, MessageRole, InfoKind, ConversationRole, NoticeRole,
-    HistoricalConversationRole, HistoricalNoticeRole,
-    MembershipConversationRole, MembershipNoticeRole, MembershipChange,
-)
+from agent_comms.messages import Message, MessageRole, InfoKind, ConversationRole, NoticeRole, HistoricalConversationRole, HistoricalNoticeRole, MembershipConversationRole, MembershipNoticeRole, MembershipTransition, JoinedMembership
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
 from agent_comms.transcript_events import IncomingTranscript
 from agent_comms.transcript_sources import AssignedTranscriptSource
@@ -26,8 +22,8 @@ from agent_comms.ui_model.message_category import (
     (NoticeRole(), OtherCategory),
     (HistoricalConversationRole(), InboundCategory),
     (HistoricalNoticeRole(), OtherCategory),
-    (MembershipConversationRole(MembershipChange.JOINED), InboundCategory),
-    (MembershipNoticeRole(MembershipChange.JOINED), OtherCategory),
+    (MembershipConversationRole(JoinedMembership), InboundCategory),
+    (MembershipNoticeRole(JoinedMembership), OtherCategory),
 ])
 @pytest.mark.parametrize("sender_role", [AgentThreadRole, UserThreadRole])
 def test_role_owns_wire_filter_category(role, category, sender_role):

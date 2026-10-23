@@ -24,7 +24,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from agent_comms.change_report import FileLine
-from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
+from agent_comms.channels import AnyOfMatch, ViewPredicate, ParticipantsView
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.connector import Connector
@@ -54,9 +54,7 @@ def seed(root: Path, project: Path) -> None:
         )
     Bus.install(Bus.path_in(comms.root))
     comms.channels.set_saved_view(
-        SavedView(
-            "probe-view", ViewKind.PARTICIPANTS, ViewPredicate(AnyOfMatch, frozenset({"probe"}))
-        )
+        ParticipantsView('probe-view', ViewPredicate(AnyOfMatch, frozenset({'probe'})))
     )
     comms.goals.update_goal(
         "claude-ai", SetGoalAction(text="Measure the connector calls.", goal_id="probe-goal")
