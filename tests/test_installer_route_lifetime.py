@@ -22,7 +22,8 @@ from agent_comms.bus import Bus
 from agent_comms.comms import wire
 from agent_comms.installer.backup import StoreBackup, UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.interpreter_operation import SelectedRouteProbe
+from agent_comms.installer.publication import SelectedRouteProbe
+from agent_comms.installer.interpreter_operation import InstalledProgram
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.recorded_bus import RecordedBusIdentity
 from bus_record_fixture import prepare_native_comms
@@ -177,20 +178,24 @@ path.chmod(0o600)
     with InstallCommands() as commands:
         selected = commands.probe(
             SelectedRouteProbe(), runtime.interpreter, env=environment, cwd=tmp_path,
+            program=InstalledProgram(),
         )
         assert selected == NoRouteSelection()
         current = ActiveRoute(root, RecordedBusIdentity.capture(Bus.path_in(root)))
         path.write_text(json.dumps(current.to_record()))
         assert commands.probe(
             SelectedRouteProbe(), runtime.interpreter, env=environment, cwd=tmp_path,
+            program=InstalledProgram(),
         ) == PublishedRouteSelection(root)
         root.rename(root.with_name("retired"))
         assert commands.probe(
             SelectedRouteProbe(), runtime.interpreter, env=environment, cwd=tmp_path,
+            program=InstalledProgram(),
         ) == NoRouteSelection()
         path.unlink()
         assert commands.probe(
             SelectedRouteProbe(), runtime.interpreter, env=environment, cwd=tmp_path,
+            program=InstalledProgram(),
         ) == NoRouteSelection()
 
 
