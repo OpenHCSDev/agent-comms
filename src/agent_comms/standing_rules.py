@@ -21,7 +21,7 @@ from agent_comms.goals import GoalChangedError
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_identity import OfferedTools, ThreadIncarnation
 from agent_comms.work_branches import BranchDifference
 from agent_comms.service_passes import ServicePassStore
 
@@ -110,9 +110,9 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     def heartbeat_line(self, current: Sequence[Self]) -> str:
         return self.line()
 
-    def heartbeat_change(self, current: Sequence[Self]) -> tuple[str, ...]:
+    def heartbeat_change(self, previous: Sequence[Self], current: Sequence[Self]) -> tuple[str, ...]:
         prefix = "RULE" if current else "NO LONGER CURRENT:"
-        return (f"{prefix} {self.heartbeat_line(current or (self,))}",)
+        return (f"{prefix} {self.heartbeat_line(current or previous)}",)
 
     @staticmethod
     def _heartbeat_groups(rules: Iterable[StandingRule]) -> dict[object, list[StandingRule]]:
@@ -132,7 +132,7 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
             if frozenset(old) == frozenset(new):
                 continue
             rule = (new or old)[0]
-            lines.extend(rule.heartbeat_change(new))
+            lines.extend(rule.heartbeat_change(old, new))
         return tuple(lines)
 
     @staticmethod
@@ -189,20 +189,22 @@ class UndatedStandingRule(StandingRule, declared_name=None):
 @dataclass(frozen=True)
 class LostTools(UndatedStandingRule):
     thread: ThreadIncarnation
-    change: str
+    current: OfferedTools
+    previous: OfferedTools
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState]) -> tuple[Self, ...]:
-        return tuple(cls(unit.source.thread.incarnation, change)
+        return tuple(cls(unit.source.thread.incarnation, current, previous)
                      for unit in observed
-                     for change in unit.source.thread.lost_tools())
+                     if unit.source.thread.lost_tools()
+                     for current, previous in (unit.source.thread.offered_tools,))
 
     def line(self) -> str:
-        return f"{self.thread.name}: {self.change}"
+        return f"{self.thread.name}: {'; '.join(self.current.changes_from(self.previous))}"
 
-    def heartbeat_change(self, current: Sequence[Self]) -> tuple[str, ...]:
-        return super().heartbeat_change(current) if current else ()
+    def heartbeat_change(self, previous: Sequence[Self], current: Sequence[Self]) -> tuple[str, ...]:
+        return super().heartbeat_change(previous, current) if current else ()
 
 
 @dataclass(frozen=True)

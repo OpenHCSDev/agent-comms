@@ -40,9 +40,9 @@ from .restart_refusals import (
     OwnerGenerationChangedRefusal,
 )
 from .thread_identity import (
-    OfferedTools,
     ClaimedIdentity,
     GenerationCounter,
+    OfferedTools,
     OwnerIdentity,
     RecordedThreadIncarnation,
     ThreadIncarnation,
