@@ -130,7 +130,7 @@ def test_same_pid_different_birth_advances_both_authority_domains(tmp_path):
     with pytest.raises(RelationViolationError):
         comms.registry.lease_local_turn(owner.name, "reused-pid")
     with pytest.raises(RelationViolationError):
-        comms.threads.rename_managed_thread(owner.name, "renamed", owner_pid=os.getpid())
+        comms.threads.rename_managed_thread(owner.name, "renamed", owner=ProcessIdentity.capture(os.getpid()))
     assert identity.alive()
 
 

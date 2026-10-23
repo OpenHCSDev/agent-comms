@@ -252,7 +252,7 @@ class ProcessIdentity(RecordMember, ProcessState):
         return os.getpid() == self.pid
 
     def owns_turn(self, turn: ActiveTurn) -> bool:
-        return turn.owner_pid == self.pid
+        return turn.owner == self
 
     def signal(self, signum: int) -> None:
         Platform.current().send(self, signum)

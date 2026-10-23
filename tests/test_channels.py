@@ -586,7 +586,7 @@ def test_pin_lifecycle_tracks_identity_and_membership(tmp_path):
     comms.registry.register(
         replace(comms.registry.require("a"), process_identity=ProcessIdentity.capture(os.getpid()))
     )
-    comms.threads.rename_managed_thread("a", "renamed", owner_pid=os.getpid())
+    comms.threads.rename_managed_thread("a", "renamed", owner=ProcessIdentity.capture(os.getpid()))
     observer = wire(tmp_path)
     assert observer.channels.catalog.read().pinned_threads("#team") == {"renamed"}
     assert observer.channels.catalog.read().pinned_threads("#any") == {"renamed"}

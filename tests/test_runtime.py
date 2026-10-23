@@ -91,7 +91,7 @@ def test_owner_cursor_scope_rebases_only_attachment_session_alias():
                 "canonical",
                 "a" * 32,
                 ClaimedIdentity(RecordedThreadIncarnation("canonical", 1000.0), 3),
-                1234,
+                ProcessIdentity(1234, 1),
             ),
             7,
             EmptyCursorObservation(),
@@ -137,7 +137,7 @@ async def test_subscription_replay_uses_requested_alias(tmp_path, request_origin
             PrivateCoordinatorTable.install(store)
             store.participants.register(thread.incarnation.lookup, original, original, committed=True)
         comms.threads.attach_session(thread, str(journal), process=thread.process_identity)
-        comms.threads.rename_managed_thread(original, "renamed", owner_pid=os.getpid())
+        comms.threads.rename_managed_thread(original, "renamed", owner=ProcessIdentity.capture(os.getpid()))
         requested = original if request_original else "renamed"
         proxy = RuntimeProxy(client, requested, socket_path(comms.root, os.getpid()))
         await proxy.subscribe()
@@ -238,7 +238,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
             replace(comms.registry.require("worker"), session_file=SavedSessionFile(str(tmp_path / "session.jsonl")))
         )
         assert await proxy.request("cancel") == {"owner": "old"}
-        comms.threads.rename_managed_thread("worker", "renamed", owner_pid=old_pid)
+        comms.threads.rename_managed_thread("worker", "renamed", owner=old)
         comms.registry.register(replace(comms.registry.require("renamed"), process_identity=new))
         old_server.close()
         for writer in connections:

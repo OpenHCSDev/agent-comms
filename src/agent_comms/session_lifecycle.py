@@ -165,7 +165,7 @@ class SessionLifecycle:
 
     def acquire_declared_thread(self, thread: Thread) -> Thread:
         """An owning ACP lifecycle acquires its calling process after publication."""
-        return self.comms.owners.acquire_thread(thread.name, owner_pid=os.getpid())
+        return self.comms.owners.acquire_thread(thread.name)
 
     def validated_thread(self, cwd: str, session_id: str) -> Thread:
         thread = self.comms.registry.require(session_id)
@@ -243,7 +243,7 @@ class SessionLifecycle:
                 .items_with(ActiveThreadPresence, thread)
         ):
             thread = await Coordination.run_worker(partial(
-                self.comms.owners.acquire_thread, thread.name, owner_pid=os.getpid(),
+                self.comms.owners.acquire_thread, thread.name,
             ))
         return thread
 
