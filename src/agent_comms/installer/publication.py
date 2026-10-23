@@ -1,7 +1,7 @@
 """Select the interpreter running this module as the published runtime.
 
-The installer runs ``python -m agent_comms.installer.publication`` with the runtime
-it built: console launchers and harness links move to it, then ``current`` does.
+``PublicationProbe`` runs it in the runtime the installer built: console launchers and
+harness links move to it, then ``current`` does.
 """
 from __future__ import annotations
 
@@ -64,6 +64,3 @@ class RuntimePublication:
         for harness in Harness.present(Path.home()):
             harness.configure()
 
-
-if __name__ == '__main__':
-    RuntimePublication.installed().publish_links()
