@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any, ClassVar
 
 
 class ClassFact[Owner, Value]:
@@ -40,21 +41,19 @@ class FamilyFact[Owner, Value](ClassFact[Owner, Value]):
     """A fact about the whole family: the class declaring it holds the one value,
     derived from whichever member reads it first, so no member keeps a copy of its own."""
 
+    declared: ClassVar[dict[type, list[FamilyFact[Any, Any]]]] = {}
+
     def __set_name__(self, owner: type[Owner], name: str) -> None:
         super().__set_name__(owner, name)
         self.root = owner
+        FamilyFact.declared.setdefault(owner, []).append(self)
 
     def holder(self, owner: type[Owner]) -> type[Owner]:
         return self.root
 
     @staticmethod
-    def forget_declared(member: type) -> None:
+    def forget_inherited(member: type) -> None:
         """Forget every family fact ``member`` inherits, so the next read counts it."""
-        inherited = [
-            fact
-            for base in member.__mro__
-            for fact in vars(base).values()
-            if isinstance(fact, FamilyFact)
-        ]
-        for fact in inherited:
-            fact.forget(member)
+        for root in member.__mro__:
+            for fact in FamilyFact.declared.get(root, ()):
+                fact.forget(member)
