@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, ClassVar
 from .coordination_contracts import MAX_IDENTIFIER_CHARS, require_bounded
 from .coordination_errors import IdentityConflict, IntegrityViolationError
 from .coordinator_vocabulary import CoordinatorVocabulary
-from .declared_family import DeclaredFamily
 from .field_codec import NullMember
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Deferred, Failed, Pending, Successful, Terminal
@@ -26,7 +25,7 @@ class Unpublished(NullMember):
 
 
 @dataclass(frozen=True)
-class ResponseState(DeclaredFamily, LifecycleState, CoordinatorVocabulary, affix="Response"):
+class ResponseState(CoordinatorVocabulary, LifecycleState, affix="Response"):
     retryable: ClassVar[bool] = False
     allows_intent: ClassVar[bool] = False
     requires_intent: ClassVar[bool] = False

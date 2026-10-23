@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import Iterable
 from functools import cache
-from typing import TYPE_CHECKING, ClassVar, cast
+from typing import ClassVar
 
+from .declared_family import DeclaredFamily
 from .typed_table import sql_literal
 
-if TYPE_CHECKING:
-    from .declared_family import DeclaredFamily
 
-
-class CoordinatorVocabulary(ABC):
+class CoordinatorVocabulary(DeclaredFamily, declared_name=None):
     """A family root declaring the SQL fragments its members imply.
 
     Each root that composes this capability directly is one vocabulary; the
@@ -22,7 +20,7 @@ class CoordinatorVocabulary(ABC):
 
     _vocabularies: ClassVar[list[type[CoordinatorVocabulary]]] = []
 
-    def __init_subclass__(cls, **kwargs: object) -> None:
+    def __init_subclass__(cls, **kwargs: str | None) -> None:
         super().__init_subclass__(**kwargs)
         if CoordinatorVocabulary in cls.__bases__:
             CoordinatorVocabulary._vocabularies.append(cls)
@@ -37,7 +35,7 @@ class CoordinatorVocabulary(ABC):
         """Every vocabulary's SQL, rebuilt only when a family gains a member."""
         return _merged(
             *(
-                cast("type[DeclaredFamily]", vocabulary).members_with(vocabulary)
+                vocabulary.members_with(vocabulary)
                 for vocabulary in CoordinatorVocabulary._vocabularies
             )
         )
@@ -53,8 +51,14 @@ class CoordinatorVocabulary(ABC):
 
 @cache
 def _merged(*members: tuple[type[DeclaredFamily], ...]) -> dict[str, str]:
-    return {
-        name: sql
-        for vocabulary in CoordinatorVocabulary._vocabularies
-        for name, sql in vocabulary.sql_vocabulary().items()
-    }
+    context: dict[str, str] = {}
+    owners: dict[str, type[CoordinatorVocabulary]] = {}
+    for vocabulary in CoordinatorVocabulary._vocabularies:
+        for name, sql in vocabulary.sql_vocabulary().items():
+            if name in owners:
+                raise TypeError(
+                    f"{name} is declared by both {owners[name].__name__} and {vocabulary.__name__}"
+                )
+            owners[name] = vocabulary
+            context[name] = sql
+    return context

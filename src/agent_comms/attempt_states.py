@@ -17,7 +17,6 @@ from .coordination_errors import (
     ResponseClaimBlocked,
 )
 from .coordinator_vocabulary import CoordinatorVocabulary
-from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Failed, Terminal
 
@@ -26,7 +25,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class AttemptState(DeclaredFamily, LifecycleState, CoordinatorVocabulary, affix="Attempt"):
+class AttemptState(CoordinatorVocabulary, LifecycleState, affix="Attempt"):
     @classmethod
     def sql_vocabulary(cls) -> dict[str, str]:
         return dict(

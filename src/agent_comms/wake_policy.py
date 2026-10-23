@@ -154,9 +154,7 @@ class BoundedTriageEngagement(Engagement):
 
 
 @dataclass(frozen=True)
-class WakePolicy(
-    LifecycleCapability, DeclaredFamily, SourceProofRequirement, CoordinatorVocabulary, affix="Wake"
-):
+class WakePolicy(LifecycleCapability, CoordinatorVocabulary, SourceProofRequirement, affix="Wake"):
     triage: ClassVar[bool] = False
 
     @classmethod

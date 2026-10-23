@@ -15,7 +15,6 @@ from .assignment_states import (
 )
 from .coordination_errors import IdentityConflict, IntegrityViolationError, ResponseClaimBlocked
 from .coordinator_vocabulary import CoordinatorVocabulary
-from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Active, Complete, Failed, Successful, Terminal
 
@@ -46,7 +45,7 @@ class AdvancedOrdinal(OrdinalRule):
 
 
 @dataclass(frozen=True)
-class ExecutionState(DeclaredFamily, LifecycleState, CoordinatorVocabulary, affix="Execution"):
+class ExecutionState(CoordinatorVocabulary, LifecycleState, affix="Execution"):
     retry: ClassVar[bool] = False
     queued: ClassVar[bool] = False
     unstarted: ClassVar[bool] = False

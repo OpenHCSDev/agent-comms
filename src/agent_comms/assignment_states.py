@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .coordination_errors import IdentityConflict, IntegrityViolationError
 from .coordinator_vocabulary import CoordinatorVocabulary
-from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Active, Complete, Deferred, Failed, Pending, Terminal
@@ -62,7 +61,7 @@ class PendingDecision:
 
 
 @dataclass(frozen=True)
-class AssignmentState(DeclaredFamily, LifecycleState, CoordinatorVocabulary, affix="Assignment"):
+class AssignmentState(CoordinatorVocabulary, LifecycleState, affix="Assignment"):
     @classmethod
     def sql_vocabulary(cls) -> dict[str, str]:
         members = cls.members_with(cls)
