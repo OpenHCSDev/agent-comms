@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar
 
+from agent_comms.coordination_errors import DrainUnavailable
 from agent_comms.message_reference import MessageReference
 
 if TYPE_CHECKING:
@@ -28,7 +29,7 @@ class RouteChangedError(ValueError):
     reader_sentence = "On another Comms route; reopen this view"
 
 
-class RelationViolationError(ValueError):
+class RelationViolationError(ValueError, DrainUnavailable):
     """A required relation between declarations cannot be proved."""
 
 
