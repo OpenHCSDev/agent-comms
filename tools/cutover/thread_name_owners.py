@@ -17,7 +17,7 @@ from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
 from agent_comms.errors import RelationViolationError
 from agent_comms.installer.carry import Carried, Carry
-from agent_comms.locked_store import RootFile, SQLiteFile
+from agent_comms.locked_store import DurableFile, SQLiteFile
 from agent_comms.native_prompt_binding import PromptBinding
 from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from agent_comms.private_sidecar import (
@@ -27,7 +27,7 @@ from agent_comms.store_files import _store_lock
 from agent_comms.typed_table import HeldBusFile, SQLiteCatalogObject, SQLiteSchemaObject
 
 
-class UnfinishedOwnerRename(RootFile):
+class UnfinishedOwnerRename(DurableFile):
     filename = ".private-owner-rename.pending"
 
     @classmethod

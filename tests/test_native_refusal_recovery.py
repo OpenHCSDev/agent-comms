@@ -1,50 +1,10 @@
 """Native refusal recovery: Core reports one outcome, never blocks on a retry."""
 from agent_comms.native_arguments import SelectedModel
 
-import json
-
 import pytest
 
 import agent_comms.native_pi as native_pi
 import agent_comms.pi_events as pi_events
-from test_backend import _NATIVE_PROMPT_START, _replay_stub
-
-OVERLOADED = "Our servers are currently overloaded. Please try again later."
-
-
-
-def _stub_with(tmp_path, records):
-    lines = "\n".join(json.dumps(record) for record in records)
-    return _replay_stub(
-        tmp_path,
-        lines,
-        startup="def emit(value):\n    print(json.dumps(value), flush=True)\n"
-        + _NATIVE_PROMPT_START
-        + "prompt_request = prompt\n",
-    )
-
-
-def _refused_attempt(attempt, delay_ms):
-    """The recovery announces its retry decision before the refused message_end."""
-    return [
-        {"type": "message_start", "message": {"role": "assistant", "content": []}},
-        {"type": "native_retry_start", "attempt": attempt, "maxAttempts": 3,
-         "delayMs": delay_ms, "errorMessage": OVERLOADED},
-        {"type": "message_end", "message": {"role": "assistant", "stopReason": "error",
-         "errorMessage": OVERLOADED, "content": []}},
-    ]
-
-
-def _settled_records():
-    return [
-        {"type": "agent_settled"},
-        {"type": "response", "command": "get_session_stats", "success": True,
-         "data": {"contextUsage": {}}},
-    ]
-
-
-
-
 
 
 @pytest.mark.asyncio

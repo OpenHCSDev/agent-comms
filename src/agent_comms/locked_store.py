@@ -59,6 +59,14 @@ class RootFile:
     filename: ClassVar[str]
     root_directory: ClassVar[str] = "."
 
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        """A declared file is either retained across installations or rewritten by its
+        running owner; a declaration that is neither has no install behaviour at all."""
+        super().__init_subclass__(**kwargs)
+        if "filename" in vars(cls) and not issubclass(cls, (DurableFile, RuntimeFile)):
+            raise TypeError(f"{cls.__qualname__} declares {cls.filename!r} but is neither "
+                            "a DurableFile nor a RuntimeFile")
+
     @classmethod
     def path_in(cls, root: Path | str, **parts: str) -> Path:
         return Path(root) / cls.filename.format(**parts)
@@ -336,6 +344,12 @@ class DurableFile(RootFile):
     __slots__ = ()
 
 
+class RuntimeFile(RootFile):
+    """A bus file no carry writes: running owners rewrite it at any time, maintenance included."""
+
+    __slots__ = ()
+
+
 class BusFile(DurableFile):
     """Declared data and lifecycle files that rule out a fresh bus installation."""
 
@@ -386,7 +400,7 @@ class RegistryFile(DurableFile, WireWakeFile):
         return copied
 
 
-class RetiredCommanderFile(RootFile):
+class RetiredCommanderFile(DurableFile):
     """The retired commander file that tools/cutover/carry_commander_project.py consumes.
     The practice copy holds declared files only, so an undeclared input made the practice
     carry find nothing while the live carry deleted it. Deleted with that carry."""
@@ -640,12 +654,6 @@ class PublishedSQLiteFile(SQLiteFile):
             raise StoreCommittedError(
                 f"Committed {path}, but change notification failed: {error}"
             ) from error
-
-
-class RuntimeFile(RootFile):
-    """A bus file no carry writes: running owners rewrite it at any time, maintenance included."""
-
-    __slots__ = ()
 
 
 @dataclass(frozen=True, slots=True)
