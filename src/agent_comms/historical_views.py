@@ -412,7 +412,7 @@ class HistoryArchive(DurableFile):
         """Archived roots are found by where attach puts them, never by decoding the
         catalogue: a copy of a root in an older shape must copy before any carry reads it."""
         declared = super().files_in(root)
-        for archived in cls.archives_in(root):
+        for archived in cls.archived_roots(root):
             declared |= RootFile.paths_in(archived)
         return declared
 
@@ -421,11 +421,11 @@ class HistoryArchive(DurableFile):
         return root / "history"
 
     @classmethod
-    def archives_in(cls, root: Path) -> tuple[Path, ...]:
-        directory = cls.archive_directory(root)
-        if not directory.is_dir():
+    def archived_roots(cls, directory: Path) -> tuple[Path, ...]:
+        archives = cls.archive_directory(directory)
+        if not archives.is_dir():
             return ()
-        return tuple(sorted(path for path in directory.iterdir() if path.is_dir()))
+        return tuple(sorted(path for path in archives.iterdir() if path.is_dir()))
 
     def sources(self) -> tuple[HistorySource, ...]:
         with self.read_sources() as sources:
