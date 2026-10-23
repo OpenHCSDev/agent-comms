@@ -89,7 +89,7 @@ async def test_pattern_search_metadata_reaches_official_acp(acp_tools, name, lab
 ])
 def test_recorded_metadata_does_not_require_an_executable_request(name, label, kind):
     from agent_comms.native_tool_call import CodingCall
-    from agent_comms.native_tool_call import SelectedToolDenied
+    from agent_comms.tool_denial import SelectedToolDenied
     from agent_comms.transcript_events import ToolEndTranscript, ToolStartTranscript
 
     foreign = {"file_path": "external.txt"}
@@ -168,7 +168,8 @@ def test_core_commands_share_native_identity_without_changing_external_decode():
 
 def test_native_call_fields_are_not_model_arguments():
     from agent_comms.field_codec import FieldCodec
-    from agent_comms.native_tool_call import CodingCall, SelectedToolDenied
+    from agent_comms.native_tool_call import CodingCall
+    from agent_comms.tool_denial import SelectedToolDenied
 
     arguments = {"path": "file.py", "content": "value"}
     call = CodingCall.decode("owned-call", "write", arguments)

@@ -11,7 +11,8 @@ from typing import TYPE_CHECKING, ClassVar, Annotated, Literal
 
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
 from .field_codec import FieldCodec, NullMember, WireContext, WireOmitDefault
-from .native_tool_call import CodingCall, SelectedToolDenied
+from .native_tool_call import CodingCall
+from .tool_denial import SelectedToolDenied
 from .recorded_time import EventTime
 from .storage_rules import WriteStorageEffect, physical_path, shell_storage_effects
 from .tool_declaration import EditCall, ReplacementEdit, ToolDeclaration, one_line

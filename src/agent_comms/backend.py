@@ -62,7 +62,7 @@ from .request_progress import NO_REQUEST_OBSERVER, RequestObserver, RequestProgr
 from .native_tool_call import NativeToolMode
 from .native_tool_transport import ToolTransport, UnboundToolTransport
 from .mro_dispatch import MroDispatch, handles
-from .selected_tool_broker import SelectedToolDenied
+from .tool_denial import SelectedToolDenied
 from .send_outcome import SendBoundary
 from .turn_context import InputContributionCoordinates
 from .turn_inputs import InputForwarding

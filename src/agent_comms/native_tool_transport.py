@@ -24,11 +24,11 @@ from .native_tool_call import (
     DuplicateToolCallIdentity,
     NativeToolCall,
     OwnerToolConnection,
-    SelectedToolDenied,
     ToolOutcomeUnknown,
 )
 from .pi_payloads import PiContent
 from .private_path import PrivateDirectoryRole, PrivateSocketRole
+from .tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
     from .backend import TurnSession

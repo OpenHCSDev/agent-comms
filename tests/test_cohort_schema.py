@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 import os
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
@@ -13,7 +12,9 @@ import pytest
 
 from agent_comms.cohort_schema import CohortTable
 from agent_comms.coordination_errors import SchemaVersionError
+from agent_comms.coordination_tables.participants import Participants
 from agent_comms.coordinator import Coordination
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 
 ROOT = "a" * 32
 SEQ = 7
@@ -60,8 +61,8 @@ def _receipt(
 
 
 def _assignment(db: sqlite3.Connection) -> None:
-    db.execute("INSERT INTO participants VALUES ('a','Alice',1)")
-    db.execute("INSERT INTO participants VALUES ('b','Bob',1)")
+    Participants(participant_lookup="a", committed=True).insert(db)
+    Participants(participant_lookup="b", committed=True).insert(db)
     db.execute(
         (
             "INSERT INTO wake_claims (assignment_id,recipient,recipient_lookup,wire_seq,m"
@@ -103,7 +104,7 @@ def _seal(db: sqlite3.Connection) -> None:
 
 def _seal_two_selected_with_observer(db: sqlite3.Connection, *, reverse_claims: bool) -> None:
     _assignment(db)
-    db.execute("INSERT INTO participants VALUES ('c','Cara',1)")
+    Participants(participant_lookup="c", committed=True).insert(db)
     db.execute(
         (
             "INSERT INTO wake_claims (assignment_id,recipient,recipient_lookup,wire_seq,m"
