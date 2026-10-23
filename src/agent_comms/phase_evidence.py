@@ -908,6 +908,54 @@ class DeclaredScopes:
                     yield parent
 
 
+class DecoratorNames(NamedClasses):
+    """The classes a decorator list names; ``@dataclass(frozen=True)`` names the class it calls."""
+
+    def visit_Call(self, node: ast.Call) -> None:
+        self.visit(node.func)
+
+
+class ClassAnswers(ast.NodeVisitor):
+    """Each member a class body declares by name, with its line and its whole declaration. A
+    field counts only on a dataclass, and a name ``type`` reads per class never counts."""
+
+    def __init__(self, declared: ast.ClassDef, per_class: frozenset[str]) -> None:
+        self.fields = dataclass.__name__ in DecoratorNames.of(declared.decorator_list)
+        self.per_class = per_class
+        self.found: dict[str, tuple[int, str]] = {}
+
+    @classmethod
+    def of(cls, declared: ast.ClassDef, per_class: frozenset[str]) -> dict[str, tuple[int, str]]:
+        answers = cls(declared, per_class)
+        for member in declared.body:
+            answers.visit(member)
+        return answers.found
+
+    def record(self, name: str, member: ast.stmt) -> None:
+        if name not in self.per_class:
+            self.found[name] = (member.lineno, ast.dump(member))
+
+    def generic_visit(self, node: ast.AST) -> None:
+        """Only the body's own statements declare members."""
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self.record(node.name, node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self.record(node.name, node)
+
+    def visit_Assign(self, node: ast.Assign) -> None:
+        match node.targets:
+            case [ast.Name(id=name)]:
+                self.record(name, node)
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+        """A field is inherited only between dataclasses, and only one with a default restates."""
+        match node:
+            case ast.AnnAssign(target=ast.Name(id=name), value=ast.expr()) if self.fields:
+                self.record(name, node)
+
+
 @dataclass(frozen=True)
 class RestatedMembersAbsent(MainEvidence):
     """No class in ``paths`` restates a member its direct base in ``paths`` declares: a method
@@ -926,29 +974,11 @@ class RestatedMembersAbsent(MainEvidence):
         scopes = DeclaredScopes(main, self.paths)
         for declared in scopes.classes.values():
             for parent in scopes.parents(declared):
-                inherited = self.answers(parent.node)
-                for name, (line, answer) in self.answers(declared.node).items():
+                inherited = ClassAnswers.of(parent.node, self.per_class)
+                for name, (line, answer) in ClassAnswers.of(declared.node, self.per_class).items():
                     if name in inherited and inherited[name][1] == answer:
                         member = QualifiedName((declared.node.name, name))
                         yield f"{declared.path}:{line} {member}"
-
-    def answers(self, declared: ast.ClassDef) -> dict[str, tuple[int, str]]:
-        """Each member's line and its whole declaration; fields count only on a dataclass."""
-        fields = dataclass.__name__ in NamedClasses.of(
-            decorator.func if isinstance(decorator, ast.Call) else decorator
-            for decorator in declared.decorator_list
-        )
-        found: dict[str, tuple[int, str]] = {}
-        for member in declared.body:
-            match member:
-                case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
-                    found[name] = (member.lineno, ast.dump(member))
-                case ast.Assign(targets=[ast.Name(id=name)]) if name not in self.per_class:
-                    found[name] = (member.lineno, ast.dump(member))
-                case ast.AnnAssign(target=ast.Name(id=name), value=ast.expr()) \
-                        if fields and name not in self.per_class:
-                    found[name] = (member.lineno, ast.dump(member))
-        return found
 
     def describe(self) -> str:
         return f"no member restating its base's in {' '.join(self.paths)} on main"
