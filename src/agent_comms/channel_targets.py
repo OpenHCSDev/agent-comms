@@ -1,6 +1,7 @@
 """Named destinations own route behavior; strings are decoded at the boundary."""
 from __future__ import annotations
 
+from .activity_clocks import ActivityClocks
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
@@ -14,7 +15,6 @@ from .response_policy import DirectPolicy, MentionedOnlyPolicy
 from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, UnmentionedWake
 
 if TYPE_CHECKING:
-    from .bus_activity_index import ActivityClocks
     from .catalog_document import CatalogDocument
     from .channels import Channel
     from .goal_management import Goals

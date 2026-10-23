@@ -15,7 +15,7 @@ import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Annotated, ClassVar
 
@@ -120,6 +120,17 @@ class ActiveRoute(CommsRoute):
 
     def to_record(self) -> dict[str, object]:
         return {"version": self.version, **FieldCodec.encode(self)}
+
+    def encoded(self) -> bytes:
+        """The route file's bytes for this route."""
+        return (json.dumps(self.to_record(), sort_keys=True) + "\n").encode()
+
+    def rebound(self) -> ActiveRoute:
+        """This route naming the bus its root holds now. A restore that copies the bus
+        back gives it a new file identity, so the restored route names that one."""
+        from .bus import Bus
+
+        return replace(self, bus_identity=RecordedBusIdentity.capture(Bus.path_in(self.root)))
 
     @classmethod
     def from_record(cls, value: object, path: Path) -> ActiveRoute:
@@ -484,7 +495,7 @@ def _publish_active_route_locked(
         Platform.current().make_private_descriptor(directory, 0o700)
         if backup is None and read_active_route(path) is not None:
             raise ValueError("active comms route is already installed")
-        payload = (json.dumps(route.to_record(), sort_keys=True) + "\n").encode()
+        payload = route.encoded()
         temporary = f".active-route-{uuid.uuid4().hex}.tmp"
         fd = os.open(
             temporary,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .errors import StaleAttemptError
 import logging
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -20,7 +21,7 @@ from .goal_actions import (
     RuntimeInvocable,
     SentBackOrderGoalAction,
 )
-from .goal_attempts import Generation, GoalAttemptStore, StaleAttemptError, UnresolvedAttemptError
+from .goal_attempts import Generation, GoalAttemptStore, UnresolvedAttemptError
 from .goal_history import GoalHistoryEntry
 from .goal_waits import (
     GoalInputReview,

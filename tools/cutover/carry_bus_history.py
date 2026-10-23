@@ -26,7 +26,8 @@ from agent_comms.bus import (
     PrivateRecord,
     PublicRecord,
 )
-from agent_comms.bus_tables import BusRow, BusSchema
+from agent_comms.bus_tables import BusSchema
+from agent_comms.messages import BusRow, BusRecord, Message
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.envelope_claim_transitions import (
     AcquiringClaim,
@@ -48,7 +49,6 @@ from agent_comms.field_codec import (
 from agent_comms.historical_views import HistoryArchive, HistorySource
 from agent_comms.installer.carry import Carried, Carry
 from agent_comms.locked_store import BusFile, RegistryFile, RootFile
-from agent_comms.messages import BusRecord, Message
 from agent_comms.private_path import FileObservation, FileRevision
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.recorded_bus import RecordedBusIdentity

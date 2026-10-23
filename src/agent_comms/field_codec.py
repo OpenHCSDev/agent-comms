@@ -961,6 +961,22 @@ class SingleFieldValue(ExternalJsonShape, SingleValueEncoding):
         return compile_decoder(cls.wire_field().annotation).argument_options()
 
 
+class DeclaredWireType(ExternalJsonShape, WireValue):
+    """A member whose whole wire value is one declared JSON type, converted by its own
+    from_wire and to_wire. Its shape and schema derive from that type; inherited from a
+    union, its shape would be the union holding it, and admitting would never return."""
+
+    wire_type: ClassVar[object]
+
+    @classmethod
+    def wire_structure(cls, structural: ValueDecoder[object]) -> ValueDecoder[object]:
+        return compile_decoder(cls.wire_type)
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.value_schema(cls.wire_type)
+
+
 class SubclassUnion(DeclaredFamily, AcceptsNull, ExternalJsonShape, WireValue):
     """An untagged wire family; each union declares its own root with affix=""."""
 

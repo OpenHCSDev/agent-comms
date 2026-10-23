@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Self
 
-from ..field_codec import AbsolutePathText, BoundedText, FieldCodec, NullMember, SubclassUnion
+from ..field_codec import AbsolutePathText, BoundedText, DeclaredWireType, FieldCodec, NullMember, SubclassUnion
 from ..installer.backup import UpgradeRefused
 from ..registry_document import CommanderProject, RegistrySnapshot
 from ..repo import Repo, RepositorySelection
@@ -45,12 +45,13 @@ class RepoChoice(RepositorySelection, SubclassUnion, affix="Repos"):
 
 
 @dataclass(frozen=True, slots=True)
-class GivenRepos(RepoChoice):
+class GivenRepos(DeclaredWireType, RepoChoice):
+    wire_type = str  # comma-separated checkouts
     checkouts: tuple[Path, ...]
 
     @classmethod
     def from_wire(cls, data: object) -> Self:
-        text = FieldCodec.decode(str, data)
+        text = FieldCodec.decode(cls.wire_type, data)
         return cls(tuple(AbsolutePathText.decode(part.strip())
                          for part in text.split(",") if part.strip()))
 
