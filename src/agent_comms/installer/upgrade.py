@@ -38,7 +38,6 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from pydantic import TypeAdapter
 
-from agent_comms import cli
 from agent_comms.active_route import ActiveRoute, active_route_path, route_directory
 from agent_comms.bus import Bus
 from agent_comms.cli_bridges.shared import BridgeResume, Serve, SessionBridgeResumes
@@ -81,6 +80,7 @@ from agent_comms.installer.carry import (
     RetireInputsOperation,
 )
 from agent_comms.installer.commands import InstallCommands, TimedCommand
+from agent_comms.installer.command_worker import CliCommandProbe
 from agent_comms.installer.interpreter_operation import (
     ClientImportsProbe,
     InstalledProgram,
@@ -597,10 +597,7 @@ class Stack:
         invocation = command.invocation(*arguments)
         verb = f"agent-comms {' '.join(invocation)}"
         for _ in range(240):
-            with self.commands.timing(verb):
-                completed = subprocess.run(
-                    [str(self.python), "-m", cli.__name__, "--root", str(root), *invocation],
-                    cwd=self.home, env=self.environment(), capture_output=True, text=True)
+            completed = self.probe(CliCommandProbe(("--root", str(root), *invocation)))
             try:
                 if not completed.returncode:
                     return FieldCodec.decode(command.result_type(),
@@ -608,7 +605,7 @@ class Stack:
                 failure = CORE_ERROR.validate_json(completed.stdout)
             except (MalformedRecord, ValueError) as malformed:
                 raise UpgradeRefused(f"{verb}: undecodable answer: {malformed}; "
-                                     f"stderr: {completed.stderr.strip()}") from malformed
+                                     f"stdout: {completed.stdout.strip()}") from malformed
             if not issubclass(failure.exception_type, CoordinationReadUnavailable):
                 raise UpgradeRefused(f"{verb}: {failure.error}")
             time.sleep(5)
@@ -759,7 +756,7 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
     commands = InstallCommands()
     tree = TargetTree(checkout, scratch, target)
     bridges = report.bridges
-    with report.running(tree):
+    with commands, report.running(tree):
         installed = Stack(checkout, commands)
         current = commands.run("git", "-C", checkout, "rev-parse", "HEAD").strip()
         ancestry = ["git", "-C", str(checkout), "merge-base", "--is-ancestor", current, target]
@@ -849,6 +846,8 @@ class Install[Rehearsed: Rehearsal](ABC):
                  harnesses: Callable[[Stack], InstallResult], report: InstallReport) -> InstalledUpgrade:
         rehearsed = self.reported(rehearsal)
         live_run = self.install(rehearsal, bridges, report)
+        if self.installed.python != self.staged.python:
+            self.staged.commands.close_runtime(self.installed.python)
         finished = InstalledUpgrade(
             rehearsed.source, rehearsed.target, rehearsed.root, rehearsed.pending,
             rehearsed.rehearsal, live_run, harnesses(self.staged), commands=tuple(self.staged.commands.ran),

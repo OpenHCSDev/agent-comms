@@ -46,21 +46,21 @@ class ProbeProgram(ABC):
     """Where an operation's declaration is executable by the selected interpreter."""
 
     @abstractmethod
-    def entry(self, probe: RuntimeProbe) -> tuple[str | Path, ...]: ...
+    def entry(self) -> tuple[str | Path, ...]: ...
 
 
 class SourceProgram(ProbeProgram):
     """The target's file can run against a predecessor that does not declare it yet."""
 
-    def entry(self, probe: RuntimeProbe) -> tuple[Path]:
-        return (Path(inspect.getfile(type(probe))),)
+    def entry(self) -> tuple[str, str]:
+        return RetainedProgram.of(RuntimeProbe).entry()
 
 
 class InstalledProgram(ProbeProgram):
     """A published runtime owns its declaration after the target tree is retired."""
 
-    def entry(self, probe: RuntimeProbe) -> tuple[str, str]:
-        return "-m", type(probe).__module__
+    def entry(self) -> tuple[str, str]:
+        return "-c", "from agent_comms.installer.command_worker import main; main()"
 
 
 @dataclass(frozen=True)
@@ -72,27 +72,57 @@ class RetainedProgram(ProbeProgram):
 
     @classmethod
     def of(cls, declaration: type[RuntimeProbe]) -> RetainedProgram:
-        path = Path(inspect.getfile(declaration))
-        return cls(path, path.read_text())
-
-    def entry(self, probe: RuntimeProbe) -> tuple[str, str]:
-        return "-c", (
-            f"__file__ = {str(self.path)!r}\n" f"exec(compile({self.source!r}, __file__, 'exec'))"
+        path = Path(inspect.getfile(RuntimeProbe))
+        worker = path.with_name("command_worker.py")
+        source = (
+            "import importlib.util, sys\n"
+            f"spec = importlib.util.spec_from_loader({RuntimeProbe.__module__!r}, loader=None)\n"
+            "operation = importlib.util.module_from_spec(spec)\n"
+            f"operation.__file__ = {str(path)!r}\n"
+            "sys.modules[spec.name] = operation\n"
+            f"exec(compile({path.read_text()!r}, operation.__file__, 'exec'), operation.__dict__)\n"
+            f"spec = importlib.util.spec_from_loader('agent_comms.installer.command_worker', loader=None)\n"
+            "worker = importlib.util.module_from_spec(spec)\n"
+            f"worker.__file__ = {str(worker)!r}\n"
+            "sys.modules[spec.name] = worker\n"
+            f"exec(compile({worker.read_text()!r}, worker.__file__, 'exec'), worker.__dict__)\n"
+            "worker.main()\n"
         )
+        return cls(path, source)
+
+    def entry(self) -> tuple[str, str]:
+        return "-c", self.source
 
 
 @dataclass(frozen=True)
-class RuntimeProbe[Answer](InterpreterOperation[Answer], DeclaredFamily, affix="Probe"):
-    def command(
-        self, python: Path, request: Path, result: Path, *, program: ProbeProgram = SourceProgram()
-    ) -> tuple[str | Path, ...]:
-        return (python, "-P", *program.entry(self), request, result)
+class RuntimeProbe[Answer](InterpreterOperation[Answer], DeclaredFamily, affix="Probe",
+                           discovery_package="agent_comms.installer"):
+    """A declared operation handled by the install's selected interpreter worker."""
 
-    @classmethod
-    def main(cls) -> None:
-        request, result = sys.argv[1:]
-        probe = FieldCodec.decode(cls, FieldCodec.parse(Path(request).read_text()))
-        Path(result).write_text(probe.encode_answer(probe.run()))
+
+class RuntimeProbeFailed(RuntimeError):
+    """An operation raised in its interpreter; the message is its child traceback."""
+
+
+class ProbeReply(DeclaredFamily, affix="Reply"):
+    @abstractmethod
+    def answer(self) -> str: ...
+
+
+@dataclass(frozen=True)
+class CompletedProbeReply(ProbeReply):
+    encoded: str
+
+    def answer(self) -> str:
+        return self.encoded
+
+
+@dataclass(frozen=True)
+class FailedProbeReply(ProbeReply):
+    traceback: str
+
+    def answer(self) -> str:
+        raise RuntimeProbeFailed(self.traceback)
 
 
 class ClientImportsProbe(RuntimeProbe[None]):
@@ -317,5 +347,3 @@ class InstalledPackagesProbe(RuntimeProbe[dict[str, PackageRecord]]):
         }
 
 
-if __name__ == "__main__":
-    RuntimeProbe.main()

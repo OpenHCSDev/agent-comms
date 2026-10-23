@@ -27,5 +27,3 @@ class HarnessesProbe(RuntimeProbe[InstallResult]):
             return self.install.apply(comms)
 
 
-if __name__ == "__main__":
-    RuntimeProbe.main()

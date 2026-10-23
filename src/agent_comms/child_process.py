@@ -1936,7 +1936,9 @@ class SpawnedProcess(SynchronousProcess):
         *,
         cwd: str | Path | None = None,
         env: Mapping[str, str] = INHERITED_ENVIRONMENT,
+        stdin: int | BinaryIO | TextIO = subprocess.DEVNULL,
         output: int | BinaryIO | TextIO = subprocess.DEVNULL,
+        stderr: int | BinaryIO | TextIO | None = None,
         runtime: LaunchRuntime = LaunchRuntime.running(),
         lifetime: type[ChildLifetime] = DiesWithLauncherLifetime,
     ) -> Generator[SpawnedProcess]:
@@ -1944,7 +1946,8 @@ class SpawnedProcess(SynchronousProcess):
         if not command:
             raise ValueError("A child command is required")
         with Platform.current().launch(command, (), runtime, lifetime) as launch:
-            child = launch.spawn(cwd=cwd, env=env, stdout=output, stderr=output)
+            child = launch.spawn(cwd=cwd, env=env, stdin=stdin, stdout=output,
+                                 stderr=output if stderr is None else stderr)
             try:
                 yield child
             except BaseException:

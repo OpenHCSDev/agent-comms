@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import sys
+import traceback
 from contextlib import redirect_stdout
 from dataclasses import dataclass
 from io import StringIO
 
 from agent_comms import cli
 from agent_comms.field_codec import FieldCodec
-from agent_comms.installer.interpreter_operation import RuntimeProbe
+from agent_comms.installer.interpreter_operation import (
+    CompletedProbeReply, FailedProbeReply, RuntimeProbe,
+)
 
 
 @dataclass(frozen=True)
@@ -30,8 +33,13 @@ class CliCommandProbe(RuntimeProbe[CliOutput]):
 
 def main() -> None:
     for line in sys.stdin:
-        probe = FieldCodec.decode(RuntimeProbe, FieldCodec.parse(line))
-        print(probe.encode_answer(probe.run()), flush=True)
+        try:
+            with redirect_stdout(sys.stderr):
+                probe = FieldCodec.decode(RuntimeProbe, FieldCodec.parse(line))
+                reply = CompletedProbeReply(probe.encode_answer(probe.run()))
+        except Exception:
+            reply = FailedProbeReply(traceback.format_exc())
+        print(FieldCodec.compact(FieldCodec.encode(reply)), flush=True)
 
 
 if __name__ == "__main__":
