@@ -977,6 +977,10 @@ class NullMember(ExternalField, AcceptsNull, WireValue):
     """One declared empty member owns the JSON null representation."""
 
     @classmethod
+    def wire_structure(cls, structural: ValueDecoder[object]) -> ValueDecoder[object]:
+        return compile_decoder(type(None))
+
+    @classmethod
     def decode_external_value(cls, value: object, record: Mapping[str, object]) -> object:
         return cls.from_wire(value)
 
@@ -1116,6 +1120,10 @@ class TextRepresentation[V](FieldRepresentation):
     Its schema names the representation, so text with no declared spelling never shares a stored
     form with plain ``str`` or with another representation; SpelledText declares one.
     """
+
+    @classmethod
+    def wire_structure(cls, structural: ValueDecoder[object]) -> ValueDecoder[object]:
+        return compile_decoder(str)
 
     @classmethod
     def decode(cls, value: object) -> V:
@@ -1662,6 +1670,10 @@ class FieldCodec(MroDispatch, Sealed):
         accepted_keys: frozenset[str]
 
         @cached_property
+        def required_wire_keys(self) -> frozenset[str]:
+            return frozenset((*self.required_keys, *self.init_required_keys))
+
+        @cached_property
         def record_fields(self) -> tuple[tuple[Field[object], str], ...]:
             return tuple((plan.declared, plan.key) for plan in self.bindings)
 
@@ -1809,6 +1821,17 @@ class ValueDecoder[T](ABC):
     @property
     def wire_children(self) -> tuple[ValueDecoder[object], ...]:
         return ()
+
+    def admits_wire(self, data: object) -> bool:
+        """Check outer wire shape without decoding nested values.
+
+        This may admit a value decoding rejects, but must never reject one decoding accepts.
+        """
+        return True
+
+    def admits_external(self, data: object) -> bool:
+        """A sibling-aware external reader may accept more than the stored wire shape."""
+        return any(self.external_decoders(data)) or self.admits_wire(data)
 
     def selects_record(self, select: WireRecordFilter) -> bool:
         return False
@@ -1960,6 +1983,9 @@ class _ExactScalarDecoder(_ScalarDecoder):
     def accepts(self, data: object) -> bool:
         return type(data) is self.target
 
+    def admits_wire(self, data: object) -> bool:
+        return self.accepts(data)
+
     def accepts_value(self, value: object) -> bool:
         return self.accepts(value)
 
@@ -2005,8 +2031,11 @@ class _RealDecoder(_NumberDecoder):
     __slots__ = ()
     annotations = (float,)
 
+    def admits_wire(self, data: object) -> bool:
+        return type(data) in (int, float)
+
     def accepts(self, data: object) -> bool:
-        return type(data) in (int, float) and math.isfinite(cast(float, data))
+        return self.admits_wire(data) and math.isfinite(cast(float, data))
 
 
 @dataclass(frozen=True, slots=True)
@@ -2023,6 +2052,10 @@ class _RepresentedDecoder(ValueDecoder[Any]):
     @property
     def wire_children(self) -> tuple[ValueDecoder[object], ...]:
         return (self.wire_structure,)
+
+    def admits_wire(self, data: object) -> bool:
+        # Null handlers can change the structural null contract; leave that decision to decode.
+        return data is None or self.wire_structure.admits_wire(data)
 
     def _rewrite_records(
         self, data: object, change: WireRecordChange, select: WireRecordFilter,
@@ -2133,6 +2166,9 @@ class _TypeDecoder(_ScalarDecoder):
 
 
 class _FamilyNameDecoder(_TypeDecoder, _ChoiceDecoder[Any]):
+    def admits_wire(self, data: object) -> bool:
+        return type(data) is str
+
     def encode(self, value: type[DeclaredFamily]) -> str:
         return value.declared_name
 
@@ -2158,6 +2194,9 @@ class _LiteralDecoder(_ChoiceDecoder[Any]):
     def accepts_value(self, value: object) -> bool:
         return any(type(value) is type(item) and value == item for item in self.values)
 
+    def admits_wire(self, data: object) -> bool:
+        return any(plan.admits_wire(data) for plan in self.value_plans)
+
     def encode(self, value: object) -> object:
         for item, plan in zip(self.values, self.value_plans, strict=True):
             if type(value) is type(item) and value == item:
@@ -2181,6 +2220,9 @@ class UnionDecoder[T](_ContextDecoder[T]):
     @property
     def wire_children(self) -> tuple[ValueDecoder[object], ...]:
         return self.alternatives
+
+    def admits_wire(self, data: object) -> bool:
+        return any(alternative.admits_wire(data) for alternative in self.alternatives)
 
     def _rewrite_records(
         self, data: object, change: WireRecordChange, select: WireRecordFilter,
@@ -2216,6 +2258,7 @@ class UnionDecoder[T](_ContextDecoder[T]):
             return self.decode_bound(data, record)
         return self.decode_resolved(self.decode_candidates(
             lambda alternative: alternative.decode_external(data, record),
+            admits=lambda alternative: alternative.admits_external(data),
         ))
 
     @property
@@ -2235,12 +2278,20 @@ class UnionDecoder[T](_ContextDecoder[T]):
         raise TypeError(f"Value does not match {self.target}")
 
     def decode_bound(self, data: object, context: Mapping[str, object]) -> T:
-        return self.decode_candidates(lambda alternative: alternative.decode_bound(data, context))
+        return self.decode_candidates(
+            lambda alternative: alternative.decode_bound(data, context),
+            admits=lambda alternative: alternative.admits_wire(data),
+        )
 
-    def decode_candidates(self, decode: Callable[[ValueDecoder[T]], T]) -> T:
+    def decode_candidates(
+        self, decode: Callable[[ValueDecoder[T]], T], *,
+        admits: Callable[[ValueDecoder[T]], bool],
+    ) -> T:
         first_error = None
         try:
             for alternative in self.alternatives:
+                if not admits(alternative):
+                    continue
                 try:
                     return decode(alternative)
                 except MalformedRecord as error:
@@ -2265,6 +2316,9 @@ class _ArrayDecoder(ValueDecoder[Any]):
     @property
     def wire_children(self) -> tuple[ValueDecoder[object], ...]:
         return self.items
+
+    def admits_wire(self, data: object) -> bool:
+        return isinstance(data, list)
 
     def _rewrite_records(
         self, data: object, change: WireRecordChange, select: WireRecordFilter,
@@ -2342,6 +2396,9 @@ class _VariadicTupleDecoder(_TupleDecoder):
 
 
 class _FixedTupleDecoder(_TupleDecoder):
+    def admits_wire(self, data: object) -> bool:
+        return super().admits_wire(data) and len(cast(list[object], data)) == len(self.items)
+
     def plan_items(self, data: list[object]) -> Iterable[tuple[ValueDecoder[object], object]]:
         with MalformedRecord.refusing("Tuple length does not match declaration"):
             return tuple(zip(self.items, data, strict=True))
@@ -2441,6 +2498,9 @@ class _DictDecoder(ValueDecoder[Any]):
 class _StringKeyDictDecoder(_DictDecoder):
     entries = staticmethod(_object_entries)
 
+    def admits_wire(self, data: object) -> bool:
+        return isinstance(data, dict)
+
     @staticmethod
     def wire_mapping(entries: Iterable[tuple[object, object]]) -> dict:
         return dict(entries)
@@ -2459,6 +2519,9 @@ class _StringKeyDictDecoder(_DictDecoder):
 class _PairKeyDictDecoder(_DictDecoder):
     entries = staticmethod(_object_or_pair_entries)
 
+    def admits_wire(self, data: object) -> bool:
+        return isinstance(data, (dict, list))
+
     @staticmethod
     def wire_mapping(entries: Iterable[tuple[object, object]]) -> list:
         return [[key, value] for key, value in entries]
@@ -2473,6 +2536,9 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
     """The encoded object carries its member's name under the family tag."""
 
     target: type[Member]
+
+    def admits_wire(self, data: object) -> bool:
+        return isinstance(data, dict) and isinstance(data.get(self.target.family_discriminator), str)
 
     @property
     def wire_children(self) -> tuple[ValueDecoder[object], ...]:
@@ -2520,6 +2586,10 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
 class _LeafDocumentDecoder(_FamilyRecordDecoder):
     """A directly declared leaf document omits its family selector."""
 
+    def admits_wire(self, data: object) -> bool:
+        return (super().admits_wire(data)
+                or _member_decoder(self.target).admits_wire(data))
+
     def encode_document(self, value: DeclaredFamily) -> object:
         return _member_decoder(type(value)).encode(value)
 
@@ -2538,6 +2608,12 @@ class _RecordDecoder(_ContextDecoder[Any]):
     record that contains itself compiles without recursion."""
 
     target: type
+
+    def admits_wire(self, data: object) -> bool:
+        if not isinstance(data, dict):
+            return False
+        plan = FieldCodec._record_plan(self.target)
+        return plan.required_wire_keys <= data.keys() <= plan.accepted_keys
 
     @property
     def wire_children(self) -> tuple[ValueDecoder[object], ...]:
@@ -2569,9 +2645,7 @@ class _RecordDecoder(_ContextDecoder[Any]):
 
     def problems(self, data: dict) -> dict[str, str]:
         plan = FieldCodec._record_plan(self.target)
-        missing = dict.fromkeys(
-            key for key in (*plan.required_keys, *plan.init_required_keys) if key not in data
-        )
+        missing = plan.required_wire_keys.difference(data)
         # A data refusal needs the declared keys, not an expansion of every
         # reachable schema. Recursive records are valid decode declarations.
         problems = {key: f"Missing required fields for {self.target.__name__}: {key}; "
