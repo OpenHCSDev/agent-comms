@@ -7,7 +7,7 @@ transcript can reconstruct them. Delete this carry after every root has crossed.
 from __future__ import annotations
 
 from contextlib import closing
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from agent_comms.child_process import Platform
@@ -18,7 +18,6 @@ from agent_comms.locked_store import SQLiteFile
 from agent_comms.native_runtime_input import (
     AcknowledgedSlot,
     ConsumedSlot,
-    SelectedSlotState,
     SelectedToolSlot,
 )
 from agent_comms.native_session_files import SavedSessionFile
@@ -36,31 +35,36 @@ class LedgerSlot:
     def files(self) -> tuple[Path, ...]:
         return (self.consumed, *self.acknowledgements)
 
-    def read(self) -> SelectedToolSlot:
+    def read(self) -> tuple[SelectedToolSlot, ...]:
         original = self.consumed.read_bytes()
-        state: type[SelectedSlotState] = ConsumedSlot
+        consumed = SelectedToolSlot(
+            self.consumed.name, original.decode("ascii").removesuffix("\n"), ConsumedSlot,
+        )
+        records = [consumed]
         for acknowledgement in self.acknowledgements:
             if acknowledgement.read_bytes() != original:
                 raise RelationViolationError(
                     f"Selected tool acknowledgement differs from {self.consumed}: {acknowledgement}"
                 )
-            state = AcknowledgedSlot
-        return SelectedToolSlot(
-            self.consumed.name, original.decode("ascii").removesuffix("\n"), state,
-        )
+            records.append(replace(consumed, state=AcknowledgedSlot))
+        return tuple(records)
 
 
 class SelectedToolSlots(Carry):
     opened_files = (CoordinationStore,)
 
-    def slots(self) -> tuple[LedgerSlot, ...]:
-        slots = []
+    def directories(self) -> tuple[Path, ...]:
         directories = {
             path for owner, root in SavedSessionFile.declarations_in(self.root)
             for path in root.glob(str(owner.pattern().parent / "selected-tool-ledger"))
         }
-        for directory in sorted(directories):
+        for directory in directories:
             self.require_confined(self.root, directory)
+        return tuple(sorted(directories))
+
+    def slots(self) -> tuple[LedgerSlot, ...]:
+        slots = []
+        for directory in self.directories():
             files = frozenset(directory.iterdir())
             for path in files:
                 self.require_confined(self.root, path)
@@ -80,9 +84,10 @@ class SelectedToolSlots(Carry):
 
     def carry(self, *, apply: bool) -> Carried:
         slots = self.slots()
-        if not slots:
+        directories = self.directories()
+        if not directories:
             return Carried(0)
-        rows = tuple(slot.read() for slot in slots)
+        rows = tuple(row for slot in slots for row in slot.read())
         files = tuple(path for slot in slots for path in slot.files)
         acknowledged = sum(len(slot.acknowledgements) for slot in slots)
         detail = {
@@ -90,19 +95,20 @@ class SelectedToolSlots(Carry):
             "consumed_rows": len(slots) - acknowledged, "acknowledged_rows": acknowledged,
             "slot_rows": len(slots), "deleted_files": len(files) if apply else 0,
         }
+        changed = len(files) + len(directories) - len({slot.consumed.parent for slot in slots})
         if not apply:
-            return Carried(len(files), detail)
+            return Carried(changed, detail)
         path = CoordinationStore.path_in(self.root)
         self.require_confined(self.root, path)
         HeldBusFile(CoordinationStore, path).require()
-        with closing(SQLiteFile.writer(path)) as db, SQLiteFile.write_transaction(db):
-            SelectedToolSlot.create(db, if_not_exists=True)
-            for row in rows:
-                row.carry(db)
+        if rows:
+            with closing(SQLiteFile.writer(path)) as db, SQLiteFile.write_transaction(db):
+                SelectedToolSlot.create(db, if_not_exists=True)
+                for row in rows:
+                    row.carry(db)
         # Every row is committed before the first unlink. Persist removal of
         # acknowledgements before removing consumed files: a killed carry can
         # leave a consumed file, but can never manufacture an orphan .done.
-        directories = tuple(dict.fromkeys(slot.consumed.parent for slot in slots))
         for slot in slots:
             for acknowledgement in slot.acknowledgements:
                 acknowledgement.unlink()
@@ -113,5 +119,5 @@ class SelectedToolSlots(Carry):
         for directory in directories:
             directory.rmdir()
             Platform.current().sync_directory(directory.parent)
-        return Carried(len(files), detail,
+        return Carried(changed, detail,
                        (path.relative_to(self.root), *(file.relative_to(self.root) for file in files)))
