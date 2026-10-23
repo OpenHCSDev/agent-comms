@@ -348,6 +348,9 @@ class RehearsedUpgrade(Upgrade):
 
     finished: ClassVar[str] = "Install rehearsed"
 
+    def live_lines(self) -> tuple[str, ...]:
+        return ()
+
     def lines(self) -> tuple[str, ...]:
         slowest = sorted(self.commands, key=lambda timed: timed.seconds, reverse=True)[:5]
         return (*super().lines(),
@@ -368,8 +371,11 @@ class InstalledUpgrade(RehearsedUpgrade, Extendable):
     finished: ClassVar[str] = "Install finished"
     """The headline of the post that reports this upgrade."""
 
+    def live_lines(self) -> tuple[str, ...]:
+        return self.live.lines()
+
     def lines(self) -> tuple[str, ...]:
-        return (*super().lines(), *self.live.lines(), *self.processes.lines(),
+        return (*super().lines(), *self.live_lines(), *self.processes.lines(),
                 *(line for outcome in self.bridge_resumes for line in outcome.lines()))
 
 
@@ -819,7 +825,7 @@ class Install[Rehearsed: Rehearsal](ABC):
             try:
                 for bridge in Serve.running(self.installed.home):
                     bridges.pause(bridge, resources)
-                return self.live(rehearsal, report)
+                return report.record_live(self.live(rehearsal, report))
             finally:
                 # A later pause may fail; resume captured peers before closing their sockets.
                 bridges.resume()
