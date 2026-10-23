@@ -75,6 +75,7 @@ from agent_comms.head_review import AcceptedHeadReview
 from agent_comms.lifecycle_capability import LifecycleCapability, Pending
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message
+from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.order_runs import OrderRun
 from agent_comms.order_story import FleetEvent, ProblemStory, StoryEvent, StoryLine, StorySource
 from agent_comms.owner_requests import (
@@ -83,6 +84,7 @@ from agent_comms.owner_requests import (
     RequestAtRevision,
     RequestDirective,
     RequestLink,
+    RequestSelection,
     RequestState,
 )
 from agent_comms.plan_phases import OrderPhase, UnplannedPhase
@@ -116,6 +118,9 @@ from agent_comms.typed_table import (
 from agent_comms.work_branches import WorkBranchError, WorkBranches
 
 if TYPE_CHECKING:
+    from agent_comms.commander.order import (
+        Commander, CommanderContext, OrderedProblems, OrderFile, Reassignment,
+    )
     from agent_comms.bus import BusReader
     from agent_comms.comms import Comms
     from agent_comms.goal_management import Goals
@@ -1812,6 +1817,57 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         self.finding.require_references(root, revision)
         self.scope.require_references(root, revision)
 
+    def check_refusals(self, worktrees: Path) -> tuple[str, ...]:
+        """Send and correction use the check owner's clean-main acceptance rule."""
+        try:
+            with MalformedRecord.refusing('order.check'):
+                self.require_writable()
+                if Path(self.check.directory).is_dir():
+                    self.require_check_acceptance(self.check, worktrees)
+        except MalformedRecord as error:
+            return (f'order.check: {error}; fix: supply a focused measurable command',)
+        return ()
+
+    def require_check_acceptance(self, check: OrderCheck, worktrees: Path) -> None:
+        repo = Path(check.directory)
+        Repo.git(repo, 'fetch', '-q', 'origin', 'main')
+        check.require_acceptance(self.check_base(repo), worktrees)
+
+    def source_refusals(self, context: CommanderContext, document: OrderFile,
+                        traced: FileLine | NoSourceReference) -> list[str]:
+        """Scope, prose and pattern citations share the order's source revision."""
+        check = self.check
+        problems = []
+        for label, validate in (('order.source', self.require_references),
+                                ('order.check.directory', check.require_directory)):
+            try:
+                with MalformedRecord.refusing(label):
+                    validate()
+            except MalformedRecord as error:
+                problems.append(f'{label}: {error}; fix: name an existing source location or directory')
+        references = tuple(dict.fromkeys((
+            *FileLine.scan('\n'.join((document.prose, *self.edits))),
+            *(reference for slop in document.slop for reference in (slop.at, slop.by)),
+            *traced.located(),
+        )))
+        deleted = {Path(module).stem for module in self.deletes.modules}
+        if deleted and (unread := context.importers(deleted, check)):
+            problems.append(f'the order deletes {sorted(deleted)}, which {unread} import; '
+                            'the check must also count their `from agent_comms` imports')
+        for reference in references:
+            try:
+                with MalformedRecord.refusing(reference.to_wire()):
+                    reference.require_exists(Path(check.directory), self.cited_revision)
+            except MalformedRecord as error:
+                problems.append(f'{error}; fix: cite an existing source line')
+        body = '\n'.join((document.prose, *self.edits, self.report))
+        if any((Path(check.directory) / reference.file).resolve().is_relative_to(
+                   Path(check.directory) / 'tools/') for reference in references) and not all(
+                said in body for said in ('--root tools', '--root src')):
+            problems.append('the order changes tools/: say "ratchet with --root tools and with '
+                            '--root src, each as its own command"')
+        return problems
+
     def require_wording(self) -> None:
         """Check fresh order prose, never reinterpret stored history or shell commands."""
         for text in (*self.edits, *self.banned, self.report, *self.run.instructions()):
@@ -2044,6 +2100,123 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
     at: EventTime = field(default_factory=lambda: RecordedEventTime(time.time()))
     first_call_deadline: EventTime = field(
         default_factory=lambda: RecordedEventTime(time.time() + 120))
+
+    def assignment_refusals(self, context: CommanderContext, document: OrderFile, unit: str,
+                            group: Sequence[str], listed: Mapping[str, Todo],
+                            target: OrderedProblems,
+                            traced: FileLine | NoSourceReference) -> list[str]:
+        """The document's selected problems, phase and existing owners must agree."""
+        reading = context.plan_reading(
+            context.comms.goals.todos.history_for_commander(context.incarnation))
+        problems = list(self.phase.order_refusals(reading, document.unplanned_reason))
+        held = tuple(todo for todo in listed.values() if todo.holder_state.current_assignments())
+        busy = tuple(todo for todo in held if todo.held().owner == unit and todo.id not in group)
+        if busy:
+            snapshot = context.comms.registry.snapshot()
+            occupied = {todo.held().owner for todo in held} | {context.commander} | context.parked
+            idle = sorted(thread.name for thread in snapshot.active_threads(snapshot.threads.values())
+                          if thread.name not in occupied and thread.role.executor(thread))
+            problems.append(f'{unit} already holds orders '
+                            f'{", ".join(todo.id for todo in busy)}; '
+                            f'running units holding no order: {", ".join(idle) or "none"}')
+        if not group or any(not ProblemNumber.accepts(pid) for pid in group):
+            problems.append('problems: fix: supply an array of P<n> IDs, or use order problem')
+        problems.extend(target.refusals(document, group, listed))
+        for pid in group:
+            try:
+                with MalformedRecord.refusing(pid):
+                    if pid in listed:
+                        listed[pid].holder_state.require_trace(unit, traced)
+            except MalformedRecord as error:
+                problems.append(str(error))
+        return problems
+
+    def require_send(self, context: CommanderContext, document: OrderFile, unit: str,
+                     group: Sequence[str], listed: Mapping[str, Todo], target: OrderedProblems,
+                     reassign: Reassignment, holders: Sequence[str], clean: bool,
+                     traced: FileLine | NoSourceReference) -> None:
+        """Collect field refusals before recording any part of this document."""
+        problems = document.problems_found(clean)
+        try:
+            context.comms.registry.storage_rule.require_quota(context.comms.registry.require(unit))
+        except SelectedToolDenied as quota:
+            problems.append(f'{unit}: {quota}: it cleans up its own checkouts and scratch '
+                            'before it gets new work')
+        problems.extend(self.assignment_refusals(
+            context, document, unit, group, listed, target, traced))
+        problems.extend(self.source_refusals(context, document, traced))
+        problems.extend(self.check_refusals(context.worktrees))
+        problems.extend(reassign.refusals(holders))
+        if problems:
+            sys.exit('Refused order:\n  ' + '\n  '.join(problems))
+        fired = tuple(listed[pid] for pid in group if pid in listed and listed[pid].struck_out(unit))
+        self.run.require_assignment(context.comms.registry.require(unit).incarnation,
+                                    fired, ProblemGoalOrder.StrikeLimit)
+
+    def message(self, context: CommanderContext, document: OrderFile, unit: str, group: Sequence[str],
+                replacing: bool, reassign: Reassignment) -> str:
+        """Render owned fields; never parse this message back into an order."""
+        instructions = '\n'.join((document.prose, *(slop.render() for slop in document.slop),
+            f'Problems: {", ".join(group)}', *self.work_instructions()))
+        replacement = '\nThis replaces my earlier order on it; drop that one.' if replacing else ''
+        storage = context.comms.registry.storage_rule.order_text(
+            context.comms.registry.require(unit),
+            [f'{repo.checkout}/.venv/bin/python' for repo in context.repos])
+        return (instructions + replacement + reassign.note() + '\n' + storage
+                + '\nIf two lines of this order conflict, take the narrower reading, '
+                'say which one you took, and proceed; do not stop to ask.'
+                + '\nStart now and push as you go.\n'
+                + '\n'.join(line for pid in group for line in self.scope.instructions(pid)))
+
+    def send(
+        self, context: Commander, document: OrderFile, unit: str, clean: bool,
+        reassign: Reassignment, target: OrderedProblems,
+        traced: FileLine | NoSourceReference, answers: tuple[MessageReference, ...],
+        request: RequestSelection,
+    ) -> None:
+        """Validate the complete issuance before recording, then publish its owned effects."""
+        group = target.group(document)
+        listed = {todo.id: todo for todo in context.todos()}
+        holders = sorted({assignment.owner for pid in group if pid in listed
+                          for assignment in listed[pid].holder_state.current_assignments()
+                          if assignment.owner != unit})
+        replacing = target.replacing(unit, group, listed)
+        self.require_send(context, document, unit, group, listed, target,
+                          reassign, holders, clean, traced)
+        struck_already = replacing and listed[group[0]].struck_on_order(unit)
+        measured = MeasuredReview.read(context.comms.goals.todos)
+        review_at = measured.review_at(self)
+        message = self.message(context, document, unit, group, replacing, reassign)
+        request_id = request.for_order(context.comms.goals.todos, context.incarnation)
+        target.record(context, self, unit, group, traced, request_id, review_at)
+        self.publish(context, unit, group, message, answers)
+        self.notify_replaced(context, unit, group, holders, listed, reassign)
+        print(f'{measured.summary}; review timer {review_at.clock()}')
+        print(self.id)
+        if replacing and not clean:
+            reassign.send_back(context, document, unit, group[0], struck_already)
+
+    def publish(
+        self, context: Commander, unit: str, group: Sequence[str], message: str,
+        answers: tuple[MessageReference, ...],
+    ) -> None:
+        """Bind the one published message to every problem through its native command."""
+        sent = context.post(VerdictAudience((unit,)), message, answers)
+        for pid in group:
+            context.comms.goals.change_problem(pid, OrderMessage(
+                context.comms.goals.todos.get(pid).revision, context.actor_identity, sent,
+            ), context.commander)
+
+    def notify_replaced(
+        self, context: Commander, unit: str, group: Sequence[str], holders: Sequence[str],
+        listed: Mapping[str, Todo], reassign: Reassignment,
+    ) -> None:
+        """The order that takes over the work tells each former holder why."""
+        for previous in holders:
+            context.post(VerdictAudience((previous,)),
+                         f'Taken off you: {", ".join(group)} ("{listed[group[0]].text[:120]}") '
+                         f'now belongs to {unit} because: {reassign.because()}. '
+                         'Stop that work; do not touch its files.')
 
     def reissued(self, at: float) -> PendingProblemOrder:
         return self.fresh_order(at, self.edits)
