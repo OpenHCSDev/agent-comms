@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Annotated, ClassVar
 
@@ -48,12 +49,17 @@ class ForkSessionHelper(PiHelper):
         return PiHelperFailed(
             cls.declared_name,
             result,
-            result.outcome.fork_failure(
+            result.outcome.fork_failure(partial(cls.interrupted_consequence, request)),
+        )
+
+    @classmethod
+    def interrupted_consequence(cls, request: ForkSessionRequest) -> str:
+        return (
             f"killed (bound {cls.timeout_for(request):.0f}s) while it may hold the native "
             f"writer locks of {request.file}; that lock and any partial fork in "
             f"{request.directory or 'the default session directory for ' + request.cwd} "
             "remain and block later forks of this parent until reviewed (locks are never "
-            "stolen automatically)"),
+            "stolen automatically)"
         )
 
 

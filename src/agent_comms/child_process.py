@@ -1208,7 +1208,7 @@ class ChildOutcome(DeclaredFamily, affix="Outcome"):
     def report_shutdown(self, report_timeout: Callable[[], None]) -> None:
         pass
 
-    def fork_failure(self, interrupted_consequence: str) -> str:
+    def fork_failure(self, interrupted_consequence: Callable[[], str]) -> str:
         return ""
 
     def printed_count(self, stdout: bytes) -> CheckPrinted:
@@ -1246,8 +1246,8 @@ class ExitedOutcome(ChildOutcome):
 class InterruptedForkOutcome(ChildOutcome):
     """A killed helper may leave its native writer locks behind."""
 
-    def fork_failure(self, interrupted_consequence: str) -> str:
-        return interrupted_consequence
+    def fork_failure(self, interrupted_consequence: Callable[[], str]) -> str:
+        return interrupted_consequence()
 
 
 @dataclass(frozen=True)
