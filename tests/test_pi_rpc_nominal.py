@@ -157,8 +157,8 @@ async def test_correlation_handles_out_of_order_ids_and_anonymous_commands():
     channel = PiRpcChannel(asyncio.StreamReader())
     first = commands.SetModel(id=RequestId("a"), provider="p", model_id="one")
     second = commands.SetModel(id=RequestId("b"), provider="p", model_id="two")
-    channel.encode(first)
-    channel.encode(second)
+    channel.track(first)
+    channel.track(second)
 
     def response(identity):
         return PiRpcChannel.decode_record(
@@ -173,12 +173,37 @@ async def test_correlation_handles_out_of_order_ids_and_anonymous_commands():
         commands.InterruptSteering(id=AnonymousRequest()),
         commands.InterruptSteering(id=AnonymousRequest()),
     )
-    channel.encode(one)
-    channel.encode(two)
+    channel.track(one)
+    channel.track(two)
     reply = PiRpcChannel.decode_record(b'{"type":"response","command":"interrupt_steering"}')
     assert channel.correlate(reply) is one
     assert channel.correlate(reply) is two
     channel.pending.cancel_all()
+
+
+@pytest.mark.parametrize("anonymous", (False, True))
+async def test_pending_response_registers_each_child_exchange_once(tmp_path, anonymous):
+    import sys
+
+    from agent_comms.child_process import BoundedRun
+    from agent_comms.native_child import PiChild
+
+    responder = """import json, sys
+for line in sys.stdin:
+    request = json.loads(line)
+    response = {"type": "response", "command": request["type"], "success": True}
+    if "id" in request:
+        response["id"] = request["id"]
+    print(json.dumps(response), flush=True)
+"""
+    async with BoundedRun.session((sys.executable, "-u", "-c", responder), cwd=tmp_path, timeout=2) as proc:
+        child = PiChild(proc, PiRpcChannel(proc.stdout))
+        for index in range(2):
+            request = commands.SetSteeringMode(
+                id=AnonymousRequest() if anonymous else RequestId(f"exchange-{index}"),
+                mode="all",
+            )
+            assert (await request.exchange(child, strict=True)).succeeded
 
 
 async def test_fragmented_cancelled_line_remains_intact_in_the_only_reader():

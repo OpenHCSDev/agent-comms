@@ -91,14 +91,17 @@ class PiChild:
     forwarding: InputForwarder = field(default_factory=NoInputForwarder, init=False, repr=False)
     _close_job: asyncio.Task[ChildOutcome | BaseException] | None = field(default=None, init=False, repr=False)
 
-    def send(self, command) -> None:
-        self.proc.send(self.reader.encode(command))
+    def send(self, command) -> asyncio.Future:
+        future = self.reader.track(command)
+        self.proc.send(self.reader.command_bytes(command))
+        return future
 
     async def drain(self) -> None:
         await self.proc.drain()
 
     async def send_fenced(self, command, boundary, *, measurements) -> None:
-        await self.proc.send_fenced(self.reader.encode(command), boundary, measurements=measurements)
+        self.reader.track(command)
+        await self.proc.send_fenced(self.reader.command_bytes(command), boundary, measurements=measurements)
 
     async def reply_ui(self, response) -> None:
         self.send(response)

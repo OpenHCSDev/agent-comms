@@ -88,9 +88,8 @@ class PiCommand(DeclaredFamily):
     @asynccontextmanager
     async def pending_response(self, child):
         channel = child.reader
-        future = channel.track(self)
+        future = child.send(self)
         try:
-            child.send(self)
             await child.drain()
             yield future
         finally:

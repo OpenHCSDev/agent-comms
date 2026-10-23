@@ -106,11 +106,6 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
             return None
         return self.decode_record(raw, strict=strict, max_bytes=max_bytes, event_type=self.event_type)
 
-    def encode(self, command: PiCommand) -> bytes:
-        """Register before writing; correlated proof still requires its native input ID."""
-        self.track(command)
-        return self.command_bytes(command)
-
     def track(self, command: PiCommand) -> asyncio.Future[Response]:
         """Expose the same pending response to the request's lifecycle owner."""
         return command.id.track_in(self.pending, type(command), command)
