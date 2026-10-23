@@ -2180,6 +2180,7 @@ class _RepresentedDecoder(ValueDecoder[Any]):
     def wire_children(self) -> tuple[ValueDecoder[object], ...]:
         return (self.wire_structure,)
 
+    @boundary_decoder
     def fits_wire(self, data: object) -> bool:
         # Null handlers can change the structural null contract; leave that decision to decode.
         return data is None or self.wire_structure.fits_wire(data)
