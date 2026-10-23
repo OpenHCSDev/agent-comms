@@ -11,7 +11,6 @@ import re
 import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping
-from contextlib import contextmanager
 from dataclasses import MISSING, Field, dataclass, field, fields, is_dataclass
 from datetime import datetime
 from enum import Enum
@@ -63,19 +62,35 @@ class MalformedRecord(ValueError):  # noqa: N818 - names the refused data
     def located(self, name: str, fix: str) -> dict[str, str]:
         return {name: f"{self}; fix: {fix}"}
 
+    class _Refusal:
+        """Convert refused values using the error class and its boundary subject."""
+
+        __slots__ = ("error_cls", "subject")
+
+        def __init__(self, error_cls: type[MalformedRecord], subject: str) -> None:
+            self.error_cls = error_cls
+            self.subject = subject
+
+        def __enter__(self) -> None:
+            return None
+
+        def __exit__(
+            self, _exc_type: type[BaseException] | None, exc: BaseException | None,
+            _traceback: types.TracebackType | None,
+        ) -> Literal[False]:
+            if exc is None or isinstance(exc, self.error_cls):
+                return False
+            if isinstance(exc, ValueError):
+                raise self.error_cls(f"{self.subject}: {exc}") from exc
+            return False
+
     @classmethod
-    @contextmanager
-    def refusing(cls, subject: str) -> Iterator[None]:
+    def refusing(cls, subject: str) -> MalformedRecord._Refusal:
         """Any check that refuses decoded data with ValueError refuses a malformed record.
 
         A domain error raised by the record's own checks stays the cause.
         """
-        try:
-            yield
-        except cls:
-            raise
-        except ValueError as error:
-            raise cls(f"{subject}: {error}") from error
+        return cls._Refusal(cls, subject)
 
 
 class RecordProblems(MalformedRecord):
@@ -855,12 +870,8 @@ class FieldRepresentation(MroDispatch, ABC):
     @classmethod
     def decode_field(cls, data: object, structural: ValueDecoder[object]) -> object:
         handler = cls.handler_for(type(data))
-        try:
+        with MalformedRecord.refusing(f"Invalid {cls.__name__}"):
             return cast(object, handler(data, structural))
-        except MalformedRecord:
-            raise
-        except ValueError as error:
-            raise MalformedRecord(f"Invalid {cls.__name__}: {error}") from error
 
     @handles(type(None))
     @classmethod
@@ -1161,12 +1172,8 @@ class TextRepresentation[V](FieldRepresentation):
 
     @classmethod
     def decode(cls, value: object) -> V:
-        try:
+        with MalformedRecord.refusing(f"Invalid {cls.__name__}"):
             return cls.from_text(FieldCodec.decode(str, value))
-        except MalformedRecord:
-            raise
-        except ValueError as error:
-            raise MalformedRecord(f"Invalid {cls.__name__}: {error}") from error
 
     @classmethod
     @abstractmethod
@@ -1568,15 +1575,11 @@ class FieldCodec(MroDispatch, Sealed):
     @staticmethod
     def parse(text: str | bytes) -> object:
         """External JSON text is data: strict UTF-8, syntax and duplicate keys refuse it."""
-        try:
+        with MalformedRecord.refusing("Invalid JSON"):
             return json.loads(
                 text.decode("utf-8") if isinstance(text, bytes) else text,
                 object_pairs_hook=_unique_object,
             )
-        except MalformedRecord:
-            raise
-        except ValueError as error:
-            raise MalformedRecord(f"Invalid JSON: {error}") from error
 
     @classmethod
     def require_fields(cls, record: DataclassInstance, *names: str) -> None:
@@ -1598,12 +1601,8 @@ class FieldCodec(MroDispatch, Sealed):
     @staticmethod
     def construct(target: Callable[..., T], values: dict[str, object]) -> T:
         """A record built from decoded data refuses its values as a malformed record."""
-        try:
+        with MalformedRecord.refusing(f"Invalid {target.__name__}"):
             return target(**values)
-        except MalformedRecord:
-            raise
-        except ValueError as error:
-            raise MalformedRecord(f"Invalid {target.__name__}: {error}") from error
 
     @staticmethod
     def alternatives_schema(
@@ -2149,14 +2148,8 @@ class _JsonValueRepresentation(FieldRepresentation):
 
     @classmethod
     def decode(cls, data):
-        try:
+        with MalformedRecord.refusing("Expected a JSON value with string keys and finite numbers"):
             return cls.validator().validate_python(data, strict=True)
-        except MalformedRecord:
-            raise
-        except ValueError as error:
-            raise MalformedRecord(
-                f"Expected a JSON value with string keys and finite numbers: {error}"
-            ) from error
 
     @classmethod
     def encode(cls, value):
@@ -2460,12 +2453,8 @@ class _FixedTupleDecoder(_TupleDecoder):
         return super().admits_wire(data) and len(cast(list[object], data)) == len(self.items)
 
     def plan_items(self, data: list[object]) -> Iterable[tuple[ValueDecoder[object], object]]:
-        try:
+        with MalformedRecord.refusing("Tuple length does not match declaration"):
             return tuple(zip(self.items, data, strict=True))
-        except MalformedRecord:
-            raise
-        except ValueError as error:
-            raise MalformedRecord(f"Tuple length does not match declaration: {error}") from error
 
     def encode_items(self, items: Iterable[object]) -> list[object]:
         return [plan.encode(item) for plan, item in zip(self.items, items, strict=True)]
@@ -2776,12 +2765,8 @@ class _EnumDecoder(_ChoiceDecoder[Any]):
         return tuple((str(member.value), member.value) for member in self.target)
 
     def decode(self, data):
-        try:
+        with MalformedRecord.refusing(f"Invalid {self.target.__name__}"):
             return self.target(data)
-        except MalformedRecord:
-            raise
-        except ValueError as error:
-            raise MalformedRecord(f"Invalid {self.target.__name__}: {error}") from error
 
 
 @overload
