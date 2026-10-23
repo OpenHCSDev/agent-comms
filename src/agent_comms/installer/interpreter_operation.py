@@ -19,8 +19,9 @@ from pydantic import BaseModel, RootModel
 from pydantic.json_schema import DEFAULT_REF_TEMPLATE
 from typing_extensions import TypeForm
 
+from agent_comms.active_route import ActiveRoute, RouteFile, read_active_route
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec, PathText, WireValue
+from agent_comms.field_codec import FieldCodec, PathText, WireValue, boundary_decoder
 from agent_comms.service_sender import ServiceSender
 
 
@@ -113,14 +114,35 @@ class PackageRootProbe(RuntimeProbe[Path]):
         return Path(agent_comms.__file__).parent
 
 
-class SelectedRouteProbe(RuntimeProbe[Path | None]):
+class RouteSelection(DeclaredFamily, affix="Selection", declared_name=None):
+    """The outgoing reader's validated choice owns whether this bus may be published."""
+
+    def publish(self, route: ActiveRoute, path: Path, directory: int) -> str:
+        return RouteFile.read(path).route_new_bus(route, path, directory)
+
+
+@dataclass(frozen=True)
+class NoRouteSelection(RouteSelection):
+    """No route was published; the installer may publish its bus first."""
+
+
+@dataclass(frozen=True)
+class PublishedRouteSelection(RouteSelection):
+    root: Annotated[Path, PathText]
+
+    def publish(self, route: ActiveRoute, path: Path, directory: int) -> str:
+        if self.root.resolve() != route.root.resolve():
+            return f'kept {path}: it selects {self.root}'
+        return super().publish(route, path, directory)
+
+
+class SelectedRouteProbe(RuntimeProbe[RouteSelection]):
     """The outgoing reader validates its own published route before source changes."""
 
-    def run(self) -> Annotated[Path, PathText] | None:
-        from agent_comms.active_route import read_active_route
-
+    @boundary_decoder
+    def run(self) -> RouteSelection:
         route = read_active_route()
-        return None if route is None else route.observe_root()
+        return NoRouteSelection() if route is None else PublishedRouteSelection(route.observe_root())
 
 
 class PrepareNativeProbe(RuntimeProbe[None]):

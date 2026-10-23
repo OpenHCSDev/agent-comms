@@ -4,6 +4,17 @@ Decision (Tristan, 2026-10-20): the bus stops being a physical file. It keeps ev
 
 ## Why
 
+## Current checkpoint — 2026-10-23
+
+Core `69c5b0e4e` and paired Toad `dab0047a4` are merged. The live install failed
+because it left the version-2 active route behind for the version-3 runtime;
+rollback selected Core `d9ce9cd` and Toad `a5c`. Paired installed qualification
+remains open. Route migration and rollback are owned in PR #2633, including route
+absence, concurrent publishers and publication whose durability result is unknown.
+That PR stays open through the actual install and a fresh message/reply.
+
+## Why
+
 The bus started on September 19 as an append-only JSONL file. Everything since has been the cost of the file being physical:
 
 - **A proof layer for a second store.** The SQLite indexes over the file are a second store, so a layer proves after every crash or copy that the two still agree: prefix witnesses, seals keyed by inode, size and mtime, checked reads, tail replay. `private_bus_checkpoint.py` (1,316 lines), `checkpoint_seals.py` (218), `bus_page_index.py` (345), most of `wire_log.py` (1,009) and `wire_record.py`'s row reader. That layer froze the desktop for half an hour, and stranded the laptop's history on 2026-10-20 (#2333 is what fixed that restore).

@@ -17,7 +17,11 @@ from agent_comms.bus import Bus
 from agent_comms.comms import Comms
 from agent_comms.installer.backup import StoreBackup, UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.interpreter_operation import SelectedRouteProbe
+from agent_comms.installer.interpreter_operation import (
+    NoRouteSelection,
+    PublishedRouteSelection,
+    SelectedRouteProbe,
+)
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.recorded_bus import RecordedBusIdentity
 from bus_record_fixture import prepare_native_comms
@@ -48,7 +52,8 @@ def test_route_publication_and_rollback_with_no_sql_changes(tmp_path, route_bus,
     original = old_route(path, route_bus) if had_route else None
     backup = StoreBackup.take(route_bus.root, path, (), tmp_path / "spill")
 
-    backup.rebind_route(route_bus.root if had_route else None)
+    selected = PublishedRouteSelection(route_bus.root) if had_route else NoRouteSelection()
+    backup.rebind_route(route_bus, selected)
     assert read_active_route(path) == route_bus
     assert not backup.original()
     backup.restore()
@@ -67,7 +72,7 @@ def test_install_of_another_bus_keeps_the_published_selection(tmp_path, route_bu
     route_new_bus(other, path)
     original = path.read_bytes()
     backup = StoreBackup.take(route_bus.root, path, (), tmp_path / "spill")
-    backup.rebind_route(other_root)
+    backup.rebind_route(route_bus, PublishedRouteSelection(other_root))
     assert read_active_route(path) == other
     assert path.read_bytes() == original
     assert backup.original()
@@ -80,7 +85,7 @@ def test_concurrent_publication_before_rebind_is_preserved_on_rollback(tmp_path,
     route_new_bus(route_bus, path)
     concurrent = path.read_bytes()
     with pytest.raises(UpgradeRefused, match="route changed"):
-        backup.rebind_route(route_bus.root)
+        backup.rebind_route(route_bus, PublishedRouteSelection(route_bus.root))
     backup.restore()
     assert path.read_bytes() == concurrent
     assert read_active_route(path) == route_bus
@@ -90,7 +95,7 @@ def test_concurrent_publication_after_rebind_is_preserved_on_rollback(tmp_path, 
     path = tmp_path / "state" / "active-route.json"
     old_route(path, route_bus)
     backup = StoreBackup.take(route_bus.root, path, (), tmp_path / "spill")
-    backup.rebind_route(route_bus.root)
+    backup.rebind_route(route_bus, PublishedRouteSelection(route_bus.root))
 
     # A replaced bus permits the existing route owner to publish another selection.
     database = Bus.path_in(route_bus.root)
@@ -126,7 +131,8 @@ def test_unknown_publication_is_still_owned_by_rollback(tmp_path, route_bus, had
 
     monkeypatch.setattr(os, "fsync", fail_directory_once)
     with pytest.raises(RoutePublicationUnknownError):
-        backup.rebind_route(route_bus.root if had_route else None)
+        selected = PublishedRouteSelection(route_bus.root) if had_route else NoRouteSelection()
+        backup.rebind_route(route_bus, selected)
     assert failed
     assert read_active_route(path) == route_bus
     backup.restore()
@@ -138,11 +144,14 @@ def test_unknown_publication_is_still_owned_by_rollback(tmp_path, route_bus, had
 
 
 def test_selected_route_probe_uses_the_actual_outgoing_v2_reader(tmp_path):
-    runtime = LaunchRuntime.installed()
+    runtime = LaunchRuntime.running()
     home = tmp_path / "outgoing-home"
     generated = predecessor_history(tmp_path)
     root = generated / "destination"
-    environment = {**runtime.environment(os.environ), "HOME": str(home)}
+    environment = {
+        **runtime.environment(os.environ), "HOME": str(home),
+        "PYTHONPATH": str(tmp_path / "publisher" / "src"),
+    }
     # The outgoing declaration writes its own record; the incoming probe never
     # imports or implements the retired route schema.
     writer = """from pathlib import Path
@@ -166,8 +175,8 @@ path.chmod(0o600)
     selected = InstallCommands().probe(
         SelectedRouteProbe(), runtime.interpreter, env=environment, cwd=tmp_path,
     )
-    assert selected == root
+    assert selected == PublishedRouteSelection(root)
     path.unlink()
     assert InstallCommands().probe(
         SelectedRouteProbe(), runtime.interpreter, env=environment, cwd=tmp_path,
-    ) is None
+    ) == NoRouteSelection()

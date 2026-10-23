@@ -20,14 +20,13 @@ from pathlib import Path
 from string import Formatter
 from typing import ClassVar, Iterator, Self
 
-from agent_comms.active_route import ActiveRoute, RouteFile, _route_directory, route_directory
+from agent_comms.active_route import ActiveRoute, _route_directory, route_directory
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
-from agent_comms.installer.interpreter_operation import HoldTranscriptsProbe
+from agent_comms.installer.interpreter_operation import HoldTranscriptsProbe, RouteSelection
 from agent_comms.locked_store import LockedStore, RootFile, RuntimeFile, SQLiteFile
 from agent_comms.private_path import FileObservation, FileRevision, MissingFile
-from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.store_files import _atomic_write_text
 
 
@@ -235,16 +234,11 @@ class StoreBackup(ResourceBackup):
         if FileRevision.capture(self.route) != self.route_revision:
             raise UpgradeRefused('Active route changed after its backup')
 
-    def rebind_route(self, selected: Path | None) -> str:
-        from agent_comms.bus import Bus
-
-        route = ActiveRoute(self.root.absolute(), RecordedBusIdentity.capture(Bus.path_in(self.root)))
+    def rebind_route(self, route: ActiveRoute, selected: RouteSelection) -> str:
         with _route_directory(route, self.route) as (path, directory):
             self.require_route_revision()
-            if selected is not None and selected.resolve() != self.root.resolve():
-                return f'kept {self.route}: it selects {selected}'
             try:
-                return RouteFile.read(path).route_new_bus(route, path, directory)
+                return selected.publish(route, path, directory)
             finally:
                 # Observe our mutation while EX still excludes another publisher,
                 # including a replacement whose durability acknowledgement failed.

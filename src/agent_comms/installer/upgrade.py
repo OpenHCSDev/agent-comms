@@ -39,7 +39,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 from pydantic import TypeAdapter
 
 from agent_comms import cli
-from agent_comms.active_route import active_route_path, route_directory
+from agent_comms.active_route import ActiveRoute, active_route_path, route_directory
 from agent_comms.bus import Bus
 from agent_comms.cli_bridges.shared import Serve, SessionBridgeResumes
 from agent_comms.cli_commands import (
@@ -90,6 +90,7 @@ from agent_comms.installer.interpreter_operation import (
     PrepareNativeProbe,
     ProbeProgram,
     RetainedProgram,
+    RouteSelection,
     RunningOwnersProbe,
     RuntimeProbe,
     SelectedRouteProbe,
@@ -110,6 +111,7 @@ from agent_comms.maintenance_barrier import (
     MaintenanceOperator,
     MaintenanceState,
 )
+from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout, ScratchCheckout
 from agent_comms.storage_rules import StorageRule
@@ -722,16 +724,17 @@ class Install[Rehearsed: Rehearsal](ABC):
     def initial_writer(root: Path, installed: Stack) -> RootWriter:
         return RuntimeWriter(root, installed, RetainedProgram.of(InstallReportProbe))
 
-    def backed_up(self, files: tuple[Path, ...]) -> tuple[StoreBackup, Path | None]:
+    def backed_up(self, files: tuple[Path, ...]) -> tuple[StoreBackup, RouteSelection]:
         backup = StoreBackup.take(self.root, active_route_path(), files, self.spill_dir)
         with route_directory(backup.route):
             backup.require_route_revision()
             selected = self.installed.probe(SelectedRouteProbe())
         return backup, selected
 
-    def publish(self, backup: StoreBackup, selected: Path | None) -> str:
+    def publish(self, backup: StoreBackup, selected: RouteSelection) -> str:
         """The converted bus's route is ready before new runtime entrypoints open it."""
-        route = backup.rebind_route(selected)
+        incoming = ActiveRoute(self.root.absolute(), RecordedBusIdentity.capture(Bus.path_in(self.root)))
+        route = backup.rebind_route(incoming, selected)
         self.staged.publish()
         return route
 
