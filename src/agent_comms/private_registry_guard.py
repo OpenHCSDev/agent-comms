@@ -38,6 +38,7 @@ from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from .private_path import fsync_directory
 
 if TYPE_CHECKING:
+    from .typed_table import TableSchema
     from .bus_publication import Delivered
     from .notification_assignment import NotificationAssignmentRead
     from .acp_extension import CursorAdvancedUpdate, CursorScope
@@ -168,8 +169,19 @@ class RegistryPrivacy(ABC):
         self, sources: Sequence[Delivered],
     ) -> NotificationAssignmentRead: ...
 
+    @abstractmethod
+    def coordinator_schema(self) -> type[TableSchema]:
+        """The complete schema this root's authority requires during reconciliation."""
+
+
 
 class PublicRegistry(RegistryPrivacy):
+    def coordinator_schema(self) -> type[TableSchema]:
+        from .coordination_schema import CoordinatorTable
+
+        CoordinatorTable.declarations()
+        return CoordinatorTable
+
     def notification_context_sql(self, connection: sqlite3.Connection) -> str:
         return (
             "SELECT assignment_id,0 AS triage_inflight,"
@@ -222,6 +234,19 @@ class PublicRegistry(RegistryPrivacy):
 
 class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
     filename = ".registry-owner-guard"
+
+    def coordinator_schema(self) -> type[TableSchema]:
+        from .private_runtime_schema import PrivateCoordinatorSchema, PrivateCoordinatorTable
+
+        PrivateCoordinatorTable.declarations()
+        return PrivateCoordinatorSchema
+
+    def prepare_runtime(self) -> None:
+        from .private_runtime_schema import PrivateCoordinatorTable
+
+        PrivateCoordinatorTable.declarations()
+        with Coordination(CoordinationStore.path_in(self.registry_path.parent)) as store:
+            PrivateCoordinatorTable.install(store)
 
     def notification_context_sql(self, connection: sqlite3.Connection) -> str:
         NativeRuntimeTable.require_installed(connection)

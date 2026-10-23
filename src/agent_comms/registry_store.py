@@ -233,6 +233,10 @@ class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument]):
     cache: RegistryCache = field(init=False, compare=False, repr=False)
 
     def __post_init__(self) -> None:
+        from .private_runtime_schema import PrivateCoordinatorTable
+
+        # Guard-loss checks must know every private declaration before taking this store's lock.
+        PrivateCoordinatorTable.declarations()
         object.__setattr__(self, "cache", RegistryCache.for_path(self.path))
 
     record_type = RegistryDocument
@@ -403,10 +407,10 @@ class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument]):
             return PrivateRegistryGuard.load(self.path)
         coordinator = CoordinationStore.path_in(self.path.parent)
         if coordinator.exists() or coordinator.is_symlink():
-            from .private_runtime_schema import PrivateRuntimeSchema
+            from .private_runtime_schema import PrivateCoordinatorTable
 
             with CoordinationStore.observing(coordinator) as db:
-                if PrivateRuntimeSchema.stored_schema(db):
+                if PrivateCoordinatorTable.stored_schema(db):
                     raise RelationViolationError("Native runtime has no registry authority")
         return PublicRegistry()
 

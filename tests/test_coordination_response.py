@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from bus_record_fixture import prepare_native_comms
 from agent_comms.lifecycle_capability import Active, Complete
 
@@ -16,7 +17,6 @@ from agent_comms.assignment_states import CompletedAssignment
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttempt, SettlingAttempt
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import (
@@ -24,13 +24,7 @@ from agent_comms.coordination_errors import (
     PublicationUncertain,
     StaleRevision,
 )
-from agent_comms.coordination_response import (
-    LiveResponseOwner,
-    install_private_response_schema,
-    prepare_fenced_response,
-    publish_fenced_response,
-    resolve_existing_response,
-)
+from agent_comms.coordination_response import LiveResponseOwner, prepare_fenced_response, publish_fenced_response, resolve_existing_response
 from agent_comms.coordination_results import AlreadyApplied
 from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordinator import Coordination
@@ -82,8 +76,7 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
     recipient = original_record.audience.recipients[0]
     bus = responder(comms.root, comms.registry)
     store = Coordination(str(comms.root / "coordination.sqlite3"), clock_ms=lambda: 1_000)
-    install_private_cohort_schema(store)
-    install_private_response_schema(store)
+    PrivateCoordinatorTable.install(store)
     store.participants.register(
         recipient.recipient_lookup,
         recipient.canonical_thread,

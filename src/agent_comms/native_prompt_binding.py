@@ -18,7 +18,6 @@ from typing import TYPE_CHECKING, Annotated
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordinator import Coordination
-from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 
 from .cohort_schema import CohortTable
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
@@ -34,6 +33,7 @@ from .reservation_rules import ReservationViolationError
 from .threads import Thread
 from .typed_table import (
     Column,
+    DurableTables,
     ImmutableRows,
     IntegerStorage,
     TextStorage,
@@ -52,13 +52,9 @@ def binding_store_path(store: Coordination) -> Path:
 
 @dataclass(frozen=True, slots=True)
 class PromptBinding(
-    ImmutableRows, DurableFile, SQLiteFile, NativeInputRecord, TypedTable, PrivateRuntimeSchema
+    ImmutableRows, DurableFile, SQLiteFile, NativeInputRecord, TypedTable, DurableTables
 ):
     filename = "native_prompt_bindings.sqlite3"
-
-    @classmethod
-    def install(cls, store) -> None:
-        install_prompt_binding_schema(store)
 
     input_id: Annotated[
         str,
@@ -97,11 +93,6 @@ class PromptBinding(
 @dataclass(frozen=True)
 class _BindingRoot(TypedRow):
     wire_root_id: str
-
-
-def install_prompt_binding_schema(store: Coordination) -> None:
-    """Explicit fresh-root install; ordinary callers may rely on _ensure."""
-    _ensure_binding_schema(store)
 
 
 def _ensure_binding_schema(store: Coordination) -> None:

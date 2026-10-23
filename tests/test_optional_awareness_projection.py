@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from bus_record_fixture import prepare_native_comms
 from agent_comms.lifecycle_capability import Executing
 
@@ -16,11 +17,7 @@ import pytest
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.bus_publication import Delivered
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.cohort_schema import (
-    AwarenessClaimGenerations,
-    ClaimBatchAcknowledgements,
-    install_private_cohort_schema,
-)
+from agent_comms.cohort_schema import AwarenessClaimGenerations, ClaimBatchAcknowledgements
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import IdentityConflict
@@ -56,7 +53,7 @@ def _root(
         )
     root_id = comms.registry.prepare_native_root().namespace
     store = Coordination(str(root / "coordination.sqlite3"))
-    install_private_cohort_schema(store)
+    PrivateCoordinatorTable.install(store)
     return comms, store, WakeCandidateIndex(comms.bus.bus), root_id
 
 

@@ -1812,6 +1812,10 @@ class StoreReconcileCliCommand(CliCommand[ReconciledStoresResult]):
     def apply(self, ctx: Comms) -> ReconciledStoresResult:
         return self.answer(ctx.root)
 
+    def execute(self, route: CommsRoute, output: TextIO) -> int:
+        """Reconciliation reads its declared files before opening runtime consumers."""
+        return self.written(self.answer(route.root), output)
+
 
 @dataclass(frozen=True, kw_only=True)
 class ReconcileStoresCliCommand(StoreReconcileCliCommand, declared_name="reconcile-stores"):
@@ -1830,14 +1834,9 @@ class PlannedReconcileCliCommand(StoreReconcileCliCommand, declared_name="planne
 
     @staticmethod
     def changes(owner: type[ReconciledFile], path: Path) -> bool:
+        schema = owner.schema_at(path)
         with closing(owner.read_snapshot(path)) as db:
-            return owner.table_schema().schema_differs(db)
-
-    def execute(self, route: CommsRoute, output: TextIO) -> int:
-        """Opening the bus opens stores, and opening a store reconciles its schema: before
-        the backup that write would have no copy, so only the stores themselves are read."""
-        return self.written(self.answer(route.root), output)
-
+            return schema.schema_differs(db)
 
 @dataclass(frozen=True, kw_only=True)
 class CheckpointCliCommand(NameArgument, CliCommand, declared_name="checkpoint"):

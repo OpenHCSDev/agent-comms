@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from bus_record_fixture import prepare_native_comms
 
 from conftest import publish_initial
@@ -23,7 +24,6 @@ from agent_comms.selected_claim import (
     verify_selected_wake,
     write_selected_claimed_file,
 )
-from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
 from agent_comms.coordination_errors import IdentityConflict
@@ -61,7 +61,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
         message = publish_initial(comms, "sender", "#team", "@Alice investigate")
         initial = comms.bus.bus.delivery(message.seq)
         with Coordination(str(root / "coordination.sqlite3")) as store:
-            install_private_cohort_schema(store)
+            PrivateCoordinatorTable.install(store)
             for recipient in initial.audience.recipients:
                 store.participants.register(
                     recipient.recipient_lookup,

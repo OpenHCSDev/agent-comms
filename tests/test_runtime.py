@@ -1,5 +1,6 @@
 """Single-owner attachment and idle wakeup through real processes and sockets."""
 
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 import asyncio
 import json
 import os
@@ -133,7 +134,7 @@ async def test_subscription_replay_uses_requested_alias(tmp_path, request_origin
         )))
         thread = comms.registry.require(original)
         with Coordination(str(comms.root / "coordination.sqlite3")) as store:
-            store.install_private_runtime()
+            PrivateCoordinatorTable.install(store)
             store.participants.register(thread.incarnation.lookup, original, original, committed=True)
         comms.threads.attach_session(thread, str(journal), process=thread.process_identity)
         comms.threads.rename_managed_thread(original, "renamed", owner_pid=os.getpid())

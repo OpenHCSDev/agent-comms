@@ -18,6 +18,7 @@ from agent_comms.typed_table import (
     CarriedWriter,
     ReconciledFile,
     StoreWriter,
+    TableSchema,
 )
 
 from .declared_family import DeclaredFamily
@@ -71,6 +72,12 @@ class CoordinationStore(CarriedWriter, ReconciledFile):
     @classmethod
     def table_schema(cls) -> type[CoordinatorTable]:
         return CoordinatorTable
+
+    @classmethod
+    def schema_at(cls, path: Path) -> type[TableSchema]:
+        from .private_registry_guard import RegistryPrivacy
+
+        return RegistryPrivacy.capture(path.parent).coordinator_schema()
 
     @staticmethod
     def observed(path: Path) -> StoreFile:

@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Annotated
 
 from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import Participants
-from agent_comms.private_runtime_schema import PrivateRuntimeSchema
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
 from .field_codec import FieldCodec, MalformedRecord, NativeContext, WireName
@@ -62,24 +62,11 @@ if TYPE_CHECKING:
     from .native_session_reopen import NativeSessionIdentity
 
 
-class NativeRuntimeTable(PrivateRuntimeSchema):
+class NativeRuntimeTable(PrivateCoordinatorTable):
     """Capability identifying the native-runtime schema's declared tables."""
 
     __slots__ = ()
     schema_error = PublicationActivationBlocked
-
-    @classmethod
-    def install(cls, store) -> None:
-        from .coordinated_runtime_schema import install_native_runtime_schema
-
-        install_native_runtime_schema(store)
-
-    @classmethod
-    def schema_rows(cls) -> tuple[type[TypedTable], ...]:
-        # Importing it declares the family's last table.
-        from . import triage_native_sources  # noqa: F401
-
-        return super().schema_rows()
 
 
 @dataclass(frozen=True)

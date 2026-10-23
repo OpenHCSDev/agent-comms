@@ -1,5 +1,6 @@
 """A line still being appended is not history yet, so a newer read never stalls on it."""
 
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 import json
 
 from agent_comms.thread_text import SavedSessionFile
@@ -23,7 +24,7 @@ def test_newer_read_moves_past_a_line_still_being_appended(tmp_path):
                              "timestamp": "2026-10-20T00:00:00.000Z"}) + line(answer("first", "First answer")))
     comms.registry.declare(comms.registry.new_thread("saved", frozenset(), str(tmp_path), session_file=SavedSessionFile(str(session))))
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
-        store.install_private_runtime()
+        PrivateCoordinatorTable.install(store)
     complete = session.stat().st_size
     pending = line(answer("second", "Second answer " + "x" * 200_000))
     with session.open("a") as stream:

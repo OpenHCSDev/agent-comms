@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from bus_record_fixture import prepare_native_comms
 
 from agent_comms.bus import Bus
@@ -24,9 +25,7 @@ from agent_comms.assignment_states import (
     DeliveredAssignment,
     FullPendingAssignment,
 )
-from agent_comms.cohort_schema import (
-    ClaimBatchAcknowledgements, CohortDeliveries, install_private_cohort_schema,
-)
+from agent_comms.cohort_schema import ClaimBatchAcknowledgements, CohortDeliveries
 from agent_comms.messages import Message
 from agent_comms.private_registry_guard import RegistryPrivacy
 from agent_comms.comms import Comms
@@ -74,7 +73,7 @@ def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
         for name, (created_at, _tags) in people.items()
     }
     coordinator = Coordination(str(root / "coordinator.sqlite"), clock_ms=lambda: 4723)
-    install_private_cohort_schema(coordinator)
+    PrivateCoordinatorTable.install(coordinator)
     for name in ("Alice", "Bob", "Charlie"):
         coordinator.participants.register(lookups[name], name, name, committed=True)
     root_id = comms.registry.prepare_native_root().namespace

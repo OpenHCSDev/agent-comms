@@ -1,5 +1,6 @@
 """A refused coding tool call tells the agent the real reason."""
 
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 import secrets
 import sqlite3
 from pathlib import Path
@@ -34,7 +35,7 @@ def test_busy_coordination_database_is_reported_as_busy(tmp_path):
     (tmp_path / "wire").mkdir(mode=0o700)
     path = tmp_path / "wire" / "coordination.sqlite3"
     with Coordination(str(path)) as store:
-        store.install_private_runtime()
+        PrivateCoordinatorTable.install(store)
         writer = sqlite3.connect(path, isolation_level=None)
         try:
             writer.execute("BEGIN EXCLUSIVE")
