@@ -12,7 +12,6 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import BinaryIO, ClassVar
 
-from metaclass_registry import RegistryConfig
 from pydantic import Field, JsonValue, TypeAdapter, field_validator, model_validator
 
 from agent_comms.cli_protocol import OpenWire, TimestampedWire, WireHeader, WireModel
@@ -45,9 +44,7 @@ class RolloutItemHeader(WireHeader):
         return {'type': '/'.join(part for part in (value.get('type'), value.get('role')) if part)}
 
 
-class RolloutItem(OpenWire, ABC):
-    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
+class RolloutItem(OpenWire, ABC, affix=""):
     header = RolloutItemHeader
 
     def updates(self, state: RolloutState, position: int, timestamp: float) -> tuple[RuntimeUpdate, ...]:
@@ -60,12 +57,11 @@ class RolloutItem(OpenWire, ABC):
         return ''
 
 
-class ForeignItem(RolloutItem):
+class ForeignItem(RolloutItem, declared_name='foreign'):
     """Reasoning, searches and other items that are not portable conversation."""
-    wire_tag = 'foreign'
 
 
-class MessageItem(RolloutItem, ABC):
+class MessageItem(RolloutItem, ABC, declared_name=None):
     id: str = ''
     content: list[ContentPart]
 
@@ -79,8 +75,7 @@ class MessageItem(RolloutItem, ABC):
         return '\n'.join(part.text for part in self.content if part.text)
 
 
-class UserMessageItem(MessageItem):
-    wire_tag = 'message/user'
+class UserMessageItem(MessageItem, declared_name='message/user'):
 
     def updates(self, state: RolloutState, position: int, timestamp: float) -> tuple[RuntimeUpdate, ...]:
         return (FinishedItem('', self.id, (UserTranscript(self.text, position=position, timestamp=timestamp),)),)
@@ -89,14 +84,13 @@ class UserMessageItem(MessageItem):
         return self.text
 
 
-class AssistantMessageItem(MessageItem):
-    wire_tag = 'message/assistant'
+class AssistantMessageItem(MessageItem, declared_name='message/assistant'):
 
     def updates(self, state: RolloutState, position: int, timestamp: float) -> tuple[RuntimeUpdate, ...]:
         return (FinishedItem('', self.id, (AssistantTranscript(self.text, position=position, timestamp=timestamp),)),)
 
 
-class InstructionMessage(MessageItem, ABC):
+class InstructionMessage(MessageItem, ABC, declared_name=None):
     """Instructions the source session ran under: kept as references to their bytes, never as
     messages, because they were that session's instructions and are not this thread's."""
 
@@ -104,16 +98,15 @@ class InstructionMessage(MessageItem, ABC):
         return (self,)
 
 
-class SystemMessageItem(InstructionMessage):
-    wire_tag = 'message/system'
+class SystemMessageItem(InstructionMessage, declared_name='message/system'):
+    pass
 
 
-class DeveloperMessageItem(InstructionMessage):
-    wire_tag = 'message/developer'
+class DeveloperMessageItem(InstructionMessage, declared_name='message/developer'):
+    pass
 
 
-class FunctionCallItem(RolloutItem):
-    wire_tag = 'function_call'
+class FunctionCallItem(RolloutItem, declared_name='function_call'):
     name: str
     call_id: str = ''
     arguments: str = ''
@@ -129,9 +122,8 @@ class FunctionCallItem(RolloutItem):
             tool=ToolDeclaration.record(self.name, self.raw_input, call_id=self.call_id)),)),)
 
 
-class CustomToolCallItem(FunctionCallItem):
+class CustomToolCallItem(FunctionCallItem, declared_name='custom_tool_call'):
     """A freeform tool (apply_patch): its input is text, not JSON arguments."""
-    wire_tag = 'custom_tool_call'
     arguments: str = Field(default='', alias='input')
 
     @property
@@ -139,8 +131,7 @@ class CustomToolCallItem(FunctionCallItem):
         return {'input': self.arguments}
 
 
-class FunctionCallOutputItem(RolloutItem):
-    wire_tag = 'function_call_output'
+class FunctionCallOutputItem(RolloutItem, declared_name='function_call_output'):
     call_id: str = ''
     output: JsonValue = ''
 
@@ -150,15 +141,13 @@ class FunctionCallOutputItem(RolloutItem):
             position=position, timestamp=timestamp, tool_call_id=self.call_id, tool_name=state.tools.get(self.call_id, ''), text=text),)),)
 
 
-class CustomToolCallOutputItem(FunctionCallOutputItem):
-    wire_tag = 'custom_tool_call_output'
+class CustomToolCallOutputItem(FunctionCallOutputItem, declared_name='custom_tool_call_output'):
+    pass
 
 
-class RolloutRecord(TimestampedWire, OpenWire, ABC):
+class RolloutRecord(TimestampedWire, OpenWire, ABC, affix=""):
     """One rollout line. Conversation is in the items a record carries; the record adds what
     it says about the session."""
-    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
 
     def entries(self) -> tuple[RolloutItem, ...]:
         return ()
@@ -183,9 +172,8 @@ class RolloutRecord(TimestampedWire, OpenWire, ABC):
         raise ValueError('A Codex rollout starts with its session metadata.')
 
 
-class ForeignRecord(RolloutRecord):
+class ForeignRecord(RolloutRecord, declared_name='foreign'):
     """Events the rollout mirrors from items (event_msg) and other bookkeeping."""
-    wire_tag = 'foreign'
 
 
 class SessionMeta(WireModel):
@@ -193,8 +181,7 @@ class SessionMeta(WireModel):
     cwd: str = ''
 
 
-class SessionMetaRecord(RolloutRecord):
-    wire_tag = 'session_meta'
+class SessionMetaRecord(RolloutRecord, declared_name='session_meta'):
     payload: SessionMeta
 
     @property
@@ -209,8 +196,7 @@ class TurnContext(WireModel):
     cwd: str = ''
 
 
-class TurnContextRecord(RolloutRecord):
-    wire_tag = 'turn_context'
+class TurnContextRecord(RolloutRecord, declared_name='turn_context'):
     payload: TurnContext
 
     def own_updates(self) -> tuple[RuntimeUpdate, ...]:
@@ -224,9 +210,8 @@ class Compaction(WireModel):
     guardian_history: list[JsonValue] = Field(default_factory=list)
 
 
-class CompactedRecord(RolloutRecord):
+class CompactedRecord(RolloutRecord, declared_name='compacted'):
     """Codex replaced the conversation with a summary and the items it kept."""
-    wire_tag = 'compacted'
     payload: Compaction
 
     def begins_history(self) -> bool:
@@ -241,8 +226,7 @@ class CompactedRecord(RolloutRecord):
         return (Summarized(self.payload.message or self.payload.summary), *private)
 
 
-class ResponseItemRecord(RolloutRecord):
-    wire_tag = 'response_item'
+class ResponseItemRecord(RolloutRecord, declared_name='response_item'):
     payload: RolloutItem.declared_union()
 
     def entries(self) -> tuple[RolloutItem, ...]:

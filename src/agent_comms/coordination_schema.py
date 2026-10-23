@@ -7,8 +7,6 @@ from collections.abc import Iterable
 from functools import cache
 from typing import Final
 
-from metaclass_registry.discovery import discover_registry_classes
-
 import agent_comms.coordination_tables as coordination_tables
 from agent_comms.assignment_states import AssignmentState
 from agent_comms.attempt_states import AttemptState, RetryPredecessor
@@ -48,10 +46,7 @@ class CoordinatorTable(SharedFileTables, DurableTables):
 
     @classmethod
     def declarations(cls) -> tuple[type[TypedTable], ...]:
-        discover_registry_classes(
-            coordination_tables.__path__, coordination_tables.__name__ + ".", CoordinatorTable,
-        )
-        return TypedTable.members_with(cls)
+        return TypedTable.discover_members(coordination_tables, cls)
 
     @classmethod
     def configure_connection(cls, connection: sqlite3.Connection) -> None:

@@ -7,7 +7,6 @@ from dataclasses import dataclass, field
 from typing import ClassVar, Literal, Self
 from xml.etree import ElementTree
 
-from metaclass_registry import RegistryConfig
 from pydantic import (
     Field,
     JsonValue,
@@ -273,15 +272,15 @@ class ClaudeUserHeader(WireHeader):
     is_meta: bool = Field(default=False, alias='isMeta')
 
     def record_type(self) -> str:
-        if self.origin.type == TaskNotification.wire_tag:
-            return TaskUserRecord.wire_tag
+        if self.origin.type == TaskNotification.declared_name:
+            return TaskUserRecord.declared_name
         if 'prompt_id' not in self.model_fields_set:
-            return LocalCommandOutput.wire_tag
+            return LocalCommandOutput.declared_name
         if self.is_compact_summary:
-            return CompactSummary.wire_tag
+            return CompactSummary.declared_name
         if self.is_meta and 'origin' not in self.model_fields_set:
-            return HarnessNote.wire_tag
-        return UserRecord.wire_tag
+            return HarnessNote.declared_name
+        return UserRecord.declared_name
 
 
 class ClaudeHeader(WireHeader):
@@ -289,14 +288,12 @@ class ClaudeHeader(WireHeader):
     @classmethod
     def local_command(cls, value: object, handler: ModelWrapValidatorHandler[Self]) -> Self:
         header = handler(value)
-        if header.type == UserRecord.wire_tag:
+        if header.type == UserRecord.declared_name:
             header.type = ClaudeUserHeader.model_validate(value).record_type()
         return header
 
 
-class ClaudeRecord(TaggedWire, ABC):
-    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
+class ClaudeRecord(TaggedWire, ABC, affix=""):
     header = ClaudeHeader
     cwd: str = ''
 
@@ -312,9 +309,7 @@ class ClaudeRecord(TaggedWire, ABC):
         return ''
 
 
-class AssistantBlock(TaggedWire, ABC):
-    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
+class AssistantBlock(TaggedWire, ABC, affix=""):
 
     @abstractmethod
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]: ...
@@ -332,25 +327,23 @@ class ImageContent(WireModel):
         return '[image]'
 
 
-class AssistantText(TextWire, AssistantBlock, TextContent):
+class AssistantText(TextWire, AssistantBlock, TextContent, declared_name='text'):
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return session.finished(record.uuid, (AssistantTranscript(self.text, timestamp=record.timestamp, position=record.position),))
 
 
-class RedactedThinking(AssistantBlock):
-    wire_tag = 'redacted_thinking'
+class RedactedThinking(AssistantBlock, declared_name='redacted_thinking'):
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return session.turn.active(record.uuid, session.phase, ModelWaitPhase())
 
 
-class NarrationBlock(RedactedThinking):
+class NarrationBlock(RedactedThinking, declared_name='thinking'):
     """Claude Code saves its reasoning under this tag with empty text, and the
     narration it shows before a tool call under the same tag with the text
     filled in. The text is a message to the reader, never hidden reasoning."""
 
-    wire_tag = 'thinking'
     thinking: str
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
@@ -361,8 +354,7 @@ class NarrationBlock(RedactedThinking):
             record.uuid, (AssistantTranscript(self.thinking, timestamp=record.timestamp, position=record.position),)))
 
 
-class ToolUse(AssistantBlock):
-    wire_tag = 'tool_use'
+class ToolUse(AssistantBlock, declared_name='tool_use'):
     id: str
     name: str
     input: dict[str, JsonValue]
@@ -382,32 +374,28 @@ class AssistantMessage(WireModel):
     content: list[AssistantBlock.declared_union()]
 
 
-class AssistantRecord(ClaudeRecord, TimedRecord):
-    wire_tag = 'assistant'
+class AssistantRecord(ClaudeRecord, TimedRecord, declared_name='assistant'):
     message: AssistantMessage
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return tuple(update for block in self.message.content for update in block.updates(self, session))
 
 
-class ResultPart(TaggedWire, ABC):
-    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
+class ResultPart(TaggedWire, ABC, affix=""):
 
     @abstractmethod
     def result_text(self) -> str: ...
 
 
-class ResultText(TextWire, TextContent, ResultPart):
+class ResultText(TextWire, TextContent, ResultPart, declared_name='text'):
     pass
 
 
-class ResultImage(ImageContent, ResultPart):
-    wire_tag = 'image'
+class ResultImage(ImageContent, ResultPart, declared_name='image'):
+    pass
 
 
-class ResultToolReference(ResultPart):
-    wire_tag = 'tool_reference'
+class ResultToolReference(ResultPart, declared_name='tool_reference'):
     tool_name: str
 
     def result_text(self) -> str:
@@ -418,11 +406,9 @@ class KindHeader(WireHeader):
     type: str = Field(alias='kind')
 
 
-class PromptOrigin(TaggedWire, ABC):
+class PromptOrigin(TaggedWire, ABC, affix=""):
     """Who wrote a user record. Only a person's prompt is shown live as input;
     another agent's message is conversation history the live view hides."""
-    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
     header = KindHeader
 
     def prompt(self, record: TimedRecord, text: str,
@@ -433,14 +419,14 @@ class PromptOrigin(TaggedWire, ABC):
         return ''
 
 
-class Prompting(PromptOrigin, ABC):
+class Prompting(PromptOrigin, ABC, declared_name=None):
     """An origin whose text is a request to the model."""
 
     def request(self, text: str) -> str:
         return text
 
 
-class AgentPrompt(Prompting):
+class AgentPrompt(Prompting, declared_name=None):
     """Input another agent wrote: the commanding session, or a peer session."""
 
     def prompt(self, record: TimedRecord, text: str,
@@ -448,8 +434,7 @@ class AgentPrompt(Prompting):
         return (HiddenItem((UserTranscript(text, timestamp=record.timestamp, position=record.position),)),)
 
 
-class HumanPrompt(Prompting):
-    wire_tag = 'human'
+class HumanPrompt(Prompting, declared_name='human'):
 
     def prompt(self, record: TimedRecord, text: str,
                session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
@@ -457,26 +442,24 @@ class HumanPrompt(Prompting):
             record.uuid, (UserTranscript(text, timestamp=record.timestamp, position=record.position),)))
 
 
-class TaskNotification(PromptOrigin):
+class TaskNotification(PromptOrigin, declared_name='task-notification'):
     """Its specialized user record owns task-envelope decoding."""
-    wire_tag = 'task-notification'
     kind: Literal['task-notification']
 
 
-class PeerMessage(AgentPrompt):
-    wire_tag = 'peer'
+class PeerMessage(AgentPrompt, declared_name='peer'):
+    pass
 
 
-class CoordinatorMessage(AgentPrompt):
+class CoordinatorMessage(AgentPrompt, declared_name='coordinator'):
     """The session that started this subagent, writing to it while it works."""
-    wire_tag = 'coordinator'
 
 
-class AutoContinuation(PromptOrigin):
-    wire_tag = 'auto-continuation'
+class AutoContinuation(PromptOrigin, declared_name='auto-continuation'):
+    pass
 
 
-class ToolSupplied(Prompting):
+class ToolSupplied(Prompting, declared_name=None):
     """Text Claude records without a sender: a subagent's task, or a local command's echo.
     It starts a turn; the live view does not show it as the person's prompt."""
 
@@ -485,9 +468,7 @@ class ToolSupplied(Prompting):
         return (TurnStarted(), HiddenItem((UserTranscript(text, timestamp=record.timestamp, position=record.position),)))
 
 
-class UserBlock(TaggedWire, ABC):
-    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
+class UserBlock(TaggedWire, ABC, affix=""):
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return (TurnStarted(),)
@@ -496,7 +477,7 @@ class UserBlock(TaggedWire, ABC):
         return ''
 
 
-class UserText(TextWire, UserBlock, TextContent):
+class UserText(TextWire, UserBlock, TextContent, declared_name='text'):
 
     def prompt_text(self) -> str:
         return self.text
@@ -507,8 +488,8 @@ class UserText(TextWire, UserBlock, TextContent):
         return record.origin.prompt(record, self.text, session)
 
 
-class UserImage(UserBlock, ImageContent):
-    wire_tag = 'image'
+class UserImage(UserBlock, ImageContent, declared_name='image'):
+    pass
 
 
 class ContentBlocks(WireModel):
@@ -577,8 +558,7 @@ class TaskMessage(ContentBlocks):
         return tuple(update for block in self.content for update in block.updates(record))
 
 
-class ToolResult(UserBlock, ContentBlocks):
-    wire_tag = 'tool_result'
+class ToolResult(UserBlock, ContentBlocks, declared_name='tool_result'):
     tool_use_id: str
     content: list[ResultPart.declared_union()]
     is_error: bool = False
@@ -593,8 +573,7 @@ class UserMessage(ContentBlocks):
     content: list[UserBlock.declared_union()]
 
 
-class UserRecord(ClaudeRecord, TimedRecord):
-    wire_tag = 'user'
+class UserRecord(ClaudeRecord, TimedRecord, declared_name='user'):
     promptId: str
     message: UserMessage
     origin: PromptOrigin.declared_union() = Field(default_factory=ToolSupplied)
@@ -611,9 +590,8 @@ class UserRecord(ClaudeRecord, TimedRecord):
         return self.origin.request(self.text)
 
 
-class CompactSummary(UserRecord):
+class CompactSummary(UserRecord, declared_name='compact-summary'):
     """Claude's summary of the conversation before its latest compaction."""
-    wire_tag = 'compact-summary'
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         session.turn = KnownTurn(self.promptId)
@@ -623,8 +601,7 @@ class CompactSummary(UserRecord):
         return ''
 
 
-class TaskUserRecord(ClaudeRecord, TimedRecord):
-    wire_tag = 'task-user'
+class TaskUserRecord(ClaudeRecord, TimedRecord, declared_name='task-user'):
     origin: TaskNotification
     message: TaskMessage
 
@@ -636,9 +613,7 @@ class SubtypeHeader(WireHeader):
     type: str = Field(alias='subtype')
 
 
-class SystemEvent(TaggedWire, ABC):
-    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
+class SystemEvent(TaggedWire, ABC, affix=""):
     header = SubtypeHeader
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
@@ -648,15 +623,13 @@ class SystemEvent(TaggedWire, ABC):
         return False
 
 
-class TurnDuration(SystemEvent):
-    wire_tag = 'turn_duration'
+class TurnDuration(SystemEvent, declared_name='turn_duration'):
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return (TurnEnded(),)
 
 
-class CompactBoundary(SystemEvent, TimedRecord):
-    wire_tag = 'compact_boundary'
+class CompactBoundary(SystemEvent, TimedRecord, declared_name='compact_boundary'):
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return session.finished(self.uuid, (NoticeTranscript('Context compacted', timestamp=self.timestamp, position=self.position),))
@@ -665,36 +638,35 @@ class CompactBoundary(SystemEvent, TimedRecord):
         return True
 
 
-class StopHookSummary(SystemEvent):
-    wire_tag = 'stop_hook_summary'
+class StopHookSummary(SystemEvent, declared_name='stop_hook_summary'):
+    pass
 
 
-class Informational(SystemEvent):
-    wire_tag = 'informational'
+class Informational(SystemEvent, declared_name='informational'):
+    pass
 
 
-class ScheduledTaskFire(SystemEvent):
-    wire_tag = 'scheduled_task_fire'
+class ScheduledTaskFire(SystemEvent, declared_name='scheduled_task_fire'):
+    pass
 
 
-class LocalCommand(SystemEvent):
-    wire_tag = 'local_command'
+class LocalCommand(SystemEvent, declared_name='local_command'):
+    pass
 
 
-class AwaySummary(SystemEvent):
-    wire_tag = 'away_summary'
+class AwaySummary(SystemEvent, declared_name='away_summary'):
+    pass
 
 
-class AgentsKilled(SystemEvent):
-    wire_tag = 'agents_killed'
+class AgentsKilled(SystemEvent, declared_name='agents_killed'):
+    pass
 
 
-class ModelRefusalNoFallback(SystemEvent):
-    wire_tag = 'model_refusal_no_fallback'
+class ModelRefusalNoFallback(SystemEvent, declared_name='model_refusal_no_fallback'):
+    pass
 
 
-class SystemRecord(ClaudeRecord):
-    wire_tag = 'system'
+class SystemRecord(ClaudeRecord, declared_name='system'):
     subtype: SystemEvent.declared_union()
 
     @model_validator(mode='before')
@@ -711,7 +683,7 @@ class SystemRecord(ClaudeRecord):
         return self.subtype.begins_history()
 
 
-class MetadataRecord(ClaudeRecord, ABC):
+class MetadataRecord(ClaudeRecord, ABC, declared_name=None):
     pass
 
 
@@ -719,137 +691,123 @@ class AttachmentHeader(WireHeader):
     @model_validator(mode='before')
     @classmethod
     def task_notification(cls, value: dict) -> dict:
-        if (value.get('type') == QueuedTaskNotification.wire_tag
-                and value.get('origin', {}).get('kind') == TaskNotification.wire_tag):
+        if (value.get('type') == QueuedTaskNotification.declared_name
+                and value.get('origin', {}).get('kind') == TaskNotification.declared_name):
             return value
-        return {'type': ForeignAttachment.wire_tag}
+        return {'type': ForeignAttachment.declared_name}
 
 
-class AttachmentPayload(TaggedWire, ABC):
-    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
+class AttachmentPayload(TaggedWire, ABC, affix=""):
     header = AttachmentHeader
 
     @abstractmethod
     def updates(self, record: TimedRecord) -> tuple[RuntimeUpdate, ...]: ...
 
 
-class QueuedTaskNotification(TaskContent, AttachmentPayload):
-    wire_tag = 'queued_command'
+class QueuedTaskNotification(TaskContent, AttachmentPayload, declared_name='queued_command'):
     text: TaskEnvelope = Field(alias='prompt')
     origin: TaskNotification
 
 
-class ForeignAttachment(AttachmentPayload):
-    wire_tag = 'foreign'
+class ForeignAttachment(AttachmentPayload, declared_name='foreign'):
 
     def updates(self, record: TimedRecord) -> tuple[RuntimeUpdate, ...]:
         return ()
 
 
-class Attachment(ClaudeRecord, TimedRecord):
-    wire_tag = 'attachment'
+class Attachment(ClaudeRecord, TimedRecord, declared_name='attachment'):
     attachment: AttachmentPayload.declared_union()
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return self.attachment.updates(self)
 
 
-class QueueOperation(MetadataRecord):
-    wire_tag = 'queue-operation'
+class QueueOperation(MetadataRecord, declared_name='queue-operation'):
+    pass
 
 
-class Mode(MetadataRecord):
-    wire_tag = 'mode'
+class Mode(MetadataRecord, declared_name='mode'):
+    pass
 
 
-class PermissionMode(MetadataRecord):
-    wire_tag = 'permission-mode'
+class PermissionMode(MetadataRecord, declared_name='permission-mode'):
+    pass
 
 
-class AtisLatch(MetadataRecord):
-    wire_tag = 'atis-latch'
+class AtisLatch(MetadataRecord, declared_name='atis-latch'):
+    pass
 
 
-class LastPrompt(MetadataRecord):
-    wire_tag = 'last-prompt'
+class LastPrompt(MetadataRecord, declared_name='last-prompt'):
+    pass
 
 
-class AiTitle(MetadataRecord):
-    wire_tag = 'ai-title'
+class AiTitle(MetadataRecord, declared_name='ai-title'):
+    pass
 
 
-class PrLink(MetadataRecord):
-    wire_tag = 'pr-link'
+class PrLink(MetadataRecord, declared_name='pr-link'):
+    pass
 
 
-class FileHistorySnapshot(MetadataRecord):
-    wire_tag = 'file-history-snapshot'
+class FileHistorySnapshot(MetadataRecord, declared_name='file-history-snapshot'):
+    pass
 
 
-class FileHistoryDelta(MetadataRecord):
-    wire_tag = 'file-history-delta'
+class FileHistoryDelta(MetadataRecord, declared_name='file-history-delta'):
+    pass
 
 
-class CostState(MetadataRecord):
-    wire_tag = 'cost-state'
+class CostState(MetadataRecord, declared_name='cost-state'):
+    pass
 
 
-class ApiRequest(MetadataRecord):
+class ApiRequest(MetadataRecord, declared_name='api-request'):
     """The parameters of one model request the harness sent."""
-    wire_tag = 'api-request'
 
 
-class ApiRequestShape(MetadataRecord):
+class ApiRequestShape(MetadataRecord, declared_name='api-request-shape'):
     """The system prompt and tools a request was sent with, stored once by hash."""
-    wire_tag = 'api-request-shape'
 
 
-class ApiRequestBlob(MetadataRecord):
+class ApiRequestBlob(MetadataRecord, declared_name='api-request-blob'):
     """One message a request carried, stored once by hash."""
-    wire_tag = 'api-request-blob'
 
 
-class LocalCommandOutput(MetadataRecord):
+class LocalCommandOutput(MetadataRecord, declared_name='local-command'):
     """A terminal-only slash command and its output."""
-    wire_tag = 'local-command'
 
 
-class HarnessNote(MetadataRecord):
+class HarnessNote(MetadataRecord, declared_name='harness-note'):
     """Text the harness adds for the model without a sender: reminders, skill bodies, image notes."""
-    wire_tag = 'harness-note'
 
 
-class ForkContextReference(MetadataRecord):
+class ForkContextReference(MetadataRecord, declared_name='fork-context-ref'):
     """A forked subagent starts from its parent's context, stored in the parent's transcript."""
-    wire_tag = 'fork-context-ref'
     parentSessionId: str
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return (HistoryNotice(f'Context inherited from session {self.parentSessionId} is not imported.'),)
 
 
-class CustomTitle(MetadataRecord):
+class CustomTitle(MetadataRecord, declared_name='custom-title'):
     """The name a person gave the session."""
-    wire_tag = 'custom-title'
     customTitle: str
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return (SessionFacts(title=ThreadText.external(self.customTitle)),)
 
 
-class AgentName(MetadataRecord):
+class AgentName(MetadataRecord, declared_name='agent-name'):
     """The name the session runs under as an agent."""
-    wire_tag = 'agent-name'
     agentName: str
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return (SessionFacts(title=ThreadText.external(self.agentName)),)
 
 
-class ContinuedIn(MetadataRecord):
+class ContinuedIn(MetadataRecord, declared_name='continued-in'):
     """The conversation went on in another session."""
-    wire_tag = 'continued-in'
     continuedInSessionId: str
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
