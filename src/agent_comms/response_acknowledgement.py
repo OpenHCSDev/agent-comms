@@ -14,7 +14,6 @@ from agent_comms.coordination_contracts import (
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import (
     FieldCodec,
-    MalformedRecord,
     NullMember,
     RecordMember,
     SubclassUnion,

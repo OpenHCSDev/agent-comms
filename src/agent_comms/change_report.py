@@ -20,7 +20,6 @@ from agent_comms.errors import ToolRefusedError
 
 from .field_codec import (
     FieldCodec,
-    MalformedRecord,
     NullMember,
     RecordMember,
     SubclassUnion,
