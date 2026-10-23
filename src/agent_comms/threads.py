@@ -295,6 +295,14 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
     channel_scope_generation: int = 0
     turn_generation: int = 0
 
+    def require_commander(self) -> None:
+        """The thread's declared provider owns eligibility to command."""
+        if not self.model.native(NativeArguments(())).provider_type.may_command:
+            raise RelationViolationError(
+                f"Thread {self.name!r} with declared model {self.model.otherwise(None)!r} "
+                "cannot command: no Codex commander."
+            )
+
     def inherited_history(self, registry, visited):
         if self.name in visited:
             return
