@@ -432,23 +432,58 @@ def _async_store_lock(
     )
 
 
-def _atomic_write_text(
-    path: Path, text: str, *,
-    mode: int = PrivateFileRole.permissions,
-) -> None:
-    """Replace a snapshot and durably sync its name."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary_path = StoreOwner.stage_file(path)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as output:
-            os.chmod(temporary_path, mode)
-            output.write(text)
-            output.flush()
-            os.fsync(output.fileno())
-        os.replace(temporary_path, path)
-        Platform.current().sync_directory(path.parent)
-    finally:
-        temporary_path.unlink(missing_ok=True)
+@dataclass(frozen=True)
+class AtomicFile:
+    """A staged replacement always syncs its contents and directory entry."""
+
+    path: Path
+    mode: int = PrivateFileRole.permissions
+
+    @contextmanager
+    def staged(self) -> Iterator[BinaryIO]:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary = StoreOwner.stage_file(self.path)
+        try:
+            with os.fdopen(descriptor, "wb") as output:
+                os.chmod(temporary, self.mode)
+                yield output
+                output.flush()
+                os.fsync(output.fileno())
+            self._publish(temporary)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    def write_text(self, text: str) -> None:
+        self.write_bytes(text.encode("utf-8"))
+
+    def write_bytes(self, data: bytes) -> None:
+        with self.staged() as output:
+            output.write(data)
+
+    def replace(self, staged: Path) -> None:
+        """Publish an independently prepared file after syncing its data."""
+        Platform.current().sync_file(staged)
+        self._publish(staged)
+
+    def _publish(self, staged: Path) -> None:
+        self._install(staged)
+        Platform.current().sync_directory(self.path.parent)
+
+    def _install(self, staged: Path) -> None:
+        os.replace(staged, self.path)
+
+    def sync(self) -> None:
+        """Sync an existing file without replacing an open database's inode."""
+        platform = Platform.current()
+        platform.sync_file(self.path)
+        platform.sync_directory(self.path.parent)
+
+
+class ExclusiveAtomicFile(AtomicFile):
+    """Create a new name atomically, refusing an existing destination."""
+
+    def _install(self, staged: Path) -> None:
+        os.link(staged, self.path)
 
 
 def _repair_trailing_jsonl(path: Path) -> None:

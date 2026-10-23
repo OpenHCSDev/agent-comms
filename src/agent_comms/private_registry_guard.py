@@ -28,8 +28,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, NoReturn
 
-from . import store_files
 from .child_process import Platform
+from . import store_files
 from .coordination_database import CoordinationStore
 from .coordinator import Coordination
 from .errors import RelationViolationError
@@ -210,7 +210,7 @@ class PublicRegistry(RegistryPrivacy):
         _reject("native namespace requires the original registry guard")
 
     def write(self, registry_path: Path, text: str) -> None:
-        store_files._atomic_write_text(registry_path, text)
+        store_files.AtomicFile(registry_path).write_text(text)
 
     def register_restored(self, threads: Iterable[Thread]) -> None:
         """A public bus has no coordinator identities for restored threads."""
@@ -446,7 +446,7 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
         # A pending guard after any failed write MUST remain fail-closed.
         digest = hashlib.sha256(b"present\0" + text.encode("utf-8")).digest()
         sequence, slot = self.prepare(digest)
-        store_files._atomic_write_text(registry_path, text)
+        store_files.AtomicFile(registry_path).write_text(text)
         self.commit(sequence, slot, digest)
 
     def register_restored(self, threads: Iterable[Thread]) -> None:
@@ -470,28 +470,21 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
                 os.fsync(registry_fd)
             finally:
                 os.close(registry_fd)
-        platform = Platform.current()
-        platform.sync_directory(self.registry_path.parent)  # baseline registry name and existing root
+        Platform.current().sync_directory(self.registry_path.parent)
         fd = os.open(
             self.path,
             os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
             0o600,
         )
         try:
-            if (
-                os.pwrite(
-                    fd,
-                    _record(self.root_id, 0, _COMMITTED, digest) * 2,
-                    0,
-                )
-                != 2 * _SIZE
-            ):
+            if os.pwrite(fd, _record(self.root_id, 0, _COMMITTED, digest) * 2, 0) != 2 * _SIZE:
                 _reject("initial slots were incomplete")
             os.fsync(fd)
-            platform.sync_directory(self.registry_path.parent)
+            Platform.current().sync_directory(self.registry_path.parent)
             self._write(fd, 1, _record(self.root_id, 1, _PENDING, digest))
         finally:
             os.close(fd)
+
 
     def commit_initial(self) -> None:
         fd = self._open()
@@ -524,8 +517,7 @@ class PrivateOwnerRenameIntent(DurableFile):
     completed: bool = False
 
     def write(self, root: Path) -> None:
-        store_files._atomic_write_text(self.path_in(root),
-                           json.dumps(FieldCodec.encode(self), sort_keys=True))
+        store_files.AtomicFile(self.path_in(root)).write_text(json.dumps(FieldCodec.encode(self), sort_keys=True))
 
     @classmethod
     def complete(cls, root: Path) -> None:

@@ -8,14 +8,15 @@ from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Self
 
-from .child_process import Platform
+from agent_comms.child_process import Platform
+from agent_comms.field_codec import Id128Text
+from agent_comms.locked_store import DurableFile, PatternFile, SQLiteFile
+from agent_comms.native_session_reopen import NativeSessionIdentity
+from agent_comms.participant_identity import ParticipantIdentity
+from agent_comms.private_path import PrivateDirectoryRole, TrustedAncestorRole
+
 from .errors import RelationViolationError
 from .native_failures import NativePiUnavailable
-from agent_comms.locked_store import DurableFile, PatternFile, SQLiteFile
-from agent_comms.field_codec import Id128Text
-from agent_comms.participant_identity import ParticipantIdentity
-from agent_comms.native_session_reopen import NativeSessionIdentity
-from agent_comms.private_path import PrivateDirectoryRole, TrustedAncestorRole
 
 
 class SessionFiles:

@@ -18,7 +18,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.carry import Carried, Carry
 from agent_comms.registry_store import RegistryStore
-from agent_comms.store_files import _atomic_write_text
+from agent_comms.store_files import AtomicFile
 from agent_comms.thread_identity import TurnIdentity
 from agent_comms.turn_lease import ActiveTurn, StoredTurnRecord
 
@@ -47,6 +47,6 @@ class TurnOwner(Carry):
             carried = stored | {"owner": FieldCodec.encode(owner, ProcessIdentity)}
             FieldCodec.decode(ActiveTurn, carried)
             if apply:
-                _atomic_write_text(path, json.dumps(carried))
+                AtomicFile(path).write_text(json.dumps(carried))
             rewritten.append(str(path.relative_to(self.root)))
         return Carried(len(rewritten), rewritten=tuple(rewritten) if apply else ())

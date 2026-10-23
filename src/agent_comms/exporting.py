@@ -6,7 +6,6 @@ import hashlib
 import json
 import math
 import os
-import tempfile
 from abc import abstractmethod
 from collections import deque
 from collections.abc import Callable, Iterable, Mapping
@@ -15,14 +14,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import BinaryIO, ClassVar
 
-from .child_process import Platform
 from .channels import Channel
 from .cli_result import CliResult
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
-from .messages import Message
 from .message_reference import MessageReference
+from .messages import Message
 from .registration import Registration
+from .store_files import AtomicFile, ExclusiveAtomicFile
 
 
 class WireExportFormat(DeclaredFamily, affix="Format"):
@@ -445,35 +444,25 @@ class WireTranscriptExporter:
         if not overwrite and os.path.lexists(destination):
             raise FileExistsError(f"Wire-export destination {str(destination)!r} already exists.")
 
-        descriptor, temporary = tempfile.mkstemp(
-            prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent
-        )
-        temporary_path = Path(temporary)
+        artifact = AtomicFile(destination) if overwrite else ExclusiveAtomicFile(destination)
         stats = ExportSelectionStats()
         exported = 0
         first_selected: Message | None = None
         last_selected: Message | None = None
-        try:
-            with os.fdopen(descriptor, "wb") as output:
-                writer = _ArtifactWriter(output)
-                writer.write(header)
-                rows = self._rows(messages, stats)
-                for row in self.limit.select(
-                    rows, len(header), self.boundary.export_started_at, stats
-                ):
-                    writer.write(row.data)
-                    exported += 1
-                    if first_selected is None:
-                        first_selected = row.message
-                    last_selected = row.message
-                output.flush()
-                os.fsync(output.fileno())
-                bytes_written = writer.size
-                output_sha256 = writer.digest.hexdigest()
-
-            self._publish(temporary_path, destination, overwrite=overwrite)
-        finally:
-            temporary_path.unlink(missing_ok=True)
+        with artifact.staged() as output:
+            writer = _ArtifactWriter(output)
+            writer.write(header)
+            rows = self._rows(messages, stats)
+            for row in self.limit.select(
+                rows, len(header), self.boundary.export_started_at, stats
+            ):
+                writer.write(row.data)
+                exported += 1
+                if first_selected is None:
+                    first_selected = row.message
+                last_selected = row.message
+            bytes_written = writer.size
+            output_sha256 = writer.digest.hexdigest()
 
         omitted = stats.source_messages - exported
         return WireExportProvenance(
@@ -530,16 +519,3 @@ class WireTranscriptExporter:
         if message.seq <= previous:
             raise ValueError("Wire-export envelopes must have unique ascending sequences.")
         return message.seq
-
-    @staticmethod
-    def _publish(temporary: Path, destination: Path, *, overwrite: bool) -> None:
-        if overwrite:
-            os.replace(temporary, destination)
-        else:
-            try:
-                os.link(temporary, destination)
-            except FileExistsError:
-                raise FileExistsError(
-                    f"Wire-export destination {str(destination)!r} already exists."
-                ) from None
-        Platform.current().sync_directory(destination.parent)
