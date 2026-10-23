@@ -286,7 +286,6 @@ class PrivateFileRole(PrivateRole):
     def accepts_kind(cls, mode: int) -> bool:
         return stat.S_ISREG(mode)
 
-
     @classmethod
     def accepts_links(cls, nlink: int) -> bool:
         return nlink == 1
