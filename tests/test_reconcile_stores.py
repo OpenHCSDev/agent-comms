@@ -29,7 +29,7 @@ from agent_comms.triage_native_sources import TriageNativeSources
 from agent_comms.bus import Bus
 from agent_comms.maintenance_barrier import HOLDER_NONCE
 from agent_comms.installer.backup import bus_files
-from agent_comms.typed_table import ReconciledFile
+from agent_comms.typed_table import ProjectionProducer, ReconciledFile
 from conftest import maintenance_held
 
 
@@ -101,6 +101,26 @@ def test_planned_reconcile_names_the_same_stores_and_writes_nothing(private_comm
         assert tuple(json.loads(completed.stdout)["rewritten"]) == tuple(sorted(dropped))
     with closing(sqlite3.connect(projection.path)) as db:
         assert db.execute("SELECT 1 FROM sqlite_master WHERE name='retired_derived_shape'").fetchone()
+
+
+def test_planned_reconcile_names_the_bus_whose_build_stamp_reconcile_rewrites(private_comms):
+    """Install 23: a new build with unchanged producer source verifies by digest, but the
+    reconcile restamps the build; the plan must name that write, or the rehearsal never
+    copies the bus and the live carry rewrites a file the rehearsal did not."""
+    root = private_comms.root
+    bus = Bus.path_in(root)
+    with closing(sqlite3.connect(bus)) as db:
+        ProjectionProducer.update(db, where="1=1", parameters=(), commit="0" * 40)
+        db.commit()
+    rewritten = [str(bus.relative_to(root))]
+    with maintenance_held(root) as nonce:
+        before = bus_files(root)
+        planned = reconcile(root, nonce, PlannedReconcileCliCommand)
+        assert planned.returncode == 0, planned.stdout + planned.stderr
+        assert json.loads(planned.stdout)["rewritten"] == rewritten
+        assert bus_files(root) == before
+        assert json.loads(reconcile(root, nonce).stdout)["rewritten"] == rewritten
+        assert json.loads(reconcile(root, nonce, PlannedReconcileCliCommand).stdout)["rewritten"] == []
 
 
 def test_read_back_under_the_hold_writes_nothing_on_a_drifted_bus(private_comms):

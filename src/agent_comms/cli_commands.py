@@ -1864,7 +1864,7 @@ class PlannedReconcileCliCommand(StoreReconcileCliCommand, declared_name="planne
     def changes(owner: type[ReconciledFile], path: Path) -> bool:
         schema = owner.schema_at(path)
         with closing(owner.read_snapshot(path)) as db:
-            return schema.schema_differs(db)
+            return schema.reconcile_writes(db)
 
 @dataclass(frozen=True, kw_only=True)
 class CheckpointCliCommand(NameArgument, CliCommand, declared_name="checkpoint"):
