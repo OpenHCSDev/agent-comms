@@ -16,7 +16,7 @@ from agent_comms.locked_store import DocumentChange, LockedStore
 from agent_comms.registration import Registration
 from agent_comms.registry_document import RegistryDocument, ThreadSlice
 from agent_comms.registry_store import RegistryStore, UncachedRegistry
-from agent_comms.store_files import SharedLock
+from agent_comms.store_files import SharedLock, StoreLockContention
 from agent_comms.threads import Thread
 from agent_comms.thread_text import GivenThreadText
 
@@ -118,10 +118,10 @@ def test_registry_readers_share_lock_and_exclude_writer(tmp_path):
     registry.register(owner(tmp_path, registry=registry))
     other = RegistryStore(registry.store.path)
     with registry.store.reading():
-        with other.locked(mode=SharedLock(), blocking=False):
+        with other.locked(mode=SharedLock(), contention=StoreLockContention(0)):
             assert other._read_unlocked().threads["owner"].name == "owner"
         assert_writer_excluded(other.path)
-    with other.locked(blocking=False):
+    with other.locked(contention=StoreLockContention(0)):
         assert other._read_unlocked().threads["owner"].name == "owner"
 
 

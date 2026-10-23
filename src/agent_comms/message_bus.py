@@ -47,13 +47,13 @@ from agent_comms.read_basis import (
     WatchAcknowledgment,
 )
 from agent_comms.routing import DeliveryScope
+from agent_comms.store_files import UNBOUNDED_CONTENTION, StoreLockContention
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.registration import Registration
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.relationships import PeerRelation
-    from agent_comms.store_files import StoreLockContention
     from agent_comms.threads import Thread
 
 
@@ -96,7 +96,7 @@ class MessageBus[Writes: Publisher]:
 
     @contextmanager
     def opened_activity(
-        self, contention: StoreLockContention | None = None,
+        self, contention: StoreLockContention = UNBOUNDED_CONTENTION,
     ) -> Iterator[ActivityClocks]:
         yield self.bus.activity_clocks(contention)
 

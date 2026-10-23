@@ -83,7 +83,7 @@ def test_read_boundary_defers_instead_of_waiting_on_a_held_bus(private_comms):
             with Coordination(
                 str(private_comms.root / "coordination.sqlite3"), contention=StoreBusy(),
                 session_type=ReadNativeCoordinationSession,
-            ) as store, store.session.boundary():
+            ) as store, store.session.boundary(store.session.bus):
                 outcome.append("entered")
         except BlockingIOError as error:
             outcome.append(error)

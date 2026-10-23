@@ -15,7 +15,7 @@ from agent_comms.coordination_errors import (
     IntegrityViolationError,
 )
 from agent_comms.locked_store import DEFAULT_STORE_CONTENTION, RegistryFile, StoreContention
-from agent_comms.store_files import StoreLockContention
+from agent_comms.store_files import UNBOUNDED_CONTENTION, StoreLockContention
 
 if TYPE_CHECKING:
     from .message_bus import MessageBus
@@ -77,14 +77,16 @@ class CoordinationSession(CoordinationStore):
 class NativeBoundary(ExitStack):
     """Borrow the registry's own read lock for a publication decision."""
 
-    def __init__(self, bus, *, blocking=True, contention=None, measurements=None):
+    def __init__(
+        self, bus: MessageBus, *, contention: StoreLockContention = UNBOUNDED_CONTENTION,
+    ) -> None:
         super().__init__()
         from agent_comms.diagnostics import PublicationMeasurements
 
         # One budget for every lock the boundary takes, the activity cut included.
         self.bus = bus
-        self.contention = contention or StoreLockContention.for_blocking(blocking)
-        self.measurements = measurements if measurements is not None else PublicationMeasurements()
+        self.contention = contention
+        self.measurements = PublicationMeasurements()
 
     def __enter__(self):
         from .store_files import SharedLock, _store_lock
@@ -118,18 +120,21 @@ class NativeCoordinationSession(CoordinationSession):
             publisher.ClaimWrites,
         )
 
-    def boundary(self, bus: MessageBus | None = None, **options: object) -> NativeBoundary:
-        selected = self.bus if bus is None else bus
-        if selected.bus.path.parent.resolve() != self.path.parent.resolve():
+    def boundary_contention(self) -> StoreLockContention:
+        """A session's boundary waits as long as the lock is held."""
+        return UNBOUNDED_CONTENTION
+
+    def boundary(self, bus: MessageBus) -> NativeBoundary:
+        if bus.bus.path.parent.resolve() != self.path.parent.resolve():
             raise IntegrityViolationError("native boundary belongs to another coordinator")
-        return NativeBoundary(selected, **options)
+        return NativeBoundary(bus, contention=self.boundary_contention())
 
     @contextmanager
     def settlement(
         self, boundary: NativeBoundary | None = None
     ) -> Iterator[NativeBoundary]:
         """Acquire a native boundary, or borrow the caller's already held one."""
-        with self.boundary() if boundary is None else nullcontext(boundary) as acquired:
+        with self.boundary(self.bus) if boundary is None else nullcontext(boundary) as acquired:
             if acquired.bus.bus.path.parent.resolve() != self.path.parent.resolve():
                 raise IntegrityViolationError("settlement boundary belongs to another coordinator")
             with self.writing():
@@ -149,11 +154,11 @@ class ReadNativeCoordinationSession(NativeCoordinationSession):
         self.contention = contention
         super().__init__(path, clock_ms=clock_ms, contention=contention)
 
-    def boundary(self, bus: MessageBus | None = None, **options: object) -> NativeBoundary:
+    def boundary_contention(self) -> StoreLockContention:
         """A read's boundary spends the read's own budget on every lock it takes, so
         contention the read cannot wait out raises BlockingIOError for its caller to
         defer, instead of a wait with no end."""
-        return super().boundary(bus, contention=self.contention.lock_budget(), **options)
+        return self.contention.lock_budget()
 
     def _prepare_private_file(self) -> None:
         self._private_file()

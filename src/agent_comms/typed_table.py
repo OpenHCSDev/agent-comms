@@ -66,7 +66,7 @@ from .locked_store import (
 from .maintenance_barrier import MaintenanceBarrier, MaintenanceHolder
 from .package_stamp import STAMP
 from .projection_source import ProjectionSource
-from .store_files import AtomicFile, StoreLockContention, _store_lock
+from .store_files import UNBOUNDED_CONTENTION, AtomicFile, StoreLockContention, _store_lock
 
 if TYPE_CHECKING:
     from .execution_states import ExecutionState
@@ -2148,7 +2148,7 @@ class WalStore(StoreWriter):
     @contextmanager
     def _attached(
         self, opening: Callable[[], AbstractContextManager[sqlite3.Connection]],
-        contention: StoreLockContention | None = None,
+        contention: StoreLockContention = UNBOUNDED_CONTENTION,
     ) -> Iterator[sqlite3.Connection]:
         """Serialize WAL attachment and retirement, not authorized SQL work.
 
@@ -2178,7 +2178,7 @@ class WalStore(StoreWriter):
         self,
         schema: type[TableSchema],
         opening: Callable[[], AbstractContextManager[sqlite3.Connection]],
-        contention: StoreLockContention | None = None,
+        contention: StoreLockContention = UNBOUNDED_CONTENTION,
     ) -> Iterator[sqlite3.Connection]:
         """Read the committed file, or its declared empty schema before its first write.
 
