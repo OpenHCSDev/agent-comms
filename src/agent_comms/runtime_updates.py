@@ -23,6 +23,7 @@ from .transcript_events import (
     TranscriptEvent,
 )
 from .thread_text import NoThreadText, ThreadText
+from .thread_identity import OfferedTools
 from .turn_phase import IdlePhase, ModelWaitPhase, TurnPhase
 from .turn_item import TurnItem
 
@@ -203,6 +204,9 @@ class ReadingPhase(ABC):
     def status(self, update: StatusUpdate) -> tuple[RuntimeUpdate, ...]:
         """Current activity now, or held until the reader has caught up."""
 
+    def offered(self, update: OfferedToolsObserved) -> tuple[RuntimeUpdate, ...]:
+        return (update,)
+
 
 @dataclass(frozen=True)
 class RuntimeUpdate(ABC):
@@ -246,6 +250,17 @@ class StatusUpdate(RuntimeUpdate):
 
     def during(self, phase: ReadingPhase) -> tuple[RuntimeUpdate, ...]:
         return phase.status(self)
+
+
+@dataclass(frozen=True)
+class OfferedToolsObserved(RuntimeUpdate):
+    offered: OfferedTools
+
+    def during(self, phase: ReadingPhase) -> tuple[RuntimeUpdate, ...]:
+        return phase.offered(self)
+
+    def publish(self, output: ThreadOutput) -> None:
+        output.agents.registry.observe_offered_tools(output.transcript.incarnation, self.offered)
 
 
 @dataclass(frozen=True)
