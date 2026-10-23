@@ -296,6 +296,9 @@ class Checkout:
         """Changes outside the pinned submodules, which retiring the tree would lose."""
         return Repo.git(self.path, "status", "--porcelain", "--ignore-submodules=all")
 
+    def discard_generated(self) -> None:
+        """A persistent checkout has no run-owned changes to discard."""
+
     def retire(self) -> None:
         """Retire a clean worktree after releasing its pinned submodules."""
         held = self.held_work()
@@ -307,6 +310,7 @@ class Checkout:
         directory = Path(Repo.git(self.path, "rev-parse", "--absolute-git-dir").strip())
         if directory == common:
             raise ValueError(f"Cannot retire the primary checkout: {self.path}")
+        self.discard_generated()
         if self.submodules():
             Repo.git(self.path, "submodule", "deinit", "--all")
             # Deinit empties the working directory but retains this worktree's
@@ -324,8 +328,7 @@ class ScratchCheckout(Checkout):
     def held_work(self) -> str:
         return ""
 
-    def retire(self) -> None:
+    def discard_generated(self) -> None:
         """Only a run-owned disposable tree may discard its generated build inputs."""
         Repo.git(self.path, "restore", "--staged", "--worktree", "--", ".")
         Repo.git(self.path, "clean", "-fd")
-        super().retire()
