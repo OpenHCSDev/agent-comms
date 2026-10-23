@@ -82,9 +82,9 @@ def test_private_owner_rename_during_active_attempt_can_complete(tmp_path, manag
     lookup = RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         before = store.participants.get(lookup)
-        store.executions.create("rename-active", ExecutionOrigin.ACP, lookup, "beta", 1)
-        store.executions.mark_pending("rename-active", expected_revision=1)
-        fence = store.attempts.start(AttemptStart(
+        store.create("rename-active", ExecutionOrigin.ACP, lookup, "beta", 1)
+        store.mark_pending("rename-active", expected_revision=1)
+        fence = store.start(AttemptStart(
             "rename-active", 1, "beta", 1, prepare_fence_token(),
             expected_execution_revision=2, expected_pointer_revision=0,
         )).value.fence
@@ -102,7 +102,7 @@ def test_private_owner_rename_during_active_attempt_can_complete(tmp_path, manag
         with pytest.raises(StaleRevision):
             store.participants.rename_owner(lookup, "wrong", expected_generation=2)
         fence = final_evidence(store, fence)
-        settled = store.attempts.settle_nonpublication(
+        settled = store.settle_nonpublication(
             fence, expected_pointer_revision=1, outcome=SucceededAttempt(),
         ).value
         assert isinstance(settled.attempt.lifecycle, SucceededAttempt)

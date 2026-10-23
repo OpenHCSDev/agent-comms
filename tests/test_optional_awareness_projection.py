@@ -115,7 +115,7 @@ def test_selected_decision_and_open_obligation_are_both_source_cited(tmp_path: P
     try:
         initial, assignment = _accepted(comms, store, root_id, "member000", "work")
         owner = _owner(comms, "member000")
-        store.executions.create(
+        store.create(
             "reply000",
             ExecutionOrigin.WIRE,
             assignment.recipient_lookup,
@@ -169,7 +169,7 @@ def test_open_obligation_budget_cannot_be_hidden_by_selected_cursor(tmp_path: Pa
         newer, new_claim = _accepted(comms, store, root_id, "member000", "newer")
         owner = _owner(comms, "member000")
         for number, (assignment, delivery) in enumerate(((old_claim, older), (new_claim, newer))):
-            store.executions.create(
+            store.create(
                 f"reply{number}",
                 ExecutionOrigin.WIRE,
                 assignment.recipient_lookup,
@@ -229,7 +229,7 @@ def test_fresh_gen2_selected_and_old_pending_obligation_are_scoped(tmp_path: Pat
     comms, store, index, root_id = _root(tmp_path)
     try:
         old, old_claim = _accepted(comms, store, root_id, "member000", "old pending")
-        store.executions.create(
+        store.create(
             "old-reply",
             ExecutionOrigin.WIRE,
             old_claim.recipient_lookup,
@@ -403,7 +403,7 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
             parameters=(observer, initial.message.seq),
         )
         owner = _owner(comms, "member000")
-        store.executions.create(
+        store.create(
             "wire-awareness-reply",
             ExecutionOrigin.WIRE,
             assignment.recipient_lookup,

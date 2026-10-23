@@ -45,9 +45,9 @@ def test_wire_success_cannot_silently_complete_original_response(tmp_path):
     with ready(tmp_path / "coordination.sqlite3") as store:
         _, fence = started(store)
         fence = final_evidence(store, fence)
-        before = store.snapshots.get("exec")
+        before = store.get("exec")
         with pytest.raises(sqlite3.IntegrityError):
-            store.attempts.settle_nonpublication(fence, expected_pointer_revision=1,
+            store.settle_nonpublication(fence, expected_pointer_revision=1,
                                                 outcome=SucceededAttempt())
-        assert store.snapshots.get("exec") == before
+        assert store.get("exec") == before
         assert not store.session._connection.in_transaction

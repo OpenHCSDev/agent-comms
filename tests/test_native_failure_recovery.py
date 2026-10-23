@@ -128,7 +128,7 @@ async def release_native_input(directory: Path, history: type[NativeSendHistory]
                 comms, store, root_id, "beta", 0, cursor_delivery=cursor_delivery,
             ) as participant:
                 assert participant is not None
-                created = store.executions.create(
+                created = store.create(
                     participant.batch.execution_id, ExecutionOrigin.WIRE,
                     participant.lookup, participant.owner.thread.name, 1,
                     sources=participant.batch.sources,
@@ -193,7 +193,7 @@ def test_recovery_refuses_released_but_live_owner(released_failure):
     with Coordination(source.root / "coordination.sqlite3") as store:
         with pytest.raises(RecoveryBlocked):
             RecoveryMonitorCapability.recover_native_failure(store, source.execution_id, source.session_file)
-        assert store.snapshots.get(source.execution_id).is_current
+        assert store.get(source.execution_id).is_current
 
 
 class EvidenceDamage(DeclaredFamily, affix="Damage"):
@@ -260,6 +260,6 @@ def test_recovery_refuses_ambiguous_evidence(released_failure, damage):
     with Coordination(source.root / "coordination.sqlite3") as store:
         with pytest.raises(case.refusal):
             RecoveryMonitorCapability.recover_native_failure(store, source.execution_id, session_file)
-        assert store.snapshots.get(source.execution_id).is_current
+        assert store.get(source.execution_id).is_current
         assert len(NativeRuntimeInput.select(store.session._connection)) == 1
     assert source.session_file.read_bytes() == before

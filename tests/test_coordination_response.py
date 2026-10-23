@@ -102,7 +102,7 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
         sources.append(SelectedSource(extra_assignment.assignment_id, store.assignments, delivery))
     reply_target = original.exact_reply_target
     assert reply_target is not None
-    store.executions.create(
+    store.create(
         "exec",
         ExecutionOrigin.WIRE,
         recipient.recipient_lookup,
@@ -110,9 +110,9 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
         1,
         sources=tuple(sources),
     )
-    store.executions.mark_pending("exec", expected_revision=1)
+    store.mark_pending("exec", expected_revision=1)
     token = prepare_fence_token()
-    first = store.attempts.start(
+    first = store.start(
         AttemptStart(
             "exec",
             1,
@@ -123,13 +123,13 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
             expected_pointer_revision=0,
         )
     ).value.fence
-    accepted_turn = store.attempts.advance(
+    accepted_turn = store.advance(
         first, PromptAcceptedAttempt, expected_pointer_revision=1
     ).value.fence
-    model = store.attempts.advance(
+    model = store.advance(
         accepted_turn, ModelRunningAttempt, expected_pointer_revision=1
     ).value.fence
-    final = store.attempts.advance(
+    final = store.advance(
         model,
         SettlingAttempt,
         expected_pointer_revision=1,
@@ -158,7 +158,7 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
 def test_original_routes_prepare_together_and_release_one_attempt_only_after_all_receipts(tmp_path: Path):
     case = _ready(tmp_path, extra_targets=("owner",))
     try:
-        batch = case.store.snapshots.get("exec")
+        batch = case.store.get("exec")
         routes = tuple(row.exact_target for row in batch.require_wire_responses())
         assert set(routes) == {"#team", "sender"}
         assert len(batch.assignments) == 2
@@ -171,7 +171,7 @@ def test_original_routes_prepare_together_and_release_one_attempt_only_after_all
                 case.store, case.bus, case.fence,
                 exact_target=routes[0], owner_witness=case.witness,
             )
-        assert not case.store.snapshots.get("exec").publication_evidence
+        assert not case.store.get("exec").publication_evidence
         assert first.published_message(case.bus.bus) is None
         prepare_fenced_response(
             case.store, case.bus, case.fence, "Direct questions combined",
@@ -220,7 +220,7 @@ def test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay(tmp_path: Path, di
         )
         intent = result.value
         assert intent.exact_target == case.reply_target
-        assert type(case.store.snapshots.get("exec").require_wire_response(case.reply_target).lifecycle) is PublishingResponse
+        assert type(case.store.get("exec").require_wire_response(case.reply_target).lifecycle) is PublishingResponse
         assert intent.published_message(case.bus.bus) is None
         with pytest.raises(PublicationUncertain):
             resolve_existing_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
@@ -250,7 +250,7 @@ def test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay(tmp_path: Path, di
             resolve_existing_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness),
             AlreadyApplied,
         )
-        assert published == case.store.snapshots.get("exec")
+        assert published == case.store.get("exec")
         case.store.close()
         with Coordination(str(case.comms.root / "coordination.sqlite3")) as reopened:
             reread = resolve_existing_response(
@@ -278,7 +278,7 @@ def test_response_requires_exact_same_root_coordinator(tmp_path: Path) -> None:
             prepare_fenced_response(
                 case.store, alien_bus, case.fence, "not allowed", exact_target=case.reply_target, owner_witness=case.witness
             )
-        assert type(case.store.snapshots.get("exec").require_wire_response(case.reply_target).lifecycle) is PendingResponse
+        assert type(case.store.get("exec").require_wire_response(case.reply_target).lifecycle) is PendingResponse
         assert case.comms.bus.bus.revision() == case.origin_seq
     finally:
         case.close()
@@ -340,7 +340,7 @@ def test_response_requires_current_exact_live_turn(tmp_path, change):
                 exact_target=case.reply_target, owner_witness=witness,
             )
         assert case.bus.bus.revision() == case.origin_seq
-        assert ResponseObligation.response_record(case.store.snapshots.get("exec").publication_intents, case.reply_target) is None
+        assert ResponseObligation.response_record(case.store.get("exec").publication_intents, case.reply_target) is None
     finally:
         case.close()
 

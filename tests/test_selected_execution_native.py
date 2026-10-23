@@ -217,7 +217,7 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
             assert not comms.bus.bus.claim_projection()
         with Coordination(str(root / "coordination.sqlite3")) as store:
             assignment = store.assignments.get(outcome.assignment_ids[0])
-            snapshot = store.snapshots.get(assignment.lifecycle.require_completion().execution_id)
+            snapshot = store.get(assignment.lifecycle.require_completion().execution_id)
             snapshot.execution.lifecycle.require(Complete, ValueError("execution must complete"))
             assert (
                 snapshot.attempt.lifecycle.backend_done and snapshot.attempt.lifecycle.process_dead

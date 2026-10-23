@@ -112,15 +112,15 @@ def selected_turn():
                 owner, "selected-turn", expected_generation=generation
             )
             person = store.participants.get(lookup)
-            store.executions.create(
+            store.create(
                 "execution", ExecutionOrigin.WIRE, lookup, owner.name, 1,
                 sources=(SelectedSource(assignment.assignment_id, store.assignments, initial),),
             )
-            snapshot = store.snapshots.get("execution")
-            snapshot = store.executions.mark_pending(
+            snapshot = store.get("execution")
+            snapshot = store.mark_pending(
                 "execution", expected_revision=snapshot.execution.revision
             ).value
-            store.attempts.start(AttemptStart(
+            store.start(AttemptStart(
                 "execution", 1, owner.name, person.owner_identity.generation, prepare_fence_token(),
                 expected_execution_revision=snapshot.execution.revision,
                 expected_pointer_revision=snapshot.pointer_revision,
@@ -146,12 +146,12 @@ def settle_failed(store):
     from agent_comms.attempt_states import AttemptFailedAttempt
 
     with store.session.settlement() as boundary:
-        snapshot = store.snapshots.get("execution")
+        snapshot = store.get("execution")
         snapshot.attempt.advance(
             store.session, type(snapshot.attempt.lifecycle), backend_done=True,
             process_dead=True, progress=False, reason_code=NoReasonCode(),
         )
-        store.snapshots.get("execution").settle(store.session, AttemptFailedAttempt(), NoReasonCode(), boundary)
+        store.get("execution").settle(store.session, AttemptFailedAttempt(), NoReasonCode(), boundary)
 
 
 def claim_originals(comms: Comms) -> tuple[ClaimMessage, ...]:

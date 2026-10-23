@@ -88,12 +88,12 @@ class SelectedParticipant(MroDispatch):
     async def fail_before_send(self, max_attempts: int) -> None:
         """Settle captured originals when acquisition fails before any native send."""
         await self.require_current()
-        snapshot = self.store.executions.create(
+        snapshot = self.store.create(
             self.batch.execution_id, ExecutionOrigin.WIRE,
             self.lookup, self.owner.thread.name, max_attempts,
             sources=self.batch.sources,
         ).value
-        self.store.executions.fail_unstarted(
+        self.store.fail_unstarted(
             self.batch.execution_id, expected_revision=snapshot.execution.revision,
             reason_code=GivenReasonCode("session-acquisition-failed"),
         )
