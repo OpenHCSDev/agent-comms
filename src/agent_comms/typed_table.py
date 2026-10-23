@@ -45,6 +45,7 @@ from .field_codec import (
     FieldCodec,
     FieldDirective,
     FieldPlan,
+    FieldRepresentation,
     MalformedRecord,
     NullMember,
     ValueDecoder,
@@ -2084,7 +2085,7 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
 
     @classmethod
     def producer_owners(cls) -> tuple[type, ...]:
-        """Only this table's writers and their inherited implementations.
+        """This table's writers, column values and their inherited implementations.
 
         An ancestor declaring other outputs owns those outputs alone. Inherited
         producer capabilities follow the writer; unrelated mechanisms do not.
@@ -2102,6 +2103,19 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
                 if issubclass(parent, ProjectionSource)
                 and ("writes" not in vars(parent) or parent in writers)
             )
+        annotations = [column.annotation for column in cls._columns]
+        while annotations:
+            value, representation = FieldCodec._representation(annotations.pop())
+            annotations.extend(get_args(value))
+            for owner in (value, representation):
+                if not isinstance(owner, type):
+                    continue
+                for parent in owner.__mro__:
+                    if parent.__module__ == object.__module__:
+                        break
+                    owners.add(parent)
+                    if parent is FieldRepresentation:
+                        break
         return tuple(sorted(owners, key=lambda owner: (owner.__module__, owner.__qualname__)))
 
 
