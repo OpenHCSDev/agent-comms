@@ -19,7 +19,7 @@ from .agent_events import AgentEvent
 from .backend import InputStartListener, TurnSession
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .field_codec import Id128Text, MalformedRecord
+from .field_codec import MalformedRecord
 from .external_transcript import DraftRow
 from .following_inputs import FollowingInputs
 from .maintenance_barrier import UNCOORDINATED_INGRESS, MaintenanceIngress
@@ -290,7 +290,6 @@ class TrackedTurnSession(TurnSession):
         execution: NativeExecution,
         following: FollowingInputs = NO_FOLLOWING_INPUTS,
     ) -> NativeTurnResult:
-        Id128Text.decode(input_id)
         if not prompt or not isinstance(prompt, str):
             raise ValueError("A native turn requires a nonempty prompt")
         measurements = startup.measurements

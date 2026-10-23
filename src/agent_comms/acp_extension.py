@@ -677,9 +677,6 @@ class PromptRequest(CommsRequest):
         default_factory=UnattributedInputOrigin, kw_only=True
     )
 
-    def __post_init__(self):
-        Id128Text.decode(self.input_id)
-
     @property
     def draft_text(self) -> str | None:
         return self.user_text
