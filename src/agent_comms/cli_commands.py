@@ -25,9 +25,8 @@ from pathlib import Path
 from types import get_original_bases
 from typing import Annotated, ClassVar, Literal, Self, TextIO, cast, get_args, get_origin
 
-from pydantic import JsonValue
-
 from acp.exceptions import RequestError
+from pydantic import JsonValue
 
 from agent_comms.errors import ToolRefusedError
 from agent_comms.launch_root import LaunchRoot
@@ -67,7 +66,7 @@ from .cli_bridges.history import (
     OfflineHistory,
     OnlineHistory,
 )
-from .cli_bridges.shared import ChoiceTargetField, DeclaredOptions, SendRequest, TargetField
+from .cli_bridges.shared import ChoiceTargetField, SendRequest, TargetField
 from .cli_protocol import ArrivedMessage, EarlierItems
 from .cli_result import CliResult
 from .command import Command
@@ -86,7 +85,7 @@ from .config_options import (
 from .context_store import LATEST_CONTEXT, ContextManifestCursor
 from .coordination_database import CoordinationStore
 from .declared_family import DeclaredFamily
-from .errors import RelationViolationError
+from .declared_verb import DeclaredCommand
 from .exporting import (
     EverythingScope,
     FullLimit,
@@ -799,8 +798,7 @@ class WorktreeArgument:
 
 @dataclass(frozen=True, kw_only=True)
 class CliCommand[Answer: CliResult = CliResult](
-    DeclaredFamily,
-    DeclaredOptions,
+    DeclaredCommand,
     CliExecution[Answer],
     affix="CliCommand",
     discovery_package="agent_comms.tools",
