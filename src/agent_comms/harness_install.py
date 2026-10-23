@@ -109,22 +109,24 @@ class CodexHarness(Harness):
 
     executable: ClassVar[str] = 'codex'
     skills_dir: ClassVar[str] = '.codex/skills'
-    bus_threads: ClassVar[tuple[str, ...]] = ('codex',)
 
     def configure(self) -> tuple[Path, ...]:
-        unit = self.home / '.config/systemd/user/codex-comms-inbox.service'
+        unit = self.home / '.config/systemd/user/codex-comms-inbox@.service'
         unit.parent.mkdir(parents=True, exist_ok=True)
         unit.write_text(f"""[Unit]
-Description=Core message stream to the selected Codex conversation
+Description=Core message stream to Codex conversation %i
 
 [Service]
 Type=simple
-ExecStart={self.bin('agent-comms-codex-bridge')} watch --state {self.home / '.local/state/codex-comms-inbox'}
+ExecStart={self.bin('agent-comms-codex-bridge')} watch --state %h/.local/state/codex-comms-inbox --session %i
 Restart=on-failure
 RestartSec=5
 KillMode=control-group
 TimeoutStopSec=10
 UMask=0077
+
+[Install]
+WantedBy=default.target
 """)
         return (unit,)
 
