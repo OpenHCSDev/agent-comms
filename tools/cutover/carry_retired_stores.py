@@ -3,16 +3,16 @@
 from pathlib import Path
 
 from agent_comms.installer.carry import Carried, Carry
-from agent_comms.locked_store import PatternFile, SQLiteFile
+from agent_comms.locked_store import DurableFile, PatternFile, RootFile, SQLiteFile
 from agent_comms.typed_table import HeldBusFile
 
 
-class RetiredSQLiteStore(SQLiteFile, PatternFile):
+class RetiredSQLiteStore(DurableFile, SQLiteFile, PatternFile):
     """Declared SQLite snapshot behavior remains available throughout rollback."""
 
 
 class RetiredTodoAllocationSnapshot(RetiredSQLiteStore):
-    filename = "todos.sqlite3.before-allocation-{created}"
+    filename = "todos.sqlite3.before-allocation-1792621659"
 
 
 class RetiredTranscriptReplyIndex(RetiredSQLiteStore):
@@ -44,8 +44,8 @@ class RetiredStores(Carry):
     opened_files = (RetiredSQLiteStore,)
 
     def carry(self, *, apply: bool) -> Carried:
-        owners = {path: owner for path, owner in SQLiteFile.existing_in(self.root).items()
-                  if issubclass(owner, RetiredSQLiteStore)}
+        owners = {self.root / resource.path: owner for resource, owner in
+                  RootFile.owned_files(self.root, self.input_files()).items()}
         rewritten: list[Path] = []
         for path, owner in owners.items():
             self.require_confined(self.root, path)
