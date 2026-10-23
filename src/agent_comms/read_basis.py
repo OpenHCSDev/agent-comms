@@ -910,6 +910,7 @@ class DirectedDMDisplayScope(MessageDisplayScope):
         return self.addresses(message.sender, message.target)
 
 
+@dataclass(frozen=True, slots=True)
 class DMDisplayScope(DirectedDMDisplayScope):
     """A conversation includes both directions of its participants' direct messages."""
 
@@ -926,8 +927,8 @@ class DMDisplayScope(DirectedDMDisplayScope):
         return cls.capture(first.name, second.name, snapshot)
 
     def address_predicate(self, sender: str, target: str) -> tuple[str, tuple]:
-        forward, first = super().address_predicate(sender, target)
-        reverse, second = super().address_predicate(target, sender)
+        forward, first = super(DMDisplayScope, self).address_predicate(sender, target)
+        reverse, second = super(DMDisplayScope, self).address_predicate(target, sender)
         return f"({forward} OR {reverse})", (*first, *second)
 
     @property
@@ -935,7 +936,8 @@ class DMDisplayScope(DirectedDMDisplayScope):
         return self.first_names | self.second_names
 
     def addresses(self, sender: str, target: str) -> bool:
-        return super().addresses(sender, target) or super().addresses(target, sender)
+        return (super(DMDisplayScope, self).addresses(sender, target)
+                or super(DMDisplayScope, self).addresses(target, sender))
 
 
 @dataclass(frozen=True)

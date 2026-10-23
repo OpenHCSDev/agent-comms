@@ -20,6 +20,8 @@ from agent_comms.commander.order import Commander, OrderFile, SayVerb, SendVerb
 from agent_comms.commander.questions import UnansweredBurst, UnansweredUnitAsks
 from agent_comms.commander.standing import (
     HeartbeatSilent,
+    HeartbeatNotStarted,
+    MissedHeartbeat,
     AnswersTo,
     UnitAskUnanswered,
 )
@@ -577,6 +579,39 @@ def test_every_pass_beats_and_a_stale_beat_is_heartbeat_silent(held_bus, monkeyp
     silent, = HeartbeatSilent.violations(held_bus, "lead")
     assert silent.beat == unchanged.seq
     assert silent.line().startswith(f"HEARTBEAT SILENT: no beat since seq {unchanged.seq}")
+
+
+def test_first_heartbeat_is_owed_from_the_oldest_open_request_then_survives_renames(
+        held_bus, monkeypatch):
+    commander = held_bus.registry.require("lead")
+    held_bus.registry.register(replace(commander, process_identity=ProcessIdentity.capture(os.getpid())))
+    request, = CommanderHeartbeat.requested_by(held_bus.registry.require("lead"), held_bus.goals)
+    assert HeartbeatSilent.violations(held_bus, "lead") == ()
+    due = request.created_at + HeartbeatSilent.seconds
+    monkeypatch.setattr(time, "time", lambda: due + 1)
+    never, = HeartbeatSilent.violations(held_bus, "lead")
+    assert isinstance(never, HeartbeatNotStarted)
+    assert never.request == request.id and never.since == due
+    assert "HEARTBEAT NOT STARTED" in never.line()
+    assert HeartbeatSilent.broken(held_bus, "lead", observed=()) == (never,)
+
+    # A newer request and mere service registration cannot reset older unpaid service.
+    held_bus.goals.todos.add_request(commander.incarnation, "A newer independent request")
+    CommanderHeartbeat.register(held_bus.registry)
+    assert HeartbeatSilent.violations(held_bus, "lead") == (never,)
+    fresh = held_bus.bus.publisher.publish_ordinary(Message(
+        sender=CommanderHeartbeat.sender, target="lead", body="The heartbeat is running now",
+        type=InfoKind, timestamp=due + 1,
+    ), origin=AgentOrigin())
+    assert HeartbeatSilent.violations(held_bus, "lead") == ()
+
+    held_bus.threads._rename_thread("lead", "renamed-lead")
+    held_bus.threads._rename_thread(CommanderHeartbeat.sender, "renamed-heartbeat")
+    monkeypatch.setattr(time, "time", lambda: fresh.timestamp + HeartbeatSilent.seconds + 1)
+    held_bus.messaging.send("renamed-lead", "renamed-heartbeat", "Read the earlier beat")
+    silent, = HeartbeatSilent.violations(held_bus, "renamed-lead")
+    assert isinstance(silent, MissedHeartbeat) and silent.beat == fresh.seq
+    assert silent.since == fresh.timestamp + HeartbeatSilent.seconds
 
 
 def test_one_answer_covers_an_escalation_burst_sent_before_it(held_bus):

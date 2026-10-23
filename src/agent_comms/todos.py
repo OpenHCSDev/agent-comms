@@ -3544,13 +3544,13 @@ class OwnerRequestStore(DurableStore):
             return OwnerRequest.require(db, id=request)
 
     def open_requests(
-        self, commander: ThreadIncarnation, *, limit: int = -1,
+        self, commander: ThreadIncarnation, *, limit: int = -1, descending: bool = True,
     ) -> tuple[OwnerRequest, ...]:
         with self.snapshot() as db:
             return tuple(OwnerRequest.select(
                 db, where="commander_created_at=?",
                 parameters=(commander.require_recorded().created_at,), state=OpenRequestState(),
-                order_by=("created_at", "id"), descending=True, limit=limit,
+                order_by=("created_at", "id"), descending=descending, limit=limit,
             ))
 
     def record_directive(self, request: OwnerRequestId, directive: RequestDirective) -> None:
