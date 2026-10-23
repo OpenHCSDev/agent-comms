@@ -987,7 +987,11 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
         with MaintenancePhase("begin").running(self.staged.commands.clock):
             maintenance = MaintenanceBarrier(RegistryStore.at(self.root).path)
             services = HostService.stop_running()
-            held = maintenance.begin(MaintenanceOperator.current())
+            try:
+                held = maintenance.begin(MaintenanceOperator.current())
+            except BaseException:
+                self.installed.start_services(services)
+                raise
             holder = ExitStack()
             holder.enter_context(held.holding())  # this run's own CLI calls read under its hold
         try:
