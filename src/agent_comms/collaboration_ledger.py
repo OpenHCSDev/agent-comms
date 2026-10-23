@@ -10,6 +10,7 @@ from .shared_ledger import SharedLedger
 
 @dataclass(frozen=True, slots=True)
 class CollaborationLedger(SharedLedger):
+    locks_after = SharedLedger
     registry: Registration
 
     def merge(self, updates: Mapping[str, object], author: str) -> None:

@@ -23,6 +23,7 @@ from contextlib import (
 from contextvars import Context, ContextVar
 from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
+from inspect import isabstract
 from pathlib import Path
 from typing import BinaryIO, ClassVar
 
@@ -145,8 +146,6 @@ class StoreLock:
     @contextmanager
     def ordered(cls, requests: Mapping[StoreLockOwner, LockMode], *, blocking=True, contention=None):
         """Acquire store owners by their declared rank, never their filenames."""
-        # The declared order ranks every owner before the first ordered acquisition.
-        from . import store_order  # noqa: F401
         with ExitStack() as resources:
             yield {owner: resources.enter_context(owner.locked(
                 mode=requests[owner], blocking=blocking, contention=contention))
@@ -247,19 +246,26 @@ class StoreOwner(DeclaredFamily):
 class StoreLockOwner(StoreOwner, declared_name=None):
     __slots__ = ()
     path: Path
+    locks_after: ClassVar[type[StoreLockOwner] | None]
     lock_rank: ClassVar[int]
     lock_type: ClassVar[type[StoreLock]] = StoreLock
 
-    @classmethod
-    def declare_lock_order(cls, owners: tuple[type[StoreLockOwner], ...]) -> None:
-        if len(set(owners)) != len(owners):
-            raise TypeError("A store owner occurs twice in the lock order")
-        missing = set(cls.members_with(cls)) - set(owners)
-        if missing:
-            names = ", ".join(sorted(owner.__name__ for owner in missing))
-            raise TypeError(f"Store owners missing from the lock order: {names}")
-        for rank, owner in enumerate(owners):
-            owner.lock_rank = rank
+    def __init_subclass__(cls, **kwargs) -> None:
+        super().__init_subclass__(**kwargs)
+        if isabstract(cls) or cls.declared_name is None:
+            return
+        if "locks_after" not in vars(cls):
+            raise TypeError(f"{cls.__name__} must declare locks_after")
+        for owner in StoreLockOwner.members_with(StoreLockOwner):
+            if owner.locks_after is cls.locks_after:
+                # A slots dataclass rebuilds its declaration with the same field objects.
+                fields = vars(cls).get("__dataclass_fields__")
+                if fields is not None and fields is vars(owner).get("__dataclass_fields__"):
+                    continue
+                raise TypeError(
+                    f"{cls.__name__} and {owner.__name__} declare the same lock predecessor"
+                )
+        cls.lock_rank = 0 if cls.locks_after is None else cls.locks_after.lock_rank + 1
 
     def locked(self, *, blocking: bool = True, read_budget: StoreReadBudget = UNBOUNDED_STORE_READ,
                mode: LockMode = ExclusiveLock(), contention: StoreLockContention | None = None):

@@ -7,6 +7,7 @@ claim historical proof that a model consumed an old channel message.
 
 from __future__ import annotations
 
+from .read_ledger import ReadLedger
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
@@ -651,6 +652,7 @@ class RemoveRelationshipEdit(RelationshipEdit):
 
 class RelationshipStore(ThreadOwnedState, CarriedDocument[RelationshipDocument]):
     """One current durable typed schema; retired formats are rejected."""
+    locks_after = ReadLedger
 
     filename = "relationships.json"
     json_indent = 2

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .relationships import RelationshipStore
 from abc import abstractmethod
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
@@ -83,6 +84,7 @@ class RuntimeInfoDocument(SingleFieldValue):
 @dataclass(frozen=True, slots=True)
 class RuntimeInfoStore(ThreadOwnedState, CarriedDocument[RuntimeInfoDocument]):
     """Latest observations, independently committed from the registry/log."""
+    locks_after = RelationshipStore
 
     filename: ClassVar[str] = "runtime_info.json"
     json_indent = 2

@@ -1,6 +1,7 @@
 """Connector grants and browser trust, independent of the HTTP transport."""
 from __future__ import annotations
 
+from .collaboration_ledger import CollaborationLedger
 import hashlib
 import json
 import secrets
@@ -183,6 +184,7 @@ class ConnectorGrants:
 
 @dataclass(frozen=True, slots=True)
 class ConnectorStore(CarriedDocument[ConnectorGrants]):
+    locks_after = CollaborationLedger
     filename: ClassVar[str] = "grants.json"
 
     @classmethod
