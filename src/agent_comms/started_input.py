@@ -35,7 +35,7 @@ class StartedInput:
         current = await inputs.queue_binding(session_id)
         if not scope.current_for(current):
             current = NoQueueScope()
-        await inputs.runtime.session_update(
+        await inputs.runtime.publish_update(
             session_id=session_id, update=InputStartedUpdate(
                 public_id, text, current, current.start_revision(inputs, session_id), row.native_id,
             ).acp_chunk(),

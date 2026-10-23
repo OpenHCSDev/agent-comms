@@ -34,7 +34,7 @@ def test_dm_page_marks_covered_range_preserving_omitted_older_unread(tmp_path: P
     assert isinstance(page.selection, DMSelection)
     comms.views.mark_page_read(page, worktree=str(tmp_path))
     assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) == 45
-    assert [message.body for message in comms.bus.inbox(viewer, CommandTarget.named("peer"))] == [
+    assert [message.body for message in comms.bus.inbox(viewer, CommandTarget.named("peer")).page.messages] == [
         f"old {index}" for index in range(45)
     ]
 

@@ -26,6 +26,6 @@ async def test_watch_emits_startup_unread_then_arrival_and_leaves_untaken_unread
         third = wired.messaging.send("PR111", "fixer", "not taken").message
         # Closing here never advances the iterator to the third message.
 
-    unread = {message.message_id for message in wired.bus.inbox("fixer")}
+    unread = {message.message_id for message in wired.bus.inbox("fixer").page.messages}
     assert first.message_id not in unread
     assert third.message_id in unread

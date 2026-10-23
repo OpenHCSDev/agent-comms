@@ -181,12 +181,12 @@ def test_installer_discovers_the_live_claim_independent_of_state_directory(
             assert paused.bridge == bridge
             assert isinstance(claim.state(), LiveWatch)
             # A held claim's absent socket is an install's gap: the reader waits it out.
-            claim.state().await_socket(FileNotFoundError(claim.socket_path))
+            claim.state().await_socket(claim, FileNotFoundError(claim.socket_path))
         assert child.wait(timeout=15) == 0, log.read_text()
         assert isinstance(claim.state(), LapsedWatch)
         # A bridge that stopped ends the Monitor reader with the reason, not a silent spin.
         with pytest.raises(NoSessionBridge):
-            claim.state().await_socket(FileNotFoundError(claim.socket_path))
+            claim.state().await_socket(claim, FileNotFoundError(claim.socket_path))
 
 
 def test_session_start_and_runtime_replacement_share_the_declared_launcher(tmp_path):

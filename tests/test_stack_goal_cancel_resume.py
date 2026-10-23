@@ -1,4 +1,5 @@
 """Real native Pi and owner socket: cancelled goals need an explicit fresh grant."""
+from agent_comms.controller import SessionUpdateSink
 
 import asyncio
 import json
@@ -35,8 +36,8 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(tm
         first_chunk, continued = asyncio.Event(), asyncio.Event()
         updates = []
 
-        class Client:
-            async def session_update(self, session_id, update):
+        class Client(SessionUpdateSink):
+            async def publish_update(self, session_id, update):
                 value = SessionNotification(session_id=session_id, update=update).update.model_dump(
                     by_alias=True, exclude_none=True,
                 )
@@ -46,6 +47,7 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(tm
                     first_chunk.set()
                 if "FRESH_RESPONSE" in text:
                     continued.set()
+                return True
 
         provider = native.provider
         provider.text = "CANCELLED_RESPONSE"

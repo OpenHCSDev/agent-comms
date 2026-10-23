@@ -1,5 +1,5 @@
 """Follow live native sessions and print turn digests for commander judgment."""
-import os, time, glob, collections
+import argparse, os, time, glob, collections
 
 from ..native_tool_call import CodingCall
 from ..lifecycle_capability import Successful
@@ -61,6 +61,7 @@ def walk(ctx: Commander, turns: dict[str, list[str]], thread: str,
 
 
 def main(a, ctx):
+    argparse.ArgumentParser(prog='tool-watch', description=__doc__).parse_args(a)
     registry = ctx.comms.registry
     names, offsets = thread_names(registry), {}
     turns = collections.defaultdict(list)

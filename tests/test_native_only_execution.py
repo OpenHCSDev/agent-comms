@@ -15,6 +15,7 @@ from agent_comms.child_process import BoundedRun
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.threads import Thread
 from bus_history import read_history
+from bus_record_fixture import prepare_native_comms
 from pi_session_turn import one_turn_events
 
 @pytest.mark.parametrize("arguments,code", [(('--help',), 0), (('tools',), 2), ((), 1)])
@@ -54,7 +55,8 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
         caller_project = base / "caller-project"
         project.mkdir()
         caller_project.mkdir()
-        comms = wire(base / "wire")
+        # Headless execution requires a private bus root (worker.py); its owner prepares one.
+        comms = prepare_native_comms(wire(base / "wire"))
         comms.registry.declare(Thread('headless', frozenset(), str(project)))
         env = dict(
             os.environ,

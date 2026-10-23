@@ -1,4 +1,5 @@
 """Public agent-comms and ACP fields consumed by pinned Toad builds."""
+from agent_comms.controller import SessionUpdateSink
 
 from functools import partial
 
@@ -40,10 +41,11 @@ async def test_toad_public_types_and_acp_agent_comms_metadata(tmp_path, consumer
 
     updates = []
 
-    class Client:
-        async def session_update(self, session_id, update):
+    class Client(SessionUpdateSink):
+        async def publish_update(self, session_id, update):
             assert session_id == "worker"
             updates.append(update.model_dump(by_alias=True, exclude_none=True))
+            return True
 
     route = MessageRoute("worker", ("#team",))
     client = Client()

@@ -6,7 +6,7 @@ import asyncio
 import os
 from functools import partial
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from acp import RequestError
 from acp.schema import (
@@ -36,7 +36,6 @@ from .acp_extension import (
 from .child_process import join_retirement
 from .comms import Comms
 from .config_options import SessionConfigOptions
-from .controller import AcpController
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, MalformedRecord, boundary_decoder
@@ -55,6 +54,10 @@ from .threads import Thread
 from .transcript_updates import TranscriptReplay
 
 
+if TYPE_CHECKING:
+    from .acp import SdkSessionConnection
+
+
 class SessionLifecycle:
     def __init__(
         self,
@@ -71,7 +74,7 @@ class SessionLifecycle:
         # A launcher registers this process as the owner before it starts, so
         # this process owns that registration even if it never binds a session.
         self.launched_owners: set[str] = set()
-        self.client: AcpController | None = None
+        self.client: SdkSessionConnection | None = None
         self.titles: dict[str, str] = {}
         self.display_titles: dict[str, ThreadText] = {}
         self.worktrees: dict[str, str] = {}
@@ -195,7 +198,7 @@ class SessionLifecycle:
             session_id=thread.name,
             field_meta=await self.metadata(thread.name, session_id=thread.name),
         )
-        self.config.start_menu(thread.name, self.client)
+        self.config.start_menu(thread.name, self.runtime)
         return response
 
     async def load_session(self, request: LoadSessionRequest) -> LoadSessionResponse:
@@ -210,7 +213,7 @@ class SessionLifecycle:
         response = LoadSessionResponse(
             field_meta=await self.metadata(thread.name, session_id=session_id),
         )
-        self.config.start_menu(session_id, self.client)
+        self.config.start_menu(session_id, self.runtime)
         return response
 
     async def start_owner(self, cwd: str, session_id: str) -> None:
@@ -315,7 +318,7 @@ class SessionLifecycle:
         self, session_id: str, *, title: ThreadText = NoThreadText(),
     ) -> None:
         """Encode the thread's title once for the ACP metadata boundary."""
-        await self.runtime.session_update(
+        await self.runtime.publish_update(
             session_id=session_id,
             update=SessionInfoUpdate(
                 session_update="session_info_update",

@@ -229,7 +229,7 @@ def test_dm_ack_survives_process_exit_and_rebind_does_not_inherit_reads(tmp_path
     fresh = comms.messaging.send("alice", viewer, "new incarnation unseen").message
     assert not read_message(comms, viewer, old)
     assert comms.bus.pending_count(viewer, CommandTarget.named("alice")) == 1
-    assert [row.seq for row in comms.bus.inbox(viewer, CommandTarget.named("alice"))] == [fresh.seq]
+    assert [row.seq for row in comms.bus.inbox(viewer, CommandTarget.named("alice")).page.messages] == [fresh.seq]
 
 
 @pytest.mark.parametrize("seed", [7, 31, 99])

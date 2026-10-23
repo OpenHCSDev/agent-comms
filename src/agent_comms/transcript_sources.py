@@ -15,11 +15,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
 if TYPE_CHECKING:
+    from .context_store import ContextStore
     from .external_transcript import ExternalPageRow
     from .message_reference import MessageReference
     from .native_entries import TranscriptProjection
     from .native_transcript import NativeRecord, NativeTranscript
     from .threads import Thread, ThreadProvenance
+    from .turn_context import SegmentManifest
     from .transcript_events import TextTranscript, TranscriptEvent
     from .transcript_routes import TranscriptRoutes, _SessionRoutes
     from .transcripts import NativeTranscriptCursor, TranscriptCursor
@@ -388,6 +390,12 @@ class TranscriptSource:
 
     async def watch_requests(self, emit: Callable[[ExternalPageRow], None]) -> None:
         """Sources without a harness continuation have no bridge requests."""
+
+    def recorded_contexts(
+        self, contexts: ContextStore, entry_ids: tuple[str, ...],
+    ) -> dict[str, SegmentManifest]:
+        """Only a native journal records a context manifest per input entry."""
+        return {}
 
     def turns(self, bound: TurnBound) -> tuple[TurnDigest, ...]:
         """Read input-bounded turns under one original record-source cut."""

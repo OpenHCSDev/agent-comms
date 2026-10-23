@@ -115,6 +115,19 @@ class StoredBinding(BindingRequest):
 
 
 @dataclass(frozen=True)
+class GivenBinding(BindingRequest):
+    """Some binding fields given: each overrides the stored binding's field, and a field
+    missing from both is refused by name when the merged fields decode."""
+
+    given: dict[str, str]
+
+    def bind(self, db: sqlite3.Connection) -> Binding:
+        stored = tuple(FieldCodec.encode(row) for row in Binding.select(db))
+        requested = FieldCodec.decode(Binding, {**(stored[0] if stored else {}), **self.given})
+        return requested.bind(db)
+
+
+@dataclass(frozen=True)
 class Binding(BridgeStateTable, TypedTable, BindingRequest):
     root: str
     bus: Annotated[str, field_codec.WireName("bus_thread")]
@@ -122,7 +135,8 @@ class Binding(BridgeStateTable, TypedTable, BindingRequest):
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
-        group = parser.add_argument_group('Core/CLI binding (all or none)')
+        group = parser.add_argument_group(
+            'Core/CLI binding (each given field overrides the stored binding)')
         for _, key in FieldCodec.record_fields(cls):
             group.add_argument('--' + key.replace('_', '-'))
 
@@ -130,7 +144,7 @@ class Binding(BridgeStateTable, TypedTable, BindingRequest):
     def from_arguments(cls, arguments: argparse.Namespace) -> BindingRequest:
         values = {key: vars(arguments)[key] for _, key in FieldCodec.record_fields(cls)
                   if vars(arguments)[key] is not None}
-        return FieldCodec.decode(cls, {cls.family_discriminator: cls.declared_name, **values}) if values else StoredBinding()
+        return GivenBinding({cls.family_discriminator: cls.declared_name, **values}) if values else StoredBinding()
 
     @classmethod
     @contextmanager
