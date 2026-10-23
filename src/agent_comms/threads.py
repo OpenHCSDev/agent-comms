@@ -61,7 +61,7 @@ from .thread_identity import (
 from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 from .thread_provenance import ThreadProvenance
 from .thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
-from .turn_lease import NoTurnRecord, TurnLease, TurnLeaseFence, TurnRecord, TurnState
+from .turn_lease import FinishedTurn, NoTurnRecord, TurnLease, TurnLeaseFence, TurnRecord, TurnState
 
 if TYPE_CHECKING:
     from .goal_management import Goals
@@ -213,7 +213,6 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
     turn_record: TurnRecord = field(default_factory=NoTurnRecord)
     channel_scope_generation: int = 0
     turn_generation: int = 0
-    last_finished_turn_id: str | None = None
 
     def inherited_history(self, registry, visited):
         if self.name in visited:
@@ -257,7 +256,7 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
 
     @property
     def turn_state(self) -> TurnState:
-        return TurnState(self.turn_record.read(), self.last_finished_turn_id)
+        return self.turn_record.state()
 
     def restart_candidates(self, status):
         return self.execution.restart_candidates(self, status)
@@ -317,12 +316,7 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
             raise ValueError("Channel scope generation must be a nonnegative 63-bit integer.")
         if type(self.turn_generation) is not int or not 0 <= self.turn_generation < 1 << 63:
             raise ValueError("Turn generation must be an exact nonnegative 63-bit integer.")
-        if self.last_finished_turn_id is not None and (
-            type(self.last_finished_turn_id) is not str
-            or not self.last_finished_turn_id
-            or self.turn_generation == 0
-        ):
-            raise ValueError("Finished turn requires a prior turn generation and ID.")
+        self.turn_record.require_generation(self.turn_generation)
         if self.parent.named(self.name):
             raise RelationViolationError(f"Thread {self.name!r} cannot be its own parent.")
 
@@ -418,7 +412,7 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
 
     def without_turn(self) -> Thread:
         """Drop the reference; the registry transaction owns revoking the record."""
-        return replace(self, turn_record=NoTurnRecord())
+        return replace(self, turn_record=self.turn_record.released())
 
     def preserve_registration_history(self, previous: Thread) -> Thread:
         """Metadata writers cannot forge channel scope or reset a finished turn."""
@@ -430,11 +424,7 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         result = replace(self, created_at=previous.created_at, channel_scope_generation=scope)
         if self.turn_generation != previous.turn_generation:
             result = replace(
-                result, turn_generation=previous.turn_generation,
-                last_finished_turn_id=(
-                    previous.last_finished_turn_id
-                    if self.turn_record == previous.turn_record else None
-                ),
+                result, turn_generation=previous.turn_generation, turn_record=previous.turn_record,
             )
         return result
 
@@ -484,14 +474,20 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
             return False
         return self.turn_lease.observes_task_turn(
             identity, turn,
-            idle=identity.generation == self.turn_generation and self.last_finished_turn_id == turn.value)
+            idle=identity.generation == self.turn_generation
+            and self.turn_record == FinishedTurn(turn.value))
+
+    @property
+    def turn_identity(self) -> TurnIdentity:
+        """The turn generation this thread's registry entry currently names."""
+        return TurnIdentity(self.incarnation, self.turn_generation)
 
     def observed_turn(self, claim_scope: int) -> TurnFence | None:
         """Passive current/last-completed witness; never a begin-turn grant."""
-        turn_id = self.turn_record.read().observed_id(self.last_finished_turn_id)
+        turn_id = self.turn_state.observed_id()
         if turn_id is None:
             return None
-        return TurnFence(TurnIdentity(self.incarnation, self.turn_generation), turn_id, claim_scope)
+        return TurnFence(self.turn_identity, turn_id, claim_scope)
 
     def latest_idle_turn(self, fence: TurnFence, claim_scope: int) -> bool:
         """Only the exact latest completed turn can release a dependency."""

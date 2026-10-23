@@ -56,7 +56,7 @@ from .thread_status import (
 )
 from .thread_text import ForkedParent, NoParent
 from .threads import Thread
-from .turn_lease import FinishedTurnFence, NoFinishedTurn, TurnCompletion, TurnLeaseFence
+from .turn_lease import FinishedTurn, FinishedTurnFence, NoFinishedTurn, TurnCompletion, TurnLeaseFence
 
 if TYPE_CHECKING:
     from .activity import ObservedActivity
@@ -688,7 +688,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         record = current.turn_record
         if record != canonical_lease.record:
             return False, NoFinishedTurn()
-        if TurnIdentity(current.incarnation, current.turn_generation) != canonical_lease.identity:
+        if current.turn_identity != canonical_lease.identity:
             return False, NoFinishedTurn()
         turn = record.read().require_active()
         if not turn.may_release(canonical_lease):
@@ -700,8 +700,8 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         keeps_resume = turn.phase.keeps_project_resume
         record.without_claim()
         self.threads[name] = replace(
-            current.without_turn(),
-            last_finished_turn_id=(lease.turn_id if current.turn_generation else None),
+            current,
+            turn_record=FinishedTurn(lease.turn_id),
             project_resume_due=current.project_resume_due and keeps_resume,
         )
         self.last_seen[name] = time.time()
@@ -793,6 +793,11 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
 
     def threads_for(self, incarnation: RecordedThreadIncarnation) -> tuple[Thread, ...]:
         return tuple(self.by_lookup[key] for key in (incarnation.lookup,) if key in self.by_lookup)
+
+    def holds_turn(self, identity: TurnIdentity) -> bool:
+        """Whether its thread still names this turn generation; a superseded lease does not."""
+        return any(thread.turn_identity == identity
+                   for thread in self.threads_for(identity.incarnation.require_recorded()))
 
     def idle_after(self, fence: FinishedTurnFence) -> tuple[Thread, ...]:
         return tuple(
