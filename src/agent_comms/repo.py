@@ -69,7 +69,7 @@ class Repo(BaseModel, WireValue):
         Annotated[
             RepositoryName,
             PlainValidator(RepositoryName.from_wire, json_schema_input_type=str),
-            PlainSerializer(RepositoryName.to_wire),
+            PlainSerializer(lambda name: name.to_wire()),
         ]
     ]
     source: str = "src"

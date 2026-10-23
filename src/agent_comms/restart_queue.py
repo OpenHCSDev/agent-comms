@@ -29,7 +29,7 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec, WireOmitDefault
 from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .lifecycle_capability import Active, LifecycleCapability, Pending
-from .locked_store import DurableFile, PatternFile
+from .locked_store import DurableFile, PatternFile, RuntimeFile
 from .native_arguments import GivenBinary, NativeArguments
 from .owner_cutover import PreserveOwnerRuntime
 from .owner_launch import RetainedOwnerLaunch
@@ -38,7 +38,7 @@ from .owner_restart import OwnerRestartRequest, StoppedOwnerFailure
 from .private_path import PrivateDirectoryRole
 from .restart_refusals import RestartRefusal
 from .restart_scope import OwnersNamed
-from .store_files import AtomicFile, _store_lock
+from .store_files import AtomicFile, StoreLockFile, _store_lock
 from .thread_identity import RecordedThreadIncarnation
 from .watched import ChangeSignal, DirectorySource, FileSource
 
@@ -191,6 +191,13 @@ class QueuedRestart(DurableFile, PatternFile):
         return replace(self, state=state)
 
 
+class RestartQueueLock(RuntimeFile, StoreLockFile):
+    """The queue's lock: every enqueue, transition and watcher release takes it."""
+
+    filename: ClassVar[str] = "queue"
+    root_directory: ClassVar[str] = DIRECTORY
+
+
 class RestartQueueLayoutError(RelationViolationError):
     """The one-use queue layout migration must precede new queue writers."""
 
@@ -204,7 +211,8 @@ class RestartQueue:
     def __post_init__(self) -> None:
         for path in (self.directory, self.active_directory, self.directory / 'settled'):
             path.mkdir(mode=0o700, exist_ok=True)
-            PrivateDirectoryRole.require(path.lstat())
+            PrivateDirectoryRole.require(
+                path.lstat(), RelationViolationError("Restart queue directory must be private"))
 
     @property
     def active_directory(self) -> Path:
@@ -212,7 +220,7 @@ class RestartQueue:
 
     @property
     def lock_path(self) -> Path:
-        return self.directory / 'queue'
+        return RestartQueueLock.path_in(self.directory)
 
     @contextmanager
     def locked(self):
@@ -230,7 +238,8 @@ class RestartQueue:
         owner = record.selection.identity.incarnation.require_recorded()
         directory = self.directory / 'settled' / owner.lookup
         directory.mkdir(mode=0o700, exist_ok=True)
-        PrivateDirectoryRole.require(directory.lstat())
+        PrivateDirectoryRole.require(
+            directory.lstat(), RelationViolationError("Settled restart directory must be private"))
         return directory / f'{uuid.UUID(record.id).hex}.json'
 
     def read(self, path: Path) -> QueuedRestart:

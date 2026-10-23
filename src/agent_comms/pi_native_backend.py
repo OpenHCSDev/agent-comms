@@ -83,7 +83,7 @@ class PiSessionFile(RuntimeLocation):
 
     path: str
 
-    def select_session(self, directory, execution, source_reads, *, root, thread):
+    def select_session(self, directory, execution, source_reads, *, participant):
         path = Path(self.path).absolute()
         retained = execution.retained_source(path)
         identity = (retained.identity if retained is not None else
@@ -91,7 +91,7 @@ class PiSessionFile(RuntimeLocation):
                         source_reads.for_source(path)
                     ))
         return SavedSelectedSession(directory, identity=identity,
-                                    owner=thread.incarnation.require_recorded())
+                                    owner=participant.owner.thread.incarnation.require_recorded())
 
     def history_source(self, root, incarnation):
         return NativeTranscript(Path(self.path))

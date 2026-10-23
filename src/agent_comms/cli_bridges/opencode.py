@@ -57,6 +57,7 @@ class OpenCodeOptions(Options):
 class Attach(Watch):
     """The selected native session owns its Core thread and bridge child."""
 
+    help = "Attach the running OpenCode session to its bus thread and deliver to it"
     pid: int
 
     @classmethod

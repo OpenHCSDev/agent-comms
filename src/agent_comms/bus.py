@@ -469,11 +469,9 @@ class Bus(BusReader, ReconciledFile, WalStore, CarriedWriter, BusFile, Watched):
     def observing(
         self, contention: StoreLockContention = UNBOUNDED_CONTENTION,
     ) -> Iterator[sqlite3.Connection]:
-        """Borrow one read-only snapshot, including for an archived bus; a bus before its
-        first write reads as its declared empty tables."""
-        with self.committed_or_empty(
-            self.table_schema(), lambda: SQLiteFile.observing(self.path), contention
-        ) as db:
+        """Borrow one read-only snapshot, including for an archived bus. Root adoption
+        creates the bus, so an absent file is a deleted bus and fails to open."""
+        with self._attached(lambda: SQLiteFile.observing(self.path), contention) as db:
             yield db
 
     def backup(self, destination: Path) -> None:

@@ -34,6 +34,7 @@ from agent_comms.installer.upgrade import (
     InstalledUpgrade,
     RehearsedUpgrade,
     Stack,
+    UncopiedRehearsal,
     Upgrade,
 )
 from agent_comms.launch_runtime import LaunchRuntime
@@ -111,9 +112,8 @@ def drop_one_index(root: Path) -> Path:
 ), ids=("kept-repos-current-stores", "given-repos-drifted-store"))
 def test_install_rehearses_without_changing_the_bus(installed_comms, installed_home, install_checkout, tmp_path,
                                                     repos, drifted):
-    """Retained carry steps inspect a practice copy, even when no step is pending.
-
-    Only the deliberately drifted store is rewritten; neither case changes the bus.
+    """A rehearsal copies only what pending carries and the planned reconcile name;
+    with neither, nothing is copied. Neither case changes the bus.
     """
     comms = installed_comms
     declare_test_bus(comms, channels=("comms",), threads=(
@@ -131,9 +131,14 @@ def test_install_rehearses_without_changing_the_bus(installed_comms, installed_h
     assert installed.returncode == 0, installed.stderr
     result = FieldCodec.decode(Upgrade, FieldCodec.parse(installed.stdout))
     assert isinstance(result, RehearsedUpgrade)
-    assert isinstance(result.rehearsal, CarriedRehearsal)
     assert result.pending == ()
-    assert result.rehearsal.files.names == rewritten
+    if drifted:
+        assert isinstance(result.rehearsal, CarriedRehearsal)
+        assert result.rehearsal.files.names == rewritten
+    else:
+        assert isinstance(result.rehearsal, UncopiedRehearsal)
+        assert result.rehearsal.copy.bytes == 0
+        assert result.rehearsal.inputs == ()
     assert bus_files(comms.root) == before
 
 

@@ -9,7 +9,6 @@ from __future__ import annotations
 import fcntl
 import json
 import os
-import stat
 import time
 import uuid
 from abc import ABC, abstractmethod
@@ -26,7 +25,7 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec, MalformedRecord, PathText
 from .launch_root import LaunchRoot
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
-from .private_path import ObservedPath
+from .private_path import ObservedPath, OwnedDirectoryRole, PrivateDirectoryRole, PrivateFileRole
 from .recorded_bus import RecordedBusIdentity
 from .store_files import UNBOUNDED_CONTENTION, SharedLock, StoreLockContention
 
@@ -197,28 +196,25 @@ def active_route_path() -> Path:
     return Path.home() / ".local/state/agent-comms" / RouteFile.filename
 
 
+class RouteFileNotPrivate(ValueError):
+    def __init__(self) -> None:
+        super().__init__("active comms route must be one owner-only regular file")
+
+
 def read_active_route(path: Path | None = None) -> ActiveRoute | None:
     """Decode the one trusted default route; explicit roots bypass this file."""
     path = active_route_path() if path is None else path
+    refusal = RouteFileNotPrivate()
     try:
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        fd = PrivateFileRole.read(path, refusal)
     except FileNotFoundError:
         return None
     try:
-        parent = path.parent.lstat()
-        if (
-            not stat.S_ISDIR(parent.st_mode)
-            or not Platform.current().is_private(parent, 0o700)
-        ):
-            raise ValueError("active comms route directory must be owner-only")
+        PrivateDirectoryRole.require(
+            path.parent.lstat(), ValueError("active comms route directory must be owner-only"))
         info = os.fstat(fd)
-        if (
-            not stat.S_ISREG(info.st_mode)
-            or not Platform.current().is_private(info, 0o600)
-            or info.st_nlink != 1
-            or not 0 < info.st_size <= 4096
-        ):
-            raise ValueError("active comms route must be one owner-only regular file")
+        if not 0 < info.st_size <= 4096:
+            raise refusal
         raw = os.read(fd, 4097)
     finally:
         os.close(fd)
@@ -252,17 +248,11 @@ def guard_default_route_write(
     """
     path = active_route_path()
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    refusal = ValueError("active comms route directory changed or is not owned")
+    directory = OwnedDirectoryRole.read(path.parent, refusal)
     try:
         contention.acquire(directory, Platform.current(), mode=SharedLock())
-        info = os.fstat(directory)
-        parent = path.parent.lstat()
-        if (
-            not stat.S_ISDIR(info.st_mode)
-            or not Platform.current().is_owned(info)
-            or (parent.st_dev, parent.st_ino) != (info.st_dev, info.st_ino)
-        ):
-            raise ValueError("active comms route directory changed or is not owned")
+        OwnedDirectoryRole.held(directory, path.parent, refusal)
         Platform.current().make_private_descriptor(directory, 0o700)
         route = CommsRoute.current(path)
         # Local roots may be created under this guard. ActiveRoute owns the
@@ -489,14 +479,11 @@ def _route_directory(route: ActiveRoute, path: Path | None) -> Iterator[tuple[Pa
 def route_directory(path: Path) -> Iterator[int]:
     """Hold the existing publication lock for one route snapshot or mutation."""
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    refusal = ValueError("active comms route directory changed or is not owned")
+    directory = OwnedDirectoryRole.read(path.parent, refusal)
     try:
         acquire_exclusive_route_lock(directory)
-        info = os.fstat(directory)
-        parent = path.parent.lstat()
-        if (not stat.S_ISDIR(info.st_mode) or not Platform.current().is_owned(info)
-                or (parent.st_dev, parent.st_ino) != (info.st_dev, info.st_ino)):
-            raise ValueError("active comms route directory changed or is not owned")
+        OwnedDirectoryRole.held(directory, path.parent, refusal)
         Platform.current().make_private_descriptor(directory, 0o700)
         yield directory
     finally:
@@ -514,26 +501,17 @@ def _publish_active_route_locked(
     or move an unreadable one to ``backup`` and replace it."""
     temporary: str | None = None
     try:
+        refusal = ValueError("active comms route directory changed or is not owned")
+        OwnedDirectoryRole.held(directory, path.parent, refusal)
         info = os.fstat(directory)
-        parent = path.parent.lstat()
-        if (
-            not stat.S_ISDIR(info.st_mode)
-            or not Platform.current().is_owned(info)
-            or parent.st_dev != info.st_dev
-            or parent.st_ino != info.st_ino
-        ):
-            raise ValueError("active comms route directory changed or is not owned")
         Platform.current().make_private_descriptor(directory, 0o700)
         if backup is None and read_active_route(path) is not None:
             raise ValueError("active comms route is already installed")
         payload = route.encoded()
         temporary = f".active-route-{uuid.uuid4().hex}.tmp"
-        fd = os.open(
-            temporary,
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-            0o600,
-            dir_fd=directory,
-        )
+        fd = PrivateFileRole.create(
+            temporary, RouteFileNotPrivate(),
+            dir_fd=directory)
         try:
             view = memoryview(payload)
             while view:

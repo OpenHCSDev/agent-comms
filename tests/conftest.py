@@ -71,8 +71,7 @@ class TranscriptRecords:
         from agent_comms.pi_payloads import PiMessage
 
         entry = self.entry(MessageEntry, message=PiMessage.from_wire(payload), **coordinates)
-        encoded = FieldCodec.encode(entry)
-        assert isinstance(encoded, dict)
+        encoded = FieldCodec.decode(dict[str, JsonValue], entry.to_wire())
         return {**encoded, "message": payload}
 
     def session(self, **coordinates: JsonValue) -> SessionEntry:

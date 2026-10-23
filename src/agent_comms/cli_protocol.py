@@ -214,7 +214,7 @@ class FailedCoreError(CoreError, declared_name='failed'):
 
 class ArrivedMessage(WatchLine, declared_name='message'):
     """One decoded message; its journal retains canonical Message wire."""
-    message: InstanceOf[Annotated[Message, PlainValidator(Message.from_wire), PlainSerializer(Message.to_wire)]]
+    message: InstanceOf[Annotated[Message, PlainValidator(Message.from_wire), PlainSerializer(lambda message: message.to_wire())]]
 
     async def handle(self, bridge: CliBridge, child: AttachedChild) -> None:
         await bridge.accept(self.message)

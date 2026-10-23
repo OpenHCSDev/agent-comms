@@ -1,8 +1,5 @@
 """The real SessionStart program must leave an installable serve after hook exit."""
 
-
-from agent_comms.bus import Bus
-
 import asyncio
 import json
 import os
@@ -20,6 +17,7 @@ from agent_comms.cli_bridges.monitor import InspectSession, VerifySession
 from agent_comms.cli_bridges.shared import Binding, Serve
 from agent_comms.comms import wire
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.root_runtime import RootRuntime
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms_hooks.session import started
 from agent_comms_hooks.watch import LiveWatch, WatchClaim, WatchRecord
@@ -31,7 +29,8 @@ def test_session_start_hook_exit_preserves_the_recorded_owner_for_install_pause(
     home = bridge_home
     session = 'copied-session'
     comms = wire(tmp_path / 'bus')
-    Bus.install(Bus.path_in(comms.root))
+    # The source programs run the hook's bridge, so their runtime owns the root it attaches to.
+    RootRuntime.publish(comms.root, source_programs.runtime)
     comms.registry.declare(Thread(
         'bridge-copy', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
     transcript = tmp_path / f'{session}.jsonl'
@@ -92,7 +91,7 @@ def test_session_start_hook_exit_preserves_the_recorded_owner_for_install_pause(
             assert observed.process.alive()
             (bridge,) = Serve.running(home)
             with ExitStack() as resources:
-                (paused,) = bridge.pause(resources)
+                paused = bridge.pause(resources)
                 assert paused.bridge.observed.owner == expected
                 assert isinstance(claim.state(), LiveWatch)
                 assert owner.poll() is None

@@ -17,7 +17,7 @@ from .native_session_reopen import NativeSessionIdentity
 from agent_comms.native_pi import _session_location
 from agent_comms.native_failures import NativePiUnavailable
 from .field_codec import boundary_decoder
-from .private_path import NativeSessionFileRole
+from .private_path import PrivateFileRole
 from .launch_runtime import RestartEnvironment, ThreadLaunch
 from .pi_vocabulary import ThinkingChoice
 
@@ -108,7 +108,7 @@ class SelectedSession:
             thread = participant.owner.thread
             runtime = thread.runtime if path is None else thread.backend.location_type(str(path))
             return runtime.select_session(directory, execution, source_reads,
-                                          root=participant.comms.root, thread=thread)
+                                          participant=participant)
 
         with participant.cursor_delivery.measurements.operation("session_reopen"):
             async with participant.cursor_delivery.reading() as source_reads:
@@ -165,12 +165,14 @@ class SavedSelectedSession(SelectedSession):
 
     def verify_start(self, actual: NativeSessionIdentity) -> Path:
         self.identity.require_same_session(actual)
+        refusal = IdentityConflict("native start requires the exact saved session")
         try:
             if self.path.resolve(strict=True) != self.path:
                 raise ValueError("redirected saved session")
-            NativeSessionFileRole.require(self.path.lstat())
+            info = self.path.lstat()
         except (OSError, ValueError) as error:
-            raise IdentityConflict("native start requires the exact saved session") from error
+            raise refusal from error
+        PrivateFileRole.require(info, refusal)
         return self.path
 
     def require_context(self, context) -> None:
