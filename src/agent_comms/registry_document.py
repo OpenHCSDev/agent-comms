@@ -6,6 +6,7 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass, field, replace
+from functools import cached_property
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Literal, Annotated, Self
 
@@ -20,6 +21,7 @@ from .field_codec import (
     SlicePolicy,
     WireOmitDefault,
     WireRequired,
+    WireValue,
 )
 from .registration_change import (
     InitialRegistration,
@@ -85,6 +87,10 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
 
     statuses: StatusMap
     last_seen: Mapping[str, float]
+
+    def active_candidates(self) -> Iterator[Thread]:
+        return (self.threads[name] for name, status in self.statuses.items()
+                if status.may_be_active)
 
     def set_status(self: RegistryPresence[dict[str, ThreadStatus]], name: str, status: ThreadStatus) -> None:
         self.statuses[name] = status.declaration()

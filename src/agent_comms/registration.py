@@ -72,7 +72,6 @@ class Registration:
     def __init__(self, store_path: Path):
         self.store = RegistryStore(store_path)
         self.storage_rule = StorageRule.load(store_path.parent)
-        self.store.read()
 
     def register(
         self,
