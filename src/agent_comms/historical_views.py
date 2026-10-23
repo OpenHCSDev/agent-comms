@@ -128,20 +128,19 @@ class ConversationHistoryView:
         return page.selection.identity == earlier.selection.identity
 
     @classmethod
-    def revision(cls, views: HistoryViews, target: str | NamedTarget,
+    def revision(cls, views: HistoryViews, target: NamedTarget,
                  earlier: ConversationObservation,
                  *, worktree: str) -> ConversationRevision:
         return earlier.capture(
             views.revision(), partial(cls._read_revision, views, target, worktree))
 
     @classmethod
-    def _read_revision(cls, views: HistoryViews, target: str | NamedTarget,
+    def _read_revision(cls, views: HistoryViews, target: NamedTarget,
                        worktree: str) -> ConversationRevision:
         worktree = str(Path(worktree).resolve())
         viewer = views.messaging.user_identity(worktree).name
         with views.registry.store.reading(views.channels.catalog):
             snapshot = views.registry.store.read_snapshot_unlocked()
-            target = CommandTarget.named(target)
             stores = views.revision()
             return ConversationRevision(
                 stores, cls._selection(

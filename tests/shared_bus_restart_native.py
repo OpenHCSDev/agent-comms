@@ -5,6 +5,7 @@ claim_scope, native process, source proof and response publication remain real.
 """
 
 from agent_comms.channel_targets import CommandTarget
+from agent_comms.active_route import resolve_comms_route
 
 from bus_record_fixture import prepare_native_comms
 from agent_comms.lifecycle_capability import Complete
