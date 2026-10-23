@@ -92,13 +92,14 @@ def merge_two_commit_fix(source, binaries, number):
     source.git(checkout, 'merge', '-q', '--no-ff', '-m', f'Merge pull request #{number}', f'fix/{number}')
     merge = source.git(checkout, 'rev-parse', 'HEAD').strip()
     source.git(checkout, 'push', '-q', 'origin', 'main', f'{commits[-1]}:refs/pull/{number}/head')
-    stub = binaries / 'pull_requests.json'
-    data = json.loads(stub.read_text())
-    data['requests'][str(number)] = {'body': f'## fix {number}', 'listed': FieldCodec.encode(
+    from github_fixture import GitHubFixture
+
+    GitHubFixture(binaries).put(source.github,
         MergedListedPullRequest(number=number, branch=f'fix/{number}', head=commits[-1],
                                 updated='2026-10-23T12:00:00Z', base=WorkBranches.main,
-                                merge=PullRequestCommit(merge), merged='2026-10-23T12:00:00Z'))}
-    stub.write_text(json.dumps(data))
+                                reviewable_times=('2026-10-23T12:00:00Z',),
+                                merge=PullRequestCommit(merge), merged='2026-10-23T12:00:00Z'),
+        body=f'## fix {number}')
     return base, commits[0], merge
 
 

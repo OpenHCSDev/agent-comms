@@ -18,6 +18,8 @@ from .tool_result import ToolResult
 if TYPE_CHECKING:
     from .comms import Comms
     from .registration import Registration
+    from .head_review import PullRequestHead
+    from .todos import HeadReviewOrder
     from .threads import Thread
     from .tools import ToolRequest
 
@@ -124,6 +126,12 @@ class ThreadCaller(ToolCaller):
 
     def identity(self, comms: Comms) -> ThreadIncarnation:
         return comms.registry.require(self.name).incarnation
+
+    def head_review_actor(self, comms: Comms, request: PullRequestHead,
+                          order: HeadReviewOrder) -> ThreadIncarnation:
+        actor = self.identity(comms)
+        order.require_reviewer(comms.goals, request, actor)
+        return actor
 
     def invoke(self, request: ToolRequest[ThreadCaller], comms: Comms) -> ToolResult:
         return request.apply(comms, self)

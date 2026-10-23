@@ -27,6 +27,7 @@ from .registration_change import (
     UpdatedRegistration,
 )
 from .repo import Repo, RepositorySelection
+from .repository_name import RepositoryName
 from .registry_provenance import (
     DeletedThread,
     RegisteredRecipient,
@@ -349,6 +350,9 @@ class CommanderProject(DeclaredFamily, affix="CommanderProject"):
     def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]: ...
 
     @abstractmethod
+    def repository_names(self) -> tuple[RepositoryName, ...]: ...
+
+    @abstractmethod
     def require(self) -> RegisteredCommanderProject: ...
 
     @abstractmethod
@@ -361,6 +365,9 @@ class CommanderProject(DeclaredFamily, affix="CommanderProject"):
 
 class NoCommanderProject(CommanderProject):
     def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        return ()
+
+    def repository_names(self) -> tuple[RepositoryName, ...]:
         return ()
 
     def require(self) -> RegisteredCommanderProject:
@@ -385,6 +392,9 @@ class RegisteredCommanderProject(CommanderProject):
         if not selected:
             raise RelationViolationError("The registered commander thread no longer exists.")
         return selected
+
+    def repository_names(self) -> tuple[RepositoryName, ...]:
+        return tuple(repo.github for repo in self.repos)
 
     def require(self) -> RegisteredCommanderProject:
         return self

@@ -23,6 +23,7 @@ from agent_comms.text_digest import TextDigest
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
+from agent_comms.head_review import PullRequestHead
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.work_branches import BranchDifference
 from agent_comms.service_passes import ServicePassStore
@@ -36,6 +37,7 @@ if TYPE_CHECKING:
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.storage_rules import MemoryUse, StorageRule
     from agent_comms.todos import OrderClaim, OwnerRequest, ProgressRead, PullRequest, Todo
+    from agent_comms.goal_management import Goals
     from agent_comms.ui_model.unit_state import UnitObservation, UnitState
 
 
@@ -149,6 +151,28 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
         return tuple(rule for owner in owners
                      for rule in owner.scan_observed(comms, commander, observed, frame)
                      if isinstance(rule, cls) and rule.attention() and rule.broke_after(after))
+
+
+class OrderRefusingStandingRule(StandingRule, declared_name=None):
+    """An overdue review prevents new orders, through the same backend admission path."""
+
+    @classmethod
+    @abstractmethod
+    def scan_reviews(cls, goals: Goals, commander: str, pulls: ProgressRead) -> tuple[Self, ...]: ...
+
+    @classmethod
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+        return cls.scan_reviews(comms.goals, commander, frame.pulls)
+
+    @classmethod
+    def refusals(cls, goals: Goals, commander: str) -> tuple[str, ...]:
+        from agent_comms.todos import ProgressRead
+
+        pulls = ProgressRead(goals.todos.held_for_commander(goals.registry.require(commander).incarnation))
+        owners = dict.fromkeys(member.scan_owner() for member in cls.members_with(cls))
+        return tuple(rule.line() for owner in owners
+                     for rule in owner.scan_reviews(goals, commander, pulls))
 
 
 class IndependentStandingRule(StandingRule, declared_name=None):
@@ -471,6 +495,34 @@ class DeliveredHeadReview(DatedStandingRule):
         return (f"DELIVERED HEAD NEEDS REVIEW: order {self.order} ({self.problem}), "
                 f"holder {self.holder.name}, {self.repo.to_wire()}#{self.pr} head {self.head} "
                 "-> commander reviews this head")
+
+
+@dataclass(frozen=True)
+class UnreviewedHead(OrderRefusingStandingRule, DatedStandingRule):
+    """One ready head, including an orderless PR, waiting too long for a recorded verdict."""
+    request: PullRequestHead
+    due_at: float
+    seconds: ClassVar[int] = 10 * 60
+
+    @classmethod
+    def scan_reviews(cls, goals: Goals, commander: str, pulls: ProgressRead) -> tuple[Self, ...]:
+        now = time.time()
+        return tuple(
+            cls(request, due)
+            for repo in goals.registry.snapshot().commander_project.repository_names()
+            for row in pulls.open(repo)
+            for due in row.review_due(now, cls.seconds)
+            for request in (PullRequestHead(repo, row.number, row.head),)
+            if not goals.todos.head_reviews(request)
+        )
+
+    def began(self) -> float:
+        return self.due_at
+
+    def line(self) -> str:
+        return (f"UNREVIEWED HEAD: {self.request.repo.to_wire()}#{self.request.pr} "
+                f"head {self.request.head} -> judge ok/back --pr {self.request.pr} "
+                f"--head {self.request.head}")
 
 
 @dataclass(frozen=True)

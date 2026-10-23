@@ -1,7 +1,7 @@
 """Replay a small fleet written through Core's own writers: each covered incident is raised once.
 
 Git is real (a temporary repository with an origin remote and one worktree per unit); only the
-forge answer comes from the fleet, through ProgressRead's own query method.
+forge answers come from the external gh fixture, through the unmodified reader.
 """
 
 import os
@@ -10,6 +10,7 @@ import time
 from abc import ABC, abstractmethod
 from collections import Counter
 from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import ClassVar
 
@@ -38,11 +39,9 @@ from agent_comms.thread_text import ForkedParent
 from agent_comms.threads import Thread
 from agent_comms.todos import (
     ClaimOrder,
-    ListedPullRequest,
     OrderClaim,
     OrderMessage,
     PendingProblemOrder,
-    ProgressRead,
     PullRequestLink,
     SharedWorktreeRefusal,
     Todo,
@@ -52,6 +51,9 @@ from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.work_branches import UnpushedHead
 from conftest import declare_test_bus
 from source_revision_fixture import SourceRepository
+from github_fixture import GitHubFixture
+
+pytest_plugins = ("github_fixture",)
 
 
 @dataclass
@@ -63,7 +65,7 @@ class Fleet:
     worktrees: Path
     old_main: str
     request: str
-    pulls: dict[int, ListedPullRequest] = field(default_factory=dict)
+    github: GitHubFixture
     problems: dict[str, str] = field(default_factory=dict)
     commander: ClassVar[str] = "lead"
 
@@ -92,21 +94,9 @@ class Fleet:
             timeout=30,
         ).stdout.strip()
 
-    def reading(self) -> type[ProgressRead]:
-        """The live progress read, answered by this fleet's pull requests instead of GitHub."""
-        pulls = self.pulls
-
-        class FleetProgressRead(ProgressRead):
-            def query(
-                self, repo: RepositoryName, numbers: tuple[int, ...]
-            ) -> tuple[ListedPullRequest, ...]:
-                return tuple(pulls[number] for number in numbers if number in pulls)
-
-        return FleetProgressRead
-
     def observe(self) -> CommanderObservation:
         return CommanderObservation.read(
-            self.comms, self.comms.registry.require(self.commander), self.reading()
+            self.comms, self.comms.registry.require(self.commander)
         )
 
     def thread(self, name: str) -> Thread:
@@ -191,9 +181,10 @@ class Fleet:
         return claimed
 
     def pull_request(self, number: int, branch: str, head: str) -> None:
-        self.pulls[number] = UnmergedListedPullRequest(
-            number, branch, head, "2026-10-23T12:00:00Z", "main"
-        )
+        stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.github.put(self.repository, UnmergedListedPullRequest(
+            number, branch, head, stamp, "main", reviewable_times=(stamp,),
+        ))
 
 
 class IncidentSeed(ABC):
@@ -381,7 +372,7 @@ class LostToolsSeed(IncidentSeed):
 
 
 @pytest.fixture
-def fleet(comms, tmp_path, configured_repository, installed_runtime):
+def fleet(comms, tmp_path, configured_repository, installed_runtime, github_cli):
     source = SourceRepository.create(tmp_path / "source")
     declare_test_bus(
         comms,
@@ -393,9 +384,10 @@ def fleet(comms, tmp_path, configured_repository, installed_runtime):
     request = comms.goals.todos.add_request(
         comms.registry.require(Fleet.commander).incarnation, "Keep the fleet on its plans"
     ).id
-    configured_repository(comms)
+    project = configured_repository(comms)
+    github_cli.configure(source.github, *(repo.github for repo in project.repos))
     old_main = source.main_commit
-    built = Fleet(comms, source, tmp_path / "worktrees", old_main, request)
+    built = Fleet(comms, source, tmp_path / "worktrees", old_main, request, github_cli)
     # Main moves past the oldest branch's base by exactly one commit more than the limit.
     for count in range(BranchBehindMain.limit + 1):
         built.commit(source.checkout, "main.py", f"count = {count}\n")

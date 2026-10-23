@@ -67,15 +67,14 @@ from .commander.standing import UnownedOrderWatch
 from .commander_heartbeat import CommanderHeartbeat
 from .coordinator import Coordination
 from .service_passes import ServicePassStore
-from .head_review import HeadReview, PullRequestHead
-from .repository_name import RepositoryName
-from .todos import DirectiveText, ReviewedHeadVerdict
+from .head_review import PullRequestHead
+from .todos import DirectiveText, HeadReviewOrder
 from .tool_result import ToolResult
 from .task_sources import OwnerRequestAttachment
 from .tool_caller import ThreadCaller, ToolCaller
 from .tools import (
-    CommsSendTool, CommsVerdictTool, MessagePublished, ReadTool, SendTool,
-    TodoChanged, ToolRequest, tool_field,
+    CommsHeadVerdictTool, CommsSendTool, HeadVerdictTool, MessagePublished, ReadTool, SendTool,
+    ToolRequest, tool_field,
 )
 
 LOOPBACK = "127.0.0.1"
@@ -95,6 +94,10 @@ class DirectorCaller(ThreadCaller):
     def origin(self) -> DirectorOrigin:
         return DirectorOrigin()
 
+    def head_review_actor(self, comms: Comms, request: PullRequestHead,
+                          order: HeadReviewOrder):
+        return order.director_identity(comms.goals, self.identity(comms))
+
 
 class ConnectorTool(ToolRequest[DirectorCaller], affix="ConnectorTool"):
     """Connector-only declarations are absent from the native/CLI tool registry."""
@@ -113,46 +116,9 @@ class ConnectorSendTool(SendTool, ConnectorTool, declared_name=CommsSendTool.dec
 
 
 @dataclass(frozen=True, kw_only=True)
-class ConnectorVerdictTool(ConnectorTool, declared_name=CommsVerdictTool.declared_name):
-    label = "Review PR head"
-    description = "Record the connector reviewer's acceptance of the exact PR commit it reviewed."
-    id: Annotated[str, *tool_field("Problem ID")]
-    operation: Annotated[ReviewedHeadVerdict, *tool_field("Accepted PR-head verdict")]
-
-    def apply(self, comms: Comms, caller: DirectorCaller) -> TodoChanged:
-        todo = self.operation.reviewed(
-            comms.goals, self.id, comms.registry.require(caller.name).incarnation
-        )
-        return TodoChanged(todo, todo.strike_count)
-
-
-@dataclass(frozen=True)
-class HeadReviewed(ToolResult):
-    repo: RepositoryName
-    pr: int
-    head: str
-    review: HeadReview
-
-
-@dataclass(frozen=True, kw_only=True)
-class ConnectorHeadReviewTool(ConnectorTool, declared_name="comms_review_head"):
-    """A pull request with no order still gets the connector reviewer's verdict on its head;
-    an order's pull request takes comms_verdict, which also records the verdict on the order."""
-
-    label = "Review PR head without an order"
-    description = (
-        "Post the connector reviewer's verdict (accepted, or sent_back with its reason) as "
-        "agent-comms/review on the exact head commit of a pull request no order holds."
-    )
-    repo: Annotated[RepositoryName, *tool_field("Repository, owner/name")]
-    pr: Annotated[int, *tool_field("Pull request number")]
-    head: Annotated[str, GitCommitText, *tool_field("The exact head commit reviewed")]
-    review: Annotated[HeadReview, *tool_field("accepted, or sent_back with the reason")]
-
-    def apply(self, comms: Comms, caller: DirectorCaller) -> HeadReviewed:
-        head = PullRequestHead(self.repo, self.pr, self.head).current()
-        self.review.post(self.repo, head, caller.name, f"#{self.pr}")
-        return HeadReviewed(self.repo, self.pr, self.head, self.review)
+class ConnectorHeadVerdictTool(HeadVerdictTool, ConnectorTool,
+                               declared_name=CommsHeadVerdictTool.declared_name):
+    """Director and native callers share the same persisted verdict and publication path."""
 
 
 CALLER = DirectorCaller("claude-ai")  # Owner-typed calls act as this registered bus thread.
