@@ -1,6 +1,5 @@
 """Declare existing incarnations once; delete after the installed bus has carried them."""
 
-from pathlib import Path
 from typing import ClassVar
 
 from agent_comms.coordination_database import CoordinationStore

@@ -43,7 +43,6 @@ if TYPE_CHECKING:
     from .notification_assignment import NotificationAssignmentRead
     from .private_nk_entrypoint import RootLaunch
     from .registry_document import RegistrySnapshot
-    from .threads import Thread
     from .typed_table import TableSchema
 
 _MAGIC = b"ACRG"

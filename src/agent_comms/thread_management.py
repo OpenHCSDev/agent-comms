@@ -38,9 +38,6 @@ from .native_arguments import ConfiguredBinary
 from .native_settings import NativeThreadDefaults
 from .owner_lifecycle import LaunchInput, OwnerLifecycle, TaskLaunchInput
 from .pi_vocabulary import NoThinkingOverride, ThinkingChoice, ThinkingLevelField
-from .private_registry_guard import (
-    RegistryPrivacy,
-)
 from .registry_document import RegistrySnapshot
 from .registry_provenance import RegistryNames
 from .session_file import RegistrySessionLocation
