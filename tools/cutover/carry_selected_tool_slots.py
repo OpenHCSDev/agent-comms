@@ -75,7 +75,10 @@ class SelectedToolSlots(Carry):
                     raise RelationViolationError(
                         f"Selected tool ledger entry is not a file: {path}"
                     )
-                if path.suffix == ".done" and path.with_suffix("") not in files:
+            acknowledgements = frozenset(path for path in files if path.match("*.done"))
+            consumed = files - acknowledgements
+            for path in acknowledgements:
+                if path.with_suffix("") not in consumed:
                     raise RelationViolationError(
                         f"Selected tool acknowledgement has no consumed file: {path}"
                     )
@@ -84,8 +87,7 @@ class SelectedToolSlots(Carry):
                     path,
                     tuple(ack for ack in (path.with_name(path.name + ".done"),) if ack in files),
                 )
-                for path in sorted(files)
-                if path.suffix != ".done"
+                for path in sorted(consumed)
             )
         return tuple(slots)
 
@@ -100,7 +102,7 @@ class SelectedToolSlots(Carry):
         rows = tuple(row for slot in slots for row in slot.read())
         files = tuple(path for slot in slots for path in slot.files)
         acknowledged = sum(len(slot.acknowledgements) for slot in slots)
-        detail = {
+        detail: dict[str, int | bool] = {
             "consumed_files": len(slots),
             "acknowledgement_files": acknowledged,
             "consumed_rows": len(slots) - acknowledged,
