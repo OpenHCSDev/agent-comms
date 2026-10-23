@@ -20,6 +20,7 @@ from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import TurnRouting
 from .storage_rules import StorageRule
 from .thread_execution import CommanderForkExecution
+from .field_codec import TurnId
 from .thread_identity import GenerationCounter, RegisteredTurn
 from .thread_status import (
     ConnectedThreadStatus,
@@ -321,7 +322,7 @@ class Registration:
         return owner.thread, owner.claimed_generation
 
     def lease_live_turn_with_claim(
-        self, expected: Thread, turn_id: str, *, expected_generation: int
+        self, expected: Thread, turn_id: TurnId, *, expected_generation: int
     ) -> tuple[Thread, int]:
         """Claim a turn against the input generation, allowing unrelated metadata changes."""
         Thread.require_declaration(expected)
@@ -337,7 +338,7 @@ class Registration:
     def lease_live_turn_with_generation(
         self,
         expected: Thread,
-        turn_id: str,
+        turn_id: TurnId,
         *,
         expected_owner_generation: int,
         routing: TurnRouting | None = None,
@@ -356,7 +357,7 @@ class Registration:
             return result
 
     def lease_local_turn(
-        self, name: str, turn_id: str, *, routing: TurnRouting | None = None
+        self, name: str, turn_id: TurnId, *, routing: TurnRouting | None = None
     ) -> tuple[Thread, int]:
         """Atomic local begin-turn, never reviving a stopped or replaced owner."""
         turn = RegisteredTurn(turn_id)

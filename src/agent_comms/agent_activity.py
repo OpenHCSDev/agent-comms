@@ -36,6 +36,7 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .routing import TurnRouting
 from .runtime_info import RuntimeInfo, RuntimeInfoStore
+from .field_codec import TurnId
 from .thread_identity import OwnerIdentity, ThreadIncarnation
 from .threads import Thread
 from .turn_lease import NoFinishedTurn, TurnCompletion, TurnLeaseFence, TurnState
@@ -254,7 +255,7 @@ class AgentActivity:
         return self._recover_drain(thread.name, owner, diagnostic)
 
     def begin_turn(
-        self, name: str, turn_id: str, detail: str = "", routing: TurnRouting | None = None
+        self, name: str, turn_id: TurnId, detail: str = "", routing: TurnRouting | None = None
     ) -> RegistryOwner:
         """Return the exact owner installed by this atomic begin, including its lease."""
         leased, _ = self.registry.lease_local_turn(name, turn_id, routing=routing)
