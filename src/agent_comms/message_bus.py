@@ -47,6 +47,7 @@ from agent_comms.read_basis import (
     WatchAcknowledgment,
 )
 from agent_comms.routing import DeliveryScope
+from agent_comms.store_files import UNBOUNDED_CONTENTION, StoreLockContention
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
@@ -94,8 +95,10 @@ class MessageBus[Writes: Publisher]:
         self.publisher = publisher(self.bus, registry, self._channels, self.opened_activity)
 
     @contextmanager
-    def opened_activity(self) -> Iterator[ActivityClocks]:
-        yield self.bus.activity_clocks()
+    def opened_activity(
+        self, contention: StoreLockContention = UNBOUNDED_CONTENTION,
+    ) -> Iterator[ActivityClocks]:
+        yield self.bus.activity_clocks(contention)
 
     def require_channel(self, target: str):
         with self.opened_activity() as activity:
