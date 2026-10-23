@@ -798,7 +798,7 @@ class Completed(ItemNotification, declared_name='item/completed'):
                          completedAtMs=self.completedAtMs).publication()
 
 
-class TextDelta(ItemNotification, ABC):
+class TextDelta(ItemNotification, ABC, declared_name=None):
     itemId: str
     delta: str
     def section(self) -> int:
