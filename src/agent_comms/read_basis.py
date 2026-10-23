@@ -939,25 +939,6 @@ class RepliesDisplayScope(AnyTargetDisplayScope, DMDisplayScope):
                 or (message.sender in self.second_names
                     and bool(message.response_eligibility(tuple(self.first_names)).recipients)))
 
-    def response_predicate(self, sender: str, target: str, policy: str,
-                           mentions: str) -> tuple[str, tuple]:
-        """Original eligibility on indexed fields, before selecting an answer."""
-        from .response_policy import ResponsePolicy
-
-        first, second = tuple(self.first_names), tuple(self.second_names)
-        a, b = ",".join("?" for _ in first), ",".join("?" for _ in second)
-        direct, parameters = self.address_predicate(sender, target)
-        conditions, selected = [], []
-        for member in ResponsePolicy.members_with(ResponsePolicy):
-            condition, values = member.recipients_sql(mentions, first)
-            conditions.append(f"({policy}={sql_literal(member)} AND ({condition}))")
-            selected.extend(values)
-        return (
-            f"({sender} IN ({a}) OR ({direct}) OR "
-            f"({sender} IN ({b}) AND ({' OR '.join(conditions)})))",
-            (*first, *parameters, *second, *selected),
-        )
-
 
 @dataclass(frozen=True, slots=True)
 class ListedDeliveries(MessageDisplayScope):

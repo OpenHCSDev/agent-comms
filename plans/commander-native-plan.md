@@ -241,6 +241,36 @@ Installed full-session/parity acceptance and the complete control-plane phase
 remain open. The source census has zero parse omissions; unprojected declarations
 remain visible.
 
+### Reply eligibility work: the message owns the answer (2026-10-23)
+
+`MessageIdentitySource.response_policy` copied the result of
+`Message.role.response_policy`, and `RepliesDisplayScope.response_predicate`
+and `ResponsePolicy.recipients_sql` supplied a second implementation of the
+existing Python eligibility contract. This is IDEN-5/IMPL-5: the message role
+and `RepliesDisplayScope.includes` already determine the answer. The current
+checkpoint deletes that column and SQL family. `AnsweredSource` first joins
+the recorded exact question/reply references, groups by original, and visits
+actual originals lazily in the requested answer order. Greatest reply sequence
+and greatest timestamp are separate selections. Unanswered pages apply the
+same real eligibility owner before counting their page limit. No callback,
+callback cache, fake message, policy switch or new index is added.
+
+Eleven focused copied-bus checks pass, including aliases, wrong reference
+hashes, an older question outside the time cut, newer ineligible candidates,
+non-monotonic reply timestamps and an unanswered page limited to one eligible
+original. The retained 19,189-record replay and source census are recorded in
+the PR. This branch starts at accepted #2624 and excludes rejected #2629;
+removing this policy mirror does not establish generic projection freshness.
+
+The computed-policy family is still open: `Delivered.projections` also stores
+`DirectReplySource` membership computed by `Delivered.direct_for`.
+`Goals._goal_input_review` and `RecordedGoalWait.has_reply` consume
+that membership through `BusReader.received`. Their migration must preserve
+the recorded sender/recipient incarnations, UNKNOWN inputs and review cursor,
+and apply actual `direct_for` before the page limit. The control-plane owner
+keeps this repair; the MI worker owns the overlapping received/decode contract.
+The current installed pair remains independent of this draft.
+
 ### Phase 8: cutover
 
 **Changes.**

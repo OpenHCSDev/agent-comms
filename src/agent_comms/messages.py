@@ -411,9 +411,7 @@ class Message(Addressed, BusCapability):
             yield BusDisplayIndex.from_message(self, participant=participant)
         yield from self.role.activity_rows(self)
         yield from self.type.route_rows(self)
-        yield MessageIdentitySource(
-            self.seq, self.message_id, self.sender, type(self.role.response_policy(self)),
-        )
+        yield MessageIdentitySource(self.seq, self.message_id, self.sender)
         for original in self.answers:
             yield AnsweredSource(original, self.seq)
 

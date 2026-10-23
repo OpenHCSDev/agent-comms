@@ -378,6 +378,12 @@ def test_latest_answer_uses_the_complete_original_reference_and_time_cut(held_bu
     latest = publish(held_bus, "lead", "worker", since + 6, answers=(question.reference,))
     assert tuple(message.reference for message in AnswersTo(scope, since).read_opened(
         held_bus.bus.bus)) == (latest.reference,)
+    # Bus order and the producer's timestamp are independent answers.
+    backdated = publish(held_bus, "lead", "worker", since + 2.5, answers=(question.reference,))
+    unrelated = publish(held_bus, "worker", "outsider", since + 7)
+    publish(held_bus, "lead", "worker", since + 8, answers=(unrelated.reference,))
+    assert AnswersTo(scope, since).read_opened(held_bus.bus.bus) == (backdated,)
+    assert held_bus.bus.bus.answer_timestamp(scope, since=since) == latest.timestamp
 
 
 def test_unanswered_pages_match_the_complete_answer_reference(held_bus):
@@ -398,8 +404,11 @@ def test_answering_an_unrelated_peer_does_not_clear_the_commander_burst(held_bus
     now = time.time()
     owed = publish(held_bus, "worker", "lead", now - 30)
     unrelated = publish(held_bus, "worker", "outsider", now - 20)
-    publish(held_bus, "lead", "outsider", now - 10, answers=(unrelated.reference,))
     scope = RepliesDisplayScope(frozenset({"lead"}), frozenset({"worker"}))
+    assert held_bus.bus.bus.unanswered_page(
+        scope, since=now - 60, before=now, upper=unrelated.seq + 1, limit=1,
+    ) == (owed,)
+    publish(held_bus, "lead", "outsider", now - 10, answers=(unrelated.reference,))
     assert AnswersTo(scope, now - 60).read_opened(held_bus.bus.bus) == ()
     assert UnansweredBurst(scope, now - 60, now).read_opened(held_bus.bus.bus) == (owed,)
     reply = publish(held_bus, "lead", "worker", now - 5, answers=(owed.reference,))
