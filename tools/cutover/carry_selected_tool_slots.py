@@ -24,6 +24,7 @@ from agent_comms.native_runtime_input import (
     SelectedToolSlot,
 )
 from agent_comms.native_session_files import SavedSessionFile
+from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.typed_table import HeldBusFile
 
 
@@ -151,11 +152,16 @@ class SelectedToolSlots(Carry):
                 for slot, row in zip(slots, rows, strict=True):
                     if row.insert_if_absent(db).rowcount == 0:
                         current = SelectedToolSlot.require(db, input_id=row.input_id)
-                        if current.call_id != row.call_id or current.state is not row.state:
+                        try:
+                            current.require_call(row.call_id)
+                        except SelectedToolDenied as error:
                             raise RelationViolationError(
                                 f"Selected tool slot differs from committed row: {slot.consumed}"
+                            ) from error
+                        if current.state is not row.state:
+                            raise RelationViolationError(
+                                f"Selected tool state differs from committed row: {slot.consumed}"
                             )
-                        current.require_call(row.call_id)
         # Every row is committed before the first unlink. Persist removal of
         # acknowledgements before removing consumed files: a killed carry can
         # leave a consumed file, but can never manufacture an orphan .done.
