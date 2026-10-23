@@ -36,6 +36,7 @@ from agent_comms.messages import (
     MembershipChange,
     Message,
     MessageRoleWire,
+    NoticeRole,
 )
 from agent_comms.message_reference import MessageReference
 from agent_comms.package_stamp import STAMP
@@ -332,6 +333,17 @@ def test_scoped_and_frozen_source_queries_are_sequence_bounded(bus):
     assert bus.conversation(
         "a" * 32, limit=1, descending=False, sequences=(reply.seq,),
     ) == (reply,)
+    after = bus.revision()
+    for index in range(101):
+        bus.append(lambda seq, db, index=index: record_from(PrivateRecord, Message(
+            "author", "worker", f"notice {index}", InfoKind, seq=seq, role=NoticeRole(),
+        )))
+    accepted = bus.append(lambda seq, db: record_from(PrivateRecord, Message(
+        "author", "worker", "first eligible reply after notices", InfoKind, seq=seq,
+    )))
+    assert bus.direct_replies(
+        "b" * 32, after=after, limit=1, descending=False, sender_lookups=("a" * 32,),
+    ) == (accepted,)
 
 
 def test_unanswered_reference_selection_requires_the_recorded_original_and_exact_owner_answer(bus):
