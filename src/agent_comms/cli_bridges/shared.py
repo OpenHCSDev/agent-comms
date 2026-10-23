@@ -58,7 +58,6 @@ from agent_comms_hooks.watch import HeldClaim, WatchClaim, WatchRecord
 
 from ..locked_store import RegistryFile, SQLiteFile
 from .monitor import (
-    REPLIES,
     BridgeExit,
     InspectSession,
     MonitorAttachment,
@@ -68,6 +67,8 @@ from .monitor import (
     PauseSession,
     ReaderState,
     SessionInformation,
+    SessionReady,
+    SessionRefused,
     SessionRequest,
     VerifySession,
     read_monitor,
@@ -690,7 +691,7 @@ class SessionBridge:
         peer = resources.enter_context(PauseSession(
             owner=self.observed.owner, process=self.observed.process).connection(self.claim.socket_path))
         stream = resources.enter_context(peer.makefile('rb'))
-        REPLIES.validate_json(stream.readline(4096)).require()
+        FieldCodec.decode(SessionReady | SessionRefused, FieldCodec.parse(stream.readline(4096))).require()
         return PausedSessionBridge(self, peer)
 
 
