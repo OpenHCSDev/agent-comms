@@ -48,6 +48,7 @@ from .field_codec import (
     FieldRepresentation,
     MalformedRecord,
     NullMember,
+    TextRepresentation,
     ValueDecoder,
     WireName,
     WireValue,
@@ -181,7 +182,10 @@ class TextStorage(SqlStorage):
 
     @classmethod
     def accepts(cls, annotation: object) -> bool:
-        return isinstance(annotation, type) and issubclass(annotation, str)
+        if annotation is str:
+            return True
+        _, representation = FieldCodec._representation(annotation)
+        return representation is not None and issubclass(representation, TextRepresentation)
 
 
 class IntegerStorage(SqlStorage):
