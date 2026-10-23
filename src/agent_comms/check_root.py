@@ -29,6 +29,7 @@ from .thread_text import NoThreadText
 from .session_file import SavedSessionFile
 from .threads import Thread
 from .transcript_routes import TranscriptRoutes
+from .turn_lease import NoTurnRecord
 
 
 @dataclass(frozen=True)
@@ -105,7 +106,8 @@ class CheckRoot:
             project.mkdir(parents=True, mode=0o700)
             session = self._session(original, copied.root, slot, project)
             declarations[name] = replace(
-                original.without_turn(),
+                original,
+                turn_record=NoTurnRecord(),
                 worktree=str(project),
                 parent=original.parent.kept_in(selected),
                 task=NoThreadText(),
@@ -116,7 +118,6 @@ class CheckRoot:
                 project_resume_due=False,
                 storage_roots=StorageRoots(copied.root / "scratch" / slot),
                 turn_generation=0,
-                last_finished_turn_id=None,
             )
         with copied.registry.store.editing() as edit:
             edit.document.restore_stopped(snapshot, names)

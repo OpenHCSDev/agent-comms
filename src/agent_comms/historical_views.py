@@ -47,9 +47,9 @@ from .recorded_bus import RecordedBusIdentity
 from .registration import Registration
 from .registry_provenance import RegistryProvenance
 from .revision_views import BusSourceView
-from .store_files import _atomic_write_text, _store_lock
+from .store_files import AtomicFile, _store_lock
 from .thread_identity import UnrecordedThreadIncarnation
-from .thread_provenance import ThreadProvenance
+from .threads import ThreadProvenance
 
 if TYPE_CHECKING:
     from .catalog_document import CatalogDocument
@@ -505,10 +505,7 @@ class HistoryArchive(DurableFile):
                 )
                 if not source.provenance.threads:
                     raise ValueError("Historical source has no identity declarations")
-                _atomic_write_text(
-                    self.path,
-                    json.dumps([FieldCodec.encode(item) for item in (*sources, source)]),
-                )
+                AtomicFile(self.path).write_text(json.dumps([FieldCodec.encode(item) for item in (*sources, source)]))
                 return source
             except BaseException:
                 shutil.rmtree(stage)

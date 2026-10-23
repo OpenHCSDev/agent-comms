@@ -11,8 +11,7 @@ from agent_comms.commander_parity.lifecycle import (
     StrikeLimitCase,
     verify_order_progress,
 )
-from agent_comms.commander_parity.load import LoadComparison
-from agent_comms.commander_parity.measurements import StorageComparison, measured_load
+from agent_comms.commander_parity.measurements import StorageComparison
 from agent_comms.commander_parity.story import StoryCase
 from agent_comms.commander_parity.verdicts import VerdictComparison
 from agent_comms.commander_parity.wording import (
@@ -182,15 +181,15 @@ class RuleReviewParityRow(ParityRow):
 class LoadForkingParityRow(ParityRow):
     number = 17
     capability = "Load and forking"
-    current = "`agent-comms-commander capacity`: load and live fork reports; ten-minute beat age"
+    current = "`comms_commander_load`: open orders, review timers and unjudged edits"
     native = (
-        "Reporting-only `commander.capacity.Load.of`; no capacity refusal or automatic fork policy"
+        "`OverloadDegradation` reports load and raises overload; automatic forking is unverified"
     )
     phases = (ControlPlanePhase,)
 
     @classmethod
     def verify(cls) -> ParityComparison:
-        return LoadComparison.read()
+        return UnverifiedParity("Automatic forking has no native comparison owner")
 
 
 class StorageHygieneParityRow(ParityRow):
@@ -290,16 +289,16 @@ class MomentumParityRow(ParityRow):
 class MeasuredLoadParityRow(ParityRow):
     number = 28
     capability = "Measured load and self-report"
-    current = "`capacity.py` unit count"
+    current = "`comms_commander_load` order and edit counts"
     native = (
-        "`commander.capacity.Load.of` reports orders, review timers up and edits; "
+        "`OverloadDegradation.of` reports orders, review timers up and edits; "
         "self-report comparison unverified"
     )
     phases = (ControlPlanePhase,)
 
     @classmethod
     def verify(cls) -> ParityComparison:
-        return measured_load()
+        return UnverifiedParity("Missing native self-report comparison owner")
 
 
 class FinishedWorkTransferParityRow(ParityRow):

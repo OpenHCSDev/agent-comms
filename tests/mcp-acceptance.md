@@ -10,7 +10,7 @@ env -i HOME="$HOME" PATH="$PATH" \
   TMPDIR=/absolute/to/home-test-tmp \
   AC_MCP_NATIVE_BIN=/absolute/to/prepared/pi-native \
   AC_MCP_TOAD_ADAPTER=/absolute/to/toad/tests/mcp_linked_adapter.py \
-  /absolute/to/compatible/python -m pytest -q -o addopts='' \
+  /absolute/to/compatible/python -m pytest -q \
   tests/test_mcp_acceptance.py --basetemp=/absolute/to/fresh-evidence-directory
 ```
 

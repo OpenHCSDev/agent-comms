@@ -28,9 +28,11 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, NoReturn
 
-from . import store_files
 from .child_process import Platform
+from . import store_files
+from .coordination_contracts import MAX_IDENTIFIER_CHARS
 from .coordination_database import CoordinationStore
+from .coordination_errors import ParticipantNotRegistered
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, WireName
@@ -44,6 +46,7 @@ if TYPE_CHECKING:
     from .notification_assignment import NotificationAssignmentRead
     from .private_nk_entrypoint import RootLaunch
     from .registry_document import RegistrySnapshot
+    from .thread_management import ThreadManagement
     from .threads import Thread
     from .typed_table import TableSchema
 
@@ -118,6 +121,15 @@ def _decode(data: bytes, root_id: bytes) -> tuple[int, int, bytes]:
 class RegistryPrivacy(ABC):
     """What a registry root's protocol marker decides, selected by the registry store."""
 
+    @abstractmethod
+    def rename(
+        self, threads: ThreadManagement, before: Thread, new_name: str
+    ) -> tuple[str, str]:
+        """Rename under this root's original registry and coordinator authority."""
+
+    def rename_applied(self, root: Path) -> None:
+        """Public roots have no private owner intent to complete."""
+
     @staticmethod
     def capture(root: Path) -> RegistryPrivacy:
         """Read original privacy authority under its registry's existing lock."""
@@ -174,6 +186,11 @@ class RegistryPrivacy(ABC):
 
 
 class PublicRegistry(RegistryPrivacy):
+    def rename(
+        self, threads: ThreadManagement, before: Thread, new_name: str
+    ) -> tuple[str, str]:
+        return threads.registry.rename(before.name, new_name)
+
     def coordinator_schema(self) -> type[TableSchema]:
         from .coordination_schema import CoordinatorTable
 
@@ -210,7 +227,7 @@ class PublicRegistry(RegistryPrivacy):
         _reject("native namespace requires the original registry guard")
 
     def write(self, registry_path: Path, text: str) -> None:
-        store_files._atomic_write_text(registry_path, text)
+        store_files.AtomicFile(registry_path).write_text(text)
 
     def register_restored(self, threads: Iterable[Thread]) -> None:
         """A public bus has no coordinator identities for restored threads."""
@@ -231,6 +248,62 @@ class PublicRegistry(RegistryPrivacy):
 
 
 class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
+    def rename(
+        self, threads: ThreadManagement, before: Thread, new_name: str
+    ) -> tuple[str, str]:
+        root, registry = threads.root, threads.registry
+        _require_no_private_owner_rename(root)
+        coordinator = CoordinationStore.path_in(root)
+        if not coordinator.exists() or before.name == new_name:
+            return registry.rename(before.name, new_name)
+        # Validate registry/SQL name refusals before renaming the private owner.
+        # Registry readers cannot select a different owner while both stores change.
+        registry.status(before.name).require_self_rename()
+        if registry.snapshot().taken(new_name, owner=before.name):
+            raise RelationViolationError(f"Thread name {new_name!r} is already in use.")
+        before.require_name(new_name)
+        if len(new_name) > MAX_IDENTIFIER_CHARS:
+            raise ValueError("Private coordinator owner name exceeds its bound.")
+        with Coordination(str(coordinator)) as store:
+            try:
+                person = store.participants.get(before.incarnation.require_recorded().lookup)
+            except ParticipantNotRegistered:
+                return registry.rename(before.name, new_name)
+            if not person.committed or person.owner_identity.owner_thread != before.name:
+                raise RelationViolationError(
+                    "Private coordinator owner differs from the registered owner."
+                )
+            generation = person.owner_identity.generation
+            PrivateOwnerRenameIntent(
+                lookup=person.lookup,
+                old=before.name,
+                new=new_name,
+                generation=generation,
+                wire_root_id=self.root_id.hex(),
+            ).write(root)
+            store.participants.rename_owner(person.lookup, new_name, expected_generation=generation)
+            try:
+                return registry.rename(before.name, new_name)
+            except BaseException as error:
+                # Registry persistence can fail after the SQL CAS. If its atomic snapshot still
+                # names the old owner, restore that name without revoking its active attempt.
+                uncertain = RelationViolationError(
+                    "Private owner rename is uncertain; inspect both authorities."
+                )
+                try:
+                    if registry.require(before.name).name == before.name:
+                        store.participants.rename_owner(
+                            person.lookup, before.name, expected_generation=generation
+                        )
+                except BaseException as compensation:
+                    # Ambiguous dual-store failure: the inspection needs both failures.
+                    raise uncertain from compensation
+                raise uncertain from error
+
+    def rename_applied(self, root: Path) -> None:
+        if PrivateOwnerRenameIntent.path_in(root).exists():
+            PrivateOwnerRenameIntent.complete(root)
+
     filename = ".registry-owner-guard"
 
     def coordinator_schema(self) -> type[TableSchema]:
@@ -446,7 +519,7 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
         # A pending guard after any failed write MUST remain fail-closed.
         digest = hashlib.sha256(b"present\0" + text.encode("utf-8")).digest()
         sequence, slot = self.prepare(digest)
-        store_files._atomic_write_text(registry_path, text)
+        store_files.AtomicFile(registry_path).write_text(text)
         self.commit(sequence, slot, digest)
 
     def register_restored(self, threads: Iterable[Thread]) -> None:
@@ -470,28 +543,21 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
                 os.fsync(registry_fd)
             finally:
                 os.close(registry_fd)
-        platform = Platform.current()
-        platform.sync_directory(self.registry_path.parent)  # baseline registry name and existing root
+        Platform.current().sync_directory(self.registry_path.parent)
         fd = os.open(
             self.path,
             os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
             0o600,
         )
         try:
-            if (
-                os.pwrite(
-                    fd,
-                    _record(self.root_id, 0, _COMMITTED, digest) * 2,
-                    0,
-                )
-                != 2 * _SIZE
-            ):
+            if os.pwrite(fd, _record(self.root_id, 0, _COMMITTED, digest) * 2, 0) != 2 * _SIZE:
                 _reject("initial slots were incomplete")
             os.fsync(fd)
-            platform.sync_directory(self.registry_path.parent)
+            Platform.current().sync_directory(self.registry_path.parent)
             self._write(fd, 1, _record(self.root_id, 1, _PENDING, digest))
         finally:
             os.close(fd)
+
 
     def commit_initial(self) -> None:
         fd = self._open()
@@ -524,8 +590,7 @@ class PrivateOwnerRenameIntent(DurableFile):
     completed: bool = False
 
     def write(self, root: Path) -> None:
-        store_files._atomic_write_text(self.path_in(root),
-                           json.dumps(FieldCodec.encode(self), sort_keys=True))
+        store_files.AtomicFile(self.path_in(root)).write_text(json.dumps(FieldCodec.encode(self), sort_keys=True))
 
     @classmethod
     def complete(cls, root: Path) -> None:

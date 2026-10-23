@@ -30,8 +30,8 @@ from .agent_backend import RuntimeLocation
 from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
 from .errors import RelationViolationError
-from .importing import ImportLimits, ImportSnapshot, ThreadImported
 from .field_codec import FieldCodec, NullMember, RecordMember, SingleFieldValue, SubclassUnion
+from .importing import ImportLimits, ImportSnapshot, ThreadImported
 from .launch_runtime import LaunchRuntime, TagListText
 from .message_bus import MessageBus
 from .native_arguments import ConfiguredBinary
@@ -43,14 +43,21 @@ from .private_registry_guard import (
 )
 from .registry_document import RegistrySnapshot
 from .registry_provenance import RegistryNames
-from .store_files import _atomic_write_text
-from .thread_identity import AgentThreadRole, ThreadRole
-from .thread_text import ForkedParent, GivenThreadText, NoThreadText, ThreadText
 from .session_file import SavedSessionFile
+from .store_files import AtomicFile
+from .thread_identity import AgentThreadRole, ThreadRole
 from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 from .thread_owned_state import ThreadOwnedState
-from .thread_rename import RenameThreadResult, ThreadRename
+from .thread_text import ForkedParent, GivenThreadText, NoThreadText, ThreadText
+from .tool_result import ToolResult
 from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread, current_thread
+
+
+@dataclass(frozen=True, slots=True)
+class RenameThreadResult(ToolResult):
+    previous: str
+    current: str
+    changed: bool
 
 
 class TagChoice(SubclassUnion, affix="Tags"):
@@ -258,7 +265,7 @@ class ThreadManagement:
                 or stat.S_IMODE(info.st_mode) != 0o700
             ):
                 raise ValueError("Imported session directory is not owner-controlled.")
-            _atomic_write_text(session_path, snapshot.pi_session(project))
+            AtomicFile(session_path).write_text(snapshot.pi_session(project))
             try:
                 self.registry._declare_unlocked(thread, StoppedThreadStatus())
                 self.bus.mark_delivered_through(name, self.bus.bus.revision())
@@ -380,7 +387,21 @@ class ThreadManagement:
     def _rename_thread_unlocked(
         self, name: str, new_name: str, *, title: ThreadText = NoThreadText()
     ) -> RenameThreadResult:
-        return ThreadRename.chosen(self, self.registry.require(name), new_name).applied(title)
+        privacy = self._privacy()
+        previous, current = privacy.rename(self, self.registry.require(name), new_name)
+        thread = self.registry.require(current)
+        titled = replace(thread, auto_title_pending=False, title=title.applied(thread.title))
+        if titled != thread:
+            self.registry.register(titled, self.registry.status(current))
+        changed = previous != current
+        if changed:
+            self.agents.activity.rename_thread(previous, current)
+            self.agents.runtime_info.rename_thread(previous, current)
+            self.ledger.rename_thread(previous, current)
+            with self.catalog.editing() as document:
+                document.rename_thread(previous, current)
+        privacy.rename_applied(self.root)
+        return RenameThreadResult(previous, current, changed)
 
     def heartbeat(self, name: str) -> None:
         self.registry.heartbeat(name)

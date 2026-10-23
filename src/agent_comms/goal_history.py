@@ -23,11 +23,17 @@ from agent_comms.field_codec import WireOmitDefault
 from agent_comms.owner_requests import NoRequestRevision, RequestAtRevision, RequestRevision
 
 from .child_process import Platform
-from .field_codec import FieldCodec, MalformedRecord, HistoryExclude
+from .field_codec import FieldCodec, HistoryExclude, MalformedRecord
 from .goals import GoalDeclaration, NoGoal
 from .locked_store import DurableFile
+from .store_files import AtomicFile
 from .typed_table import (
-    Column, DurableTables, Index, JsonStorage, ReconciledFile, TypedTable,
+    Column,
+    DurableTables,
+    Index,
+    JsonStorage,
+    ReconciledFile,
+    TypedTable,
 )
 
 
@@ -169,9 +175,7 @@ class GoalHistoryStore(DurableFile, ReconciledFile):
             raise GoalHistoryError("Goal history database is unavailable.") from error
 
     def _sync(self) -> None:
-        platform = Platform.current()
-        platform.sync_file(self.path)
-        platform.sync_directory(self.path.parent)
+        AtomicFile(self.path).sync()
 
     def _initialize(self) -> None:
         try:
@@ -243,10 +247,8 @@ class GoalHistoryStore(DurableFile, ReconciledFile):
         if guard.exists():
             targets.append(guard)
         try:
-            platform = Platform.current()
             for target in targets:
-                platform.sync_file(target)
-            platform.sync_directory(self.registry_path.parent)
+                AtomicFile(target).sync()
         except OSError as error:
             raise GoalHistoryError("Cannot sync visible goal authority.") from error
 

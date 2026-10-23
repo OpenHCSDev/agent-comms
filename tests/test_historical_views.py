@@ -358,7 +358,7 @@ def test_historical_namespace_has_recorded_provenance_and_no_live_authority(migr
 
     from agent_comms.field_codec import FieldCodec
     from agent_comms.registry_provenance import RegistryProvenance
-    from agent_comms.thread_provenance import ThreadProvenance
+    from agent_comms.threads import ThreadProvenance
 
     old, _, live, source = migrated
     recorded = source.provenance.require("alice")

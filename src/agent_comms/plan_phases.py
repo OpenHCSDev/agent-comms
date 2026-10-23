@@ -13,9 +13,9 @@ from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.installer.carry import Carry
-from agent_comms.pi_turn_phase import PiTurnPhase
+from agent_comms.pi_events import PiEvent
 from agent_comms.thread_identity import BirthlessIncarnation
-from agent_comms.thread_rename import ThreadRename
+from agent_comms.private_registry_guard import RegistryPrivacy
 from agent_comms.tool_calls import CliToolArguments
 from agent_comms.phase_evidence import (
     AllEvidence,
@@ -667,11 +667,11 @@ class RostersPhase(RemainingSlopPhase):
                 ClassFlagsAbsent(r"^\s*" + attribute + r"\s*[:=]", owners=(owner,))
                 for owner, attribute in (
                     (Carry, "declared"),
-                    (ThreadRename, "kinds"),
+                    (RegistryPrivacy, "kinds"),
                     (BirthlessIncarnation, "members"),
                     (CliToolArguments, "types"),
-                    (PiTurnPhase, "_start_phases"),
-                    (PiTurnPhase, "_end_events"),
+                    (PiEvent, "_start_phases"),
+                    (PiEvent, "_end_events"),
                 )
             ),
         )

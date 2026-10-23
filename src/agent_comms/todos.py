@@ -1038,7 +1038,7 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
 
     @classmethod
     def from_source(cls, source: ProgressSource) -> OrderProgress:
-        members = sorted(cls.members_with(FoundProgress), key=lambda member: member.precedence)
+        members = cls.members_with(FoundProgress)
         try:
             return next((progress for member in members
                          for progress in member.observations(source)), NoCommitProgress())
@@ -1068,8 +1068,7 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
 
 @dataclass(frozen=True)
 class FoundProgress(OrderProgress):
-    """A state read finds in the checkout or on GitHub; the lowest ``precedence`` found wins."""
-    precedence: ClassVar[int]
+    """A state read finds in the checkout or on GitHub; the first declaration found wins."""
 
     @classmethod
     @abstractmethod
@@ -1102,20 +1101,6 @@ class NoCommitProgress(OrderProgress):
 
 
 @dataclass(frozen=True)
-class EditingProgress(Moving, NoCommitProgress, FoundProgress):
-    """Uncommitted changes in the holder's own checkout: work is moving, nothing is delivered."""
-    precedence: ClassVar[int] = 6
-
-    @classmethod
-    def found(cls, source: ProgressSource) -> Iterator[Self]:
-        return (cls(at=edited) for edited in source.edited_at)
-
-    @property
-    def state(self) -> str:
-        return f"uncommitted edits at {RecordedEventTime(self.at).clock()}, no commit"
-
-
-@dataclass(frozen=True)
 class UnreadProgress(OrderProgress):
     reason: str
 
@@ -1134,8 +1119,40 @@ class GitProgress(Moving, FoundProgress, declared_name=None):
 
 
 @dataclass(frozen=True)
+class MergedProgress(FoundProgress):
+    """The forge proves a linked merge; the order's run owns what still needs doing."""
+    sha: str
+
+    @classmethod
+    def found(cls, source: ProgressSource) -> Iterator[Self]:
+        return (cls(sha) for pr in source.requests(MergedListedPullRequest)
+                for sha in pr.merged_commits(source.since))
+
+    @property
+    def state(self) -> str:
+        return f"merged as {self.sha[:9]}"
+
+    def waiting_on_install(self, todo: Todo) -> tuple[Todo, ...]:
+        return (todo,)
+
+
+@dataclass(frozen=True)
+class OpenPrProgress(GitProgress):
+    number: int
+    head: str
+
+    @classmethod
+    def found(cls, source: ProgressSource) -> Iterator[Self]:
+        return (cls(pr.number, pr.head[:9], at=pr.updated_at,
+                    readings=source.readings()) for pr in source.requests(UnmergedListedPullRequest))
+
+    @property
+    def state(self) -> str:
+        return f"PR #{self.number} open at {self.head}"
+
+
+@dataclass(frozen=True)
 class CommittedProgress(GitProgress):
-    precedence: ClassVar[int] = 4
     sha: str
 
     @classmethod
@@ -1151,7 +1168,6 @@ class CommittedProgress(GitProgress):
 @dataclass(frozen=True)
 class PushedProgress(CommittedProgress):
     """Pushed past the default branch, with no PR naming the order yet."""
-    precedence: ClassVar[int] = 5
 
     @classmethod
     def found(cls, source: ProgressSource) -> Iterator[Self]:
@@ -1166,38 +1182,16 @@ class PushedProgress(CommittedProgress):
 
 
 @dataclass(frozen=True)
-class OpenPrProgress(GitProgress):
-    precedence: ClassVar[int] = 3
-    number: int
-    head: str
+class EditingProgress(Moving, NoCommitProgress, FoundProgress):
+    """Uncommitted changes in the holder's own checkout: work is moving, nothing is delivered."""
 
     @classmethod
     def found(cls, source: ProgressSource) -> Iterator[Self]:
-        return (cls(pr.number, pr.head[:9], at=pr.updated_at,
-                    readings=source.readings()) for pr in source.requests(UnmergedListedPullRequest))
+        return (cls(at=edited) for edited in source.edited_at)
 
     @property
     def state(self) -> str:
-        return f"PR #{self.number} open at {self.head}"
-
-
-@dataclass(frozen=True)
-class MergedProgress(FoundProgress):
-    """The forge proves a linked merge; the order's run owns what still needs doing."""
-    precedence: ClassVar[int] = 1
-    sha: str
-
-    @classmethod
-    def found(cls, source: ProgressSource) -> Iterator[Self]:
-        return (cls(sha) for pr in source.requests(MergedListedPullRequest)
-                for sha in pr.merged_commits(source.since))
-
-    @property
-    def state(self) -> str:
-        return f"merged as {self.sha[:9]}"
-
-    def waiting_on_install(self, todo: Todo) -> tuple[Todo, ...]:
-        return (todo,)
+        return f"uncommitted edits at {RecordedEventTime(self.at).clock()}, no commit"
 
 
 @dataclass(frozen=True)

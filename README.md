@@ -112,9 +112,9 @@ It does not publish the runtime or change the live installation. Pass `--home DI
 to retain a private test build for inspection. The pytest basetemp is disposable,
 named for the checkout's HEAD, and the test run is limited to 300 seconds.
 
-Pytest uses separate `pytest-xdist` worker processes (automatic CPU detection,
-capped at eight) with work stealing and combined coverage. Use `pytest -n 0`
-for serial debugging or `pytest -n 4` to choose a worker count.
+Pytest runs serially by default, so a run of a few touched tests starts no
+worker pool. The full suite in CI passes `-n auto --maxprocesses=8
+--dist=worksteal` itself; do the same locally for a full run.
 
 ## Releasing
 

@@ -22,8 +22,15 @@ from typing import Any, ClassVar, Generic, Self, TypeVar
 from .child_process import Platform
 from .coordination_errors import CoordinationReadUnavailable
 from .field_codec import FieldCodec, MalformedRecord
+from .private_path import PrivateFileRole
 from .store_files import (
-    SharedLock, StoreLock, StoreLockOwner, StoreOwner, _store_lock, store_lock_path,
+    AtomicFile,
+    SharedLock,
+    StoreLock,
+    StoreLockOwner,
+    StoreOwner,
+    _store_lock,
+    store_lock_path,
 )
 
 T = TypeVar("T")
@@ -86,49 +93,32 @@ class JsonDocument(ABC, Generic[T]):
         old-or-new semantics, not a multi-file transaction or recovery journal.
         """
         fd, staged = StoreOwner.stage_file(self.path)
+        os.close(fd)
+        staged.unlink()
         backup = StoreOwner.rollback_file(staged)
-        published = False
-        had_original = False
-        keep_backup = False
         try:
-            with os.fdopen(fd, "w", encoding="utf-8") as output:
-                try:
-                    mode = stat.S_IMODE(self.path.stat().st_mode)
-                except FileNotFoundError:
-                    mode = 0o600
-                output.write(text)
-                output.flush()
-                os.chmod(staged, mode)
-                os.fsync(output.fileno())
+            mode = stat.S_IMODE(self.path.stat().st_mode)
+            os.link(self.path, backup)
+        except FileNotFoundError:
+            mode = PrivateFileRole.permissions
+        try:
             try:
-                os.link(self.path, backup)
-                had_original = True
-            except FileNotFoundError:
-                pass
-            os.replace(staged, self.path)
-            published = True
-            Platform.current().sync_directory(self.path.parent)
-            # A failed backup cleanup is still a failed update: retain the old
-            # inode until unlink succeeds so the exception path can restore it.
-            backup.unlink(missing_ok=True)
-        except BaseException:
-            if published:
-                if had_original:
-                    try:
-                        os.replace(backup, self.path)
-                    except BaseException:
-                        # Keep the recovery bytes if the filesystem also
-                        # refuses rollback; never erase the remaining copy.
-                        keep_backup = True
-                        raise
-                else:
-                    self.path.unlink()
-                Platform.current().sync_directory(self.path.parent)
-            raise
-        finally:
-            staged.unlink(missing_ok=True)
-            if not keep_backup:
+                AtomicFile(self.path, mode).write_text(text)
                 backup.unlink(missing_ok=True)
+            except BaseException:
+                if backup.exists():
+                    if not self.path.exists() or not self.path.samefile(backup):
+                        os.replace(backup, self.path)
+                        Platform.current().sync_directory(self.path.parent)
+                else:
+                    self.path.unlink(missing_ok=True)
+                    Platform.current().sync_directory(self.path.parent)
+                raise
+        finally:
+            # A failed restore leaves the last original inode for recovery.
+            if backup.exists() and self.path.exists() and self.path.samefile(backup):
+                backup.unlink()
+
 
 
 class RootFile:
