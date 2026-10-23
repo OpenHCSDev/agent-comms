@@ -26,7 +26,7 @@ def goal_updates(metadata) -> tuple[GoalChangedUpdate, ...]:
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
-async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch):
+async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch, native_runtime_package):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = wire(tmp_path / "wire")
     owner = canonical_agent(comms, agent_bin=GivenBinary("pi"), agent_args=GivenArguments(()), runtime_enabled=True)

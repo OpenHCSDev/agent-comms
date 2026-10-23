@@ -40,7 +40,10 @@ tmp_path = private_root_fixture
     "selected_write, triage",
     [(False, False), (True, False), (False, True)],
 )
-async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch, selected_write, triage, *, cursor_delivery, source_reads):
+async def test_native_full_four_tools_publish_and_release(
+    tmp_path, monkeypatch, selected_write, triage, *, cursor_delivery, source_reads,
+    native_runtime_package,
+):
     package = os.environ.get("AC_NATIVE_COPIED_PACKAGE")
     if not package:
         pytest.skip("Prepared native package required; never build or call a paid provider")
