@@ -1099,6 +1099,11 @@ class JsonShapeFamily(AcceptsNull, ExternalJsonShape, SingleValueEncoding):
         return result
 
     @classmethod
+    def wire_structure(cls, structural: ValueDecoder[object]) -> ValueDecoder[object]:
+        """The wire value is one owned member's value; a member owns only its own."""
+        return compile_decoder(Union[tuple(annotation for _, annotation in cls._json_owners.values())])
+
+    @classmethod
     def schema(cls) -> dict[str, Any]:
         alternatives = [FieldCodec.value_schema(annotation)
                         for _, annotation in cls._json_owners.values()]
