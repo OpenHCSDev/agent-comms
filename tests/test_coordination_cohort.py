@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 
-from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from bus_record_fixture import prepare_native_comms
 
 from agent_comms.bus import Bus
@@ -39,6 +38,7 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_results import AlreadyApplied, Applied
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordinator import Coordination
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.exporting import (
     ChannelScope,
@@ -74,8 +74,7 @@ def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
         name: RecordedThreadIncarnation("fixture", created_at).lookup
         for name, (created_at, _tags) in people.items()
     }
-    coordinator = Coordination(str(root / "coordinator.sqlite"), clock_ms=lambda: 4723)
-    PrivateCoordinatorTable.install(coordinator)
+    coordinator = Coordination(str(CoordinationStore.path_in(root)), clock_ms=lambda: 4723)
     for name in ("Alice", "Bob", "Charlie"):
         coordinator.participants.register(lookups[name], committed=True)
     root_id = comms.registry.prepare_native_root().namespace

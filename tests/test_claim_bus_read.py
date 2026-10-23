@@ -8,7 +8,6 @@ the owner's event loop with the wire, bus and registry locks held.
 
 from __future__ import annotations
 
-from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from agent_comms.context_store import UNREAD_CONTEXT
 
 from conftest import publish_initial
@@ -90,7 +89,6 @@ def selected_turn(private_comms, private_directory):
     record_context(comms, "Alice", 2)
     initial = comms.bus.bus.delivery(message.seq)
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        PrivateCoordinatorTable.install(store)
         for recipient in initial.audience.recipients:
             store.participants.register(
                 recipient.recipient_lookup, committed=True,

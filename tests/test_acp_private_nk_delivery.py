@@ -7,7 +7,6 @@ activate private processing for existing public sessions.
 from __future__ import annotations
 
 
-from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from bus_record_fixture import prepare_native_comms
 
 
@@ -43,7 +42,6 @@ def _private_comms(tmp_path):
         store.participants.register(
             owner.incarnation.lookup, committed=True
         )
-        PrivateCoordinatorTable.install(store)
     return comms, root_id
 
 

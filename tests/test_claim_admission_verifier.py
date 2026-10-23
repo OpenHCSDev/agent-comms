@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 
-from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from bus_record_fixture import prepare_native_comms
 
 from conftest import publish_initial
@@ -63,7 +62,6 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
         message = publish_initial(comms, "sender", "#team", "@Alice investigate")
         initial = comms.bus.bus.delivery(message.seq)
         with Coordination(str(root / "coordination.sqlite3")) as store:
-            PrivateCoordinatorTable.install(store)
             for recipient in initial.audience.recipients:
                 store.participants.register(
                     recipient.recipient_lookup,

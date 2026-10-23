@@ -1,11 +1,8 @@
 """A line still being appended is not history yet, so a newer read never stalls on it."""
 
-from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 import json
 
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms.comms import wire
-from agent_comms.coordinator import Coordination
 from agent_comms.threads import Thread
 
 
@@ -18,14 +15,12 @@ def answer(identity, text):
             "message": {"role": "assistant", "content": [{"type": "text", "text": text}]}}
 
 
-def test_newer_read_moves_past_a_line_still_being_appended(tmp_path):
-    comms = wire(tmp_path / "wire")
+def test_newer_read_moves_past_a_line_still_being_appended(tmp_path, private_comms):
+    comms = private_comms
     session = tmp_path / "saved.jsonl"
     session.write_text(line({"type": "session", "version": 3, "id": "saved-session",
                              "timestamp": "2026-10-20T00:00:00.000Z"}) + line(answer("first", "First answer")))
     comms.registry.declare(Thread("saved", frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(session), comms.root)))
-    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
-        PrivateCoordinatorTable.install(store)
     complete = session.stat().st_size
     pending = line(answer("second", "Second answer " + "x" * 200_000))
     with session.open("a") as stream:

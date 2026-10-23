@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 
-from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from bus_record_fixture import prepare_native_comms
 from agent_comms.lifecycle_capability import Active, Complete
 
@@ -78,7 +77,6 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
     recipient = original_record.audience.recipients[0]
     bus = responder(comms.root, comms.registry)
     store = Coordination(str(comms.root / "coordination.sqlite3"), clock_ms=lambda: 1_000)
-    PrivateCoordinatorTable.install(store)
     store.participants.register(
         recipient.recipient_lookup,
         committed=True,
