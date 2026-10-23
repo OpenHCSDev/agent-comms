@@ -23,7 +23,7 @@ async def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_coh
     stopped = comms.registry.require("stopped-reviewer")
     comms.registry.register(stopped, StoppedThreadStatus())
     receiver = comms.registry.require("receiver")
-    lookup = receiver.incarnation.require_recorded().lookup
+    lookup = receiver.incarnation.lookup
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         with store.session.read():
             assert Participants.select(store.session._connection) == []

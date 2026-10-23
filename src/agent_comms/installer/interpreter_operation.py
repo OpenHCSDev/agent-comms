@@ -10,7 +10,6 @@ import inspect
 import json
 import os
 import sys
-import traceback
 from abc import ABC, abstractmethod
 from contextlib import redirect_stdout
 from dataclasses import dataclass
@@ -99,31 +98,6 @@ class RuntimeProbe[Answer](
     """A declared operation handled by the install's selected interpreter worker."""
 
 
-class RuntimeProbeFailed(RuntimeError):
-    """An operation raised in its interpreter; the message is its child traceback."""
-
-
-class ProbeReply(DeclaredFamily, affix="Reply"):
-    @abstractmethod
-    def answer(self) -> str: ...
-
-
-@dataclass(frozen=True)
-class CompletedProbeReply(ProbeReply):
-    encoded: str
-
-    def answer(self) -> str:
-        return self.encoded
-
-
-@dataclass(frozen=True)
-class FailedProbeReply(ProbeReply):
-    traceback: str
-
-    def answer(self) -> str:
-        raise RuntimeProbeFailed(self.traceback)
-
-
 @dataclass(frozen=True)
 class CliOutput:
     returncode: int
@@ -161,16 +135,13 @@ class ProbeRequest:
 
 
 def serve() -> None:
-    """Answer declared operations from stdin, one encoded request per line, until it closes."""
+    """Answer declared operations from stdin, one encoded answer per request line, until it
+    closes. An operation that raises ends the worker: its traceback goes to stderr, and the
+    caller reads the exit in place of an answer."""
     for line in sys.stdin:
-        reply: ProbeReply
-        try:
-            with redirect_stdout(sys.stderr):
-                request = FieldCodec.decode(ProbeRequest, FieldCodec.parse(line))
-                reply = CompletedProbeReply(request.answer())
-        except Exception as error:
-            reply = FailedProbeReply("".join(traceback.format_exception(error)))
-        print(json.dumps(FieldCodec.encode(reply)), flush=True)
+        with redirect_stdout(sys.stderr):
+            answer = FieldCodec.decode(ProbeRequest, FieldCodec.parse(line)).answer()
+        print(answer, flush=True)
 
 
 class ClientImportsProbe(RuntimeProbe[None]):

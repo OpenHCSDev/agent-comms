@@ -78,8 +78,8 @@ def _root(
 def test_wake_frame_rejects_no_wake_forgery_and_unengaged_full(tmp_path: Path) -> None:
     root, _root_id, comms, initial, people = _root(tmp_path, mentioned=True)
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        alpha_lookup = people[1].incarnation.require_recorded().lookup
-        beta_lookup = people[2].incarnation.require_recorded().lookup
+        alpha_lookup = people[1].incarnation.lookup
+        beta_lookup = people[2].incarnation.lookup
         assert sealed_cohort_assignments(store, alpha_lookup) == ()
         selected = sealed_cohort_assignments(store, beta_lookup)[0]
     # A pending FULL claim has no response obligation, and no frame may grant one.
@@ -94,7 +94,7 @@ def test_wake_frame_rejects_no_wake_forgery_and_unengaged_full(tmp_path: Path) -
 def test_triage_frame_is_read_only_and_does_not_promote_message_body(tmp_path: Path) -> None:
     root, _root_id, comms, initial, people = _root(tmp_path)
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        lookup = people[1].incarnation.require_recorded().lookup
+        lookup = people[1].incarnation.lookup
         assignment = sealed_cohort_assignments(store, lookup)[0]
     frame = TurnContext.render_segments((SelectedWakeSegment.capture(((initial, assignment),), people[1], comms.goals),)).text
     assert f'"source_seq":{initial.message.seq}' in frame
@@ -114,7 +114,7 @@ def test_channel_wake_frame_carries_declared_goal_state(tmp_path: Path) -> None:
         progress="Routing fixed",
     )))
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        lookup = people[1].incarnation.require_recorded().lookup
+        lookup = people[1].incarnation.lookup
         assignment = sealed_cohort_assignments(store, lookup)[0]
     frame = TurnContext.render_segments((SelectedWakeSegment.capture(
         ((initial, assignment),), comms.registry.require("alpha"), comms.goals,
@@ -135,7 +135,7 @@ def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> No
 
     root, _root_id, _comms, initial, people = _root(tmp_path)
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        lookup = people[1].incarnation.require_recorded().lookup
+        lookup = people[1].incarnation.lookup
         assignment = sealed_cohort_assignments(store, lookup)[0]
     notification = MessageNotification(
         initial.audience.recipients[0], initial.audience.sender_lookup, HumanReadProgress(),

@@ -24,7 +24,6 @@ from pathlib import Path
 import pytest
 from agent_comms.lifecycle_capability import Executing
 
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.native_input_record import TriageNativeExecution
 from agent_comms.acp import CommsClient
 from agent_comms.acp_extension import (
@@ -431,9 +430,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                 rejected = read_historical_native_inputs(
                     store,
                     wire_root_id=root_id,
-                    recipient_lookup=RecordedThreadIncarnation(
-                        "fixture", owner.created_at
-                    ).lookup,
+                    recipient_lookup=owner.incarnation.lookup,
                     source_seq=reply.seq,
                     source_reads=source_reads,
                 )

@@ -29,10 +29,11 @@ from agent_comms.pinned_audit import GodFunction
 from agent_comms.plan_phases import BusDeletionPhase, FLAG, ExternalBoundariesPhase, PlanPhase, RostersPhase
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
+from fixture_git import IDENTITY
 
 
 def git(checkout, *args):
-    return subprocess.run(("git", "-C", str(checkout), *args), check=True,
+    return subprocess.run(("git", *IDENTITY, "-C", str(checkout), *args), check=True,
                           capture_output=True, text=True, timeout=30).stdout.strip()
 
 
@@ -41,7 +42,7 @@ def test_evidence_reads_origin_main_and_never_the_worktree(tmp_path):
     (tmp_path / "src").mkdir()
     (tmp_path / "src/kept.py").write_text("flag = True\n")
     git(tmp_path, "add", ".")
-    git(tmp_path, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "main")
+    git(tmp_path, "commit", "-qm", "main")
     sha = git(tmp_path, "rev-parse", "HEAD")
     git(tmp_path, "update-ref", "refs/remotes/origin/main", sha)
     (tmp_path / "src/kept.py").unlink()
@@ -66,7 +67,7 @@ def test_boundary_evidence_ignores_its_declaration_and_exception_groups(tmp_path
         "try:\n    pass\nexcept ExceptionGroup:\n    raise\n"
     )
     git(tmp_path, "add", ".")
-    git(tmp_path, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "boundary")
+    git(tmp_path, "commit", "-qm", "boundary")
     sha = git(tmp_path, "rev-parse", "HEAD")
     git(tmp_path, "update-ref", "refs/remotes/origin/main", sha)
     reading = PlanReading((), MainTree.of(
@@ -75,7 +76,7 @@ def test_boundary_evidence_ignores_its_declaration_and_exception_groups(tmp_path
 
     source.write_text("try:\n    pass\nexcept Exception:\n    raise\n")
     git(tmp_path, "add", ".")
-    git(tmp_path, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "broad")
+    git(tmp_path, "commit", "-qm", "broad")
     git(tmp_path, "update-ref", "refs/remotes/origin/main", git(tmp_path, "rev-parse", "HEAD"))
     changed = PlanReading((), MainTree.of(reading.main.repo))
     assert not changed.holds(ExternalBoundariesPhase.evidence)
@@ -93,7 +94,7 @@ def main_of(tmp_path, files):
         (tmp_path / path).parent.mkdir(parents=True, exist_ok=True)
         (tmp_path / path).write_text(text)
     git(tmp_path, "add", ".")
-    git(tmp_path, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "main")
+    git(tmp_path, "commit", "-qm", "main")
     git(tmp_path, "update-ref", "refs/remotes/origin/main", git(tmp_path, "rev-parse", "HEAD"))
     return PlanReading((), MainTree.of(
         Repo(checkout=tmp_path, github=RepositoryName.from_wire("OpenHCSDev/agent-comms"))))
@@ -123,7 +124,7 @@ def test_roster_evidence_keeps_external_abi_and_each_remaining_internal_registry
     ):
         (tmp_path / "src/remaining.py").write_text(remaining)
         git(tmp_path, "add", ".")
-        git(tmp_path, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "registry")
+        git(tmp_path, "commit", "-qm", "registry")
         git(tmp_path, "update-ref", "refs/remotes/origin/main", git(tmp_path, "rev-parse", "HEAD"))
         changed = PlanReading((), MainTree.of(reading.main.repo))
         assert not changed.holds(RostersPhase.evidence), remaining
@@ -138,7 +139,7 @@ def test_main_tree_grep_uses_the_same_repository_tree_as_its_module_reader(tmp_p
     reading = main_of(checkout, {"src/owner.py": "class OtherOwner:\n    members = {}\n"})
     git(checkout, "-c", "protocol.file.allow=always", "submodule", "add", "-q",
         str(dependency), "src/dependency")
-    git(checkout, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "dependency")
+    git(checkout, "commit", "-qam", "dependency")
     git(checkout, "update-ref", "refs/remotes/origin/main", git(checkout, "rev-parse", "HEAD"))
     git(checkout, "config", "submodule.recurse", "true")
     assert "src/dependency" in git(checkout, "grep", "--recurse-submodules", "-n",
@@ -172,7 +173,7 @@ def test_bus_deletion_evidence_reads_uses_without_matching_its_own_declaration(t
     ):
         (tmp_path / "src/uses.py").write_text(source)
         git(tmp_path, "add", ".")
-        git(tmp_path, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "use")
+        git(tmp_path, "commit", "-qm", "use")
         git(tmp_path, "update-ref", "refs/remotes/origin/main", git(tmp_path, "rev-parse", "HEAD"))
         changed = PlanReading((), MainTree.of(reading.main.repo))
         assert not changed.holds(BusDeletionPhase.evidence), source

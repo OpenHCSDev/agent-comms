@@ -15,7 +15,6 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.bus_publication import Delivered
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import AwarenessClaimGenerations, ClaimBatchAcknowledgements
@@ -25,7 +24,7 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.assignment_states import EngagedAssignment
 from agent_comms.wake_policy import FullWake
-from agent_comms.coordination_tables.executions import ExecutionProvenance, WireOrigin
+from agent_comms.coordination_tables.executions import WireOrigin
 from agent_comms.coordinator import Coordination
 from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
 from agent_comms.registration import Registration
@@ -100,7 +99,7 @@ def _projection(
         through_seq,
         registry=Registration(index.bus.path.with_name("registry.json")),
         expected_participant_generation=store.participants.get(
-            RecordedThreadIncarnation("fixture", owner.created_at).lookup
+            owner.incarnation.lookup
         ).owner_identity.generation,
         expected_claimed_generation=claimed_generation,
         max_rows=max_rows,
@@ -254,7 +253,7 @@ def test_fresh_gen2_selected_and_old_pending_obligation_are_scoped(tmp_path: Pat
 def test_fresh_gen2_only_selected_is_available(tmp_path: Path) -> None:
     comms, store, index, root_id = _root(tmp_path)
     try:
-        lookup = RecordedThreadIncarnation("fixture", comms.registry.require("member000").created_at).lookup
+        lookup = comms.registry.require("member000").incarnation.lookup
         store.participants.register(lookup, committed=True)
         store.participants.advance_generation(lookup, expected_generation=1)
         initial, assignment = _accepted(comms, store, root_id, "member000", "fresh")
@@ -402,7 +401,7 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
         assert isinstance(passive.lifecycle, PassiveAssignment)
         with pytest.raises(IdentityConflict):
             passive.lifecycle.require_engageable()
-        observer = RecordedThreadIncarnation("fixture", comms.registry.require("member001").created_at).lookup
+        observer = comms.registry.require("member001").incarnation.lookup
         assert not WakeAssignment.select(
             store.session._connection,
             where="recipient_lookup=? AND wire_seq=?",

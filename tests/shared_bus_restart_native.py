@@ -5,7 +5,6 @@ claim_scope, native process, source proof and response publication remain real.
 """
 
 from agent_comms.channel_targets import CommandTarget
-from agent_comms.active_route import resolve_comms_route
 
 from bus_record_fixture import prepare_native_comms
 from agent_comms.lifecycle_capability import Complete
@@ -29,7 +28,6 @@ import subprocess
 import threading
 
 from compaction_loopback import LoopbackProvider
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.comms import wire
 from agent_comms.acp import CommsAgent, CommsClient
 from agent_comms.acp_extension import decode_updates
@@ -550,7 +548,7 @@ async def configured_mixed_routes(arguments):
                             parameters=(late_assignment.lifecycle.execution_id,))
                         assert len(late_receipts) == 1 and late_receipts[0].exact_target == 'human'
                         assert '23' in service.bus.bus.messages_for_references((late_receipts[0].reference,))[0].body
-                        lookup = RecordedThreadIncarnation("fixture", service.registry.require(name).created_at).lookup
+                        lookup = service.registry.require(name).incarnation.lookup
                         for original in (*originals,late):
                             history = read_historical_native_inputs(
                                 store,
@@ -824,7 +822,7 @@ async def run(arguments):
     if arguments.saved_source:
         for name in names:
             owner = service.registry.require(name)
-            directory = service.root/'native-sessions'/RecordedThreadIncarnation("fixture", owner.created_at).lookup
+            directory = service.root/'native-sessions'/owner.incarnation.lookup
             directory.mkdir(mode=0o700, parents=True)
             saved = directory/'retained.jsonl'
             shutil.copyfile(arguments.saved_source, saved); saved.chmod(0o600)
@@ -1096,7 +1094,7 @@ async def run(arguments):
                 f'10+{index}={10+index}' for index in range(arguments.wave_size)) + '.'
             assert replies[1].body == 'Separate late-wave answer: 20+3=23.'
             assert provider.posts == 4
-            lookup = RecordedThreadIncarnation("fixture", service.registry.require(names[0]).created_at).lookup
+            lookup = service.registry.require(names[0]).incarnation.lookup
             with Coordination(str(service.root/'coordination.sqlite3')) as store, NativeEvidenceScope() as source_reads:
                 inputs = NativeRuntimeInput.select(store.session._connection)
                 assert len(inputs) == 4

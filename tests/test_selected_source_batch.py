@@ -8,7 +8,6 @@ import os
 
 import pytest
 
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination_cohort import accept_delivery_cohort, pending_sealed_assignments
@@ -32,7 +31,7 @@ async def test_a_mixed_route_wave_turns_one_route_at_a_time(tmp_path, *, cursor_
     for name in ("sender", "receiver"):
         comms.registry.declare(Thread(name, frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('openai-codex/gpt-6-sol')))
     root_id = comms.registry.prepare_native_root().namespace
-    lookup = RecordedThreadIncarnation("fixture", comms.registry.require("receiver").created_at).lookup
+    lookup = comms.registry.require("receiver").incarnation.lookup
     with Coordination(str(root / "coordination.sqlite3")) as store:
         store.participants.register(lookup, committed=True)
 

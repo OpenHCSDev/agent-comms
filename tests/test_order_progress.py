@@ -12,6 +12,7 @@ import time
 import pytest
 from test_todos import order
 from source_revision_fixture import SourceRepository
+from fixture_git import IDENTITY
 
 from agent_comms.comms import wire
 from agent_comms.goal_actions import CreateProblemGoalAction
@@ -29,7 +30,7 @@ from agent_comms.threads import Thread
 
 
 def git(checkout, *args):
-    return subprocess.run(['git', '-C', str(checkout), *args], check=True, capture_output=True, text=True).stdout.strip()
+    return subprocess.run(['git', *IDENTITY, '-C', str(checkout), *args], check=True, capture_output=True, text=True).stdout.strip()
 
 
 def test_prior_declarations_do_not_enter_native_request_schemas():
@@ -59,7 +60,7 @@ def unit_checkout(path):
     git(path, 'init', '-q')
     (path / 'owner.py').write_text('one\n')
     git(path, 'add', 'owner.py')
-    git(path, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'base')
+    git(path, 'commit', '-q', '-m', 'base')
     return path
 
 
@@ -104,7 +105,7 @@ def test_a_submodule_with_a_missing_git_directory_does_not_stop_reading_edits(tm
     package = unit_checkout(tmp_path / 'package')
     worktree = unit_checkout(tmp_path / 'worker--P1')
     git(worktree, '-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', str(package), 'pinned')
-    git(worktree, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'pin')
+    git(worktree, 'commit', '-q', '-m', 'pin')
     (worktree / 'pinned' / '.git').write_text('gitdir: ../.git/modules/removed\n')
     assert WorkBranches(worktree).uncommitted() == ()
     edited(worktree, 'owner.py', 700.0)

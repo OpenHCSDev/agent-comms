@@ -79,7 +79,7 @@ from .session_lifecycle import AttachedSessionLifecycle, SessionLifecycle, Sessi
 from .threads import Thread
 from .turn_effects import PromptBlock, TurnEffects
 from .turn_runner import TurnRunner
-from .turn_terminal import EndedWithoutResult, TurnInterruption, TurnTerminal
+from .turn_terminal import EndedWithoutResult, TurnInterruption
 
 if TYPE_CHECKING:
     from .selected_tool_broker import SelectedToolIntent
@@ -411,7 +411,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         ).schedule()
         return 1
 
-    async def shutdown(self, terminal: TurnTerminal = EndedWithoutResult()) -> None:
+    async def shutdown(self) -> None:
         """Stop drains and mark threads owned by this ACP connection offline."""
         async with AsyncExitStack() as retirement:
             # CursorPublication owns the cross-observation evidence lifetime;
@@ -419,9 +419,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             retirement.callback(self.cursors.close)
             retirement.push_async_callback(self.sessions.release_owned)
             retirement.callback(self.inputs.end_sessions)
-            retirement.push_async_callback(self.turns.close, terminal)
+            retirement.push_async_callback(self.turns.close)
             retirement.push_async_callback(self.sessions.close_proxies)
-            retirement.push_async_callback(self.inputs.close, terminal)
+            retirement.push_async_callback(self.inputs.close)
             retirement.push_async_callback(self.annotations.close)
 
     @staticmethod

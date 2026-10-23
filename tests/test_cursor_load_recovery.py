@@ -27,7 +27,7 @@ async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
     Bus.install(Bus.path_in(comms.root))
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.participants.register(
-            owner.incarnation.require_recorded().lookup, committed=True
+            owner.incarnation.lookup, committed=True
         )
     agent = CommsAgent(
         comms,

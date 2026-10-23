@@ -49,6 +49,7 @@ from cutover.carry_commander_project import CommanderProjectCarry
 from cutover.carry_drop_connectivity import DropConnectivity
 from cutover.carry_parked_threads import ParkedThreads
 from agent_comms.threads import Thread
+from fixture_git import IDENTITY
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -66,11 +67,9 @@ class Repository:
     def __init__(self, path: Path):
         self.path = path
         self.git("init", "-q")
-        self.git("config", "user.email", "carry@example.invalid")
-        self.git("config", "user.name", "Carry test")
 
     def git(self, *args: str) -> str:
-        return subprocess.check_output(["git", "-C", str(self.path), *args], text=True, timeout=10).strip()
+        return subprocess.check_output(["git", *IDENTITY, "-C", str(self.path), *args], text=True, timeout=10).strip()
 
     def commit(self, steps: dict[str, str | None]) -> str:
         """One commit per step, in order, as the main line adds steps one at a time."""
