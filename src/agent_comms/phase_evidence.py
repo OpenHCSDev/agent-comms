@@ -13,7 +13,7 @@ import copy
 import re
 from abc import ABC, abstractmethod
 from collections import Counter
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, ClassVar, get_args, get_origin, get_type_hints
@@ -750,6 +750,11 @@ class QualifiedName:
         """An import statement's module text, split once where the AST hands it over."""
         return cls(tuple(part for part in dotted.split(".") if part))
 
+    @classmethod
+    def of_class(cls, declared: type) -> QualifiedName:
+        """A live class's name, as its module and qualified name declare it."""
+        return cls.of(declared.__module__).joined(cls.of(declared.__qualname__))
+
     def child(self, name: str) -> QualifiedName:
         return QualifiedName((*self.parts, name))
 
@@ -773,17 +778,29 @@ class QualifiedName:
 
 
 @dataclass(frozen=True)
-class DeclaredClass:
-    """One class statement on main: the module path that holds it and its node, so two classes
-    spelled alike stay two classes."""
+class Declaration:
+    """One declaring statement on main and the module path that holds it, so two declarations
+    spelled alike stay two."""
 
     path: str
+
+    def under(self, paths: tuple[str, ...]) -> bool:
+        return any(PurePosixPath(self.path).is_relative_to(path) for path in paths)
+
+
+@dataclass(frozen=True)
+class DeclaredClass(Declaration):
     node: ast.ClassDef
 
 
+@dataclass(frozen=True)
+class DeclaredFunction(Declaration):
+    node: ast.FunctionDef | ast.AsyncFunctionDef
+
+
 class ClassDeclarations(ast.NodeVisitor):
-    """Each class a body declares, nested ones under their outer class's name. A function body
-    runs later, so nothing in it is declared at import."""
+    """Each class and function a body declares, nested classes and methods under their outer
+    class's name. A function body runs later, so nothing in it is declared at import."""
 
     def __init__(self, scopes: DeclaredScopes, path: str, prefix: QualifiedName) -> None:
         self.scopes = scopes
@@ -797,9 +814,11 @@ class ClassDeclarations(ast.NodeVisitor):
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         """A function's body is not run at import."""
+        self.scopes.functions[self.prefix.child(node.name)] = DeclaredFunction(self.path, node)
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
         """A coroutine's body is not run at import."""
+        self.scopes.functions[self.prefix.child(node.name)] = DeclaredFunction(self.path, node)
 
 
 class ModuleBindings(ClassDeclarations):
@@ -858,8 +877,24 @@ class DeclaredScopes:
     level binds. A class is found by its qualified name, the way Python imports it, never by
     its bare spelling in some other module; a name its module never binds reaches nothing."""
 
+    built: ClassVar[dict[tuple[MainTree, tuple[str, ...]], DeclaredScopes]] = {}
+
+    @classmethod
+    def of(cls, main: MainTree, paths: tuple[str, ...]) -> DeclaredScopes:
+        """One walk per main commit and roots, shared by every reader; a newer main of the same
+        checkout drops the older walks."""
+        if (main, paths) not in cls.built:
+            cls.built = {
+                (tree, roots): scopes
+                for (tree, roots), scopes in cls.built.items()
+                if tree.repo.checkout != main.repo.checkout or tree == main
+            }
+            cls.built[main, paths] = cls(main, paths)
+        return cls.built[main, paths]
+
     def __init__(self, main: MainTree, paths: tuple[str, ...]) -> None:
         self.classes: dict[QualifiedName, DeclaredClass] = {}
+        self.functions: dict[QualifiedName, DeclaredFunction] = {}
         self.modules: dict[QualifiedName, ModuleBindings] = {}
         self.module_of: dict[str, QualifiedName] = {}
         for module in main.modules(paths):
@@ -906,6 +941,74 @@ class DeclaredScopes:
             for parent in self.resolve(self.module_of[declared.path], base):
                 if parent != declared:
                     yield parent
+
+    def lineage(self, declared: DeclaredClass) -> frozenset[DeclaredClass]:
+        """The class and every class its bases reach under the roots."""
+        found = {declared}
+        pending = [declared]
+        while pending:
+            for parent in self.parents(pending.pop()):
+                if parent not in found:
+                    found.add(parent)
+                    pending.append(parent)
+        return frozenset(found)
+
+
+@dataclass(frozen=True)
+class DeclarationEvidence(MainEvidence):
+    """Whether ``paths`` on main declare a class or function called ``name``, read from the
+    walk of their import roots. The name is a string because it is the declared target of a
+    declaration the phase's work may not have written yet."""
+
+    kind: ClassVar[str]
+    name: str
+    paths: tuple[str, ...] = ("src",)
+
+    def read(self, main: MainTree) -> bool:
+        roots = tuple(dict.fromkeys(PurePosixPath(path).parts[0] for path in self.paths))
+        declarations = self.declarations(DeclaredScopes.of(main, roots))
+        return self.satisfied(any(
+            qualified.name == self.name and declared.under(self.paths)
+            for qualified, declared in declarations.items()
+        ))
+
+    @abstractmethod
+    def declarations(self, scopes: DeclaredScopes) -> Mapping[QualifiedName, Declaration]: ...
+
+    @abstractmethod
+    def satisfied(self, found: bool) -> bool: ...
+
+
+class ClassDeclarationEvidence(DeclarationEvidence):
+    kind: ClassVar[str] = "class"
+
+    def declarations(self, scopes: DeclaredScopes) -> Mapping[QualifiedName, Declaration]:
+        return scopes.classes
+
+
+class FunctionDeclarationEvidence(DeclarationEvidence):
+    kind: ClassVar[str] = "function"
+
+    def declarations(self, scopes: DeclaredScopes) -> Mapping[QualifiedName, Declaration]:
+        return scopes.functions
+
+
+class Declared(DeclarationEvidence):
+    def satisfied(self, found: bool) -> bool:
+        return found
+
+    def describe(self) -> str:
+        return f"{self.kind} {self.name} declared in {' '.join(self.paths)} on main"
+
+
+@dataclass(frozen=True)
+class ClassDeclared(Declared, ClassDeclarationEvidence):
+    """A class ``name`` declared under ``paths``."""
+
+
+@dataclass(frozen=True)
+class FunctionDeclared(Declared, FunctionDeclarationEvidence):
+    """A function or method ``name`` declared under ``paths``."""
 
 
 class DecoratorNames(NamedClasses):
@@ -971,7 +1074,7 @@ class RestatedMembersAbsent(MainEvidence):
 
     def restatements(self, main: MainTree) -> Iterator[str]:
         """Each restated member, as ``PATH:LINE Class.member``."""
-        scopes = DeclaredScopes(main, self.paths)
+        scopes = DeclaredScopes.of(main, self.paths)
         for declared in scopes.classes.values():
             for parent in scopes.parents(declared):
                 inherited = ClassAnswers.of(parent.node, self.per_class)
@@ -998,25 +1101,46 @@ class ClassRostersAbsent(MainEvidence):
     def read(self, main: MainTree) -> bool:
         return not any(self.rosters(main))
 
-    def relations(self) -> frozenset[str]:
-        """The class attributes each family declares as a tuple of its own classes."""
-        return frozenset(
-            name
+    def relations(self, scopes: DeclaredScopes) -> dict[DeclaredClass, frozenset[str]]:
+        """Each family's declaration under the roots, found by its qualified name, with the class
+        attributes it declares as a tuple of its own classes."""
+        return {
+            declared: frozenset(
+                name
+                for name, hint in get_type_hints(family).items()
+                if get_origin(hint) is ClassVar
+                and get_args(hint) == (tuple[type[family], ...],)  # type: ignore[valid-type]
+            )
             for family in self.families
-            for name, hint in get_type_hints(family).items()
-            if get_origin(hint) is ClassVar
-            and get_args(hint) == (tuple[type[family], ...],)  # type: ignore[valid-type]
+            for declared in scopes.declared(QualifiedName.of_class(family))
+        }
+
+    @staticmethod
+    def related(
+        scopes: DeclaredScopes,
+        relations: dict[DeclaredClass, frozenset[str]],
+        declared: DeclaredClass,
+    ) -> frozenset[str]:
+        """The relations of every family the class descends from; any other class's ``after``
+        is a roster like any other."""
+        lineage = scopes.lineage(declared)
+        return frozenset[str]().union(
+            *(names for family, names in relations.items() if family in lineage)
         )
 
     def rosters(self, main: MainTree) -> Iterator[str]:
         """Each roster, as ``PATH:LINE NAME``."""
-        scopes = DeclaredScopes(main, self.paths)
-        relations = self.relations()
+        scopes = DeclaredScopes.of(main, self.paths)
+        relations = self.relations(scopes)
         for bindings in scopes.modules.values():
             bodies = (
                 (QualifiedName(()), frozenset[str](), tuple(bindings.assignments)),
                 *(
-                    (QualifiedName((declared.node.name,)), relations, tuple(declared.node.body))
+                    (
+                        QualifiedName((declared.node.name,)),
+                        self.related(scopes, relations, declared),
+                        tuple(declared.node.body),
+                    )
                     for declared in scopes.classes.values()
                     if declared.path == bindings.path
                 ),

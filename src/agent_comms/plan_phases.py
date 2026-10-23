@@ -21,8 +21,10 @@ from agent_comms.phase_evidence import (
     AllEvidence,
     BusStorageAbsent,
     ClassFlagsAbsent,
+    ClassDeclared,
     ClassRostersAbsent,
     CommitMerged,
+    FunctionDeclared,
     NoAbsenceProbes,
     NoExactCopies,
     NoGodFunction,
@@ -202,8 +204,8 @@ class StoryPhase(CommanderNativePhase):
     after = (RecordPlanePhase,)
     evidence = AllEvidence(
         (
-            PatternPresent(r"^class CommsOrderStoryTool\b", ("src/agent_comms/tools.py",)),
-            PatternPresent(r"^class CommsFleetStoryTool\b", ("src/agent_comms/tools.py",)),
+            ClassDeclared("CommsOrderStoryTool", ("src/agent_comms/tools.py",)),
+            ClassDeclared("CommsFleetStoryTool", ("src/agent_comms/tools.py",)),
             PatternAbsent(r"^def roast\b", (COMMANDER + "judge.py",)),
         )
     )
@@ -215,7 +217,7 @@ class CommanderPagePhase(CommanderNativePhase):
     after = (RecordPlanePhase, ControlPlanePhase)
     evidence = AllEvidence(
         (
-            PatternPresent(r"^class CommanderHud\b", ("src",)),
+            ClassDeclared("CommanderHud", ("src",)),
             PatternPresent(r"\bcomms_hud\b", ("src",)),
         )
     )
@@ -657,7 +659,7 @@ class OwnedDispatchPhase(RemainingSlopPhase):
                 r"""separators\s*=\s*\(\s*["'],["']\s*,\s*["']:["']\s*\)""",
                 ("src", ":!src/agent_comms/field_codec.py"),
             ),
-            PatternPresent(r"def compact\(", ("src/agent_comms/field_codec.py",)),
+            FunctionDeclared("compact", ("src/agent_comms/field_codec.py",)),
         )
     )
 
@@ -728,7 +730,7 @@ class FleetAwarenessPhase(CommanderNativePhase, declared_name=None):
 class OneHolderPerWorktreePhase(FleetAwarenessPhase):
     """One holder per worktree, refused at order time."""
 
-    evidence = PatternPresent(r"class SharedWorktreeRefusal\(", ("src/agent_comms",))
+    evidence = ClassDeclared("SharedWorktreeRefusal", ("src/agent_comms",))
 
 
 class DriftOverlapRulesPhase(FleetAwarenessPhase):
@@ -736,8 +738,8 @@ class DriftOverlapRulesPhase(FleetAwarenessPhase):
 
     evidence = AllEvidence(
         (
-            PatternPresent(r"class BranchBehindMain\(", ("src/agent_comms",)),
-            PatternPresent(r"class SharedFileBranches\(", ("src/agent_comms",)),
+            ClassDeclared("BranchBehindMain", ("src/agent_comms",)),
+            ClassDeclared("SharedFileBranches", ("src/agent_comms",)),
         )
     )
 
@@ -745,31 +747,31 @@ class DriftOverlapRulesPhase(FleetAwarenessPhase):
 class SpinningUnitPhase(FleetAwarenessPhase):
     """Spinning as a UnitState member."""
 
-    evidence = PatternPresent(r"class SpinningUnit\(", ("src/agent_comms",))
+    evidence = ClassDeclared("SpinningUnit", ("src/agent_comms",))
 
 
 class UnpushedWorkPhase(FleetAwarenessPhase):
     """Unpushed work as a standing rule."""
 
-    evidence = PatternPresent(r"class UnpushedBranch\(", ("src/agent_comms",))
+    evidence = ClassDeclared("UnpushedBranch", ("src/agent_comms",))
 
 
 class EmptyPullRequestPhase(FleetAwarenessPhase):
     """Empty PRs as a standing rule."""
 
-    evidence = PatternPresent(r"class EmptyPullRequest\(", ("src/agent_comms",))
+    evidence = ClassDeclared("EmptyPullRequest", ("src/agent_comms",))
 
 
 class DeliveryReviewPhase(FleetAwarenessPhase):
     """Review is triggered by delivery."""
 
-    evidence = PatternPresent(r"class DeliveredHeadReview\(", ("src/agent_comms",))
+    evidence = ClassDeclared("DeliveredHeadReview", ("src/agent_comms",))
 
 
 class LostToolsPhase(FleetAwarenessPhase):
     """Lost tools are a bus fact."""
 
-    evidence = PatternPresent(r"class LostTools\(", ("src/agent_comms",))
+    evidence = ClassDeclared("LostTools", ("src/agent_comms",))
 
 
 class FleetReplayPhase(FleetAwarenessPhase):
@@ -784,4 +786,4 @@ class FleetReplayPhase(FleetAwarenessPhase):
         DeliveryReviewPhase,
         LostToolsPhase,
     )
-    evidence = PatternPresent(r"def test_replay_raises_each_incident_once\b", ("tests",))
+    evidence = FunctionDeclared("test_replay_raises_each_incident_once", ("tests",))
