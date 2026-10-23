@@ -45,6 +45,24 @@ class Repo(BaseModel):
     ]
     source: str = "src"
 
+    @classmethod
+    def selected(cls, repositories: tuple[Repo, ...], name: str) -> Repo:
+        for repository in repositories:
+            if repository.named(name):
+                return repository
+        configured = ", ".join(
+            f"{repository.github.to_wire()} ({repository.checkout})"
+            for repository in repositories
+        )
+        raise ValueError(f"Unknown repository {name!r}. Registered repositories: {configured}.")
+
+    @classmethod
+    def declaring(cls, repositories: tuple[Repo, ...], module: str) -> Repo:
+        for repository in repositories:
+            if (repository.checkout / repository.module_file(module)).is_file():
+                return repository
+        raise ValueError(f"No registered repository holds {module}")
+
     def module_file(self, module: str) -> Path:
         """Where the dotted ``module`` sits under this checkout's source root, relative to it."""
         return Path(self.source, *module.split(".")).with_suffix(".py")
