@@ -169,9 +169,7 @@ class UnrecordedScope(NullMember, ClaimScope):
 class RecordedScope(ClaimScope, declared_name=None):
     """Every acquisition published today records the input generation and operation it serves."""
 
-    owner_claimed_generation: Annotated[
-        int, WireName("owner_admission_generation")
-    ]
+    owner_claimed_generation: int
     operation_id: Annotated[str, Id128Text]
     turn_id: str
 
@@ -274,7 +272,7 @@ class ClaimIdentity:
 @dataclass(frozen=True)
 class AcquiringClaim(ClaimIdentity):
     generation: Annotated[str, Id128Text]
-    resource_scope: Annotated[ClaimScope, WireName("admission")]
+    resource_scope: ClaimScope
 
 
 @dataclass(frozen=True)
@@ -390,7 +388,7 @@ class Acquisition(ClaimTransition, declared_name=None):
 class WakeClaims(RecordMember, Acquisition, AcquiringClaim):
     """An acquisition published today; its row records the scope it serves."""
 
-    resource_scope: Annotated[RecordedScope, WireName("admission")]
+    resource_scope: RecordedScope
 
 
 @dataclass(frozen=True)

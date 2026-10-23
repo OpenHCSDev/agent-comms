@@ -16,7 +16,7 @@ import secrets
 from contextlib import suppress
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, Annotated
+from typing import TYPE_CHECKING, Literal
 
 from .coordination_database import CoordinationStore
 from .locked_store import DurableFile, PatternFile
@@ -33,7 +33,7 @@ from .child_process import Platform
 from .coordination_cohort import sealed_cohort_assignments
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ExistingFileClaim
-from .field_codec import FieldCodec, Id128Text, MalformedRecord, WireName
+from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .message_reference import MessageReference
 from .private_path import PrivateDirectoryRole, PrivateFileRole
 from .thread_identity import ClaimedIdentity, RecordedThreadIncarnation
@@ -54,7 +54,7 @@ class SelectedWriteBinding:
     root_id: str
     source: MessageReference
     assignment_id: str
-    claimed_identity: Annotated[ClaimedIdentity, WireName("admission")]
+    claimed_identity: ClaimedIdentity
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -69,7 +69,7 @@ class SelectedWriteIntent(DeclaredFamily, affix="WriteIntent"):
     claim_id: str
     owner: str
     incarnation: float
-    claim_epoch: Annotated[int, WireName("admission_epoch")]
+    claim_epoch: int
     expected_attempt_ordinal: Literal[1]
     operation_id: str
     resource: str

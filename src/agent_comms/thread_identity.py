@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from functools import cached_property
-from typing import TYPE_CHECKING, Callable, ClassVar, Self, TypeVar, Annotated
+from typing import TYPE_CHECKING, Callable, ClassVar, Self, TypeVar
 
 from metaclass_registry import AutoRegisterMeta, RegistryConfig
 
@@ -23,7 +23,6 @@ from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,
     WireValue,
-    WireName,
 )
 from .response_policy import CollectivePolicy, InformationalPolicy, ResponsePolicy
 
@@ -350,7 +349,7 @@ class ClaimedIdentity:
     """A registry-allocated input generation, never an owner lease."""
 
     incarnation: ThreadIncarnation
-    claimed_generation: Annotated[int, WireName("admission_generation")]
+    claimed_generation: int
 
     def includes(self, previous: ClaimedIdentity) -> bool:
         """Compare order only within this registry's input-generation counter."""
@@ -381,7 +380,7 @@ class TurnFence:
 
     identity: TurnIdentity
     turn_id: str
-    claimed_generation: Annotated[int, WireName("admission_generation")]
+    claimed_generation: int
 
     def renamed(self, name: str) -> Self:
         """Registry alias resolution changes the name, never incarnation or epochs."""

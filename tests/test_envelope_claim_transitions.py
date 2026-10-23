@@ -73,12 +73,12 @@ def test_selected_wake_binding_survives_claim_projection(tmp_path):
     message = Message("owner", "owner", "Claim file", ClaimNoticeKind, seq=8, timestamp=1.0)
     bound = ClaimMessage.of(message, replace(claimed, message_id=message.message_id))
     assert Message.from_wire(bound.to_wire()) == bound
-    admission_key = FieldCodec.record_key(WakeClaims, "resource_scope")
-    invalid = {**raw, admission_key: {**raw[admission_key], "version": 99}}
+    scope_key = FieldCodec.record_key(WakeClaims, "resource_scope")
+    invalid = {**raw, scope_key: {**raw[scope_key], "version": 99}}
     with pytest.raises(ValueError):
         FieldCodec.decode(ClaimTransition, invalid)
     null_claim = raw.copy()
-    null_claim[admission_key] = None
+    null_claim[scope_key] = None
     with pytest.raises(ValueError):
         FieldCodec.decode(ClaimTransition, null_claim)
 

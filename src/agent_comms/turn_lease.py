@@ -17,7 +17,6 @@ from .field_codec import (
     RecordMember,
     SingleFieldValue,
     SubclassUnion,
-    WireName,
     WireTransient,
     boundary_decoder,
 )
@@ -212,9 +211,7 @@ class ActiveTurn(Executing, RecordMember, TurnDeclaration):
     owner: ProcessIdentity
     started_at: float = field(default_factory=time.time)
     routing: TurnRouting | None = None
-    claimed_generation: Annotated[
-        TurnGeneration, WireName("admission_generation")
-    ] = UnrecordedGeneration()
+    claimed_generation: TurnGeneration = UnrecordedGeneration()
     turn_generation: TurnGeneration = UnrecordedGeneration()
     phase: TurnPhase = field(default_factory=PreparingPhase)
     def execution(self, source: GoalExecutionSource) -> GoalExecution:

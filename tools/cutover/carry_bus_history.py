@@ -44,6 +44,7 @@ from agent_comms.field_codec import (
     WireName,
     WireOmitDefault,
     WireOrder,
+    compile_decoder,
 )
 from agent_comms.historical_views import HistoryArchive, HistorySource
 from agent_comms.installer.carry import Carried, Carry
@@ -403,7 +404,10 @@ class OrderedHistoryMember(RecordMember):
 
 class HistoryScope(SubclassUnion, ABC, affix="HistoryScope"):
     def restored(self, scope: ClaimScope) -> Self:
-        return FieldCodec.decode_record(type(self), FieldCodec.encode(scope))
+        raw = FieldCodec.encode(scope)
+        old = {"owner_admission_generation" if key == "owner_claimed_generation" else key: value
+               for key, value in raw.items()}
+        return FieldCodec.decode_record(type(self), old)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -486,11 +490,17 @@ class HistoryClaim(SubclassUnion, ClaimIdentity, ABC, affix="HistoryClaim"):
     """Retired field-group order is part of the original envelope's physical form."""
 
     def current(self) -> ClaimTransition:
-        return ClaimTransition.from_wire(FieldCodec.encode(self))
+        from .carry_claim_fields import WIRE_NAMES
+
+        raw = WIRE_NAMES.rewrite(compile_decoder(ClaimTransition), FieldCodec.encode(self))
+        return ClaimTransition.from_wire(raw)
+
+    def restored_wire(self, transition: ClaimTransition) -> dict[str, object]:
+        return FieldCodec.encode(transition)
 
     def restored(self, transition: ClaimTransition) -> Self:
         # The known old member owns layout; the new record supplies every value.
-        return FieldCodec.decode_record(type(self), FieldCodec.encode(transition))
+        return FieldCodec.decode_record(type(self), self.restored_wire(transition))
 
 
 class OrderedHistoryClaim(OrderedHistoryMember, HistoryClaim, declared_name=None):
@@ -516,12 +526,13 @@ class ClaimGeneration:
 class ScopedClaimGeneration(ClaimGeneration, HistoryClaim, declared_name=None):
     scope: Annotated[HistoryScope, WireName("admission")]
 
-    def restored(self, transition: ClaimTransition) -> Self:
+    def restored_wire(self, transition: ClaimTransition) -> dict[str, object]:
         # This retired member decoded an acquiring scope, never a release.
         acquiring = cast(AcquiringClaim, transition)
-        return replace(
-            super().restored(transition), scope=self.scope.restored(acquiring.claim_scope)
-        )
+        scope = FieldCodec.encode(self.scope.restored(acquiring.resource_scope))
+        return {"admission" if key == "resource_scope" else key:
+                scope if key == "resource_scope" else value
+                for key, value in super().restored_wire(transition).items()}
 
 
 @dataclass(frozen=True, kw_only=True)

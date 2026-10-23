@@ -212,7 +212,7 @@ def test_claim_scope_cannot_decode_a_registry_process_owner(tmp_path):
         encoded = FieldCodec.encode(scope)
         assert FieldCodec.decode(type(scope), encoded) == scope
         wire_key = FieldCodec.record_key(type(scope), "claimed_identity")
-        assert wire_key == "admission"
+        assert wire_key == "claimed_identity"
         encoded[wire_key] = FieldCodec.encode(registry_owner)
         with pytest.raises(ValueError):
             FieldCodec.decode(type(scope), encoded)

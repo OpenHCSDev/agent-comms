@@ -248,7 +248,7 @@ class StoredInput(InputAttempt):
     key: str
     sequence: int | None
     owner: str
-    claim_generation: Annotated[int, WireName("admission")]
+    claim_generation: int
     target: str
     source_text: str
     origin: Annotated[InputOrigin, WireOmitDefault()] = field(

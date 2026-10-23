@@ -11,7 +11,7 @@ from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
-from typing import TYPE_CHECKING, Any, Generic, Self, TypeVar, Annotated
+from typing import TYPE_CHECKING, Any, Generic, Self, TypeVar
 
 from acp import RequestError
 
@@ -24,7 +24,7 @@ from .coordination_errors import IdentityConflict, StaleRevision
 from .coordination_session import ReadNativeCoordinationSession
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .field_codec import Id128Text, WireName
+from .field_codec import Id128Text
 from .goals import GoalDeclaration, NoGoal
 from .image_inputs import ImageInput
 from .input_attempt import InputAttempt, ReservedInput
@@ -55,7 +55,7 @@ class InputHandoffRefused(RelationViolationError):
 
 @dataclass(frozen=True, slots=True)
 class QueuedInputContext:
-    claimed_identity: Annotated[ClaimedIdentity, WireName("admission")]
+    claimed_identity: ClaimedIdentity
     goal: GoalDeclaration = field(default_factory=NoGoal)
 
     @classmethod

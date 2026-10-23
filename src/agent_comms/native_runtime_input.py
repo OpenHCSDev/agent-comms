@@ -16,7 +16,7 @@ from agent_comms.coordination_tables.participants import Participants
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
-from .field_codec import FieldCodec, MalformedRecord, NativeContext, WireName
+from .field_codec import FieldCodec, MalformedRecord, NativeContext
 from .native_claim_epoch import NativeClaimEpoch, UnrecordedNativeClaim
 from .native_input_record import (
     NativeColumn,
@@ -264,7 +264,6 @@ class NativeRuntimeInput(
     owner_token_digest: Annotated[str, FrozenColumn(check="length(owner_token_digest)=64")]
     sent_owner_claimed_generation: Annotated[
         NativeClaimEpoch,
-        WireName("sent_owner_admission_generation"),
         Column(
             record_key=True,
             check="{sent_owner_claimed_generation}>0",
@@ -365,7 +364,6 @@ class CurrentNativeCursor(
     owner_generation: Annotated[int, FrozenColumn(primary_key=True, check="owner_generation>0")]
     owner_claimed_generation: Annotated[
         int,
-        WireName("owner_admission_generation"),
         FrozenColumn(record_key=True, primary_key=True, check="{owner_claimed_generation}>0"),
     ]
 

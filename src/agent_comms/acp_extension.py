@@ -302,7 +302,7 @@ class NoCursorScope(CursorScope):
 class LiveCursorScope(CursorScope, LiveAttachmentScope):
     session_id: str
     wire_root_id: str
-    claimed_identity: Annotated[ClaimedIdentity, WireName("admission")]
+    claimed_identity: ClaimedIdentity
     owner: ProcessIdentity
 
     def __post_init__(self):
@@ -446,7 +446,7 @@ class NoQueueScope(QueueScope):
 @dataclass(frozen=True)
 class LiveQueueScope(QueueScope, LiveAttachmentScope):
     session_id: str
-    claimed_identity: Annotated[ClaimedIdentity, WireName("admission")]
+    claimed_identity: ClaimedIdentity
     owner: ProcessIdentity
 
     @property
