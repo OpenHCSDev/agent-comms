@@ -22,7 +22,7 @@ from pydantic import (
 )
 from typing_extensions import TypeForm
 
-from .coordination_errors import CoordinationReadUnavailable
+from .coordination_errors import CoordinationError, CoordinationReadUnavailable
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .external_transcript import RequestedEarlierPage
 from .field_codec import TimestampText
@@ -35,6 +35,9 @@ from .wire_models import DeclaredWireFamily, WireModel
 if TYPE_CHECKING:
     from .child_process import AttachedChild
     from .cli_bridges.shared import CliBridge, DeliveryRow
+
+
+CLI_FAILURES = (ValueError, OSError, CoordinationError)
 
 
 async def raise_child_exit(child: AttachedChild, reason: str) -> NoReturn:

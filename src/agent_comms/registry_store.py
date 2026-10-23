@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, Self
 
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
@@ -96,7 +96,9 @@ class RegistryRevision(CachedRegistry):
         return self.document.entry(name) if self.revision == revision else decode()
 
     def decoded(self, store: RegistryStore, raw: dict) -> RegistryDocument:
-        return store._bind_document(RegistryDocument.from_wire(raw, (self.raw, self.document)))
+        document = RegistryDocument.from_wire(raw, (self.raw, self.document))
+        document.threads.bind(store._bind_thread)
+        return document
 
     @cached_property
     def snapshot(self) -> RegistrySnapshot:
@@ -204,6 +206,10 @@ class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument], RegistryTie
     json_indent = 2
     cache: RegistryCache = field(init=False, compare=False, repr=False)
 
+    def __reduce__(self) -> tuple[type[Self], tuple[Path]]:
+        """Row bindings travel by their store path, never by a process's locks."""
+        return type(self), (self.path,)
+
     def __post_init__(self) -> None:
         from .private_runtime_schema import PrivateCoordinatorTable
 
@@ -299,13 +305,10 @@ class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument], RegistryTie
             return thread
         return replace(thread, turn_record=record, session_file=session)
 
-    def _bind_document(self, document: RegistryDocument) -> RegistryDocument:
-        for name, thread in document.threads.items():
-            document.threads[name] = self._bind_thread(thread)
-        return document
-
     def _decode(self, data: object) -> RegistryDocument:
-        return self._bind_document(self.record_type.from_wire(data))
+        document = self.record_type.from_wire(data)
+        document.threads.bind(self._bind_thread)
+        return document
 
     @contextmanager
     def editing(self) -> Iterator[RegistryEdit]:
@@ -323,7 +326,7 @@ class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument], RegistryTie
 
     def save_unlocked(self, document: RegistryDocument) -> None:
         self.read_revision_unlocked().document.purpose.require_write()
-        document = self._bind_document(document)
+        document.threads.bind(self._bind_thread)
         raw = self._encode(document)
         self._write_unlocked(json.dumps(raw, indent=2))
         # Still under the exclusive lock: the written file is this document.

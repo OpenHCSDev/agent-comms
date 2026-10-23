@@ -43,6 +43,7 @@ from agent_comms.field_codec import (
     Argument,
     FieldCodec,
     MalformedRecord,
+    MessageIdText,
     Normalize,
     NullMember,
     SingleFieldValue,
@@ -61,7 +62,7 @@ from agent_comms.problem_number import ProblemNumber
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.registry_document import RegisteredCommanderProject
-from agent_comms.standing_rules import HuntDue, OwedAnswer
+from agent_comms.standing_rules import HuntDue, OwedAnswer, StandingScan
 from agent_comms.storage_rules import UnitStorage
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import (
@@ -95,18 +96,7 @@ from agent_comms.todos import (
 )
 from agent_comms.slop import Slop
 from agent_comms.tool_caller import CommanderForkCaller, NoThreadCaller
-from agent_comms.tools import (
-    CommsChangeProblemTool,
-    CommsFireTool,
-    CommsOrderCheckTool,
-    CommsOrderDoneTool,
-    CommsOrderServeTool,
-    CommsOrderTool,
-    CommsProblemCloseTool,
-    CommsTodoCreateTool,
-    CommsTodoListTool,
-    TodoList,
-)
+from agent_comms.order_tools import CommsChangeProblemTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderServeTool, CommsOrderTool, CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, TodoList
 
 
 def refuse(text, *families):
@@ -791,7 +781,7 @@ class DirectiveVerb(CommanderVerb):
     """An action may answer named directives; unrelated work cannot clear them."""
 
     answers: Annotated[
-        tuple[str, ...],
+        tuple[Annotated[str, MessageIdText], ...],
         Argument(
             flags=("--answers",),
             options={"nargs": "+",
@@ -818,10 +808,11 @@ class DirectiveVerb(CommanderVerb):
                      ' reaches:\n' + '\n'.join(misaddressed))
         owed = tuple(rule for rule in opened if rule.due(now) and not rule.answered_by(named))
         if owed:
-            lines = '\n'.join(f'{rule.line()}: {rule.message.body[:80]}' for rule in owed)
-            sys.exit('REFUSED, nothing recorded: messages owed an answer:\n' + lines
-                     + '\nReply to the original message or use --answers MESSAGE_ID. An answer '
-                     'that must wait is sent now: "waiting on X, owner Y".')
+            lines = '\n'.join(
+                f'{rule.line()}: {rule.message.body[:80]}\n{rule.clearing_action()}'
+                for rule in owed
+            )
+            sys.exit('REFUSED, nothing recorded: messages owed an answer:\n' + lines)
         self.respond(ctx, tuple(dict.fromkeys(message.reference for message in named)))
 
     @property
@@ -1268,7 +1259,7 @@ class NextHuntVerb(OrderVerb, declared_name="next-hunt"):
 
     def run(self, ctx: Commander) -> None:
         for path in HuntDue.next_hunt(ctx.comms, ctx.commander,
-                                      HuntDue.todos(ctx.comms, ctx.commander)):
+                                      StandingScan.read(ctx.comms, ctx.commander).todos):
             print(path)
 
 
@@ -1276,7 +1267,8 @@ class IdleVerb(OrderVerb):
     help = "print the units Core counts idle: a recent turn and no order"
 
     def run(self, ctx: Commander) -> None:
-        for thread in UnownedWheelSpin.idle(ctx.comms, ctx.commander):
+        scan = StandingScan.read(ctx.comms, ctx.commander)
+        for thread in UnownedWheelSpin.idle(ctx.comms, ctx.commander, scan):
             print(thread.name)
 
 

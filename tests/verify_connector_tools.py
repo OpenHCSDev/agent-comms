@@ -39,7 +39,7 @@ from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.todos import OperationDelivery, PendingProblemOrder
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import CommsOrderDoneTool, CommsTodoCreateTool
+from agent_comms.order_tools import CommsOrderDoneTool, CommsTodoCreateTool
 from connector_readiness import ConnectorReadiness
 from order_scope_fixture import FIX_SCOPE
 from agent_comms.threads import Thread

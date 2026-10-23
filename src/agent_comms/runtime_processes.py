@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import os
+import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 
 from agent_comms.child_process import IdentityMismatchError, Platform, ProcessIdentity
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.runtime_children import ApplicationChildInitiator
 
@@ -71,32 +73,33 @@ class RuntimeProcesses:
         directory = target.prefix.parent
         outcomes: list[RuntimeProcessOutcome] = []
         platform = Platform.current()
+        observer = ProcessIdentity.capture(os.getpid())
+        lineage: frozenset[ProcessIdentity] = frozenset(observer.lineage())
         for entry in proc.iterdir():
             if not entry.name.isdecimal():
                 continue
             pid = int(entry.name)
             try:
                 identity = ProcessIdentity.capture(pid)
-                invoked = (entry / "cmdline").read_bytes().partition(b"\0")[0]
+                invoked = platform.arguments(identity)[0]
                 identity.require_alive()
-            except ProcessLookupError, FileNotFoundError:
+            except ProcessLookupError:
                 continue
             except (OSError, IdentityMismatchError) as error:
                 outcomes.append(UnreadableRuntimeProcess(pid, str(error)))
                 continue
-            # Empty command lines declare no userspace invocation (kernel/exited
-            # tasks). Other namespaces do not name an agent-comms installation.
-            interpreter = Path(os.fsdecode(invoked))
-            if not invoked or not interpreter.is_relative_to(directory):
+            # Other namespaces do not name an agent-comms installation.
+            interpreter = Path(invoked)
+            if not interpreter.is_relative_to(directory):
                 continue
             runtime = LaunchRuntime.from_interpreter(interpreter)
             if runtime.prefix == target.prefix:
                 continue
             try:
+                if identity in lineage or observer in identity.lineage():
+                    continue
                 parent = platform.parent_identity(pid)
-                application = RuntimeApplication(
-                    parent, (proc / str(parent.pid) / "comm").read_text().strip()
-                )
+                application = RuntimeApplication(parent, platform.process_name(parent.pid))
                 parent.require_alive()
                 identity.require_alive()
             except (OSError, IdentityMismatchError) as error:
@@ -113,3 +116,8 @@ class RuntimeProcesses:
                 )
             )
         return cls(tuple(outcomes))
+
+
+if __name__ == "__main__":
+    print(FieldCodec.compact(FieldCodec.encode(RuntimeProcesses.observe(
+        LaunchRuntime.from_interpreter(sys.argv[1])))))

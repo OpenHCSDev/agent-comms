@@ -6,7 +6,7 @@ import sys
 from contextlib import ExitStack
 from pathlib import Path
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.child_process import Platform, ProcessIdentity
 from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.runtime_processes import (
@@ -23,25 +23,42 @@ def stop(child):
     child.wait(timeout=10)
 
 
-def test_runtime_process_family(tmp_path):
+def test_runtime_process_family(tmp_path, monkeypatch):
     runtimes = tmp_path / "runtimes"
     old, target = (LaunchRuntime(runtimes / name / "bin/python") for name in ("old", "target"))
     for runtime in (old, target):
         runtime.interpreter.parent.mkdir(parents=True)
         runtime.interpreter.symlink_to(sys.executable)
+        configuration = Path(sys.prefix) / "pyvenv.cfg"
+        if configuration.is_file():
+            (runtime.prefix / "pyvenv.cfg").symlink_to(configuration)
+            (runtime.prefix / "lib").symlink_to(Path(sys.prefix) / "lib", target_is_directory=True)
     with ExitStack() as cleanup:
         children = []
         for runtime in (old, target):
-            child = subprocess.Popen([str(runtime.interpreter), "-c", "import time; time.sleep(120)"])
+            child = subprocess.Popen([
+                str(runtime.interpreter), str(Path(__file__).with_name("runtime_process_sleeper.py")),
+            ])
             cleanup.callback(stop, child)
             children.append(child)
-        snapshot = RuntimeProcesses.observe(target)
+        assert not RuntimeProcesses.observe(target).outcomes
+        # Its old-runtime parent is ours; sibling old-runtime applications are not.
+        with subprocess.Popen(
+            [str(old.interpreter), str(Path(__file__).with_name("runtime_process_parent.py")),
+             str(target.interpreter)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env=LaunchRuntime.running().child_environment(os.environ),
+        ) as observer_parent:
+            observed, errors = observer_parent.communicate(timeout=30)
+            assert observer_parent.returncode == 0, errors
+        snapshot = FieldCodec.decode(RuntimeProcesses, FieldCodec.parse(observed))
         (outcome,) = snapshot.outcomes
         assert isinstance(outcome, UnretiredRuntimeProcess)
+        assert outcome.process.pid != observer_parent.pid
         assert outcome.process == ProcessIdentity.capture(children[0].pid)
         assert outcome.process.prefix == old.prefix
         assert outcome.process.application.process == ProcessIdentity.capture(os.getpid())
-        assert outcome.process.application.name == Path(f"/proc/{os.getpid()}/comm").read_text().strip()
+        assert outcome.process.application.name == Platform.current().process_name(os.getpid())
         # Resolving the interpreter would collapse both runtimes onto the shared Python.
         assert old.interpreter.resolve() == target.interpreter.resolve()
         assert str(children[0].pid) in outcome.line()
@@ -59,8 +76,14 @@ def test_runtime_process_family(tmp_path):
     # A named process whose command line cannot be read is not silently discarded.
     proc = tmp_path / "proc"
     entry = proc / str(os.getpid())
-    (entry / "cmdline").mkdir(parents=True)
-    (unknown,) = RuntimeProcesses.observe(target, proc).outcomes
+    entry.mkdir(parents=True)
+
+    def denied_arguments(platform, process):
+        raise PermissionError("process command line denied")
+
+    with monkeypatch.context() as denied:
+        denied.setattr(type(Platform.current()), "arguments", denied_arguments)
+        (unknown,) = RuntimeProcesses.observe(target, proc).outcomes
     assert isinstance(unknown, UnreadableRuntimeProcess)
     assert unknown.pid == os.getpid()
     assert str(unknown.pid) in unknown.line()

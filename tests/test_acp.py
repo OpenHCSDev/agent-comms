@@ -45,7 +45,7 @@ def facts(metadata, kind):
 
 
 @pytest.fixture
-def native_stdio_root():
+def native_stdio_root(native_runtime_package):
     if not os.environ.get("AC_NATIVE_COPIED_PACKAGE"):
         pytest.skip("Requires existing prepared native package; no provider request")
     with tempfile.TemporaryDirectory(prefix="l0b-stdio-", dir="/var/tmp") as directory:
@@ -63,7 +63,7 @@ class TestHandlers:
         assert response.agent_info is not None
         assert response.agent_info.name == "agent-comms"
 
-    async def test_new_session_registers_thread_from_cwd(self, tmp_path):
+    async def test_new_session_registers_thread_from_cwd(self, tmp_path, native_runtime_package):
         agent = self._agent(tmp_path)
         response = await agent.new_session(cwd="/home/me/my-project", mcp_servers=[])
         assert response.session_id == "my-project"
@@ -74,7 +74,7 @@ class TestHandlers:
         assert thread.tags == frozenset({"acp"})
 
     async def test_attach_metadata_restores_saved_context_without_reading_transcript(
-        self, tmp_path
+        self, tmp_path, native_runtime_package
     ):
         agent = self._agent(tmp_path)
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
@@ -96,7 +96,7 @@ class TestHandlers:
             == UnmeasuredContext()
         )
 
-    async def test_unknown_model_is_rejected(self, tmp_path, monkeypatch):
+    async def test_unknown_model_is_rejected(self, tmp_path, monkeypatch, native_runtime_package):
 
         monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "openrouter/one")
         agent = canonical_agent(
@@ -114,7 +114,9 @@ class TestHandlers:
         assert "\x1b" not in backend.compaction_summary("\x1b[2J\nSafe")
 
     @pytest.mark.parametrize("renamed", [False, True])
-    async def test_snapshot_capability_replays_one_bounded_update(self, tmp_path, renamed):
+    async def test_snapshot_capability_replays_one_bounded_update(
+        self, tmp_path, renamed, native_runtime_package
+    ):
         agent = self._agent(tmp_path)
         await agent.initialize(1)
         await agent.new_session("/wt/proj")
@@ -159,7 +161,7 @@ class TestHandlers:
         finally:
             await agent.shutdown()
 
-    async def test_new_session_starts_after_existing_wire_history(self, tmp_path):
+    async def test_new_session_starts_after_existing_wire_history(self, tmp_path, native_runtime_package):
         agent = canonical_agent(wire(tmp_path / "wire"))
         agent._comms.registry.declare(Thread(name='peer', tags=frozenset(), worktree='/wt'))
         agent._comms.messaging.send("peer", "#all", "old message").message.message_id
@@ -170,7 +172,7 @@ class TestHandlers:
             "new message"
         ]
 
-    async def test_same_cwd_allocates_distinct_threads(self, tmp_path):
+    async def test_same_cwd_allocates_distinct_threads(self, tmp_path, native_runtime_package):
         agent = self._agent(tmp_path)
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         agent._comms.owners.stop("proj")
@@ -180,7 +182,7 @@ class TestHandlers:
         assert response.session_id == "proj-2"
         assert agent._comms.registry.status("proj").declared_name == "stopped"
 
-    async def test_same_leaf_different_cwd_disambiguates(self, tmp_path):
+    async def test_same_leaf_different_cwd_disambiguates(self, tmp_path, native_runtime_package):
         agent = self._agent(tmp_path)
         await agent.new_session(cwd="/a/proj", mcp_servers=[])
         await agent.new_session(cwd="/b/proj", mcp_servers=[])
@@ -189,7 +191,7 @@ class TestHandlers:
         assert agent._comms.registry.require("proj").worktree == "/a/proj"
         assert agent._comms.registry.require("proj-2").worktree == "/b/proj"
 
-    async def test_separate_servers_in_same_cwd_get_distinct_threads(self, tmp_path):
+    async def test_separate_servers_in_same_cwd_get_distinct_threads(self, tmp_path, native_runtime_package):
         first = self._agent(tmp_path)
         second = self._agent(tmp_path)
         first_response = await first.new_session(cwd="/wt/proj", mcp_servers=[])
@@ -197,7 +199,7 @@ class TestHandlers:
         assert first_response.session_id == "proj"
         assert second_response.session_id == "proj-2"
 
-    async def test_load_session_reconnects_persistent_thread(self, tmp_path):
+    async def test_load_session_reconnects_persistent_thread(self, tmp_path, native_runtime_package):
         first = self._agent(tmp_path)
         response = await first.new_session(cwd="/wt/proj", mcp_servers=[])
         session_file = tmp_path / "session.jsonl"
@@ -261,7 +263,7 @@ class TestHandlers:
             "replayed response",
         ]
 
-    async def test_prompt_broadcasts_to_global_channel(self, tmp_path):
+    async def test_prompt_broadcasts_to_global_channel(self, tmp_path, native_runtime_package):
         agent = canonical_agent(wire(tmp_path / "wire"))
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         response = await agent.prompt(
@@ -278,12 +280,12 @@ class TestHandlers:
         with pytest.raises(RequestError):
             await agent.prompt(session_id="nope", prompt=[TextContentBlock(type="text", text="x")])
 
-    async def test_cwd_leaf_sanitized_for_thread_name(self, tmp_path):
+    async def test_cwd_leaf_sanitized_for_thread_name(self, tmp_path, native_runtime_package):
         agent = self._agent(tmp_path)
         await agent.new_session(cwd="/wt/My Project!", mcp_servers=[])
         assert "My-Project" in agent._comms.registry
 
-    async def test_cancel_preserves_unbound_inbox(self, tmp_path):
+    async def test_cancel_preserves_unbound_inbox(self, tmp_path, native_runtime_package):
         agent = self._agent(tmp_path)
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         agent._comms.registry.declare(Thread(name='peer', tags=frozenset(), worktree='/wt'))
@@ -395,7 +397,7 @@ class TestWireProtocol:
 
 
 class TestLiveDrain:
-    async def test_cancel_keeps_background_drain_live(self, tmp_path):
+    async def test_cancel_keeps_background_drain_live(self, tmp_path, native_runtime_package):
         agent = canonical_agent(wire(tmp_path / "wire"))
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         await agent.prompt(
@@ -505,7 +507,7 @@ class TestTargetPrefix:
 
         assert parse_target("@fixer")[0] == "#all"
 
-    async def test_dm_prompt_reaches_only_target(self, wired):
+    async def test_dm_prompt_reaches_only_target(self, wired, native_runtime_package):
         agent = canonical_agent(wired)
         wired.registry.declare(Thread(name='peer', tags=frozenset(), worktree='/wt'))
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])

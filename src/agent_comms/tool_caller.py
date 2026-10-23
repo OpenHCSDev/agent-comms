@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from .head_review import PullRequestHead
     from .todos import HeadReviewOrder
     from .threads import Thread
-    from .tools import ToolRequest
+    from .tool_request import ToolRequest
 
 
 @dataclass(frozen=True)

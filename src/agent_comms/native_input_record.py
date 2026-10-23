@@ -117,6 +117,8 @@ class NativeColumn(DeclaredFamily, JsonShapeFamily, affix="NativeColumn"):
     recorded value means; the member answers only whether the column holds one.
     """
 
+    value: str | int | None
+
     def require_unrecorded(self) -> None:
         raise MalformedRecord("Native column holds a value its group does not record")
 
@@ -462,7 +464,7 @@ class NativeInputContext:
         """A context field decoded as its NativeContext directive declares it."""
         plan = next(plan for plan in FieldCodec.field_plans(type(self)) if plan.name == name)
         for directive in NativeContext.single(plan.annotation):
-            return FieldCodec.decode(directive.value, FieldCodec.encode(getattr(self, name)))
+            return FieldCodec.decode(directive.value, getattr(self, name).value)
         return getattr(self, name)
 
     @property
@@ -476,7 +478,7 @@ class NativeInputContext:
         try:
             for plan in FieldCodec.field_plans(type(self)):
                 for _directive in NativeContext.single(plan.annotation):
-                    FieldCodec.decode(type(None), FieldCodec.encode(getattr(self, plan.name)))
+                    FieldCodec.decode(type(None), getattr(self, plan.name).value)
         except MalformedRecord as error:
             raise IdentityConflict("Native unrecorded context group is partial") from error
         return UnrecordedNativeInputReference()
@@ -485,7 +487,7 @@ class NativeInputContext:
         try:
             for plan in FieldCodec.field_plans(type(self)):
                 for directive in NativeContext.single(plan.annotation):
-                    FieldCodec.decode(directive.value, FieldCodec.encode(getattr(self, plan.name)))
+                    FieldCodec.decode(directive.value, getattr(self, plan.name).value)
         except MalformedRecord as error:
             raise IdentityConflict("Native recorded context group is partial") from error
         return NativeInputReference.acquire(self)

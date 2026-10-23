@@ -246,7 +246,7 @@ class ToolDamage(EvidenceDamage):
 class WrongEpochDamage(EvidenceDamage):
     def alter(self, source):
         releases = wire(source.root).owners.releases
-        original = releases.get("beta")
+        original = releases.read_many(("beta",))["beta"]
         with releases.writing() as db:
             OwnerReleaseEvidence.update(db, where="name=?", parameters=("beta",), before=original.after + 1)
         return source.session_file

@@ -14,8 +14,8 @@ from agent_comms.typed_table import (
     ComposedSchemas,
     Index,
     ProjectionProducerTables,
+    TableReference,
     TypedTable,
-    sql_literal,
 )
 
 if TYPE_CHECKING:
@@ -104,19 +104,14 @@ class MessageIdentitySource(MessageReference, messages.BusProjectionTables):
         Index(("sender", "message_id")),
     )
 
-    @classmethod
-    def reference_sql(cls, alias: str) -> str:
-        fields = ",".join(
-            value for item, key in FieldCodec.record_fields(MessageReference)
-            for value in (sql_literal(key), cls._sql(alias + ".{" + item.name + "}"))
-        )
-        return f"json_object({fields})"
-
 
 @dataclass(frozen=True)
 class AnsweredSource(messages.BusProjectionTables):
-    original: Annotated[MessageReference, Column(primary_key=True)]
+    original: Annotated[int, Column(
+        primary_key=True, references=TableReference(MessageIdentitySource, ("seq",)),
+    )]
     seq: Annotated[int, Column(primary_key=True)]
+    indexes = (Index(("original",)),)
 
     @classmethod
     def unanswered_references(
@@ -130,13 +125,12 @@ class AnsweredSource(messages.BusProjectionTables):
         asking = ",".join("?" for _ in sequences)
         replying = ",".join("?" for _ in responders)
         identity = MessageIdentitySource.declared_name
-        reference = MessageIdentitySource.reference_sql("asked")
         rows = db.execute(
             f'SELECT asked.seq, asked.message_id FROM "{identity}" AS asked '
             f'WHERE asked.seq IN ({asking}) AND NOT EXISTS ('
             f'SELECT 1 FROM "{cls.declared_name}" AS answered '
             f'JOIN "{identity}" AS author ON author.seq=answered.seq '
-            + cls._sql(f'WHERE answered.{{original}}={reference} ')
+            + cls._sql('WHERE answered.{original}=asked.seq ')
             + f'AND author.sender IN ({replying})) ORDER BY asked.seq',
             (*sequences, *responders),
         )
@@ -151,7 +145,6 @@ class AnsweredSource(messages.BusProjectionTables):
     ) -> tuple[messages.BusRecord, ...]:
         """Read unanswered originals through the existing reference and sender indexes."""
         requesters, responders = scope.second_names - scope.first_names, scope.first_names
-        reference = MessageIdentitySource.reference_sql("asked")
         eligible, eligibility = AwaitingAnswerSource.recipient_predicate(
             "asked.seq", scope.first_names,
         )
@@ -170,7 +163,7 @@ class AnsweredSource(messages.BusProjectionTables):
             + f'AND asked.seq < ? {kind_filter}AND ({eligible}) AND NOT EXISTS ('
             f'SELECT 1 FROM "{cls.declared_name}" AS answered '
             f'JOIN "{MessageIdentitySource.declared_name}" AS author ON author.seq=answered.seq '
-            + cls._sql(f'WHERE answered.{{original}}={reference} ')
+            + cls._sql('WHERE answered.{original}=asked.seq ')
             + f'AND author.sender IN ({replying})) ORDER BY asked.seq DESC LIMIT ?'
         )
         sequences = db.execute(query, (
@@ -202,7 +195,7 @@ class AnsweredSource(messages.BusProjectionTables):
             + content._sql('reply_message.{timestamp} >= ? AND EXISTS (')
             + f'SELECT 1 FROM "{cls.declared_name}" AS answered '
             f'JOIN "{identity}" AS asked ON '
-            + cls._sql(f'answered.{{original}}={MessageIdentitySource.reference_sql("asked")} ')
+            + cls._sql('answered.{original}=asked.seq ')
             + f'JOIN "{content.declared_name}" AS question ON question.seq=asked.seq '
             f'WHERE answered.seq=reply.seq AND asked.seq<reply.seq '
             f'AND asked.sender IN ({asking}) AND '

@@ -13,7 +13,8 @@ from acp.schema import (
 )
 
 from agent_comms.comms import wire
-from agent_comms.image_inputs import MAX_IMAGE_BYTES, ImageInput, prompt_images
+from agent_comms.image_input import MAX_IMAGE_BYTES, ImageInput
+from agent_comms.image_inputs import prompt_images
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from bus_history import read_history
 from delivery_owner_fixture import canonical_agent
@@ -69,7 +70,7 @@ async def make_agent(tmp_path, monkeypatch):
     return agent
 
 
-async def test_routed_image_rejected_before_bus_side_effects(tmp_path, monkeypatch):
+async def test_routed_image_rejected_before_bus_side_effects(tmp_path, monkeypatch, native_runtime_package):
     agent = await make_agent(tmp_path, monkeypatch)
     try:
         with pytest.raises(RequestError):

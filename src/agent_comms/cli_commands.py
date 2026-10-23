@@ -25,7 +25,7 @@ from pathlib import Path
 from types import get_original_bases
 from typing import Annotated, ClassVar, Literal, Self, TextIO, cast, get_args, get_origin
 
-from acp.exceptions import RequestError
+from agent_comms.coordination_errors import RequestRefused
 from pydantic import JsonValue
 
 from agent_comms.errors import ToolRefusedError
@@ -67,7 +67,7 @@ from .cli_bridges.history import (
     OnlineHistory,
 )
 from .cli_bridges.shared import ChoiceTargetField, SendRequest, TargetField
-from .cli_protocol import ArrivedMessage, EarlierItems
+from .cli_protocol import CLI_FAILURES, ArrivedMessage, EarlierItems
 from .cli_result import CliResult
 from .command import Command
 from .commander.config import (
@@ -109,10 +109,12 @@ from .field_codec import (
     NamedArgumentGroup,
     Normalize,
     PathText,
+    RecordMember,
     TargetBound,
     WireForm,
     WireName,
     WireOmitDefault,
+    WireValue,
     boundary_decoder,
 )
 from .harness_install import Harness
@@ -285,10 +287,16 @@ class TargetOutcome(LifecycleCapability):
 
 
 @dataclass(frozen=True)
-class TargetCompleted(Successful, TargetOutcome):
+class TargetCompleted(Successful, TargetOutcome, RecordMember):
     target: str
     command: CliCommand
-    result: Annotated[CliResult, WireForm]
+    result: Annotated[CliResult, WireValue]
+
+    @classmethod
+    def from_wire(cls, data: JsonValue) -> Self:
+        record = FieldCodec.decode(dict[str, JsonValue], data)
+        command = FieldCodec.decode(CliCommand, record["command"])
+        return FieldCodec.decode_record(cls, record, field_types={"result": command.result_type()})
 
     def reconnect_targets(self) -> tuple[str, ...]:
         return self.result.reconnect_targets()
@@ -302,6 +310,9 @@ class TargetFailed(TargetOutcome):
     target: str
     error_type: str
     error: str
+
+    def __str__(self) -> str:
+        return f"{self.target}: {self.error_type}: {self.error}"
 
 
 @dataclass(frozen=True)
@@ -326,6 +337,10 @@ class TargetBatchResult(CliResult):
 
     def exit_code(self) -> int:
         return int(not self.successful)
+
+    def require_success(self, refusal: type[Exception]) -> None:
+        for outcome in self.outcomes:
+            outcome.require(Successful, refusal(str(outcome)))
 
 
 class CommandSelectionChanged(ToolRefusedError):
@@ -433,7 +448,7 @@ class TargetBatch(TargetSelection):
                     scope = f' in {context}' if context is not None else ''
                     raise CommandSelectionChanged(f'The bound command for {name}{scope} changed; refresh the selection')
                 command.schedule(TargetBatchSchedule(position, name, outcomes, together), comms)
-            except ToolRefusedError as error:
+            except CLI_FAILURES as error:
                 result = TargetFailed(name.name, type(error).__name__, str(error))
                 outcomes.append((position, result))
         for together_declaration, members in together.items():
@@ -1397,7 +1412,7 @@ class WatchStream(CliResult):
     watch: WatchCliCommand
 
     def messages(self) -> AsyncIterator[Message]:
-        return self.comms.bus.watch(self.watch.thread, acknowledgment=self.watch.acknowledgment,
+        return self.comms.watch(self.watch.thread, acknowledgment=self.watch.acknowledgment,
                                     after=self.watch.after)
 
     def write(self, output: TextIO) -> int:
@@ -1408,8 +1423,9 @@ class WatchStream(CliResult):
                     emit(ArrivedMessage(message=message).model_dump_json())
 
         async def watch() -> None:
-            thread = self.comms.registry.require(self.watch.thread)
-            source = thread.runtime.history_source(self.comms.root, thread.incarnation)
+            with Comms.client(self.comms.route) as comms:
+                thread = comms.registry.require(self.watch.thread)
+                source = thread.runtime.history_source(comms.root, thread.incarnation)
             async with asyncio.TaskGroup() as tasks:
                 tasks.create_task(stream())
                 tasks.create_task(source.watch_requests(
@@ -1444,6 +1460,11 @@ class WatchCliCommand(ThreadArgument, CliCommand[WatchStream], declared_name="wa
     def apply(self, ctx: Comms) -> WatchStream:
         return WatchStream(ctx, self)
 
+    def execute(self, route: CommsRoute, output: TextIO) -> int:
+        with Comms.client(route) as comms:
+            stream = self.apply(comms)
+        return stream.write(output)
+
 
 @dataclass(frozen=True, kw_only=True)
 class AckCliCommand(ThreadArgument, CliCommand):
@@ -1469,7 +1490,7 @@ class StatusCliCommand(CliCommand):
 
     def apply(self, ctx: Comms) -> CliResult:
         snapshot = ctx.registry.snapshot()
-        running = snapshot.active_threads(snapshot.threads.values())
+        running = snapshot.active_threads(snapshot.active_candidates())
         activities = ctx.agents.all_activity(running, snapshot=snapshot)
         return ActiveStatusResult(tuple(
             ThreadActivityRow(thread, activity.state, activity.detail, activity.timestamp)
@@ -2173,7 +2194,7 @@ class ContextCliCommand(CliCommand):
                     payload = await connection.request("context")
                     native = FieldCodec.decode(NativeContextData, payload).require_session_file(
                         owner.runtime.path)
-                except RequestError as error:
+                except RequestRefused as error:
                     return context, None, str(error)
                 return context, native, None
             finally:

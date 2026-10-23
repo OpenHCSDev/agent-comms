@@ -41,7 +41,7 @@ from agent_comms.todos import (
     Todo,
 )
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import CommsOrderDoneTool, CommsProblemCloseTool, CommsTodoCreateTool
+from agent_comms.order_tools import CommsOrderDoneTool, CommsProblemCloseTool, CommsTodoCreateTool
 from fixture_git import IDENTITY
 from order_scope_fixture import FIX_SCOPE
 from source_revision_fixture import SourceRepository

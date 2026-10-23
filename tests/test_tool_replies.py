@@ -3,13 +3,14 @@ from typing import get_type_hints
 
 from agent_comms.comms import Comms
 from agent_comms.tool_result import ToolResult
-from agent_comms.tools import (
-    ToolRequest,
-)
+from agent_comms.tool_request import ToolRequest
 
 
 def result_type(tool: type[ToolRequest]) -> type:
-    return get_type_hints(tool.apply, localns={"Comms": Comms})["return"]
+    return get_type_hints(tool.apply, localns={
+        "Comms": Comms,
+        **{param.__name__: param for param in ToolRequest.__type_params__},
+    })["return"]
 
 
 def stores(comms: Comms) -> dict:

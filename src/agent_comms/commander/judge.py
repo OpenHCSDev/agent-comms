@@ -56,7 +56,7 @@ from agent_comms.todos import (
     ToolCallVerdict,
 )
 from agent_comms.slop import Derivation, Slop
-from agent_comms.tools import CommsHeadVerdictTool, CommsUnjudgedTool, CommsVerdictTool
+from agent_comms.order_tools import CommsHeadVerdictTool, CommsUnjudgedTool, CommsVerdictTool
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tool_declaration import EditCall, ReplacementEdit
 from agent_comms.commander import order

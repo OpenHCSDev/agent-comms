@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from acp import RequestError
+from agent_comms.coordination_errors import RequestRefused
 
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
@@ -142,7 +142,7 @@ class WakeScheduleCheck(SchedulesWake, BackgroundWake, SessionScheduleCheck):
                         autonomous_goal=len(pending) == 1 and pending[0].autonomous_goal,
                         dependency_wait_id=pending[0].goal_wait_id,
                     )
-                except RequestError as error:
+                except RequestRefused as error:
                     pending[0].require_dependency_wake(error)
                     await inputs.effects.turns.goals.sync_goal_execution(session_id, owner.name)
                 finally:

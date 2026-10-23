@@ -6,7 +6,10 @@ from dataclasses import fields, replace
 
 import pytest
 
+from agent_comms.registry_document import ThreadRows
+
 from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import MalformedRecord
 from agent_comms.display_references import CurrentDisplayReferences, HistoricalDisplayReference
 from agent_comms.historical_views import HistorySource
 from agent_comms.registry_document import HistoricalRootPurpose
@@ -53,7 +56,7 @@ def test_registry_snapshot_constructor_and_pickle_own_immutable_maps(comms, decl
     original = declare_reference()
     captured = comms.registry.snapshot()
     supplied = dict(captured.threads)
-    snapshot = replace(captured, threads=supplied)
+    snapshot = replace(captured, threads=ThreadRows.from_threads(supplied))
     supplied.clear()
     for restored in (snapshot, pickle.loads(pickle.dumps(snapshot, protocol=5))):
         assert restored.purpose == captured.purpose
@@ -78,11 +81,11 @@ def test_snapshot_constructor_retains_namespace_validation_and_derives_birth_ind
 ):
     original = declare_reference()
     captured = comms.registry.snapshot()
-    with pytest.raises(RelationViolationError, match="name differs"):
-        replace(captured, threads={"misnamed": original})
+    with pytest.raises(MalformedRecord, match="name differs"):
+        replace(captured, threads=ThreadRows.from_threads({"misnamed": original}))
     with pytest.raises(RelationViolationError, match="alias"):
         replace(captured, aliases={"unowned": "absent"})
-    retired = replace(captured, threads={})
+    retired = replace(captured, threads=ThreadRows.from_threads({}))
     assert not retired.by_lookup
     assert captured.by_lookup[original.incarnation.lookup] == original
 

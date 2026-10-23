@@ -29,7 +29,6 @@ import time
 import tomllib
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
-from concurrent.futures import ThreadPoolExecutor
 from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
@@ -51,6 +50,7 @@ from agent_comms.cli_commands import (
     StartCliCommand,
     StopCliCommand,
     TargetActionCliCommand,
+    TargetBatchResult,
 )
 from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.cli_protocol import CoreError
@@ -96,6 +96,7 @@ from agent_comms.installer.reporting import (
 )
 from agent_comms.installer.runtime_resolution import RuntimeResolution, StackProject
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
+from agent_comms.lifecycle_capability import Successful
 from agent_comms.locked_store import BusFile, DeclaredFile, UndeclaredFile
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
@@ -593,41 +594,30 @@ class Stack:
         """Use the restart request's receiving declaration in the selected runtime."""
         return self.probe(RunningOwnersProbe(root))
 
-    def stop_owners(self, root: Path, names: list[str]) -> None:
-        """One target batch owns the signal pass and grace period for every owner."""
+    def owners(self, root: Path, command: type[CliCommand], names: list[str]) -> TargetBatchResult:
+        """Run the whole owner selection through the operation's existing CLI batch."""
         if not names:
-            return
-        with OwnersPhase(command=StopCliCommand).running(self.commands.clock):
+            return TargetBatchResult(())
+        with OwnersPhase(command=command).running(self.commands.clock):
             invocation = TargetActionCliCommand.invocation(
-                "--operation", StopCliCommand.declared_name, "--targets", *names)
+                "--operation", command.declared_name, "--targets", *names)
             completed = self.probe(CliCommandProbe(("--root", str(root), *invocation)))
-            if completed.returncode:
-                raise UpgradeRefused(
-                    f"agent-comms {' '.join(invocation)}: {completed.stdout.strip()}")
-
-    def start_owner(self, root: Path, name: str) -> OwnerStart:
-        try:
-            self.cli(root, StartCliCommand, "--name", name)
-        except UpgradeRefused as error:
-            return RefusedOwner(name, str(error))
-        return StartedOwner(name)
+            return FieldCodec.decode(TargetBatchResult, FieldCodec.parse(completed.stdout))
 
     def start(self, root: Path, names: list[str]) -> tuple[OwnerStart, ...]:
-        """Start the captured owner set together; each owner's outcome is its own."""
-        with (OwnersPhase(command=StartCliCommand).running(self.commands.clock),
-              ThreadPoolExecutor(max_workers=max(1, len(names))) as pool):
-            return tuple(pool.map(lambda name: self.start_owner(root, name), names))
-
-    def restart_services(self) -> tuple[RestartedService, ...]:
-        """Every running host service moves onto this runtime, which owns the root and so
-        proves each one serves it."""
-        with ServicesPhase("restart").running(self.commands.clock):
-            services = HostService.restart_running(self.python)
-            self.probe(ServingProbe())
-            return services
+        """One start batch; keep each refusal in the installed or rollback report."""
+        started: list[OwnerStart] = []
+        for outcome in self.owners(root, StartCliCommand, names).outcomes:
+            try:
+                outcome.require(Successful, UpgradeRefused(str(outcome)))
+            except UpgradeRefused as error:
+                started.append(RefusedOwner(outcome.target, str(error)))
+            else:
+                started.append(StartedOwner(outcome.target))
+        return tuple(started)
 
     def start_services(self, stopped: tuple[HostService, ...]) -> tuple[RestartedService, ...]:
-        with ServicesPhase("recover").running(self.commands.clock):
+        with ServicesPhase("start").running(self.commands.clock):
             services = tuple(service.start_onto(self.python) for service in stopped)
             self.probe(ServingProbe())
             return services
@@ -994,12 +984,17 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
         running = self.installed.running_owners(self.root)
         with MaintenancePhase("begin").running(self.staged.commands.clock):
             maintenance = MaintenanceBarrier(RegistryStore.at(self.root).path)
-            held = maintenance.begin(MaintenanceOperator.current())
+            services = HostService.stop_running()
+            try:
+                held = maintenance.begin(MaintenanceOperator.current())
+            except BaseException:
+                self.installed.start_services(services)
+                raise
             holder = ExitStack()
             holder.enter_context(held.holding())  # this run's own CLI calls read under its hold
         try:
             try:
-                self.installed.stop_owners(self.root, running)
+                self.installed.owners(self.root, StopCliCommand, running).require_success(UpgradeRefused)
                 with MaintenancePhase("retarget").running(self.staged.commands.clock):
                     held = maintenance.retarget(held, self.staged.runtime)
                     holder.close()
@@ -1017,6 +1012,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                     holder.close()
                     maintenance.clear(held)
                 started = self.installed.start(self.root, running)
+                self.installed.start_services(services)
                 print(f"install: aborted before the backup ({type(error).__name__}: {error}); "
                       f"maintenance cleared; owners: {started}", file=sys.stderr)
                 raise
@@ -1030,13 +1026,14 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                 with MaintenancePhase("clear").running(self.staged.commands.clock):
                     holder.close()
                     maintenance.clear(held)
-                services = self.staged.restart_services()
+                restarted_services = self.staged.start_services(services)
             except BaseException as error:
                 print(f"install: install failed ({type(error).__name__}: {error}); "
                       "restoring original installation", file=sys.stderr)
                 # A running service writes the root (the connector its passes), so none may
                 # run while the backup is restored; they start again on the original runtime.
-                stopped = HostService.stop_running()
+                for service in services:
+                    service.stop()
                 state = maintenance.read()
                 recovery = state.phase.hold_for(maintenance, state, MaintenanceOperator.current())
                 holder.close()
@@ -1055,7 +1052,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                 self.installed.publish(self.root)
                 holder.close()
                 maintenance.clear(restored_hold)
-                self.installed.start_services(stopped)
+                self.installed.start_services(services)
                 started = self.installed.start(self.root, running)
                 print(f"install: restored after failure ({type(error).__name__}: {error}); "
                       f"original runtime selected; owners: {started}; "
@@ -1075,7 +1072,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                 started = self.staged.start(self.root, running)
             with BackupRetirePhase().running(self.staged.commands.clock):
                 retired_backups = migration.backup.retain(self.spill_dir)
-            return passed.extended(CarriedRun, stopped=tuple(running), services=services,
+            return passed.extended(CarriedRun, stopped=tuple(running), services=restarted_services,
                                    started=started, restore_space=restore, backup=migration.backup.report(),
                                    retired_backups=retired_backups)
         finally:
@@ -1129,12 +1126,16 @@ class FreshInstall(Install[FreshRehearsal]):
         wire(self.root).registry.prepare_native_root()
         report.writer = RuntimeWriter(self.root, self.staged)
         backup, selected_route = self.backed_up(())
+        stopped = HostService.stop_running()
         try:
             route = self.publish(backup, selected_route)
-            services = self.staged.restart_services()
+            services = self.staged.start_services(stopped)
         except BaseException:
+            for service in stopped:
+                service.stop()
             backup.restore_route()
             self.installed.publish(self.root)
+            self.installed.start_services(stopped)
             raise
         with BackupRetirePhase().running(self.staged.commands.clock):
             backup.retain(self.spill_dir)
@@ -1150,7 +1151,7 @@ class RetiringInstall(FreshInstall):
 
     def live(self, rehearsal: FreshRehearsal, report: InstallReport) -> RetiredRun:
         running = self.installed.running_owners(self.root)
-        self.installed.stop_owners(self.root, running)
+        self.installed.owners(self.root, StopCliCommand, running).require_success(UpgradeRefused)
         retired = self.root.with_name(f"{self.root.name}.retired-{time.strftime('%Y%m%dT%H%M%S')}")
         self.root.rename(retired)
         return super().live(rehearsal, report).extended(

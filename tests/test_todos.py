@@ -12,6 +12,7 @@ import os
 import shlex
 import shutil
 import subprocess
+import time
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import chdir, nullcontext
 from dataclasses import dataclass, replace
@@ -21,7 +22,9 @@ from pathlib import Path
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.commander.order import Commander, PullRequestVerb
+from agent_comms.commander.order import Commander, PullRequestVerb, SayVerb
+from agent_comms.standing_rules import OwedAnswer
+from agent_comms.ui_model.unit_state import AwaitingCommander
 from agent_comms.commander.standing import UnownedOrderWatch
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import wire
@@ -45,7 +48,10 @@ from agent_comms.threads import Thread
 from agent_comms.todos import (
     Assignment,
     ChangeTodoState,
+    ClaimOrder,
     ClosedListedPullRequest,
+    OrderClaim,
+    OrderMessage,
     DeliverTodo,
     DoneTodoState,
     MergedListedPullRequest,
@@ -309,11 +315,12 @@ def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, durable_home, git
     return Commander.read_root(tmp_path)
 
 
-def pr_order(ctx, pid, run: OrderRun = MechanicalOrderRun()):
+def pr_order(ctx, pid, run: OrderRun = MechanicalOrderRun(), *, owner: Thread | None = None):
     source = ctx.repos[0]
     lead = ctx.comms.registry.require(ctx.commander)
     return ctx.comms.goals.todos.create(
-        pid, source.github, "Fix the sidebar", creator=lead, assigner=lead.incarnation, owner=lead,
+        pid, source.github, "Fix the sidebar", creator=lead, assigner=lead.incarnation,
+        owner=owner if owner is not None else lead,
         generation="pr-work", request=NewestOpenRequest().for_order(ctx.comms.goals.todos, lead.incarnation),
         review_at=RecordedEventTime(1000),
         order=replace(order(source), id=f"order-{pid}", run=run))
@@ -324,7 +331,9 @@ def adopt_pr(ctx, pid, number):
     PullRequestVerb.add_arguments(parser)
     command = PullRequestVerb.from_arguments(
         parser.parse_args([pid, "--existing", str(number)]))
-    with chdir(ctx.repos[0].checkout):
+    todo = ctx.comms.goals.todos.get(pid)
+    checkout = Path(ctx.comms.registry.require(todo.held().owner).project_path)
+    with chdir(checkout):
         command.apply(ctx)
     return ctx.comms.goals.todos.get(pid)
 
@@ -358,17 +367,35 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
             goal_id="pr-work"))
         lead = c.registry.require(ctx.commander)
         c.registry.register(replace(lead, process_identity=ProcessIdentity.capture(os.getpid())))
+        worker_checkout = ctx.root.parent / "worker-checkout"
+        source.git(source.checkout, "worktree", "add", "-q", "--detach", str(worker_checkout))
+        worker = Thread("worker", frozenset(), str(worker_checkout), created_at=2.0)
+        c.registry.register(worker)
         original = adopt_pr(ctx, pr_order(ctx, "P1", ApplicationOrderRun(
             'Read the copied board and confirm the application order remains assigned',
-        )).id, 1)
+        ), owner=worker).id, 1)
+        merged = PullRequests((original,)).listed(
+            source.github, MergedListedPullRequest, original,
+        )[0].merge
+        sent = c.messaging.send(ctx.commander, worker.name, original.order.instructions(original)).message
+        original = c.goals.todos.apply(original.id, OrderMessage(
+            original.revision, lead.incarnation, sent.message_id))
+        claim = OrderClaim.for_order(
+            original, worker.incarnation, 1, merged, "The repair is ready for review",
+            sent.reference, store=c.goals.todos,
+        )
+        claim = replace(claim, message=replace(
+            claim.message, timestamp=time.time() - AwaitingCommander.seconds - 1))
+        original = ClaimOrder(
+            original.revision, worker.incarnation, original.held().generation, claim,
+        ).record(c.goals, original.id)
+        assert any(rule.message.message_id == claim.message.message_id
+                   for rule in OwedAnswer.opened(c, ctx.commander))
         released = pr_order(ctx, "P3")
         c.goals.todos.apply(released.id, ReleaseTodo(
             released.revision, CoreWatcherIncarnation.watcher(), released.held(),
             StrikeReason("The worker stopped before this order was completed and published.")))
         checkout = c.registry.storage_rule.order_checkout(lead.name, released.id)
-        merged = PullRequests((original,)).listed(
-            source.github, MergedListedPullRequest, original,
-        )[0].merge
         source.git(source.checkout, "worktree", "add", "-q", "-b", "released-work", str(checkout), merged)
         copied_path = ctx.root.parent / f"{ctx.root.name}-watchers"
         practice = PracticeCopy(ctx.root, copied_path)
@@ -408,6 +435,12 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
                 observed.extend(readings)
             application = copied.goals.todos.get(original.id)
             assert application.order.sha == merged and not application.order.accepted
+            assert application.order.commander_claims() == ()
+            assert not any(rule.message.message_id == claim.message.message_id
+                           for rule in OwedAnswer.opened(copied, ctx.commander))
+            report = root / "after-merge.txt"
+            report.write_text("Merged; installation evidence is still pending")
+            SayVerb(units="#comms", body_file=str(report)).apply(Commander.read_root(root))
             assert copied.goals.todos.get(released.id).holder is None
             assert any(line.startswith("gh ") for line in observed)
             assert any(line.startswith("git ") for line in observed)

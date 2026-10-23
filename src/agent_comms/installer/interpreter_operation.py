@@ -99,7 +99,7 @@ class ProbePhase(InstallPhase):
 
     @property
     def subject(self) -> str:
-        return self.probe.declared_name
+        return f"{self.probe.declared_name} {self.detail}".rstrip()
 
 
 class PracticePhase(InstallPhase):
@@ -139,7 +139,7 @@ class BackupRetirePhase(InstallPhase):
 
 
 class ServicesPhase(InstallPhase):
-    """Restart or recover host services and prove they serve the new runtime."""
+    """Start stopped host services and prove they serve the selected runtime."""
 
 
 class ProcessScanPhase(InstallPhase):

@@ -17,8 +17,8 @@ class CoreBuildHook(BuildHookInterface):
         root = Path(self.root)
         relative = "src/agent_comms/package_stamp.py"
         source = root / relative
-        # These definitions need no application dependencies in the build env. Loaded under
-        # their package name, so a written stamp imports its type from where it is declared.
+        # Load the stamp under its package name, so the generated value imports its type
+        # from the same place at runtime.
         spec = spec_from_file_location(
             "agent_comms.core_stamp", root / "src/agent_comms/core_stamp.py"
         )
@@ -27,14 +27,14 @@ class CoreBuildHook(BuildHookInterface):
         # Never overwrite a source checkout's stamp while building its wheel.
         path = Path(self.directory) / ".core_stamp.py"
         if (root / ".git").exists():
-            # Repo.git cannot load here, so the build reads its commit directly.
+            # Pin this source revision before stamping its producer digests.
             commit = subprocess.check_output(
                 ("git", "-C", str(root.resolve()), "rev-parse", "HEAD"),
                 text=True,
             ).strip()
-            types.WheelStamp(commit).write(path)
+            types.WheelStamp.of_source(root / "src", commit).write(path)
         elif not (commit := "$Format:%H$").startswith("$Format"):
-            types.WheelStamp(commit).write(path)
+            types.WheelStamp.of_source(root / "src", commit).write(path)
         else:
             # A source distribution already carries its generated wheel value.
             path.parent.mkdir(parents=True, exist_ok=True)

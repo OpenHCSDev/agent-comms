@@ -9,31 +9,31 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
-from .image_inputs import ImageInput
-
-from acp import RequestError
+from agent_comms.coordination_errors import RequestRefused
 
 from agent_comms.following_inputs import OwnerFollowingInputs
+from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 
 from . import agent_events as events
 from .agent_backend import InputContent, TurnDelivery
 from .channel_input_batch import InputBatch
+from .controller import UNBOUND_CONTROLLER
+from .coordinator import Coordination
 from .field_codec import Id128Text
-from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from .goals import Goal
-from .messages import Message
+from .image_input import ImageInput
 from .input_attempt import ReservedInput
 from .input_origin import WireInputOrigin
-from .owned_send import OwnedSend
-from .native_input_owner import RegistryOwner
+from .messages import Message
 from .native_failures import NativeRequestFailure
-from .coordinator import Coordination
+from .native_input_owner import RegistryOwner
+from .owned_send import OwnedSend
 from .routing import MessageRoute, ScheduledTurn, TurnRouting
-from .controller import UNBOUND_CONTROLLER
 from .thread_identity import TurnId
 from .turn_goal_account import TurnGoalAccount
 from .turn_goal_permission import (
-    OwnerGoalPermission, TurnGoalPermission,
+    OwnerGoalPermission,
+    TurnGoalPermission,
 )
 from .turn_input_source import (
     CapturedInputDependency,
@@ -43,9 +43,9 @@ from .turn_input_source import (
     RoutedOriginalInput,
     ScheduledOriginalInput,
 )
+from .turn_phase import CancellingPhase, PromptAcceptancePhase
 from .turn_progress import TurnProgress
 from .turn_terminal import EndedWithoutResult, TurnTerminal
-from .turn_phase import CancellingPhase, PromptAcceptancePhase
 
 if TYPE_CHECKING:
     from .turn_runner import TurnRunner
@@ -127,7 +127,7 @@ class OwnedTurn:
         if self.original_owner_input and self.original_goal_id != (
             active_goal.reported_id()
         ):
-            raise RequestError.invalid_params({"reason": "input_authority_changed"})
+            raise RequestRefused.invalid_params({"reason": "input_authority_changed"})
         self.goal_permit: GoalTurnPermit = NoLaunchPermit()
         return True
 
@@ -211,11 +211,11 @@ class OwnedTurn:
             self.runner.comms.root, self.runner.comms.registry.snapshot(), self.worktree
         )
         from .turn_context import (
-            TurnContext,
             AutomaticTitleSegment,
-            ReplyRouteSegment,
             OwnerProvenance,
             RecordedContextTurn,
+            ReplyRouteSegment,
+            TurnContext,
         )
 
         self.relations = self.runner.comms.relationships.context_relations(self.thread.name)
@@ -425,7 +425,7 @@ class OwnedTurn:
             state = await Coordination.run_worker(self.settle_unbound)
             await self.progress.consumer.dispatch(events.PromptCancelled(state))
             raise
-        except (NativeRequestFailure, RequestError) as error:
+        except (NativeRequestFailure, RequestRefused) as error:
             await self.fail(error, error)
         # The completed outcome owns notification delivery and request failure;
         # it is outside stream-fault reporting, so no failure is published twice.

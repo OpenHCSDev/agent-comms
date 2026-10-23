@@ -54,7 +54,7 @@ from agent_comms.read_basis import DMDisplayScope, RepliesDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.heartbeat_frame import HeartbeatFrame
-from agent_comms.standing_rules import StandingRule
+from agent_comms.standing_rules import StandingRule, StandingScan
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_status import StoppedThreadStatus
@@ -147,7 +147,8 @@ def claim_order(held_bus):
 
 
 def state_cards(comms, member):
-    return tuple(state for state in UnitState.current(comms, "lead", ProgressRead())
+    frame = HeartbeatFrame.read(comms, "lead", ProgressRead())
+    return tuple(state for state in UnitState.current(comms, "lead", frame)
                  if isinstance(state, member))
 
 
@@ -223,10 +224,9 @@ def test_order_claim_publishes_only_to_its_retained_commander_birth(
 
 
 def unanswered(comms):
-    pulls = ProgressRead()
+    frame = HeartbeatFrame.read(comms, "lead", ProgressRead())
     return UnitAskUnanswered.broken(
-        comms, "lead", observed=UnitState.current(comms, "lead", pulls),
-        frame=HeartbeatFrame.read(comms, "lead", pulls))
+        comms, "lead", observed=UnitState.current(comms, "lead", frame), frame=frame)
 
 
 def blocked_holder(comms):
@@ -376,8 +376,9 @@ def test_latest_answer_uses_the_complete_original_reference_and_time_cut(held_bu
     question = publish(held_bus, "worker", "lead", since + 1)
     reply = publish(held_bus, "lead", "worker", since + 2, answers=(question.reference,))
     publish(held_bus, "lead", "worker", since + 3)
-    publish(held_bus, "lead", "worker", since + 4,
-            answers=(MessageReference(question.seq, "wrong-original"),))
+    with pytest.raises(RelationViolationError):
+        publish(held_bus, "lead", "worker", since + 4,
+                answers=(MessageReference(question.seq, "wrong-original"),))
     expired = publish(held_bus, "worker", "lead", since - 1)
     publish(held_bus, "lead", "worker", since + 5, answers=(expired.reference,))
     scope = RepliesDisplayScope(frozenset({"lead"}), frozenset({"worker"}))
@@ -398,8 +399,9 @@ def test_unanswered_pages_match_the_complete_answer_reference(held_bus):
     now = time.time()
     questions = tuple(publish(held_bus, "worker", "lead", now - 900 - offset)
                       for offset in range(105))
-    publish(held_bus, "lead", "worker", now,
-            answers=(MessageReference(questions[0].seq, "not-the-original-hash"),))
+    with pytest.raises(RelationViolationError):
+        publish(held_bus, "lead", "worker", now,
+                answers=(MessageReference(questions[0].seq, "not-the-original-hash"),))
     answered = (questions[1].reference, questions[-1].reference)
     held_bus.messaging.send("lead", "outsider", "Answers retain their original references",
                             answers=answered)
@@ -557,7 +559,7 @@ def test_channel_messages_without_a_commander_addressee_are_not_a_question(held_
     with held_bus.bus.bus.reading() as source:
         questions = UnansweredUnitAsks.for_orders(
             source, held_bus.registry.snapshot(), 'lead',
-            StandingRule.holders(held_bus, 'lead'), time.time(),
+            StandingScan.read(held_bus, 'lead').holders, time.time(),
         )
     assert not any(questions.values())
 
@@ -632,11 +634,11 @@ def test_one_state_per_unit_even_when_blocked_and_detached(held_bus, installed_r
     assert detached.unit.name == "worker" and set(detached.orders) == {"P1", "P2"}
     blocked_holder(held_bus)
     blocked, = state_cards(held_bus, Blocked)
-    pulls = ProgressRead()
-    states = UnitState.current(held_bus, "lead", pulls)
+    frame = HeartbeatFrame.read(held_bus, "lead", ProgressRead())
+    states = UnitState.current(held_bus, "lead", frame)
     assert tuple(state for state in states if state.unit == blocked.unit) == (blocked,)
     assert blocked not in StandingRule.broken(
-        held_bus, "lead", observed=states, frame=HeartbeatFrame.read(held_bus, "lead", pulls))
+        held_bus, "lead", observed=states, frame=frame)
 
 
 def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus, installed_runtime):

@@ -13,7 +13,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import OrderRefusingStandingRule
 from agent_comms.errors import RelationViolationError, ToolRefusedError
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import CommsHeadVerdictTool
+from agent_comms.order_tools import CommsHeadVerdictTool
 from agent_comms.todos import (
     HeadReviewOrder, NoHeadOrder, PullRequestLink, RecordPullRequest,
     RejectedHeadVerdict, ReviewedHeadVerdict, StoredHeadReview, StrikeReason,
