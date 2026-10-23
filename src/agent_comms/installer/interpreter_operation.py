@@ -85,16 +85,11 @@ class RetainedProgram(ProbeProgram):
 
     @classmethod
     def current(cls) -> RetainedProgram:
-        """Retain only the worker and its discoverable probe declarations.
-
-        The selected runtime supplies Core's other packages. The snapshot supplies
-        this installer's operation family and its discoverable probe package.
-        """
-        worker = Path(inspect.getfile(RuntimeProbe))
-        directory = worker.parent
+        """The snapshot owns the whole installer package; the selected runtime owns the rest of Core."""
+        directory = Path(inspect.getfile(RuntimeProbe)).parent
         output = BytesIO()
         with ZipFile(output, "w", compression=ZIP_DEFLATED) as archive:
-            for path in (worker, *sorted((directory / "probes").rglob("*.py"))):
+            for path in sorted(directory.rglob("*.py")):
                 archive.writestr(str(path.relative_to(directory.parent.parent)), path.read_bytes())
         payload = base64.b85encode(output.getvalue()).decode("ascii")
         return cls(

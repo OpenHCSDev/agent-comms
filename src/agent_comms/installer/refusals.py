@@ -1,14 +1,12 @@
-"""Install refusals and the owner-start results recorded by a rollback."""
+"""Install refusals, independent of installer orchestration."""
 
 from __future__ import annotations
 
-from abc import abstractmethod
-from dataclasses import dataclass
 from typing import ClassVar
 
 from agent_comms.child_process import ChildOutcome
 from agent_comms.coordination_errors import CoordinationError
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.installer.owner_starts import OwnerStart
 from agent_comms.launch_runtime import LaunchRuntime
 
 
@@ -32,31 +30,6 @@ class InterpreterWorkerDied(UpgradeRefused):
         super().__init__(f"Interpreter worker {outcome.summary} without an answer: {errors}")
         self.outcome = outcome
         self.errors = errors
-
-
-@dataclass(frozen=True)
-class OwnerStart(DeclaredFamily, affix="Owner"):
-    """What starting one stopped owner did. A unit that cannot start is reported by name;
-    the runtime and bus it would run on are installed either way."""
-
-    name: str
-
-    @abstractmethod
-    def lines(self) -> tuple[str, ...]: ...
-
-
-@dataclass(frozen=True)
-class StartedOwner(OwnerStart):
-    def lines(self) -> tuple[str, ...]:
-        return (f"Started owner: {self.name}",)
-
-
-@dataclass(frozen=True)
-class RefusedOwner(OwnerStart):
-    error: str
-
-    def lines(self) -> tuple[str, ...]:
-        return (f"Owner not started: {self.name}: {self.error}",)
 
 
 class InstallRolledBack(UpgradeRefused):
