@@ -4,18 +4,18 @@ from itertools import count
 from multiprocessing import Pipe
 
 from agent_comms.ui_model.observation import (
-    Observation,
     ObservationPending,
     ObservationService,
     ObserveSidebar,
     ObserveThreads,
+    ReadingObservation,
     SidebarObserved,
     SidebarPreparing,
     SidebarReading,
 )
 
 
-class EndlessReading(Observation):
+class EndlessReading(ReadingObservation):
     def __init__(self, request):
         super().__init__(request)
         self.visits = 0
