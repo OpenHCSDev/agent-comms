@@ -1,6 +1,7 @@
 """The declared bus watch uses real native commit and replacement notifications."""
 
 import asyncio
+import errno
 from contextlib import aclosing
 from concurrent.futures import Future
 from dataclasses import replace
@@ -171,6 +172,20 @@ async def test_native_file_removal_wakes_without_unrelated_events(tmp_path, remo
                 await changes.wait()
         remove(auth)
         await asyncio.wait_for(changes.wait(), 1)
+
+
+async def test_failed_native_descriptor_reaches_waiting_reader_and_survives_later_wake(tmp_path):
+    path = tmp_path / "observed"
+    async with ChangeSignal.opened(FileSource(path)) as changes:
+        changes.prepare()
+        # Retire the real native descriptor before a queued readiness callback runs.
+        # ExitStack close is idempotent; context retirement will not close it twice.
+        changes.close()
+        changes._on_ready()
+        changes.wake()
+        with pytest.raises(OSError) as failed:
+            await asyncio.wait_for(changes.wait(), 1)
+        assert failed.value.errno == errno.EBADF
 
 
 async def test_native_file_burst_wakes_before_the_producer_finishes(tmp_path):
