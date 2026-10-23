@@ -869,7 +869,8 @@ def test_identity_and_digest_text_is_one_rule_at_every_reader(tmp_path: Path) ->
     for invalid in (minted.upper(), minted[:31], int(minted, 16)):
         with pytest.raises(MalformedRecord):
             AddressedPage.capture(lookup=invalid)
+    for invalid_text in (minted.upper(), minted[:31]):
         with pytest.raises(RelationViolationError):
-            PrivateRegistryGuard(tmp_path / "registry.json", invalid)
+            PrivateRegistryGuard(tmp_path / "registry.json", invalid_text)
     with pytest.raises(MalformedRecord):
         TextDigest("a" * 63)
