@@ -271,3 +271,9 @@ class NativeAgentSettings(DurableFile, PatternFile):
         directory = session_directory / cls.directory_name
         NativeSessionFiles.prepare_private_directory(directory)
         return directory
+
+
+class RetainedNativeWriteMarker(DurableFile, PatternFile):
+    """The retired PR48 writer left this after an uncertain write; retain its evidence."""
+
+    filename = "sessions/{session}.pr48-writer.lock"

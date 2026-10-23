@@ -64,10 +64,6 @@ class RetiredWrappedOwnerReleases(RetiredSQLiteStore):
     filename = "owner_releases.sqlite3"
 
 
-class RetiredProbeWriterLock(RetiredRootFile):
-    filename = "sessions/{session}.pr48-writer.lock"
-
-
 class RetiredStores(Carry):
     opened_files: ClassVar[tuple[type[RetiredRootFile], ...]] = (RetiredRootFile,)
 
