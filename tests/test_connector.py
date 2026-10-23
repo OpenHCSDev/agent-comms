@@ -1,5 +1,6 @@
 """The claude.ai connector: OAuth in front of an MCP transport over the ToolRequest family."""
 
+
 import asyncio
 import base64
 import fcntl
@@ -24,7 +25,7 @@ from connector_readiness import ConnectorReadiness
 
 from agent_comms.active_route import active_route_path
 from agent_comms.bus import Bus
-from agent_comms.comms import Comms
+from agent_comms.comms import Comms, wire
 from agent_comms.connector import (
     CALLER,
     ApprovalLink,
@@ -325,7 +326,7 @@ class PublishingWatch(WatchPass[None]):
 async def test_watch_pass_waits_for_install_then_runs_once(comms, copied_connector, caplog):
     original = comms.messaging.send("worker", "claude-ai", "Original stays unchanged").message
     connector = await copied_connector()
-    copied = Comms(connector.root)
+    copied = wire(connector.root)
     barrier = MaintenanceBarrier(copied.registry.store.path)
     held = barrier.begin(MaintenanceOperator.current())
     held = barrier.advance(held, PausedPhase)
@@ -334,9 +335,9 @@ async def test_watch_pass_waits_for_install_then_runs_once(comms, copied_connect
 
     @contextmanager
     def opened_wire():
-        with connector.service_wire() as wire:
+        with connector.service_wire() as service:
             opened.set()
-            yield wire
+            yield service
 
     watch = PublishingWatch()
     passes = ServicePassStore.at(connector.root)
@@ -397,12 +398,12 @@ async def test_watch_pass_logs_real_failures_with_tracebacks(connector, caplog):
     assert error.exc_info[0] is RuntimeError
     assert str(error.exc_info[1]) == "A real watch failure"
     assert error.exc_info[2] is not None
-    failing, = ServicePassFailing.violations(Comms(connector.root), "worker")
+    failing, = ServicePassFailing.violations(wire(connector.root), "worker")
     assert failing.watch == "FailingWatch"
     assert failing.line().endswith(
         ": RuntimeError: A real watch failure -> fix the owner of the failing read this wake")
     passes.passed("FailingWatch")
-    assert ServicePassFailing.violations(Comms(connector.root), "worker") == ()
+    assert ServicePassFailing.violations(wire(connector.root), "worker") == ()
 
 
 async def test_registration_accepts_only_the_claude_callback(client):
@@ -462,7 +463,7 @@ async def test_connector_channel_history_on_a_copy_leaves_unread_unchanged(
         "worker", "#comms", f"@claude-ai channel post {number}").message
         for number in range(55)]
     connector = await copied_connector()
-    copied = Comms(connector.root)
+    copied = wire(connector.root)
     target = CommandTarget.named("#comms")
     before = copied.bus.pending_count("claude-ai", target)
     ledger = copied.bus.reads.read()
@@ -517,7 +518,7 @@ async def test_a_call_returns_what_the_tool_returns_in_process(client, store, ro
             },
         )
     ).json()
-    in_process = invoke_tool(Comms(root), "comms_threads", {}, caller=CALLER)
+    in_process = invoke_tool(wire(root), "comms_threads", {}, caller=CALLER)
     assert called["result"]["structuredContent"] == in_process
 
 
@@ -530,7 +531,7 @@ async def test_maintenance_refuses_before_locked_stores_on_a_copied_bus(
     copied_root = connector.root
     monkeypatch.setenv("HOME", str(tmp_path))
     async with TestClient(TestServer(connector.application())) as reader:
-        headers = {"Authorization": f"Bearer {await approved_token(reader, Comms(copied_root))}"}
+        headers = {"Authorization": f"Bearer {await approved_token(reader, wire(copied_root))}"}
         copied_bus = Bus(Bus.path_in(copied_root))
         before = copied_bus.revision()
         barrier = MaintenanceBarrier(copied_root / "registry.json")

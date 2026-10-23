@@ -1,5 +1,6 @@
 """Commander forks use registered identity and the original Todo assignment."""
 
+
 from agent_comms.bus import Bus
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
@@ -16,7 +17,7 @@ from source_revision_fixture import SourceRepository
 from agent_comms.change_report import FileLine
 from cli_command import commander
 from agent_comms.commander.order import Commander, CommanderContext, OrderFile
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.tool_caller import CommanderForkCaller
@@ -47,7 +48,7 @@ def fork_bus(tmp_path):
     source.git(source.checkout, 'add', 'declaration.py')
     source.git(source.checkout, 'commit', '-qm', 'Declare shared assignment owner')
     source.git(source.checkout, 'push', 'origin', 'main')
-    comms = Comms(tmp_path / 'saved-bus')
+    comms = wire(tmp_path / 'saved-bus')
     Bus.install(Bus.path_in(comms.root))
     comms.channels.create_tag('comms')
     for name in ('lead', 'worker', 'other', 'retained'):
@@ -74,7 +75,7 @@ def fork_bus(tmp_path):
         request=request.id)
     copied = tmp_path / 'copied-bus'
     StoreBackup.copy_tree(comms.root, copied)
-    return Comms(copied), source, order
+    return wire(copied), source, order
 
 
 def command(comms, *args):

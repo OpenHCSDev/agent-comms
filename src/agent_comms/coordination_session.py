@@ -55,7 +55,7 @@ class CoordinationSession(CoordinationStore):
         with self.writing():
             yield None
 
-    def release_resources(self, snapshot, outcome, boundary: NativeBoundary | None) -> None:
+    def release_resources(self, snapshot, outcome, boundary: NativeBoundary) -> None:
         """Standalone attempts cannot acquire native file claims."""
 
     @contextmanager
@@ -135,9 +135,7 @@ class NativeCoordinationSession(CoordinationSession):
             with self.writing():
                 yield acquired
 
-    def release_resources(self, snapshot, outcome, boundary: NativeBoundary | None) -> None:
-        if not isinstance(boundary, NativeBoundary):
-            raise IntegrityViolationError("native release requires an acquired boundary")
+    def release_resources(self, snapshot, outcome, boundary: NativeBoundary) -> None:
         snapshot.release_resources(boundary, outcome)
 
 

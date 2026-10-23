@@ -1,6 +1,7 @@
 """Shared Core inbox delivery and process lifetime for external CLI adapters."""
 from __future__ import annotations
 
+
 import argparse
 import asyncio
 import builtins
@@ -41,7 +42,7 @@ from agent_comms.cli_protocol import (
     WatchLine,
     raise_child_exit,
 )
-from agent_comms.comms import Comms
+from agent_comms.comms import Comms, wire
 from agent_comms.config_options import CatalogConfigOption, CatalogSelection, ConfigOptions
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.declared_family import DeclaredFamily
@@ -809,7 +810,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
 
     @cached_property
     def comms(self) -> Comms:
-        return Comms(Path(self.binding.root))
+        return wire(Path(self.binding.root))
 
     def watch_record(self) -> WatchRecord:
         return WatchRecord(self.binding.bus, self.binding.root,

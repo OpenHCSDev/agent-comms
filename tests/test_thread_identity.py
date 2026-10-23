@@ -1,5 +1,6 @@
 """S5 identity boundaries: process, turn, provenance and saved-data preservation."""
 
+
 import json
 import os
 from dataclasses import replace
@@ -8,7 +9,7 @@ import pytest
 
 from agent_comms.session_file import SavedSessionFile
 from agent_comms.child_process import NoProcess, ProcessIdentity
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
@@ -42,7 +43,7 @@ def registry_with_owner(tmp_path):
 
 
 def test_saved_thread_text_round_trips_null_and_supplied_values(tmp_path):
-    comms = Comms(tmp_path)
+    comms = wire(tmp_path)
     for name, title, task in (
         ("untitled", NoThreadText(), NoThreadText()),
         ("named", GivenThreadText("A title"), GivenThreadText("An assignment")),
@@ -52,7 +53,7 @@ def test_saved_thread_text_round_trips_null_and_supplied_values(tmp_path):
         )
         comms.registry.declare(thread)
         encoded = json.dumps(FieldCodec.encode(thread), sort_keys=True, separators=(",", ":"))
-        saved = Comms(tmp_path).registry.require(name)
+        saved = wire(tmp_path).registry.require(name)
         assert json.dumps(FieldCodec.encode(saved), sort_keys=True, separators=(",", ":")) == encoded
         assert saved.title == title and saved.task == task
         assert FieldCodec.encode(saved.wake_context(comms.goals))["title"] == FieldCodec.encode(title)
@@ -127,7 +128,7 @@ def test_same_process_idle_presence_does_not_rotate_identity(tmp_path):
 
 
 def test_exact_turn_identity_survives_alias_but_not_reused_turn_id(tmp_path):
-    comms = Comms(tmp_path)
+    comms = wire(tmp_path)
     comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     first = comms.agents.begin_turn("owner", "reused").turn_lease
     assert first.identity.incarnation == comms.registry.require("owner").incarnation
@@ -256,7 +257,7 @@ def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):
     assert {participant for conversation in document.messages[viewer_identity].conversations
             for participant in conversation.participants} == {
                 viewer_identity, comms.registry.require("owner").incarnation}
-    reopened = Comms(tmp_path)
+    reopened = wire(tmp_path)
     snapshot = reopened.registry.snapshot()
     conversation = reopened.bus.reads.conversation(message, snapshot)
     assert message.seq in reopened.bus.reads.cursor(viewer, snapshot).for_conversation(conversation)

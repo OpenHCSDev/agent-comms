@@ -8,6 +8,7 @@ and the answer was never delivered.
 
 from __future__ import annotations
 
+
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from bus_record_fixture import prepare_native_comms
 
@@ -23,7 +24,7 @@ import pytest
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
@@ -42,7 +43,7 @@ def alice_batch(*sent: tuple[str, str]):
     with TemporaryDirectory(prefix="ac-answer-", dir="/var/tmp") as dirname:
         root = Path(dirname) / "wire"
         root.mkdir(mode=0o700)
-        comms = prepare_native_comms(Comms(root))
+        comms = prepare_native_comms(wire(root))
         for name, created in (("sender", 17021.0), ("Alice", 17022.0)):
             comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), dirname, process_identity=ProcessIdentity.capture(os.getpid()), created_at=created))
         root_id = comms.registry.prepare_native_root().namespace

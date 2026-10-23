@@ -166,10 +166,8 @@ class ActiveRoute(CommsRoute):
         return RootLaunch.derive(self).require_private()
 
 
-def resolve_comms_route(root: CommsRoute | Path | str | None = None) -> CommsRoute:
+def resolve_comms_route(root: Path | str | None = None) -> CommsRoute:
     """Resolve one current selection without creating stores or reading registry."""
-    if isinstance(root, CommsRoute):
-        return root
     if root is not None:
         return LocalRoute(Path(root).expanduser().absolute())
     return LocalRoute(LaunchRoot.current().path)

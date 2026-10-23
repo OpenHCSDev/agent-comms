@@ -17,6 +17,7 @@ Usage:
 
 from __future__ import annotations
 
+
 import asyncio
 import base64
 import hashlib
@@ -44,7 +45,7 @@ from .bus_publication import DirectorOrigin
 from .cli_bridges.shared import DeclaredVerb
 from .cli_protocol import CoreError
 from .command import Command
-from .comms import Comms, client_wire
+from .comms import Comms, client_wire, wire
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .errors import RelationViolationError, ToolRefusedError, UnregisteredThreadError
 from .coordination_errors import CoordinationError
@@ -574,7 +575,7 @@ class Connector:
         Waiting with a client route borrowed would hold up its replacement. The
         pass inherits the bus's hold wait; requests retain client_wire's fast refusal.
         """
-        yield Comms(self.root)
+        yield wire(self.root)
 
     def invoke(
         self, tool: type[ToolRequest] | type[ConnectorTool], arguments: Mapping[str, object]
