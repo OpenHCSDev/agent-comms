@@ -35,6 +35,7 @@ from .field_codec import Id128Text, MalformedRecord
 from .locked_store import DurableFile, WireWakeFile
 from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from .private_path import PrivateFileRole
+from .private_runtime_schema import PrivateCoordinatorSchema, PrivateCoordinatorTable
 
 if TYPE_CHECKING:
     from .acp_extension import CursorAdvancedUpdate, CursorScope
@@ -218,8 +219,6 @@ class PublicRegistry(RegistryPrivacy):
         return SharedRootLaunch(root)
 
     def prepare_native(self, registry_path: Path) -> PrivateRegistryGuard:
-        from .private_runtime_schema import PrivateCoordinatorTable
-
         guard = PrivateRegistryGuard(registry_path, Id128Text.mint())
         guard._trusted_root()
         # Install the new private capabilities while the existing public schema
@@ -247,14 +246,10 @@ class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
         return connection
 
     def coordinator_schema(self) -> type[TableSchema]:
-        from .private_runtime_schema import PrivateCoordinatorSchema, PrivateCoordinatorTable
-
         PrivateCoordinatorTable.declarations()
         return PrivateCoordinatorSchema
 
     def prepare_runtime(self) -> None:
-        from .private_runtime_schema import PrivateCoordinatorTable
-
         PrivateCoordinatorTable.declarations()
         with Coordination(str(CoordinationStore.path_in(self.registry_path.parent))) as store:
             PrivateCoordinatorTable.install(store)
