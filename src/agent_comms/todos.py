@@ -2740,7 +2740,7 @@ class DoneTodoState(TodoState):
 
 
 @dataclass(frozen=True)
-class TodoCommand(Command, DeclaredFamily, affix="TodoOperation"):
+class TodoCommand(Command["Todo", "Todo"], DeclaredFamily, affix="TodoOperation"):
     expected_revision: int
 
     def __post_init__(self) -> None:

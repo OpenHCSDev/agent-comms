@@ -23,7 +23,7 @@ from agent_comms.unit_instructions import UnitInstructions
 
 
 @dataclass(frozen=True, kw_only=True)
-class NativePackageVerb(DeclaredVerb, Command, affix="Verb"):
+class NativePackageVerb(DeclaredVerb, Command[None, None], affix="Verb"):
     """One verb: its fields declare its parser, and apply() does the work."""
 
     @abstractmethod

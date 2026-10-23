@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 from abc import abstractmethod
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import partial
@@ -67,7 +67,7 @@ class RuntimeRequestContext:
 
 
 @dataclass(frozen=True, kw_only=True)
-class RuntimeRequest(DeclaredFamily, Command, affix="RuntimeRequest"):
+class RuntimeRequest(DeclaredFamily, Command[RuntimeRequestContext, Awaitable[None]], affix="RuntimeRequest"):
     thread: str
 
     @classmethod

@@ -593,7 +593,10 @@ class RelationshipEditContext:
 
 
 @dataclass(frozen=True)
-class RelationshipEdit(Command, DeclaredFamily, affix="RelationshipEdit"):
+class RelationshipEdit(
+    Command[RelationshipEditContext, tuple[RelationshipDocument, Collaboration | None]],
+    DeclaredFamily, affix="RelationshipEdit",
+):
     note: str = ""
 
     def __post_init__(self):
@@ -601,11 +604,11 @@ class RelationshipEdit(Command, DeclaredFamily, affix="RelationshipEdit"):
             raise ValueError("Collaboration notes are limited to 2000 characters")
 
     @abstractmethod
-    def apply(self, ctx: RelationshipEditContext): ...
+    def apply(self, ctx: RelationshipEditContext) -> tuple[RelationshipDocument, Collaboration | None]: ...
 
 
 class RetainingRelationshipEdit(RelationshipEdit):
-    def apply(self, ctx: RelationshipEditContext):
+    def apply(self, ctx: RelationshipEditContext) -> tuple[RelationshipDocument, Collaboration | None]:
         peer = ctx.require_peer()
         return ctx.publish(self.change(ctx, peer))
 
@@ -632,7 +635,7 @@ class UpdateRelationshipEdit(RetainingRelationshipEdit):
 
 
 class RemoveRelationshipEdit(RelationshipEdit):
-    def apply(self, ctx: RelationshipEditContext):
+    def apply(self, ctx: RelationshipEditContext) -> tuple[RelationshipDocument, Collaboration | None]:
         existing = ctx.existing
         if existing is None:
             return ctx.document, None
