@@ -38,4 +38,3 @@ class ImageInput:
     @property
     def size(self) -> int:
         return len(self.data) * 3 // 4 - (len(self.data) - len(self.data.rstrip("=")))
-

@@ -13,9 +13,9 @@ from uuid import uuid4
 
 from pydantic import JsonValue
 
-from .agent_backend import StreamingInputPolicy
 from . import agent_events as events
 from . import turn_phase as phases
+from .agent_backend import StreamingInputPolicy
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import (
     FieldCodec,
@@ -259,9 +259,9 @@ class CatalogQuery(NativeQuery):
     ):
         """Acquire metadata commands without borrowing a saved or executing session."""
         from .child_process import BoundedRun
+        from .native_child import PiChild
         from .native_pi import NativePiRpcLaunch
         from .pi_rpc import PiRpcChannel
-        from .native_child import PiChild
 
         try:
             launch = await asyncio.to_thread(

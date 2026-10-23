@@ -15,8 +15,6 @@ message also fail the turn, carrying ``errorMessage`` and typed diagnostics.
 
 from __future__ import annotations
 
-from agent_comms.participant_identity import ParticipantIdentity
-
 import asyncio
 import json
 import secrets
@@ -37,33 +35,34 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from agent_comms.participant_identity import ParticipantIdentity
 from agent_comms.pi_payloads import RequestId
 
 from . import agent_events as events
 from . import pi_commands as commands
 from . import pi_events as pi
 from . import turn_failure as failures
-from .agent_backend import TurnInbox
 from .acp_failure import UnrecordedFailureSource
+from .agent_backend import TurnInbox
 from .coordinator import Coordination
 from .extension_ui import ExtensionUiSession
 from .field_codec import Id128Text, MalformedRecord, boundary_decoder
 from .image_input import ImageInput
+from .mro_dispatch import MroDispatch, handles
 from .native_attestation import AttestationError
 from .native_child import PiSessionChild
+from .native_failures import NativePiUnavailable
 from .native_package import VerifiedNativePackage
 from .native_pi import NativePiRpcLaunch
-from .native_failures import NativePiUnavailable
 from .native_session_reopen import SessionRetention
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup
+from .native_tool_call import NativeToolMode
+from .native_tool_transport import ToolTransport, UnboundToolTransport
 from .pi_rpc import PiRpcChannel
 from .prompt_state import UnwrittenPrompt
 from .request_progress import NO_REQUEST_OBSERVER, RequestObserver, RequestProgress
-from .native_tool_call import NativeToolMode
-from .native_tool_transport import ToolTransport, UnboundToolTransport
-from .mro_dispatch import MroDispatch, handles
-from .tool_denial import SelectedToolDenied
 from .send_outcome import SendBoundary
+from .tool_denial import SelectedToolDenied
 from .turn_context import InputContributionCoordinates
 from .turn_inputs import InputForwarding
 from .turn_output import TurnOutput

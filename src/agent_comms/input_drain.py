@@ -21,15 +21,15 @@ from .acp_extension import (
     encode_updates,
 )
 from .activity import FailedWakeDiagnostic
-from .cohort_schema import AcceptanceFrontier
 from .agent_backend import ClearQueue, InputContent, InputId, SendNow, TurnInbox, TurnInboxItem
 from .bus import Bus
 from .child_process import join_retirement
+from .cohort_schema import AcceptanceFrontier
 from .comms import Comms
+from .controller import UNBOUND_CONTROLLER, SessionUpdateSink
 from .coordination_cohort import next_sealed_assignment
 from .coordination_database import CoordinationStore
 from .coordinator import Coordination
-from .controller import UNBOUND_CONTROLLER, SessionUpdateSink
 from .cursor_owner import CursorOwner
 from .drain_failures import (
     DEFERRED_DRAIN_ERRORS,
@@ -38,6 +38,7 @@ from .drain_failures import (
     record_drain_failure,
 )
 from .errors import RelationViolationError, UnregisteredThreadError
+from .image_input import ImageInput
 from .input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
     InputAttempt,
@@ -46,7 +47,6 @@ from .input_attempt import (
 )
 from .input_disposition import InputDispositions, InputDocument
 from .input_effects import InputEffects
-from .image_input import ImageInput
 from .lifecycle_capability import Executing
 from .maintenance_barrier import MaintenanceBarrier, MaintenanceIngress
 from .native_input_owner import RegistryOwner
