@@ -38,7 +38,8 @@ from .native_pi import (
 from .native_prompt_send import UNGUARDED_PROMPT, PromptBoundary, PromptSendFailure
 from .native_startup import NativeStartup
 from .native_session_reopen import SessionRetention
-from .native_tool_call import NativeToolMode, SelectedToolDenied
+from .native_tool_call import NativeToolMode
+from .tool_denial import SelectedToolDenied
 from .pi_rpc import PiRpcChannel
 from .pi_vocabulary import NoThinkingOverride, ThinkingChoice
 from .request_progress import NO_REQUEST_OBSERVER, RequestObserver
