@@ -6,6 +6,7 @@ import asyncio
 import os
 import subprocess
 import sys
+import time
 from contextlib import closing, nullcontext
 from dataclasses import replace
 from pathlib import Path
@@ -18,19 +19,70 @@ from agent_comms.child_process import (
     ChildOutcome,
     DiesWithLauncherLifetime,
     ExitedOutcome,
+    ForcedStopOutcome,
     GroupMember,
     IdentityMismatchError,
     ObservedProcess,
-    SpawnedProcess,
-    SynchronousProcess,
     Platform,
     ProcessIdentity,
+    SpawnedProcess,
+    SynchronousProcess,
     TimedOutOutcome,
 )
 from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_runtime import LaunchRuntime
-
 from process_tree_fixture import TREE, identities, ready
+
+
+def test_wait_any_exit_returns_before_another_member_exits() -> None:
+    first = SpawnedProcess.launch((sys.executable, "-c", "import time; time.sleep(.1)"))
+    last = SpawnedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
+    try:
+        started = time.monotonic()
+        Platform.current().wait_any_exited((first.identity, last.identity), 10)
+        assert time.monotonic() - started < 5
+        assert not first.alive()
+        assert last.alive()
+    finally:
+        first.close()
+        last.close()
+
+
+def test_wait_any_exit_refuses_reused_identity_and_handles_exited_member() -> None:
+    child = SpawnedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
+    platform = Platform.current()
+    try:
+        with pytest.raises(IdentityMismatchError):
+            platform.wait_any_exited(
+                (replace(child.identity, start_time=child.identity.start_time + 1),), 10,
+            )
+        assert child.alive()
+    finally:
+        child.close()
+    started = time.monotonic()
+    platform.wait_any_exited((child.identity,), 10)
+    assert time.monotonic() - started < 5
+
+
+def test_stop_batch_shares_one_force_deadline() -> None:
+    command = (sys.executable, "-c", (
+        "import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+        "print('ready',flush=True); time.sleep(60)"
+    ))
+    children = tuple(SpawnedProcess.launch(command, output=subprocess.PIPE) for _ in range(2))
+    try:
+        for child in children:
+            assert child.process.stdout.readline() == b"ready\n"
+        started = time.monotonic()
+        outcomes = SynchronousProcess.stop_together(
+            tuple((child, nullcontext) for child in children)
+        )
+        assert time.monotonic() - started < 3.5
+        assert all(isinstance(outcome, ForcedStopOutcome) for outcome in outcomes)
+        assert all(child.retired for child in children)
+    finally:
+        for child in children:
+            child.close()
 
 
 @pytest.mark.asyncio

@@ -54,12 +54,11 @@ if TYPE_CHECKING:
     from .runtime_children import RuntimeChildrenStore, RuntimeChildReservation
     from .store_files import LockMode
     from .thread_identity import ThreadIncarnation, ThreadRole
-    from .thread_status import ActiveThreadPresence, ThreadStatus
     from .thread_presentation import ThreadOwnerBinding, ThreadPresentation
+    from .thread_status import ActiveThreadPresence, ThreadStatus
     from .turn_lease import ActiveTurn
 
 STOP_GRACE_SECONDS = 2.0
-STOP_POLL_SECONDS = 0.02  # no kernel event reports an emptied process group
 
 
 class IdentityMismatchError(ProcessLookupError):
@@ -417,6 +416,12 @@ class Platform(DeclaredFamily, affix="Platform"):
     async def wait_exited(self, identity: ProcessIdentity) -> None:
         raise NotImplementedError('This platform does not expose process exit observation')
 
+    @abstractmethod
+    def wait_any_exited(
+        self, identities: tuple[ProcessIdentity, ...], timeout: float,
+    ) -> None:
+        """Wait for a member's exit or the caller's remaining deadline."""
+
     def matches(self, identity: ProcessIdentity) -> bool:
         try:
             return self.identity(identity.pid) == identity
@@ -505,12 +510,6 @@ class PosixPlatform(Platform):
 
     @abstractmethod
     def members_of_group(self, pgid: int) -> tuple[ProcessIdentity, ...]: ...
-
-    @abstractmethod
-    def wait_any_exited(
-        self, identities: tuple[ProcessIdentity, ...], timeout: float,
-    ) -> None:
-        """Wait for a member's exit or the caller's remaining deadline."""
 
     def send(self, identity: ProcessIdentity, signum: int) -> None:
         self.require(identity)
@@ -718,11 +717,11 @@ class DarwinPlatform(PosixPlatform):
                 returned = pending.control(
                     events, 1, None if math.isinf(timeout) else max(0, timeout),
                 )
+                for event in returned:
+                    if event.flags & select.KQ_EV_ERROR:
+                        raise OSError(event.data, os.strerror(event.data))
             except ProcessLookupError:
                 return
-            for event in returned:
-                if event.flags & select.KQ_EV_ERROR:
-                    raise OSError(event.data, os.strerror(event.data))
 
 
 class Win32Platform(Platform):
@@ -807,6 +806,12 @@ class Win32Platform(Platform):
         self._api("CloseHandle", ctypes.c_int, handle)
         self._api("GetProcessTimes", ctypes.c_int, handle, pointer, pointer, pointer, pointer)
         self._api("WaitForSingleObject", dword, handle, dword)
+        self.wait_callback_type = ctypes.WINFUNCTYPE(None, pointer, ctypes.c_ubyte)
+        self._api("CreateEventW", handle, pointer, ctypes.c_int, ctypes.c_int, ctypes.c_wchar_p)
+        self._api("SetEvent", ctypes.c_int, handle)
+        self._api("RegisterWaitForSingleObject", ctypes.c_int, ctypes.POINTER(handle), handle,
+                  self.wait_callback_type, pointer, dword, dword)
+        self._api("UnregisterWaitEx", ctypes.c_int, handle, handle)
         self._api("CreateJobObjectW", handle, pointer, ctypes.c_wchar_p)
         self._api("OpenJobObjectW", handle, dword, ctypes.c_int, ctypes.c_wchar_p)
         self._api("AssignProcessToJobObject", ctypes.c_int, handle, handle)
@@ -856,6 +861,35 @@ class Win32Platform(Platform):
     def identity(self, pid: int) -> ProcessIdentity:
         with self.process_handle(pid) as handle:
             return self._identity(pid, handle)
+
+    def wait_any_exited(
+        self, identities: tuple[ProcessIdentity, ...], timeout: float,
+    ) -> None:
+        event = self.kernel.CreateEventW(None, True, False, None)
+        if not event:
+            raise ctypes.WinError(ctypes.get_last_error())
+        callback = self.wait_callback_type(lambda _context, _expired: self.kernel.SetEvent(event))
+        try:
+            with ExitStack() as waits:
+                for identity in identities:
+                    handle = waits.enter_context(self.process_handle(identity.pid))
+                    if self._identity(identity.pid, handle) != identity:
+                        raise IdentityMismatchError(identity.pid)
+                    registered = ctypes.c_void_p()
+                    if not self.kernel.RegisterWaitForSingleObject(
+                        ctypes.byref(registered), handle, callback, None, 0xFFFFFFFF, 8,
+                    ):  # INFINITE; WT_EXECUTEONLYONCE
+                        raise ctypes.WinError(ctypes.get_last_error())
+                    # Join callbacks before closing their process handles and shared event.
+                    waits.callback(self.kernel.UnregisterWaitEx, registered, ctypes.c_void_p(-1))
+                milliseconds = (0xFFFFFFFF if math.isinf(timeout)
+                                else max(0, math.ceil(timeout * 1000)))
+                if self.kernel.WaitForSingleObject(event, milliseconds) == 0xFFFFFFFF:
+                    raise ctypes.WinError(ctypes.get_last_error())
+        except ProcessLookupError:
+            return
+        finally:
+            self.kernel.CloseHandle(event)
 
     @staticmethod
     def job_name(identity: ProcessIdentity) -> str:
@@ -1574,29 +1608,26 @@ class ChildProcess(Sealed, ABC):
 
     def _stop_plan(
         self, guard: Callable[[], AbstractContextManager[None]], deadline: float = math.inf,
-    ) -> Generator[float, None, type[GracefulStopOutcome]]:
+    ) -> Generator[tuple[tuple[ProcessIdentity, ...], float], None, type[GracefulStopOutcome]]:
         with guard():
             self.platform.terminate_group(self.identity)
         grace_deadline = min(time.monotonic() + STOP_GRACE_SECONDS, deadline)
         stage = GracefulStopOutcome
-        while self.platform.group_members(self.identity):
-            if time.monotonic() >= grace_deadline:
+        while members := self.platform.group_members(self.identity):
+            now = time.monotonic()
+            if stage is GracefulStopOutcome and now >= grace_deadline:
                 stage = ForcedStopOutcome
                 with guard():
                     self.platform.force_group(self.identity)
-                break
-            yield STOP_POLL_SECONDS
-        # A killed process exits once the kernel releases it (swapped memory,
-        # pending disk IO), which has no deadline. Kill again each round so a
-        # member forked during the first kill retires too.
-        while self.platform.group_members(self.identity):
-            if time.monotonic() >= deadline:
-                survivors = self.platform.group_members(self.identity)
-                raise ChildRetirementFailed(f"Process group still alive: {survivors}")
+                continue
             if stage is ForcedStopOutcome:
+                if now >= deadline:
+                    raise ChildRetirementFailed(f"Process group still alive: {members}")
                 with guard():
                     self.platform.force_group(self.identity)
-            yield STOP_POLL_SECONDS
+            # Re-enumerate after a member exits: a surviving member may have forked.
+            until = grace_deadline if stage is GracefulStopOutcome else deadline
+            yield members, max(0, until - now)
         self.registration.finished(self.identity)
         return stage
 
@@ -1605,10 +1636,10 @@ class ChildProcess(Sealed, ABC):
         plan = self._stop_plan(guard, deadline)
         while True:
             try:
-                delay = next(plan)
+                members, timeout = next(plan)
             except StopIteration as done:
                 return done.value
-            time.sleep(delay)
+            self.platform.wait_any_exited(members, timeout)
 
     async def _stop(self) -> ChildOutcome:
         pending = asyncio.get_running_loop().run_in_executor(
@@ -1962,18 +1993,23 @@ class SynchronousProcess(ChildProcess):
             plans[index] = process._stop_plan(guard, deadline)
         stages = {}
         while plans:
-            delays = []
+            waits = []
             for index, plan in tuple(plans.items()):
                 try:
-                    delays.append(next(plan))
+                    waits.append(next(plan))
                 except StopIteration as done:
                     stages[index] = done.value
                     del plans[index]
                 except ChildRetirementFailed as error:
                     errors.append(error)
                     del plans[index]
-            if delays:
-                time.sleep(min(delays))
+            if waits:
+                members = tuple(dict.fromkeys(
+                    member for identities, _timeout in waits for member in identities
+                ))
+                Platform.current().wait_any_exited(
+                    members, min(timeout for _identities, timeout in waits),
+                )
         if errors:
             raise errors[0] if len(errors) == 1 else ExceptionGroup("Process retirement failed", errors)
         return tuple(stages[index](process.reap()) for index, (process, _) in enumerate(stops))
@@ -1989,8 +2025,7 @@ class ObservedProcess(SynchronousProcess):
         return DetachedExitOutcome()
 
     async def wait(self) -> ChildOutcome:
-        while self.alive():
-            await asyncio.sleep(STOP_POLL_SECONDS)
+        await asyncio.to_thread(self.platform.wait_any_exited, (self.identity,), math.inf)
         return self.reap()
 
 
@@ -2078,8 +2113,7 @@ class SpawnedProcess(SynchronousProcess):
         return ChildOutcome.from_returncode(self.process.wait(timeout=STOP_GRACE_SECONDS))
 
     async def wait(self) -> ChildOutcome:
-        while self.process.poll() is None:
-            await asyncio.sleep(STOP_POLL_SECONDS)
+        await asyncio.to_thread(self.platform.wait_any_exited, (self.identity,), math.inf)
         return self.reap()
 
     def close_streams(self) -> None:
