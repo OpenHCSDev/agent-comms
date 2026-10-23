@@ -49,6 +49,6 @@ def test_unscoped_history_row_decodes_projects_never_live_and_releases(tmp_path)
 
     # A row published today records its scope; history rows carry none.
     with pytest.raises(MalformedRecord):
-        FieldCodec.decode(ClaimTransition, {**stored, "admission": None})
+        FieldCodec.decode(ClaimTransition, {**stored, "claim_scope": None})
     scoped = FieldCodec.encode(taken[resource])
-    assert scoped["admission"]["operation_id"] == "c" * 32
+    assert scoped["claim_scope"]["operation_id"] == "c" * 32

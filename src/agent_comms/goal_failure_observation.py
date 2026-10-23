@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated
 
 from .diagnostics import FailureReason
-from .field_codec import Id128Text, WireName
+from .field_codec import Id128Text
 from .goal_attempt_identity import GoalAttemptIdentity
 from .thread_identity import (
     ClaimedIdentity,
@@ -56,9 +56,7 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable, GoalFailureEvidence):
     owner: str
     owner_created_at: float
     worktree: str
-    claim_scope: Annotated[
-        int, WireName("admission"), Column(record_key=True, check="{claim_scope}>0")
-    ]
+    claim_scope: Annotated[int, Column(record_key=True, check="{claim_scope}>0")]
     turn_generation: Annotated[int, Column(check="turn_generation>0")]
     goal_revision: Annotated[int, Column(check="goal_revision>=0")]
     turn_id: Annotated[str, Column(unique=True, check="length(turn_id)=32")]

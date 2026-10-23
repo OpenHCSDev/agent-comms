@@ -19,7 +19,6 @@ from .field_codec import (
     MalformedRecord,
     FieldPlan,
     SlicePolicy,
-    WireName,
     WireRequired,
 )
 from .registration_change import (
@@ -322,9 +321,9 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
     owners: Annotated[GenerationCounter, SlicePolicy(GenerationOf)] = field(
         default_factory=GenerationCounter
     )
-    claims: Annotated[
-        GenerationCounter, WireName("admissions"), SlicePolicy(GenerationOf)
-    ] = field(default_factory=GenerationCounter)
+    claims: Annotated[GenerationCounter, SlicePolicy(GenerationOf)] = field(
+        default_factory=GenerationCounter
+    )
 
     _human: UserThreadLookup[str] = field(init=False, repr=False, compare=False)
 

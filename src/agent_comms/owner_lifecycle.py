@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 from uuid import uuid4
 
-from agent_comms import field_codec
 
 from .active_route import resolve_comms_route
 from agent_comms.attempt_recovery import RecoveryMonitorCapability
@@ -95,7 +94,7 @@ class TaskLaunchInput(LaunchInput):
 class OwnerRestartSelection:
     identity: OwnerIdentity
     process: ProcessIdentity
-    claimed_generation: Annotated[int, field_codec.WireName("admission_generation")]
+    claimed_generation: int
     interpreter: str
 
     @classmethod

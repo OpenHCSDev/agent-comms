@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Annotated
 from .bus_publication import HumanOrigin
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import Id128Text, WireName
+from .field_codec import Id128Text
 from .goals import GoalCheckpoint
 from .message_reference import MessageReference
 from .thread_identity import ClaimedIdentity
@@ -120,7 +120,7 @@ class HumanInputOrigin(InputOrigin):
 
     root_id: Annotated[str, Id128Text]
     author: HumanOrigin
-    claim_scope: Annotated[ClaimedIdentity, WireName("admission")]
+    claim_scope: ClaimedIdentity
     project: str
     goal: GoalCheckpoint
 
