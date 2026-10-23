@@ -17,7 +17,7 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repo import Checkout
 
 
-def test_rehearsal_home_requires_both_installed_inputs(tmp_path, monkeypatch):
+def test_rehearsal_home_requires_both_installed_inputs(tmp_path, monkeypatch, test_uv):
     executable = practice.TestHome(tmp_path).uv
     installed_home = tmp_path / "installed"
     installed_home.mkdir()
@@ -40,7 +40,7 @@ def test_rehearsal_home_requires_both_installed_inputs(tmp_path, monkeypatch):
     assert (home.path / uv.relative_to(installed_home)).resolve() == executable.resolve()
 
 
-def test_test_home_requires_uv_on_path_even_with_an_installer_uv(tmp_path, monkeypatch):
+def test_test_home_requires_uv_on_path_even_with_an_installer_uv(tmp_path, monkeypatch, test_uv):
     executable = practice.TestHome(tmp_path).uv
     installed_home = tmp_path / "installed"
     uv = practice.RuntimeHome.uv_path(installed_home)
@@ -53,7 +53,7 @@ def test_test_home_requires_uv_on_path_even_with_an_installer_uv(tmp_path, monke
 
 
 @pytest.mark.timeout(290)
-def test_checkout_native_tests_use_a_private_runtime(tmp_path):
+def test_checkout_native_tests_use_a_private_runtime(tmp_path, test_uv):
     repository = Path(__file__).resolve().parents[1]
     checkout = tmp_path / "checkout"
     subprocess.run(["git", "clone", "--shared", "-q", repository, checkout], check=True)

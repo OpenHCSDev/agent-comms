@@ -23,6 +23,7 @@ from agent_comms.goal_states import (
     OwnerPause,
     PausedGoal,
 )
+from agent_comms.root_runtime import RootRuntime
 from conftest import installed_comms
 
 
@@ -116,6 +117,7 @@ def test_fresh_cli_tool_process_preserves_owner_pause(owner, source_programs):
 
     comms, goal = owner
     paused = comms.goals.update_goal("worker", PausedGoalAction(), actor=OwnerInvocable)
+    RootRuntime.publish(comms.root, source_programs.runtime)
     result = subprocess.run(
         [
             source_programs.script(main),
@@ -141,4 +143,4 @@ def test_fresh_cli_tool_process_preserves_owner_pause(owner, source_programs):
     )
     assert result.returncode == 1, result.stderr
     assert "paused by the owner" in json.loads(result.stdout)["error"]
-    assert wire(comms.root).registry.require("worker").goal == paused
+    assert comms.registry.require("worker").goal == paused
