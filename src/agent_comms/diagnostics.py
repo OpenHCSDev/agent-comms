@@ -29,22 +29,27 @@ if TYPE_CHECKING:
     from .threads import Thread
 
 
-@contextmanager
-def owner_process_output(root: Path, thread: Thread):
-    """Retain a detached owner's startup traceback in the existing diagnostics.
+class OwnerProcessOutput(DurableFile, PatternFile):
+    """Startup output retained by the owner launcher."""
 
-    The child inherits this descriptor; closing the parent's copy does not end
-    capture. Each launch gets its own private file, without changing thread or
-    input disposition state.
-    """
-    directory = root / "diagnostics"
-    directory.mkdir(mode=0o700, exist_ok=True)
-    path = directory / f"owner-{thread.incarnation.lookup}-{uuid4().hex}.log"
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(descriptor, "w") as output:
-        output.write(f"Owner launch: {thread.name}\n")
-        output.flush()
-        yield output
+    filename = "diagnostics/owner-{lookup}-{id}.log"
+
+    @classmethod
+    @contextmanager
+    def open(cls, root: Path, thread: Thread):
+        """Retain a detached owner's startup traceback in the existing diagnostics.
+
+        The child inherits this descriptor; closing the parent's copy does not end
+        capture. Each launch gets its own private file, without changing thread or
+        input disposition state.
+        """
+        path = cls.path_in(root, lookup=thread.incarnation.lookup, id=uuid4().hex)
+        path.parent.mkdir(mode=0o700, exist_ok=True)
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "w") as output:
+            output.write(f"Owner launch: {thread.name}\n")
+            output.flush()
+            yield output
 
 
 @dataclass
