@@ -118,7 +118,8 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
     def visible_threads(
         self, visibility: RosterVisibility, *, names: Iterable[str] | None = None,
     ) -> Iterator[Thread]:
-        selected = (self.threads.values() if names is None else
+        selected = ((self.threads[name] for name, status in self.statuses.items()
+                     if status.in_view(visibility)) if names is None else
                     (self.threads[name] for name in dict.fromkeys(map(self.canonical_name, names))
                      if name in self.threads))
         return (executor for thread in selected
