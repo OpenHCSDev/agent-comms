@@ -207,6 +207,13 @@ class UnitAskUnanswered(OwedAnswer, UndatedStandingRule):
     def due(self, now: float) -> bool:
         return self.message.timestamp <= now - AwaitingCommander.seconds
 
+    def misaddressed(self, named: tuple[Message, ...], reached: frozenset[str]) -> str:
+        """A unit's ask is answered only by a message that reaches that unit."""
+        if self.unit in reached or not self.answered_by(named):
+            return ""
+        return (f"{self.message.message_id} was asked by {self.unit}; "
+                f"answer it in a message to {self.unit}")
+
     def line(self) -> str:
         age = max(0, int((time.time() - self.message.timestamp) // 60))
         return (f"UNANSWERED {self.unit}: message {self.cited}, "
