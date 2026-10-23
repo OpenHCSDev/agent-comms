@@ -5,8 +5,8 @@ refused because the target's owner probe asked the outgoing runtime for a method
 longer had (fixed in #2419); every required check passed both, because nothing ran the
 installer. These checks rehearse an already-current bus format through the CLI:
 launch, target tree, staged stack build, carried practice copy and the outgoing
-runtime's owner probe. The outgoing package uses this source, and an empty commit
-on the isolated target creates a real revision transition without changing formats.
+runtime's owner probe. The outgoing package uses this source; the isolated target
+retires the history converter, as an already-converted installation does.
 The predecessor-history carry has its own real-writer fixture in test_carry_bus_history.
 """
 from __future__ import annotations
@@ -75,9 +75,10 @@ def install_checkout(tmp_path) -> Path:
     checkout = tmp_path / "checkout"
     subprocess.run(["git", "clone", "--shared", "-q", REPOSITORY, checkout], check=True)
     Checkout(checkout).prepare()
+    subprocess.run(["git", "-C", checkout, "rm", "-q", "tools/cutover/carry_bus_history.py"], check=True)
     subprocess.run(["git", "-C", checkout, "-c", "user.name=Installer test",
-                    "-c", "user.email=installer@example.invalid", "commit", "--allow-empty",
-                    "-qm", "Distinct target revision with the same bus declarations"], check=True)
+                    "-c", "user.email=installer@example.invalid", "commit",
+                    "-qm", "Retire the completed history carry on an already-converted bus"], check=True)
     return checkout
 
 
