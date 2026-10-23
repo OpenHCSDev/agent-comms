@@ -2024,7 +2024,11 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
 
     @classmethod
     def producer_owners(cls) -> tuple[type, ...]:
-        """Only this table's declared writers and their inherited implementations."""
+        """Only this table's writers and their inherited implementations.
+
+        An ancestor declaring other outputs owns those outputs alone; unscoped
+        inherited machinery still follows the writer that uses it.
+        """
         owners = set(cls.shared_producers)
         owners.update(parent for parent in cls.__mro__
                       if parent.__module__.partition(".")[0] == __package__)

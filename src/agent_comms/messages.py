@@ -759,16 +759,6 @@ class Message(Addressed, BusCapability, TurnOrigin):
     time; the hash-derived ``message_id`` is identity only and is not ordered.
     """
 
-    @ClassFact
-    def writes(cls) -> tuple[type, ...]:
-        from .bus_activity_index import BusActivityIndex, SentActivity
-        from .bus_display_index import BusDisplayIndex
-        from .bus_route_counts import BusRouteCounts
-        from .bus_tables import MessageIdentitySource, AnsweredSource
-        return (
-            BusActivityIndex, SentActivity, BusDisplayIndex, BusRouteCounts,
-            MessageIdentitySource, AnsweredSource,
-        )
 
 
     body: Annotated[str, WireName("text"), WireOrder(6)]
@@ -801,22 +791,6 @@ class Message(Addressed, BusCapability, TurnOrigin):
         tuple[MessageReference, ...], WireOmitDefault(), WireOrder(14)
     ] = ()
 
-    def projections(self):
-        from .bus_activity_index import BusActivityIndex
-        from .bus_display_index import BusDisplayIndex
-        from .bus_tables import AnsweredSource, MessageIdentitySource
-
-        yield from super().projections()
-        yield BusActivityIndex.from_message(self, target=self.target)
-        participants = {self.sender, *CommandTarget.named(self.target).direct_names,
-                        *(mention.thread for mention in self.mentions)}
-        for participant in participants:
-            yield BusDisplayIndex.from_message(self, participant=participant)
-        yield from self.role.activity_rows(self)
-        yield from self.type.route_rows(self)
-        yield MessageIdentitySource(self.seq, self.message_id, self.sender)
-        for original in self.answers:
-            yield AnsweredSource(original, self.seq)
 
     @classmethod
     def from_message(cls, message: Message, **capabilities: object) -> Self:
@@ -993,6 +967,35 @@ class Message(Addressed, BusCapability, TurnOrigin):
 @dataclass_transform(frozen_default=True, kw_only_default=True)
 class BusRecord(Message, DeclaredFamily, affix="Record"):
     """Every record declaration owns its frozen value and derived tables."""
+
+    @ClassFact
+    def writes(cls) -> tuple[type, ...]:
+        from .bus_activity_index import BusActivityIndex, SentActivity
+        from .bus_display_index import BusDisplayIndex
+        from .bus_route_counts import BusRouteCounts
+        from .bus_tables import MessageIdentitySource, AnsweredSource
+        return (
+            BusActivityIndex, SentActivity, BusDisplayIndex, BusRouteCounts,
+            MessageIdentitySource, AnsweredSource,
+        )
+
+    def projections(self):
+        from .bus_activity_index import BusActivityIndex
+        from .bus_display_index import BusDisplayIndex
+        from .bus_tables import AnsweredSource, MessageIdentitySource
+
+        yield from super().projections()
+        yield BusActivityIndex.from_message(self, target=self.target)
+        participants = {self.sender, *CommandTarget.named(self.target).direct_names,
+                        *(mention.thread for mention in self.mentions)}
+        for participant in participants:
+            yield BusDisplayIndex.from_message(self, participant=participant)
+        yield from self.role.activity_rows(self)
+        yield from self.type.route_rows(self)
+        yield MessageIdentitySource(self.seq, self.message_id, self.sender)
+        for original in self.answers:
+            yield AnsweredSource(original, self.seq)
+
 
     def append_to(self, db: sqlite3.Connection, seq: int) -> int:
         """The caller's transaction owns the sequence, including preserved history."""

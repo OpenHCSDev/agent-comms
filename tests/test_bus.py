@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import signal
@@ -191,6 +192,37 @@ def test_projection_digest_tracks_producing_source(
     assert original.count(old) == 1
     path.write_text(original.replace(old, new))
     assert projection_source_digest(projection_source) != before
+
+
+def test_activity_source_changes_only_sent_activity(projection_source: Path) -> None:
+    before = json.loads(projection_source_digest(projection_source))
+    path = projection_source / "messages.py"
+    original = path.read_text()
+    old = "return (SentActivity(message.sender, message.timestamp),)"
+    assert original.count(old) == 1
+    path.write_text(original.replace(
+        old, "return (SentActivity(message.sender, message.timestamp + 1.0),)"))
+    after = json.loads(projection_source_digest(projection_source))
+    assert {name for name in before if before[name] != after[name]} == {"sent_activity"}
+
+
+def test_display_import_does_not_add_projection_producers(projection_source: Path) -> None:
+    program = """
+import sys
+sys.path.insert(0, sys.argv[1])
+from agent_comms.bus import Bus
+from agent_comms.messages import BusProjectionTables
+rows = BusProjectionTables.projection_rows()
+before = {row.declared_name: row.producer_digest() for row in rows}
+from agent_comms import cli
+rows[0]._producer_digest.cache_clear()
+after = {row.declared_name: row.producer_digest() for row in rows}
+assert before == after
+"""
+    subprocess.run(
+        (sys.executable, "-I", "-c", program, str(projection_source.parent)),
+        check=True, capture_output=True, text=True, timeout=60,
+    )
 
 
 # Mechanisms that decode, store and dispatch rows; their edits never change row content.

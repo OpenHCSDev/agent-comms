@@ -30,7 +30,7 @@ class CoreBuildHook(BuildHookInterface):
         # Never overwrite a source checkout's stamp while building its wheel.
         path = Path(self.directory) / ".core_stamp.py"
         if (root / ".git").exists():
-            # Repo.git cannot load here, so the build reads its commit directly.
+            # Pin this source revision before stamping its producer digests.
             commit = subprocess.check_output(
                 ("git", "-C", str(root.resolve()), "rev-parse", "HEAD"),
                 text=True,
@@ -46,7 +46,7 @@ class CoreBuildHook(BuildHookInterface):
         self.build_config.build_reserved_paths.add(destination)
         build_data["force_include"][str(path)] = destination
 
-    def producer_digests(self, root):
+    def producer_digests(self, root: Path) -> dict[str, str]:
         """Import the bus's declared schema once while building its immutable wheel.
 
         The custom hook requires the project's runtime dependencies in pyproject.toml;
