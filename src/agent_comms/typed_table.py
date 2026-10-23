@@ -2162,3 +2162,10 @@ class WithoutRowid(TypedTable, declared_name=None):
     """The table is stored directly by its declared primary key."""
 
     without_rowid = True
+
+
+@dataclass(frozen=True)
+class SingletonRow(TypedTable, declared_name=None):
+    """The table has one fixed primary key, preceding its owned value fields."""
+
+    singleton: Annotated[Literal[1], Column(primary_key=True)]

@@ -25,7 +25,6 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Annotated, Literal
 
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.coordination_errors import IdentityConflict
@@ -34,8 +33,8 @@ from .private_path import ObservedPath
 from .store_files import StoreOwner
 from .typed_table import (
     AllObjectsTables,
-    Column,
     ImmutableRows,
+    SingletonRow,
     SQLiteDatabase,
     SQLiteForeignKeys,
     SQLiteSchemaObject,
@@ -204,8 +203,7 @@ def _connect(raw: bytes | None) -> sqlite3.Connection:
 
 
 @dataclass(frozen=True)
-class SnapshotMeta(ImmutableRows, TypedTable):
-    singleton: Annotated[Literal[1], Column(primary_key=True)]
+class SnapshotMeta(ImmutableRows, SingletonRow):
     ddl_digest: str
 
 @dataclass(frozen=True)
