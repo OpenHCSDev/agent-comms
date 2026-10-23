@@ -383,7 +383,7 @@ class RulesetGates(PhaseEvidence):
     rules_query: ClassVar[str] = (
         "[.[] | {ruleset: .ruleset_id, required: [.parameters.required_status_checks[]?.context]}]"
     )
-    bypass_query: ClassVar[str] = ".bypass_actors | length == 0"
+    bypass_query: ClassVar[str] = ".bypass_actors | isempty(.[])"
 
     def holds(self, reading: PlanReading) -> bool:
         main = reading.main
