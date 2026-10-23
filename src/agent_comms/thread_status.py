@@ -263,10 +263,9 @@ class RunningThreadStatus(SelfRenaming, ActiveThreadPresence):
         pass
 
 
-class HeartbeatThreadStatus(SelfRenaming, ActiveThreadPresence):
+class HeartbeatThreadStatus(RunningThreadStatus):
     """A processless participant whose presence expires without another heartbeat."""
 
-    running = True
     max_age: ClassVar[float] = 120.0
 
     def when_seen(self, last_seen: float) -> ThreadStatus:
@@ -275,8 +274,8 @@ class HeartbeatThreadStatus(SelfRenaming, ActiveThreadPresence):
     def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
         return self.when_seen(last_seen)
 
-    def require_running(self) -> None:
-        pass
+    def declaration(self) -> ThreadStatus:
+        return self
 
 
 class IdleThreadStatus(ActiveThreadPresence):
