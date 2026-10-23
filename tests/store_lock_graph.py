@@ -212,12 +212,21 @@ class StoreLockGraph:
                 and any(isinstance(t, ast.Name) and t.id == name for t in node.targets)
                 and isinstance(node.value, ast.Call)
                 and isinstance(node.value.func, ast.Name)
-                and node.value.func.id in {"changing", "reading"}
             ):
                 wrapper = self.method(owner, node.value.func.id)
                 if wrapper:
-                    nested = next(n for n in wrapper[1].body if isinstance(n, ast.FunctionDef))
-                    return (found[0], nested)
+                    local_functions = {
+                        child.name: child
+                        for child in wrapper[1].body
+                        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    }
+                    for returned in wrapper[1].body:
+                        if (
+                            isinstance(returned, ast.Return)
+                            and isinstance(returned.value, ast.Name)
+                            and returned.value.id in local_functions
+                        ):
+                            return (wrapper[0], local_functions[returned.value.id])
         for base in self.bases(owner):
             if found := self.method(base, name, seen | {owner}):
                 return found
@@ -225,7 +234,8 @@ class StoreLockGraph:
 
     def typeof(self, node, env):
         if isinstance(node, ast.Name):
-            return env.get(node.id, node.id if self.declaration(node.id) else "")
+            value = env.get(node.id, node.id if self.declaration(node.id) else "")
+            return value if isinstance(value, str) else ""
         if isinstance(node, ast.Attribute):
             return self.attribute(self.typeof(node.value, env), node.attr)
         if isinstance(node, ast.Call):
@@ -285,14 +295,40 @@ class StoreLockGraph:
         if id(expr) in seen:
             return ()
         seen = seen | {id(expr)}
+        if isinstance(expr, ast.Starred):
+            return self.iteration_types(expr.value, env, seen)
         if isinstance(expr, (ast.Tuple, ast.List)):
-            return tuple(value for element in expr.elts if (value := self.typeof(element, env)))
+            return tuple(
+                value for element in expr.elts for value in self.iteration_types(element, env, seen)
+            )
+        if isinstance(expr, ast.Dict):
+            return tuple(
+                value for key in expr.keys for value in self.iteration_types(key, env, seen)
+            )
+        if isinstance(expr, ast.Call) and expr.args:
+            if isinstance(expr.func, ast.Name) and expr.func.id == sorted.__name__:
+                return self.iteration_types(expr.args[0], env, seen)
+            if (
+                isinstance(expr.func, ast.Attribute)
+                and isinstance(expr.func.value, ast.Name)
+                and expr.func.value.id == dict.__name__
+                and expr.func.attr == dict.fromkeys.__name__
+            ):
+                return self.iteration_types(expr.args[0], env, seen)
         if isinstance(expr, ast.Name):
+            value = env.get(expr.id)
+            if isinstance(value, tuple):
+                return value
+            if isinstance(value, str) and self.derives(value, StoreLockOwner.__name__):
+                return (value,)
             for node in ast.walk(env["__function__"]):
                 if isinstance(node, ast.Assign) and any(
                     isinstance(t, ast.Name) and t.id == expr.id for t in node.targets
                 ):
                     return self.iteration_types(node.value, env, seen)
+        concrete = self.typeof(expr, env)
+        if self.derives(concrete, StoreLockOwner.__name__):
+            return (concrete,)
         if isinstance(expr, ast.Attribute):
             owner = self.typeof(expr.value, env)
             found = self.method(owner, expr.attr)
@@ -306,62 +342,49 @@ class StoreLockGraph:
                             return values
         return ()
 
+    def call_environment(self, node, owner, call, env):
+        args = node.args.posonlyargs + node.args.args
+        offset = 1 if args and args[0].arg in {"self", "cls"} else 0
+        supplied = {
+            arg.arg: self.typeof(value, env) or self.iteration_types(value, env)
+            for arg, value in zip(args[offset:], call.args, strict=False)
+        }
+        supplied.update(
+            {
+                keyword.arg: self.typeof(keyword.value, env)
+                or self.iteration_types(keyword.value, env)
+                for keyword in call.keywords
+                if keyword.arg
+            }
+        )
+        if node.args.vararg:
+            supplied[node.args.vararg.arg] = tuple(
+                owner_type
+                for value in call.args[len(args) - offset :]
+                for owner_type in self.iteration_types(value, env)
+            )
+        return self.environment(node, owner, supplied)
+
+    def calls_physical_lock(self, node):
+        return any(
+            isinstance(call, ast.Call)
+            and isinstance(call.func, ast.Attribute)
+            and call.func.attr
+            in {StoreLockOwner.locked.__name__, StoreLockOwner.locked_async.__name__}
+            for call in ast.walk(node)
+        )
+
     def locks(self, call, env, module, budget=1, trail=()):
         if not isinstance(call, ast.Call) or not isinstance(call.func, ast.Attribute):
             return ()
         owner = self.typeof(call.func.value, env)
         name = call.func.attr
         site = f"{module.path}:{call.lineno}"
-        if name in {"locked", "locked_async"}:
+        if name in {StoreLockOwner.locked.__name__, StoreLockOwner.locked_async.__name__}:
             self.all_sites.add((site, owner, ast.unparse(call)))
-            if self.derives(owner, "StoreLockOwner") or owner == "RestartQueue":
+            if self.derives(owner, StoreLockOwner.__name__):
                 return (Acquisition(owner, site, site, ast.unparse(call.func.value)),)
-            if owner not in {"StoreLockAcquisition", "UnacquiredStoreLock"}:
-                self.unresolved.add((site, ast.unparse(call), owner))
-            return ()
-        if (
-            name == "ordered"
-            and isinstance(call.func.value, ast.Name)
-            and (call.func.value.id == "StoreLock")
-        ):
-            return ()
-        if self.derives(owner, "StoreLockOwner") and name in {
-            "reading",
-            "editing",
-            "reading_snapshot",
-            "read",
-            "read_entry",
-            "read_conversation",
-            "update",
-            "replace",
-            "mark_historical",
-            "adopt",
-        }:
-            origin = self.method(owner, name)
-            origin_site = site
-            if origin:
-                physical = [
-                    n
-                    for n in ast.walk(origin[1])
-                    if isinstance(n, ast.Call)
-                    and isinstance(n.func, ast.Attribute)
-                    and (n.func.attr in {"locked", "locked_async", "ordered"})
-                ]
-                if physical:
-                    origin_site = f"{origin[0].path}:{physical[0].lineno}"
-                elif name == "read":
-                    origin_site = "src/agent_comms/locked_store.py:698"
-                else:
-                    origin_site = f"{origin[0].path}:{origin[1].lineno}"
-            answer = [Acquisition(owner, origin_site, site, ast.unparse(call.func.value))]
-            if name == "reading":
-                answer += [
-                    Acquisition(self.typeof(arg, env), origin_site, site, ast.unparse(arg))
-                    for arg in call.args
-                    if self.derives(self.typeof(arg, env), "StoreLockOwner")
-                ]
-            return tuple(answer)
-        if budget <= 0:
+            self.unresolved.add((site, ast.unparse(call), owner))
             return ()
         found = self.method(owner, name)
         if not found:
@@ -369,37 +392,56 @@ class StoreLockGraph:
         callee_module, node = found
         if id(node) in trail:
             return ()
-        args = node.args.posonlyargs + node.args.args
-        offset = 0 if args and args[0].arg not in {"self", "cls"} else 1
-        supplied = {
-            arg.arg: self.typeof(value, env)
-            for arg, value in zip(args[offset:], call.args, strict=False)
-        }
-        inner_env = self.environment(node, owner, supplied)
+        if (
+            budget <= 0
+            and not self.derives(owner, StoreLockOwner.__name__)
+            and not self.calls_physical_lock(node)
+        ):
+            return ()
+        inner_env = self.call_environment(node, owner, call, env)
+        return tuple(
+            Acquisition(acquired.store, acquired.site, site, acquired.expression)
+            for acquired in self.nested_locks(
+                node, inner_env, callee_module, budget, trail + (id(node),)
+            )
+        )
+
+    def scope_nodes(self, node):
+        yield node
+        for child in ast.iter_child_nodes(node):
+            if not isinstance(
+                child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+            ):
+                yield from self.scope_nodes(child)
+
+    def nested_locks(self, node, env, module, budget, trail=()):
         answer = []
-        for inner in ast.walk(node):
-            if isinstance(inner, ast.Call):
-                candidate_envs = [inner_env]
-                for loop in ast.walk(node):
-                    if (
-                        isinstance(loop, ast.For)
-                        and isinstance(loop.target, ast.Name)
-                        and (inner in tuple(ast.walk(loop)))
-                    ):
-                        choices = self.iteration_types(loop.iter, inner_env)
-                        if choices:
-                            candidate_envs = [
-                                {**item, loop.target.id: choice}
-                                for item in candidate_envs
-                                for choice in choices
-                            ]
+        for inner in self.scope_nodes(node):
+            if not isinstance(inner, ast.Call):
+                continue
+            candidate_envs = [env]
+            loops = []
+            for parent in ast.walk(node):
+                if inner not in tuple(ast.walk(parent)):
+                    continue
+                if isinstance(parent, ast.For):
+                    loops.append(parent)
+                elif isinstance(
+                    parent, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+                ):
+                    loops.extend(parent.generators)
+            for loop in loops:
+                if not isinstance(loop.target, ast.Name):
+                    continue
+                expanded = []
                 for candidate_env in candidate_envs:
-                    for acquired in self.locks(
-                        inner, candidate_env, callee_module, budget - 1, trail + (id(node),)
-                    ):
-                        answer.append(
-                            Acquisition(acquired.store, acquired.site, site, acquired.expression)
-                        )
+                    choices = self.iteration_types(loop.iter, candidate_env)
+                    expanded.extend({**candidate_env, loop.target.id: choice} for choice in choices)
+                if expanded:
+                    candidate_envs = expanded
+            for candidate_env in candidate_envs:
+                for acquired in self.locks(inner, candidate_env, module, budget - 1, trail):
+                    answer.append(acquired)
         return tuple(dict.fromkeys(answer))
 
     def context_locks(self, call, env, module, budget=2):
@@ -407,21 +449,19 @@ class StoreLockGraph:
             return ()
         owner = self.typeof(call.func.value, env)
         name = call.func.attr
-        if name in {"locked", "locked_async"} or self.derives(owner, "StoreLockOwner"):
+        if name in {StoreLockOwner.locked.__name__, StoreLockOwner.locked_async.__name__}:
             return self.locks(call, env, module, budget)
-        if budget <= 0:
-            return ()
         found = self.method(owner, name)
         if not found:
             return ()
         callee_module, node = found
-        args = node.args.posonlyargs + node.args.args
-        offset = 1 if args and args[0].arg in {"self", "cls"} else 0
-        supplied = {
-            arg.arg: self.typeof(value, env)
-            for arg, value in zip(args[offset:], call.args, strict=False)
-        }
-        inner_env = self.environment(node, owner, supplied)
+        if (
+            budget <= 0
+            and not self.derives(owner, StoreLockOwner.__name__)
+            and not self.calls_physical_lock(node)
+        ):
+            return ()
+        inner_env = self.call_environment(node, owner, call, env)
         held_at_yield = []
 
         def find(nodes, active):
@@ -441,6 +481,7 @@ class StoreLockGraph:
                     find(item.body, held)
                 elif isinstance(item, (ast.Yield, ast.YieldFrom)):
                     held_at_yield.extend(active)
+                    held_at_yield.extend(self.nested_locks(item, inner_env, callee_module, budget))
                 else:
                     find(list(ast.iter_child_nodes(item)), active)
 
@@ -453,12 +494,7 @@ class StoreLockGraph:
         )
 
     def record(self, outer, inner, active):
-        if outer.store in {
-            "StoreLockOwner",
-            "LockedStore",
-            "LockedFile",
-            "CarriedDocument",
-        } or inner.store in {"StoreLockOwner", "LockedStore", "LockedFile", "CarriedDocument"}:
+        if outer.store not in self.ranks or inner.store not in self.ranks:
             return
         borrowed = next((held for held in reversed(active) if held.store == inner.store), None)
         if borrowed is not None:

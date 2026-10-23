@@ -1,6 +1,7 @@
 """The source acquisition graph must respect every declaration-owned store tier."""
 
 from importlib import import_module
+from inspect import getfile
 from pathlib import Path
 
 import pytest
@@ -19,14 +20,10 @@ def test_source_acquisitions_follow_store_tiers():
             module.path.removeprefix("src/").removesuffix(".py").replace("/", ".")
         )
         owners[name] = vars(imported)[declaration.name]
-    StoreLockOwner.require_ranked()
     failures = []
     checked = 0
     borrowed = 0
     for outer, inner, reentry in sorted(graph.pairs):
-        # RestartQueue's physical lock is outside the StoreLockOwner family.
-        if outer.store not in owners or inner.store not in owners:
-            continue
         first, second = owners[outer.store].lock_rank(), owners[inner.store].lock_rank()
         valid = first == second if reentry else first < second
         checked += 1
@@ -52,3 +49,40 @@ def test_source_acquisitions_follow_store_tiers():
             pass
 
     print(f"{checked} store acquisition pairs checked; {borrowed} borrowed-lock reentries")
+
+
+def test_new_lock_method_and_wrapper_are_discovered(tmp_path):
+    source = tmp_path / "src"
+    source.mkdir()
+    (source / "store_files.py").write_text(Path(getfile(StoreLockOwner)).read_text())
+    (source / "new_methods.py").write_text("""
+from contextlib import contextmanager
+from agent_comms.store_files import CatalogTier, RegistryTier
+
+class NewRegistry(RegistryTier):
+    @contextmanager
+    def invented_guard(self):
+        with self.locked():
+            yield
+
+    @staticmethod
+    def invented_factory(action):
+        def invented_closure(self):
+            with self.invented_guard():
+                return action(self)
+        return invented_closure
+
+    run_action = invented_factory(lambda self: None)
+
+class NewCatalog(CatalogTier):
+    def invert(self, registry: NewRegistry):
+        with self.locked():
+            registry.run_action()
+""")
+    graph = StoreLockGraph(tmp_path)
+    inversions = [
+        (outer, inner)
+        for outer, inner, reentry in graph.pairs
+        if not reentry and graph.ranks[outer.store] > graph.ranks[inner.store]
+    ]
+    assert inversions, "A new lock method and returned wrapper must expose their inversion"

@@ -156,7 +156,6 @@ class StoreLock:
         contention: StoreLockContention = UNBOUNDED_CONTENTION,
     ):
         """Acquire store owners by their declared rank, never their filenames."""
-        StoreLockOwner.require_ranked()
         with ExitStack() as resources:
             yield {owner: resources.enter_context(owner.locked(
                 mode=requests[owner], contention=contention))
@@ -273,12 +272,6 @@ class StoreLockOwner(StoreOwner, declared_name=None):
         if len(inherited) != 1:
             raise TypeError(f"{cls.__qualname__} must inherit exactly one store lock tier")
         return tiers.index(inherited[0])
-
-    @classmethod
-    def require_ranked(cls) -> None:
-        """Every registered owner must carry exactly one rank, including new stores."""
-        for owner in StoreLockOwner.members_with(StoreLockOwner):
-            owner.lock_rank()
 
     @classmethod
     def validate_selection(cls, members: Iterable[type[DeclaredFamily]]) -> None:
