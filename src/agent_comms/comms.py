@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-from contextlib import AbstractContextManager, contextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import AbstractContextManager, aclosing, contextmanager
+from functools import partial
 from pathlib import Path
 from typing import ClassVar
 
@@ -13,21 +14,27 @@ from .catalog_store import ChannelCatalog
 from .channel_management import ChannelManagement
 from .collaboration_ledger import CollaborationLedger
 from .context_store import ContextStore
+from .coordinator import Coordination
+from .errors import UnregisteredThreadError
 from .goal_management import Goals
 from .history_views import HistoryViews
 from .launch_runtime import LaunchRuntime
 from .locked_store import RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
+from .message_reference import AfterMessageStart, FirstUnreadStart, InboxStart
+from .messages import Message
 from .messaging import Messaging
 from .owner_lifecycle import OwnerLifecycle
 from .publisher import OwnerPublisher, Publisher
 from .registration import Registration
 from .relationships import ThreadRelationships
+from .read_basis import WatchAcknowledgment
 from .root_runtime import RootRuntime
 from .thread_configuration import ThreadConfiguration
 from .thread_management import ThreadManagement
 from .transcripts import Transcripts
+from .watched import FileSource
 
 
 class Comms:
@@ -84,6 +91,32 @@ class Comms:
         MaintenanceBarrier(RegistryFile.path_in(route.root)).assert_open_unlocked()
         with route.hold_client_route():
             yield cls(route)
+
+    async def watch(
+        self, name: str, *, acknowledgment: type[WatchAcknowledgment],
+        after: InboxStart = FirstUnreadStart(),
+    ) -> AsyncIterator[Message]:
+        """Wait unlocked; each inbox read and acknowledgment owns one client call."""
+        with Comms.client(self.route) as comms:
+            reader = comms.registry.require(name).incarnation
+        maintenance = MaintenanceBarrier(self.registry.store.path)
+        async with aclosing(self.bus.bus.watch(FileSource(maintenance.state_path))) as changes:
+            async for _ in changes:
+                while True:
+                    with Comms.client(self.route) as comms:
+                        snapshot = comms.registry.snapshot()
+                        batch = await Coordination.run_worker(partial(
+                            comms.bus.inbox_at, name, snapshot, after=after,
+                        ))
+                        if not reader.current(comms.registry.snapshot()):
+                            raise UnregisteredThreadError("Watched thread was removed or replaced")
+                    for message in batch.page.messages:
+                        yield message
+                        with Comms.client(self.route) as comms:
+                            acknowledgment.taken(comms.bus.reads, batch.displayed.through(message.seq))
+                        after = AfterMessageStart(message.reference)
+                    if not batch.remaining:
+                        break
 
 
 def wire(

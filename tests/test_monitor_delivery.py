@@ -206,7 +206,7 @@ async def test_explicit_watch_does_not_mark_streamed_messages_read(wired):
     from contextlib import aclosing
     import asyncio
     first=wired.messaging.send('PR111','fixer','first').message
-    async with aclosing(wired.bus.watch('fixer', acknowledgment=ExplicitWatchAcknowledgment)) as stream:
+    async with aclosing(wired.watch('fixer', acknowledgment=ExplicitWatchAcknowledgment)) as stream:
         assert (await anext(stream)).reference==first.reference
         pending=asyncio.create_task(anext(stream))
         try:
