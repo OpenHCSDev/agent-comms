@@ -479,7 +479,7 @@ class InheritanceCleanupPhase(MultipleInheritancePhase):
                 rf"\b(getattr|hasattr)\([^,()]+, *[\"']"
                 rf"({LIFECYCLE_FLAGS}|{CODEC_FLAGS}|{SMALL_FAMILY_FLAGS})[\"']"
             ),
-            ClassRostersAbsent(),
+            ClassRostersAbsent(families=(PlanPhase,)),
         )
     )
 
