@@ -7,7 +7,10 @@ from dataclasses import fields, replace
 import pytest
 
 from agent_comms.errors import RelationViolationError
+from agent_comms.display_references import CurrentDisplayReferences, HistoricalDisplayReference
+from agent_comms.historical_views import HistorySource
 from agent_comms.registry_document import HistoricalRootPurpose
+from agent_comms.registry_provenance import RegistryProvenance
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.ui_model.sidebar import SidebarModel
 from agent_comms.ui_model.unread import ExactUnread, UnobservedUnread
@@ -106,3 +109,27 @@ def test_recreated_thread_reference_resolves_new_birth_not_same_name(comms, decl
     assert before.thread(original.incarnation).incarnation == original.incarnation
     with pytest.raises(KeyError):
         references.thread(original.incarnation)
+
+
+def test_current_reference_membership_and_lookup_share_the_retained_registry(comms, declare_reference):
+    original = declare_reference()
+    references = CurrentDisplayReferences(str(comms.root), registry=comms.registry.snapshot())
+    for restored in (references, pickle.loads(pickle.dumps(references, protocol=5))):
+        reference = restored.thread(original.incarnation)
+        assert reference.current_in(restored)
+        assert restored.find(f"@{original.name}")[0].reference == reference
+        with pytest.raises(TypeError):
+            restored.targets["unowned"] = reference
+
+
+def test_current_reference_source_projection_keeps_historical_identity(comms, declare_reference):
+    original = declare_reference()
+    references = comms.views.viewer_snapshot(str(comms.root.parent)).references
+    source = HistorySource.capture_original(comms.root, RegistryProvenance.capture(references.registry))
+    restored = pickle.loads(pickle.dumps(references, protocol=5))
+    recorded = restored.for_source(source)
+    assert not isinstance(recorded, CurrentDisplayReferences)
+    reference = recorded.find(f"@{original.name}")[0].reference
+    assert isinstance(reference, HistoricalDisplayReference)
+    assert reference.source == source.key
+    assert reference.incarnation == original.incarnation

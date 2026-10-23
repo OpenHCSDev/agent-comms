@@ -6,10 +6,11 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from functools import cached_property
 import re
-from typing import TYPE_CHECKING
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Self
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.thread_identity import ThreadIncarnation
@@ -146,14 +147,14 @@ class DisplayReferences(RootedReferences):
     description = ""
     targets: Mapping[str, DisplayReference] = field(default_factory=dict)
 
-    @classmethod
-    def recorded(cls, root, source) -> DisplayReferences:
+    @staticmethod
+    def recorded(root, source) -> DisplayReferences:
         registry = source.provenance
         targets = {name: HistoricalDisplayReference(str(root), thread.incarnation, source.key)
                    for name, thread in registry.threads.items()}
         targets.update((alias, targets[name]) for alias, name in registry.aliases.items()
                        if name in targets)
-        return cls(str(root), targets)
+        return DisplayReferences(str(root), targets)
 
     def for_source(self, source) -> DisplayReferences:
         if source is None:
@@ -192,16 +193,23 @@ class CurrentDisplayReferences(DisplayReferences):
     Recorded catalogs share name recognition but cannot resolve a live target.
     """
 
-    registry: RegistrySnapshot = field(kw_only=True, repr=False, compare=False)
+    targets: Mapping[str, DisplayReference] = field(init=False)
+    registry: RegistrySnapshot = field(repr=False, compare=False)
+    channels: tuple[str, ...] = ()
 
-    @classmethod
-    def capture(cls, root, registry: RegistrySnapshot, channels) -> CurrentDisplayReferences:
-        targets = {name: ThreadDisplayReference(str(root), thread.incarnation)
-                   for name, thread in registry.threads.items()}
-        targets.update((alias, targets[name]) for alias, name in registry.aliases.items()
+    def __post_init__(self) -> None:
+        targets = {name: ThreadDisplayReference(self.root, thread.incarnation)
+                   for name, thread in self.registry.threads.items()}
+        targets.update((alias, targets[name]) for alias, name in self.registry.aliases.items()
                        if name in targets)
-        targets.update((name, ChannelDisplayReference(str(root), name)) for name in channels)
-        return cls(str(root), targets, registry=registry)
+        targets.update((name, ChannelDisplayReference(self.root, name)) for name in self.channels)
+        object.__setattr__(self, "targets", MappingProxyType(targets))
+
+    def __reduce__(self) -> tuple[type[Self], tuple[object, ...]]:
+        """Restore declared inputs; rebuild the target view from their owners."""
+        return type(self), tuple(
+            getattr(self, declaration.name) for declaration in fields(self) if declaration.init
+        )
 
     def thread(self, incarnation: ThreadIncarnation) -> ThreadDisplayReference:
         """Resolve an exact birth to its current name; a missing birth fails."""
