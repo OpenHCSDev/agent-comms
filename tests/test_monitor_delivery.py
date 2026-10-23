@@ -10,7 +10,8 @@ import pytest
 
 from conftest import declare_test_bus
 
-from agent_comms.installer.practice import practice_copy
+from agent_comms.installer.practice import PracticeCopy
+from agent_comms.locked_store import RootFile
 
 from agent_comms.cli_bridges.claude import ClaudeBridge, ClaudeJsonLines
 from agent_comms.cli_bridges.claude_protocol import (
@@ -33,12 +34,14 @@ def bridge(comms, tmp_path):
         comms.registry.new_thread(name, frozenset(), str(tmp_path))
         for name in ('claude-code', 'viewer', 'peer')
     ))
-    with practice_copy(comms.root, tmp_path / 'copied-bus') as (root, _measurement):
-        state = tmp_path / 'bridge-state'
-        binding = Binding(str(root), 'viewer', 'session')
-        with Binding.open(state) as db:
-            binding.bind(db)
-            yield ClaudeBridge(Options(Watch(), StoredBinding(), state), binding, db)
+    practice = PracticeCopy(comms.root, tmp_path / 'copied-bus')
+    practice.include(tuple(RootFile.existing_in(practice.root)))
+    (root, _measurement) = practice.path, practice.measurement
+    state = tmp_path / 'bridge-state'
+    binding = Binding(str(root), 'viewer', 'session')
+    with Binding.open(state) as db:
+        binding.bind(db)
+        yield ClaudeBridge(Options(Watch(), StoredBinding(), state), binding, db)
 
 
 @pytest.fixture

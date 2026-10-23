@@ -6,9 +6,7 @@ import shutil
 import subprocess
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
-from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from agent_comms.field_codec import boundary_decoder
@@ -95,30 +93,40 @@ class TestHome(RuntimeHome):
         return Path(executable)
 
 
-@contextmanager
-def practice_copy(root: Path, into: Path) -> Iterator[tuple[Path, PracticeMeasurement]]:
-    """Copy the bus as files, so no runtime's code reads it to build the copy: the outgoing
-    runtime's bugs cannot block the install of their fix, and the target cannot read a
-    format its carries have not run on yet. The copy is the declared owners' files and
-    nothing else: every SQLite owner's database copies through SQLite's backup, and its
-    -wal, -shm and journal never. Each declared owner copies its consistent file group;
-    the retired history converter alone knows its old marker relationship.
-    The maintenance witnesses stay behind: the rehearsal holds its copy itself. Stored
-    paths keep naming the live bus, and every step writes only inside the root it is given."""
-    floor = StorageRule.load(root).floor_gib * 2**30
-    into.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    if shutil.disk_usage(into.parent).free < floor:
-        raise UpgradeRefused("Insufficient free space before building the practice copy")
-    started = time.monotonic()
-    witnesses = set(MaintenanceBarrier(RegistryFile.path_in(root)).witness_paths)
-    files = RootFile.existing_in(root)
-    into.mkdir(mode=0o700)
+@dataclass
+class PracticeCopy:
+    """A private, incrementally selected cut of the source owners' files."""
 
-    copied: set[Path] = set()
-    for path, owner in files.items():
-        if path in copied or path in witnesses:
-            continue
-        target = into / path.relative_to(root)
-        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        copied.update(owner.copy_group(path, target))
-    yield into, PracticeMeasurement.of(into, time.monotonic() - started, floor)
+    root: Path
+    path: Path
+    copied: dict[Path, Path] = field(default_factory=dict)
+    seconds: float = 0.0
+
+    def include(self, paths: tuple[Path, ...]) -> None:
+        floor = StorageRule.load(self.root).floor_gib * 2**30
+        self.path.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if shutil.disk_usage(self.path.parent).free < floor:
+            raise UpgradeRefused("Insufficient free space before building the practice copy")
+        started = time.monotonic()
+        witnesses = set(MaintenanceBarrier(RegistryFile.path_in(self.root)).witness_paths)
+        for resource, owner in RootFile.owned_files(self.root, paths).items():
+            source = self.root / resource.path
+            if source in self.copied or source in witnesses or not source.exists():
+                continue
+            target = self.path / resource.path
+            target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            self.copied.update((member, source) for member in owner.copy_group(source, target))
+        self.seconds += time.monotonic() - started
+
+    def retain(self, paths: tuple[Path, ...]) -> None:
+        """Discard inputs used only to establish that an earlier carry was finished."""
+        selected = {self.root / resource.path for resource in RootFile.owned_files(self.root, paths)}
+        discarded = tuple(source for source, primary in self.copied.items() if primary not in selected)
+        for source in discarded:
+            (self.path / source.relative_to(self.root)).unlink(missing_ok=True)
+            del self.copied[source]
+
+    @property
+    def measurement(self) -> PracticeMeasurement:
+        return PracticeMeasurement.of(
+            self.path, self.seconds, StorageRule.load(self.root).floor_gib * 2**30)

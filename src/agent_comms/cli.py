@@ -15,9 +15,8 @@ from collections.abc import Sequence
 from typing import TextIO
 
 from agent_comms.active_route import resolve_comms_route
-from agent_comms.cli_bridges.shared import SendArguments
 from agent_comms.cli_commands import CliCommand
-from agent_comms.cli_protocol import CoreError
+from agent_comms.cli_protocol import CliArguments, CoreError
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.launch_root import LaunchRoot
 
@@ -53,7 +52,7 @@ def build_parser() -> argparse.ArgumentParser:
 def execute(arguments: Sequence[str], output: TextIO) -> int:
     """Own parsing, root selection and dispatch for every registered command."""
     arguments = list(arguments)
-    args, unknown = build_parser().parse_known_args(arguments, namespace=SendArguments())
+    args, unknown = build_parser().parse_known_args(arguments, namespace=CliArguments())
     if unknown and (len(unknown) != 2 or unknown[0] != LaunchRoot.argument):
         raise ValueError(f"unrecognized arguments: {' '.join(unknown)}")
     declaration = CliCommand.member_named(args.command)

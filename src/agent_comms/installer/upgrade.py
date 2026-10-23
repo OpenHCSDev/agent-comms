@@ -71,7 +71,6 @@ from agent_comms.installer.backup import (
 )
 from agent_comms.installer.carry import (
     STEPS,
-    BackupFilesOperation,
     Carried,
     Carry,
     CarryChain,
@@ -98,10 +97,10 @@ from agent_comms.installer.interpreter_operation import (
     SourceProgram,
 )
 from agent_comms.installer.practice import (
+    PracticeCopy,
     PracticeMeasurement,
     RehearsalHome,
     RuntimeHome,
-    practice_copy,
 )
 from agent_comms.installer.reporting import (
     OutgoingWriter, RootWriter, RuntimeWriter, UnpostedWriter,
@@ -294,10 +293,12 @@ class Rehearsal(DeclaredFamily, affix="Rehearsal"):
     """What a run tried before it touched the live bus."""
 
 
+@dataclass(frozen=True)
 class RehearsedFiles(Rehearsal, declared_name=None):
     """A rehearsal that names the files its live pass may rewrite."""
 
     files: RehearsalFiles
+    inputs: tuple[Annotated[Path, PathText], ...]
 
 
 @dataclass(frozen=True)
@@ -312,6 +313,7 @@ class UncopiedRehearsal(RehearsedFiles):
     reconcile, under the hold, still refuses before any write if it names a file."""
 
     files: RehearsalFiles = field(default_factory=RehearsalFiles.none)
+    inputs: tuple[Annotated[Path, PathText], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -629,13 +631,6 @@ class Stack:
         (answer,) = self.call_steps((step,), tree, operation)
         return answer
 
-    def backup_files(self, pending: tuple[Carry, ...],
-                     tree: TargetTree) -> tuple[Path, ...]:
-        return tuple(sorted({
-            path for paths in self.call_steps(pending, tree, BackupFilesOperation())
-            for path in paths
-        }))
-
     def running_owners(self, root: Path) -> list[str]:
         """Use the restart request's receiving declaration in the selected runtime."""
         return self.probe(RunningOwnersProbe(root))
@@ -711,15 +706,17 @@ class TargetTree(AbstractContextManager):
 
 @dataclass(frozen=True)
 class PracticeBus:
-    """The one practice copy of an install. The carry steps' dry runs and the rehearsal
-    both run on it, so no process of the staged runtime opens the live bus before
-    maintenance holds it: opening a store reconciles its schema, and on 2026-10-22
-    install 53's dry runs left the live store on the target's schema, which the outgoing
-    runtime's own stop then refused."""
+    """Pending selection dry-runs every step on the live root before maintenance holds
+    it, so nothing is copied to choose: a dry run reads the live stores under their own
+    locks and writes no store data, because every carry writes only when applying.
+    Taking a store's lock creates its lock file, and that file's directory, when it
+    does not exist yet; live writers wait while a dry run holds a lock. Reading a WAL
+    database updates its shared-memory index (``-shm``), as every SQLite reader does,
+    and creates the index when it is missing. Apply runs use the selected practice
+    inputs, then the backed-up live root under maintenance."""
 
     scratch: Path
-    copied: Path
-    measurement: PracticeMeasurement
+    copy: PracticeCopy
     original_root: Path
     spill_dir: Path
 
@@ -733,16 +730,27 @@ class PracticeBus:
         with (
             tempfile.TemporaryDirectory(dir=parent, prefix="practice-") as scratch,
             tempfile.TemporaryDirectory(dir=spill_dir, prefix="practice-carry-") as spill,
-            practice_copy(root, Path(scratch) / "bus") as (copied, measurement),
         ):
-            yield cls(Path(scratch), copied, measurement, root, Path(spill))
+            yield cls(Path(scratch), PracticeCopy(root, Path(scratch) / "bus"), root, Path(spill))
 
     def pending(self, chain: CarryChain, staged: Stack,
                 tree: TargetTree) -> tuple[type[Carry], ...]:
-        """Each step's dry run with the target's staged stack says what is left."""
+        """Read-only dry runs choose the pending steps before copying their inputs."""
         return chain.pending(lambda step: staged.call_step(
-            step(self.copied, self.original_root, self.spill_dir), tree,
+            step(self.original_root, self.original_root, self.spill_dir), tree,
             MigrateOperation(apply=False)))
+
+    def select(self, pending: tuple[Carry, ...], reconciled: tuple[Path, ...]) -> tuple[Path, ...]:
+        # This is the one input union consumed by both rehearsal and live backup.
+        paths = tuple(sorted({
+            RegistryStore.at(self.original_root).path,
+            RootRuntimeStore.path_in(self.original_root),
+            *(self.original_root / path for path in reconciled),
+            *(path for step in pending for path in step.input_files()),
+        }))
+        self.copy.include(paths)
+        self.copy.retain(paths)
+        return tuple(sorted(path.relative_to(self.original_root) for path in self.copy.copied))
 
 
 def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice, mode: RunMode,
@@ -959,18 +967,15 @@ class BackedUpMigration(PreparedMigration):
 
 class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
     def rehearsal(self, practice: PracticeBus) -> CarriedRehearsal:
-        copied = practice.copied
+        copied = practice.copy.path
         home = practice.scratch / "home"
         RehearsalHome(home).prepare()
         (home / ".claude").symlink_to(Path.home() / ".claude")
         stack = replace(self.staged, home=home)
         pending = tuple(replace(step, root=copied, spill_dir=practice.spill_dir)
                         for step in self.pending)
-        for destination in stack.backup_files(pending, self.tree):
-            source = self.root / destination.relative_to(copied)
-            if source.exists() and not destination.exists():
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                RootFile.content_owner(source).copy_file(source, destination)
+        planned = self.staged.cli(self.root, PlannedReconcileCliCommand)
+        inputs = practice.select(self.pending, planned.rewritten)
         self.installed.running_owners(copied)
         maintenance = MaintenanceBarrier(RegistryStore.at(copied).path)
         hold = maintenance.retarget(maintenance.begin(MaintenanceOperator.current()), stack.runtime)
@@ -979,15 +984,13 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
             passed = migration.carry(pending, stack, self.tree)
             passed = passed.after_acceptance(pending, stack, self.tree)
         maintenance.clear(hold)
-        return passed.extended(CarriedRehearsal, copy=practice.measurement)
+        return passed.extended(CarriedRehearsal, copy=practice.copy.measurement, inputs=inputs)
 
     def uncopied(self) -> UncopiedRehearsal:
         return UncopiedRehearsal()
 
     def live(self, rehearsal: RehearsedFiles, report: InstallReport) -> CarriedRun:
-        expected = frozenset(rehearsal.files.names) | frozenset(
-            path.relative_to(self.root)
-            for path in self.staged.backup_files(self.pending, self.tree))
+        expected = frozenset(rehearsal.files.names) | frozenset(rehearsal.inputs)
         selected = tuple(self.root / name for name in sorted(expected))
         restore = RestoreSpace.measure(max(
             rehearsal.files.restore_bytes,

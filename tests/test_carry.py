@@ -20,7 +20,6 @@ from agent_comms.installer.backup import (
 )
 from agent_comms.installer.carry import (
     STEPS,
-    BackupFilesOperation,
     Carried,
     Carry,
     CarryChain,
@@ -49,7 +48,7 @@ def step_source() -> str:
     return (
         "from agent_comms.installer.carry import Carried, Carry\n\n"
         "class Step(Carry):\n"
-        "    def backup_files(self):\n        return ()\n"
+        "    opened_files = ()\n"
         "    def carry(self, *, apply):\n        return Carried(0)\n"
     )
 
@@ -169,9 +168,7 @@ def noisy_step(tmp_path_factory):
         "from pathlib import Path\n"
         "from agent_comms.installer.carry import Carry, Carried\n"
         "class Noisy(Carry):\n"
-        "    def backup_files(self):\n"
-        "        print('backup diagnostic')\n"
-        "        return (self.root / 'saved',)\n"
+        "    opened_files = ()\n"
         "    def carry(self, *, apply):\n"
         "        import atexit\n"
         "        atexit.register(print, 'diagnostic after the answer')\n"
@@ -188,8 +185,7 @@ def noisy_step(tmp_path_factory):
         def module(cls):
             return module
 
-        def backup_files(self):
-            raise AssertionError("The selected interpreter lists the backups, never its caller")
+        opened_files = ()
 
         def carry(self, *, apply):
             raise AssertionError("The selected interpreter executes the carry, never its caller")
@@ -204,7 +200,6 @@ def test_step_answers_are_separate_from_diagnostics_and_keep_their_types(
     root = tmp_path / "bus"
     root.mkdir()
     request = step(root, root, tmp_path / "spill")
-    assert stack.call_step(request, tree, BackupFilesOperation()) == (root / "saved",)
     assert stack.call_step(request, tree, MigrateOperation(False)) == (
         Carried(1, {"applied": False}, (Path("saved"),)))
     assert not (root / "saved").exists()

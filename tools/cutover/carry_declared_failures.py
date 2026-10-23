@@ -16,17 +16,19 @@ from agent_comms.diagnostics import DiagnosticDocument
 from agent_comms.errors import RelationViolationError
 from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore
 from agent_comms.goal_failure_observation import FailedTurnEvidence, GoalLedgerTable
+from agent_comms.historical_views import HistoryArchive
 from agent_comms.installer.carry import Carried, Carry
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.store_files import AtomicFile
 from agent_comms.typed_table import HeldBusFile, sql_literal
 
-from .carry_bus_history import CarryCatalogSource
+from .archived_roots import CarryCatalogSource
 from .carry_claim_fields import ClaimFields
 from .retired_claim_fields import RetiredClaimFields
 
 
 class DeclaredFailures(RetiredClaimFields, Carry):
+    opened_files = (HistoryArchive, GoalAttemptStore, DiagnosticDocument)
     # Both changes affect one table. Rebuild it once with both source columns;
     # ClaimFields then observes the already-carried SQL claim field.
     precedes = (ClaimFields,)
@@ -45,28 +47,10 @@ class DeclaredFailures(RetiredClaimFields, Carry):
         "queued_input_start_missing": failures.QueuedInputMissing,
     }
 
-    def roots(self) -> tuple[Path, ...]:
-        return tuple(dict.fromkeys((
-            self.root,
-            *(source.mapped_root(self.root, self.original_root)
-              for source in CarryCatalogSource.read(self.root, self.original_root)),
-        )))
 
-    def backup_files(self) -> tuple[Path, ...]:
-        paths = tuple(
-            path for root in self.roots()
-            for path in (
-                *GoalAttemptStore.files(GoalAttemptStore.path_in(GoalAttemptStore.directory_in(root))),
-                *DiagnosticDocument.files_in(root),
-                *GoalAttemptStore.source_paths(GoalAttemptStore.directory_in(root)),
-            ) if path.exists()
-        )
-        for path in paths:
-            self.require_confined(self.root, path)
-        return paths
 
     def carry(self, *, apply: bool) -> Carried:
-        self.backup_files()
+        self.input_files()
         if apply:
             # The installer's root hold also covers its retained, inactive snapshots.
             HeldBusFile(GoalAttemptStore, GoalAttemptStore.path_in(

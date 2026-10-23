@@ -150,9 +150,11 @@ def test_failed_live_migration_restores_data_checkout_and_runtime(
     step = checkout / "tools/cutover/carry_fault.py"
     step.write_text('''from pathlib import Path
 from agent_comms.installer.carry import Carry, Carried
+from agent_comms.locked_store import RootFile
+class Saved(RootFile):
+    filename = "saved"
 class Fault(Carry):
-    def backup_files(self):
-        return (self.root / "saved",)
+    opened_files = (Saved,)
     def carry(self, *, apply):
         if apply:
             (self.root / "saved").write_text("changed by the worker")
