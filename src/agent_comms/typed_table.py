@@ -830,6 +830,12 @@ class TableSchema(ABC):
         return bool(SQLiteSchemaObject.differences(cls.stored_schema(db), cls.declared_schema()))
 
     @classmethod
+    def reconcile_writes(cls, db: sqlite3.Connection) -> bool:
+        """Whether ``reconcile_schema`` would write this file: the installer plans with
+        this answer, so it names every file the reconcile then rewrites."""
+        return cls.schema_differs(db)
+
+    @classmethod
     def require_schema(cls, db: sqlite3.Connection) -> None:
         """Readers use only the declared schema, whichever kind of file this is."""
         if cls.schema_differs(db):
@@ -1380,6 +1386,11 @@ class DerivedTables(TableSchema):
     def schema_differs(cls, db: sqlite3.Connection) -> bool:
         return (super().schema_differs(db)
                 or not ProjectionProducer.matches(db, cls.projection_rows()))
+
+    @classmethod
+    def reconcile_writes(cls, db: sqlite3.Connection) -> bool:
+        return (super().reconcile_writes(db)
+                or bool(ProjectionProducer.unstamped(db, cls.projection_rows())))
 
     @classmethod
     def reconcile_schema(cls, db: sqlite3.Connection, change: SchemaChange) -> bool:
@@ -2026,19 +2037,26 @@ class ProjectionProducer(TypedTable, ProjectionProducerTables):
     def verify_build(cls, db: sqlite3.Connection, rows: tuple[type[ProducedTable], ...],
                      change: SchemaChange) -> bool:
         """After schema verification, record the current build without rebuilding its rows."""
-        if not rows:
-            return False
-        commit = STAMP.commit()
-        names = {row.declared_name for row in rows}
-        stale = tuple(record for record in cls.select(db)
-                      if record.projection in names and record.commit != commit)
+        stale = cls.unstamped(db, rows)
         if not stale:
             return False
         change.require()
+        commit = STAMP.commit()
         with SQLiteFile.write_transaction(db):
             for record in stale:
                 replace(record, commit=commit).upsert(db)
         return True
+
+    @classmethod
+    def unstamped(cls, db: sqlite3.Connection, rows: tuple[type[ProducedTable], ...]
+                  ) -> tuple[Self, ...]:
+        """The records ``verify_build`` restamps with this build, as the plan reads them."""
+        if not rows:
+            return ()
+        commit = STAMP.commit()
+        names = {row.declared_name for row in rows}
+        return tuple(record for record in cls.select(db)
+                     if record.projection in names and record.commit != commit)
 
 
 class StoreWriter(PublishedSQLiteFile, FileStore):
