@@ -614,7 +614,6 @@ class ResumableBridge(ABC):
     def resume(self) -> BridgeResume: ...
 
 
-
 @dataclass(frozen=True)
 class BridgeResume(ResumableBridge, DeclaredFamily, affix="Bridge"):
     name: str
@@ -630,7 +629,6 @@ class BridgeResume(ResumableBridge, DeclaredFamily, affix="Bridge"):
     def lines(self) -> tuple[str, ...]: ...
 
 
-
 class UnresumedBridge(BridgeResume, ValueError):
     """A bridge that should have come back on the new runtime and did not."""
 
@@ -639,7 +637,6 @@ class UnresumedBridge(BridgeResume, ValueError):
 
     def __str__(self) -> str:
         return "\n".join(self.lines())
-
 
 
 @dataclass(frozen=True)
@@ -652,12 +649,10 @@ class ResumedBridge(BridgeResume):
                 f"{self.to_runtime.prefix}",)
 
 
-
 @dataclass(frozen=True)
 class OwnerExitedBridge(BridgeResume):
     def lines(self) -> tuple[str, ...]:
         return (f"Session bridge {self.name}: owner exited; left stopped",)
-
 
 
 @dataclass(frozen=True)
@@ -670,7 +665,6 @@ class ReplacedBridge(UnresumedBridge):
                 f"({self.observed} -> {self.current}); re-arm this bridge",)
 
 
-
 @dataclass(frozen=True)
 class UnobservedBridge(UnresumedBridge):
     reason: str
@@ -678,7 +672,6 @@ class UnobservedBridge(UnresumedBridge):
     def lines(self) -> tuple[str, ...]:
         return (f"Session bridge {self.name}: new runtime was not observed "
                 f"({self.reason}); re-arm this bridge",)
-
 
 
 @dataclass(frozen=True)
@@ -699,7 +692,6 @@ class SessionBridge:
         stream = resources.enter_context(peer.makefile('rb'))
         REPLIES.validate_json(stream.readline(4096)).require()
         return PausedSessionBridge(self, peer)
-
 
 
 @dataclass
@@ -723,14 +715,10 @@ class SessionBridgeResumes:
     def lines(self) -> tuple[str, ...]:
         return tuple(line for outcome in self.outcomes for line in outcome.lines())
 
-    def failure_lines(self) -> tuple[str, ...]:
-        return tuple(line for outcome in self.failures for line in outcome.lines())
-
     def require_resumed(self) -> None:
         failures = self.failures
         if failures:
             raise ExceptionGroup('Session bridges not resumed', failures)
-
 
 
 @dataclass(frozen=True)
@@ -764,7 +752,6 @@ class PausedSessionBridge(ResumableBridge):
                     name, f"observed {current.runtime.prefix}, expected {runtime.prefix}")
             return ResumedBridge(name, observed.runtime, current.runtime)
         return UnobservedBridge(name, f"process exited or resume deadline expired for {runtime.prefix}")
-
 
 
 class Enrol(Operation):

@@ -71,7 +71,7 @@ class InstallReport(MroDispatch):
         try:
             with tree:
                 yield
-            lines = (*self.outcome.lines(), *self.bridges.lines())
+            lines = self.outcome.lines()
         except BaseException as error:
             failure = (*next(self.handlers_for(error))(error), *self.bridges.lines())
             try:
