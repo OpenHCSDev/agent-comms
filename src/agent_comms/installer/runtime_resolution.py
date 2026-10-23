@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import os
 import sys
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 from urllib.parse import urlsplit
 
 from packaging.markers import Marker
@@ -15,7 +14,6 @@ from packaging.utils import canonicalize_name
 from pydantic import BaseModel, Field
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import (
     ArchivePin,
     DistributionVersionsProbe,
@@ -26,6 +24,9 @@ from agent_comms.installer.interpreter_operation import (
 )
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repository_name import RepositoryName
+
+if TYPE_CHECKING:
+    from agent_comms.installer.upgrade import Stack
 
 
 class RuntimePackage(DeclaredFamily, affix="Package"):
@@ -155,7 +156,7 @@ class ResolvedLock(BaseModel):
 class UnbuiltRuntime:
     prefix: Path
 
-    def matches(self, lock: Path, python: Path, core: str, commands: InstallCommands) -> bool:
+    def matches(self, lock: Path, stack: Stack, core: str) -> bool:
         return False
 
 
@@ -179,9 +180,8 @@ class RuntimeResolution(BaseModel):
         return cls.at(prefix)
 
     @classmethod
-    def capture(cls, python: Path, core: str, commands: InstallCommands) -> RuntimeResolution:
-        packages = commands.probe(InstalledPackagesProbe(core), python,
-                                  env=LaunchRuntime(python).environment(os.environ))
+    def capture(cls, stack: Stack, core: str) -> RuntimeResolution:
+        packages = stack.probe(InstalledPackagesProbe(core))
         return cls(core_commit=core, packages=packages)
 
     def save(self, prefix: Path) -> None:
@@ -200,11 +200,10 @@ class RuntimeResolution(BaseModel):
             )
         return result
 
-    def matches(self, lock: Path, python: Path, core: str, commands: InstallCommands) -> bool:
+    def matches(self, lock: Path, stack: Stack, core: str) -> bool:
         resolved = ResolvedLock.model_validate(tomllib.loads(lock.read_text()))
         print(f"install: real lock decodes {len(resolved.package)} packages", file=sys.stderr)
         # sync --locked has already selected the platform, groups and extras. Read its
         # selected names/versions, then obtain every source identity from the lock itself.
-        selected = commands.probe(DistributionVersionsProbe(), python,
-                                  env=LaunchRuntime(python).environment(os.environ))
+        selected = stack.probe(DistributionVersionsProbe())
         return self.pins() == resolved.pins(selected, core)
