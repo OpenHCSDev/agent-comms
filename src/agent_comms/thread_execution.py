@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
@@ -161,7 +162,7 @@ class ExternalThreadExecution(ThreadExecution):
 
     @classmethod
     def registered_status(cls, thread: Thread, requested: ThreadStatus) -> ThreadStatus:
-        return NoBridgeThreadStatus().registered(thread)
+        return NoBridgeThreadStatus().registered(thread, time.time())
 
     @classmethod
     def presentation(cls, thread: Thread, status: ThreadStatus, ordinary: ThreadPresentation,
