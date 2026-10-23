@@ -219,11 +219,12 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule):
     def idle(cls, comms: Comms, commander: str) -> list[Thread]:
         """Units with a recent turn in their own transcript and no order, parked threads aside."""
         held = {todo.holder for todo in cls.todos(comms, commander)}
-        excluded = held | CommanderConfig.read_root(comms.root).parked | {commander, ""}
+        excluded = held | {commander, ""}
         bound = TurnsSince(time.time() - cls.recent)
-        return sorted((thread for thread in comms.registry.all_threads().values()
+        return sorted((candidate for thread in comms.registry.all_threads().values()
                        if thread.name not in excluded
-                       and TurnDigestRead(comms.root, thread, bound).read().turns),
+                       for candidate in thread.work_state.candidates(thread)
+                       if TurnDigestRead(comms.root, candidate, bound).read().turns),
                       key=lambda thread: thread.name)
 
     def _identity(self) -> tuple[object, ...]:
