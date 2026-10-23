@@ -1597,11 +1597,6 @@ class FieldCodec(MroDispatch, Sealed):
     def encode(cls, value: object, annotation: object = None) -> JsonValue:
         return compile_decoder(annotation).encode(value)
 
-    @classmethod
-    def accepts(cls, annotation: object, value: object) -> bool:
-        """Whether an in-process value matches its declared decoder."""
-        return compile_decoder(annotation).accepts_value(value)
-
     @staticmethod
     def compact(
         value: object, *, ensure_ascii: bool = True,
@@ -1731,7 +1726,7 @@ class FieldCodec(MroDispatch, Sealed):
             if names and name not in names:
                 continue
             value = getattr(record, name)
-            if not cls.accepts(annotation, value):
+            if cls.decode(annotation, cls.encode(value)) != value:
                 raise MalformedRecord(f"{type(record).__name__}.{name} is not its declared type")
 
     @staticmethod

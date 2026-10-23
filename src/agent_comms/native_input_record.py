@@ -413,7 +413,7 @@ class NativeInputReference(NativeContextReference):
                 session_id=row.context_value("session_id"),
                 request_generation=row.context_value("request_generation"),
             ))
-            FieldCodec.require_fields(result)
+            result = FieldCodec.decode(cls, FieldCodec.encode(result, cls))
             if not 0 < result.request_generation <= 2**53 - 1:
                 raise MalformedRecord("Native reference generation is outside its native range")
             if not result.session_id:
