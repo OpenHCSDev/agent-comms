@@ -14,6 +14,7 @@ import sys
 import time
 import traceback
 from abc import ABC, abstractmethod
+from collections import deque
 from collections.abc import Callable
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager, suppress
 from dataclasses import dataclass, field, replace
@@ -611,16 +612,24 @@ class ResumedServe(Serve):
         return claim.adopted(self.claim, record)
 
 
+class ConfirmableBridge(ABC):
+    @abstractmethod
+    def confirm(self) -> BridgeResume: ...
+
+
 class ResumableBridge(ABC):
     @abstractmethod
-    def resume(self) -> BridgeResume: ...
+    def release(self) -> ConfirmableBridge: ...
 
 
 @dataclass(frozen=True)
-class BridgeResume(ResumableBridge, DeclaredFamily, affix="Bridge"):
+class BridgeResume(ResumableBridge, ConfirmableBridge, DeclaredFamily, affix="Bridge"):
     name: str
 
-    def resume(self) -> Self:
+    def release(self) -> Self:
+        return self
+
+    def confirm(self) -> Self:
         return self
 
     def failures(self) -> tuple[UnresumedBridge, ...]:
@@ -701,14 +710,24 @@ class SessionBridgeResumes:
     """Every bridge an install paused. One failed resume cancels neither another resume nor
     the install steps after it: each outcome is reported, then the install exits non-zero."""
 
-    paused: list[ResumableBridge] = field(default_factory=list)
+    paused: deque[ResumableBridge] = field(default_factory=deque)
+    released: deque[ConfirmableBridge] = field(default_factory=deque)
     outcomes: list[BridgeResume] = field(default_factory=list)
 
     def pause(self, bridge: SessionBridge, resources: ExitStack) -> None:
         self.paused.append(bridge.pause(resources))
 
-    def resume(self) -> None:
-        self.outcomes.extend(paused.resume() for paused in self.paused)
+    def release(self) -> None:
+        """Give every paused peer its selected runtime before waiting for any successor."""
+        while self.paused:
+            self.released.append(self.paused[0].release())
+            self.paused.popleft()
+
+    def confirm(self) -> None:
+        """Consume each released peer once, retaining outcomes for the terminal report."""
+        while self.released:
+            self.outcomes.append(self.released[0].confirm())
+            self.released.popleft()
 
     @property
     def failures(self) -> tuple[UnresumedBridge, ...]:
@@ -728,7 +747,7 @@ class PausedSessionBridge(ResumableBridge):
     bridge: SessionBridge
     peer: socket.socket
 
-    def resume(self) -> BridgeResume:
+    def release(self) -> ConfirmableBridge:
         runtime = LaunchRuntime.installed()
         observed = self.bridge.observed
         name = self.bridge.claim.thread
@@ -738,6 +757,20 @@ class PausedSessionBridge(ResumableBridge):
             self.peer.sendall((json.dumps(FieldCodec.encode(runtime)) + '\n').encode())
         except OSError as error:
             return UnobservedBridge(name, f"{type(error).__name__}: {error}")
+        return ReleasedSessionBridge(self.bridge, runtime)
+
+
+@dataclass(frozen=True)
+class ReleasedSessionBridge(ConfirmableBridge):
+    """A peer already given its runtime; its successor can start while install continues."""
+
+    bridge: SessionBridge
+    runtime: LaunchRuntime
+
+    def confirm(self) -> BridgeResume:
+        observed = self.bridge.observed
+        name = self.bridge.claim.thread
+        runtime = self.runtime
         deadline = time.monotonic() + 30
         while observed.process.alive() and time.monotonic() < deadline:
             try:

@@ -237,7 +237,7 @@ def test_install_swap_keeps_the_claim_and_resumes_the_same_process_on_the_new_ru
         with ExitStack() as cleanup:
             with ExitStack() as resources:
                 bridges.pause(bridge, resources)
-                resources.callback(bridges.resume)
+                resources.callback(bridges.release)
                 assert not claim.socket_path.exists()
                 assert isinstance(claim.state(), LiveWatch)
                 hook = subprocess.run(
@@ -264,6 +264,7 @@ def test_install_swap_keeps_the_claim_and_resumes_the_same_process_on_the_new_ru
                     f'Waiting for the session bridge of {claim.thread}: '
                     'an install holds its claim and is replacing it.'
                 )
+            bridges.confirm()
             bridges.require_resumed()
             assert bridges.failures == ()
             resumed = InspectSession().information(claim.socket_path)

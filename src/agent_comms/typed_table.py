@@ -1426,23 +1426,45 @@ class DerivedTables(TableSchema):
     def schema_differs(
         cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
     ) -> bool:
-        return (super().schema_differs(db, sharing)
-                or not ProjectionProducer.matches(db, cls.projection_rows()))
+        return bool(cls.changed_rows(db, sharing))
 
     @classmethod
-    def create_schema(cls, db: sqlite3.Connection) -> None:
-        super().create_schema(db)
-        for producer in ProjectionProducer.records_for(cls.projection_rows()):
+    def changed_rows(
+        cls, db: sqlite3.Connection, sharing: tuple[type[TypedTable], ...] = (),
+    ) -> tuple[type[TypedTable], ...]:
+        """SQL or producer changes; non-produced metadata rows compare SQL only."""
+        changed_producers = frozenset(
+            row for row in cls.projection_rows() if not ProjectionProducer.matches(db, (row,)))
+        return tuple(row for row in cls.schema_rows() if SQLiteSchemaObject.differences(
+            TypedTable.objects_of(db, (row,), sharing), row.schema_objects(),
+        ) or row in changed_producers)
+
+    @classmethod
+    def create_schema(
+        cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...] | None = None,
+    ) -> None:
+        selected = cls.schema_rows() if rows is None else rows
+        for row in selected:
+            row.create(db)
+        projections = tuple(row for row in cls.projection_rows() if row in selected)
+        for producer in ProjectionProducer.records_for(projections):
             producer.upsert(db)
 
     @classmethod
     def reset_schema(cls, db: sqlite3.Connection) -> None:
         """Inside the caller's transaction: rebuild only this schema's derived tables."""
-        for row in cls.schema_rows():
+        changed = cls.changed_rows(db)
+        if not changed:
+            return
+        # Unchanged children may reference a rebuilt parent: check after its rows return.
+        db.execute("PRAGMA defer_foreign_keys=ON")
+        for row in changed:
             row.take_previous_name(db)
+        names = frozenset(row.declared_name for row in changed)
         for stored in cls.stored_tables(db):
-            stored.drop(db)
-        cls.create_schema(db)
+            if stored.name in names:
+                stored.drop(db)
+        cls.create_schema(db, changed)
 
     @classmethod
     def carry_schema(
@@ -1952,6 +1974,7 @@ class TypedTable(
             f"SELECT COUNT(*) FROM {_identifier(cls.declared_name)} WHERE {condition}", parameters))[0]
 
     @classmethod
+    @cache
     def _writable_fields(cls, columns: tuple[str, ...] | None = None) -> tuple[_Field, ...]:
         if columns is None:
             return tuple(item for item in cls._fields if item.column.writable)
@@ -1961,6 +1984,7 @@ class TypedTable(
         return selected
 
     @classmethod
+    @cache
     def insertion_statement(cls, columns: tuple[str, ...] = ()) -> str:
         writable = cls._writable_fields(columns or None)
         return (f"INSERT INTO {_identifier(cls.declared_name)} "
