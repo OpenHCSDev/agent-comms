@@ -2,21 +2,67 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from typing import Annotated, TYPE_CHECKING
 
 
 from .channel_targets import CommandTarget
-from .field_codec import FieldCodec, WireOmitDefault
+from .field_codec import FieldCodec, NullMember, WireOmitDefault
 from .message_reference import MessageReference
-from .messages import Message
 from .read_basis import DMDisplayScope, MessageDisplayScope, ReadCursor
 
 if TYPE_CHECKING:
     from .catalog_document import CatalogDocument
     from .registry_provenance import RegistryProvenance
     from .thread_identity import ThreadIncarnation
+    from .input_disposition import InputDispositions
+    from .messages import Message
+    from .threads import Thread
+
+
+class TurnOrigin(ABC):
+    """The source of a scheduled turn owns batching and delivery identity."""
+
+    __slots__ = ()
+
+    @property
+    @abstractmethod
+    def separate_turn(self) -> bool: ...
+
+    @property
+    @abstractmethod
+    def batch_target(self) -> object: ...
+
+    @property
+    @abstractmethod
+    def autonomous(self) -> bool: ...
+
+    @property
+    @abstractmethod
+    def messages(self) -> tuple[Message, ...]: ...
+
+    @abstractmethod
+    def bus_keys(self, dispositions: InputDispositions, owner: Thread) -> tuple[str, ...]: ...
+
+
+class NoTurnOrigin(NullMember, TurnOrigin):
+    """An autonomous turn has no message, delivery key or reply destination."""
+
+    separate_turn = False
+    autonomous = True
+    messages = ()
+
+    @property
+    def batch_target(self) -> NoTurnOrigin:
+        return self
+
+    def bus_keys(self, dispositions: InputDispositions, owner: Thread) -> tuple[str, ...]:
+        return ()
+
+
+NO_TURN_ORIGIN = NoTurnOrigin()
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,13 +134,13 @@ class TurnRouting:
 @dataclass(frozen=True, slots=True)
 class ScheduledTurn:
     prompt: str
-    origin: Message | None = None
+    origin: TurnOrigin = NO_TURN_ORIGIN
     goal_id: str | None = None
     goal_wait_id: str | None = None
 
     @property
     def autonomous_goal(self) -> bool:
-        return self.goal_id is not None and self.origin is None
+        return self.goal_id is not None and self.origin.autonomous
 
     @classmethod
     def resuming_in_project(cls, project: str) -> ScheduledTurn:
@@ -109,10 +155,6 @@ class ScheduledTurn:
         """Only dependency launches use standby refusal settlement."""
         if self.goal_wait_id is None:
             raise error
-
-    @property
-    def origins(self) -> tuple[Message, ...]:
-        return (self.origin,) if self.origin is not None else ()
 
     @classmethod
     def incoming(
@@ -131,15 +173,14 @@ class ScheduledTurn:
         """Combine channel turns sharing a route, keeping each direct input separate."""
         if not pending:
             return [], []
-        if pending[0].origin and pending[0].origin.role.response_policy(pending[0].origin).separate_turn:
+        if pending[0].origin.separate_turn:
             return pending[:1], pending[1:]
         boundary = next(
             (
                 index
                 for index, turn in enumerate(pending)
-                if (turn.origin.exact_reply_target if turn.origin else None)
-                != (pending[0].origin.exact_reply_target if pending[0].origin else None)
-                or (turn.origin and turn.origin.role.response_policy(turn.origin).separate_turn)
+                if (turn.origin.batch_target != pending[0].origin.batch_target
+                    or turn.origin.separate_turn)
             ),
             len(pending),
         )

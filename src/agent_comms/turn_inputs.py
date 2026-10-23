@@ -96,8 +96,8 @@ class InputForwarding:
 
     async def write(self, session: TurnSession, *written: commands.PiCommand) -> None:
         for command in written:
-            session.stdin.write(session.native.reader.encode(command))
-        await session.stdin.drain()
+            session.native.proc.stdin.write(session.native.reader.encode(command))
+        await session.native.proc.stdin.drain()
 
     async def queued(self, input_ids: tuple[InputId, ...]) -> tuple[str, ...]:
         """A native prompt acknowledgement proves it reached the child's queue."""
@@ -117,7 +117,7 @@ class InputForwarding:
         command = commands.ClearQueue(input_ids=await self.queued(item.input_ids))
         if not command.input_ids:
             return True
-        async with command.pending_response(session.native.reader, session.stdin) as future:
+        async with command.pending_response(session.native.reader, session.native.proc.stdin) as future:
             response = await future
         if not response.succeeded:
             raise RuntimeError(
@@ -151,7 +151,7 @@ class InputForwarding:
             with status.phase.send_running(
                 session.interrupt_boundary, first.require_id(), candidates[0], first.message,
             ) as outcome:
-                completion = outcome.dispatch(self, session, item, lambda: session.stdin.write(
+                completion = outcome.dispatch(self, session, item, lambda: session.native.proc.stdin.write(
                     session.native.reader.encode(commands.InterruptSteering(input_ids=list(candidates)))
                 ))
         return await completion
@@ -172,7 +172,7 @@ class InputForwarding:
         def write():
             if command.images:
                 session.output.sensitive = True
-            session.stdin.write(session.native.reader.encode(command))
+            session.native.proc.stdin.write(session.native.reader.encode(command))
             self.pending[native_id] = command
             self.generation += 1
 

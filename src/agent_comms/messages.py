@@ -37,12 +37,14 @@ from .field_codec import (
 from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .page_traversal import LiveCursor, PageCursor
+from .routing import TurnOrigin
 from .task_sources import Decision, NoTaskAttachment, TaskAttachment
 from .thread_identity import AgentThreadRole, ThreadRole
 from .ui_model.message_category import InboundCategory, MessageCategory, OtherCategory
 from .wake_policy import BoundedTriageWake, PassiveWake
 
 if TYPE_CHECKING:
+    from .input_disposition import InputDispositions
     from .historical_views import HistorySource
     from .retained_task_facts import ExactTaskFact
     from .threads import Thread
@@ -361,7 +363,7 @@ class HistoricalMembershipNoticeRole(HistoricalRole, MembershipNoticeRole, decla
 
 
 @dataclass(frozen=True, slots=True)
-class Message(Addressed, BusCapability):
+class Message(Addressed, BusCapability, TurnOrigin):
     """Declares one inter-thread message.
 
     The bus assigns ``seq`` (a monotonically increasing log position) at send
@@ -559,6 +561,23 @@ class Message(Addressed, BusCapability):
     def exact_reply_target(self) -> str:
         """The exact response destination owned by this opening message."""
         return CommandTarget.named(self.target).reply_target(self.sender)
+
+    autonomous: ClassVar[bool] = False
+
+    @property
+    def separate_turn(self) -> bool:
+        return self.role.response_policy(self).separate_turn
+
+    @property
+    def batch_target(self) -> str:
+        return self.exact_reply_target
+
+    @property
+    def messages(self) -> tuple[Message, ...]:
+        return (self,)
+
+    def bus_keys(self, dispositions: InputDispositions, owner: Thread) -> tuple[str, ...]:
+        return (dispositions.bus_key(self, owner),)
 
     @property
     def reply_target(self) -> str | None:
