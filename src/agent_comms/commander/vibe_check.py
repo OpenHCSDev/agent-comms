@@ -149,7 +149,7 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
     def of(cls, comms: Comms, commander: str) -> Self:
         return cls.from_orders(
             StandingRule.todos(comms, commander),
-            len(ReviewTimerUp.violations(comms, commander)),
+            len(ReviewTimerUp.scan_observed(comms, commander, ())),
             OrderEditCountRead.count(comms, commander),
         )
 

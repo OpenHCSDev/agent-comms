@@ -640,12 +640,29 @@ class PullRequests:
             for candidate in problems.values():
                 self._read[repo, kind, candidate.id] = ()
             return ()
+        requests = tuple((row, row.parsed(
+            tuple(candidate.id for candidate in linked[row.number]),
+            tuple(dict.fromkeys(order.id for candidate in linked[row.number]
+                                for order in candidate.order_history
+                                if PullRequestLink(repo, row.number) in order.pull_requests))))
+            for row in self.query(repo, tuple(linked)))
+        for selection in dict.fromkeys((kind, *ListedPullRequest.members_with(ListedPullRequest))):
+            for candidate in problems.values():
+                self._read[repo, selection, candidate.id] = tuple(sorted(
+                    (request for row, request in requests
+                     if isinstance(row, selection) and request.belongs_to(candidate)),
+                    key=lambda request: request.updated_at, reverse=True))
+        return self._read[repo, kind, todo.id]
+
+    def query(self, repo: RepositoryName,
+              numbers: tuple[int, ...]) -> tuple[ListedPullRequest, ...]:
+        """GitHub's rows for these numbers: the one forge read in this frame."""
         selections = [
             f'p{number}: pullRequest(number: {number}) {{ number branch: headRefName '
             'head: headRefOid base: baseRefName draft: isDraft closed merge: mergeCommit { oid } '
             'merged: mergedAt updated: updatedAt '
             'head_statuses: commits(last: 1) { nodes { commit { status { contexts { context } } } } } }'
-            for number in linked]
+            for number in numbers]
         query = (f'query {{ repository(owner: {json.dumps(repo.owner)}, '
                  f'name: {json.dumps(repo.name)}) {{ {" ".join(selections)} }} }}')
         listed = repo.api(
@@ -660,20 +677,8 @@ class PullRequests:
         if listed.returncode:
             raise WorkBranchError(
                 listed.stderr.strip() or f"GitHub order lookup in {repo.to_wire()} failed.")
-        rows = FieldCodec.decode(dict[str, ListedPullRequest], FieldCodec.parse(listed.stdout))
-        requests = tuple((row, row.parsed(
-            tuple(candidate.id for candidate in linked[row.number]),
-            tuple(dict.fromkeys(order.id for candidate in linked[row.number]
-                                for order in candidate.order_history
-                                if PullRequestLink(repo, row.number) in order.pull_requests))))
-            for row in rows.values())
-        for selection in dict.fromkeys((kind, *ListedPullRequest.members_with(ListedPullRequest))):
-            for candidate in problems.values():
-                self._read[repo, selection, candidate.id] = tuple(sorted(
-                    (request for row, request in requests
-                     if isinstance(row, selection) and request.belongs_to(candidate)),
-                    key=lambda request: request.updated_at, reverse=True))
-        return self._read[repo, kind, todo.id]
+        return tuple(FieldCodec.decode(
+            dict[str, ListedPullRequest], FieldCodec.parse(listed.stdout)).values())
 
 
 @dataclass(frozen=True)
@@ -4011,11 +4016,14 @@ class TodoStore(OwnerRequestStore):
         return self._select("creator=? AND creator_created=?",
                             (commander.name, commander.wire_birth), reader=self._open)
 
-    def timers_up_for_commander(self, commander: ThreadIncarnation, registry: Registration,
-                                now: float) -> tuple[tuple[Todo, RecordedEventTime], ...]:
-        """Held work whose review timer is up, with its round; merged work waits on install."""
+    def timers_up_for_commander(
+        self, commander: ThreadIncarnation, registry: Registration, now: float,
+        pulls: ProgressRead | None = None,
+    ) -> tuple[tuple[Todo, RecordedEventTime], ...]:
+        """Held work whose review timer is up, with its round; merged work waits on install.
+        The heartbeat passes its frame's reader, so one beat asks the forge once."""
         held = self.held_for_commander(commander)
-        pulls = ProgressRead(held)
+        pulls = ProgressRead(held) if pulls is None else pulls.register(held)
         progress = {todo.id: OrderProgress.read(todo, registry, pulls) for todo in held}
         return self.timers_up_in(held, now, progress)
 

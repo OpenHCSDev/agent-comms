@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from agent_comms.messages import Message
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.storage_rules import MemoryUse, StorageRule
-    from agent_comms.todos import OrderClaim, OwnerRequest, PullRequest, Todo
+    from agent_comms.todos import OrderClaim, OwnerRequest, ProgressRead, PullRequest, Todo
     from agent_comms.ui_model.unit_state import UnitObservation, UnitState
 
 
@@ -397,7 +397,7 @@ class ReasonedStandingRule(StandingRule, declared_name=None):
 
 
 @dataclass(frozen=True)
-class HeldOrderDue(IndependentStandingRule, DatedStandingRule, declared_name=None):
+class HeldOrderDue(DatedStandingRule, declared_name=None):
     """Each held order supplies one dated condition; the rule owns its wording."""
 
     problem: str
@@ -406,13 +406,17 @@ class HeldOrderDue(IndependentStandingRule, DatedStandingRule, declared_name=Non
     since: EventTime
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState]) -> tuple[Self, ...]:
+        """Conditions read the frame's own progress facts, never a second forge read."""
+        pulls = next((state.source.pulls for state in observed), None)
         return tuple(cls(todo.id, todo.held().owner_identity, todo.order.checked().id, due)
-                     for todo, due in cls.conditions(comms, commander))
+                     for todo, due in cls.conditions(comms, commander, pulls))
 
     @classmethod
     @abstractmethod
-    def conditions(cls, comms: Comms, commander: str) -> Iterable[tuple[Todo, EventTime]]: ...
+    def conditions(cls, comms: Comms, commander: str,
+                   pulls: ProgressRead | None) -> Iterable[tuple[Todo, EventTime]]: ...
 
     def began(self) -> float:
         return self.since.recorded_at("An order alarm")
@@ -423,10 +427,11 @@ class ReviewTimerUp(HeldOrderDue):
     the commander once per round; the unit sees no timer and nothing is struck."""
 
     @classmethod
-    def conditions(cls, comms: Comms, commander: str) -> Iterable[tuple[Todo, EventTime]]:
+    def conditions(cls, comms: Comms, commander: str,
+                   pulls: ProgressRead | None) -> Iterable[tuple[Todo, EventTime]]:
         actor = comms.registry.require(commander).incarnation
         return comms.goals.todos.timers_up_for_commander(
-            actor, comms.registry, time.time())
+            actor, comms.registry, time.time(), pulls)
 
     def line(self) -> str:
         return (f"TIMER UP: {self.holder.name} {self.problem} at {self.since.clock()}, "

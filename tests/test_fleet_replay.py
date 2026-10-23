@@ -1,144 +1,448 @@
-"""Replay the privately copied October 23 fleet through Core's rule family."""
+"""Replay a small fleet written through Core's own writers: each covered incident is raised once.
 
+Git is real (a temporary repository with an origin remote and one worktree per unit); only the
+forge answer comes from the fleet, through ProgressRead's own query method.
+"""
+
+import os
+import subprocess
 import time
+from abc import ABC, abstractmethod
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Annotated
+from typing import ClassVar
 
 import pytest
 
-from agent_comms.active_route import LocalRoute
+from agent_comms.commander.publication_rules import EmptyPullRequest, UnpushedBranch
+from agent_comms.commander.spinning import SpinningUnit
+from agent_comms.commander_heartbeat import CommanderObservation
 from agent_comms.comms import Comms
-from agent_comms.field_codec import FieldCodec, PathText
-from agent_comms.fleet_replay import FleetInputs, FleetRootCopy
-from agent_comms.phase_evidence import MainTree
-from agent_comms.repo import Repo
-from agent_comms.standing_rules import StandingRule
-from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.todos import CheckoutReads, PresentCheckout, PullRequests, SharedWorktreeRefusal
-from agent_comms.work_branches import WorkBranches
+from agent_comms.external_transcript import ExternalTranscript
+from agent_comms.goal_actions import CreateProblemGoalAction
+from agent_comms.goals import CountCheckResult, OrderCheck
+from agent_comms.order_runs import MechanicalOrderRun
+from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.repository_name import RepositoryName
+from agent_comms.standing_rules import (
+    BranchBehindMain,
+    DeliveredHeadReview,
+    HeldBranchRule,
+    LostTools,
+    SharedFileBranches,
+    StandingRule,
+)
+from agent_comms.thread_identity import ReportedTools, ToolName
+from agent_comms.thread_text import ForkedParent
+from agent_comms.threads import Thread
+from agent_comms.todos import (
+    ClaimOrder,
+    ListedPullRequest,
+    OrderClaim,
+    OrderMessage,
+    PendingProblemOrder,
+    ProgressRead,
+    PullRequestLink,
+    SharedWorktreeRefusal,
+    Todo,
+    UnmergedListedPullRequest,
+)
+from agent_comms.transcript_events import ToolStartTranscript
+from agent_comms.work_branches import UnpushedHead
+from conftest import declare_test_bus
+from source_revision_fixture import SourceRepository
 
 
-@dataclass(frozen=True)
-class ExpectedIncident:
-    rule: StandingRule
-    evidence: tuple[str, ...]
+@dataclass
+class Fleet:
+    """One commander, one repository and the units its seeds add."""
+
+    comms: Comms
+    source: SourceRepository
+    worktrees: Path
+    old_main: str
+    request: str
+    pulls: dict[int, ListedPullRequest] = field(default_factory=dict)
+    problems: dict[str, str] = field(default_factory=dict)
+    commander: ClassVar[str] = "lead"
+
+    @property
+    def repository(self) -> RepositoryName:
+        return self.source.github
+
+    @property
+    def main(self) -> str:
+        return self.git(self.source.checkout, "rev-parse", "refs/remotes/origin/main")
+
+    @staticmethod
+    def git(checkout: Path, *arguments: str, at: float | None = None) -> str:
+        """Real Git; a past ``at`` dates the commit and the HEAD reflog entry it writes."""
+        environment = {
+            key: value for key, value in os.environ.items() if not key.startswith("GIT_")
+        }
+        if at is not None:
+            environment["GIT_AUTHOR_DATE"] = environment["GIT_COMMITTER_DATE"] = f"@{int(at)}"
+        return subprocess.run(
+            ("git", "-C", str(checkout), *arguments),
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,
+        ).stdout.strip()
+
+    def reading(self) -> type[ProgressRead]:
+        """The live progress read, answered by this fleet's pull requests instead of GitHub."""
+        pulls = self.pulls
+
+        class FleetProgressRead(ProgressRead):
+            def query(
+                self, repo: RepositoryName, numbers: tuple[int, ...]
+            ) -> tuple[ListedPullRequest, ...]:
+                return tuple(pulls[number] for number in numbers if number in pulls)
+
+        return FleetProgressRead
+
+    def observe(self) -> CommanderObservation:
+        return CommanderObservation.read(
+            self.comms, self.comms.registry.require(self.commander), self.reading()
+        )
+
+    def thread(self, name: str) -> Thread:
+        return self.comms.registry.require(name)
+
+    def worktree(self, branch: str, *, base: str, at: float | None = None) -> Path:
+        path = self.worktrees / branch
+        self.git(
+            self.source.checkout, "worktree", "add", "-q", "-b", branch, str(path), base, at=at
+        )
+        return path
+
+    def commit(self, worktree: Path, name: str, text: str, *, at: float | None = None) -> str:
+        (worktree / name).write_text(text)
+        self.git(worktree, "add", name, at=at)
+        self.git(worktree, "commit", "-q", "-m", f"Change {name}", at=at)
+        return self.git(worktree, "rev-parse", "HEAD")
+
+    def push(self, worktree: Path) -> None:
+        self.git(worktree, "push", "-q", "-u", "origin", "HEAD")
+
+    def unit(self, name: str, worktree: Path, *, at: float | None = None) -> Todo:
+        """Register a unit on its worktree and give it one order through the goal writer."""
+        declare_test_bus(
+            self.comms,
+            threads=(
+                self.comms.registry.new_thread(
+                    name=name, tags=frozenset({"comms"}), worktree=str(worktree)
+                ),
+            ),
+        )
+        return self.order(name, worktree, at=time.time() if at is None else at)
+
+    def order(self, name: str, worktree: Path, *, at: float) -> Todo:
+        problem = self.problems.setdefault(name, f"P{len(self.problems) + 1}")
+        scope = SourceRepository.scope()
+        self.comms.goals.update_goal(
+            name,
+            CreateProblemGoalAction(
+                problem=problem,
+                commander=self.commander,
+                request=self.request,
+                assigner=self.thread(self.commander).incarnation,
+                repo=self.repository,
+                text=f"Repair {name}",
+                review_at=RecordedEventTime(time.time() + 3600),
+                order=PendingProblemOrder(
+                    id=f"order-{name}",
+                    owner=scope.shape.parents[0],
+                    scope=scope,
+                    run=MechanicalOrderRun(),
+                    check=OrderCheck(str(worktree), "printf 1", CountCheckResult(1)),
+                    edits=("Repair the existing owner",),
+                    banned=("No second store",),
+                    report="Report the result",
+                    at=RecordedEventTime(at),
+                    first_call_deadline=RecordedEventTime(time.time() + 3600),
+                ),
+            ),
+        )
+        return self.comms.goals.todos.get(problem)
+
+    def claim(self, todo: Todo, number: int, head: str, *, at: float) -> OrderClaim:
+        """The unit delivers through the claim writer, linking its pull request to the order."""
+        lead = self.thread(self.commander).incarnation
+        unit = self.thread(todo.held().owner).incarnation
+        original = self.comms.messaging.send(
+            self.commander, unit.name, todo.order.instructions(todo)
+        ).message
+        todo = self.comms.goals.todos.apply(
+            todo.id, OrderMessage(todo.revision, lead, original.message_id)
+        )
+        claimed = OrderClaim.for_order(
+            todo,
+            unit,
+            number,
+            head,
+            "Delivered the repair",
+            original.reference,
+            store=self.comms.goals.todos,
+        )
+        claimed = replace(claimed, message=replace(claimed.message, timestamp=at))
+        ClaimOrder(todo.revision, unit, todo.held().generation, claimed).record(
+            self.comms.goals, todo.id
+        )
+        return claimed
+
+    def pull_request(self, number: int, branch: str, head: str) -> None:
+        self.pulls[number] = UnmergedListedPullRequest(
+            number, branch, head, "2026-10-23T12:00:00Z", "main"
+        )
 
 
-@dataclass(frozen=True)
-class ExpectedAssignment:
-    problem: str
-    holder: ThreadIncarnation
+class IncidentSeed(ABC):
+    """One covered standing rule: the fleet it needs and the single rule the replay must raise."""
+
+    seeds: ClassVar[dict[type[StandingRule], type[IncidentSeed]]] = {}
+    rule: ClassVar[type[StandingRule]]
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        super().__init_subclass__(**kwargs)
+        IncidentSeed.seeds[cls.rule] = cls
+
+    @classmethod
+    @abstractmethod
+    def seed(cls, fleet: Fleet) -> StandingRule: ...
 
 
-@dataclass(frozen=True)
-class ExpectedSharedWorktree:
-    worktree: Annotated[Path, PathText]
-    attempt: ExpectedAssignment
-    others: tuple[ExpectedAssignment, ...]
-    evidence: tuple[str, ...]
+class BranchBehindMainSeed(IncidentSeed):
+    rule = BranchBehindMain
+
+    @classmethod
+    def seed(cls, fleet: Fleet) -> StandingRule:
+        worktree = fleet.worktree("behind", base=fleet.old_main)
+        fleet.commit(worktree, "behind.py", "behind = 1\n")
+        fleet.push(worktree)
+        todo = fleet.unit("behind", worktree)
+        return BranchBehindMain(
+            todo.id,
+            todo.held().owner_identity,
+            fleet.repository,
+            "behind",
+            BranchBehindMain.limit + 1,
+        )
 
 
-@dataclass(frozen=True)
-class ExpectedFleet:
-    incidents: tuple[ExpectedIncident, ...]
-    shared_worktree: ExpectedSharedWorktree
+class SharedFileBranchesSeed(IncidentSeed):
+    rule = SharedFileBranches
+
+    @classmethod
+    def seed(cls, fleet: Fleet) -> StandingRule:
+        held = []
+        for branch in ("shared-left", "shared-right"):
+            worktree = fleet.worktree(branch, base=fleet.main)
+            fleet.commit(worktree, "shared.py", f"side = {branch!r}\n")
+            fleet.push(worktree)
+            held.append(fleet.unit(branch, worktree))
+        left, right = held
+        return SharedFileBranches(
+            left.id,
+            left.held().owner_identity,
+            "shared-left",
+            right.id,
+            right.held().owner_identity,
+            "shared-right",
+            fleet.repository,
+            "shared.py",
+        )
+
+
+class UnpushedBranchSeed(IncidentSeed):
+    rule = UnpushedBranch
+
+    @classmethod
+    def seed(cls, fleet: Fleet) -> StandingRule:
+        worktree = fleet.worktree("unpushed", base=fleet.main)
+        head = fleet.commit(worktree, "unpushed.py", "unpushed = 1\n")
+        todo = fleet.unit("unpushed", worktree)
+        unit = fleet.thread("unpushed")
+        return UnpushedBranch(
+            todo.id,
+            todo.order.checked().id,
+            unit.incarnation,
+            unit.project_path,
+            UnpushedHead(head, 1, ""),
+        )
+
+
+class EmptyPullRequestSeed(IncidentSeed):
+    rule = EmptyPullRequest
+
+    @classmethod
+    def seed(cls, fleet: Fleet) -> StandingRule:
+        worktree = fleet.worktree("empty", base=fleet.main)
+        fleet.commit(worktree, "empty.py", "empty = 1\n")
+        fleet.push(worktree)
+        todo = fleet.unit("empty", worktree)
+        # The PR's head is main itself; a fresh claim is not yet owed a head review.
+        fleet.pull_request(11, "empty", fleet.main)
+        fleet.claim(todo, 11, fleet.main, at=time.time())
+        return EmptyPullRequest(
+            todo.id,
+            todo.order.checked().id,
+            todo.held().owner_identity,
+            PullRequestLink(fleet.repository, 11),
+            fleet.main,
+            fleet.main,
+        )
+
+
+class DeliveredHeadReviewSeed(IncidentSeed):
+    rule = DeliveredHeadReview
+
+    @classmethod
+    def seed(cls, fleet: Fleet) -> StandingRule:
+        worktree = fleet.worktree("delivered", base=fleet.main)
+        head = fleet.commit(worktree, "delivered.py", "delivered = 1\n")
+        fleet.push(worktree)
+        todo = fleet.unit("delivered", worktree)
+        fleet.pull_request(12, "delivered", head)
+        claimed = fleet.claim(
+            todo, 12, head, at=time.time() - DeliveredHeadReview.minutes * 60 - 60
+        )
+        return DeliveredHeadReview(
+            todo.id,
+            todo.held().owner_identity,
+            todo.order.checked().id,
+            fleet.repository,
+            12,
+            head,
+            claimed.message.timestamp + DeliveredHeadReview.minutes * 60,
+        )
+
+
+class SpinningUnitSeed(IncidentSeed):
+    rule = SpinningUnit
+
+    @classmethod
+    def seed(cls, fleet: Fleet) -> StandingRule:
+        moved = time.time() - (SpinningUnit.minutes + 10) * 60
+        worktree = fleet.worktree("spinning", base=fleet.main, at=moved)
+        head = fleet.commit(worktree, "spinning.py", "spinning = 1\n", at=moved)
+        fleet.push(worktree)
+        todo = fleet.unit("spinning", worktree, at=moved - 60)
+        transcript = ExternalTranscript(fleet.comms.root, todo.held().owner_identity)
+        for call in range(SpinningUnit.calls):
+            transcript.finish(
+                turn_id="spinning",
+                item_id=f"call-{call}",
+                events=(
+                    ToolStartTranscript(
+                        position=0,
+                        tool_call_id=f"call-{call}",
+                        tool_name="bash",
+                        timestamp=moved + 60 + call,
+                    ),
+                ),
+            )
+        return SpinningUnit(
+            todo.id, todo.held().owner_identity, SpinningUnit.calls, SpinningUnit.minutes, head
+        )
+
+
+class LostToolsSeed(IncidentSeed):
+    rule = LostTools
+
+    @classmethod
+    def seed(cls, fleet: Fleet) -> StandingRule:
+        registry = fleet.comms.registry
+        declare_test_bus(
+            fleet.comms,
+            threads=(
+                registry.new_thread(
+                    name="restarted",
+                    tags=frozenset({"comms"}),
+                    worktree=str(fleet.source.checkout),
+                    parent=ForkedParent(fleet.commander),
+                ),
+            ),
+        )
+        registry.observe_offered_tools(
+            registry.require("restarted").incarnation,
+            ReportedTools(
+                "1", frozenset({ToolName("comms_send"), ToolName("comms_order_deliver")})
+            ),
+        )
+        registry.register(registry.require("restarted"), new_owner=True)
+        registry.observe_offered_tools(
+            registry.require("restarted").incarnation,
+            ReportedTools("1", frozenset({ToolName("comms_send")})),
+        )
+        return LostTools(
+            registry.require("restarted").incarnation,
+            ("missing tools comms_order_deliver; runtime 1",),
+        )
 
 
 @pytest.fixture
-def recorded_fleet(monkeypatch):
-    directory = Path.home() / ".cache/agent-scratch/fleet-replay-2026-10-23"
-    copy = FieldCodec.decode(
-        FleetRootCopy, FieldCodec.parse((directory / "copy.json").read_bytes())
-    )
-    inputs = FieldCodec.decode(
-        FleetInputs, FieldCodec.parse((directory / "inputs.json").read_bytes())
-    )
-    expected = FieldCodec.decode(
-        ExpectedFleet,
-        FieldCodec.parse(
-            (Path(__file__).parent / "fixtures/fleet-2026-10-23-incidents.json").read_bytes()
+def fleet(comms, tmp_path, configured_repository, installed_runtime):
+    source = SourceRepository.create(tmp_path / "source")
+    declare_test_bus(
+        comms,
+        channels=("comms",),
+        threads=(
+            comms.registry.new_thread(
+                name=Fleet.commander, tags=frozenset({"comms"}), worktree=str(source.checkout)
+            ),
         ),
     )
-    original_repo_git, original_checkout_git = Repo.git, PresentCheckout.git
-
-    def repo_git(checkout, *arguments, **options):
-        return original_repo_git(
-            checkout, *inputs.checkout(Path(checkout)).arguments(arguments), **options
-        )
-
-    def checkout_git(checkout, *arguments):
-        return original_checkout_git(checkout, *inputs.checkout(checkout.path).arguments(arguments))
-
-    def branch_difference(reader, path):
-        return inputs.branch_difference(path)
-
-    def unpublished(reader, difference):
-        return inputs.unpublished(reader.checkout)
-
-    def pull_diff(reader, base, head):
-        return inputs.comparison(reader.checkout, base, head)
-
-    def listed(reader, repo, selection, todo):
-        return inputs.listed(repo, selection, todo)
-
-    def worktrees(reader):
-        return {row.branch: row.paths for row in inputs.checkout(reader.checkout).worktrees}
-
-    monkeypatch.setattr(time, "time", lambda: inputs.captured_at)
-    monkeypatch.setattr(Repo, "git", staticmethod(repo_git))
-    monkeypatch.setattr(PresentCheckout, "git", checkout_git)
-    monkeypatch.setattr(CheckoutReads, "branch_difference", branch_difference)
-    monkeypatch.setattr(WorkBranches, "unpushed", unpublished)
-    monkeypatch.setattr(WorkBranches, "pull_request_diff", pull_diff)
-    monkeypatch.setattr(
-        WorkBranches, "uncommitted", lambda reader: inputs.checkout(reader.checkout).uncommitted
+    request = comms.goals.todos.add_request(
+        comms.registry.require(Fleet.commander).incarnation, "Keep the fleet on its plans"
+    ).id
+    configured_repository(comms)
+    old_main = source.main_commit
+    built = Fleet(comms, source, tmp_path / "worktrees", old_main, request)
+    # Main moves past the oldest branch's base by exactly one commit more than the limit.
+    for count in range(BranchBehindMain.limit + 1):
+        built.commit(source.checkout, "main.py", f"count = {count}\n")
+    built.git(source.checkout, "push", "-q", "origin", "main")
+    expected = tuple(
+        IncidentSeed.seeds[member].seed(built)
+        for member in StandingRule.members_with(StandingRule)
+        if member in IncidentSeed.seeds
     )
-    monkeypatch.setattr(
-        WorkBranches,
-        "local_work",
-        property(lambda reader: inputs.checkout(reader.checkout).holds_work),
+    return built, expected
+
+
+def test_every_held_branch_rule_has_a_seed():
+    assert set(HeldBranchRule.members_with(HeldBranchRule)) <= set(IncidentSeed.seeds)
+
+
+def test_replay_raises_each_incident_once(fleet):
+    built, expected = fleet
+    first = built.observe()
+    seeded = {type(rule) for rule in expected}
+    assert seeded == set(IncidentSeed.seeds)
+    assert Counter(rule for rule in first.rules if type(rule) in seeded) == Counter(expected)
+    assert all(count == 1 for count in Counter(expected).values())
+
+    # A second holder in an occupied worktree is refused at order time.
+    behind = built.thread("behind")
+    declare_test_bus(
+        built.comms,
+        threads=(
+            built.comms.registry.new_thread(
+                name="squatter", tags=frozenset({"comms"}), worktree=str(behind.project_path)
+            ),
+        ),
     )
-    monkeypatch.setattr(WorkBranches, "worktrees", worktrees)
-    monkeypatch.setattr(PullRequests, "read", listed)
-    monkeypatch.setattr(MainTree, "of", classmethod(lambda cls, repo: inputs.main_tree(repo)))
-    return copy, expected
+    with pytest.raises(SharedWorktreeRefusal) as refused:
+        built.order("squatter", behind.project_path, at=time.time())
+    assert refused.value.problem == built.problems["squatter"]
+    assert refused.value.holder == built.thread("squatter").incarnation
+    assert refused.value.worktree == behind.project_path
+    assert refused.value.holding_problem == built.problems["behind"]
+    assert refused.value.holding_holder == behind.incarnation
 
-
-def test_replay_raises_each_incident_once(recorded_fleet):
-    copy, expected = recorded_fleet
-    first = copy.observations()
-    actual = tuple(rule for commander in first for rule in commander.rules)
-    expected_rules = tuple(incident.rule for incident in expected.incidents)
-    assert expected_rules, "The dated fixture must contain independently checked real incidents"
-    selected = {type(rule) for rule in expected_rules}
-    assert Counter(rule for rule in actual if type(rule) in selected) == Counter(expected_rules)
-    assert all(count == 1 for count in Counter(expected_rules).values())
-    assert all(incident.evidence for incident in expected.incidents)
-
-    conflict = expected.shared_worktree
-    comms = Comms(LocalRoute(copy.root))
-    (commander,) = first
-    with pytest.raises(SharedWorktreeRefusal) as refused, comms.goals.todos.writing() as database:
-        comms.goals.todos.require_assignment_in(
-            database,
-            conflict.attempt.problem,
-            conflict.attempt.holder,
-            commander.thread.incarnation,
-        )
-    assert refused.value.problem == conflict.attempt.problem
-    assert refused.value.holder == conflict.attempt.holder
-    assert refused.value.worktree == conflict.worktree
-    assert (
-        ExpectedAssignment(refused.value.holding_problem, refused.value.holding_holder)
-        in conflict.others
-    )
-    assert conflict.evidence
-
-    second = copy.observations()
-    assert tuple(commander.thread.incarnation for commander in first) == tuple(
-        commander.thread.incarnation for commander in second
-    )
-    for before, after in zip(first, second, strict=True):
-        assert StandingRule.heartbeat_changes(before.rules, after.rules) == ()
+    second = built.observe()
+    assert StandingRule.heartbeat_changes(first.rules, second.rules) == ()
