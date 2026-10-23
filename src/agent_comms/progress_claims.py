@@ -56,16 +56,23 @@ class MergedClaim(ProgressClaim):
 
     def unresolved(self) -> ValueError:
         return ValueError(
-            f"A merged claim needs a commit sha that resolves on origin; {self.commit!r} does not.")
+            f"A merged claim needs a commit sha that resolves on origin; {self.commit!r} does not."
+        )
 
     def origin_branches(self, worktree: Path) -> tuple[str, ...]:
         try:
             if not self.commit.strip() or not Repo.answers(
-                    worktree, "rev-parse", "--verify", "--quiet", f"{self.commit}^{{commit}}"):
+                worktree, "rev-parse", "--verify", "--quiet", f"{self.commit}^{{commit}}"
+            ):
                 raise self.unresolved()
-            listed = Repo.git(worktree, "for-each-ref", f"--contains={self.commit}",
-                              "--format=%(refname:strip=3)", "refs/remotes/origin/",
-                              timeout=self.timeout)
+            listed = Repo.git(
+                worktree,
+                "for-each-ref",
+                f"--contains={self.commit}",
+                "--format=%(refname:strip=3)",
+                "refs/remotes/origin/",
+                timeout=self.timeout,
+            )
         except subprocess.TimeoutExpired as expired:
             raise ValueError(
                 f"A merged claim needs a commit sha that resolves on origin; looking up "
