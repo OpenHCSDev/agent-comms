@@ -425,6 +425,8 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
             copied = Comms(root)
             with LaunchRoot.from_path(root).selected():
                 ctx.model_copy(update={'root': root, 'state': root / 'state'}).write(root / 'config-home')
+                with copied.bus.bus.writer_connection():
+                    pass  # Create the writer lock through its owner before the child probes it.
                 lock = shlex.quote(str(store_lock_path(copied.bus.bus.path)))
                 calls = ctx.root / "watcher-children.txt"
                 calls.write_text("")

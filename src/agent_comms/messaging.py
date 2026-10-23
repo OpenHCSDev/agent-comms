@@ -47,15 +47,19 @@ class Messaging:
 
     def _publish(self, message: Message, origin: InitialOrigin) -> Message:
         """Record the meaning of a committed ordinary send beyond its bus transaction."""
+        committed: Message | None = None
         try:
-            committed = self.bus.publisher.publish_ordinary(message, origin=origin)
-        except CommittedMessageError as error:
-            origin.published(self.goals, error.record.message)
-            raise
-        try:
-            origin.published(self.goals, committed)
-        except Exception as error:
-            raise CommittedMessageError(committed) from error
+            try:
+                committed = self.bus.publisher.publish_ordinary(message, origin=origin)
+            except CommittedMessageError as error:
+                committed = error.record.message
+                raise
+        finally:
+            if committed is not None:
+                try:
+                    origin.published(self.goals, committed)
+                except Exception as error:
+                    raise CommittedMessageError(committed) from error
         return committed
 
     def send(

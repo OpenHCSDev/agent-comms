@@ -11,6 +11,7 @@ from acp.connection import StreamDirection, StreamEvent
 from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.comms import Comms
 from agent_comms.launch_root import LaunchRoot
+from bus_record_fixture import prepare_native_comms
 
 
 class SessionPackets:
@@ -48,8 +49,7 @@ async def test_new_response_precedes_updates_and_load_replays_before_response(tm
     project.mkdir()
     config = tmp_path / "native-config"
     config.mkdir()
-    comms = Comms(tmp_path / "wire")
-    comms.messaging.initialize_private_initial_protocol()
+    comms = prepare_native_comms(Comms(tmp_path / "wire"))
     packets = SessionPackets()
     environment = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
                        AGENT_COMMS_NATIVE_CONFIG_DIR=str(config), PI_CODING_AGENT_DIR=str(config))

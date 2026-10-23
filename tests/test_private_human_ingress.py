@@ -23,12 +23,14 @@ from agent_comms.coordinator import Coordination
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.errors import (
+    CommittedMessageError,
     RelationViolationError,
     UnregisteredThreadError,
 )
 from agent_comms.messages import Message, InfoKind
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.read_basis import NamedViewer
+from agent_comms.task_sources import NoTaskAttachment
 
 pytestmark = pytest.mark.skipif(
     os.name != "posix", reason="private bus requires POSIX owner/directory durability"
@@ -53,6 +55,36 @@ def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
 
 def _public_messages(comms: Comms) -> tuple[Message, ...]:
     return tuple(comms.bus.bus.message_history())
+
+
+@pytest.mark.parametrize("notification_fails", [False, True])
+def test_owner_completion_failure_retains_the_committed_send(tmp_path, monkeypatch, notification_fails):
+    comms, store, _, _ = _root(tmp_path)
+    completions = []
+
+    def fail_direct(self, goals, message):
+        completions.append(message.reference)
+        raise RuntimeError("Directive recording failed after commit")
+
+    monkeypatch.setattr(NoTaskAttachment, "direct", fail_direct)
+    if notification_fails:
+        comms.bus.bus.path.with_suffix(".changed").mkdir()
+    try:
+        with pytest.raises(CommittedMessageError) as failed:
+            comms.messaging.send_user_message("alice", "One committed input", worktree=str(tmp_path))
+        committed = failed.value.record.message
+        assert comms.bus.bus.lookup(committed.seq) == committed
+        assert _public_messages(comms) == (Message.from_message(committed),)
+        assert completions == [committed.reference]
+        assert isinstance(failed.value.__cause__, RuntimeError)
+        publication_failure = failed.value.__cause__.__context__
+        if notification_fails:
+            assert isinstance(publication_failure, CommittedMessageError)
+            assert publication_failure.record.message == committed
+        else:
+            assert publication_failure is None
+    finally:
+        store.close()
 
 
 def test_private_human_channel_and_dm_seal_original_full_audience(tmp_path: Path) -> None:
