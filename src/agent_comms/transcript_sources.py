@@ -544,7 +544,7 @@ class AssignedTranscriptSource(TranscriptSource):
         return tuple(result)
 
     def events(self, original):
-        message = original.message
+        message = original.envelope
         if original.audience.sender_lookup == self.recipient.lookup:
             return (
                 SentTranscript.from_message(message),
