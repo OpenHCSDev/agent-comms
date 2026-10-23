@@ -39,6 +39,4 @@ class LockChains(Carry):
         if apply:
             for path in chained:
                 path.unlink()
-        return Carried(len(chained), detail={"deleted": len(chained)},
-                       rewritten=tuple(path.relative_to(self.root) for path in chained)
-                       if apply else ())
+        return Carried(len(chained), detail={"deleted": len(chained)})
