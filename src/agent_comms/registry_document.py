@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass, field, replace
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Literal, Annotated, Self
+from typing import TYPE_CHECKING, Literal, Annotated, Self
 
 
 from .child_process import NoProcess, ProcessIdentity
@@ -241,6 +241,47 @@ class OwnRow(SnapshotValue[dict]):
         return MappingProxyType(cls.copy(value))
 
 
+@dataclass(frozen=True)
+class ThreadSection:
+    """A document field holding one row per thread name. Its field plan owns both the
+    wire key and the attribute, so a revision reuses unchanged rows without naming them."""
+
+    plan: FieldPlan
+
+    def rows(self, raw: Mapping[str, object]) -> dict[str, object]:
+        rows = raw.get(self.plan.key)
+        if not isinstance(rows, dict):
+            raise MalformedRecord(f"registry section {self.plan.key} must be an object")
+        return rows
+
+    def decoded(self, document: object) -> MutableMapping[str, object]:
+        rows = self.plan.current(document)
+        if not isinstance(rows, MutableMapping):
+            raise TypeError(f"{self.plan.name} does not hold one row per thread")
+        return rows
+
+    def kept(self, raw: Mapping[str, object], earlier_raw: Mapping[str, object],
+             earlier: object) -> frozenset[str]:
+        """Names whose row equals the earlier revision's, so their decoded value is reused."""
+        held, before = self.decoded(earlier), self.rows(earlier_raw)
+        return frozenset(
+            name for name, row in self.rows(raw).items()
+            if name in held and name in before and before[name] == row
+        )
+
+    def changed_rows(self, raw: Mapping[str, object], kept: frozenset[str]) -> dict[str, object]:
+        return {name: row for name, row in self.rows(raw).items() if name not in kept}
+
+    def reuse(self, raw: Mapping[str, object], kept: frozenset[str], earlier: object,
+              changed: object) -> None:
+        """Fill ``changed``'s own rows, in wire order, with the earlier decoded value of
+        every kept name; ``changed`` decoded only the rows that differ."""
+        reused, fresh = self.decoded(earlier), self.decoded(changed)
+        merged = {name: (reused if name in kept else fresh)[name] for name in self.rows(raw)}
+        fresh.clear()
+        fresh.update(merged)
+
+
 class AliasesOf(OwnRow):
     """The aliases that point at the thread; they also resolve its canonical name."""
 
@@ -463,10 +504,10 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         return cls.from_wire(restricted).entry(name)
 
     @classmethod
-    def thread_rows(cls) -> tuple[str, ...]:
+    def thread_sections(cls) -> tuple[ThreadSection, ...]:
         """The sections that hold one row per thread name."""
         return tuple(
-            plan.name
+            ThreadSection(plan)
             for plan in FieldCodec.field_plans(cls)
             if plan.declared.init and plan.records and ThreadSlice.of(plan) is OwnRow
         )
@@ -487,33 +528,19 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
                 document = FieldCodec.decode(cls, raw)
             else:
                 earlier_raw, decoded = earlier
-                thread_rows = cls.thread_rows()
-                if not isinstance(raw, dict) or any(
-                    not isinstance(raw.get(section), dict) for section in thread_rows
-                ):
-                    raise MalformedRecord("registry thread sections must be objects")
-                kept = {
-                    section: {
-                        name for name, row in raw[section].items()
-                        if name in getattr(decoded, section)
-                        and name in earlier_raw[section] and earlier_raw[section][name] == row
-                    }
-                    for section in thread_rows
-                }
+                if not isinstance(raw, dict):
+                    raise MalformedRecord("registry document must be an object")
+                kept = tuple(
+                    (section, section.kept(raw, earlier_raw, decoded))
+                    for section in cls.thread_sections()
+                )
                 changed = FieldCodec.decode(cls, {**raw, **{
-                    section: {name: row for name, row in raw[section].items()
-                              if name not in kept[section]}
-                    for section in thread_rows
+                    section.plan.key: section.changed_rows(raw, same) for section, same in kept
                 }})
-                reused: dict[str, Any] = {
-                    section: {
-                        name: (getattr(decoded, section) if name in kept[section]
-                               else getattr(changed, section))[name]
-                        for name in raw[section]
-                    }
-                    for section in thread_rows
-                }
-                document = replace(changed, **reused)
+                for section, same in kept:
+                    section.reuse(raw, same, decoded, changed)
+                # Construct again so derived state (the user thread) covers every row.
+                document = replace(changed)
             names = set(document.threads)
             if names != set(document.statuses) or names != set(document.last_seen):
                 raise MalformedRecord("thread presence does not match declarations")

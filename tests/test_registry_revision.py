@@ -89,3 +89,24 @@ def test_a_changed_revision_is_checked_as_a_whole(tmp_path):
     AtomicFile(path).write_text(json.dumps(raw, indent=2))
     with pytest.raises(RelationViolationError):
         registry.require("first")
+
+
+def test_a_reused_revision_still_finds_its_user_thread(tmp_path):
+    from agent_comms.thread_identity import UserThreadRole
+
+    path = tmp_path / "registry.json"
+    writer = Registration(path)
+    writer.register(writer.new_thread(name="user", tags=frozenset(), worktree=str(tmp_path),
+                                      role=UserThreadRole))
+    writer.register(writer.new_thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
+    reader = Registration(path)
+    with reader.store.reading() as document:
+        assert [thread.name for thread in document.user_thread().existing()] == ["user"]
+
+    # Only the worker's row changes; the user's declaration is reused, not decoded again.
+    raw = json.loads(path.read_text())
+    raw["last_seen"]["worker"] = raw["last_seen"]["worker"] + 1
+    AtomicFile(path).write_text(json.dumps(raw, indent=2))
+
+    with reader.store.reading() as document:
+        assert [thread.name for thread in document.user_thread().existing()] == ["user"]
