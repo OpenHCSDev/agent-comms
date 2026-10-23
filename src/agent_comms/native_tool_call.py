@@ -77,7 +77,7 @@ class CallObservation(LifecycleCapability, ABC):  # noqa: B024 - shared rejectio
         raise SelectedToolDenied("Native tool start is missing an announcement or was repeated")
 
     def finish(
-        self, call: NativeToolCall, is_error: bool, directory: Path,
+        self, call: NativeToolCall, is_error: bool, coordination_path: Path,
         input_id: str, round_number: int,
     ) -> None:
         raise SelectedToolDenied("Native tool terminal is missing or repeated")
@@ -100,13 +100,13 @@ class AnnouncedCall(CallObservation):
 class ExecutingCall(Executing, CallObservation):
 
     def finish(
-        self, call: NativeToolCall, is_error: bool, directory: Path,
+        self, call: NativeToolCall, is_error: bool, coordination_path: Path,
         input_id: str, round_number: int,
     ) -> None:
-        # A failed terminal fsync cannot be retried or converted to a completed
+        # A failed terminal commit cannot be retried or converted to a completed
         # error by a subsequent event. The live acknowledgement must succeed exactly once.
         call.progress.observation = UncertainCall()
-        call.progress.claim_scope.finish(call, is_error, directory, input_id, round_number)
+        call.progress.claim_scope.finish(call, is_error, coordination_path, input_id, round_number)
         call.progress.observation = CompletedCall()
 
 
@@ -126,7 +126,7 @@ class CallClaim(ABC):  # noqa: B024 - shared rejection; leaves override valid tr
         raise SelectedToolDenied("Native tool request was already consumed; outcome may be UNKNOWN")
 
     def finish(
-        self, call: NativeToolCall, is_error: bool, directory: Path,
+        self, call: NativeToolCall, is_error: bool, coordination_path: Path,
         input_id: str, round_number: int,
     ) -> None:
         raise SelectedToolDenied("Native tool ran without owner claim_scope")
@@ -137,7 +137,7 @@ class AwaitingClaim(CallClaim):
         call.progress.observation.refuse(call, refusal)
 
     async def consume(self, call: NativeToolCall, action: Callable[[], Awaitable[None]]) -> None:
-        # No retry even when the callback is cancelled or its durable fsync fails.
+        # No retry even when the callback is cancelled or its durable commit fails.
         call.progress.claim_scope = UncertainClaim()
         await action()
         call.progress.observation.require(Executing, ToolNotExecuting())
@@ -146,10 +146,10 @@ class AwaitingClaim(CallClaim):
 
 class AuthorizedCall(CallClaim):
     def finish(
-        self, call: NativeToolCall, is_error: bool, directory: Path,
+        self, call: NativeToolCall, is_error: bool, coordination_path: Path,
         input_id: str, round_number: int,
     ) -> None:
-        call.commit_terminal(is_error, directory, input_id, round_number)
+        call.commit_terminal(is_error, coordination_path, input_id, round_number)
 
 
 class UncertainClaim(CallClaim):
@@ -158,7 +158,7 @@ class UncertainClaim(CallClaim):
         pass
 
     def finish(
-        self, call: NativeToolCall, is_error: bool, directory: Path,
+        self, call: NativeToolCall, is_error: bool, coordination_path: Path,
         input_id: str, round_number: int,
     ) -> None:
         if not is_error:
@@ -224,19 +224,19 @@ class NativeToolCall(ABC):
             raise
 
     def finish(
-        self, name: str, is_error: bool | None, directory: Path,
+        self, name: str, is_error: bool | None, coordination_path: Path,
         input_id: str, round_number: int,
     ) -> None:
         if name != self.declared_name or type(is_error) is not bool:
             raise SelectedToolDenied("Native tool terminal identity/result changed")
-        self.progress.observation.finish(self, is_error, directory, input_id, round_number)
+        self.progress.observation.finish(self, is_error, coordination_path, input_id, round_number)
 
     def accepts_current_request(self, candidate: NativeToolCall) -> bool:
         return self.progress.observation.accepts_current_request(self, candidate)
 
     @abstractmethod
     def commit_terminal(
-        self, is_error: bool, directory: Path, input_id: str, round_number: int
+        self, is_error: bool, coordination_path: Path, input_id: str, round_number: int
     ) -> None: ...
 
     @abstractmethod
@@ -267,12 +267,12 @@ class CodingCall(NativeToolCall):
         return effects
 
     def commit_terminal(
-        self, is_error: bool, directory: Path, input_id: str, round_number: int
+        self, is_error: bool, coordination_path: Path, input_id: str, round_number: int
     ) -> None:
         from .selected_tool_broker import record_selected_terminal
 
         slot = self.slot(input_id, round_number)
-        record_selected_terminal(directory, slot, slot)
+        record_selected_terminal(coordination_path, slot, slot)
 
     def claim_failed(self) -> None:
         # A denied ordinary tool may report an error and let Pi explain it. The
