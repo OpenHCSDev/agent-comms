@@ -11,7 +11,14 @@ import pytest
 
 from agent_comms.bus import Bus, ClaimRecord, KeyedPrivateRecord, PublicRecord, RecordBuilder
 from agent_comms.bus_publication import HumanOrigin
-from agent_comms.bus_tables import BusProjectionTables, BusRow, BusTables, ClaimOperations, HeldResources
+from agent_comms.bus_tables import (
+    BusProjectionTables,
+    BusRow,
+    BusTables,
+    ClaimOperations,
+    HeldResources,
+    ReplayedHolders,
+)
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.envelope_claim_transitions import (
@@ -184,8 +191,9 @@ def test_expiry_and_rebuild_use_claimed_replay_not_a_checkpoint(claims: ClaimBus
     with claims.bus.writing() as db:
         HeldResources.delete(db)
         ClaimOperations.delete(db)
+        holders = ReplayedHolders()
         for original in Claimed.table.select(db, order_by=("seq",)):
-            Claimed(claim_transition=original.claim_transition).replay_claim(db)
+            Claimed(claim_transition=original.claim_transition).project_into(db, holders)
     assert claims.bus.claim_projection() == before
     assert claims.counts() == counts
 
