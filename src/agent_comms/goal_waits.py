@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
+from contextlib import closing, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
@@ -17,7 +18,6 @@ from .goal_presentation import GoalExecution, GoalExecutionSource, GoalWaitTarge
 from .goals import Goal, GoalDeclaration
 from .input_attempt import StoredInput, UnresolvedInput
 from .locked_store import WireWakeFile
-from .private_path import FileRevision
 from .store_files import SharedLock
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
@@ -29,7 +29,6 @@ if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
     from .threads import Thread
     from .goal_management import Goals
-    from .registry_store import RegistryRevision
 
 
 class GoalWait(ABC):
@@ -257,36 +256,69 @@ class StandbyReview:
 class GoalWaitReview:
     """The existing registry, turn and wait observed before reading reply history."""
 
-    registry: RegistryRevision
+    snapshot: RegistrySnapshot
     owner: Thread
     wait: GoalWait
     turn: TurnLease
 
-    @classmethod
-    def capture(cls, goals: Goals, name: str) -> GoalWaitReview:
+    @staticmethod
+    def capture(goals: Goals, name: str) -> GoalWaitReview:
         with goals.registry.store.locked(mode=SharedLock()):
-            registry = goals.registry.store.read_revision_unlocked()
-            owner = registry.snapshot.require(name)
-            return cls(registry, owner, goals.waits.resolve(owner.goal), owner.turn_lease)
+            snapshot = goals.registry.store.read_snapshot_unlocked()
+            owner = snapshot.require(name)
+            return GoalWaitReview(snapshot, owner, goals.waits.resolve(owner.goal), owner.turn_lease)
 
     def current_for(self, goals: Goals) -> bool:
         """Caller holds the publication lock; no reply decoding belongs in this check."""
-        return (
-            FileRevision.capture(goals.registry.store.path) == self.registry.revision
-            and self.owner.turn_lease == self.turn
-            and goals.waits.resolve(self.owner.goal) == self.wait
+        snapshot = goals.registry.snapshot()
+        return any(
+            self._same_thread(snapshot, owner, self.owner)
+            and owner.goal == self.owner.goal
+            and owner.turn_lease == self.turn
+            and goals.waits.resolve(owner.goal) == self.wait
+            for owner in snapshot.threads_for(self.owner.incarnation.require_recorded())
         )
 
-    def require_current(self, goals: Goals) -> None:
-        if not self.current_for(goals):
+    def _same_thread(self, snapshot: RegistrySnapshot, actual: Thread, expected: Thread) -> bool:
+        """Ignore display metadata, but retain the original process and input/turn epochs."""
+        before = self.snapshot
+        return (
+            actual.same_launch(expected)
+            and actual.turn_generation == expected.turn_generation
+            and actual.turn_record == expected.turn_record
+            and snapshot.owner_identity(actual.name) == before.owner_identity(expected.name)
+            and snapshot.claim_generation(actual.name) == before.claim_generation(expected.name)
+            and snapshot.status(actual.name) == before.status(expected.name)
+        )
+
+    def require_current(self, goals: Goals, owner: Thread) -> None:
+        if owner.incarnation != self.owner.incarnation or not self.current_for(goals):
             raise ValueError("Goal, dependency or wait changed during reply review; inspect it again.")
 
-    def unanswered(self, bus: BusReader) -> tuple[int, ...]:
-        """The captured bus cut with no qualifying reply, or no such cut."""
-        with bus.reading() as source:
-            if self.wait.has_reply(source, self.owner.incarnation.require_recorded()):
-                return ()
-            return (source.revision(),)
+    @contextmanager
+    def publishing_unanswered(self, goals: Goals) -> Iterator[bool]:
+        """Read without EX; hold it only after this owner's received cut still agrees."""
+        owner = self.owner.incarnation.require_recorded()
+        while True:
+            with goals.bus.bus.reading() as source:
+                replied = self.wait.has_reply(source, owner)
+                through_seq = source.revision()
+            if replied:
+                yield False
+                return
+            with goals.registry.store.locked():
+                if not self.current_for(goals):
+                    yield False
+                    return
+                # The existing indexed sequence query reads at most one metadata row.
+                # Any new candidate needs another unlocked policy read, not a stale release.
+                with closing(goals.bus.bus._received_sequences(
+                    owner.lookup, after=through_seq, limit=1,
+                )) as positions:
+                    if next(positions, None) is not None:
+                        continue
+                yield True
+                return
 
     @property
     def goal_id(self) -> str:
@@ -294,7 +326,7 @@ class GoalWaitReview:
 
     @property
     def owners(self) -> frozenset[str]:
-        return self.registry.snapshot.names_for(self.owner.name)
+        return self.snapshot.names_for(self.owner.name)
 
 
 @dataclass(frozen=True, slots=True)
@@ -305,6 +337,16 @@ class GoalInputReview(GoalWaitReview):
     targets: tuple[GoalWaitTarget, ...]
     unknown: tuple[StoredInput, ...]
     eligible_keys: frozenset[str]
+
+    def current_for(self, goals: Goals) -> bool:
+        if not super(GoalInputReview, self).current_for(goals):
+            return False
+        snapshot = goals.registry.snapshot()
+        before = self.snapshot
+        return all(any(
+            self._same_thread(snapshot, actual, before.require(target.incarnation.name))
+            for actual in snapshot.threads_for(target.incarnation)
+        ) for target in self.targets)
 
     def standby_review(self) -> StandbyReview:
         eligible: list[UnresolvedInput] = []

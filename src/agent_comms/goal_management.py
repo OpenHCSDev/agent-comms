@@ -176,7 +176,7 @@ class Goals:
     ) -> GoalInputReview:
         captured = GoalWaitReview.capture(self, name)
         thread = captured.owner
-        snapshot = captured.registry.snapshot
+        snapshot = captured.snapshot
         goal = thread.goal.require().require_id(goal_id).require_active()
         if not wait_for:
             raise ValueError("Standby requires explicit wait_for thread names.")
@@ -190,9 +190,10 @@ class Goals:
         dispositions = InputDispositions(self.root)
         unknown = {row.key: row for row in dispositions.unresolved(owners).unknown(owners)}
         eligible = set()
-        lookup = thread.incarnation.lookup
+        incarnation = thread.incarnation.require_recorded()
+        lookup = incarnation.lookup
         after_seq = captured.wait.review_after_seq(
-            goal, thread.incarnation.require_recorded(), targets
+            goal, incarnation, targets
         )
         sequences = tuple({
             sequence for row in unknown.values()
@@ -239,7 +240,7 @@ class Goals:
                     unknown[key] = pending
                     eligible.add(key)
         return GoalInputReview(
-            captured.registry,
+            captured.snapshot,
             thread,
             captured.wait,
             captured.turn,
@@ -266,7 +267,7 @@ class Goals:
         except UnregisteredThreadError:
             return ()
         owner = review.owner
-        snapshot = review.registry.snapshot
+        snapshot = review.snapshot
         if self.agents.is_working(owner.incarnation, snapshot) or not any(
             review.wait.current_for(goal, owner.incarnation.require_recorded())
             for goal in owner.goal.active()
@@ -278,26 +279,24 @@ class Goals:
         if not closed:
             return ()
         # A failed read is a diagnostic, never evidence of silence.
-        for through_seq in review.unanswered(self.bus.bus):
-            with self.registry.store.locked():
-                if not review.current_for(self):
-                    return ()
-                snapshot = self.registry.snapshot()
-                if self.agents.is_working(owner.incarnation, snapshot):
-                    return ()
-                closed = GoalWaits.closed_wait_group(
-                    owner.name, review.wait.targets, self.waits.read(), snapshot, self.agents,
-                )
-                if not closed:
-                    return ()
-                names = ", ".join(f"@{member}" for member in closed)
-                note = (
-                    f"Dependency wait group ({names}) has no independent worker. "
-                    "Standby was released; inspect dependencies and continue useful work."
-                )
-                if self._release_reviewed_wait(review, through_seq, note):
-                    return closed
-        return ()
+        with review.publishing_unanswered(self) as unchanged:
+            if not unchanged:
+                return ()
+            snapshot = self.registry.snapshot()
+            owner, = snapshot.threads_for(review.owner.incarnation.require_recorded())
+            if self.agents.is_working(owner.incarnation, snapshot):
+                return ()
+            closed = GoalWaits.closed_wait_group(
+                owner.name, review.wait.targets, self.waits.read(), snapshot, self.agents,
+            )
+            if not closed:
+                return ()
+            names = ", ".join(f"@{member}" for member in closed)
+            note = (
+                f"Dependency wait group ({names}) has no independent worker. "
+                "Standby was released; inspect dependencies and continue useful work."
+            )
+            return closed if self._release_reviewed_wait(review, note) else ()
 
     def release_waits_after_terminal_turn(self, fence: TurnCompletion) -> tuple[str, ...]:
         """A completed turn may release silence observed outside the registry lock."""
@@ -313,47 +312,47 @@ class Goals:
                     review = GoalWaitReview.capture(self, owner.name)
                 except UnregisteredThreadError:
                     continue
-                if review.wait == wait and self._release_finished_wait(review, fence):
-                    released.append(review.owner.name)
+                if review.wait == wait:
+                    released.extend(self._release_finished_wait(review, fence))
         return tuple(released)
 
-    def _release_finished_wait(self, review: GoalWaitReview, fence: TurnCompletion) -> bool:
+    def _release_finished_wait(self, review: GoalWaitReview, fence: TurnCompletion) -> tuple[str, ...]:
         wait, owner = review.wait, review.owner
         if not any(wait.current_for(goal, owner.incarnation.require_recorded())
                    for goal in owner.goal.active()):
-            return False
-        if any(self.agents.is_working(target.incarnation, review.registry.snapshot)
+            return ()
+        if any(self.agents.is_working(target.incarnation, review.snapshot)
                for target in wait.targets):
-            return False
-        for through_seq in review.unanswered(self.bus.bus):
-            with self.registry.store.locked():
-                if not review.current_for(self):
-                    return False
-                current = self.registry.snapshot()
-                sources = fence.idle_sources(current)
-                if not sources or any(self.agents.is_working(target.incarnation, current)
-                                      for target in wait.targets):
-                    return False
-                actual_source, = sources
-                note = (
-                    f"Declared dependency @{actual_source.name} finished without a qualifying direct "
-                    "reply, and no declared dependency has an active turn. "
-                    "Standby was released; inspect messages and UNKNOWN inputs, then "
-                    "continue independent work or redelegate. No input was replayed."
-                )
-                return self._release_reviewed_wait(review, through_seq, note)
-        return False
+            return ()
+        with review.publishing_unanswered(self) as unchanged:
+            if not unchanged:
+                return ()
+            current = self.registry.snapshot()
+            sources = fence.idle_sources(current)
+            if not sources or any(self.agents.is_working(target.incarnation, current)
+                                  for target in wait.targets):
+                return ()
+            actual_source, = sources
+            note = (
+                f"Declared dependency @{actual_source.name} finished without a qualifying direct "
+                "reply, and no declared dependency has an active turn. "
+                "Standby was released; inspect messages and UNKNOWN inputs, then "
+                "continue independent work or redelegate. No input was replayed."
+            )
+            if self._release_reviewed_wait(review, note):
+                actual_owner, = current.threads_for(owner.incarnation.require_recorded())
+                return (actual_owner.name,)
+        return ()
 
-    def _release_reviewed_wait(self, review: GoalWaitReview, through_seq: int, note: str) -> bool:
-        """Caller holds the registry; a new append invalidates the silence just read."""
-        if self.bus.bus.revision() != through_seq:
-            return False
-        owner = review.owner
+    def _release_reviewed_wait(self, review: GoalWaitReview, note: str) -> bool:
+        """Publish a validated silent wait while its review owns the registry lock."""
+        snapshot = self.registry.snapshot()
+        owner, = snapshot.threads_for(review.owner.incarnation.require_recorded())
         goal = owner.goal.require_active()
         progress = f"{goal.progress}\n\n{note}" if goal.progress else note
         self.registry.register(
             replace(owner, goal=replace(goal, progress=progress, revision=goal.revision + 1)),
-            review.registry.snapshot.status(owner.name),
+            snapshot.status(owner.name),
         )
         return review.wait.clear(self.waits)
 

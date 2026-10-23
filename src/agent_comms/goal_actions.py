@@ -289,7 +289,7 @@ class PreparedStandbyGoalAction(StandbyGoalAction, declared_name=None):
 
     def before_goal_publish(self, goal: Goal, ctx: GoalActionContext) -> None:
         review = self.review
-        review.require_current(ctx.goals)
+        review.require_current(ctx.goals, ctx.thread)
         thread = ctx.thread
         report_turn = ctx.report_turn
         wait_targets = review.targets
