@@ -433,6 +433,9 @@ class Platform(DeclaredFamily, affix="Platform"):
     @abstractmethod
     def environment(self, process: ProcessIdentity) -> dict[str, str]: ...
 
+    @abstractmethod
+    def process_name(self, pid: int) -> str: ...
+
     def parent_identity(self, pid: int) -> ProcessIdentity:
         raise NotImplementedError('This platform does not expose exact parent identities')
 
@@ -601,6 +604,12 @@ class LinuxPlatform(PidfdHandles, PosixPlatform):
         values = (item.split(b"=", 1) for item in raw.split(b"\0") if b"=" in item)
         return {os.fsdecode(key): os.fsdecode(value) for key, value in values}
 
+    def process_name(self, pid: int) -> str:
+        try:
+            return Path(f"/proc/{pid}/comm").read_text().strip()
+        except FileNotFoundError:
+            raise ProcessLookupError(pid) from None
+
     def parent_identity(self, pid: int) -> ProcessIdentity:
         return self.identity(self._stat(pid).parent)
 
@@ -745,6 +754,9 @@ class DarwinPlatform(PosixPlatform):
 
     def environment(self, process: ProcessIdentity) -> dict[str, str]:
         raise NotImplementedError(f"{type(self).__name__} does not read process environment")
+
+    def process_name(self, pid: int) -> str:
+        raise NotImplementedError(f"{type(self).__name__} does not read process names")
 
     def members_of_group(self, pgid: int) -> tuple[ProcessIdentity, ...]:
         # proc_listpids returns bytes. Grow until one query fits; never mistake
@@ -957,6 +969,9 @@ class Win32Platform(Platform):
 
     def environment(self, process: ProcessIdentity) -> dict[str, str]:
         raise NotImplementedError(f"{type(self).__name__} does not read process environment")
+
+    def process_name(self, pid: int) -> str:
+        raise NotImplementedError(f"{type(self).__name__} does not read process names")
 
     def wait_any_exited(
         self, identities: tuple[ProcessIdentity, ...], timeout: float,
