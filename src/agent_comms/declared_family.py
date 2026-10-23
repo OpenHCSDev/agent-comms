@@ -17,8 +17,6 @@ from metaclass_registry import (
     RegistryConfig,
 )
 from metaclass_registry.discovery import import_module_preserving_root_logging
-from pydantic import BaseModel
-from pydantic._internal._model_construction import ModelMetaclass
 
 
 def declared_words(stem: str) -> str:
@@ -238,20 +236,6 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
     def declared_position(cls) -> int:
         root = cast(type[DeclaredFamily], cls._family_root)
         return root.members_with(root).index(cls)
-
-
-class _WireFamilyMeta(_FamilyMeta, ModelMetaclass):
-    """Compose the family registry with Pydantic's model construction."""
-
-
-class DeclaredWireFamily(DeclaredFamily, BaseModel, metaclass=_WireFamilyMeta):
-    """A validated wire model whose family owns declaration discovery."""
-
-    declared_name: ClassVar[str]
-    family_discriminator: ClassVar[str]
-    _family_root: ClassVar[type[DeclaredFamily] | None]
-    _family_affix: ClassVar[str]
-    __registry__: ClassVar[dict[str, type[DeclaredFamily]]]
 
 
 class UniqueExternalSelector(ABC):

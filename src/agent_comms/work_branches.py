@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, ClassVar
 from pydantic import ConfigDict
 from pydantic.alias_generators import to_camel
 
-from .cli_protocol import WireModel
+from agent_comms.wire_models import WireModel
 from .declared_family import DeclaredFamily
 from .field_codec import projected
 from .repo import Repo

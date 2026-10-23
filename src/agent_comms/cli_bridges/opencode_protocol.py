@@ -1,6 +1,8 @@
 """OpenCode's session events drive both input confirmation and live output."""
 from __future__ import annotations
 
+from agent_comms.wire_models import WireAdapter
+
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
 from itertools import takewhile
@@ -8,8 +10,10 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 
 from pydantic import Field, JsonValue, TypeAdapter
 
-from agent_comms.cli_protocol import TaggedWire, WireModel
-from agent_comms.declared_family import DeclaredWireFamily, UnknownFamilyMember
+from agent_comms.cli_protocol import TaggedWire
+from agent_comms.wire_models import WireModel
+from agent_comms.declared_family import UnknownFamilyMember
+from agent_comms.wire_models import DeclaredWireFamily
 from agent_comms.runtime_updates import (
     AllTurnsEnded,
     AppendDraftItem,
@@ -117,8 +121,8 @@ class RetryStatus(SessionStatus, declared_name='retry'):
         return TurnStarted(f'Retry {self.attempt}: {self.message}')
 
 
-SESSION_STATUSES = TypeAdapter(dict[str, SessionStatus.declared_union()])
-MESSAGES = TypeAdapter(list[SavedMessage])
+SESSION_STATUSES = WireAdapter(dict[str, SessionStatus.declared_union()])
+MESSAGES = WireAdapter(list[SavedMessage])
 
 
 class StatusUpdate(WireModel):

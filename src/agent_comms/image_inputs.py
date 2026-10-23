@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.wire_models import WireAdapter
+
 import base64
 import binascii
 from collections.abc import Sequence
@@ -82,7 +84,7 @@ class PromptImages(MroDispatch):
             raise ValueError("Image input requires base64 data and a MIME type.")
 
 
-_PROMPT_CONTENT: TypeAdapter[list[object]] = TypeAdapter(
+_PROMPT_CONTENT: TypeAdapter[list[object]] = WireAdapter(
     PromptRequest.model_fields["prompt"].rebuild_annotation()
 )
 

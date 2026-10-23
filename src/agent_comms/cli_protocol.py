@@ -1,6 +1,8 @@
 """Declared JSON boundaries shared by Core's CLI and external CLI adapters."""
 from __future__ import annotations
 
+from agent_comms.wire_models import WireAdapter, WireModel
+
 import asyncio
 import builtins
 from abc import ABC, abstractmethod
@@ -9,11 +11,12 @@ from graphlib import TopologicalSorter
 from itertools import groupby
 from typing import TYPE_CHECKING, Annotated, AsyncIterator, ClassVar, NoReturn, Self, Union
 
-from pydantic import BaseModel, ConfigDict, Discriminator, InstanceOf, PlainSerializer, PlainValidator, Tag, TypeAdapter, computed_field, field_validator, model_validator
+from pydantic import Discriminator, InstanceOf, PlainSerializer, PlainValidator, Tag, computed_field, field_validator, model_validator
 from typing_extensions import TypeForm
 
 from .coordination_errors import CoordinationReadUnavailable
-from .declared_family import DeclaredFamily, DeclaredWireFamily, UnknownFamilyMember
+from .declared_family import DeclaredFamily, UnknownFamilyMember
+from agent_comms.wire_models import DeclaredWireFamily
 from .maintenance_barrier import MaintenanceHeldError
 from .messages import Message
 from .field_codec import TimestampText
@@ -30,11 +33,6 @@ async def raise_child_exit(child: AttachedChild, reason: str) -> NoReturn:
     await child.wait()
     tail = await child.stderr_tail(max_bytes=8192)
     raise ChildProcessError(f'Core watch ended, exit {child.returncode}\n{reason}\n{tail}')
-
-
-class WireModel(BaseModel):
-    """Strict fields at an external protocol boundary."""
-    model_config = ConfigDict(strict=True)
 
 
 class TimestampedWire(WireModel):
@@ -223,4 +221,4 @@ class EarlierItems(WatchLine, TurnItem, declared_name='earlier-items'):
         await bridge.earlier(self)
 
 
-WATCH_LINE = TypeAdapter(WatchLine.declared_union())
+WATCH_LINE = WireAdapter(WatchLine.declared_union())

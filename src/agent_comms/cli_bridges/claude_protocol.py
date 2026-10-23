@@ -1,6 +1,8 @@
 """Claude's completed JSONL blocks own transcript items and activity."""
 from __future__ import annotations
 
+from agent_comms.wire_models import WireAdapter
+
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -16,7 +18,8 @@ from pydantic import (
     model_validator,
 )
 
-from agent_comms.cli_protocol import TaggedWire, TextWire, TimestampedWire, WireHeader, WireModel
+from agent_comms.cli_protocol import TaggedWire, TextWire, TimestampedWire, WireHeader
+from agent_comms.wire_models import WireModel
 from agent_comms.recorded_time import EventTime
 from agent_comms.runtime_updates import (
     ActiveItem,
@@ -60,7 +63,7 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
     EVENT_CHARS = 500
     BATCH_CHARS = 3000
     HEADER = 'Comms in'
-    JSON_TEXT = TypeAdapter(str)
+    JSON_TEXT = WireAdapter(str)
 
     @classmethod
     def event_size(cls, text: str) -> int:
@@ -814,4 +817,4 @@ class ContinuedIn(MetadataRecord, declared_name='continued-in'):
         return (HistoryNotice(f'The conversation continued in session {self.continuedInSessionId}.'),)
 
 
-CLAUDE_RECORD = TypeAdapter(ClaudeRecord.declared_union())
+CLAUDE_RECORD = WireAdapter(ClaudeRecord.declared_union())

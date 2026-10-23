@@ -1,6 +1,7 @@
 """Shared Core inbox delivery and process lifetime for external CLI adapters."""
 from __future__ import annotations
 
+from agent_comms.wire_models import WireAdapter
 
 import argparse
 import asyncio
@@ -988,7 +989,7 @@ class ForeignMonitorFrame(MonitorFrame, declared_name='foreign'):
         """Another monitor's output is not comms delivery evidence."""
 
 
-MONITOR_FRAME = TypeAdapter(MonitorFrame.declared_union())
+MONITOR_FRAME = WireAdapter(MonitorFrame.declared_union())
 
 
 @dataclass(frozen=True)
