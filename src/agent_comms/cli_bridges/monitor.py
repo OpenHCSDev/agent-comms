@@ -313,7 +313,7 @@ class InspectSession(SessionRequest[SessionInformation], declared_name='inspect'
             try:
                 return self.information(claim.socket_path)
             except (FileNotFoundError, ConnectionRefusedError) as absent:
-                claim.state().await_socket(absent)
+                claim.state().await_socket(claim, absent)
 
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
         return SessionInformation(
