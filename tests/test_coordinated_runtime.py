@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 
-from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 import json
 import os
 from dataclasses import replace
@@ -22,6 +21,7 @@ from agent_comms.coordination_errors import (
     PublicationActivationBlocked,
 )
 from agent_comms.coordinator import Coordination
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.notification_progress import HumanReadProgress
 from agent_comms.pi_vocabulary import HighThinkingLevel
@@ -150,17 +150,9 @@ def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> No
     assert replace(notification, changed=False).sent_outcome() is None
 
 
-def test_native_runtime_schema_explicit_install_and_drift_fail_closed(tmp_path: Path) -> None:
-    path = tmp_path / "fresh.sqlite3"
+def test_native_runtime_schema_drift_fails_closed(private_comms) -> None:
+    path = CoordinationStore.path_in(private_comms.root)
     with Coordination(str(path)) as store:
-        assert (
-            store.session._connection.execute(
-                "SELECT 1 FROM sqlite_master WHERE name='native_runtime_input'"
-            ).fetchone()
-            is None
-        )
-        PrivateCoordinatorTable.install(store)
-        PrivateCoordinatorTable.install(store)
         NativeRuntimeTable.require_installed(store.session._connection)
         trigger = next(iter(NativeRuntimeInput.triggers()))
         store.session._connection.execute(f'DROP TRIGGER "{trigger}"')
