@@ -23,8 +23,8 @@ from pathlib import Path
 import pytest
 
 from agent_comms.cli_commands import HistoryCliCommand
-from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
+from agent_comms.history_result import ChannelHistoryPageResult
 from agent_comms.installer.backup import bus_files
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.practice import TestHome
@@ -37,9 +37,12 @@ from agent_comms.installer.upgrade import (
     Stack,
     Upgrade,
 )
+from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import MaintenanceBarrier
+from agent_comms.messages import Message
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout
+from agent_comms.root_runtime import RootRuntime
 from agent_comms.storage_rules import StorageRule
 from agent_comms.typed_table import ReconciledFile
 from conftest import declare_test_bus, publish_initial
@@ -65,6 +68,13 @@ def installed_home(tmp_path_factory) -> dict[str, str]:
     (home / ".local/share/agent-comms/current").symlink_to(
         outgoing.runtime.prefix, target_is_directory=True)
     return environment
+
+
+def installed_runtime(environment: dict[str, str]) -> LaunchRuntime:
+    """The runtime the home's ``current`` pointer selects: it owns every bus this
+    machine serves, so it owns the test bus before an install and reads it after."""
+    return LaunchRuntime.from_interpreter(
+        Path(environment["HOME"]) / ".local/share/agent-comms/current/bin/python")
 
 
 @pytest.fixture(scope="module")
@@ -234,6 +244,7 @@ def test_failed_publication_restores_absent_route_without_store_changes(
     blocker.write_text("An owner file that publication must preserve")
     route = home / ".local/state/agent-comms/active-route.json"
     assert not route.exists()
+    RootRuntime.publish(private_comms.root, installed_runtime(installed_home))
 
     completed = subprocess.run(
         [pointer / "bin/agent-comms", "--root", private_comms.root, "install",
@@ -260,6 +271,7 @@ def test_installed_entry_reports_completion_after_target_source_retirement(
     root = tmp_path / "new-bus" if fresh else private_comms.root
     if not fresh:
         declare_test_bus(private_comms, channels=("comms",))
+        RootRuntime.publish(root, installed_runtime(installed_home))
     scratch = tmp_path / "install-scratch"
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
     StorageRule.path_in(root).write_text(json.dumps(FieldCodec.encode(
@@ -277,7 +289,12 @@ def test_installed_entry_reports_completion_after_target_source_retirement(
     assert completed.returncode == 0, completed.stderr
     result = FieldCodec.decode(Upgrade, FieldCodec.parse(completed.stdout))
     assert isinstance(result, InstalledUpgrade) and type(result.live) is live_kind
-    history = tuple(reversed(HistoryCliCommand(target="#comms").apply(wire(root)).messages))
+    read = subprocess.run(
+        [installed_runtime(installed_home).interpreter, "-m", "agent_comms.cli", "--root", root,
+         *HistoryCliCommand.invocation("--target", "#comms")],
+        env=installed_home, capture_output=True, text=True, timeout=60, check=True)
+    history = tuple(reversed([Message.from_wire(row) for row in
+                              json.loads(read.stdout)[ChannelHistoryPageResult.messages_key]]))
     assert len(history) == (1 if fresh else 2)
     assert history[-1].sender == "installer"
     assert history[-1].body.startswith("Install finished")
