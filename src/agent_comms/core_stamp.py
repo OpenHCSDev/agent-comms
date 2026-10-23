@@ -13,7 +13,7 @@ class CoreStamp(ABC):
         """Generate one importable value using its declared concrete type."""
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
-            f"from agent_comms.core_stamp import {type(self).__name__}\nSTAMP = {self!r}\n",
+            f"from {type(self).__module__} import {type(self).__name__}\nSTAMP = {self!r}\n",
             encoding="utf-8",
         )
 
