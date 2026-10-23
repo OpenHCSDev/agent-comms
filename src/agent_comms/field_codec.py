@@ -923,7 +923,7 @@ class FieldRepresentation[T](MroDispatch, ABC):
         raise TypeError(f"{cls.__name__} has no JSON schema")
 
     @classmethod
-    def argument_options(cls) -> dict[str, object]:
+    def argument_options(cls, argument: Argument) -> dict[str, object]:
         """argparse options for this representation's command-line text."""
         return {}
 
@@ -1014,8 +1014,8 @@ class SingleFieldValue(ExternalJsonShape, SingleValueEncoding):
         return FieldCodec.value_schema(cls.wire_field().annotation)
 
     @classmethod
-    def argument_options(cls) -> dict[str, object]:
-        return compile_decoder(cls.wire_field().annotation).argument_options()
+    def argument_options(cls, argument: Argument) -> dict[str, object]:
+        return compile_decoder(cls.wire_field().annotation).argument_options(argument)
 
 
 class DeclaredWireType(ExternalJsonShape, WireValue):
@@ -1054,11 +1054,11 @@ class SubclassUnion(DeclaredFamily, AcceptsNull, ExternalJsonShape, WireValue):
         return FieldCodec.value_schema(ValueDecoder.for_members(cls.members_with(cls)).target)
 
     @classmethod
-    def argument_options(cls) -> dict[str, object]:
+    def argument_options(cls, argument: Argument) -> dict[str, object]:
         """The union root offers its members' choices; a member offers only its own."""
         if cls._family_root is not cls:
-            return super().argument_options()
-        return ValueDecoder.for_members(cls.members_with(cls)).argument_options()
+            return super().argument_options(argument)
+        return ValueDecoder.for_members(cls.members_with(cls)).argument_options(argument)
 
 
 class PresentMember:
@@ -1318,7 +1318,7 @@ class SpelledText(TextRepresentation[str], ValidatedScalar):
             raise argparse.ArgumentTypeError(f"{text!r}: {error}") from error
 
     @classmethod
-    def argument_options(cls) -> dict[str, object]:
+    def argument_options(cls, argument: Argument) -> dict[str, object]:
         return {"type": cls.command_line}
 
     @classmethod
@@ -2121,7 +2121,7 @@ class ValueDecoder[T](DecoderPlan):
     def editor_choices(self) -> tuple[tuple[str, object], ...]:
         raise TypeError("The declared decoder does not offer finite choices")
 
-    def argument_options(self, argument: Argument | None = None) -> dict[str, object]:
+    def argument_options(self, argument: Argument) -> dict[str, object]:
         """argparse options for this annotation's command-line text."""
         return {}
 
@@ -2152,7 +2152,7 @@ class _ChoiceDecoder[T](ValueDecoder[T]):
 
     __slots__ = ()
 
-    def argument_options(self, argument: Argument | None = None) -> dict[str, object]:
+    def argument_options(self, argument: Argument) -> dict[str, object]:
         return {"choices": [self.argument_text(value) for _, value in self.editor_choices()]}
 
 
@@ -2215,14 +2215,14 @@ class _FlagDecoder(_ExactScalarDecoder[bool]):
     __slots__ = ()
     annotations = (bool,)
 
-    def argument_options(self, argument: Argument | None = None) -> dict[str, object]:
+    def argument_options(self, argument: Argument) -> dict[str, object]:
         return {"action": "store_true"}
 
 
 class _NumberDecoder[T: (int, float)](_ExactScalarDecoder[T]):
     __slots__ = ()
 
-    def argument_options(self, argument: Argument | None = None) -> dict[str, object]:
+    def argument_options(self, argument: Argument) -> dict[str, object]:
         return {"type": self.target}
 
 
@@ -2284,8 +2284,8 @@ class _RepresentedDecoder[T](ValueDecoder[T]):
     def uses_representation(self) -> bool:
         return True
 
-    def argument_options(self, argument: Argument | None = None) -> dict[str, object]:
-        return self.representation.argument_options()
+    def argument_options(self, argument: Argument) -> dict[str, object]:
+        return self.representation.argument_options(argument)
 
     def encode(self, value: T) -> object:
         return None if value is None else self.representation.encode(value)
@@ -2480,7 +2480,7 @@ class UnionDecoder[T](_ContextDecoder[T]):
     def editor_annotation(self):
         return Union[tuple(item.editor_annotation for item in self.alternatives)]
 
-    def argument_options(self, argument: Argument | None = None) -> dict[str, object]:
+    def argument_options(self, argument: Argument) -> dict[str, object]:
         return self.alternatives[0].argument_options(argument)
 
     def accepts_value(self, value: object) -> bool:
@@ -2623,8 +2623,8 @@ class _TupleDecoder[E](_ArrayDecoder[tuple[E, ...]]):
 class _VariadicTupleDecoder[E](_TupleDecoder[E]):
     """The inherited item decoder applies to every tuple element."""
 
-    def argument_options(self, argument: Argument | None = None) -> dict[str, object]:
-        if argument is not None and "nargs" in argument.options:
+    def argument_options(self, argument: Argument) -> dict[str, object]:
+        if "nargs" in argument.options:
             return self.items[0].argument_options(argument)
         return super().argument_options(argument)
 
@@ -2692,7 +2692,7 @@ class _DictDecoder[K, V](ValueDecoder[dict[K, V]]):
             for key, value in self.entries(data)
         )
 
-    def argument_options(self, argument: Argument | None = None) -> dict[str, object]:
+    def argument_options(self, argument: Argument) -> dict[str, object]:
         return {"type": FieldCodec.parse}
 
     @classmethod
@@ -2805,7 +2805,7 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
         return tuple((member.label, {self.target.family_discriminator: member.declared_name})
                      for member in self.target.members_with(self.target))
 
-    def argument_options(self, argument: Argument | None = None) -> dict[str, object]:
+    def argument_options(self, argument: Argument) -> dict[str, object]:
         """Every member is a command-line choice, labelled or not."""
         return {"choices": list(self.target.names())}
 
