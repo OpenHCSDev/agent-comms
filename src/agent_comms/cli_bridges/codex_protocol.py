@@ -275,6 +275,8 @@ RPC_RESPONSE = TypeAdapter(RpcSuccess | RpcFailure | RpcNotification)
 
 
 class Item(TaggedWire, ABC, affix=""):
+    wire_tag: ClassVar[str]
+
     @classmethod
     def tag(cls) -> str:
         return cls.wire_tag
