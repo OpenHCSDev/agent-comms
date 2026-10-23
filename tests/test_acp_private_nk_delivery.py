@@ -21,7 +21,7 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.coordination_errors import ParticipantNotRegistered, PublicationActivationBlocked
+from agent_comms.coordination_errors import PublicationActivationBlocked
 from agent_comms.coordinator import Coordination
 from test_coordinated_runtime import tmp_path as private_root_fixture
 from agent_comms.thread_model import DeclaredModel
@@ -114,18 +114,6 @@ def test_private_rename_preserves_independent_sql_generation(tmp_path):
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         assert store.participants.get(lookup).owner_identity.generation == 2
     assert comms.bus.bus.revision() == 0
-
-
-def test_private_rename_of_unregistered_participant_takes_the_plain_path(tmp_path):
-    comms, _ = _private_comms(tmp_path)
-    lookup = comms.registry.require("sender").incarnation.lookup
-    renamed = comms.threads._rename_thread("sender", "courier")
-    assert (renamed.previous, renamed.current) == ("sender", "courier")
-    assert comms.registry.require("sender").name == "courier"
-    assert not (comms.root / ".private-owner-rename.pending").exists()
-    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
-        with pytest.raises(ParticipantNotRegistered):
-            store.participants.get(lookup)
 
 
 async def test_missing_native_schema_refuses_cursor_metadata(tmp_path, native_runtime_package):

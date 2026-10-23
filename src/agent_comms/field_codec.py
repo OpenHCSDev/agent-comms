@@ -2958,6 +2958,8 @@ class _RecordDecoder[T](_ContextDecoder[T]):
         return result
 
     def encode(self, value: object) -> dict[str, object]:
+        if not isinstance(value, self.target):
+            raise MalformedRecord(f"Expected {self.target.__name__} record")
         result = FieldCodec._record_plan(type(value)).encoded(
             value, "wire", lambda entry, current: entry.value.encode(current)
         )

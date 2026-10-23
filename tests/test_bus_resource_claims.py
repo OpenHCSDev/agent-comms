@@ -198,6 +198,7 @@ def test_expiry_and_rebuild_use_claimed_replay_not_a_checkpoint(claims: ClaimBus
         holders = ReplayedHolders()
         for original in Claimed.table.select(db, order_by=("seq",)):
             Claimed(claim_transition=original.claim_transition).project_into(db, holders)
+        holders.flush(db)
     assert claims.bus.claim_projection() == before
     assert claims.counts() == counts
 

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.bus import ClaimRecord
 from agent_comms.envelope_claim_transitions import (
     ClaimConflict, ClaimProjection, ClaimRelease, ClaimTransition,
     ClaimTransitionError, ExistingFileClaim, NativeClaim, ReleasedClaims,
@@ -16,6 +17,16 @@ from agent_comms.messages import ClaimMessage, ClaimNoticeKind, Message
 
 G1 = "a" * 32
 G2 = "b" * 32
+
+
+def append_transition(bus, transition):
+    def build(seq, db):
+        message = Message(transition.owner, "owner", "Claim file", ClaimNoticeKind,
+                          seq=transition.seq)
+        object.__setattr__(transition, "message_id", message.message_id)
+        return ClaimRecord.of(message, transition)
+
+    return bus.bus.append(build)
 
 
 def test_same_name_can_take_a_previous_birth_only_with_current_registry_evidence(comms, tmp_path):
@@ -221,20 +232,24 @@ def test_owned_application_is_deterministic_and_requires_order(tmp_path):
             stale.project(released)
 
 
-def test_only_exact_typed_nonempty_sequenced_envelopes(tmp_path):
+def test_only_exact_typed_nonempty_sequenced_envelopes(comms, tmp_path):
     _, a, _ = resources(tmp_path)
     mistyped = (
-        lambda: transition(True, claims=(a,), generation=G1),
-        lambda: transition(0, claims=(a,), generation=G1),
-        lambda: transition(1, claims=(a,), generation=None),
-        lambda: transition(1, claims=(a,), generation="f" * 31),
-        lambda: transition(1, claims=(a,), generation=G1.upper()),
-        lambda: ReleasedClaims("owner", "epoch", 1, "m", releases=("bad",)),
-        lambda: UnscopedClaims("owner", "epoch", 1, "m", claims=[a], generation=G1),
+        (transition(1, claims=(a,), generation=G1), "seq", True),
+        (transition(1, claims=(a,), generation=G1), "seq", 0),
+        (transition(1, claims=(a,), generation=G1), "generation", None),
+        (transition(1, claims=(a,), generation=G1), "generation", "f" * 31),
+        (transition(1, claims=(a,), generation=G1), "generation", G1.upper()),
+        (ReleasedClaims("owner", "epoch", 1, "m", releases=(ClaimRelease(a, G1),)),
+         "releases", ("bad",)),
+        (transition(1, claims=(a,), generation=G1), "claims", [a]),
     )
-    for candidate in mistyped:
+    for candidate, name, value in mistyped:
+        # Corrupt an already constructed value so the append must enforce its field types,
+        # independently of the constructors' retained legality checks.
+        object.__setattr__(candidate, name, value)
         with pytest.raises(MalformedRecord):
-            candidate()
+            append_transition(comms.bus, candidate)
     for candidate in (
         lambda: transition(1),
         lambda: transition(1, releases=(ClaimRelease(a, G1),), generation=G2),
@@ -252,16 +267,17 @@ def test_path_aliases_are_rejected_as_duplicate_normalized_resources(tmp_path):
         transition(1, claims=duplicate, generation=G1)
 
 
-def test_raw_path_aliases_cannot_acquire_or_release_same_file(tmp_path):
+def test_raw_path_aliases_cannot_acquire_or_release_same_file(comms, tmp_path):
     worktree, a, _ = resources(tmp_path)
     held = transition(1, claims=(a,), generation=G1).project(ClaimProjection())
     aliases = (f"{worktree}//a.py", f"{worktree}/./a.py")
     for alias in aliases:
         assert alias != a
         with pytest.raises(MalformedRecord):
-            transition(2, owner="competitor", claims=(alias,), generation=G2)
+            append_transition(comms.bus, transition(
+                2, owner="competitor", claims=(alias,), generation=G2))
         with pytest.raises(MalformedRecord):
-            ClaimRelease(alias, G1)
+            append_transition(comms.bus, transition(2, releases=(ClaimRelease(alias, G1),)))
         claiming_row = FieldCodec.encode(transition(2, owner="competitor", claims=(a,), generation=G2))
         claiming_row[FieldCodec.record_key(UnscopedClaims, "claims")] = [alias]
         with pytest.raises(MalformedRecord):

@@ -127,7 +127,6 @@ class AssignmentBinding(ProjectionSource):
     execution_id: Annotated[str, BoundedText]
 
     def __post_init__(self) -> None:
-        FieldCodec.require_fields(self)
         if ":" in self.execution_id:
             raise ClaimTransitionError("Execution ID cannot contain a colon.")
         if FieldCodec.decode(int, self.source.seq) <= 0:
@@ -182,7 +181,6 @@ class RecordedScope(ClaimScope, declared_name=None):
     turn_id: str
 
     def __post_init__(self) -> None:
-        FieldCodec.require_fields(self)
         GenerationCounter.require_positive(self.owner_claimed_generation)
         TurnId.for_registration(self.turn_id)
 
@@ -265,9 +263,6 @@ class ClaimRelease(ProjectionSource):
     resource: Annotated[str, ResourcePathText]
     generation: Annotated[str, Id128Text]
 
-    def __post_init__(self) -> None:
-        FieldCodec.require_fields(self)
-
 
 @dataclass(frozen=True)
 class ClaimIdentity:
@@ -299,7 +294,6 @@ class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, ProjectionSource, affix
     ] = field(default=(), kw_only=True)
 
     def __post_init__(self) -> None:
-        FieldCodec.require_fields(self)
         if not self.resources or len(self.resources) > self.max_resources:
             raise ClaimTransitionError("Claim transitions need a bounded resource set.")
         if len(set(self.resources)) != len(self.resources):
