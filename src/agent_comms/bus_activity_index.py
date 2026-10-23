@@ -13,10 +13,6 @@ if TYPE_CHECKING:
     from .messages import Message
 
 
-
-
-
-
 class ActivityMaximum(TypedTable, BusProjectionTables, declared_name=None):
     """The declared non-key values are maxima, not independently writable clocks."""
 

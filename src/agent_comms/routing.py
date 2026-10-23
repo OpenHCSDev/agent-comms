@@ -22,8 +22,6 @@ if TYPE_CHECKING:
     from .threads import Thread
 
 
-
-
 class NoTurnOrigin(NullMember, turn_origin.TurnOrigin):
     """An autonomous turn has no message, delivery key or reply destination."""
 

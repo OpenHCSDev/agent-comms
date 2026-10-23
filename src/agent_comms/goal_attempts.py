@@ -72,8 +72,6 @@ if TYPE_CHECKING:
     from .turn_context import TurnContext
 
 
-
-
 class StorageUncertainError(errors.GoalAttemptError):
     """A write or durability/readback check failed; never launch from it."""
 
@@ -99,8 +97,6 @@ class MissingGoalGenerationError(errors.GoalAttemptError, ValueError):
 
     def diagnostic(self) -> str:
         return str(self)
-
-
 
 
 @dataclass(frozen=True)

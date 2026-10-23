@@ -261,9 +261,7 @@ class BusWriterPhase(VirtualBusPhase):
 
 
 class BusDeliveryReadersPhase(VirtualBusPhase):
-    """B1: delivery, wake, cursor and notification readers on ``seq``.
-
-    ``store_order`` keeps ``WireLog`` until C deletes the class, so it is not read here."""
+    """B1: delivery, wake, cursor and notification readers on ``seq``."""
 
     after = (BusWriterPhase,)
     evidence = PatternAbsent(
