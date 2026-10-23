@@ -194,15 +194,26 @@ Neither attempt establishes the recorded SelectCurrent diagnosis or a deadlock.
 The persistence cause is traced: Toad's `Session` declared SQL directives in
 dataclass metadata after Core's column compiler moved to `Annotated`. Fresh
 session rows therefore had a NULL `id` while insertion returned SQLite's rowid.
-The Toad binding fork owns the complete DB family repair: annotation-derived
-session and model-history tables, shared durable schema reconciliation, one
-transaction path and surfaced SQLite failures. Eight focused checks passed on
-the source checkpoint; final connection-owner and dependency cleanup follows.
-The installed user's sessions table already has a valid primary key and no rows;
-its model-history table has two rows requiring a one-time schema carry.
-That carry uses an explicit SQLite backup and transaction outside the bus-only
-installer carry contract. Root owns its execution and paired installation after
-the Toad fork's copy proof; the virtual-bus integration is not a prerequisite.
+The DB family repair is installed: Core `d9ce9cd95` with Toad `a5c627b95`.
+Session and model-history rows share annotation-derived schema and the existing
+SQLite connection/transaction owner; SQLite errors propagate. The unused second
+connection path, success-only bools and aiosqlite dependency are deleted. The
+one-time SQLite carry preserved both model-history rows and the existing sessions;
+`/home/ts/.cache/agent-scratch/toad-db-before-install.db` retains the backup.
+The accepted transient converter is retired. All 194 registered threads stayed
+unchanged, with no owner restarts. Actual installed saved-fork/fresh-DM/reply/tab
+return and complete native client-request journeys passed: 2 checks in 54.95 seconds,
+recorded in `installer-db-batch-native.txt`. This includes reading the newly
+created session's persisted title through the installed DB.
+
+The Toad binding fork separately owns the confirmed new-session ordering defect:
+the server reuses load's replay-before-response behavior before the client knows
+the new ID. Retained wire records 43–51 in `toad-test-ich92jvs` prove seven new-ID updates
+preceded their creation response. The repair belongs to the existing subscription
+request family; a fresh subscription announces identity before replay, while load
+keeps its required replay-before-response contract. Source implementation and an
+actual stdio ordering check are in progress; the passing DB journeys do not cover
+this packet-order assertion.
 
 ### 2. Commander verbs take a fixed, small time
 

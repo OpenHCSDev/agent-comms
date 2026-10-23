@@ -479,19 +479,23 @@ class RuntimeProxy(RuntimeConnection):
     def controller_token(self):
         return self._controller_token
 
-    async def subscribe(self) -> dict[str, object]:
-        attachment = await self._subscribe_once()
+    async def subscribe(
+        self, subscription: type[SubscribeRuntimeRequest] = SubscribeRuntimeRequest,
+    ) -> dict[str, object]:
+        attachment = await self._subscribe_once(subscription)
         self.task = asyncio.create_task(self.forward(attachment.reader))
         return attachment.presented
 
-    async def _subscribe_once(self) -> OwnerAttachment:
+    async def _subscribe_once(
+        self, subscription: type[SubscribeRuntimeRequest] = SubscribeRuntimeRequest,
+    ) -> OwnerAttachment:
         reader, writer = await self._connect_current()
         self.writer = writer
         try:
             writer.write(
                 (
                     json.dumps(
-                        SubscribeRuntimeRequest(
+                        subscription(
                             thread=self.session_id,
                         ).to_wire()
                     )
