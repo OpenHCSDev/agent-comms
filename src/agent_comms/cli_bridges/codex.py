@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import socket
 import sqlite3
+import struct
 from collections import deque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -13,6 +15,7 @@ from uuid import uuid4
 
 import aiohttp
 from pydantic import JsonValue
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.messages import Message
 from agent_comms.send_result import SendResult
 from agent_comms.cli_protocol import EarlierItems, Outcome, DeliveredOutcome
@@ -134,6 +137,19 @@ class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions], declared_name=
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         parser.add_argument('--socket', default=str(cls.SOCKET))
+
+    def session_process(self) -> ProcessIdentity:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as peer:
+            peer.connect(self.socket)
+            pid, _uid, _gid = struct.unpack(
+                '3i', peer.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize('3i')))
+        return ProcessIdentity.capture(pid)
+
+    async def session_worktree(self) -> Path:
+        async with CodexConnection.open(self.socket) as codex:
+            resumed = ResumedThread.model_validate(await codex.call(
+                ResumeThread(threadId=self.binding.thread)))
+            return Path(resumed.thread.cwd)
 
     async def transcript(self) -> AsyncIterator[RuntimeUpdate]:
         async with CodexConnection.open(self.socket) as codex:
