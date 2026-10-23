@@ -13,9 +13,9 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
-from test_todos import order, pr_commander, thread
+from test_todos import order, thread
 
-pytest_plugins = ("test_proof_build",)
+pytest_plugins = ("test_todos",)
 
 
 @pytest.mark.parametrize('definition', [
