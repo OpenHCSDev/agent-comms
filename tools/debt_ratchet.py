@@ -2022,6 +2022,48 @@ class DeclaredTypeSites(MroDispatch):
             self.declare("alias", node.value, scope)
 
 
+class AnyName(PerFileMeasure):
+    """Every name or member bound to typing.Any, including runtime uses.
+
+    Import aliases use the same resolver as annotation measures. Import and
+    assignment nodes do not themselves contribute an expression occurrence.
+    """
+
+    @classmethod
+    def uses(cls, source: bytes, filename: str) -> tuple[ast.Name | ast.Attribute, ...]:
+        tree = ast.parse(source, filename)
+        imports = TypingImports.at_any_depth(tree)
+        found = []
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Name, ast.Attribute)):
+                reference = TypingReference(imports)
+                reference.dispatch_sync(node)
+                if reference.value is typing.Any:
+                    found.append(node)
+        return tuple(found)
+
+    @classmethod
+    def count(cls, source: bytes, filename: str) -> int:
+        return len(cls.uses(source, filename))
+
+
+class UnannotatedParameter(PerFileOccurrenceMeasure):
+    """Every function parameter declares its type; self and cls name their owner."""
+
+    @staticmethod
+    def occurrences(node: ast.AST) -> int:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return 0
+        arguments = node.args
+        return sum(
+            argument.annotation is None and argument.arg not in ("self", "cls")
+            for argument in (
+                *arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs,
+                *filter(None, (arguments.vararg, arguments.kwarg)),
+            )
+        )
+
+
 class AnyAnnotation(PerFileMeasure):
     """``typing.Any`` written where a type is declared.
 
