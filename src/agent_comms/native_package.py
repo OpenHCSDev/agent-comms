@@ -24,6 +24,7 @@ from typing import Annotated, Literal
 from agent_comms.child_process import Platform
 from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText, Sha256Text, WireName
 from agent_comms.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
+from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.private_path import PrivateDirectoryRole, TrustedAncestorRole
 
 from .store_files import AtomicFile
@@ -36,6 +37,10 @@ MAX_DEPTH = 32
 
 class NativePackageError(ValueError):
     """Package bytes or filesystem shape are not the pinned native artifact."""
+
+
+class NativePackageMissing(NativePackageError, NativePiUnavailable):  # noqa: N818 - nominal outcome
+    """No build of this manifest's pin exists yet: native Pi is unavailable until it is prepared."""
 
 
 def _resource_root() -> Path:
@@ -79,7 +84,8 @@ def pinned_location() -> Path:
 
 def pinned_native_package() -> Path:
     if not (package := pinned_location()).is_dir():
-        raise NativePackageError(f"Pinned native package directory is missing: {package}")
+        raise NativePackageMissing(f"Pinned native package directory is missing: {package}; "
+                                   f"run {MANIFEST.parent / 'bin/prepare-pi-native'} first")
     return package
 
 

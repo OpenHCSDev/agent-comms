@@ -14,11 +14,21 @@ import pytest
 import agent_comms.native_package as native_package
 from agent_comms.core_stamp import CheckoutStamp
 from agent_comms.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
+from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.native_package import (
     package_tree_digest,
 )
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX native package filesystem")
+
+
+def test_unbuilt_pin_is_native_pi_unavailable_and_names_its_preparation(tmp_path, monkeypatch):
+    manifest = tmp_path / "stack/pi-native.sha256"
+    manifest.parent.mkdir()
+    manifest.write_text(f"{'0' * 64}  dist/cli.js\n")
+    monkeypatch.setattr(native_package, "MANIFEST", manifest)
+    with pytest.raises(NativePiUnavailable, match="run .*/stack/bin/prepare-pi-native first"):
+        native_package.pinned_native_package()
 
 
 def test_pinned_inputs_refuse_changed_patch(tmp_path):
@@ -212,7 +222,12 @@ def test_publication_installs_declared_source_with_one_link(launcher, tmp_path):
 
 
 def test_prepare_imports_agent_comms_with_the_stack_interpreter_not_path_python3(launcher, tmp_path):
-    stack, _ = launcher
+    stack, package = launcher
+    stale = [stack / ".pi-native-0123456789abcdef", stack / ".pi-native-fedcba9876543210"]
+    for build in stale:
+        (build / "node_modules").mkdir(parents=True)
+    running_stage = stack / ".pi-native.stage.running"
+    running_stage.mkdir()
     bare = tmp_path / "bare"
     bare.mkdir()
     (bare / "python3").write_text(f'#!/bin/sh\nexec {sys.base_prefix}/bin/python3 -S "$@"\n')
@@ -224,11 +239,16 @@ def test_prepare_imports_agent_comms_with_the_stack_interpreter_not_path_python3
                             capture_output=True, text=True, timeout=15)
     assert result.returncode == 0, result.stderr
     assert result.stdout == f"PI_NATIVE_BIN={stack}/bin/pi-native\n"
+    # Accepting the pinned build retires every other pin's build, never a stage in use.
+    assert not any(build.exists() for build in stale)
+    assert package.is_dir() and running_stage.is_dir()
 
 
 def test_publication_refuses_unlisted_dependency_drift(launcher, tmp_path):
     stack, package = launcher
     (package / "dependency.js").write_text("// unpinned dependency change\n")
+    other = stack / ".pi-native-0123456789abcdef"
+    other.mkdir()
     deployments = tmp_path / "deployments"
     result = subprocess.run(
         [str(stack / "bin/prepare-pi-native"), "--publish", str(deployments)],
@@ -240,3 +260,4 @@ def test_publication_refuses_unlisted_dependency_drift(launcher, tmp_path):
     assert not result.stdout
     assert b"differs from pinned artifact" in result.stderr
     assert (package / "dependency.js").read_text() == "// unpinned dependency change\n"
+    assert other.is_dir()  # a refused build retires nothing

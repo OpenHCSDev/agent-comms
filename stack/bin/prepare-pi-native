@@ -84,15 +84,28 @@ publish() (
     printf 'PI_NATIVE_BIN=%s/bin/pi-native\n' "$stack_root"
 )
 
+# This script owns stack/'s builds: once $target is accepted, every other pin's
+# finished build is retired, as the installer retires its prepared copies. A
+# .pi-native.stage.* directory belongs to a run that may still hold it; its own
+# trap removes it.
+accept() (
+    publish "$target"
+    for stale in "$stack_root"/.pi-native-????????????????; do
+        if [[ -d "$stale" && "$stale" != "$target" ]]; then
+            rm -rf -- "$stale"
+        fi
+    done
+)
+
 if [[ "$update_pins" == false && -e "$target" ]]; then
     # Publication qualifies the final copied tree before exposing it. Do not
     # launch a second verifier over the prepared input of that same operation.
     if [[ -n "$publish_root" ]]; then
-        publish "$target"
+        accept
         exit 0
     fi
     if verify "$target"; then
-        publish "$target"
+        accept
         exit 0
     fi
     printf 'Existing native Pi copy differs from the pinned build: %s\n' "$target" >&2
@@ -203,8 +216,8 @@ if [[ -e "$target" ]]; then
     if [[ -z "$publish_root" ]]; then
         verify "$target"
     fi
-    publish "$target"
+    accept
     exit 0
 fi
 mv -- "$stage" "$target"
-publish "$target"
+accept

@@ -15,11 +15,8 @@ if [[ ${1:-} == update ]]; then
 fi
 # Each launch derives the installed extension sources from the verified
 # declaration; sources whose bytes already match are not written. The same call
-# answers the package the manifest pins.
-if ! package=$(native install_sources "$repo_root"); then
-    printf 'Native Pi is unavailable; run %s/bin/prepare-pi-native first.\n' "$stack_root" >&2
-    exit 1
-fi
+# answers the package the manifest pins; its refusal is the native owner's own.
+package=$(native install_sources "$repo_root")
 cli="$package/dist/cli.js"
 # Drop inherited preloads (including the old external project bootstrap). The
 # managed-project override is now copied inside the verified package instead.

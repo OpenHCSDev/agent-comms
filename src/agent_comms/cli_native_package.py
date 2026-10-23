@@ -124,6 +124,10 @@ class SourceInstallationVerb(NativePackageVerb):
     def apply(self, ctx: None = None) -> None:
         package = self._native_package()
         install_declared_sources(package.path, self.snapshot)
+        self.answer(package)
+
+    def answer(self, package: VerifiedNativePackage) -> None:
+        """Publication answers nothing: its output is the preparation script's."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -136,9 +140,8 @@ class InstallSourcesVerb(SourceInstallationVerb):
     def _native_package(self) -> VerifiedNativePackage:
         return VerifiedNativePackage.acquire(pinned_native_package())
 
-    def apply(self, ctx: None = None) -> None:
-        super().apply()
-        print(self._native_package().path)
+    def answer(self, package: VerifiedNativePackage) -> None:
+        print(package.path)
 
 
 @dataclass(frozen=True, kw_only=True)
