@@ -11,10 +11,10 @@ from typing import Annotated
 from agent_comms import field_codec
 from agent_comms.command import Command
 from agent_comms.declared_verb import DeclaredVerb
+from agent_comms.native_build_inputs import built_tree_pin
 from agent_comms.native_package import (
     MANIFEST,
     VerifiedNativePackage,
-    built_tree_pin,
     install_declared_sources,
     package_tree_digest,
     pinned_native_package,
