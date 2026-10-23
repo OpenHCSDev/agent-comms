@@ -177,7 +177,7 @@ class MessageNotification:
 
     @classmethod
     def ordered(cls, notifications: Iterable[MessageNotification]) -> tuple[MessageNotification, ...]:
-        return tuple(sorted(notifications, key=lambda item: (item.state.priority, item.recipient.casefold())))
+        return tuple(sorted(notifications, key=lambda item: (item.state.rank(), item.recipient.casefold())))
 
     @classmethod
     def summary(cls, notifications: Iterable[MessageNotification]) -> str:

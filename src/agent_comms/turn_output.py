@@ -143,11 +143,7 @@ class TurnOutput:
         yield terminal
 
     def settle(self, session: TurnSession, transport_ok: bool) -> None:
-        for cause in sorted(
-            failures.TurnFailure.members_with(failures.TerminalFailure),
-            key=lambda member: member.precedence,
-            reverse=True,
-        ):
+        for cause in failures.TurnFailure.members_with(failures.TerminalFailure):
             if cause.detected(session, transport_ok):
                 self.record_failure(cause(cause.explanation(self)))
 
