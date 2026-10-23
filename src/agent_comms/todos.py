@@ -384,13 +384,7 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
     async def contains(self, check: OrderCheck, head: str) -> bool:
         if head == self.delivered:
             return True
-        result = await BoundedRun.run(
-            ("git", "merge-base", "--is-ancestor", self.delivered, head),
-            cwd=check.directory, timeout=120)
-        if result.outcome not in (ExitedOutcome(0), ExitedOutcome(1)):
-            raise ValueError(result.stderr.decode(errors="replace") or
-                             "Could not check the delivered commit against its PR head.")
-        return result.outcome == ExitedOutcome(0)
+        return await asyncio.to_thread(Repo.descends, check.directory, self.delivered, head)
 
 
 class DeliveryMerge(DeclaredFamily, affix="DeliveryMerge"):

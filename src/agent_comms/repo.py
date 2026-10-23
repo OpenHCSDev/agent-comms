@@ -115,15 +115,7 @@ class Repo(BaseModel, WireValue):
             self.git(self.checkout, "fetch", "-q", "origin")
             if not self.has_commit(sha):
                 return False
-        result = subprocess.run(
-            ("git", "-C", str(self.checkout), "merge-base", "--is-ancestor", sha, revision),
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        if result.returncode not in (0, 1):
-            raise GitCommandError(str(self.checkout), result)
-        return result.returncode == 0
+        return self.descends(self.checkout, sha, revision)
 
     def has_commit(self, sha: str) -> bool:
         return (
@@ -136,13 +128,26 @@ class Repo(BaseModel, WireValue):
         )
 
     @staticmethod
-    def git(checkout: Path | str, *args: str) -> str:
+    def _run(checkout: Path | str, *args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(("git", "-C", str(checkout), *args), capture_output=True, text=True,
+                              timeout=60, env=os.environ | {"LC_ALL": "C"})
+
+    @classmethod
+    def git(cls, checkout: Path | str, *args: str) -> str:
         """The one Git runner: C-locale output, and every failure a GitCommandError."""
-        run = subprocess.run(("git", "-C", str(checkout), *args), capture_output=True, text=True,
-                             timeout=60, env=os.environ | {"LC_ALL": "C"})
+        run = cls._run(checkout, *args)
         if run.returncode:
             raise GitCommandError(str(checkout), run)
         return run.stdout
+
+    @classmethod
+    def descends(cls, checkout: Path | str, ancestor: str, revision: str) -> bool:
+        """Whether ``revision`` holds ``ancestor`` in this checkout's history. Git answers
+        no with exit 1; any other failure is a GitCommandError."""
+        run = cls._run(checkout, "merge-base", "--is-ancestor", ancestor, revision)
+        if run.returncode not in (0, 1):
+            raise GitCommandError(str(checkout), run)
+        return run.returncode == 0
 
     @classmethod
     def of(cls, checkout: Path) -> Repo:

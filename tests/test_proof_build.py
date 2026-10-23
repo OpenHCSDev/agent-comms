@@ -34,7 +34,7 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repo import Repo
+from agent_comms.repo import GitCommandError, Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import StandingRule
 from agent_comms.todos import (
@@ -326,7 +326,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
 
 def test_build_containment_does_not_turn_git_failure_into_absence_or_success(proof_build_checkouts):
     graph = proof_build_checkouts[0]
-    with pytest.raises(subprocess.CalledProcessError):
+    with pytest.raises(GitCommandError):
         RecordedBuildIdentity.installed().contains("0" * 40, graph.repository.checkout)
 
 
