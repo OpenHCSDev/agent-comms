@@ -16,9 +16,10 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Generic, TypeVar
 
-from .child_process import join_retirement
+from .child_process import Platform, join_retirement
 from .coordination_database import CoordinationStore
 from .field_codec import FieldCodec, MalformedRecord, Token256Text
+from .errors import RelationViolationError
 from .lifecycle_capability import Complete
 from .native_tool_call import (
     DuplicateToolCallIdentity,
@@ -200,9 +201,12 @@ class ToolListener:
         self.session_directory = Path(directory).absolute()
         self.token = token
         self._resources = AsyncExitStack()
-        if not hasattr(socket, "SO_PEERCRED") or not hasattr(os, "O_NOFOLLOW"):
-            raise SelectedToolDenied("Selected tool requires a peer-credential Unix socket")
-        PrivateDirectoryRole.require(self.session_directory.lstat())
+        refusal = SelectedToolDenied("Selected tool requires a peer-credential Unix socket")
+        if not hasattr(socket, "SO_PEERCRED"):
+            raise refusal
+        Platform.current().require_pinned_paths(refusal)
+        PrivateDirectoryRole.require(
+            self.session_directory.lstat(), RelationViolationError("Selected tool socket parent is not private"))
         if self.session_directory.resolve() != self.session_directory:
             raise SelectedToolDenied("Selected tool socket parent is not private")
         with ExitStack() as prepared:
