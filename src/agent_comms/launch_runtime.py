@@ -26,7 +26,15 @@ from agent_comms.field_codec import (
     WireOmitDefault,
 )
 from agent_comms.launch_root import LaunchRoot
-from agent_comms.thread_text import AbsentText, GivenText, NoParent, NoThreadText, TextChoice, ThreadParent, ThreadText
+from agent_comms.thread_text import (
+    AbsentText,
+    GivenText,
+    NoParent,
+    NoThreadText,
+    TextChoice,
+    ThreadParent,
+    ThreadText,
+)
 
 if TYPE_CHECKING:
     from agent_comms.threads import Thread
@@ -63,9 +71,14 @@ class LaunchRuntime:
     interpreter: Annotated[Path, PathText]
 
     @classmethod
+    def from_interpreter(cls, interpreter: str | Path) -> Self:
+        """Keep the invoked interpreter: resolving its symlink loses the runtime."""
+        return cls(Path(interpreter))
+
+    @classmethod
     def running(cls) -> LaunchRuntime:
         """Keep ordinary launches on the calling process's installation."""
-        return cls(Path(sys.executable))
+        return cls.from_interpreter(sys.executable)
 
     def child_environment(self, environment: Mapping[str, str]) -> dict[str, str]:
         """A child of this process's own interpreter imports the source this process
@@ -239,9 +252,7 @@ class RestartEnvironment(EnvironmentRecord):
     stay in /proc and are read only from the exact selected process at execution.
     """
 
-    home: Annotated[
-        EnvironmentValue, WireOmitDefault(), WireName("HOME")
-    ] = UnsetVariable()
+    home: Annotated[EnvironmentValue, WireOmitDefault(), WireName("HOME")] = UnsetVariable()
     path: Annotated[
         EnvironmentValue,
         WireOmitDefault(),
@@ -260,9 +271,9 @@ class RestartEnvironment(EnvironmentRecord):
         WireName("VIRTUAL_ENV"),
         RuntimeScope(),
     ] = UnsetVariable()
-    config: Annotated[
-        EnvironmentValue, WireOmitDefault(), WireName("XDG_CONFIG_HOME")
-    ] = UnsetVariable()
+    config: Annotated[EnvironmentValue, WireOmitDefault(), WireName("XDG_CONFIG_HOME")] = (
+        UnsetVariable()
+    )
     default_agent_directory: ClassVar[Path] = Path("~/.pi/agent")
     native_config: Annotated[
         Path,
@@ -270,9 +281,9 @@ class RestartEnvironment(EnvironmentRecord):
         WireName("AGENT_COMMS_NATIVE_CONFIG_DIR"),
         NativeScope(),
     ] = default_agent_directory
-    agent_directory: Annotated[
-        Path, PathText, WireName("PI_CODING_AGENT_DIR"), NativeScope()
-    ] = default_agent_directory
+    agent_directory: Annotated[Path, PathText, WireName("PI_CODING_AGENT_DIR"), NativeScope()] = (
+        default_agent_directory
+    )
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "native_config", self.absolute(self.native_config))
@@ -384,12 +395,8 @@ class ThreadLaunch(EnvironmentRecord):
         WireOmitDefault(),
         WireName("AGENT_COMMS_TAGS"),
     ] = frozenset()
-    parent: Annotated[
-        ThreadParent, WireOmitDefault(), WireName("PI_PARENT_ID")
-    ] = NoParent()
-    task: Annotated[
-        ThreadText, WireOmitDefault(), WireName("PI_TASK")
-    ] = NoThreadText()
+    parent: Annotated[ThreadParent, WireOmitDefault(), WireName("PI_PARENT_ID")] = NoParent()
+    task: Annotated[ThreadText, WireOmitDefault(), WireName("PI_TASK")] = NoThreadText()
     managed: Annotated[
         bool,
         FlagText,

@@ -933,6 +933,13 @@ class NativeMessages:
             offset += len(text.encode("utf-8")) + 1
         return tuple(ranges)
 
+    def render_into(self, prompt_parts, provider):
+        provider.setdefault("messages", []).extend(self.messages)
+
+
+class NativeAnnotations(NativeMessages):
+    """A transcript span keeps the disclosure policy of its original native message."""
+
     def disclosure_for(self, span: ContextSpan):
         from .pi_payloads import PiMessage
 
@@ -941,12 +948,9 @@ class NativeMessages:
                 return PiMessage.from_wire(message).disclosure_for(span)
         raise ValueError("Annotation names no original native message")
 
-    def render_into(self, prompt_parts, provider):
-        provider.setdefault("messages", []).extend(self.messages)
-
 
 @dataclass(frozen=True, kw_only=True)
-class TranscriptSegment(NativeMessages, MeasuredNativeSegment):
+class TranscriptSegment(NativeAnnotations, MeasuredNativeSegment):
     keyframe_interval: ClassVar[int] = 32
 
     @classmethod
@@ -975,7 +979,7 @@ class CompactionSummarySegment(PublicInstructionAnnotations, NativeMessages, Mea
 
 
 @dataclass(frozen=True, kw_only=True)
-class InjectionMessageSegment(NativeMessages, MeasuredNativeSegment):
+class InjectionMessageSegment(NativeAnnotations, MeasuredNativeSegment):
     pass
 
 

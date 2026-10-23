@@ -406,17 +406,19 @@ class DuplicatesPhase(MultipleInheritancePhase):
                     ("__init__",),
                     ("durable_turn.py", "execution_store.py", "exporting.py", "publisher.py"),
                 ),
-                (("wire_member",), ("pi_payloads.py",)),
+                (("wire_member",), ("pi_payloads.py", "field_codec.py")),
                 (
                     (
                         "_assert_response_schema",
                         "assert_cohort_schema",
                         "assert_native_runtime_schema",
+                        "require_schema",
                     ),
                     (
                         "cohort_schema.py",
                         "coordinated_runtime_schema.py",
                         "coordination_response.py",
+                        "typed_table.py",
                     ),
                 ),
                 (
@@ -429,7 +431,7 @@ class DuplicatesPhase(MultipleInheritancePhase):
                 ),
                 (
                     ("annotation_disclosure", "disclosure_for"),
-                    ("pi_payloads.py", "turn_context.py"),
+                    ("pi_payloads.py", "turn_context.py", "annotation_disclosure.py"),
                 ),
             )
         )

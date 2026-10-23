@@ -104,7 +104,9 @@ from agent_comms.installer.practice import (
 from agent_comms.installer.reporting import RootWriter, RuntimeWriter, UnpostedWriter
 from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
-from agent_comms.locked_store import BusFile, RootFile
+from agent_comms.locked_store import BusFile, DeclaredFile, RootFile, UndeclaredFile
+from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
+from agent_comms.runtime_processes import RuntimeProcesses
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
     MaintenanceOperator,
@@ -136,7 +138,7 @@ class RehearsalFiles:
 
     identical: int
     rewritten: int
-    names: tuple[str, ...]
+    names: tuple[Annotated[Path, PathText], ...]
     restore_bytes: int
 
     @classmethod
@@ -145,7 +147,7 @@ class RehearsalFiles:
         return cls(0, 0, (), 0)
 
     @staticmethod
-    def declared(steps: tuple[StepRun, ...]) -> frozenset[str]:
+    def declared(steps: tuple[StepRun, ...]) -> frozenset[Path]:
         return frozenset(name for step in steps for name in step.carried.rewritten)
 
     def require_rehearsal(self, rehearsal: RehearsalFiles) -> None:
@@ -155,25 +157,30 @@ class RehearsalFiles:
 
 
 
-def carried(root: Path, before: dict[str, SavedFile], steps: tuple[StepRun, ...],
-            expected: frozenset[str]) -> RehearsalFiles:
+def carried(
+    root: Path,
+    before: dict[DeclaredFile | UndeclaredFile, dict[Path, SavedFile]],
+    steps: tuple[StepRun, ...], expected: frozenset[Path],
+) -> RehearsalFiles:
     """Only the files a step names as rewritten may differ from ``before``."""
     after = bus_files(root)
-    physical = {name for name in before.keys() | after.keys()
-                if before.get(name) != after.get(name)}
-    # SQLite's committed WAL belongs to its database declaration, not a second carry.
-    changed = {name[:-4] if name.endswith('-wal') and name[:-4] in before.keys() | after.keys()
-               else name for name in physical}
-    unnamed = sorted(changed - RehearsalFiles.declared(steps))
+    physical = {key for key in before.keys() | after.keys()
+                if before.get(key) != after.get(key)}
+    members = {member: resource.path for resource, snapshot in (*before.items(), *after.items())
+               for member in snapshot}
+    changed = {resource.path for resource in physical}
+    declared = {members.get(path, path) for path in RehearsalFiles.declared(steps)}
+    unnamed = sorted(changed - declared)
     if unnamed:
         raise UpgradeRefused(f"Carries changed files no step names: {unnamed}")
-    outside = sorted(changed - expected)
+    outside = sorted(changed - {members.get(path, path) for path in expected})
     if outside:
         raise UpgradeRefused(f"Carries changed files outside the expected set: {outside}")
     return RehearsalFiles(
-        identical=len(before.keys() - changed), rewritten=len(changed),
+        identical=len({resource.path for resource in before} - changed), rewritten=len(changed),
         names=tuple(sorted(changed)),
-        restore_bytes=sum(before[name].size for name in physical & before.keys()))
+        restore_bytes=sum(file.size for key in physical & before.keys()
+                          for file in before[key].values()))
 
 
 @dataclass(frozen=True)
@@ -250,7 +257,7 @@ class CarriedPass(Extendable):
     def after_acceptance(self, pending: tuple[Carry, ...], stack: Stack,
                          tree: TargetTree) -> Self:
         return replace(self, retired_inputs=tuple(
-            StepRun(step.name(), retired) for step, retired in
+            StepRun(step.declared_name, retired) for step, retired in
             zip(pending, stack.call_steps(pending, tree, RetireInputsOperation()), strict=True)
         ))
 
@@ -402,12 +409,14 @@ class InstalledUpgrade(RehearsedUpgrade, Extendable):
     live: LiveRun
     install: InstallResult
     """The harnesses registered on the bus the target now reads."""
+    processes: RuntimeProcesses = field(kw_only=True, default=RuntimeProcesses(()))
+    """Applications still running an outgoing runtime; reported, never signalled."""
 
     finished: ClassVar[str] = "Install finished"
     """The headline of the post that reports this upgrade."""
 
     def lines(self) -> tuple[str, ...]:
-        return (*super().lines(), *self.live.lines())
+        return (*super().lines(), *self.live.lines(), *self.processes.lines())
 
 
 @dataclass(frozen=True)
@@ -543,12 +552,14 @@ class Stack:
     def prepare_native(self) -> None:
         self.probe(PrepareNativeProbe())
 
-    def publish(self) -> None:
-        """The selected interpreter owns console metadata and harness declarations."""
+    def publish(self, root: Path) -> None:
+        """The selected interpreter owns console metadata and harness declarations, and
+        ``root`` belongs to this stack's runtime from now on."""
         self.commands.run(
                           self.python, "-m", publication.__name__,
                           cwd=self.checkout, env=self.environment(),
         )
+        RootRuntime.publish(root, self.runtime)
 
     def environment(self, *paths: Path) -> dict:
         """Use the artifact's packages; carry steps also select the target tree's source."""
@@ -595,7 +606,7 @@ class Stack:
             result = Path(scratch) / "result.json"
             self.commands.run(self.python, "-m", step_worker.__name__,
                               json.dumps(FieldCodec.encode(operation)), result,
-                              json.dumps([[step.name(), FieldCodec.encode(step)]
+                              json.dumps([[step.declared_name, FieldCodec.encode(step)]
                                           for step in steps]),
                               cwd=tree.path, env=self.environment(*tree.source_paths()))
             return operation.decode_answers(result.read_text())
@@ -776,7 +787,7 @@ class Install[Rehearsed: Rehearsal](ABC):
         """The converted bus's route is ready before new runtime entrypoints open it."""
         incoming = ActiveRoute(self.root.absolute(), RecordedBusIdentity.capture(Bus.path_in(self.root)))
         route = backup.rebind_route(incoming, selected)
-        self.staged.publish()
+        self.staged.publish(self.root)
         return route
 
     @staticmethod
@@ -798,7 +809,7 @@ class Install[Rehearsed: Rehearsal](ABC):
     def reported(self, rehearsal: Rehearsed) -> RehearsedUpgrade:
         return RehearsedUpgrade(
             self.current, self.target, self.root,
-            tuple(step.name() for step in self.pending), rehearsal,
+            tuple(step.declared_name for step in self.pending), rehearsal,
             commands=tuple(self.staged.commands.ran))
 
     def finished(self, rehearsal: Rehearsed, bridges: SessionBridgeResumes,
@@ -807,7 +818,8 @@ class Install[Rehearsed: Rehearsal](ABC):
         live_run = self.install(rehearsal, bridges, report)
         finished = InstalledUpgrade(
             rehearsed.source, rehearsed.target, rehearsed.root, rehearsed.pending,
-            rehearsed.rehearsal, live_run, harnesses(), commands=tuple(self.staged.commands.ran))
+            rehearsed.rehearsal, live_run, harnesses(), commands=tuple(self.staged.commands.ran),
+            processes=RuntimeProcesses.observe(self.staged.runtime))
         return (finished.extended(UnresumedUpgrade, unresumed=bridges.lines())
                 if bridges.failures else finished)
 
@@ -878,7 +890,7 @@ class PreparedMigration(Extendable):
     """The held bus as the outgoing runtime read it, before any migration."""
 
     hold: MaintenanceState
-    before: dict[str, SavedFile]
+    before: dict[DeclaredFile | UndeclaredFile, dict[Path, SavedFile]]
     read: BusReadBack
 
     @property
@@ -894,7 +906,7 @@ class PreparedMigration(Extendable):
     def carry(self, pending: tuple[Carry, ...], staged: Stack,
               tree: TargetTree) -> CarriedPass:
         """One migration sequence for rehearsal and the backed-up live bus."""
-        steps = [StepRun(step.name(), carried) for step, carried in zip(
+        steps = [StepRun(step.declared_name, carried) for step, carried in zip(
             pending, staged.call_steps(pending, tree, MigrateOperation(apply=True)), strict=True)]
         reconciled = staged.cli(self.root, ReconcileStoresCliCommand)
         steps.append(StepRun(ReconcileStoresCliCommand.declared_name, Carried(
@@ -933,7 +945,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                 RootFile.content_owner(source).copy_file(source, destination)
         self.installed.running_owners(copied)
         maintenance = MaintenanceBarrier(RegistryStore.at(copied).path)
-        hold = maintenance.begin(MaintenanceOperator.current())
+        hold = maintenance.retarget(maintenance.begin(MaintenanceOperator.current()), stack.runtime)
         with hold.holding():
             migration = PreparedMigration.capture(hold, self.installed)
             passed = migration.carry(pending, stack, self.tree)
@@ -946,7 +958,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
 
     def live(self, rehearsal: RehearsedFiles, report: InstallReport) -> CarriedRun:
         expected = frozenset(rehearsal.files.names) | frozenset(
-            str(path.relative_to(self.root))
+            path.relative_to(self.root)
             for path in self.staged.backup_files(self.pending, self.tree))
         selected = tuple(self.root / name for name in sorted(expected))
         restore = RestoreSpace.measure(max(
@@ -954,6 +966,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
             sum(path.stat().st_size for path in selected if path.exists()),
         ), self.root.parent)
         restore.require()
+        RootRuntimeStore.at(self.root).adopt(self.installed.runtime)
         running = self.installed.running_owners(self.root)
         maintenance = MaintenanceBarrier(RegistryStore.at(self.root).path)
         held = maintenance.begin(MaintenanceOperator.current())
@@ -962,6 +975,9 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
         try:
             try:
                 self.installed.owners(self.root, StopCliCommand, running)
+                held = maintenance.retarget(held, self.staged.runtime)
+                holder.close()
+                holder.enter_context(held.holding())
                 planned = self.staged.cli(self.root, PlannedReconcileCliCommand)
                 unrehearsed = sorted(frozenset(planned.rewritten) - frozenset(rehearsal.files.names))
                 if unrehearsed:
@@ -1003,7 +1019,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                 if head != self.current:
                     self.installed.commands.run("git", "-C", self.checkout, "reset", "-q", "--keep", self.current)
                     Checkout(self.checkout).prepare()
-                self.installed.publish()
+                self.installed.publish(self.root)
                 holder.close()
                 maintenance.clear(restored_hold)
                 started = self.installed.start(self.root, running)
@@ -1042,7 +1058,7 @@ class UnchangedInstall(ExistingBusInstall[UnchangedRehearsal]):
         return UnchangedRehearsal()
 
     def live(self, rehearsal: UnchangedRehearsal, report: InstallReport) -> UnchangedRun:
-        self.installed.publish()
+        self.installed.publish(self.root)
         report.writer = RuntimeWriter(self.root, self.installed, InstalledProgram())
         return UnchangedRun()
 
@@ -1082,7 +1098,7 @@ class FreshInstall(Install[FreshRehearsal]):
             services = HostService.restart_running(self.staged.python)
         except BaseException:
             backup.restore_route()
-            self.installed.publish()
+            self.installed.publish(self.root)
             raise
         backup.retain(self.spill_dir)
         return CreatedRun(services, route)

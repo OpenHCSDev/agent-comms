@@ -1765,7 +1765,7 @@ class SchemaReportCliCommand(CliCommand, declared_name="schema-report"):
 class ReconciledStoresResult(CliResult):
     """The bus files whose schema the reconcile changed, relative to the bus root."""
 
-    rewritten: tuple[str, ...]
+    rewritten: tuple[Annotated[Path, PathText], ...]
 
 
 @dataclass(frozen=True)
@@ -1810,7 +1810,7 @@ class StoreReconcileCliCommand(CliCommand[ReconciledStoresResult]):
 
     def answer(self, root: Path) -> ReconciledStoresResult:
         return ReconciledStoresResult(tuple(
-            str(path.relative_to(root))
+            path.relative_to(root)
             for path, owner in sorted(ReconciledFile.existing_in(root).items())
             if self.changes(owner, path)))
 

@@ -45,4 +45,4 @@ class DropConnectivity(Carry):
             CoordinationStore.schema_change(self.path).require()
             with SQLiteFile.write_transaction(db):
                 db.execute(f'DROP TABLE "{TABLE}"')
-            return Carried(1, {TABLE: rows}, (CoordinationStore.filename,))
+            return Carried(1, {TABLE: rows}, (self.path.relative_to(self.root),))

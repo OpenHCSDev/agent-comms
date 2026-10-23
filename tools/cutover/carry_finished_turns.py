@@ -58,7 +58,7 @@ class FinishedTurns(Carry):
                     resealed = True
                 rebound.append(source)
             rewritten = [
-                str(root.relative_to(self.root) / name)
+                root.relative_to(self.root) / name
                 for root, result in results
                 for name in result.rewritten
             ]
@@ -66,7 +66,7 @@ class FinishedTurns(Carry):
                 AtomicFile(HistoryArchive.path_in(self.root)).write_text(
                     json.dumps(FieldCodec.encode(tuple(rebound)))
                 )
-                rewritten.append(HistoryArchive.filename)
+                rewritten.append(HistoryArchive.path_in(self.root).relative_to(self.root))
             finished = sum(int(result.detail.get("finished", 0)) for _, result in results)
             return Carried(
                 sum(result.changed for _, result in results),
@@ -101,8 +101,8 @@ class FinishedTurns(Carry):
             raw = json.dumps(document)
             # Later carries still own other predecessor fields, including goal
             # orders. A current registry decode belongs after those carries.
-            rewritten: tuple[str, ...] = ()
+            rewritten: tuple[Path, ...] = ()
             if apply:
                 registry._write_unlocked(raw)
-                rewritten = tuple(str(path.relative_to(root)) for path in registry.written)
+                rewritten = tuple(path.relative_to(root) for path in registry.written)
             return Carried(carried, {"finished": finished}, rewritten)
