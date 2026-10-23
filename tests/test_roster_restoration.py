@@ -50,7 +50,7 @@ def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity
     assert after.aliases["former-name"] == "missing"
     assert current.bus.bus.revision() == bus
     assert old.bus.bus.revision() == old_bus
-    assert not current.bus.inbox("missing")
+    assert not current.bus.inbox("missing").page.messages
     first = current.registry.store.path.read_bytes()
     assert current.registry.restore_stopped(source, ("live", "missing")) == ()
     assert current.registry.store.path.read_bytes() == first
@@ -134,7 +134,8 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
     live = Thread('live', frozenset({'comms'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     missing = Thread('missing', frozenset({'comms'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     old.registry.declare(missing)
-    current.registry.declare(live)
+    # The registry assigns storage roots at declaration; restoration must leave that thread alone.
+    live = current.registry.declare(live)
     root_id = current.registry.prepare_native_root().namespace
     source = old.registry.snapshot()
     with Coordination(str(current.root / "coordination.sqlite3")) as store:

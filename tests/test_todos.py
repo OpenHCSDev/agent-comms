@@ -359,7 +359,6 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
     source = ctx.repos[0]
     with LaunchRoot.from_path(ctx.root).selected():
         c = ctx.comms
-        Bus.install(Bus.path_in(c.root))
         c.goals.update_goal(ctx.commander, SetGoalAction(
             text="Keep the commander request active for both watcher passes",
             goal_id="pr-work"))

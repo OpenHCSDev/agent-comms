@@ -43,7 +43,6 @@ from agent_comms.todos import PendingProblemOrder, ProgressRead, ReleaseTodo, St
 from agent_comms.transcript_events import AssistantTranscript
 from agent_comms.ui_model.unit_state import UnitState, Unreadable
 from agent_comms.work_branches import UnreadableCheckoutRead, WorkBranches
-from order_scope_fixture import FIX_SCOPE
 from agent_comms.threads import Thread
 
 
@@ -130,7 +129,6 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
     (root / 'storage.json').write_text(json.dumps(FieldCodec.encode(rule)))
     Bus.install(Bus.path_in(root))
     c = wire(root)
-    Bus.install(Bus.path_in(c.root))
     # Two order holders never share one worktree, so the unit taking the work has its own.
     spare = tmp_path / 'idle-project'
     git(home, 'worktree', 'add', '-q', '-b', 'idle-home', str(spare))

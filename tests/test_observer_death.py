@@ -1,6 +1,5 @@
 """The UI side of the comms observer reports the observer's end once, with how it exited, and no later use of it raises a pipe error."""
 
-from agent_comms.bus import Bus
 
 import asyncio
 import os
@@ -61,7 +60,6 @@ async def test_a_killed_observer_is_reported_once_with_its_signal_and_fails_awai
 
 
 async def test_an_invalid_notification_reference_does_not_kill_the_observer(comms, durable_home):
-    Bus.install(Bus.path_in(comms.root))
     with ObservationProcess.awaited(comms.route) as process:
         with pytest.raises(RelationViolationError):
             await process.read(ReadNotifications(

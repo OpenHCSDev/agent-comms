@@ -1,6 +1,3 @@
-
-
-from agent_comms.bus import Bus
 from agent_comms.field_codec import FieldCodec
 
 """External contracts and adding commands without editing any consumer catalog."""
@@ -8,19 +5,26 @@ from agent_comms.field_codec import FieldCodec
 import json
 
 import pytest
+from acp.schema import PromptRequest, TextContentBlock
 
 from agent_comms.cli import build_parser, main
 from agent_comms.cli_commands import CliCommand
 from agent_comms.comms import wire
-from agent_comms.native_arguments import ConfiguredBinary, GivenArguments, GivenBinary, InheritedArguments
 from agent_comms.history_result import (
     ChannelHistoryPageResult,
     DmHistoryPageResult,
     EverythingHistoryPageResult,
 )
 from agent_comms.messages import InfoKind
+from agent_comms.native_arguments import (
+    ConfiguredBinary,
+    GivenArguments,
+    GivenBinary,
+    InheritedArguments,
+)
 from agent_comms.pi_vocabulary import ServiceTier
 from agent_comms.runtime_requests import (
+    PromptRuntimeRequest,
     RuntimeRequest,
 )
 from agent_comms.threads import Thread
@@ -75,12 +79,13 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch, tmp_p
     "parameters",
     [
         {"action": "subscribe"},
-        {
-            "action": "prompt",
-            "prompt": [{"type": "text", "text": "hello"}],
-            "meta": {},
-            "controllerToken": "secret",
-        },
+        PromptRuntimeRequest(
+            thread="alias",
+            request=PromptRequest(
+                session_id="alias", prompt=[TextContentBlock(type="text", text="hello")]
+            ),
+            controller_token="secret",
+        ).to_wire(),
         {"action": "cancel"},
         {"action": "set_config_option", "config_id": "model", "value": "test/model"},
         {"action": "compact", "instructions": "focus"},
@@ -135,9 +140,9 @@ def test_invalid_runtime_parameters_use_canonical_decode_and_domain_errors(param
 @pytest.mark.parametrize(
     "arguments,result_type,per_root",
     [
-        (["history", "--target", "#team"], ChannelHistoryPageResult, 1),
-        (["history", "--target", "#any"], EverythingHistoryPageResult, 2),
-        (["history", "--target", "@alice", "--as", "bob"], DmHistoryPageResult, 1),
+        (["history", "#team"], ChannelHistoryPageResult, 1),
+        (["history", "#any"], EverythingHistoryPageResult, 2),
+        (["history", "alice", "--as", "bob"], DmHistoryPageResult, 1),
     ],
 )
 def test_normal_history_cli_keeps_migrated_content_and_source_identity(
@@ -145,7 +150,6 @@ def test_normal_history_cli_keeps_migrated_content_and_source_identity(
 ):
     old, live = wire(tmp_path / "old"), wire(tmp_path / "live")
     for comms in (old, live):
-        Bus.install(Bus.path_in(comms.root))
         for name in ("alice", "bob"):
             comms.registry.declare(
                 Thread(name, frozenset({"team"}), str(tmp_path))

@@ -6,7 +6,7 @@ import json
 import sqlite3
 import uuid
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -19,6 +19,7 @@ from .field_codec import (
     MalformedRecord,
     NullMember,
 )
+from .native_session_reopen import NativeSessionIdentity
 from .registration import Registration
 from .thread_identity import ThreadIncarnation
 from .turn_context import (
@@ -487,6 +488,16 @@ class ContextStore(DurableStore):
         if rows:
             return self.resolve(db, source, rows[0])
         return AbsentContext()
+
+    def entries(
+        self, identity: NativeSessionIdentity, entry_ids: Iterable[str],
+    ) -> dict[str, SegmentManifest]:
+        """The recorded manifest of each named journal entry that has one."""
+        with self.snapshot() as db:
+            return {row.entry_id: row.manifest for entry_id in entry_ids
+                    for row in ContextEntry.select(db, session_id=identity.session_id,
+                                                   session_file=identity.session_file,
+                                                   entry_id=entry_id)}
 
     def prior(self, owner: ThreadIncarnation) -> RecordedContextState:
         """Read the thread's previous request from a snapshot, outside any write lock."""

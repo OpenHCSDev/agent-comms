@@ -282,7 +282,7 @@ def test_standby_refuses_canonical_reply_that_arrived_before_wait(tmp_path, ackn
     goal = comms.goals.update_goal("parent", SetGoalAction(text="Delegate work"))
     message = comms.messaging.send("child", "parent", "Finished immediately").message
     if acknowledged:
-        references = tuple(message.reference for message in comms.bus.inbox("parent"))
+        references = tuple(message.reference for message in comms.bus.inbox("parent").page.messages)
         comms.messaging.acknowledge("parent", references)
     with pytest.raises(ValueError):
         comms.goals.update_goal(

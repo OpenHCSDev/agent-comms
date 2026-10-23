@@ -28,6 +28,7 @@ from .native_entries import (
     TranscriptProjection,
 )
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
+from .native_session_reopen import NativeSessionIdentity
 from .private_path import FileRevision
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .transcript_sources import TranscriptRecord, TranscriptSource
@@ -293,6 +294,9 @@ class NativeTranscript(TranscriptSource):
                 fragment, used = [], 0
         if fragment:
             yield tuple(fragment)
+
+    def recorded_contexts(self, contexts, entry_ids):
+        return contexts.entries(NativeSessionIdentity(self.session_id, str(self.path)), entry_ids)
 
     @property
     def session_id(self):
