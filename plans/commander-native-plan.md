@@ -227,95 +227,25 @@ silence scan derives its grace from that request and the latest actual beat.
 A newer request, service registration, commander reply or rename cannot erase the
 older debt. No parallel timestamp, ping store or scheduler is added.
 
-Draft #2624 is stacked on the published owner-request port #2621. Eighteen
-focused copied-bus/request/page/channel/source checks pass (7.54 seconds),
-including the newest beat across both participants' renames and later reverse
-replies. On the retained 19,189-record bus copy, an absent service with aliases
-takes 76 SQLite instructions after index reconciliation versus 45,088 before;
-both return no message. All exact-pair queries use the declared covering index.
-Reconciliation preserves every bus sequence and both bus/address row counts;
-integrity and foreign-key checks pass, and a repeated reconciliation is a no-op.
-Its current unconditional projection rebuild costs 39.83 seconds even for this
-index-only change; that installer/schema defect remains open with the commander.
-Installed full-session/parity acceptance and the complete control-plane phase
-remain open. The source census has zero parse omissions; unprojected declarations
-remain visible.
+### Reply eligibility: the message owns the answer
 
-### Reply eligibility work: the message owns the answer (2026-10-23)
+`Message.role.response_policy` owns eligibility. SQL does not reimplement its
+recipient or response rules, and `MessageIdentitySource` does not retain a
+second policy identity. `Delivered.projections` materializes the direct-turn
+predicate once for each frozen recipient in `DirectReplySource`.
+`BusReader.direct_replies` uses that index with a bounded selection before
+loading deliveries. Installed Core commit stamps invalidate and rebuild these
+projections when their producing implementation changes.
 
-`MessageIdentitySource.response_policy` copied the result of
-`Message.role.response_policy`, and `RepliesDisplayScope.response_predicate`
-and `ResponsePolicy.recipients_sql` supplied a second implementation of the
-existing Python eligibility contract. This is IDEN-5/IMPL-5: the message role
-and `RepliesDisplayScope.includes` already determine the answer. The current
-checkpoint deletes that column and SQL family. `AnsweredSource` first joins
-the recorded exact question/reply references, groups by original, and visits
-actual originals lazily in the requested answer order. Greatest reply sequence
-and greatest timestamp are separate selections. Unanswered pages apply the
-same real eligibility owner before counting their page limit. No callback,
-callback cache, fake message, policy switch or new index is added.
+Reply pages retain exact original-reference matching, participant aliases and
+the original request's response eligibility. Latest reply sequence and greatest
+reply timestamp are separate selections. The query indexes must cover that
+existing scope before a SQL limit is applied; reading every original to decide
+eligibility is not the design.
 
-Focused copied-bus checks cover aliases, wrong reference hashes, expired
-questions, newer ineligible candidates, non-monotonic reply timestamps and
-eligibility before a one-message page limit. The retained 19,189-record replay
-and source census are recorded in #2630, which is rebased onto the current
-integration branch and carries the accepted heartbeat repair. It excludes
-rejected #2629; removing these mirrors does not establish generic projection
-freshness.
-
-The change also deletes `DirectReplySource`, the other stored answer
-computed by `Delivered.direct_for`. `Goals._goal_input_review` and
-`RecordedGoalWait.has_reply` now consume `BusReader.direct_replies`, which
-checks actual delivery policy before counting the page limit. Frozen
-sender/recipient incarnations, UNKNOWN input selection and review cursors are
-preserved. The shared participant reader returns actual `Delivered` values
-through its existing checked decoder, closing the inaccurate `BusRecord`
-return contract used by `cohort_foreground`.
-
-The original streaming candidate needed 170–601 full delivery decodes for a
-100-reply page. Frozen capability decoding dominated. The implemented query
-reads actual complete `Message` values first and loads frozen deliveries only
-for accepted messages.
-`ResponsePolicy.starts_direct_turn` owns the shared predicate; `ReceivedSource`
-already establishes the frozen recipient incarnation. All sixteen counted
-replays match: a 100-reply page loads exactly 100 full deliveries, with 170–601
-message reads and 148–363 milliseconds in the completed counted replay.
-An earlier cold cell hit its one-second cutoff; that failed run is retained.
-That comparison was against the rejected full-manifest replacement, not the
-original cache. A paired source replay of the actual pre-change
-`received(source=DirectReplySource)` query on the same four saved-range
-100-reply pages costs 52–105 milliseconds with 100 delivery decodes. The new
-query costs 101–218 milliseconds with 170–601 message reads plus 100 delivery
-decodes: 1.3–4.2 times slower in those cases. Removing the stored answer closes
-the maintenance defect; this direct-query runtime regression remains owned by
-the control-plane worker. Neither replay establishes constant cost.
-Ordinary participant pages retain
-their SQL limit. Conversation pages query each declared `ParticipantSource`
-member up to that limit, then combine the bounded candidates before decoding.
-The retained one-message case takes 50 SQLite instructions on both short and
-long sources; the previous UNION materialized 6,050 versus 256,859 instructions.
-
-`tools/cutover/carry_reply_policy.py` retires the exact source-proven old table
-and applies the existing `BusSchema` family carry to the live root and its
-catalog-declared snapshots. The main installation witness and archive catalog
-lock own the work; backup and rewritten paths include every affected copy.
-An actual worker-process carry of the retained bus removes 8,290 cached rows,
-keeps all six durable source-table counts and hashes unchanged, removes the
-old policy column, passes integrity/foreign-key checks and repeats as a no-op.
-It costs 44.02 seconds; no projection skip is restored. A real attached archive
-still validates and browses with identical catalog and read results afterward.
-The cutover is deleted after all buses have run it.
-
-Whole-file ownership remains open with the control-plane owner. The attempted
-complete-catalog check was removed: the converter's `HistoryOffset` must survive
-retry until `BusHistory.after_acceptance`, and private optional awareness owns
-a separate schema view. The repair retains existing partial schema-family
-scopes and drops only the exact proven retired input. Other unclaimed tables
-are preserved; general detection is not closed by this change. The actual
-`OwnerRequests`, `ReplyPolicy`, `BusHistory` order is checked with unconverted
-JSONL and retained conversion maps, through normal after-acceptance retirement.
-The current installed pair remains independent of this draft; installation
-and live commander qualification belong to integration acceptance.
+Schema-family carries preserve converter-owned `HistoryOffset` rows until
+`BusHistory.after_acceptance` retires them. Durable history is preserved;
+rebuildable projections follow their producing Core build.
 
 ### Phase 8: cutover
 
