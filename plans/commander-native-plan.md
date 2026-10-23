@@ -276,9 +276,16 @@ four-pair direct-reply selections match the stored table, but a 100-reply
 page requires 170–601 full delivery decodes and costs 101–988 milliseconds.
 The same 601 records cost 1,106 milliseconds as full deliveries versus 133
 milliseconds as complete `Message` values: frozen delivery capability decoding
-is the dominant term. The control-plane owner is repairing that query/decode
-boundary without another policy copy. The current installed pair remains
-independent of this draft.
+is the dominant term. The next candidate reads actual complete `Message`
+values first and loads the frozen delivery only for accepted messages.
+`ResponsePolicy.starts_direct_turn` owns the shared predicate; `ReceivedSource`
+already establishes the frozen recipient incarnation. All sixteen counted
+replays match: a 100-reply page loads exactly 100 full deliveries, with 170–601
+message reads and 148–363 milliseconds in the completed counted replay.
+An earlier cold cell hit its one-second cutoff; that failed run is retained.
+Neither replay establishes constant cost. Physical retirement of the removed
+table remains open through the existing one-shot cutover owner. The current
+installed pair remains independent of this draft.
 
 ### Phase 8: cutover
 

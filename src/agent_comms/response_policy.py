@@ -20,6 +20,10 @@ class ResponsePolicy(DeclaredFamily, affix="Policy"):
     starts_turn = False
     separate_turn = False
 
+    @property
+    def starts_direct_turn(self) -> bool:
+        return self.starts_turn and self.separate_turn
+
     @classmethod
     @cache
     def instance(cls) -> ResponsePolicy:

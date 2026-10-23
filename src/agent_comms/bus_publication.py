@@ -55,7 +55,7 @@ class Delivered(BusRecord, declared_name=None):
     def direct_for(self, recipient_lookup: str) -> bool:
         """Direct reply semantics and the committed addressed incarnation agree."""
         policy = self.message.role.response_policy(self.message)
-        return (policy.starts_turn and policy.separate_turn
+        return (policy.starts_direct_turn
                 and self.audience.includes_lookup(recipient_lookup))
 
     def compaction_messages_for(self, recipient_lookup: str) -> tuple[Message, ...]:
