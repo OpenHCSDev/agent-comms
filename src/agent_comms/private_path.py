@@ -201,7 +201,9 @@ class FileRevision(RecordMember, FileObservation):
 
 
 class FilesystemRole(DeclaredFamily, affix="Role"):
-    kind_flags: ClassVar[int]
+    @classmethod
+    @abstractmethod
+    def kind_flags(cls) -> int: ...
 
     @classmethod
     @abstractmethod
@@ -236,7 +238,7 @@ class FilesystemRole(DeclaredFamily, affix="Role"):
         dir_fd: int | None = None, mode: int = 0o600,
     ) -> int:
         Platform.current().require_pinned_paths(refusal)
-        fd = os.open(path, flags | os.O_NOFOLLOW | cls.kind_flags, mode, dir_fd=dir_fd)
+        fd = os.open(path, flags | os.O_NOFOLLOW | cls.kind_flags(), mode, dir_fd=dir_fd)
         try:
             cls.require(os.fstat(fd), refusal)
         except BaseException:
@@ -277,6 +279,10 @@ class PrivateFileRole(PrivateRole):
     permissions = 0o600
 
     @classmethod
+    def kind_flags(cls) -> int:
+        return os.O_NONBLOCK
+
+    @classmethod
     def accepts_kind(cls, mode: int) -> bool:
         return stat.S_ISREG(mode)
 
@@ -290,12 +296,20 @@ class PrivateDirectoryRole(PrivateRole):
     permissions = 0o700
 
     @classmethod
+    def kind_flags(cls) -> int:
+        return os.O_DIRECTORY
+
+    @classmethod
     def accepts_kind(cls, mode: int) -> bool:
         return stat.S_ISDIR(mode)
 
 
 class PrivateSocketRole(PrivateRole):
     permissions = 0o600
+
+    @classmethod
+    def kind_flags(cls) -> int:
+        return os.O_NONBLOCK
 
     @classmethod
     def accepts_kind(cls, mode: int) -> bool:
@@ -325,6 +339,10 @@ class PrivateSocketRole(PrivateRole):
 
 class OwnedDirectoryRole(FilesystemRole):
     @classmethod
+    def kind_flags(cls) -> int:
+        return os.O_DIRECTORY
+
+    @classmethod
     def accepts_kind(cls, mode: int) -> bool:
         return stat.S_ISDIR(mode)
 
@@ -334,6 +352,10 @@ class OwnedDirectoryRole(FilesystemRole):
 
 
 class TrustedAncestorRole(FilesystemRole):
+    @classmethod
+    def kind_flags(cls) -> int:
+        return os.O_DIRECTORY
+
     @classmethod
     def require_path(cls, directory: Path, refusal: Exception) -> None:
         for ancestor in (directory, *directory.parents):
