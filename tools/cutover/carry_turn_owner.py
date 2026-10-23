@@ -18,6 +18,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.carry import Carried, Carry
+from agent_comms.locked_store import RegistryFile
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import AtomicFile
 from agent_comms.thread_identity import TurnIdentity
@@ -25,12 +26,7 @@ from agent_comms.turn_lease import ActiveTurn, StoredTurnRecord
 
 
 class TurnOwner(Carry):
-    def backup_files(self) -> tuple[Path, ...]:
-        """Every turn file, read without decoding: earlier steps carry the registry first."""
-        paths = tuple(sorted(StoredTurnRecord.matching_in(RegistryStore.at(self.root).path.parent)))
-        for path in paths:
-            self.require_confined(self.root, path)
-        return paths
+    opened_files = (RegistryFile, StoredTurnRecord)
 
     def carry(self, *, apply: bool) -> Carried:
         registry = RegistryStore.at(self.root)

@@ -22,7 +22,7 @@ from agent_comms.registry_document import NoCommanderProject, RegisteredCommande
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.installer.backup import UpgradeRefused, bus_files
 from agent_comms.installer.carry import CarryChain
-from agent_comms.installer.practice import practice_copy
+from agent_comms.installer.practice import PracticeCopy
 from agent_comms.locked_store import BusFile, RootFile, SQLiteFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 
@@ -95,17 +95,20 @@ def test_practice_copy_is_the_declared_files_without_its_maintenance_witnesses(p
                  if issubclass(owner, SQLiteFile)}
     assert databases
 
-    with practice_copy(root, private_directory / "practice/bus") as (copy, measurement):
-        copied = {str(path.relative_to(copy)) for path in copy.rglob("*") if path.is_file()}
-        assert copied == declared - witnesses
-        assert measurement.bytes > 0
-        for name in databases:
-            query = "SELECT name FROM sqlite_schema ORDER BY name"
-            with (closing(sqlite3.connect(root / name)) as original,
-                  closing(sqlite3.connect(copy / name)) as practised):
-                assert practised.execute(query).fetchall() == original.execute(query).fetchall()
-        for name in copied - databases:
-            assert (copy / name).read_bytes() == (root / name).read_bytes()
+    practice = PracticeCopy(root, private_directory / 'practice/bus')
+    practice.include(tuple(RootFile.existing_in(root)))
+    copy = practice.path
+    measurement = practice.measurement
+    copied = {str(path.relative_to(copy)) for path in copy.rglob("*") if path.is_file()}
+    assert copied == declared - witnesses
+    assert measurement.bytes > 0
+    for name in databases:
+        query = "SELECT name FROM sqlite_schema ORDER BY name"
+        with (closing(sqlite3.connect(root / name)) as original,
+              closing(sqlite3.connect(copy / name)) as practised):
+            assert practised.execute(query).fetchall() == original.execute(query).fetchall()
+    for name in copied - databases:
+        assert (copy / name).read_bytes() == (root / name).read_bytes()
     assert bus_files(root) == saved
 
 
@@ -131,13 +134,15 @@ def test_a_message_sent_while_the_bus_is_copied_preserves_one_database_cut(
         return result
 
     monkeypatch.setattr(Bus, "copy_file", classmethod(copy_then_write))
-    with practice_copy(root, private_directory / "practice/bus") as (copy, _):
-        monkeypatch.undo()
-        writer.join(timeout=30)
-        assert main(["--root", str(copy), "history", "--limit", "50"]) == 0
-        assert '"failed"' not in capsys.readouterr().out
-        assert Bus(Bus.path_in(copy)).revision() == 1
-        assert Bus(bus_path).revision() == 2
+    practice = PracticeCopy(root, private_directory / 'practice/bus')
+    practice.include(tuple(RootFile.existing_in(root)))
+    copy = practice.path
+    monkeypatch.undo()
+    writer.join(timeout=30)
+    assert main(["--root", str(copy), "history", "--limit", "50"]) == 0
+    assert '"failed"' not in capsys.readouterr().out
+    assert Bus(Bus.path_in(copy)).revision() == 1
+    assert Bus(bus_path).revision() == 2
 
 
 def test_install_report_encodes_its_registered_harnesses() -> None:
@@ -224,10 +229,12 @@ def test_a_practice_copy_of_a_bus_without_messages_reads_its_history_twice(priva
     root.mkdir(mode=0o700)
     Bus.install(Bus.path_in(root))
     (root / "storage.json").write_text(json.dumps({"floor_gib": 0}))
-    with practice_copy(root, private_directory / "practice/bus") as (copy, _):
-        for _ in range(2):
-            assert main(["--root", str(copy), "history", "--limit", "50"]) == 0
-            assert '"failed"' not in capsys.readouterr().out
+    practice = PracticeCopy(root, private_directory / 'practice/bus')
+    practice.include(tuple(RootFile.existing_in(root)))
+    copy = practice.path
+    for _ in range(2):
+        assert main(["--root", str(copy), "history", "--limit", "50"]) == 0
+        assert '"failed"' not in capsys.readouterr().out
 
 
 def test_practice_copy_takes_turn_files_in_the_registry_cut(private_directory):
@@ -241,7 +248,9 @@ def test_practice_copy_takes_turn_files_in_the_registry_cut(private_directory):
     turn = comms.registry.require("owner").turn_record.path
     assert turn in comms.registry.store.cut_paths
 
-    with practice_copy(root, private_directory / "practice/bus") as (copy, _):
-        copied = wire(copy).registry.require("owner")
-        assert copied.turn_lease.identity == lease.identity
-        assert copied.executing
+    practice = PracticeCopy(root, private_directory / 'practice/bus')
+    practice.include(tuple(RootFile.existing_in(root)))
+    copy = practice.path
+    copied = wire(copy).registry.require("owner")
+    assert copied.turn_lease.identity == lease.identity
+    assert copied.executing

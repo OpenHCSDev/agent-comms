@@ -13,7 +13,8 @@ from test_todos import order, pr_commander, thread
 from agent_comms.commander.order import OrderFile, main
 from agent_comms.commander.request import RequestAddVerb
 from agent_comms.field_codec import FieldCodec
-from agent_comms.installer.practice import practice_copy
+from agent_comms.installer.practice import PracticeCopy
+from agent_comms.locked_store import RootFile
 from agent_comms.goals import OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
@@ -42,12 +43,14 @@ def held_commander(pr_commander):
     published = source.comms.messaging.send(source.commander, worker.name, "Repair the held workflow through its existing declaration.")
     source.comms.goals.todos.apply(todo.id, OrderMessage(todo.revision, lead.incarnation, published.message.message_id))
     original = source.comms.goals.todos.get(todo.id)
-    with practice_copy(source.root, source.root.parent / f"{source.root.name}-copied") as (root, _):
-        ctx = source.model_copy(update={
-            "root": root, "state": root / "state",
-            "repos": (*source.repos, Repo.of(Path(__file__).resolve().parents[1])),
-        })
-        yield ctx
+    practice = PracticeCopy(source.root, source.root.parent / f"{source.root.name}-copied")
+    practice.include(tuple(RootFile.existing_in(practice.root)))
+    (root, _) = practice.path, practice.measurement
+    ctx = source.model_copy(update={
+        "root": root, "state": root / "state",
+        "repos": (*source.repos, Repo.of(Path(__file__).resolve().parents[1])),
+    })
+    yield ctx
     assert source.comms.goals.todos.get(todo.id) == original
 
 

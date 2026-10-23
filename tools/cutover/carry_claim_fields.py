@@ -27,7 +27,7 @@ from agent_comms.selected_write_plan import (
 from agent_comms.store_files import AtomicFile, _store_lock
 from agent_comms.typed_table import HeldBusFile, JsonStorage, TypedTable, _identifier
 
-from .carry_bus_history import CarryCatalogSource
+from .archived_roots import CarryCatalogSource
 from .carry_context_request_key import ContextRequestKey
 from .carry_dead_turns import DeadTurns
 from .carry_finished_turns import FinishedTurns
@@ -48,22 +48,6 @@ class ClaimFields(RetiredClaimFields, Carry):
             SelectedWritePlans.directory_in(root)))
         documents.update((path, QueuedRestart) for path in (root / DIRECTORY).rglob("*.json"))
         return documents
-
-    def roots(self) -> tuple[Path, ...]:
-        return (self.root, *(source.mapped_root(self.root, self.original_root)
-                             for source in CarryCatalogSource.read(self.root, self.original_root)))
-
-    def backup_files(self) -> tuple[Path, ...]:
-        paths = set()
-        for root in self.roots():
-            files = RootFile.existing_in(root)
-            paths.update(path for path, owner in files.items() if issubclass(owner, SQLiteFile))
-            paths.update(self.documents(root, files))
-            paths.update(RegistryStore.at(root).written)
-        paths.add(HistoryArchive.path_in(self.root))
-        for path in paths:
-            self.require_confined(self.root, path)
-        return tuple(sorted(path for path in paths if path.exists()))
 
     def carry(self, *, apply: bool) -> Carried:
         if apply:
