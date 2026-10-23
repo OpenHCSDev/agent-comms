@@ -148,14 +148,10 @@ class NativeSessionFiles(NativeSessionIdentity, NativeTranscriptFiles):
     def require_private_directory(directory: Path) -> None:
         if ".." in directory.parts:
             raise NativePiUnavailable("Native Pi session directory is not lexical")
-        try:
-            TrustedAncestorRole.require_path(directory)
-        except ValueError as error:
-            raise NativePiUnavailable(f"Native Pi session directory has unsafe ancestor: {error}") from error
-        try:
-            PrivateDirectoryRole.require(directory.lstat())
-        except RelationViolationError as error:
-            raise NativePiUnavailable("Native Pi session directory must be owner-only") from error
+        TrustedAncestorRole.require_path(
+            directory, NativePiUnavailable("Native Pi session directory has unsafe ancestor"))
+        PrivateDirectoryRole.require(
+            directory.lstat(), NativePiUnavailable("Native Pi session directory must be owner-only"))
 
     @classmethod
     def prepare_private_directory(cls, directory: Path) -> None:
@@ -182,7 +178,8 @@ class NativeSessionFiles(NativeSessionIdentity, NativeTranscriptFiles):
                 if parent == parent.parent:
                     break
                 try:
-                    PrivateDirectoryRole.require(parent.lstat())
+                    PrivateDirectoryRole.require(
+                        parent.lstat(), RelationViolationError("Native Pi parent must be owner-only"))
                 except RelationViolationError:
                     break
                 parent = parent.parent

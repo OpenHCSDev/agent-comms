@@ -43,7 +43,7 @@ from .pi_vocabulary import NoThinkingOverride, PendingStopReason, ThinkingChoice
 from .private_path import (
     FileIdentity,
     FileRevision,
-    NativeSessionFileRole,
+    PrivateFileRole,
     TrustedAncestorRole,
 )
 from .typed_table import (
@@ -265,7 +265,7 @@ class NativeContextJournal(
                     os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb")
                 ))
                 before = os.fstat(held.fileno())
-                NativeSessionFileRole.require(before)
+                PrivateFileRole.require(before, NativePiUnavailable("Native proof file is not private"))
                 db = ownership.enter_context(closing(SQLiteFile.recovering_snapshot(path)))
                 if cls.schema_differs(db):
                     raise NativePiUnavailable("Native proof requires offline durable conversion")
@@ -678,7 +678,8 @@ class PrivateEvidenceRead:
             if path != path.resolve(strict=True):
                 raise NativePiUnavailable("Native Pi evidence session path is not canonical")
             stream = os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb")
-            NativeSessionFileRole.require(os.fstat(stream.fileno()))
+            PrivateFileRole.require(
+                os.fstat(stream.fileno()), RelationViolationError("Native Pi evidence file is unavailable"))
             return stream
         except FileNotFoundError as error:
             if stream is not None:
@@ -853,13 +854,14 @@ class PrivateEvidenceRead:
         be hidden by shrinking the named file back.
         """
         try:
-            TrustedAncestorRole.require_path(self.path.parent)
-        except (OSError, ValueError) as error:
+            TrustedAncestorRole.require_path(
+                self.path.parent, NativePiUnavailable("Native Pi evidence has an unsafe ancestor"))
+        except OSError as error:
             raise NativePiUnavailable("Native Pi evidence has an unsafe ancestor") from error
         # Detect replacement before classifying the old descriptor's now-zero
         # links: observing a new named source takes the existing reverify path.
         for info in (self.path.lstat(), os.fstat(self.stream.fileno())):
-            NativeSessionFileRole.require(info)
+            PrivateFileRole.require(info, RelationViolationError("Native Pi evidence file is not private"))
             observed = FileRevision.from_stat(info)
             if observed.identity != self.identity or (
                 observed != revision and observed.size <= revision.size

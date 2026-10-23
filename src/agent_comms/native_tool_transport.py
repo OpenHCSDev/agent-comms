@@ -202,7 +202,8 @@ class ToolListener:
         self._resources = AsyncExitStack()
         if not hasattr(socket, "SO_PEERCRED") or not hasattr(os, "O_NOFOLLOW"):
             raise SelectedToolDenied("Selected tool requires a peer-credential Unix socket")
-        PrivateDirectoryRole.require(self.session_directory.lstat())
+        PrivateDirectoryRole.require(
+            self.session_directory.lstat(), SelectedToolDenied("Selected tool socket parent is not private"))
         if self.session_directory.resolve() != self.session_directory:
             raise SelectedToolDenied("Selected tool socket parent is not private")
         with ExitStack() as prepared:

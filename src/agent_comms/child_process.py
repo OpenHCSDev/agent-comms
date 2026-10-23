@@ -346,6 +346,9 @@ class Platform(DeclaredFamily, affix="Platform"):
     def sync_directory(self, path: Path) -> None: ...
 
     @abstractmethod
+    def require_pinned_paths(self, refusal: Exception) -> None: ...
+
+    @abstractmethod
     def is_private(self, info: os.stat_result, permissions: int) -> bool: ...
 
     @abstractmethod
@@ -428,6 +431,9 @@ class Platform(DeclaredFamily, affix="Platform"):
 
 
 class PosixPlatform(Platform):
+    def require_pinned_paths(self, refusal: Exception) -> None:
+        return None
+
     def sync_directory(self, path: Path) -> None:
         descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
@@ -649,6 +655,9 @@ class DarwinPlatform(PosixPlatform):
 
 
 class Win32Platform(Platform):
+    def require_pinned_paths(self, refusal: Exception) -> None:
+        raise refusal
+
     """Kernel creation times and named job objects bind the complete child tree."""
 
     store_lock_interval = 0.01

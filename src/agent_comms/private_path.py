@@ -223,10 +223,10 @@ class FilesystemRole(DeclaredFamily, affix="Role"):
                      if rule.violated(cls, observed)), None)
 
     @classmethod
-    def require(cls, observed: os.stat_result) -> None:
+    def require(cls, observed: os.stat_result, refusal: Exception) -> None:
         failed = cls.violation(observed)
         if failed is not None:
-            raise RelationViolationError(f"{cls.declared_name}: {failed.declared_name}")
+            raise refusal from RelationViolationError(f"{cls.declared_name}: {failed.declared_name}")
 
 
 class PrivateRole(FilesystemRole):
@@ -245,7 +245,6 @@ class PrivateFileRole(PrivateRole):
         return stat.S_ISREG(mode)
 
 
-class NativeSessionFileRole(PrivateFileRole):
     @classmethod
     def accepts_links(cls, nlink: int) -> bool:
         return nlink == 1
@@ -279,7 +278,7 @@ class PrivateSocketRole(PrivateRole):
         """
         path = Path(path).absolute()
         observed = path.parent.lstat()
-        TrustedAncestorRole.require(observed)
+        TrustedAncestorRole.require(observed, ValueError("Socket directory changed during acquisition"))
         fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
             if not os.path.samestat(observed, os.fstat(fd)):
@@ -292,9 +291,9 @@ class PrivateSocketRole(PrivateRole):
 
 class TrustedAncestorRole(FilesystemRole):
     @classmethod
-    def require_path(cls, directory: Path) -> None:
+    def require_path(cls, directory: Path, refusal: Exception) -> None:
         for ancestor in (directory, *directory.parents):
-            cls.require(ancestor.lstat())
+            cls.require(ancestor.lstat(), refusal)
 
     @classmethod
     def accepts_kind(cls, mode: int) -> bool:
