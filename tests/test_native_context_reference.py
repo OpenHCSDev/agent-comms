@@ -1,25 +1,47 @@
 """Original nullable SQL groups cannot mint a partial recorded native reference."""
 
-from dataclasses import fields, replace
-from pathlib import Path
 import sqlite3
+from dataclasses import fields, replace
+from functools import partial
+from pathlib import Path
 
 import pytest
 
-from agent_comms.native_input_record import (
-    TriageNativeExecution, FullNativeExecution, RecordedNativePosition,
-    NumberNativeColumn, TextNativeColumn, UnrecordedNativeColumn,
-)
-from agent_comms.historical_native_inputs import TriageHistoricalNativeInput, FullHistoricalNativeInput
-from agent_comms.native_pi import NativeContextProof
-from agent_comms.selected_triage import (
-    AbsentTriageDecisionRecord, DecidedTriageRecord, FullSelectedTriage, IgnoreSelectedTriage,
-)
-from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.native_input_record import NativeInputReference, UnrecordedNativeInputReference
-from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
-from agent_comms.native_claim_epoch import RecordedNativeClaim
+from agent_comms.acp_extension import EmptyCursorObservation, VerifiedCursorObservation
+from agent_comms.agent_backend import InputId
 from agent_comms.assignment_states import TriagePendingAssignment
+from agent_comms.comms import Comms
+from agent_comms.coordination_errors import IdentityConflict
+from agent_comms.cursor_owner import (
+    CommittedCursorOwner,
+    CursorOwner,
+    RecordedCursor,
+    UnstartedCursor,
+)
+from agent_comms.historical_native_inputs import (
+    FullHistoricalNativeInput,
+    TriageHistoricalNativeInput,
+)
+from agent_comms.native_claim_epoch import RecordedNativeClaim
+from agent_comms.native_input_record import (
+    FullNativeExecution,
+    NativeInputReference,
+    NumberNativeColumn,
+    RecordedNativePosition,
+    TextNativeColumn,
+    TriageNativeExecution,
+    UnrecordedNativeColumn,
+    UnrecordedNativeInputReference,
+)
+from agent_comms.native_pi import NativeContextProof
+from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
+from agent_comms.proven_source_coverage import InjectedInput
+from agent_comms.selected_triage import (
+    AbsentTriageDecisionRecord,
+    DecidedTriageRecord,
+    FullSelectedTriage,
+    IgnoreSelectedTriage,
+)
 
 
 def cursor():
@@ -29,6 +51,19 @@ def cursor():
         input_id=TextNativeColumn("c" * 32), stage=TextNativeColumn("full"),
         session_id=TextNativeColumn("original-session"), request_generation=NumberNativeColumn(1),
     )
+
+
+@pytest.mark.parametrize("state, observation, covered_seq, proves", [
+    (UnstartedCursor(), EmptyCursorObservation(), 0, False),
+    (RecordedCursor(cursor()), VerifiedCursorObservation(cursor()), 1, True),
+])
+def test_native_cursor_state_owns_start_observation_and_input_proof(
+    state, observation, covered_seq, proves,
+):
+    assert state.covered_seq == covered_seq
+    assert state.observation() == observation
+    assert state.proves_input("c" * 32) is proves
+    assert not state.proves_input("d" * 32)
 
 
 def reservation():
@@ -80,8 +115,9 @@ def test_original_unrecorded_context_and_reserved_input_remain_distinct_from_cor
             _ = replace(recorded, **{name: UnrecordedNativeColumn()}).reference
 
 
-def test_original_native_sql_acquires_required_triage_or_full_recorded_proof(recorded):
-    source = dict(
+@pytest.fixture
+def historical_source(recorded):
+    return dict(
         wire_root_id="a" * 32, source_seq=1, source_message_id="original-message",
         assignment_id="d" * 32, input_id=recorded.input_id,
         owner_lookup=recorded.owner_lookup, owner_thread=recorded.owner_thread,
@@ -92,6 +128,34 @@ def test_original_native_sql_acquires_required_triage_or_full_recorded_proof(rec
         native_reference=recorded.reference,
         expected_prompt_equality_established=True,
     )
+
+
+@pytest.mark.parametrize("make_owner, permitted", [
+    (CursorOwner, True),
+    (partial(CommittedCursorOwner, input_id=InputId("c" * 32)), True),
+    (partial(CommittedCursorOwner, input_id=InputId("d" * 32)), False),
+])
+def test_cursor_owner_enforces_exact_settlement_without_restricting_refresh(
+    tmp_path, recorded, historical_source, make_owner, permitted,
+):
+    thread = Comms(tmp_path).registry.new_thread("owner", frozenset(), str(tmp_path))
+    original = replace(
+        recorded, owner_lookup=thread.incarnation.require_recorded().lookup,
+        verdict=DecidedTriageRecord(IgnoreSelectedTriage),
+    )
+    owner = make_owner(thread=thread, claimed_generation=2, generation=1, wire_root_id="a" * 32)
+    source = {**historical_source, "owner_lookup": original.owner_lookup}
+    with sqlite3.connect(":memory:") as db:
+        NativeRuntimeInput.create(db)
+        original.insert(db)
+        proof = original.execution.historical_proof(
+            original, lifecycle=TriagePendingAssignment(), **source,
+        )
+        assert InjectedInput(proof).allows(owner, db, UnstartedCursor()) is permitted
+
+
+def test_original_native_sql_acquires_required_triage_or_full_recorded_proof(recorded, historical_source):
+    source = historical_source
     with sqlite3.connect(":memory:") as db:
         NativeRuntimeInput.create(db)
         recorded.insert(db)

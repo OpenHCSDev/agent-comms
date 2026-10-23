@@ -41,8 +41,8 @@ class GrantedAnnotationPolicy(AnnotationPolicy):
     def acquire(self, comms, incarnation):
         snapshot = comms.registry.snapshot()
         owner = snapshot.require(incarnation.resolved(snapshot).name)
-        with comms.bus.log.checked_read() as original:
-            facts = RetainedTaskFacts(tuple(original.retained_task_facts(owner.incarnation)))
+        with comms.bus.bus.reading() as original:
+            facts = RetainedTaskFacts.capture(original, owner.incarnation)
             current = facts.current_authored_sources(owner, snapshot)
             selected = next((message for message in current if message.reference == self.source), None)
             if selected is None:

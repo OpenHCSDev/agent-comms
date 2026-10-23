@@ -28,7 +28,6 @@ from agent_comms.launch_root import LaunchRoot
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.restart_scope import OwnersNamed
 from agent_comms.thread_model import DeclaredModel
-from agent_comms.wire_metadata import UndeclaredMarker
 from agent_comms.thread_text import GivenThreadText, NoSessionFile
 from delivery_owner_fixture import canonical_agent
 from native_backend_fixture import native_backend_fixture
@@ -158,7 +157,6 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
     from agent_comms.goals import Goal
     from agent_comms.owner_launch import RetainedOwnerLaunch
     from agent_comms.owner_cutover import PreserveOwnerRuntime
-    from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 
     model = 'response-local/fixture'
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", model)
@@ -181,8 +179,8 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
         ("batch-b", (), "credential-b"),
     )
 
-    class RebuildFixtureCheckpoint(PreserveOwnerRuntime):
-        """An actual declared writer operation; it never starts or stops owners."""
+    class RetainStoppedBatch(PreserveOwnerRuntime):
+        """Check the complete stopped batch without modifying its retained data."""
 
         def require_selection(self, snapshot, owners):
             live = {
@@ -190,7 +188,7 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
                 if thread.restart_candidates(snapshot.status(thread.name))
             }
             if {thread.name for thread in owners} != live:
-                raise RelationViolationError("Checkpoint installation requires the complete batch")
+                raise RelationViolationError("Restart requires the complete batch")
 
         def after_stopped(self, lifecycle):
             assert all(not original.process_alive for original in originals)
@@ -198,23 +196,8 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
                 lifecycle.registry.require(name).process_identity == original.process_identity
                 for name, original in zip(selected, originals, strict=True)
             )
-            bus = lifecycle.bus.log
-            # This fixture's original writer already understands its original
-            # prefix record. Live old-schema ownership remains a separate cutover.
-            with bus.locked():
-                marker = bus.read_metadata_unlocked()
-                before = replace(marker, checkpoint_version=UndeclaredMarker(), checkpoint_seal=UndeclaredMarker())
-                source = bus.path.read_bytes()
-                checkpoint = lifecycle.root / "private_bus_checkpoint.sqlite3"
-                checkpoint.rename(checkpoint.with_suffix(".retained-original"))
-                bus.write_metadata_unlocked(before)
-                install_private_bus_checkpoint(bus, _bus_locked=True)
-                assert replace(
-                    bus.read_metadata_unlocked(), checkpoint_version=UndeclaredMarker(), checkpoint_seal=UndeclaredMarker()
-                ) == before
-                assert bus.path.read_bytes() == source
 
-    cutover = RebuildFixtureCheckpoint()
+    cutover = RetainStoppedBatch()
 
     async def ready(owner):
         async def attach():

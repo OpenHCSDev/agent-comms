@@ -20,6 +20,7 @@ from agent_comms.goal_actions import (
     OrderGoalAction,
     ProblemOrderGoalAction,
 )
+from agent_comms.owner_requests import NewestOpenRequest
 
 from .native_settings import NativeThreadDefaults
 from .phase_tasks import PhaseTask
@@ -67,7 +68,7 @@ class WorkDispatch:
             model=defaults.model,
             thinking_level=defaults.thinking_level,
         )
-        self.action.request_ref(GoalActionContext(comms.goals, candidate))
+        self.action.require_ready(GoalActionContext(comms.goals, candidate))
         comms.registry.require_declaration_available(candidate, StoppedThreadStatus())
         CheckoutStorageEffect(checkout, Path(self.action.order.check.directory)).check(
             StorageProjection(storage, candidate)
@@ -147,7 +148,7 @@ class CheckedPhaseTask(PhaseTask):
             repo=self.repo,
             text=self.text,
             order=order,
-            request=order.request(commander, (self.problem,)),
+            request=NewestOpenRequest().for_order(comms.goals.todos, commander.incarnation),
             commander=commander.name,
             assigner=commander.incarnation,
             review_at=RecordedEventTime(now + self.review_seconds),

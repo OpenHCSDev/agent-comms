@@ -36,6 +36,9 @@ class ConnectorService:
     store: ConnectorStore = field(default_factory=ConnectorStore.owned)
     port: int = PORT
 
+    def described(self) -> str:
+        return f"Connector on port {self.port} for {self.launch.path}"
+
     @property
     def result(self) -> RoundTripResult:
         return RoundTripResult(f"{CommsChannelsTool.declared_name} read alike on port {self.port}")
@@ -96,7 +99,7 @@ class InstallServiceVerb(ConnectorOptions, declared_name="install-service"):
             launch=LaunchRoot.from_path(self.root), store=ctx, port=self.port,
         )
         service.install(service.exec_arguments(self.issuer))
-        print(service.unit_file)
+        print(service.unit_file())
         return 0
 
 

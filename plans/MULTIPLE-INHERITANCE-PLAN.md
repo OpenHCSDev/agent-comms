@@ -1,171 +1,98 @@
-# agent-comms: absorbing the remaining slop through multiple inheritance
+# agent-comms: eliminate restated facts through multiple inheritance
 
-Audited head: `origin/main` on 2026-10-20 at 17:56 EDT. Scope: all of `src/agent_comms` (431 modules, 4,080 classes), `src/agent_comms_hooks` and `tools`, scanned by AST with Python 3.14, findings checked in the code.
+Consolidated 2026-10-22 against `main` at `48c877809`. This is the current plan; the earlier audits remain evidence about their pinned heads, not additional versions of the instructions. Current phase dependencies and completion evidence belong to the `MultipleInheritancePhase` members in `src/agent_comms/plan_phases.py`. Read those declarations and the affected source before assigning work; a historical candidate list is not a current backlog.
 
-## Correction, 2026-10-21 14:20 UTC: this plan is a deletion plan
+## Outcome and ownership
 
-The scan below undercounted. It looked only for flag declarations and byte-identical method bodies, found "only 2 groups", and concluded behaviour is already shared well. That set the plan's ceiling at a few hundred lines, and batch 1's first drafts came out net zero in `src` (#2450 +106 -97, #2451 +145 -146, #2447 +56 -51): flags swapped for bases, nothing deleted. Multiple inheritance factors a repeated fact into one owner, so the whole point is deletion. Measured on `main` at `bac74b1a` with Python 3.14 (AST, `src/agent_comms`, 124K lines, 4,471 classes):
+Declare each required fact once and derive its uses. Shared behavior belongs on its existing parent; overlapping capabilities compose through multiple inheritance and the MRO. Migrate the complete related family and its consumers, then delete the replaced flags, branches, rosters, field declarations and implementations. A marker class beside the old consumer decision does not complete the change.
 
-| Slop | Size | Owner it moves to |
-|---|---|---|
-| Class-level boolean flags (`x = True` / `x: ClassVar[bool] = False`) | 500 lines, 175 of them `ClassVar[bool]` | one capability class per flag, carrying the reader's branch |
-| Structurally identical method bodies after normalizing names and literals, 3+ copies | 29 groups, 1,518 removable lines | the common base each group's classes share or should share |
-| ...of which hand-written SQL trigger text (`trigger_bodies`, `_retry_trigger_bodies`, `_lifecycle_trigger_bodies`) | about 900 lines in `cohort_schema.py`, `coordination_tables/*`, `coordination_response.py` | table capabilities (`AppendOnly`, `Revisioned`, `Retried`, `LifecycleGuarded`) that derive their triggers from the table's columns, the same owner the virtual bus uses for `AppendOnly` |
-| Methods whose whole body returns a fixed value, under names repeated 3+ times | 443 methods, 1,633 lines (`successors` 50, `violated` 32, `matches` 22, `trigger_bodies` 17, `title` 13) | a class attribute or capability where the value is a per-member fact; deleted where a base already answers it (`Terminal` answers `successors() == ()`) |
-| Lifecycle state machines written once per family | 12 families, 61 `successors` definitions, about 3,500 lines in the `*_states` modules | one `LifecycleState` machinery with capabilities; each family keeps only its members' edges |
+The implementation mechanisms already exist:
 
-Floor for the whole plan: **net -2,500 lines in `src`**. The audit fork raises this per batch once it has measured near-similar bodies (same shape, small differences), which this table does not count.
+- `DeclaredFamily.members_with` derives family membership from inherited capabilities. Delete hand-maintained member lists.
+- `MroDispatch` and `@handles` select behavior through the value's MRO. Put the behavior on its owner instead of rediscovering a nominal type in each consumer.
+- `FieldCodec` owns field decoding and encoding. Extend its declared capabilities in `field_codec.py`; never add another codec or subclass it elsewhere.
+- `TypedTable` owns columns, constraints, schema reconciliation and derived trigger SQL. Table capabilities compose there.
+- `LifecycleState` and `lifecycle_capability.py` own shared state behavior. For example, `Terminal.successors()` already supplies the empty successor set; subclasses do not restate it.
 
-Rules added to every change:
-- **Every PR states its net `src` lines in its body. A net-positive inheritance PR goes back.** New capability classes are paid for by the copies they delete.
-- **Delete first, rewire after** (Tristan, 2026-10-21: "I don't care if you delete slop and cause an error because we didn't rewire something, we'll just rewire it. There's never an excuse for slop."). A deletion that breaks a caller is fixed by moving the caller onto the owner, never by restoring the copy.
-- **Hunt, don't just execute.** Each unit reports any slop it finds outside its list in #comms with file:line, and the commander assigns it the same tick.
+The virtual-bus plan shares these owners. Its `Addressed` capability owns `sender` and `target`; this plan uses it rather than declaring a second field group. Bus byte positions and obsolete `wire_*` fields are deleted by that plan, not preserved in new mixins here.
 
-Batch 1 gains two surfaces, run in parallel with 1A to 1C on disjoint files:
-- **1D, table triggers.** Every `trigger_bodies`-style method is deleted; each table inherits the capabilities whose triggers it needs, and `TypedTable` derives the DDL. Stored schema text must stay byte-identical (see the rule below), so each capability renders exactly today's trigger SQL; where two tables' triggers differ only by table and column names, that difference is the capability's input.
-- **1E, the 29 structural duplicate groups** outside triggers, each moved to its common owner.
+## Rules that decide a change
 
-## Deletion targets per batch, measured 2026-10-21 on `a40e7f9cd`
+- **A demonstrated restatement is slop regardless of its copy count.** Two copies do not earn an exemption. Share a required fact through its owner; retain separate facts when their required answers or independent evolution differ. Current syntactic similarity alone does not establish a shared requirement.
+- **Recognize the defect before the complete repair is known.** Name the restated fact and its defective encoding. Then use AST evidence and semantic reading to trace declarations, writes, decisions, imports, inheritance and all consumers across the relevant production and dependency roots before structural edits. Report parse omissions and unresolved dynamic relationships.
+- **Capabilities carry the behavior they replace.** Moving `flag = True` into an empty base while changing `if x.flag` to `isinstance(x, Capability)` only relocates the decision. Move that decision onto the owning type or its existing dispatch mechanism and migrate every consumer. Siblings retain only irreducible differences.
+- **Delete the competing authority in the same coherent change.** Rewire callers onto the owner; a broken caller does not justify restoring the copy. No compatibility aliases, alternate codecs, legacy readers or parallel caches.
+- **Judge ownership, not line budgets.** Report source changes as measurements. Neither a net reduction nor a net increase establishes whether a fact is correctly owned. New classes must carry existing work and eliminate a restated fact or duplicated mechanism.
+- **Choose the transformation from the source.** Use a codemod for a mechanical family-wide rewrite when it removes repetitive editing; its reader changes and deletions belong in the same change. A codemod cannot decide whether two implementations mean the same thing. One-shot transformation tools are deleted before delivery.
+- **Preserve required behavior and external contracts.** Do not wrap external AST nodes, SDK types, `typing` objects or deliberately open external shapes merely to make a local scanner quiet. Distinguish genuine external-boundary handling from switches on types we own.
+- **Confirm the coherent change last.** Run the focused checks relevant to the changed behavior and exercise the actual affected installed entry path. Do not run a full suite per batch or use repeated test runs to choose the design. Merge and installation follow the current commander rules.
 
-Scan: `src/agent_comms`, 426 modules, 0 parse omissions, Python 3.14 AST, 10,936 callables (10,581 methods). Bodies are compared after erasing identifiers, literals and attribute targets: exact shapes, and near shapes at a similarity ratio of 0.8 (and a looser 0.75 pass). A group is **certain** when every copy answers the same required question in every reachable state; the rest are marked uncertain and need the reader traced before deletion.
+## Storage decision
 
-**The 1,518 above is wrong, and it is wrong in the direction that hides 1D.** Erasing literals makes every method that only returns a literal dict or tuple look identical: `cohort_schema.py:88` and `coordination_tables/assignments.py:320` are both `trigger_bodies` returning a dict of SQL, so they "match", yet their SQL guards different tables and columns. Moving such a body to a common parent deletes nothing, because each member still owns its text. Excluding bodies that only return a literal, real copied behaviour is small: **8 exact groups, 91 removable lines (58 certain)**, plus 3 near groups. Near-duplicates at 0.8 add 9 lines; at 0.75, 57 (overlapping the exact `__init__` group). Parallel class families with the same method names already have distinct bodies; the bodies that agree add 40 lines (the `references` + `trigger_bodies` family, 5 classes, 32; `add_to`/`publish` at `cli_bridges/codex_rollout.py:256` and `runtime_updates.py:355`, 7). So near-similar bodies do not raise the number. Declarations do.
+Preserve durable table and column layouts during declaration factoring. `TypedTable` compares stored schema text, so a field-group change must retain the affected table/column DDL, including column order, byte for byte. Preserve required record meanings and external wire contracts. Share a declaration only where it represents the same fact and preserves that layout; a layout change requires its own explicit migration decision.
 
-| Batch | Measured target (net `src`) | Certain? | Source of the lines |
-|---|---|---|---|
-| 1A lifecycle | -97 | yes | 85 flag lines (`terminal` 22, `failed` 10, `active` 10, `complete`/`successful`/`pending` 7, `unresolved`/`executing` 6, `deferred`/`completed` 5) less one 2-line capability per flag, plus 32 empty `successors()` bodies `Terminal` answers |
-| 1B codec | -34 | yes | 44 flag lines (`accepts_null` 11 at `acp_extension.py:163`, `accepts_prompt` 11 at `pi_events.py:143`, `opaque` 9, `external_json_shape` 7, `strict_fields` 6) less capabilities |
-| 1C small families | -83 | yes | 167 flag lines over 42 names at three or more copies (`multiple_targets` 8, `input_uncertain` 8 read nowhere, `preengagement_target`/`waiting`/`visible` 6, ...) less capabilities; `without_rowid` (16) goes to 2A |
-| 1D triggers | -800 | no: needs the stored triggers rewritten | 29 methods, 930 lines, 80 triggers (list below) |
-| 1E duplicates | -91 to -150 | 58 lines certain | 8 exact and 3 near groups (list below) |
+**Handwritten triggers are replaced, not reproduced byte for byte.** The 2026-10-21 correction superseded the original instruction to preserve their SQL text. Copying each trigger's message and whitespace into capability parameters would merely move the same SQL. A trigger holds no data: derive its guard from table and column declarations through `TypedTable`, and use the installer's one-shot cutover mechanism to drop the old triggers and create the derived ones. Preserve their required constraints and superclass promises; verify the stored result against the derived declaration. Delete the cutover tool after the affected stores have been migrated. Reuse already delivered trigger capabilities and migration work.
 
-Batch 1 as landed so far is **+13** (+307 -294). Against this table it should have been about -214 for 1A to 1C alone.
+## Work by owning family
 
-**1D needs one decision, taken here: the stored triggers are rewritten, not reproduced.** `RowMutation.abort_trigger` (`typed_table.py:661`) already derives a no-update and a no-delete trigger per table for `AppendOnlyTables` (`typed_table.py:670`). The 45 hand-written update and delete guards below restate that mechanism per table with their own message text and whitespace (IMPL-13). Rendering today's bytes exactly keeps every message and every indent as capability input, which is the same text moved, not deleted. A trigger holds no data, so `DROP TRIGGER` and `CREATE TRIGGER` from the derived declaration is lossless: one tool in `tools/cutover/` rewrites the triggers of the stored coordination files at install, and `schema_differs` (`typed_table.py:635`) then compares against the derived text. The byte-identical rule above stays in force for tables and columns. Kinds, from the trigger text: 18 refuse DELETE, 27 guard UPDATE (whole row, `UPDATE OF` one column, or a `WHEN` monotonic test), 9 freeze several columns at once (`NEW.x != OLD.x OR ...`, 63 such terms), 13 require a parent row on INSERT, 6 others, and 7 methods compute their text.
+The phase names below identify the existing declarations in `plan_phases.py`; that family owns their dependency graph and completion evidence. Recheck the current source before dispatch so delivered work is not implemented again.
 
-1D list (every trigger method in `src`):
+### Batch 1: capabilities and shared implementations
 
-| Method | Class | Lines | Triggers by kind |
-|---|---|---|---|
-| `cohort_schema.py:88` `trigger_bodies` | `ClaimBatchAcknowledgements` | 105 | immutable-columns 1, no-delete 1, no-update 1, other-insert 1 |
-| `cohort_schema.py:220` `trigger_bodies` | `ClaimBatchMembers` | 40 | insert-membership 1, no-delete 1, no-update 1 |
-| `cohort_schema.py:323` `trigger_bodies` | `CohortDeliveryReceipts` | 50 | insert-membership 2, no-delete 1, no-update 1 |
-| `cohort_schema.py:451` `trigger_bodies` | `AwarenessClaimGenerations` | 39 | insert-membership 1, no-delete 1, no-update 1 |
-| `coordination_response.py:73` `trigger_bodies` | `ResponseTable` | 7 | computed 1 |
-| `coordination_tables/assignments.py:245` `trigger_bodies` | `WakeAssignment` | 47 | immutable-columns 1, no-delete 1 |
-| `coordination_tables/assignments.py:320` `trigger_bodies` | `ExecutionAssignmentLink` | 42 | insert-membership 2, no-delete 1, no-update 1 |
-| `coordination_tables/attempts.py:264` `trigger_bodies` | `AttemptRecord` | 70 | immutable-columns 1, insert-membership 1, no-delete 1, no-update 1 |
-| `coordination_tables/attempts.py:461` `trigger_bodies` | `ReplayAssessments` | 45 | immutable-columns 1, insert-membership 1, no-delete 1, no-update 1 |
-| `coordination_tables/executions.py:148` `trigger_bodies` | `CurrentExecutions` | 21 | immutable-columns 1, insert-membership 1, no-delete 1 |
-| `coordination_tables/executions.py:400` `trigger_bodies` | `ExecutionRecord` | 73 | immutable-columns 1, no-delete 1, no-update 5 |
-| `coordination_tables/participants.py:31` `trigger_bodies` | `Participants` | 25 | no-delete 1, no-update 2 |
-| `coordination_tables/participants.py:69` `trigger_bodies` | `ParticipantAliases` | 17 | no-delete 1, no-update 1 |
-| `coordination_tables/participants.py:110` `trigger_bodies` | `OwnerGenerations` | 20 | immutable-columns 1, no-delete 1 |
-| `coordination_tables/publications.py:129` `trigger_bodies` | `PublicationIntents` | 36 | insert-membership 1, no-delete 1, no-update 1, other-insert 1 |
-| `coordination_tables/publications.py:239` `trigger_bodies` | `PublicationEvidence` | 36 | insert-membership 1, no-delete 1, no-update 1 |
-| `coordination_tables/recovery.py:64` `trigger_bodies` | `ConnectivityFacet` | 18 | immutable-columns 1, no-delete 1 |
-| `coordination_tables/recovery.py:125` `trigger_bodies` | `RecoveryAudit` | 17 | no-delete 1, no-update 1 |
-| `coordination_tables/responses.py:153` `trigger_bodies` | `ResponseObligation` | 2 | joins the three below |
-| `coordination_tables/responses.py:157` `_retry_trigger_bodies` | `ResponseObligation` | 23 | insert-membership 1, no-update 1 |
-| `coordination_tables/responses.py:182` `_lifecycle_trigger_bodies` | `ResponseObligation` | 44 | immutable-columns 1, insert-membership 1, no-delete 1, no-update 3 |
-| `coordination_tables/responses.py:228` `_publication_trigger_bodies` | `ResponseObligation` | 54 | no-update 5, other-insert 1 |
-| `native_pi.py:214` `trigger_bodies` | `NativeContextJournal` | 16 | computed 1 |
-| `native_prompt_binding.py:90` `trigger_bodies` | `PromptBinding` | 7 | computed 1 |
-| `native_runtime_input.py:305` `trigger_bodies` | `NativeRuntimeInput` | 25 | computed 1 |
-| `native_runtime_input.py:391` `trigger_bodies` | `CurrentNativeCursor` | 15 | computed 1 |
-| `private_sidecar.py:210` `trigger_bodies` | `SnapshotMeta` | 7 | computed 1 |
-| `triage_native_sources.py:32` `trigger_bodies` | `TriageNativeSources` | 26 | computed 1 |
+**1A, `LifecycleFlagsPhase`.** Reuse `lifecycle_capability.py` across assignment, obligation, execution, goal and input lifecycles. The original candidates were `terminal`, `failed`, `successful`, `pending`, `active`, `executing`, `unresolved`, `deferred`, `complete` and `completed`. Trace each required meaning and its readers; similarly spelled flags need not answer the same question. Move shared transition behavior into `LifecycleState` and its capabilities. Delete flag defaults, overrides and repeated answers already supplied by a parent.
 
-1E list (paths under `src/agent_comms/`; "removable" is the copies' lines less one owner):
+Checkpoint `2c3b83728` moves owner withdrawal onto `ThreadStatus` and its existing
+`ActiveThreadPresence` capability. Registry unregister, archive and remove invoke
+that contract; all three copied active checks and counter mutations are deleted.
+The 21 focused checks include a connected external bridge whose old owner is
+revoked while its status remains connected, plus repeated inactive withdrawals
+that retain the owner generation. Source evidence is in
+`/home/ts/.cache/agent-scratch/mi-owner-withdrawal-trace.json` (NRA inventory: 461
+production modules, zero parse omissions). This checkpoint is pushed, not installed;
+remaining active consumers and the rest of phase 1A are unfinished.
 
-| Group | Copies | Removable | Certain | Sites |
-|---|---|---|---|---|
-| `__init__` exact | 5 | 12 | yes | `attempt_store.py:47`, `cli_bridges/opencode.py:170`, `cli_bridges/shared.py:660`, `external_transcript.py:545`, `recovery_reader.py:29` |
-| `captured_owner`/`owner_identity` exact | 4 | 12 | no | `cohort_schema.py:397`, `coordination_tables/attempts.py:131`, `native_input_record.py:421`, `participant_store.py:49` |
-| `trigger_bodies` exact (computed) | 3 | 12 | yes | `coordination_response.py:73`, `native_prompt_binding.py:90`, `private_sidecar.py:210` |
-| `__init__` exact | 4 | 12 | yes | `durable_turn.py:34`, `execution_store.py:40`, `exporting.py:425`, `publisher.py:74` |
-| `wire_member` exact | 4 | 12 | yes | `pi_payloads.py:450`, `pi_payloads.py:708`, `pi_payloads.py:836`, `pi_payloads.py:1041` |
-| `_assert_response_schema`/`assert_cohort_schema`/`assert_native_runtime_schema` exact | 3 | 12 | no | `cohort_schema.py:492`, `coordinated_runtime_schema.py:14`, `coordination_response.py:238` |
-| `references` exact | 3 | 10 | yes | `coordination_tables/attempts.py:453`, `coordination_tables/recovery.py:56`, `coordination_tables/responses.py:145` |
-| `annotation_disclosure`/`disclosure_for` exact | 4 | 9 | no | `pi_payloads.py:859`, `turn_context.py:882`, `turn_context.py:983`, `turn_context.py:1037` |
-| `__init__` near (0.75) | 14 | 39 | no | `agent_event_updates.py:37`, `channel_management.py:130`, `child_process.py:1908`, `durable_turn.py:34`, `errors.py:50`, `execution_store.py:40`, `exporting.py:425`, `installer/upgrade.py:171`, `messaging.py:35`, `owner_lifecycle.py:267`, `owner_restart.py:197`, `publisher.py:74`, `thread_management.py:222`, `transcripts.py:465` |
-| `parse` near (0.75) | 3 | 9 | no | `cli_native_package.py:35`, `commander/order.py:787`, `connector.py:807` |
-| `apply` near (0.75) | 4 | 9 | no | `todos.py:2406`, `todos.py:2507`, `todos.py:2669`, `todos.py:2745` |
+**1B, `CodecFlagsPhase`.** Extend `FieldCodec`'s existing field representations and dispatch. The original candidates were `accepts_null`, `opaque`, `external_json_shape`, `strict_fields` and `accepts_prompt`. Reuse the capabilities that already own these decisions; remove remaining competing readers and declarations. A remaining wire tag belongs to the existing declared wire family, not another handwritten tag roster.
 
-What this leaves for the -2,500 floor: 1A to 1E measure about -1,100 to -1,160, of which about -270 is certain today and -800 waits on the trigger rewrite. The rest has to come from the fixed-value methods row (443 methods; turning `def x(cls): return V` into a class attribute deletes at most 1,190 of its 1,633 lines, and only where the value is a per-member fact rather than behaviour) and from the virtual bus deleting whole modules. Field directives (`WireName(`, `WireOmitDefault`, `Column(` in `Annotated`, 629 lines) are already classes; batch 2 deletes only the repeated groups, not the directives.
+**1C, `SmallFamilyFlagsPhase`.** Move command and other family decisions onto their existing owners. The phase names `multiple_targets`, `preengagement_target`, `notification_changed` and `input_uncertain`; the latter was originally declared eight times and read nowhere. Delete unused facts outright. `GoalDisplay.visible` has an explicit retained decision recorded in the phase declaration; this plan does not silently broaden that decision to unrelated visibility flags.
 
-## What the scan found
+**1D, `TriggersPhase`.** Derive table guards through `TypedTable` capabilities. The historical surfaces were `cohort_schema.py`, `coordination_response.py`, `coordination_tables/*`, native input/context tables and sidecars. Reuse the delivered `AppendOnly` and other table capabilities; remove any remaining hand-written trigger authority. Apply the storage decision above rather than recreating old SQL through a new formatter.
 
-Behaviour is already shared well: only 2 groups of identical method bodies exist across unrelated classes. The slop sits in declarations, where the same fact is written once per class:
+**1E, `DuplicatesPhase`.** The phase declaration retains the eight exact-shape candidate groups and their source paths: constructors, owner identity, computed triggers, wire-member lookup, schema assertions, references and annotation disclosure. Read each group semantically; share only the required answers that agree across supported evolution. Trace the additional near-shape constructor, parser and `apply` candidates at the historical audit head before retaining them as work. A shape match is a lead, not a proof that two facts are interchangeable.
 
-| Kind | Size | Example |
-|---|---|---|
-| Boolean capability flags | 55 flags, 303 declarations | `terminal = True` in 23 classes across five lifecycle families; `without_rowid = True` in 16 tables; `accepts_null` in 12 codec classes |
-| Field directives as string keys | about 530 | `metadata={"sql": …}`, `"wire_name"`, `"wire_omit_default"` |
-| Field groups declared together | 10 groups in 6 to 11 classes each | `sender` + `target` (11), `turn_id` + `item_id` (10), `owner_thread` + `owner_generation` (9), `offset` + `length` (7) |
-| Identical field declarations, metadata included | 24 declarations, 83 copies | `singleton: Literal[1] = field(metadata={'sql': Column(primary_key=True)})` in 8 tables |
-| `isinstance` against our own classes | 101 checks on 69 classes | `TextContent`, `SessionEntry`, `DeliveredProblemOrder` |
+The current `NoExactCopies` gate violates that distinction: `ErasedBody` removes
+names, attributes and literal values before comparison. It equates
+`PiModel.wire_member` returning `ReportedModel` with `PiToolResult.wire_member`
+returning `ProvidedToolResult`. Those are different required answers. The MI fork
+owns replacing this false completion evidence with checks for traced ownership
+obligations; do not distort production code to make the shape comparison pass.
 
-## The mechanism already exists
+### Batch 2: field declarations and table capabilities
 
-Nothing new is invented. Three owners in the tree carry all of it:
+**`FieldDirectivesPhase`.** One owner handles related field declarations and their readers together. The directive classes already exist in `FieldCodec` and `TypedTable`; extend them rather than introducing another metadata vocabulary. Fields attach the declared directives through `Annotated`.
 
-- **`DeclaredFamily.members_with(capability)`** (`declared_family.py`, 100 call sites) derives any set of members from a capability class. A capability is a class members inherit; every set that needs it is derived.
-- **`MroDispatch` with `@handles`** (`mro_dispatch.py`) runs handlers along the value's MRO, so a consumer reacts to a capability without testing for it.
-- **`FieldCodec`** and **`TypedTable`** own encoding and storage, and are where field directives and table capabilities get read.
+Factor surviving shared field requirements through their owners. The phase names `TurnItem`, `ClaimScoped`, `SingletonRow`, `SchemaMeta`, `Revisioned`, `ExecutionKeyed` and `WithoutRowid`. Check current declarations and members before adding any class. Table factoring must preserve the stored table/column DDL described above.
 
-Multiple inheritance earns its place exactly where capabilities overlap without nesting: an assignment state can be terminal and failed, a table can be a singleton and without rowid, a codec member can accept null and keep an external JSON shape. Each capability becomes one class; members combine them in their bases; the flag lines are deleted.
+Do not add an `OwnerIncarnation` field mixin merely to preserve copies of registry identity: that deletion belongs to `plans/REMAINING-SLOP-PLAN.md`. The virtual bus owns `Addressed` and deletes obsolete bus byte spans and wire positions. Coordinate shared field lines with those owners; do not factor fields that another plan removes.
 
-## Rules for every change
+### Batch 3: consumers of owned types
 
-- **A capability class carries meaning, not a boolean.** The one reader that branched on a flag moves its behaviour onto the capability, as a method or an `@handles` handler. A capability that only replaces `x.flag` with `isinstance(x, Flag)` is a rename and is not done.
-- **Sets come from `members_with`.** No tuple of member names survives.
-- **Stored schema text stays byte-identical.** `TypedTable` checks stored tables by exact SQL text (`typed_table.py:462-472`) and the schema digests hash that text. A field-group mixin may only touch a table if every affected table's `ddl()` output is unchanged; that comparison is the proof for those surfaces. Wire names derive from field names, so renaming nothing keeps every stored record decodable.
-- **External shapes are left alone.** JSON a contract leaves open (the shared ledger), Python AST nodes, `typing` objects and SDK types are not ours to wrap.
-- **Threshold three.** A mixin needs three or more members; two copies stay, unless both copies are deleted outright.
-- **Codemods, one sweep per axis.** The declaration rewrites are mechanical and go through `libcst` scripts in one commit each, with the reader changes in the same PR.
+**`OwnTypeChecksPhase`.** Once the owning families are coherent, migrate their consumers from `isinstance` decisions to owned methods or existing `@handles` dispatch. Trace the full behavior family, including its boundaries; replacing one branch while leaving sibling consumers to rediscover the same fact is unfinished work. External taxonomy handling remains at its proper boundary.
 
-## The plan: four batches, each landing as one
+### Batch 4: deletion closure
 
-### Batch 1, in parallel (three units, disjoint files)
+**`InheritanceCleanupPhase`.** Remove obsolete capability shells, duplicated answers, former-flag branches and member rosters. Keep abstractions that own required shared behavior; collapse forwarding-only or empty distinctions that do not. Confirm the phase's parent-sharing evidence and inspect what it establishes rather than treating class counts as a design argument.
 
-**1A. Lifecycle capabilities across families.** Owner: a new `lifecycle_capability.py` beside `assignment_states.py`. 93 flag declarations spread over the lifecycle families say the same few things: `assignment_states.py` (12), `obligation_states.py` (11), `execution_states.py` (9), `goal_generation.py` (5), `attempt_states.py`, `goal_states.py`, `pi_vocabulary.py`, `input_attempt.py`, `turn_lease.py`, `native_tool_call.py`, `todos.py` and `bus_route_counts.py` (3 to 4 each), declaring `terminal`, `failed`, `successful`, `pending`, `active`, `executing`, `unresolved`, `deferred` and `complete(d)`, defaulted on each root and overridden per member. Each becomes one capability class shared across all of them: `Terminal`, `Failed`, `Successful`, `Pending`, `Active`, `Executing`, `Unresolved`, `Deferred`, `Complete`. Members inherit the ones that apply (`class FailedAssignment(AssignmentState, Terminal, Failed)`), the roots stop declaring defaults, and readers such as `attempt_store.py:157` (`if phase.terminal`) ask the capability for the behaviour they branch on. Transition rules that today say "terminal states have no successors" move onto `Terminal` once.
+## Evidence and completion
 
-**1B. Codec capabilities.** Owner: `FieldCodec`. `accepts_null` (12), `opaque` (9), `external_json_shape` (7), `strict_fields` (7) and `accepts_prompt` (11) are each read in exactly one place; that place's branch moves onto `AcceptsNull`, `Opaque`, `ExternalJsonShape`, `StrictFields` and `AcceptsPrompt`, dispatched through `MroDispatch`. `wire_tag = 'text'` in five classes becomes a `TextWire` mixin that owns the tag.
+The historical source audit is at `a40e7f9cd` (2026-10-21): 426 modules, 10,936 callables, zero parse omissions with Python 3.14. These are measurements of that head:
 
-**1C. Command and small family capabilities.** `multiple_targets` (8 CLI commands), `preengagement_target` (6), `notification_changed` (5), `visible` (6) and the remaining flags with three or more declarations, each moved to the family that owns it. Flags read nowhere (`input_uncertain`, declared 8 times, read 0 times) are deleted, along with the two dead modules from the earlier plan (`acp_ingress.py`, `cli_bridges/opencode_store.py`).
+| Historical finding | What the corrected audit established |
+|---|---|
+| Repeated class capability flags | 85 lifecycle flag lines, 44 codec flag lines, and 167 small-family flag lines were candidate declarations to trace, not guaranteed deletions. |
+| Handwritten triggers | 29 methods, 930 lines and 80 triggers; moving literal SQL bodies into a parent would not remove their separate declarations. The trigger rewrite decision above addresses that cause. |
+| Repeated behavior | After excluding literal-return bodies, eight exact-shape groups had 91 candidate removable lines, 58 then classified as certain; three near-shape groups required further tracing. |
+| Earlier inflated duplicate claim | The 1,518-line estimate erased literals and conflated distinct SQL requirements. It is rejected, along with the original claim that behavior was already shared well. |
 
-### Batch 2, one owner (one codemod sweep over field declarations)
+The original source witnesses, full trigger inventory and candidate line anchors remain in Git history at `04df26b76`. Use them to locate historical evidence, then trace current source. Do not copy those inventories into a second live roster.
 
-**2A. Field directives become classes, and repeated field groups become mixins, in the same pass.** Both edit the same field lines, so one owner does both in one sweep instead of two PRs fighting over 500 lines.
-
-- The directive vocabulary becomes classes owned by their readers: `FieldCodec` declares `WireName`, `WireOmitDefault`, `WireRequired`, `SnapshotExclude`, `ContentExclude`; `TypedTable` declares `Column`; the CLI declares its parser directive. Each class carries what it does to encoding, storage or parsing, and the readers ask it instead of branching on a key. Fields attach them through `Annotated`.
-- Field groups become record mixins on wire and in-memory records: `Addressed` (`sender`, `target`, 11), `TurnItem` (`turn_id`, `item_id`, 10), `ByteSpan` (`offset`, `length`, 7), `WirePosition` (`wire_root_id`, `wire_seq`, 6), `MessageWire` (`message_id`, `wire_seq`, 6), `ClaimScoped` (`claim_scope` with its wire name, 6).
-- No `OwnerIncarnation` mixin. `owner_thread` is a copy of the registry's thread name (REMAINING-SLOP-PLAN.md wave 4.1), and a mixin would make that copy permanent; the fields are deleted there instead.
-- The virtual bus (`plans/VIRTUAL-BUS-PLAN.md`) declares `Addressed` as a bus capability, and this batch uses that class rather than declaring a second one. The bus members of `ByteSpan`, `WirePosition` and `MessageWire` are byte positions or `wire_*` names, which the virtual bus deletes, so they are deleted there, not made into mixins here. Only members that survive the virtual bus count toward the threshold of three.
-- Table mixins only where `ddl()` is unchanged: `SingletonRow` (the singleton primary key, 8 tables), `SchemaMeta` (singleton plus `ddl_digest`, 6), `Revisioned` (the positive revision check, 4), `ExecutionKeyed` (4), `WithoutRowid` (16 tables). Each table's `ddl()` before and after is compared byte for byte; any table where a mixin would move a column keeps its own declaration.
-
-### Batch 3, by consumer (parallel)
-
-**3A. `isinstance` against our own classes.** 101 checks on 69 classes, read per consumer after batches 1 and 2 have settled the families. Each becomes a method on the class or an `@handles` handler. Checks against external types (AST, `typing`, SDK classes) are excluded.
-
-### Batch 4, cleanup
-
-Any capability or mixin left with one member is folded back into it; any reader still branching on a former flag is fixed. Census at the new head confirms.
-
-## Why this is fast
-
-| Batch | PRs | Units | Stored data touched | Proof at the end |
-|---|---|---|---|---|
-| 1 | 3, landed as one batch | 3 in parallel | none | the readers' workflows run; full suite |
-| 2 | 1 | 1, codemod | none; `ddl()` byte-identical | `ddl()` comparison for every table; every stored record round-trips |
-| 3 | one per consumer, landed as one batch | as many as consumers | none | full suite |
-| 4 | 1 | 1 | none | census |
-
-No migrations, no carry steps and no extra install rehearsals: nothing stored changes shape. The large edits are codemods, so review reads the codemod and the readers, not 500 hand-edited lines.
-
-## Done means
-
-Each phase, its predecessors and the evidence on `origin/main` that proves it done are declared in `src/agent_comms/plan_phases.py`; the commander's plan-idle rule and order refusals read that family, and accepting a task never marks a phase done.
-
-One capability class or mixin owns each fact; every member that has it inherits it; every reader that branched on it now asks the owner; the replaced flags, rosters, string keys and repeated field lines are deleted with no alias left; stored schemas and records are unchanged; and the actual workflows (installs, order lifecycles, delivery, the CLI) still work. The census then confirms the drop.
+A phase is complete only when its declared evidence holds on `origin/main`. Delivery must also explain the before/after ownership and consumers, show that replaced decisions and declarations are gone, preserve the required stored data and behavior, and exercise the affected application path. Report merged, installed and seen working as the distinct facts their evidence establishes. A passing scanner or a smaller diff does not establish those other facts.

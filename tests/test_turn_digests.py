@@ -22,12 +22,13 @@ from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_text import SavedSessionFile
 from agent_comms.transcript_events import AssistantTranscript, TurnDigest
 from agent_comms.turn_digests import LastTurns, TurnBound, TurnsOlderThan, TurnsBefore, TurnsSince
-from agent_comms.wire_watch import WatchSource, WireWatch
+from agent_comms.bus import Bus
+from agent_comms.watched import FileSource
 
 
 def prepared(tmp_path):
     comms = wire(tmp_path)
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     return comms
 
 
@@ -161,8 +162,8 @@ def test_recorded_claude_transcript_pages_through_tool_without_loss(tmp_path, mo
         source = comms.transcripts.external('claude')
         try:
             async with asyncio.timeout(60):
-                async with aclosing(WireWatch.observations(*(
-                        WatchSource.modified_file(item) for item in source.source_paths(comms.root)))) as changes:
+                async with aclosing(Bus.watch_sources(*(
+                        FileSource(item) for item in source.source_paths(comms.root)))) as changes:
                     async for _ in changes:
                         turns = await asyncio.to_thread(comms.transcripts.turns, 'claude', LastTurns())
                         if any(event == AssistantTranscript('done', position=event.position,

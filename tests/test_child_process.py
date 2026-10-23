@@ -84,6 +84,43 @@ def test_synchronous_run_collects_both_streams_and_returncode(tmp_path: Path) ->
     assert (result.returncode, result.stdout, result.stderr) == (7, b"out\n", b"err\n")
 
 
+def test_child_imports_the_checkout_its_parent_imported(tmp_path: Path) -> None:
+    import agent_comms
+
+    # No inherited import path: only the owner can point the child at this checkout,
+    # not the editable install's .pth, which may name another worktree.
+    environment = {name: value for name, value in os.environ.items() if name != "PYTHONPATH"}
+    result = SpawnedProcess.run(
+        (sys.executable, "-c", "import agent_comms; print(agent_comms.__file__)"),
+        timeout=30, cwd=tmp_path, env=environment,
+    )
+    assert result.returncode == 0, result.stderr
+    checkout = Path(__file__).resolve().parents[1]
+    assert Path(agent_comms.__file__).resolve().is_relative_to(checkout)
+    assert Path(result.stdout.decode().strip()).resolve().is_relative_to(checkout)
+
+
+def test_grandchild_import_path_holds_one_copy_of_the_checkout(tmp_path: Path) -> None:
+    # The child relaunches through the same owner: two generations of real launches.
+    report = (
+        "import os,sys; from pathlib import Path; "
+        "from agent_comms.child_process import SpawnedProcess; "
+        "r = SpawnedProcess.run((sys.executable, '-c', "
+        "'import os; print(os.environ[\"PYTHONPATH\"])'), "
+        "timeout=30, cwd=Path.cwd(), env=dict(os.environ)); "
+        "sys.stdout.buffer.write(r.stdout)"
+    )
+    environment = {name: value for name, value in os.environ.items() if name != "PYTHONPATH"}
+    result = SpawnedProcess.run(
+        (sys.executable, "-c", report), timeout=60, cwd=tmp_path, env=environment
+    )
+    assert result.returncode == 0, result.stderr
+    import agent_comms
+
+    root = str(Path(agent_comms.__file__).resolve().parents[1])
+    assert result.stdout.decode().strip().split(os.pathsep).count(root) == 1
+
+
 def test_stop_batch_retires_live_child_after_an_original_identity_exits() -> None:
     exited = SpawnedProcess.launch((sys.executable, "-c", "pass"))
     live = SpawnedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))

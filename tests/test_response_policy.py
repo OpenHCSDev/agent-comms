@@ -12,8 +12,16 @@ def test_new_policy_drives_eligibility_guidance_and_batching(tmp_path):
         starts_turn = True
         separate_turn = True
 
-        def recipients(self, message, audience, *, aliases=None):
+        @staticmethod
+        def selected(audience):
             return tuple(name for name in audience if name.startswith("reviewer"))
+
+        def recipients(self, message, audience, *, aliases=None):
+            return self.selected(audience)
+
+        @classmethod
+        def recipients_sql(cls, mentions, audience):
+            return ("1" if cls.selected(audience) else "0"), ()
 
         def guidance(self, message, *, aliases=None):
             return "review; only reviewers respond"

@@ -23,7 +23,8 @@ from .attempt_states import (
 )
 from .attempt_store import AttemptStore
 from .coordination_errors import IdentityConflict
-from .coordination_tables.attempts import ReplayAssessments, ReplayFact
+from .coordination_tables.attempts import ReplayFact
+from .coordination_tables.executions import ReplayAssessments
 from .coordination_session import NativeBoundary
 from .coordinator import Coordination
 from .mro_dispatch import MroDispatch, handles
@@ -57,7 +58,7 @@ class DurableTurn(MroDispatch):
     def observe_owned(self, event, handlers, *args, **kwargs):
         """Consume one native observation through joined, worker-owned SQLite."""
         *context, resource = args
-        with self.using_attempts(resource.attempts):
+        with self.using_attempts(resource):
             return self.consume_handlers_sync(event, handlers, *context, **kwargs)
 
     @property

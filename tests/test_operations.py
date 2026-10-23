@@ -16,6 +16,7 @@ from agent_comms.activity import ActivityState
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
 from agent_comms.errors import MessageAcknowledgmentError, RelationViolationError, UnregisteredThreadError
 from agent_comms.history_views import CallingThreadTarget, NamedThreadTarget
 from agent_comms.launch_runtime import CallingThreadUnavailable, ThreadLaunch
@@ -138,7 +139,7 @@ class TestMessaging:
         page = wired.views.history_page(CommandTarget.named("#all"), PageBounds(limit=2))
         assert [message.body for message in page.messages] == ["m3", "m4"]
         assert page.has_older
-        assert wired.bus.log.latest_sequence() == 5
+        assert wired.bus.bus.revision() == 5
 
 
 class TestThreadOps:
@@ -361,7 +362,7 @@ class TestThreadOps:
         assert wired.registry.require("fixer").parent == ForkedParent("planner")
         assert wired.agents.activity.current_for(("planner",), active=frozenset({"planner"}))["planner"].detail == "renaming"
         assert wired.agents.agent_info_of("planner").model == DeclaredModel("test/model")
-        assert wired.ledger.read().entries["owner"] == "planner"
+        assert FieldCodec.encode(wired.ledger.read())["owner"] == "planner"
         assert wired.bus.pending_count("planner", CommandTarget.named("fixer")) == 0
 
         wired.messaging.send("fixer", "PR111", "old alias routes").message.message_id
@@ -524,7 +525,7 @@ class TestLedgerOps:
 
     def test_merge_records_author(self, wired):
         wired.ledger.merge({"k": "v"}, author="PR111")
-        assert wired.ledger.read().entries["last_updated_by"] == "PR111"
+        assert FieldCodec.encode(wired.ledger.read())["last_updated_by"] == "PR111"
 
 
 class TestPollAndWire:

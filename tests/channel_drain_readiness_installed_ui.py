@@ -128,7 +128,7 @@ async def acceptance(app, pilot, agent, comms, entered, release, hold_next, requ
     assert len(requests) == 2
     assert any(row.wire_seq==failure_source.seq and bool(row.lifecycle.items_with(Deferred, True)) for row in rows)
     assert not any(row.wire_seq == pending_source.seq for row in rows)
-    original, = comms.bus.log.deliveries_for_references((pending_source.reference,))
+    original, = comms.bus.bus.deliveries_for_references((pending_source.reference,))
     assert original.message == pending_source
     assert any(recipient.canonical_thread == 'beta' for recipient in original.audience.recipients)
     result = {'elapsed_seconds':perf_counter()-started, 'localhost_provider_posts':len(requests),

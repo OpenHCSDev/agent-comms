@@ -15,14 +15,27 @@ import time
 from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar, Self
+from typing import Annotated, ClassVar, Self
 
 from ..declared_family import DeclaredFamily
+from ..field_codec import PathText
 from ..launch_runtime import LaunchRuntime
 
 
 class ServiceNotServingError(RuntimeError):
     """A restarted service did not serve its installed runtime's contract."""
+
+
+@dataclass(frozen=True)
+class RestartedService:
+    """One host service an install restarted, in its own words, and the runtime it now
+    serves from."""
+
+    service: str
+    runtime: Annotated[Path, PathText]
+
+    def line(self) -> str:
+        return f"{self.service} restarted onto {self.runtime}"
 
 
 class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
@@ -48,8 +61,12 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
     def serves(self) -> None:
         """Prove the service answers; raise ServiceNotServingError naming a failure."""
 
+    @abstractmethod
+    def described(self) -> str:
+        """This instance in the words an install's report and its failures use."""
+
     @classmethod
-    def restart_running(cls, installed: Path) -> tuple[str, ...]:
+    def restart_running(cls, installed: Path) -> tuple[RestartedService, ...]:
         """Restart every declared service running on this host onto ``installed``."""
         return tuple(
             instance.restart_onto(installed)
@@ -57,16 +74,16 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
             for instance in member.running()
         )
 
-    def restart_onto(self, installed: Path) -> str:
+    def restart_onto(self, installed: Path) -> RestartedService:
         self.restart()
-        failure = f"{self} did not serve again within {self.patience}s"
+        failure = f"{self.described()} did not serve again within {self.patience}s"
         for _ in range(self.patience):
             for instance in type(self).running():
                 runtime = instance.runtime()
                 if runtime == installed:
                     instance.serves()
-                    return f"{instance} restarted onto {installed}"
-                failure = f"{instance} runs {runtime}, not the installed {installed}"
+                    return RestartedService(instance.described(), installed)
+                failure = f"{instance.described()} runs {runtime}, not the installed {installed}"
             time.sleep(1)
         raise ServiceNotServingError(failure)
 
@@ -97,9 +114,9 @@ class SystemdUserService(HostService, declared_name=None):
             notify.connect(target)
             notify.sendall(b"READY=1")
 
-    @property
-    def unit_file(self) -> Path:
-        return Path.home() / ".config/systemd/user" / self.unit
+    @classmethod
+    def unit_file(cls) -> Path:
+        return Path.home() / ".config/systemd/user" / cls.unit
 
     def unit_text(self, arguments: tuple[str, ...]) -> str:
         executable = LaunchRuntime.current_pointer() / "bin" / self.program
@@ -116,13 +133,27 @@ class SystemdUserService(HostService, declared_name=None):
         )
 
     def install(self, arguments: tuple[str, ...]) -> None:
-        self.unit_file.parent.mkdir(parents=True, exist_ok=True)
-        self.unit_file.write_text(self.unit_text(arguments), encoding="utf-8")
+        self.unit_file().parent.mkdir(parents=True, exist_ok=True)
+        self.unit_file().write_text(self.unit_text(arguments), encoding="utf-8")
         subprocess.run(("systemctl", "--user", "daemon-reload"), check=True)
         subprocess.run(("systemctl", "--user", "enable", self.unit), check=True)
 
     @classmethod
     def pid(cls) -> int:
+        """Only the unit loaded from this home's owned definition belongs to it.
+
+        The user manager belongs to the UID, not HOME; a private install must not
+        discover or restart the real home's service through that shared manager.
+        """
+        unit = cls.unit_file()
+        if not unit.is_file():
+            return 0
+        loaded = subprocess.check_output(
+            ("systemctl", "--user", "show", "-p", "FragmentPath", "--value", cls.unit),
+            text=True,
+        ).strip()
+        if Path(loaded).resolve() != unit.resolve():
+            return 0
         return int(subprocess.check_output(
             ("systemctl", "--user", "show", "-p", "MainPID", "--value", cls.unit),
             text=True,

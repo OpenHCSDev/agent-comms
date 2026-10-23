@@ -17,9 +17,11 @@ from agent_comms.field_codec import FieldCodec
 from process_tree_fixture import TREE, identities
 
 from tools.debt_ratchet import (
+    AUDIT_SCRIPTS,
     BannedVocabulary,
     BroadExceptDefault,
     BroadSwallow,
+    ContentCache,
     ForeignFieldSpellings,
     FrozenFieldWrite,
     FunctionLocalImport,
@@ -330,7 +332,7 @@ def test_other_source_root_does_not_enter_report(repo: Repository) -> None:
 
 def test_builtin_handler_measure_uses_shared_collector_and_rejects_growth(repo: Repository) -> None:
     from tools.debt_ratchet import BuiltinHandlerTypeSwitch
-    from refactor_audit.handler_declarations import BuiltinHandlerDeclarations
+    from audit.handler_declarations import BuiltinHandlerDeclarations
 
     assert issubclass(BuiltinHandlerTypeSwitch, BuiltinHandlerDeclarations)
     source = """from .mro_dispatch import MroDispatch, handles as cases
@@ -374,7 +376,7 @@ def test_family_flattening_cannot_offset_another_file_or_admit_a_named_facade(
 ):
     repo = Repository(tmp_path, root)
     from tools.debt_ratchet import FamilyFlattened
-    from refactor_audit.measures import FamilyFlattened as AuditFamilyFlattened
+    from audit.measures import FamilyFlattened as AuditFamilyFlattened
 
     original = "def carry(value):\n    return (value.declared_name, value.family_name)\n"
     base = repo.commit({"first.py": original, "second.py": "value = 1\n"})
@@ -1230,3 +1232,27 @@ def test_growth_lines_end_the_merged_log(repo: Repository) -> None:
     )
     assert merged.returncode == 1
     assert merged.stdout.rstrip().splitlines()[-1].startswith(("grew ", "introduced "))
+
+
+def test_content_cache_digest_covers_a_module_only_loaded_indirectly():
+    """The ratchet never imports coordination_tables.attempts by name; agent_comms loads it
+    through its own imports. Its source is still one of the ratchet's measuring code, so a
+    change to it is a different cache key."""
+    indirect = Path(sys.modules["agent_comms.coordination_tables.attempts"].__file__).resolve()
+    assert indirect in ContentCache.sources()
+    assert (AUDIT_SCRIPTS / "audit" / "findings.py").resolve() in ContentCache.sources()
+    assert indirect.is_relative_to(Path(__file__).resolve().parents[2] / "src")
+
+
+def test_content_cache_prunes_entries_unused_for_the_retention_period(tmp_path, monkeypatch):
+    """An entry read after it aged survives the prune; one neither written nor read does not."""
+    monkeypatch.setattr(ContentCache, "directory", tmp_path / "debt-ratchet")
+    ContentCache.store(1, "read")
+    ContentCache.store(2, "unused")
+    old = time.time() - (ContentCache.retention_days + 1) * 86400
+    for name in ("read", "unused"):
+        os.utime(ContentCache.path(name), (old, old))
+    assert ContentCache.stored("read") == (1,)
+    ContentCache.prune()
+    assert ContentCache.stored("read") == (1,)
+    assert ContentCache.stored("unused") == ()

@@ -23,6 +23,7 @@ from aiohttp.test_utils import TestClient, TestServer
 from connector_readiness import ConnectorReadiness
 
 from agent_comms.active_route import active_route_path
+from agent_comms.bus import Bus
 from agent_comms.comms import Comms
 from agent_comms.connector import (
     CALLER,
@@ -97,7 +98,7 @@ def test_connector_round_trip_reads_this_bus_as_its_caller(comms, tmp_path, regi
         "PYTHONPATH": os.pathsep.join((str(Path(__file__).resolve().parents[1] / "src"),
                                        *site.getsitepackages()))})
     command = "from agent_comms.connector import main; raise SystemExit(main())"
-    before = comms.bus.log.latest_sequence()
+    before = comms.bus.bus.revision()
     service = subprocess.Popen(
         [sys.executable, "-c", command, "serve", "--root", comms.root, "--port", str(port)],
         env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
@@ -124,7 +125,7 @@ def test_connector_round_trip_reads_this_bus_as_its_caller(comms, tmp_path, regi
     finally:
         service.terminate()
         service.wait(timeout=30)
-    assert comms.bus.log.latest_sequence() == before
+    assert comms.bus.bus.revision() == before
 
 
 @pytest.fixture
@@ -344,7 +345,7 @@ async def test_watch_pass_waits_for_install_then_runs_once(comms, copied_connect
             assert await asyncio.to_thread(opened.wait, 3)
             assert not await asyncio.to_thread(watch.completed.wait, .05)
             assert watch.calls == 0
-            assert copied.bus.log.latest_sequence() == original.seq
+            assert copied.bus.bus.revision() == original.seq
             assert not [record for record in caplog.records if record.levelno >= logging.ERROR]
         finally:
             barrier.advance(held, ReadyPhase)
@@ -356,7 +357,7 @@ async def test_watch_pass_waits_for_install_then_runs_once(comms, copied_connect
     assert watch.calls == 1
     assert [message.body for message in copied.bus.inbox("worker")] == ["One watch pass"]
     assert passes.read().failing == {}
-    assert comms.bus.log.latest_sequence() == original.seq
+    assert comms.bus.bus.revision() == original.seq
     assert not [record for record in caplog.records if record.levelno >= logging.ERROR]
 
 
@@ -529,12 +530,13 @@ async def test_maintenance_refuses_before_locked_stores_on_a_copied_bus(
     monkeypatch.setenv("HOME", str(tmp_path))
     async with TestClient(TestServer(connector.application())) as reader:
         headers = {"Authorization": f"Bearer {await approved_token(reader, Comms(copied_root))}"}
-        before = (copied_root / "bus.jsonl").read_bytes()
+        copied_bus = Bus(Bus.path_in(copied_root))
+        before = copied_bus.revision()
         barrier = MaintenanceBarrier(copied_root / "registry.json")
         held = barrier.begin(MaintenanceOperator.current())
         for phase in phases:
             held = barrier.advance(held, phase)
-        with _store_lock(barrier.wire_path), _store_lock(barrier.registry_path), ExitStack() as locks:
+        with _store_lock(copied_bus.path), _store_lock(barrier.registry_path), ExitStack() as locks:
             directory = os.open(active_route_path().parent, os.O_RDONLY | os.O_DIRECTORY)
             locks.callback(os.close, directory)
             fcntl.flock(directory, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -554,8 +556,8 @@ async def test_maintenance_refuses_before_locked_stores_on_a_copied_bus(
             assert refusal == {
                 "type": "held", "error": "Maintenance holds ingress: the bus is under maintenance"}
             assert barrier.current_unlocked() == held
-            assert (copied_root / "bus.jsonl").read_bytes() == before
-    assert comms.bus.log.latest_sequence() == original.seq
+            assert copied_bus.revision() == before
+    assert comms.bus.bus.revision() == original.seq
     assert comms.owners.maintenance.read().turn_pending is False
 
 

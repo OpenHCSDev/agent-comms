@@ -1,4 +1,6 @@
 """A published native reply automatically reaches the original channel sender."""
+
+from bus_record_fixture import prepare_native_comms
 from bus_history import read_history
 from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.native_arguments import NativeArguments
@@ -8,7 +10,6 @@ from agent_comms.owner_cutover import PreserveOwnerRuntime
 from acp.schema import SessionNotification
 
 import asyncio
-import hashlib
 import json
 import os
 import shutil
@@ -32,12 +33,10 @@ from agent_comms.acp_extension import (
     decode_updates,
 )
 from agent_comms.comms import Comms
-from agent_comms.private_bus_checkpoint import addressed_source_pointers_unlocked
-from agent_comms.store_files import _store_lock
 from test_coordinated_runtime import tmp_path as private_root_fixture
 from agent_comms.thread_model import DeclaredModel
 
-# Reuse the existing sealed-runtime persistent /var/tmp test root.
+# Reuse the existing isolated native-runtime fixture.
 tmp_path = private_root_fixture
 
 
@@ -49,22 +48,19 @@ def start_source_owner(comms, name, runtime: RestoredRuntime):
     The retained restart request uses this same explicit source-runtime policy.
     """
     thread = comms.registry.require(name)
-    with (comms.registry.storage_rule.room_for_start(thread, comms.root),
-          _store_lock(comms.owners._wire_lock_path)):
-        return comms.owners._launch_owner_unlocked(
+    with comms.registry.storage_rule.room_for_start(thread, comms.root):
+        return comms.owners._launch_owner(
             thread, NativeArguments.default_binary,
             launch_runtime=runtime,
         )
 
 
 @pytest.mark.parametrize(
-    ("restart_after_reply", "contend_cursor", "reject_triage", "broadcast"),
-    [(False, False, False, False), (True, False, False, False),
-     (False, True, False, False), (False, False, True, False),
-     (False, False, False, True)],
-    ids=["reply", "saved-restart", "contended-reply", "rejected-triage-continuity", "parallel-channel"],
+    ("restart_after_reply", "reject_triage", "broadcast"),
+    [(False, False, False), (True, False, False), (False, True, False), (False, False, True)],
+    ids=["reply", "saved-restart", "rejected-triage-continuity", "parallel-channel"],
 )
-async def test_native_channel_reply_automatically_reaches_original_sender(tmp_path, monkeypatch, restart_after_reply, contend_cursor, reject_triage, broadcast, *, source_reads, native_runtime_package):
+async def test_native_channel_reply_automatically_reaches_original_sender(tmp_path, monkeypatch, restart_after_reply, reject_triage, broadcast, *, source_reads, native_runtime_package):
     package = native_runtime_package.path
     runtime = RestoredRuntime(Path(sys.executable))
     requests = []
@@ -159,15 +155,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                 self.send_header("Content-Type", "text/event-stream")
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
-                if contend_cursor and len(requests) == 2:
-                    # Return the real model result while another reader holds
-                    # the bus lock across the worker's cursor projection.
-                    with _store_lock(comms.bus.log.path):
-                        self.wfile.write(body)
-                        self.wfile.flush()
-                        time.sleep(0.8)
-                else:
-                    self.wfile.write(body)
+                self.wfile.write(body)
             except Exception as error:
                 failures.append(repr(error))
                 self.send_error(400, "Local fixture assertion failed")
@@ -237,7 +225,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
         monkeypatch.setenv(key, value)
     for key in ("PI_PROMPT", "PI_PARENT_ID", "AGENT_COMMS_THREAD"):
         monkeypatch.delenv(key, raising=False)
-    comms = Comms(tmp_path / "wire")
+    comms = prepare_native_comms(Comms(tmp_path / "wire"))
     projects = {}
     for name in (("questioner", "answerer", "answerer2") if broadcast else ("questioner", "answerer")):
         project = tmp_path / name
@@ -246,7 +234,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
         comms.registry.declare(
             comms.registry.new_thread(name, frozenset({'team'}), str(project), model=DeclaredModel(f'roundtrip-local/{name}' if broadcast else 'roundtrip-local/fixture'), thinking_level=OffThinkingLevel)
         )
-    root_id = comms.messaging.initialize_private_initial_protocol()
+    root_id = comms.registry.prepare_native_root().namespace
     attachment = CommsClient(
         comms,
         runtime_enabled=True,
@@ -390,12 +378,8 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
         # Reading this projection proves neither model delivery nor ACK; native delivery
         # above must have happened automatically before inspecting pointers.
         owner = comms.registry.require("questioner")
-        with comms.bus.log.locked():
-            marker = comms.bus.log.private_marker_unlocked()
-            pointers = addressed_source_pointers_unlocked(
-                comms.bus.log, marker, RecordedThreadIncarnation("fixture", owner.created_at).lookup
-            )
-        assert reply.message_id in [pointer.message_id for pointer in pointers]
+        received = comms.bus.bus.received(owner.incarnation.lookup)
+        assert reply.reference in [record.reference for record in received]
 
         def selected_turn_finished():
             states = [fact.state for fact in facts if isinstance(fact, TurnChangedUpdate)]
@@ -532,7 +516,6 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                 "wire_root_id": root_id,
                 "native_package": str(package),
                 "saved_restart": restart_after_reply,
-                "contended_cursor": contend_cursor,
                 "rejected_triage_continuity": reject_triage,
                 "parallel_channel": broadcast,
                 "request_monotonic_times": request_times,
@@ -541,7 +524,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                 "provider_failures": failures,
                 "owners_stopped": True,
                 "server_thread_alive": serving.is_alive(),
-                "wire_sha256": hashlib.sha256(comms.bus.log.path.read_bytes()).hexdigest(),
+                "bus_seq": comms.bus.bus.revision(),
             }, indent=2) + "\n")
 
 

@@ -92,14 +92,14 @@ def test_execution_extension_is_stored_and_transitioned(tmp_path):
                 "kup,revision,max_attempts,reason_code,created_at_ms,updated_at_ms) VALUES ('"
                 "e','acp',json_object('kind','paused'),'owner','owner',1,2,NULL,1,1)"
             )
-            record = store.snapshots.get("e").execution
+            record = store.get("e").execution
             assert isinstance(record.lifecycle, PausedExecution)
             assert FieldCodec.decode(type(record), FieldCodec.encode(record)) == record
             store.session._connection.execute(
                 "UPDATE executions SET lifecycle=json_set(lifecycle,'$.kind','pending'),revis"
                 "ion=2 WHERE execution_id='e'"
             )
-            assert isinstance(store.snapshots.get("e").execution.lifecycle, PendingExecution)
+            assert isinstance(store.get("e").execution.lifecycle, PendingExecution)
     finally:
         ExecutionState.__registry__.pop("paused")
 
@@ -136,14 +136,14 @@ def test_new_response_state_roundtrips_real_store(tmp_path):
                     reason_code=NoReasonCode(), created_at_ms=0, updated_at_ms=0, revision=1,
                 ).insert(db)
                 ExecutionAssignmentLink("e", "c", 0).insert(db)
-            obligation, = store.snapshots.get("e").obligations
+            obligation, = store.get("e").obligations
             assert isinstance(obligation.lifecycle, ReviewedResponse)
             assert FieldCodec.decode(type(obligation), FieldCodec.encode(obligation)) == obligation
             ResponseObligation.update(
                 store.session._connection, where="execution_id=?", parameters=("e",),
                 lifecycle=SilentResponse(), revision=2,
             )
-            settled, = store.snapshots.get("e").obligations
+            settled, = store.get("e").obligations
             assert isinstance(settled.lifecycle, SilentResponse)
     finally:
         ResponseState.__registry__.pop("reviewed")

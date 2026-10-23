@@ -1,11 +1,12 @@
 """IRC model: channels, DMs, presence, history views."""
 
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.channel_targets import CommandTarget, DeclaredTag
 import pytest
 
 from agent_comms.registration import Registration
-from agent_comms.channels import AllChannel
+from agent_comms.channels import AllChannel, BuiltinChannelView
 from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.errors import UnknownChannelError, UnregisteredThreadError
 from agent_comms.messages import Message, InfoKind
 from agent_comms.read_basis import NamedViewer
@@ -15,7 +16,7 @@ from agent_comms.thread_text import ForkedParent, GivenThreadText
 
 @pytest.fixture
 def chat(comms):
-    """Only ci/docs exist; PR111 is owned by this actual process."""
+    """ci/docs join the declared tags; PR111 is owned by this actual process."""
     import os
     from agent_comms.child_process import ProcessIdentity
     from conftest import declare_test_bus
@@ -34,7 +35,7 @@ class TestChannelTargets:
 
     def test_message_to_global_channel_is_valid(self):
         message = Message(
-            sender="a", target=AllChannel.declared_name, body="x", type=InfoKind
+            sender="a", target=AllChannel.address(), body="x", type=InfoKind
         )
         assert message.target == "#all"
 
@@ -124,11 +125,13 @@ class TestHistory:
 
 class TestChannelsDerived:
     def test_channels_is_global_plus_tags(self, chat):
-        assert chat.channels.channels() == ["#any", "#none", "#all", "#ci", "#docs"]
+        declared = {member.channel() for member in DeclaredTag.members_with(DeclaredTag)}
+        assert chat.channels.channels() == [*BuiltinChannelView.addresses(), *sorted(declared | {"#ci", "#docs"})]
 
     def test_channels_empty_wire(self, tmp_path):
-        comms = wire(tmp_path / "fresh")
-        assert comms.channels.channels() == ["#any", "#none", "#all"]
+        comms = installed_comms(tmp_path / "fresh")
+        declared = sorted(member.channel() for member in DeclaredTag.members_with(DeclaredTag))
+        assert comms.channels.channels() == [*BuiltinChannelView.addresses(), *declared]
 
 
 class TestPresence:

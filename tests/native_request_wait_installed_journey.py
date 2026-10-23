@@ -1,5 +1,6 @@
 """Real installed Toad/ACP/native waits with only the localhost provider controlled."""
 
+from agent_comms.bus import Bus
 from agent_comms.lifecycle_capability import Unresolved
 from agent_comms.pi_vocabulary import OffThinkingLevel
 import argparse
@@ -16,14 +17,11 @@ import time
 from agent_comms.comms import Comms
 from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.field_codec import FieldCodec
-from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.runtime import socket_path
 from agent_comms.runtime_requests import SubscribeRuntimeRequest
-from agent_comms.threads import Thread
 from toad.agent_schema import AgentDefinition
 from toad.app import ToadApp
-from toad.widgets.transcript_history import TranscriptHistory
 
 from l0a_native_installed_pilot import until, response_painted
 from runtime_fixture import stop_test_children, stop_test_owners
@@ -100,7 +98,7 @@ async def run(arguments):
     (config / "settings.json").write_text(json.dumps({"compaction": {"enabled": False},
         "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}}}))
     service = Comms(stage / "wire")
-    service.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(service.root))
     environment = dict(os.environ, AGENT_COMMS_ROOT=str(service.root),
         AGENT_COMMS_NATIVE_CONFIG_DIR=str(config), PI_CODING_AGENT_DIR=str(config),
         AGENT_COMMS_AGENT_MODELS="wait-local/fixture", AGENT_COMMS_AGENT_BIN="pi",

@@ -1,11 +1,4 @@
-"""Pure claim transitions for the single-authority bus envelope.
-
-No bus send, file append, O_EXCL claim sidecar, write fence, or retry lives here.
-A caller must serialize send and every claim-bearing read under the wire→bus
-locks, accept only newline-complete rows after fsync of the opened bus file (and
-its parent on creation), and quarantine/re-fsync a visible row after failed
-fsync before any reader observes it. Parsed rows alone are NOT durable proof.
-"""
+"""Pure resource transitions; Bus owns their atomic publication and projection."""
 
 from __future__ import annotations
 
@@ -155,8 +148,9 @@ class ClaimScope(SubclassUnion, ABC, affix=""):
     def held_at(self, claimed_generation: int) -> bool:
         """Whether the owner's current claimed generation still holds this acquisition."""
 
-    @abstractmethod
-    def require_new_operation(self, is_used: Callable[[str], bool]) -> None: ...
+    @property
+    def operation_ids(self) -> tuple[str, ...]:
+        return ()
 
 
 @dataclass(frozen=True)
@@ -169,9 +163,6 @@ class UnrecordedScope(NullMember, ClaimScope):
 
     def held_at(self, claimed_generation: int) -> bool:
         return False
-
-    def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
-        pass
 
 
 @dataclass(frozen=True)
@@ -192,9 +183,9 @@ class RecordedScope(ClaimScope, declared_name=None):
     def held_at(self, claimed_generation: int) -> bool:
         return claimed_generation == self.owner_claimed_generation
 
-    def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
-        if is_used(self.operation_id):
-            raise IdentityConflict("Claim operation was already consumed")
+    @property
+    def operation_ids(self) -> tuple[str, ...]:
+        return (self.operation_id,)
 
 
 @dataclass(frozen=True)
@@ -306,8 +297,15 @@ class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, affix=""):
     @abstractmethod
     def resources(self) -> tuple[str, ...]: ...
 
-    def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
+    @property
+    def operation_ids(self) -> tuple[str, ...]:
         """A release consumes no acquisition operation."""
+        return ()
+
+    def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
+        for operation_id in self.operation_ids:
+            if is_used(operation_id):
+                raise IdentityConflict("Claim operation was already consumed")
 
     def claimed(self, resource: str) -> ClaimOwner:
         raise ClaimTransitionError("Release originals do not acquire resources.")
@@ -372,8 +370,9 @@ class Acquisition(ClaimTransition, declared_name=None):
             **{declared.name: getattr(self, declared.name) for declared in fields(AcquiringClaim)},
         )
 
-    def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
-        self.claim_scope.require_new_operation(is_used)
+    @property
+    def operation_ids(self) -> tuple[str, ...]:
+        return self.claim_scope.operation_ids
 
     def require_holders(self, previous: ClaimProjection) -> None:
         for resource in self.claims:
@@ -457,10 +456,9 @@ class ClaimOwner(AcquiringClaim, ResourceClaim):
     def live(self, registry: RegistrySnapshot) -> bool:
         incarnation = RecordedThreadIncarnation(self.owner, float(self.incarnation))
         return any(
-            registry.status(thread.name).active
-            and thread.process_alive
+            thread.process_alive
             and self.claim_scope.held_at(registry.claim_generation(thread.name))
-            for thread in registry.threads_for(incarnation)
+            for thread in registry.active_threads(registry.threads_for(incarnation))
         )
 
 

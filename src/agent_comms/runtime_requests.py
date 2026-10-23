@@ -10,9 +10,11 @@ from __future__ import annotations
 import asyncio
 import json
 from abc import abstractmethod
-from dataclasses import dataclass, field
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from functools import partial
-from typing import TYPE_CHECKING, ClassVar, Literal, Self, Annotated
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from acp.schema import PromptResponse, SetSessionConfigOptionResponse
 from pydantic import BaseModel, JsonValue
@@ -216,24 +218,47 @@ class ProjectRuntimeRequest(ResultRuntimeRequest):
 
 @dataclass(frozen=True, kw_only=True)
 class SubscribeRuntimeRequest(RuntimeRequest):
+    @asynccontextmanager
+    async def observing(self, ctx: RuntimeRequestContext) -> AsyncIterator[None]:
+        agent = ctx.server.agent
+        ctx.server.clients.setdefault(ctx.session_id, set()).add(ctx.client)
+        await agent.emit_session_identity(ctx.session_id, ctx.name, client=ctx.client)
+        async with agent.sessions.transcript.subscribe(self.thread, client=ctx.client):
+            await agent.turns.publish_turn_state(
+                AcpEventConsumer(agent, ctx.session_id, ctx.client)
+            )
+            await agent.inputs.emit_input_delivery_changed(ctx.session_id, client=ctx.client)
+            yield
+
+    async def ready(self, ctx: RuntimeRequestContext) -> None:
+        await ctx.send(OwnerReady(
+            ready=await ctx.server.agent.sessions.metadata(ctx.name),
+            controller_token=ctx.client.token,
+        ))
+
+    @asynccontextmanager
+    async def subscribed(self, ctx: RuntimeRequestContext) -> AsyncIterator[None]:
+        """A load replays history before its response, under its already-known ID."""
+        async with self.observing(ctx):
+            await self.ready(ctx)
+            yield
+
     async def apply(self, ctx: RuntimeRequestContext) -> None:
         agent = ctx.server.agent
         await ctx.send(OwnerAnnouncement())
-        ctx.server.clients.setdefault(ctx.session_id, set()).add(ctx.client)
-        await agent.emit_session_identity(ctx.session_id, ctx.name, client=ctx.client)
-        await agent.sessions.transcript.subscribe(self.thread, client=ctx.client)
-        await agent.turns.publish_turn_state(AcpEventConsumer(agent, ctx.session_id, ctx.client))
-        await agent.inputs.emit_input_delivery_changed(ctx.session_id, client=ctx.client)
-        metadata = await agent.sessions.metadata(ctx.name)
-        await ctx.send(
-            OwnerReady(
-                ready=metadata,
-                controller_token=ctx.client.token,
-            )
-        )
-        await agent.sessions.config.observe_configuration(ctx.session_id, ctx.client)
-        while line := await ctx.reader.readline():
-            ClientLine.read(line).answer(ctx.client)
+        async with self.subscribed(ctx):
+            async with agent.sessions.config.observe_configuration(ctx.session_id, ctx.client):
+                while line := await ctx.reader.readline():
+                    ClientLine.read(line).answer(ctx.client)
+
+
+class FreshSubscribeRuntimeRequest(SubscribeRuntimeRequest):
+    @asynccontextmanager
+    async def subscribed(self, ctx: RuntimeRequestContext) -> AsyncIterator[None]:
+        """A new ID is announced before its first publication can reach the ACP attachment."""
+        await self.ready(ctx)
+        async with self.observing(ctx):
+            yield
 
 
 @dataclass(frozen=True, slots=True)

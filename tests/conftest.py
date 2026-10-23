@@ -1,8 +1,8 @@
 """Shared fixtures: an isolated Comms wire per test."""
-from agent_comms.native_package import pinned_location, pinned_native_package
 
 import asyncio
 import os
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -12,21 +12,25 @@ from contextlib import AsyncExitStack, contextmanager
 from pathlib import Path
 
 import pytest
-import goal_owner_fixture
 from xdist import is_xdist_worker
-from source_programs import SourcePrograms
-from source_revision_fixture import SourceRepository
 
-from agent_comms import candidate_maintenance
+import goal_owner_fixture
+from agent_comms.bus import Bus
 from agent_comms.bus_publication import AgentOrigin
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.comms import Comms
+from agent_comms.locked_store import RegistryFile
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.message_bus import MessageBus
+from agent_comms.messages import ConversationRole, InfoKind, Message
+from agent_comms.native_package import pinned_location, pinned_native_package
 from agent_comms.native_tool_transport import ToolListener
 from agent_comms.publisher import ParticipantPublisher, Publisher
 from agent_comms.registration import Registration
-from agent_comms.messages import ConversationRole, InfoKind, Message
-from agent_comms.store_files import _store_lock
 from agent_comms.thread_text import ForkedParent, GivenThreadText
+from agent_comms.typed_table import TypedTable
+from source_programs import SourcePrograms
+from source_revision_fixture import SourceRepository
 
 pytest_plugins = (goal_owner_fixture.__name__,)
 
@@ -120,17 +124,16 @@ def reader(root: Path) -> Comms:
 
 def responder(root: Path, registry: Registration) -> MessageBus[ParticipantPublisher]:
     """The selected owner publishes replies and releases its attempt's claims."""
-    return MessageBus(root / "bus.jsonl", registry, ParticipantPublisher)
+    return MessageBus(root, registry, ParticipantPublisher)
 
 
 def publish_initial(comms, sender, target, body, type=InfoKind, *, role=ConversationRole()):
-    """Stage an agent's initial message on the bus; no SQL acceptance or live wake."""
+    """Publish through the ordinary owner without submitting to a native agent."""
     type.require_sendable()
-    with _store_lock(comms.root / "wire"):
-        return comms.bus.publisher.publish_initial_cohort(
-            Message(sender=sender, target=target, body=body, type=type, role=role),
-            origin=AgentOrigin(),
-        )
+    return comms.bus.publisher.publish_ordinary(
+        Message(sender=sender, target=target, body=body, type=type, role=role),
+        destination=CommandTarget.named(target), origin=AgentOrigin(),
+    )
 
 def pytest_sessionstart(session):
     """The controller prepares this checkout's pinned inputs before any worker runs.
@@ -210,19 +213,16 @@ def _managed_runtime_environment_is_explicit(monkeypatch: pytest.MonkeyPatch) ->
 
 
 @contextmanager
-def _root_lifetime(root: Path) -> Iterator[Path]:
-    """Keep each directory's bus workers inside the directory's actual lifetime."""
+def without_mutation_guards(db: sqlite3.Connection, table: type[TypedTable]) -> Iterator[None]:
+    """Damage disposable rows, restoring their declaration before a checked read."""
+    guards = table.triggers()
+    for name in guards:
+        db.execute(f'DROP TRIGGER "{name}"')
     try:
-        yield root
+        yield
     finally:
-        candidate_maintenance.drain_candidate_catchup(root)
-
-
-@pytest.fixture
-def tmp_path(tmp_path: Path) -> Iterator[Path]:
-    """Join bus workers before pytest applies its passed-directory retention policy."""
-    with _root_lifetime(tmp_path) as root:
-        yield root
+        for statement in guards.values():
+            db.execute(statement)
 
 
 @pytest.fixture
@@ -234,16 +234,13 @@ def scratch_root(tmp_path_factory):
     if not base.resolve().is_relative_to(scratch):
         base = scratch / "pytest"
         base.mkdir(parents=True, exist_ok=True)
-    with (
-        tempfile.TemporaryDirectory(prefix="check-root-", dir=base) as directory,
-        _root_lifetime(Path(directory)) as root,
-    ):
-        yield root
+    with tempfile.TemporaryDirectory(prefix="check-root-", dir=base) as directory:
+        yield Path(directory)
 
 
 @pytest.fixture
 def private_directory():
-    """A throwaway directory on physical /var/tmp; private N/K publication refuses /tmp."""
+    """An owner-only throwaway directory for isolated runtime checks."""
     if (
         os.name != "posix"
         or not Path("/var/tmp").is_dir()
@@ -251,30 +248,26 @@ def private_directory():
         or Path("/var/tmp").is_symlink()
     ):
         pytest.skip("a private bus needs a physical /var/tmp")
-    with (
-        tempfile.TemporaryDirectory(prefix="ac-private-", dir="/var/tmp") as directory,
-        _root_lifetime(Path(directory)) as root,
-    ):
-        yield root
+    with tempfile.TemporaryDirectory(prefix="ac-private-", dir="/var/tmp") as directory:
+        yield Path(directory)
 
 
 @pytest.fixture
 def private_comms(private_directory):
-    """One throwaway private bus; native consumers acquire their own package."""
+    """Install one isolated SQLite bus; native consumers acquire their own package."""
+    from bus_record_fixture import prepare_native_comms
+
     root = private_directory / "wire"
-    root.mkdir(mode=0o700)
-    comms = Comms(root)
-    comms.messaging.initialize_private_initial_protocol()
+    comms = prepare_native_comms(Comms(root))
     from agent_comms.launch_root import LaunchRoot
 
-    LaunchRoot.from_path(root).install()
-    return comms
+    with LaunchRoot.from_path(root).selected():
+        yield comms
 
 
 @pytest.fixture
-def root(tmp_path: Path) -> Iterator[Path]:
-    with _root_lifetime(tmp_path / "comms") as root:
-        yield root
+def root(tmp_path: Path) -> Path:
+    return tmp_path / "comms"
 
 
 @pytest.fixture
@@ -298,9 +291,8 @@ def configured_repository(durable_home):
 @pytest.fixture
 def installed_runtime(durable_home, tmp_path):
     """A temporary installation record, executable and pointer, never the real home."""
-    from agent_comms.installer.runtime_resolution import (
-        CommitRecord, GitRecord, PackageRecord, RuntimePackage, RuntimeResolution,
-    )
+    from agent_comms.installer.interpreter_operation import CommitRecord, GitRecord, PackageRecord
+    from agent_comms.installer.runtime_resolution import RuntimePackage, RuntimeResolution
     from agent_comms.launch_runtime import LaunchRuntime
     from agent_comms.repo import Repo
 
@@ -326,6 +318,19 @@ def installed_runtime(durable_home, tmp_path):
     return LaunchRuntime.installed()
 
 
+@contextmanager
+def maintenance_held(root: Path) -> Iterator[str]:
+    """This process holds ``root``'s maintenance the way an install does, nonce in its
+    environment for its children, so a stored schema may change here and nowhere else."""
+    barrier = MaintenanceBarrier(RegistryFile.path_in(root))
+    held = barrier.begin(MaintenanceOperator.current())
+    try:
+        with held.holding():
+            yield held.nonce
+    finally:
+        barrier.clear(held)
+
+
 def declare_test_bus(comms: Comms, *, channels=(), threads=()) -> Comms:
     """Declare exactly the test's named channels and members, never inferred ones."""
     for channel in channels:
@@ -335,9 +340,21 @@ def declare_test_bus(comms: Comms, *, channels=(), threads=()) -> Comms:
     return comms
 
 
+def installed_comms(root: Path) -> Comms:
+    """A root as the installer leaves it: its bus exists before any reader opens it."""
+    Bus.install(Bus.path_in(root))
+    return Comms(root)
+
+
 @pytest.fixture
 def comms(root: Path) -> Comms:
-    return Comms(root)
+    return installed_comms(root)
+
+
+@pytest.fixture
+def bus(tmp_path):
+    """A freshly installed bus, shared by the record and recipient test families."""
+    return Bus.install(Bus.path_in(tmp_path))
 
 
 @pytest.fixture

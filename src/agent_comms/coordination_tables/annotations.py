@@ -4,14 +4,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Annotated, ClassVar
 
-from agent_comms.coordination_schema import CoordinatorTable
+from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.message_reference import MessageReference
 from agent_comms.typed_table import (
     Column,
     Generated,
     Index,
     RowId,
-    TypedTable,
     UnallocatedRowId,
     sql_literal,
 )
@@ -21,7 +20,7 @@ from agent_comms.working_memory_requests import AnnotationOutcome, DisclosureReq
 
 
 @dataclass(frozen=True, kw_only=True)
-class SpanAnnotationsRow(CoordinatorTable, TypedTable):
+class SpanAnnotationsRow(CoordinatorRow):
     label: ModelLabel
     created_at_ms: int
     id: Annotated[RowId, Column(primary_key=True, auto_increment=True)] = field(
@@ -94,7 +93,7 @@ class SpanAnnotationsRow(CoordinatorTable, TypedTable):
 
 
 @dataclass(frozen=True, kw_only=True)
-class AnnotationRequestsRow(CoordinatorTable, TypedTable):
+class AnnotationRequestsRow(CoordinatorRow):
     request: DisclosureRequest
     outcome: AnnotationOutcome
     created_at_ms: int

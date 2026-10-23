@@ -23,11 +23,12 @@ from .notification_progress import (
     SentProgress,
     ShownToModelProgress,
 )
-from .typed_table import BooleanStorage, TypedRow, sql_literal
+from .typed_table import BooleanStorage, TypedRow
 
 if TYPE_CHECKING:
+    from .private_registry_guard import RegistryPrivacy
     from .agent_activity import RecipientActivity
-    from .bus_publication import CommittedDelivery
+    from .bus_publication import Delivered
     from .presentation import MessageNotification
     from .wake_policy import RecipientDecision
 
@@ -214,7 +215,7 @@ class UnrecordedNotificationSource(NotificationSource):
 class NotificationAssignmentRead:
     """Assignment rows captured from one caller-owned coordination snapshot."""
 
-    sources: tuple[CommittedDelivery, ...]
+    sources: tuple[Delivered, ...]
     rows: tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...]
 
     def resolve(self, root: Path) -> tuple[NotificationAssignment, ...]:
@@ -236,8 +237,8 @@ class NotificationAssignment(NotificationSource):
 
     @classmethod
     def for_deliveries(
-        cls, originals: Iterable[CommittedDelivery], records: Iterable[NotificationAssignment],
-    ) -> Iterator[tuple[CommittedDelivery, tuple[NotificationSource, ...]]]:
+        cls, originals: Iterable[Delivered], records: Iterable[NotificationAssignment],
+    ) -> Iterator[tuple[Delivered, tuple[NotificationSource, ...]]]:
         """Match notification assignments to messages and their recorded recipients."""
         by_recipient = {}
         for record in records:
@@ -255,7 +256,7 @@ class NotificationAssignment(NotificationSource):
 
     @classmethod
     def _recorded_conversation_responses(
-        cls, root: Path, sources: tuple[CommittedDelivery, ...],
+        cls, root: Path, sources: tuple[Delivered, ...],
         rows: tuple[NotificationAssignment, ...],
     ) -> tuple[NotificationAssignment, ...]:
         eligible = tuple(
@@ -263,16 +264,16 @@ class NotificationAssignment(NotificationSource):
         )
         if not eligible:
             return rows
-        from .wire_log import WireLog
+        from .bus import Bus
 
         originals = {original.message.reference: original for original in sources}
-        with WireLog(WireLog.path_in(root)).checked_read() as source:
-            # Capture under the lock; decoding runs after it is released.
-            captured = source.replies(tuple({row.assignment.source for row in eligible}))
-        replies: dict[MessageReference, list[CommittedDelivery]] = {}
-        for reply in captured:
-            for answered in reply.message.answers:
-                replies.setdefault(answered, []).append(reply)
+        captured = Bus(Bus.path_in(root)).replies(
+            tuple({row.assignment.source for row in eligible}))
+        replies: dict[MessageReference, list[Delivered]] = {}
+        for record in captured:
+            for reply in record.deliveries():
+                for answered in reply.message.answers:
+                    replies.setdefault(answered, []).append(reply)
         resolved = []
         for row in rows:
             if row.assignment.lifecycle.records_conversation_response:
@@ -288,7 +289,8 @@ class NotificationAssignment(NotificationSource):
 
     @classmethod
     def capture(
-        cls, connection: sqlite3.Connection, sources: Sequence[CommittedDelivery]
+        cls, connection: sqlite3.Connection, sources: Sequence[Delivered],
+        privacy: RegistryPrivacy,
     ) -> NotificationAssignmentRead:
         """Capture detached assignment evidence for one bounded window of originals
         from the caller's SQLite snapshot."""
@@ -300,12 +302,8 @@ class NotificationAssignment(NotificationSource):
         if not sources:
             return NotificationAssignmentRead((), ())
         from .coordination_tables.executions import CurrentExecutions
-        from .native_input_record import TriageNativeExecution
-        from .native_runtime_input import NativeRuntimeInput
-
         CoordinatorTable.require_schema(connection)
         columns = ",".join(f"w.{name}" for name in WakeAssignment.columns())
-        triage_stage = sql_literal(TriageNativeExecution)
         # The window's assignments and their native-input membership are each
         # selected once; membership has no assignment index, so it is built
         # for these assignments only, not once per row and per column.
@@ -313,22 +311,13 @@ class NotificationAssignment(NotificationSource):
             connection.execute(
                 f"WITH w AS MATERIALIZED (SELECT * FROM {WakeAssignment.declared_name} "
                 f"WHERE wire_seq IN ({','.join('?' for _ in sources)})), "
-                "member AS MATERIALIZED (SELECT m.input_id,m.assignment_id,m.ordinal "
-                f"FROM ({NativeRuntimeInput.source_membership_sql()}) m "
-                "WHERE m.assignment_id IN (SELECT assignment_id FROM w)) "
-                f"SELECT {columns}, EXISTS (SELECT 1 FROM {NativeRuntimeInput.declared_name} n "
-                "JOIN member ON member.input_id=n.input_id "
-                "WHERE member.assignment_id=w.assignment_id "
-                f"AND n.stage={triage_stage} AND n.session_entry_id IS NULL) "
-                "AS triage_inflight, pointer.execution_id AS current_execution_id, "
-                f"(SELECT n.committed_at_ms FROM {NativeRuntimeInput.declared_name} n "
-                "JOIN member ON member.input_id=n.input_id "
-                "WHERE member.assignment_id=w.assignment_id AND n.session_entry_id IS NOT NULL "
-                f"ORDER BY CASE n.stage WHEN {triage_stage} THEN 0 ELSE 1 END,"
-                "member.ordinal,n.input_id LIMIT 1) AS context_committed_at_ms, "
+                f"context AS MATERIALIZED ({privacy.notification_context_sql(connection)}) "
+                f"SELECT {columns},context.triage_inflight,"
+                "pointer.execution_id AS current_execution_id,context.context_committed_at_ms,"
                 "p.seq AS response_seq, p.message_id AS response_message_id, "
                 "p.received_at_ms AS response_received_at_ms "
                 "FROM w "
+                "JOIN context ON context.assignment_id=w.assignment_id "
                 f"LEFT JOIN {CurrentExecutions.declared_name} pointer "
                 "ON pointer.owner_lookup=w.recipient_lookup "
                 f"LEFT JOIN {PublicationEvidence.declared_name} p "
@@ -342,22 +331,24 @@ class NotificationAssignment(NotificationSource):
 
     @classmethod
     def read(
-        cls, root: Path, sources: Sequence[CommittedDelivery]
+        cls, root: Path, sources: Sequence[Delivered]
     ) -> NotificationAssignmentRead:
         """Capture assignment evidence through the single observing connection owner."""
         from .coordination_database import CoordinationStore
+        from .private_registry_guard import RegistryPrivacy
 
+        privacy = RegistryPrivacy.capture(root)
         with CoordinationStore.observed(CoordinationStore.path_in(root)).observing(
-            cls, sources
+            cls, sources, privacy,
         ) as result:
             return result
 
     @classmethod
-    def missing_store(cls, store, sources):
-        return NotificationAssignmentRead(tuple(sources), ())
+    def missing_store(cls, store, sources, privacy):
+        return privacy.missing_notification_assignments(sources)
 
     @classmethod
-    def invalid_store(cls, store, sources):
+    def invalid_store(cls, store, sources, privacy):
         raise ValueError(f"Channel notification status unavailable: {store.failure_reason}")
 
     @property

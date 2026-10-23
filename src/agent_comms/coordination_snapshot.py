@@ -20,10 +20,17 @@ from agent_comms.coordination_tables.attempts import (
     AttemptRecord,
     NoPreviousAttempt,
     PreviousAttempt,
-    ReplayAssessments,
 )
 from agent_comms.coordination_tables.executions import (
-    ExecutionOrigin, ExecutionRecord, NoPointedAttempt, NoPointedExecution, PointerAttempt, PointerExecution,
+    CurrentExecutions,
+    ExecutionOrigin,
+    ExecutionRecord,
+    NoPointedAttempt,
+    NoPointedExecution,
+    PointerAttempt,
+    PointerExecution,
+    ReplayAssessment,
+    ReplayAssessments,
 )
 from agent_comms.coordination_tables.publications import PublicationEvidence, PublicationIntents
 from agent_comms.coordination_tables.recovery import ConnectivityFacet, RecoveryAudit
@@ -46,7 +53,7 @@ class RecoverySnapshot:
     links: Annotated[
         tuple[ExecutionAssignmentLink, ...], SnapshotName("execution_claims")
     ]
-    replay: ReplayAssessments | None
+    replay: ReplayAssessment
     obligations: tuple[ResponseObligation, ...]
     publication_intents: tuple[PublicationIntents, ...]
     publication_evidence: Annotated[
@@ -138,8 +145,8 @@ class RecoverySnapshot:
     def validate_membership(self) -> None:
         execution = self.execution
         execution_id = execution.execution_id
+        self.replay.require_execution(execution_id)
         related = (
-            self.replay,
             *self.obligations,
             *self.publication_intents,
             *self.publication_evidence,
@@ -234,11 +241,6 @@ class RecoverySnapshot:
         self, session, outcome, reason_code: ReasonCode,
         boundary: NativeBoundary | None = None,
     ) -> None:
-        from .coordination_tables.assignments import WakeAssignment
-        from .coordination_tables.attempts import AttemptRecord, ReplayAssessments
-        from .coordination_tables.executions import CurrentExecutions, ExecutionRecord
-        from .coordination_tables.responses import ResponseObligation
-
         db = session._connection
         execution, attempt = self.execution, self.attempt
         if self.publication_intents:
@@ -350,11 +352,9 @@ class RecoverySnapshot:
         belonging to a later attempt (or an unbound manual claim) is untouched.
         The caller retains wire/bus/registry exclusion through terminal commit.
         """
-        bus, bus_lock = boundary.bus, boundary.bus_lock
+        bus = boundary.bus
         attempt = self.require_attempt()
-        metadata = bus.log.private_marker_unlocked()
-        with bus_lock.current_source(bus.log, metadata) as source:
-            current = source.claim_projection().live_in(boundary.registry)
+        current = bus.bus.claim_projection().live_in(boundary.registry)
         owned = tuple(
             claim for claim in current.values()
             if claim.claim_scope.belongs_to(attempt)

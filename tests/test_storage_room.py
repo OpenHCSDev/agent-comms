@@ -49,6 +49,26 @@ async def test_cancelled_waiter_releases_only_its_own_claim(tmp_path):
         assert RoomClaim.count(db) == 0
 
 
+@pytest.mark.asyncio
+async def test_committed_release_wakes_a_waiter_without_os_refresh(tmp_path):
+    comms = copied_root(tmp_path)
+    rule = comms.registry.storage_rule
+    one, two = (comms.registry.require(name) for name in ('gate-one', 'gate-two'))
+    first = await rule.wait_for_room((BuildRoomWork,), one, comms.root)
+    waiting = asyncio.create_task(rule.wait_for_room((UnitStartRoomWork,), two, comms.root))
+    try:
+        await asyncio.sleep(0.05)
+        assert not waiting.done()
+        await asyncio.to_thread(first.finish)
+        second = await asyncio.wait_for(waiting, 0.5)
+        await asyncio.to_thread(second.finish)
+    finally:
+        if not waiting.done():
+            waiting.cancel()
+        await asyncio.gather(waiting, return_exceptions=True)
+        await asyncio.to_thread(first.finish)
+
+
 @pytest.mark.parametrize('command,kind', [
     ('python -B -m pytest x', TestGateRoomWork), ('pytest x', TestGateRoomWork),
     ('python /some/build_runtime.py', BuildRoomWork), ('build_runtime.py', BuildRoomWork),

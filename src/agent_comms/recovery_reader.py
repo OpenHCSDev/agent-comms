@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from agent_comms.assignment_store import AssignmentStore
 from agent_comms.coordination_errors import (
     IdentityConflict,
@@ -11,7 +9,8 @@ from agent_comms.coordination_errors import (
 from agent_comms.coordination_session import CoordinationSession
 from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink
-from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments
+from agent_comms.coordination_tables.attempts import AttemptRecord
+from agent_comms.coordination_tables.executions import ReplayAssessments
 from agent_comms.coordination_tables.executions import (
     ExecutionRecord,
 )
@@ -27,7 +26,6 @@ from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.participant_store import ParticipantStore
 
 
-@dataclass(eq=False, repr=False)
 class RecoveryReader:
     session: CoordinationSession
     participants: ParticipantStore
@@ -52,7 +50,7 @@ class RecoveryReader:
                 )
             )
             assignments = tuple(self.assignments.get(link.assignment_id) for link in links)
-            replay = ReplayAssessments.one(db, execution_id=execution_id)
+            replay = ReplayAssessments.for_execution(db, execution_id)
             obligations = tuple(ResponseObligation.select(db, where="execution_id=?",
                 parameters=(execution_id,), order_by=("exact_target",)))
             intents = tuple(PublicationIntents.select(db, where="execution_id=?",

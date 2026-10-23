@@ -4,28 +4,29 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Iterable, Mapping, Sequence
-from contextlib import ExitStack
 from abc import abstractmethod
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 from .catalog_store import ChannelCatalog
-from .declared_family import DeclaredFamily
 from .cli_result import CliResult
+from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, WireForm
 from .registration import Registration
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .shared_ledger import LedgerDocument
-from .thread_identity import ThreadIncarnation
 from .thread_execution import ConversationPreparation
+from .thread_identity import ThreadIncarnation
 from .transcript_sources import AssignedSourceIdentity
 
 if TYPE_CHECKING:
     from .historical_views import HistoricalThread, HistorySource
     from .registry_document import RegistrySnapshot
     from .threads import Thread
+from agent_comms.thread_presentation import NoThreadPresentation, ThreadPresentation
+
 from .agent_activity import AgentActivity
 from .bus_activity_index import ChannelActivity
 from .channel_management import ChannelManagement
@@ -45,23 +46,21 @@ from .goal_management import Goals
 from .historical_views import ChannelDisplayHistory, ChannelHistory, DMDisplayHistory, DMHistory
 from .message_bus import MessageBus
 from .message_page import NEWEST_PAGE, MessagePage, PageBounds
-from .page_traversal import OlderTraversal
 from .message_reference import MessageReference
 from .messages import Message
 from .messaging import Messaging
+from .page_traversal import LiveCursor
 from .presentation import (
     ChannelView,
     CoordinationSnapshot,
-    MessageNotification,
-    ThreadRecord,
     CountedRead,
     InboxRead,
+    MessageNotification,
+    ThreadRecord,
     ThreadView,
     WireRevision,
 )
 from .read_basis import AnonymousViewer, DisplayViewer, DMDisplayBasis, NamedViewer
-from .store_files import SharedLock, _store_lock
-from agent_comms.thread_presentation import NoThreadPresentation, ThreadPresentation
 from .threads import current_thread
 from .transcripts import TranscriptCursor, Transcripts
 
@@ -121,7 +120,7 @@ class ThreadViewRead(ConversationPreparation):
         page = DMDisplayBasis.fetch_page(
             self.views.bus, self.views.registry, self.views.root, self.viewer.name,
             self.thread.name, worktree=self.viewer.worktree,
-            bounds=PageBounds(OlderTraversal(self.through.wire.sequence + 1)),
+            bounds=PageBounds(LiveCursor(self.through.wire.sequence + 1).older()),
         )
         if page.messages:
             self.views.mark_page_read(page, worktree=self.viewer.worktree)
@@ -190,12 +189,11 @@ class HistoryViews:
         self.messaging = messaging
         self.goals = goals
         self.ledger = ledger
-        self._wire_lock_path = root / "wire"
         self.presentation = BusPresentation(bus, registry, channels.catalog, agents, goals)
         self.transcript_reads = transcript_read_state(bus.reads.path)
 
     def message_notifications_for_references(self, references: Sequence[MessageReference]):
-        return MessageNotification.references(self.root, self.registry, self.bus.log, references)
+        return MessageNotification.references(self.root, self.registry, self.bus.bus, references)
 
     def history_page(self, target: CommandTarget, bounds: PageBounds = NEWEST_PAGE,
                      *, viewer: DisplayViewer = AnonymousViewer()) -> MessagePage:
@@ -208,7 +206,7 @@ class HistoryViews:
         source = self.bus.history.attach(Path(source_root), source_read=source_read)
         catalog = ChannelCatalog.at(source.root)
         incoming = catalog.read()
-        with self.bus.opened_activity() as activity, _store_lock(self._wire_lock_path):
+        with self.bus.opened_activity() as activity:
             existing = self.channels.catalog.path.exists()
             with self.channels.catalog.editing() as document:
                 document.restore_missing(incoming, activity, existing=existing)
@@ -218,7 +216,7 @@ class HistoryViews:
         return self.bus.history.threads(name)
 
     def dm_display_page(
-        self, peer: str, *, worktree: str, bounds: PageBounds = NEWEST_PAGE
+        self, peer: str | ThreadTarget, *, worktree: str, bounds: PageBounds = NEWEST_PAGE
     ) -> MessagePage:
         viewer = self.messaging.user_identity(worktree).name
         return DMDisplayHistory(viewer, peer, worktree).page(self.presentation, bounds)
@@ -251,6 +249,24 @@ class HistoryViews:
             canonical[name] = max(canonical.get(name, 0.0), timestamp)
         return canonical
 
+    def retained_context(self, name: str):
+        """Project authored context and its export boundary from one captured bus read."""
+        from .context_segments.retained import RetainedSegment
+        from .input_disposition import InputDispositions
+        from .retained_task_facts import RetainedTaskFacts
+
+        snapshot = self.registry.snapshot()
+        owner = snapshot.require(name)
+        with self.bus.bus.reading() as source:
+            facts = RetainedTaskFacts.capture(source, owner.incarnation)
+            retained = RetainedTaskFacts((
+                *facts.facts, *facts.original_input_facts(InputDispositions(self.root)),
+            ))
+            boundary = WireExportBoundary(source.revision(), time.time())
+        return RetainedSegment.capture(
+            retained.for_owner(owner, snapshot), owner, snapshot, boundary,
+        )
+
     def export_wire(
         self,
         destination: Path | str,
@@ -263,12 +279,10 @@ class HistoryViews:
     ) -> WireExportProvenance:
         """Export one fixed, non-mutating snapshot of authoritative wire rows."""
         started_at = time.time() if export_started_at is None else export_started_at
-        with ExitStack() as stack:
-            with _store_lock(self._wire_lock_path, mode=SharedLock()):
-                resolved = scope.resolve(self.bus.require_channel, self.registry)
-                through, messages = stack.enter_context(self.bus.log.full_history_snapshot())
-
-            selected = (message for message in messages if resolved.matches(message))
+        resolved = scope.resolve(self.bus.require_channel, self.registry)
+        with self.bus.bus.reading() as source:
+            through = source.revision()
+            selected = (message for message in source.message_history() if resolved.matches(message))
             return WireTranscriptExporter(
                 format=format,
                 scope=resolved.scope,
@@ -363,7 +377,7 @@ class HistoryViews:
         with self.presentation.snapshot(viewer=self.display_viewer(worktree)) as (basis, source):
             captured_viewer = basis.require_viewer()
             display_activity, display_unread = self.presentation.display_view_metrics(source, basis)
-            clocks = self.bus.activity_index.snapshot(source)
+            clocks = source.activity_clocks()
             snapshot = CoordinationSnapshot.capture(
                 self.root, basis.registry, basis.catalog, self.agents, basis.channels,
                 self.last_sent_timestamps(clocks.sent.items(), registry=basis.registry),
@@ -408,7 +422,7 @@ class HistoryViews:
 
     def latest_sequence(self) -> int:
         """The sequence number of the newest message on the bus, whoever it was sent to."""
-        return self.bus.log.latest_sequence()
+        return self.bus.bus.revision()
 
     def revision(self) -> WireRevision:
         """A cheap observer token; activity expiry is checked without rescanning idle logs."""
@@ -430,8 +444,9 @@ class HistoryViews:
     def list_threads(self, active_only: bool = False) -> tuple[ThreadRecord, ...]:
         """Summarize threads with status and pending counts."""
         snapshot = self.registry.snapshot()
-        threads = tuple(thread for name, thread in sorted(snapshot.threads.items())
-                        if not active_only or snapshot.status(name).active)
+        threads = tuple(thread for _, thread in sorted(snapshot.threads.items()))
+        if active_only:
+            threads = tuple(snapshot.active_threads(threads))
         pending = CountedRead().counts(self.bus, tuple(thread.name for thread in threads))
         return ThreadRecord.read(
             snapshot, self.agents, self.goals, threads, pending)

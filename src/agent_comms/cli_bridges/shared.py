@@ -9,6 +9,7 @@ import json
 import os
 import signal
 import socket
+import sqlite3
 import sys
 import time
 import traceback
@@ -43,7 +44,6 @@ from agent_comms.cli_protocol import (
 )
 from agent_comms.comms import Comms
 from agent_comms.config_options import CatalogConfigOption, CatalogSelection, ConfigOptions
-from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, PathText
@@ -52,7 +52,9 @@ from agent_comms.message_reference import AfterMessageStart, FirstUnreadStart, I
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
-from agent_comms.typed_table import Column, DurableTables, ExpressionIndex, TypedTable
+from agent_comms.typed_table import (
+    Column, DurableTables, ExpressionIndex, WriterOwnedFile, TypedTable,
+)
 from agent_comms_hooks.watch import HeldClaim, WatchClaim, WatchRecord
 
 from ..locked_store import RegistryFile, SQLiteFile
@@ -115,7 +117,8 @@ class BridgeStateTable(DurableTables):
     """The bridge's delivery.sqlite3: its binding and every delivery attempt.
 
     The bus holds the messages, not whether this harness was sent them, so
-    nothing rebuilds these rows: a stored schema that differs is refused.
+    nothing rebuilds these rows: a stored schema that differs is carried onto the
+    declaration where it says how, keeping every row, and refused where it cannot.
     """
 
     __slots__ = ()
@@ -126,14 +129,14 @@ class BindingRequest(ABC):
     """What the command line asks of the state directory's one binding."""
 
     @abstractmethod
-    def bind(self, db: CoordinationStore) -> Binding: ...
+    def bind(self, db: sqlite3.Connection) -> Binding: ...
 
 
 @dataclass(frozen=True)
 class StoredBinding(BindingRequest):
     """No binding given: the directory's own, read without taking the writer."""
 
-    def bind(self, db: CoordinationStore) -> Binding:
+    def bind(self, db: sqlite3.Connection) -> Binding:
         rows = Binding.select(db)
         if len(rows) != 1:
             raise ValueError('Supply one complete Core/CLI binding for this state directory')
@@ -162,15 +165,12 @@ class Binding(BridgeStateTable, TypedTable, BindingRequest):
     @contextmanager
     def open(cls, state: Path):
         state.mkdir(parents=True, exist_ok=True, mode=0o700)
-        with closing(CoordinationStore.writer(state / BridgeStateTable.filename)) as db:
+        with closing(SQLiteFile.writer(state / BridgeStateTable.filename)) as db:
             db.execute('PRAGMA synchronous=FULL')
-            with SQLiteFile.write_transaction(db):
-                if not BridgeStateTable.stored_schema(db):
-                    BridgeStateTable.create_schema(db)
-            BridgeStateTable.reconcile_schema(db)
+            BridgeStateTable.install_schema(db, WriterOwnedFile())
             yield db
 
-    def bind(self, db: CoordinationStore) -> Binding:
+    def bind(self, db: sqlite3.Connection) -> Binding:
         """The first binding claims the directory; a later one must be the same."""
         with SQLiteFile.write_transaction(db):
             if not Binding.select(db):
@@ -272,7 +272,7 @@ class DeliveryRow(BridgeStateTable, TypedTable):
     indexes = (ExpressionIndex((sequence_sql,)),)
 
     @classmethod
-    def resume_after(cls, db: CoordinationStore) -> InboxStart:
+    def resume_after(cls, db: sqlite3.Connection) -> InboxStart:
         """The existing journal owns attempted progress, including uncertain emissions."""
         latest = cls.read(db.execute(
             f'SELECT {cls._column_list(tuple(cls.column_projection()))} FROM "{cls.declared_name}" '
@@ -558,7 +558,7 @@ class Serve(Watch):
         deadline = time.monotonic() + 30
         while child.alive() and time.monotonic() < deadline:
             try:
-                request.exchange(claim)
+                request.exchange(claim.socket_path)
                 return
             except (FileNotFoundError, ConnectionRefusedError):
                 time.sleep(.05)
@@ -569,18 +569,18 @@ class Serve(Watch):
 
     @staticmethod
     def running(home: Path) -> tuple[SessionBridge, ...]:
-        claims = set()
-        for state in sorted(WatchClaim.directory(home).parent.glob('*-bridge-*')):
-            journal = state / BridgeStateTable.filename
-            if not journal.is_file():
+        bridges = []
+        for endpoint in WatchClaim.endpoints(home):
+            try:
+                observed = InspectSession().information(endpoint)
+            except (FileNotFoundError, ConnectionRefusedError):
+                # A bridge may exit after enumeration, leaving its old socket behind.
                 continue
-            with closing(CoordinationStore.read_snapshot(journal)) as db:
-                bindings = Binding.select(db)
-            for binding in bindings:
-                claim = WatchClaim(binding.thread, home)
-                claims.update(claim.state().serving_claims())
-        return tuple(SessionBridge(claim, InspectSession().information(claim))
-                     for claim in sorted(claims, key=lambda claim: claim.thread))
+            claim = WatchClaim(observed.transcript.stem, home)
+            if claim.socket_path != endpoint:
+                raise ValueError('Session endpoint reported a different claim identity')
+            bridges.append(SessionBridge(claim, observed))
+        return tuple(sorted(bridges, key=lambda bridge: bridge.claim.thread))
 
     def retired(self, bridge: LineMonitorBridge) -> None:
         bridge.retirement.finish(self, bridge.watch_record())
@@ -625,7 +625,7 @@ class SessionBridge:
             return ()
         self.observed.owner.require_alive()
         peer = resources.enter_context(PauseSession(
-            owner=self.observed.owner, process=self.observed.process).connection(self.claim))
+            owner=self.observed.owner, process=self.observed.process).connection(self.claim.socket_path))
         stream = resources.enter_context(peer.makefile('rb'))
         REPLIES.validate_json(stream.readline(4096)).require()
         return (PausedSessionBridge(self, peer),)
@@ -673,11 +673,15 @@ class PausedSessionBridge:
         if not observed.owner.alive():
             print(f'Session bridge {name}: owner exited; left stopped', file=sys.stderr)
             return f'{name}: owner exited; left stopped'
-        self.peer.sendall((json.dumps(FieldCodec.encode(runtime)) + '\n').encode())
+        try:
+            self.peer.sendall((json.dumps(FieldCodec.encode(runtime)) + '\n').encode())
+        except OSError as error:
+            raise SessionBridgeResumeError(
+                f'Session bridge {name}: resume transport failed: {error}') from error
         deadline = time.monotonic() + 30
         while observed.process.alive() and time.monotonic() < deadline:
             try:
-                current = InspectSession().information(self.bridge.claim)
+                current = InspectSession().information(self.bridge.claim.socket_path)
             except (FileNotFoundError, ConnectionRefusedError):
                 time.sleep(.05)
                 continue
@@ -744,7 +748,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
 
     options: BridgeOptions
     binding: Binding
-    db: CoordinationStore
+    db: sqlite3.Connection
 
     @cached_property
     def comms(self) -> Comms:
@@ -962,7 +966,7 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
     incoming_frame: ClassVar[type[MonitorIncomingFrame]]
     window_bytes: ClassVar[int]
 
-    def __init__(self, options: Options, binding: Binding, db: CoordinationStore) -> None:
+    def __init__(self, options: Options, binding: Binding, db: sqlite3.Connection) -> None:
         super().__init__(options, binding, db)
         self.reader: ReaderState = NoReader()
         self.reader_changed = asyncio.Condition()

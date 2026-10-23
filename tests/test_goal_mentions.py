@@ -10,6 +10,7 @@ import pytest
 
 from agent_comms.relationships import CollaboratingRelationshipGroup, RelationshipEdit
 from agent_comms.comms import Comms
+from conftest import installed_comms
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     CompletedGoalAction,
@@ -28,7 +29,7 @@ from agent_comms.tool_caller import ThreadCaller
 
 
 def _wire(tmp_path: Path) -> Comms:
-    comms = Comms(tmp_path / "wire")
+    comms = installed_comms(tmp_path / "wire")
     for name, created in (("owner", 17001.0), ("peer", 17002.0), ("other", 17003.0)):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path), created_at=created))
     comms.registry.declare(
@@ -91,8 +92,7 @@ def test_exact_goal_mentions_are_mutual_read_only_awareness_with_provenance(
     reopened = Comms(comms.root)
     assert _rows(reopened, "peer")[0]["owner"].goal_contacts == (contact,)
     assert not comms.relationships.store.path.exists()
-    with comms.bus.log.opened_wire_snapshot() as source:
-        assert tuple(source.public_records()) == ()
+    assert comms.bus.bus.revision() == 0
 
 
 def test_only_exact_registered_executable_names_bind_without_alias_or_prefix(
@@ -223,34 +223,6 @@ def test_goal_status_edits_and_explicit_contacts_are_independent(tmp_path: Path)
     assert replacement is not None and replacement.id != goal.id
     assert {row.target for row in _rows(comms, "owner")[0].values()} == {"other", "peer"}
     assert comms.relationships.collaborations("owner")[0].note == "Explicit retained note"
-
-
-@pytest.mark.parametrize("goal_mention", [False, True])
-def test_collaboration_tool_ignores_unrelated_malformed_bus_history(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, goal_mention: bool
-) -> None:
-    comms = _wire(tmp_path)
-    manual = comms.relationships.edit(
-        "owner", RelationshipEdit.member_named("add"), "peer", "Explicit note survives"
-    )
-    assert manual is not None
-    if goal_mention:
-        comms.goals.update_goal("owner", SetGoalAction(text="Review with @peer"))
-    bus = comms.bus.log.path
-    bus.write_bytes(b'{"seq":1}\n')  # Complete JSON row, malformed as a Message.
-    bus.chmod(0o600)
-    original_bus = bus.read_bytes()
-    original_relationships = comms.relationships.store.path.read_bytes()
-    monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
-    assert comms.relationships.collaborations("owner") == (manual,)
-    result = invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller("owner"))
-    assert result["collaborations"] == json.loads(json.dumps([asdict(manual)]))
-    if goal_mention:
-        assert result["visible_collaborators"][0]["sources"] == ["explicit", "goal_mention"]
-    else:
-        assert result == {"collaborations": json.loads(json.dumps([asdict(manual)]))}
-    assert bus.read_bytes() == original_bus
-    assert comms.relationships.store.path.read_bytes() == original_relationships
 
 
 def test_reused_owner_incarnation_cannot_inherit_old_derived_contact(tmp_path: Path) -> None:

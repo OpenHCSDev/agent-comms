@@ -39,6 +39,7 @@ from .native_arguments import NativeArguments
 from .runtime import RuntimeProxy, RuntimeServer
 from .session_effects import SessionEffects
 from .thread_model import ThreadModel
+from .thread_status import ActiveThreadPresence
 from .threads import Thread
 from .thread_identity import AcpThreadRole
 from .thread_text import NoThreadText, ThreadText
@@ -46,6 +47,7 @@ from .registry_document import RegistryEntry
 from .transcript_updates import TranscriptReplay
 from .owner_protocol import IncompatibleOwner, IncompatibleOwnerError
 from .session_load import SessionLoadPlan, ExistingSessionLoadPlan, FailedSessionLoadPlan
+from .runtime_requests import FreshSubscribeRuntimeRequest, SubscribeRuntimeRequest
 
 
 class SessionLifecycle:
@@ -71,7 +73,7 @@ class SessionLifecycle:
         self.proxies: dict[str, RuntimeProxy | IncompatibleOwner] = {}
         self._attachment_lock = asyncio.Lock()
         self._identity_lock = asyncio.Lock()
-        self.transcript = TranscriptReplay(comms, runtime)
+        self.transcript = TranscriptReplay(comms)
         self.config = SessionConfigOptions(comms, agent_bin, agent_args, runtime, self, effects)
 
     async def initialize(
@@ -187,7 +189,7 @@ class SessionLifecycle:
         self, cwd: str, mcp_servers: list[Any] | None = None, **kwargs: Any
     ) -> NewSessionResponse:
         self.reject_foreign_mcp(mcp_servers)
-        await Coordination.run_worker(self.effects._private_nk_marker)
+        await Coordination.run_worker(self.comms.owners.require_private_launch)
         thread = await Coordination.run_worker(partial(self.declare_thread, cwd))
         await self.bind_owned(thread, thread.name)
         self.effects.inputs.ensure_live_drain(thread.name)
@@ -195,7 +197,7 @@ class SessionLifecycle:
             session_id=thread.name,
             field_meta=await self.metadata(thread.name, session_id=thread.name),
         )
-        await self.config.observe_configuration(thread.name, self.client)
+        self.config.start_menu(thread.name, self.client)
         return response
 
     async def load_session(
@@ -206,11 +208,12 @@ class SessionLifecycle:
         if not thread.process_identity.runs_here():
             return await self.attach_owner(thread, session_id)
         await self._bind_loaded(thread, session_id)
+        await self.transcript.replay(session_id, self.runtime)
         self.effects.inputs.ensure_live_drain(session_id)
         response = LoadSessionResponse(
             field_meta=await self.metadata(thread.name, session_id=session_id),
         )
-        await self.config.observe_configuration(session_id, self.client)
+        self.config.start_menu(session_id, self.client)
         return response
 
     async def start_owner(self, cwd: str, session_id: str) -> None:
@@ -231,12 +234,13 @@ class SessionLifecycle:
         self.effects.inputs.ensure_live_drain(session_id)
 
     async def _acquire_loaded(self, cwd: str, session_id: str) -> Thread:
-        await Coordination.run_worker(self.effects._private_nk_marker)
+        await Coordination.run_worker(self.comms.owners.require_private_launch)
         thread = await Coordination.run_worker(partial(self.validated_thread, cwd, session_id))
         if not (
             self.bindings.get(session_id) == thread.name
             and thread.process_identity.runs_here()
-            and (await Coordination.run_worker(partial(self.comms.registry.status, thread.name))).active
+            and (await Coordination.run_worker(partial(self.comms.registry.status, thread.name)))
+                .items_with(ActiveThreadPresence, thread)
         ):
             thread = await Coordination.run_worker(partial(
                 self.comms.owners.acquire_thread, thread.name, owner_pid=os.getpid(),
@@ -246,10 +250,12 @@ class SessionLifecycle:
     async def _bind_loaded(self, thread: Thread, session_id: str) -> None:
         await Coordination.run_worker(partial(self.comms.threads.heartbeat, thread.name))
         await self.bind_owned(thread, session_id)
-        await self.transcript.replay(session_id, self.transcript.runtime)
         await self.effects.inputs.emit_input_delivery_changed(session_id)
 
-    async def attach_owner(self, thread: Thread, session_id: str) -> LoadSessionResponse:
+    async def attach_owner(
+        self, thread: Thread, session_id: str,
+        subscription: type[SubscribeRuntimeRequest] = SubscribeRuntimeRequest,
+    ) -> LoadSessionResponse:
         async with self._attachment_lock:
             await self.retire_proxy(session_id)
             snapshot = await Coordination.run_worker(self.comms.registry.snapshot)
@@ -258,11 +264,11 @@ class SessionLifecycle:
             proxy = await Coordination.run_worker(partial(self.effects._create_runtime_proxy, thread, session_id))
             try:
                 snapshot.require_owner_process(snapshot.owner_identity(thread.name), thread.require_process())
-                metadata = await proxy.subscribe()
+                metadata = await proxy.subscribe(subscription)
                 self.proxies[session_id] = proxy
             except IncompatibleOwnerError as error:
                 # History is Core's own store; only owner requests need the owner's Core.
-                await self.transcript.replay(session_id, self.transcript.runtime)
+                await self.transcript.replay(session_id, self.runtime)
                 self.proxies[session_id] = error.owner
                 return LoadSessionResponse(field_meta={
                     **await self.metadata(thread.name, session_id=session_id),
@@ -420,7 +426,9 @@ class AttachedSessionLifecycle(SessionLifecycle):
     ) -> NewSessionResponse:
         self.reject_foreign_mcp(mcp_servers)
         thread = await Coordination.run_worker(partial(self.declare_thread, cwd))
-        loaded = await self.load_session(cwd, thread.name, mcp_servers, **kwargs)
+        loaded = await self._attach_requested_session(
+            thread, thread.name, kwargs.get("agentCommsLoad"), FreshSubscribeRuntimeRequest,
+        )
         return NewSessionResponse(
             session_id=thread.name,
             field_meta=loaded.field_meta,
@@ -431,11 +439,19 @@ class AttachedSessionLifecycle(SessionLifecycle):
     ) -> LoadSessionResponse:
         self.reject_foreign_mcp(mcp_servers)
         thread = await Coordination.run_worker(partial(self.validated_thread, cwd, session_id))
+        return await self._attach_requested_session(
+            thread, session_id, kwargs.get("agentCommsLoad"), SubscribeRuntimeRequest,
+        )
+
+    async def _attach_requested_session(
+        self, thread: Thread, session_id: str, load_metadata: object,
+        subscription: type[SubscribeRuntimeRequest],
+    ) -> LoadSessionResponse:
         try:
-            plan = SessionLoadPlan.at_ingress(kwargs.get("agentCommsLoad"))
+            plan = SessionLoadPlan.at_ingress(load_metadata)
             owner = await plan.resolve(self, thread)
         except (OSError, RuntimeError, RelationViolationError, MalformedRecord) as error:
             raise RequestError.invalid_params(
                 {"reason": f"Session load not authorized for {thread.name!r}: {error}"}
             ) from error
-        return await self.attach_owner(owner, session_id)
+        return await self.attach_owner(owner, session_id, subscription)

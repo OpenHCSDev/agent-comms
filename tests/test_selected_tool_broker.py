@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 import asyncio
 import json
 import os
@@ -14,7 +15,6 @@ import pytest
 import agent_comms.selected_tool_broker as broker
 from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.comms import Comms
-from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import WakeClaim
 from agent_comms.native_tool_call import (
@@ -108,7 +108,7 @@ def test_owner_mode_denies_unreserved_input_before_consuming_ledger(tmp_path: Pa
         attempt_ordinal=1,
     )
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        install_native_runtime_schema(store)
+        PrivateCoordinatorTable.install(store)
         input_id = secrets.token_hex(16)
         mode = broker.selected_tool_mode_for_owner(
             comms, store, claim_scope, "owner", session_dir, input_id

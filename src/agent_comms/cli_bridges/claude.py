@@ -2,16 +2,17 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from collections.abc import Iterator
 from contextlib import aclosing
 from functools import cached_property
 from pathlib import Path
 from typing import AsyncIterator, BinaryIO, Self
 
+from agent_comms.bus import Bus
 from agent_comms.cli_protocol import WireModel
-from agent_comms.coordination_database import CoordinationStore
 from agent_comms.private_path import FileRevision
-from agent_comms.wire_watch import WatchSource, WireWatch
+from agent_comms.watched import FileSource
 from agent_comms_hooks.session import SessionHook
 from .claude_protocol import CLAUDE_RECORD, ClaudeRecord, ClaudeSession, ClaudeMonitorFrame
 from .history import ClaudeHistory, HarnessAddress, JsonLinesFile, OfflineHistory, OnlineHistory
@@ -91,7 +92,7 @@ class ClaudeBridge(RunningClaude, LineMonitorBridge, declared_name=None):
     window_bytes = ClaudeMonitorFrame.BATCH_CHARS * 2
     RECENT_BYTES = 4 * 1024 * 1024
 
-    def __init__(self, options: Options, binding: Binding, db: CoordinationStore) -> None:
+    def __init__(self, options: Options, binding: Binding, db: sqlite3.Connection) -> None:
         LineMonitorBridge.__init__(self, options, binding, db)
         RunningClaude.__init__(self, binding.thread)
 
@@ -108,7 +109,7 @@ class ClaudeBridge(RunningClaude, LineMonitorBridge, declared_name=None):
     async def transcript(self) -> AsyncIterator[RuntimeUpdate]:
         session = self.start_state()
         source = self.options.operation.transcript_source()
-        async with aclosing(WireWatch.observations(WatchSource.modified_file(source))) as changes:
+        async with aclosing(Bus.watch_sources(FileSource(source))) as changes:
             await anext(changes)
             while not source.exists():
                 await anext(changes)

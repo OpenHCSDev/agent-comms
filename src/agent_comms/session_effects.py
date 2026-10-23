@@ -20,9 +20,6 @@ class SessionEffects(ABC):
     turns: TurnRunner
 
     @abstractmethod
-    def _private_nk_marker(self) -> str: ...
-
-    @abstractmethod
     def _create_runtime_proxy(self, thread: Thread, session_id: str) -> RuntimeProxy: ...
 
     @abstractmethod

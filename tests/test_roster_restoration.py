@@ -1,5 +1,9 @@
 """Restoration changes visibility without replay or transferring live ownership."""
 
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
+from bus_record_fixture import prepare_native_comms
+from conftest import installed_comms
+
 import os
 from dataclasses import replace
 
@@ -18,8 +22,8 @@ from agent_comms.thread_text import GivenThreadText
 
 
 def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity(tmp_path):
-    old = Comms(tmp_path / "old")
-    current = Comms(tmp_path / "current")
+    old = installed_comms(tmp_path / "old")
+    current = installed_comms(tmp_path / "current")
     live = old.registry.new_thread('live', frozenset({'comms'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     missing = old.registry.new_thread('missing', frozenset({'nra', 'openhcs'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), session_file=SavedSessionFile(str(tmp_path / 'saved.jsonl')), title=GivenThreadText('Preserved title'), task=GivenThreadText('Original task'))
     old.registry.declare(live)
@@ -27,11 +31,10 @@ def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity
     missing = old.agents.begin_turn("missing", "old-turn").thread
     old.messaging.send("live", "missing", "Old pending work must not be replayed").message.message_id
     current.registry.declare(replace(live, title=GivenThreadText("Current live title")))
-    current.messaging.initialize_private_initial_protocol()
     current.messaging.send_user_message("#comms", "Current message", worktree=str(tmp_path))
     before = current.registry.snapshot()
-    bus = current.bus.log.path.read_bytes()
-    old_bus = old.bus.log.path.read_bytes()
+    bus = current.bus.bus.revision()
+    old_bus = old.bus.bus.revision()
     source = replace(old.registry.snapshot(), aliases={"former-name": "missing"})
 
     assert current.registry.restore_stopped(source, ("live", "missing")) == ("missing",)
@@ -42,8 +45,8 @@ def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity
     assert after.threads["missing"] == replace(missing, process_identity=NoProcess(), turn_record=NoTurnRecord())
     assert after.statuses["missing"] == StoppedThreadStatus()
     assert after.aliases["former-name"] == "missing"
-    assert current.bus.log.path.read_bytes() == bus
-    assert old.bus.log.path.read_bytes() == old_bus
+    assert current.bus.bus.revision() == bus
+    assert old.bus.bus.revision() == old_bus
     assert not current.bus.inbox("missing")
     first = current.registry.store.path.read_bytes()
     assert current.registry.restore_stopped(source, ("live", "missing")) == ()
@@ -84,8 +87,8 @@ def test_restore_keeps_archived_status(tmp_path):
 
 
 def test_catalog_restore_preserves_current_preferences_and_historical_channels(tmp_path):
-    old = Comms(tmp_path / "old")
-    new = Comms(tmp_path / "new")
+    old = installed_comms(tmp_path / "old")
+    new = installed_comms(tmp_path / "new")
     for c in (old, new):
         c.channels.create_tag("comms")
     old.channels.create_tag("nra")
@@ -121,19 +124,18 @@ def test_catalog_restore_preserves_current_preferences_and_historical_channels(t
 def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
     tmp_path, repair_existing
 ):
-    from agent_comms.cohort_schema import install_private_cohort_schema
     from agent_comms.coordination_cohort import accept_delivery_cohort
     from agent_comms.coordinator import Coordination
 
-    old, current = Comms(tmp_path / "old"), Comms(tmp_path / "current")
+    old, current = Comms(tmp_path / "old"), prepare_native_comms(Comms(tmp_path / "current"))
     live = current.registry.new_thread('live', frozenset({'comms'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     missing = old.registry.new_thread('missing', frozenset({'comms'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     old.registry.declare(missing)
     current.registry.declare(live)
-    root_id = current.messaging.initialize_private_initial_protocol()
+    root_id = current.registry.prepare_native_root().namespace
     source = old.registry.snapshot()
     with Coordination(str(current.root / "coordination.sqlite3")) as store:
-        install_private_cohort_schema(store)
+        PrivateCoordinatorTable.install(store)
         live_before = store.participants.register(
             RecordedThreadIncarnation("fixture", live.created_at).lookup, live.name, live.name, committed=True
         ).value
@@ -146,7 +148,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
             if repair_existing
             else None
         )
-        bus_before = current.bus.log.path.read_bytes() if message else None
+        bus_before = current.bus.bus.revision() if message else None
         current.threads.restore_stopped(source, (missing.name,))
         snapshot = current.registry.snapshot()
         assert snapshot.statuses[missing.name] == StoppedThreadStatus()
@@ -157,7 +159,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
             store.participants.get(RecordedThreadIncarnation("fixture", missing.created_at).lookup).pointer.execution_id == NoPointedExecution()
         )
         if bus_before is not None:
-            assert current.bus.log.path.read_bytes() == bus_before
+            assert current.bus.bus.revision() == bus_before
         else:
             message = current.messaging.send_user_message(
                 "#comms", "@live Reply once", worktree=str(tmp_path)

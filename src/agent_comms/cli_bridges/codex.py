@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import sqlite3
 from collections import deque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -12,7 +13,6 @@ from uuid import uuid4
 
 import aiohttp
 from pydantic import JsonValue
-from agent_comms.coordination_database import CoordinationStore
 from agent_comms.messages import Message
 from agent_comms.send_result import SendResult
 from agent_comms.cli_protocol import EarlierItems, Outcome, DeliveredOutcome
@@ -124,7 +124,7 @@ class CodexAppServer(CodexHistory, OnlineHistory):
 
 class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions], declared_name=None):
 
-    def __init__(self, options: CodexOptions, binding: Binding, db: CoordinationStore) -> None:
+    def __init__(self, options: CodexOptions, binding: Binding, db: sqlite3.Connection) -> None:
         TranscriptBridge.__init__(self, options, binding, db)
         CodexAppServer.__init__(self, binding.thread, options.socket)
 

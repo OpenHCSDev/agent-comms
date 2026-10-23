@@ -1,7 +1,7 @@
 """Rule review for the commander: print every rule, nothing drawn, nothing stored.
 
 The rules have one source each: the commander skill's bold-lead lines, every packaged rule file
-in `rules/`, and paper 1's correct-maintenance results (the packaged correct-maintenance rule).
+in `rules/`, and the OOPSLA paper's correct-maintenance results (the packaged correct-maintenance rule).
 
   agent-comms-commander rules review                 print every rule with its file:line
 """
@@ -18,7 +18,7 @@ PAPER = f'{CommanderConfig.packaged_rules()}/correct-maintenance.md'
 
 
 def principles() -> list[str]:
-    """Paper 1's correct-maintenance results, the definitions every judgment is measured against."""
+    """The OOPSLA paper's correct-maintenance results, the definitions every judgment is measured against."""
     text = RuleFile.read(Path(PAPER)).body
     return [l[2:].strip() for l in text.splitlines() if l.startswith('- ') and len(l) > 40]
 
@@ -37,7 +37,7 @@ def rules() -> list[tuple[str, str]]:
 def review() -> None:
     for i, (where, r) in enumerate(rules(), 1):
         print(f'{i:3}. {where}  {r}')
-    print('\nCorrect maintenance (paper 1; every judgment is measured against these):')
+    print('\nCorrect maintenance (the OOPSLA paper; every judgment is measured against these):')
     for r in principles():
         print(f'  - {r}')
 

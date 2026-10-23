@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.lifecycle_capability import Active
-
 import dataclasses
 import json
 import sys
@@ -11,17 +9,36 @@ import threading
 from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
-from pathlib import Path
 from functools import partial
+from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, NoReturn, TextIO, Type
 
 from pydantic import JsonValue
 
+from agent_comms.lifecycle_capability import Active
+from agent_comms.todos import (
+    ClaimOrder,
+    CorrectCheckTodo,
+    DeliverTodo,
+    InstallTodo,
+    OrderClaim,
+    OrderDelivery,
+    OrderProgress,
+    PlainText,
+    ProgressRead,
+    ReviewedHeadVerdict,
+    ServeTodo,
+    StrikeReason,
+    Todo,
+    TodoOperation,
+    ToolCallVerdict,
+    VerdictAudience,
+)
 
 from . import cli as comms_cli
 from .change_report import NoChangeReport, ReportEvidence
 from .channel_management import KeepThreadsTagDisposition, TagAction, TagDisposition
-from .channel_targets import ChannelTarget, CommandTarget
+from agent_comms.channel_targets import ChannelTarget, CommandTarget, NamedTarget
 from .channels import AnyChannel, Channel, SavedView, ViewKind, ViewMatch, ViewPredicate
 from .cli_commands import (
     ArchiveCliCommand,
@@ -45,23 +62,23 @@ from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
 from .errors import RelationViolationError, ToolRefusedError
 from .field_codec import (
-    FieldCodec,
-    MalformedRecord,
-    NullMember,
-    SingleFieldValue,
-    SubclassUnion,
-    projected,
     Argument,
     ContextSource,
     DefaultNonNull,
     Description,
+    FieldCodec,
     FieldDirective,
+    MalformedRecord,
     Normalize,
+    NullMember,
+    SingleFieldValue,
+    SubclassUnion,
     WireChoices,
+    WireForm,
     WireName,
     WireOmitDefault,
+    projected,
 )
-from .launch_runtime import LaunchRuntime
 from .goal_actions import (
     ActiveGoalAction,
     CreateProblemGoalAction,
@@ -74,69 +91,61 @@ from .goal_actions import (
     TransitionGoalAction,
 )
 from .goal_history import RecordedGoalRevision
-from .goal_presentation import GoalSnapshot, GoalExecution
+from .goal_presentation import GoalExecution, GoalSnapshot
 from .goal_waits import NoStandbyReview, StandbyReview
 from .goals import Goal, GoalDeclaration, OrderCheck
-from .message_bus import HeldBusWrite
-from .standing_rules import StandingRule
-from .plan_phases import OrderPhase
-from .message_reference import MessageReference
-from .message_page import PageBounds
 from .history_result import HistoryPageResult
 from .input_attempt import UnresolvedInput
+from .launch_runtime import LaunchRuntime
+from .message_bus import HeldBusWrite
+from .message_page import PageBounds
+from .message_reference import MessageReference
 from .messages import InfoKind, Message, MessageKind, NoticeRole, SendableMessageKind
 from .native_tools import ArgumentTool, NativeRequestTools, NativeToolDeclaration
+from .order_story import FleetStory, OrderStory
+from .order_work import OrderWork
+from .owner_lifecycle import OwnerRestartSelection, OwnerStartResult
 from .page_traversal import NewestCursor, PageCursor
-from .owner_lifecycle import OwnerStartResult, OwnerRestartSelection
+from .pi_payloads import PublishedGoalToolDetails
+from .pi_vocabulary import ServiceTier, ThinkingLevelField
+from .plan_phases import OrderPhase
 from .presentation import ChannelView
+from .progress_claims import ProgressClaim
 from .read_basis import NamedViewer
-from .relationships import Collaboration, GoalDerivedContact, GoalMentionDiagnostic
+from .relationships import (
+    Collaboration,
+    GoalDerivedContact,
+    GoalMentionDiagnostic,
+    RelationshipEdit,
+)
 from .restart_queue import (
     QueuedRestart,
+)
+from .restart_queue import (
     cancel as cancel_restart,
+)
+from .restart_queue import (
     enqueue as enqueue_restart,
+)
+from .restart_queue import (
     status as restart_status,
 )
-from .thread_management import InheritedTags, RenameThreadResult, TagChoice
-from .threads import NextTurnConfiguration
-from .thread_model import ThreadModel
-from .transcript_events import SentTranscript
-from agent_comms.todos import (
-    ClaimOrder,
-    OrderClaim,
-    CorrectCheckTodo,
-    ServeTodo,
-    DeliverTodo,
-    InstallTodo,
-    OrderDelivery,
-    OrderProgress,
-    ToolCallVerdict,
-    PlainText,
-    PullRequests,
-    StrikeReason,
-    Todo,
-    TodoOperation,
-    VerdictAudience,
-)
-from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing
-from .thread_identity import ThreadIncarnation
-from .tool_result import ToolResult
-from .pi_payloads import PublishedGoalToolDetails
 from .send_result import CorrectionResult, SendResult
+from .standing_rules import StandingRule
 from .task_sources import (
-    CurrentTaskScopeSelection,
     Constraint,
+    CurrentTaskScopeSelection,
+    NoTaskAttachment,
     Decision,
+    OriginalTaskChange,
     Subtask,
     TaskAttachment,
     TaskChange,
     TaskScopeSelection,
-    OriginalTaskChange,
 )
 from .order_story import FleetStory, OrderStory
 from .order_work import OrderWork
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
-from agent_comms.private_bus_checkpoint import PublicMessages
 from .progress_claims import ProgressClaim
 from .relationships import RelationshipEdit
 from .thread_execution import (
@@ -146,7 +155,14 @@ from .thread_execution import (
     StartOwnerControl,
     ThreadCommandAvailability,
 )
+from .thread_identity import ThreadIncarnation
+from .thread_management import InheritedTags, RenameThreadResult, TagChoice
+from .thread_model import ThreadModel
+from .threads import NextTurnConfiguration
+from .tool_caller import NoThreadCaller, ThreadCaller, ThreadListing, ToolCaller
 from .tool_output import MAX_INLINE_OUTPUT_BYTES
+from .tool_result import ToolResult
+from .transcript_events import SentTranscript
 from .turn_digests import (
     LastTurns,
     OrderEditsRead,
@@ -155,6 +171,7 @@ from .turn_digests import (
     TurnsSince,
     UnjudgedEdits,
 )
+from .ui_model.unit_state import UnitState
 from .work_branches import WorkBranch, WorkBranches
 
 if TYPE_CHECKING:
@@ -323,7 +340,7 @@ class TaskPublished(ToolResult):
 class InboxPageRead(ToolResult):
     """One unread page; only its returned references can be acknowledged."""
 
-    messages: tuple[Message, ...]
+    messages: tuple[Annotated[Message, WireForm], ...]
     acknowledged: int
     remaining: int
     unresolved_inputs: tuple[UnresolvedInput, ...]
@@ -467,9 +484,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
         return self.apply(comms, caller)
 
 
-class PublishingToolRequest[Caller: ToolCaller = ToolCaller](
-    HeldBusWrite, ToolRequest[Caller], declared_name=None
-):
+class PublishingTool[Caller: ToolCaller = ToolCaller](HeldBusWrite):
     """A publication waits at the bus owner before any caller or message mutation."""
 
     def apply(self, comms: Comms, caller: Caller) -> ToolResult:
@@ -477,6 +492,12 @@ class PublishingToolRequest[Caller: ToolCaller = ToolCaller](
 
     @abstractmethod
     def publish(self, comms: Comms, caller: Caller) -> ToolResult: ...
+
+
+class PublishingToolRequest[Caller: ToolCaller = ToolCaller](
+    PublishingTool[Caller], ToolRequest[Caller], declared_name=None,
+):
+    """Native declarations using the shared publication capability."""
 
 
 class LiveOwnerTool:
@@ -920,6 +941,28 @@ class CommsVerdictTool(CommsChangeProblemTool):
 
 
 @dataclass(frozen=True, kw_only=True)
+class CommsHeadVerdictTool(ThreadToolRequest):
+    """One reviewed commit judges the holder's whole diff: the commander, or any fork of it,
+    accepts an order's exact PR head, so every edit made before it is judged in one verdict and
+    the head carries agent-comms/review for the merge queue."""
+
+    label = "Accept an order's PR head"
+    description = (
+        "Accept the exact pull request head commit an order's holder delivered: one verdict "
+        "judges every edit made before it and posts agent-comms/review on that commit. Quote "
+        "4+ words of the order it carries out."
+    )
+    problem: Annotated[str, *tool_field("Problem ID")]
+    operation: Annotated[ReviewedHeadVerdict, *tool_field("Accepted PR-head verdict")]
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
+        reviewer = caller.identity(comms)
+        comms.goals.todos.get(self.problem).require_commander(reviewer)
+        todo = self.operation.reviewed(comms.goals, self.problem, reviewer)
+        return TodoChanged(todo, todo.strike_count)
+
+
+@dataclass(frozen=True, kw_only=True)
 class CommsUnjudgedTool(ThreadReadTool):
     label = "Unjudged edits"
     description = "Read original edit calls since each open order, excluding that order's recorded verdicts."
@@ -988,7 +1031,7 @@ class CommsTodoListTool(ThreadReadTool):
     def apply(self, comms: Comms, caller: ToolCaller) -> TodoList:
         actor = comms.registry.require(caller.subject(self.thread)).incarnation
         listed = tuple(comms.goals.todos.for_commander(actor))
-        pulls = PullRequests(listed)
+        pulls = ProgressRead(listed)
         return TodoList(listed, {todo.id: OrderProgress.read(todo, comms.registry, pulls)
                                  for todo in listed if todo.holder})
 
@@ -1005,7 +1048,9 @@ class CommsStandingRulesTool(ThreadToolRequest):
     ] = 0.0
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> StandingRulesRead:
-        broken = StandingRule.broken(comms, caller.name)
+        states = UnitState.current(comms, caller.name, ProgressRead())
+        broken = (*StandingRule.broken(comms, caller.name, observed=states),
+                  *(state for state in states if state.attention()))
         rejected = StandingRule.enforce_all(comms, caller.name, broken)
         return StandingRulesRead(
             tuple(rule.line() for rule in broken
@@ -1058,13 +1103,10 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolReque
         actor = comms.registry.require(caller.name).incarnation
         generation = todo.held().generation
         todo.require_assignee(actor, generation)
-        with comms.bus.log.checked_read() as source:
-            original = PublicMessages.require(
-                source.connection, message_id=todo.latest_message.message_id
-            )
+        original = comms.bus.bus.lookup_message(todo.latest_message.message_id)
         claim = OrderClaim.for_order(
             todo, actor, self.pull_request, self.head, self.report,
-            MessageReference(original.seq, original.message_id),
+            original.reference, store=comms.goals.todos,
         )
         changed = ClaimOrder(
             todo.revision, actor, generation, claim
@@ -1316,7 +1358,7 @@ class CommsSendRefusalsTool(ReadTool, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSendTool(PublishingToolRequest):
+class SendTool(PublishingTool):
     label = "Comms Send"
     description = (
         "Send a message to another thread or channel. Address specific threads with "
@@ -1338,17 +1380,27 @@ class CommsSendTool(PublishingToolRequest):
     ] = NoChangeReport()
 
     def publish(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
+        target = CommandTarget.named(self.target)
         try:
             caller.require_directive(comms, self.body)
-            body = VerdictAudience(self.audience).addressed(self.target, self.body)
-            result = comms.messaging.send(self.sender, self.target, body, self.type, report=self.report)
+            body = target.addressed(self.audience, self.body)
+            result = comms.messaging.send(
+                self.sender, target.name, body, self.type, report=self.report,
+                task=self.attachment(comms, target), origin=caller.origin())
         except ToolRefusedError as error:
             # The caller hears the refusal now; the record waits for the wire lock on its own.
             threading.Thread(target=SendRefusal.record,
                              args=(comms.root, self.sender, self.target, error)).start()
             raise
-        caller.sent(comms, result.message)
         return MessagePublished.from_send(result)
+
+    def attachment(self, comms: Comms, target: NamedTarget) -> TaskAttachment:
+        """An ordinary send carries no authored task or selected request."""
+        return NoTaskAttachment()
+
+
+class CommsSendTool(SendTool, ToolRequest):
+    """The native send declaration; its fields and publication belong to SendTool."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1506,7 +1558,7 @@ class CommsInboxTool(ToolRequest):
         "already reviewed entries, and excluded owner/other-dependency inputs."
     )
     thread: Annotated[str, *tool_field("Thread name")]
-    target: Annotated[str, *tool_field("Channel or peer conversation")] = AnyChannel.declared_name
+    target: Annotated[str, *tool_field("Channel or peer conversation")] = AnyChannel.address()
     ack: Annotated[bool, *tool_field("Mark exactly the returned messages delivered")] = (
         True
     )
@@ -1524,7 +1576,7 @@ class CommsInboxTool(ToolRequest):
         review = self.standby.review(comms, thread)
         page = comms.bus.inbox_at(
             thread, comms.registry.snapshot(), CommandTarget.named(target),
-            bounds=PageBounds(limit=self.limit, max_bytes=MAX_INLINE_OUTPUT_BYTES // 2),
+            bounds=PageBounds(limit=self.limit),
         )
         messages = page.page.messages
         unresolved = tuple(comms.goals.unresolved_inputs(thread))

@@ -8,7 +8,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from .bus_publication import CommittedDelivery
+from .bus import Bus
+from .bus_publication import Delivered
+from .bus_tables import DirectReplySource
 from .declared_family import DeclaredFamily
 from .field_codec import NullMember
 from .goal_presentation import GoalExecution, GoalExecutionSource, GoalWaitTarget, StandbyExecution
@@ -18,7 +20,6 @@ from .locked_store import WireWakeFile
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 from .typed_table import Column, DurableStore, ForeignKey, Index, TypedTable
-from .wire_log import WireLog
 
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity
@@ -50,7 +51,7 @@ class GoalWait(ABC):
     def owner_matches(self, owner: RecordedThreadIncarnation) -> bool:
         return False
 
-    def matches(self, original: CommittedDelivery, owner: RecordedThreadIncarnation) -> bool:
+    def matches(self, original: Delivered, owner: RecordedThreadIncarnation) -> bool:
         return False
 
     def review_after_seq(
@@ -169,7 +170,7 @@ class RecordedGoalWait(GoalWait):
             self.goal_id, self.revision
         )
 
-    def matches(self, original: CommittedDelivery, owner: RecordedThreadIncarnation) -> bool:
+    def matches(self, original: Delivered, owner: RecordedThreadIncarnation) -> bool:
         """Join original sender and the actual addressed owner through its source."""
         if not self.owner_matches(owner):
             return False
@@ -186,12 +187,17 @@ class RecordedGoalWait(GoalWait):
             return self.after_seq
         return super().review_after_seq(goal, owner, targets)
 
-    def has_reply(self, bus: WireLog, owner: RecordedThreadIncarnation) -> bool:
+    def has_reply(self, bus: Bus, owner: RecordedThreadIncarnation) -> bool:
         if not self.owner_matches(owner):
             return False
         return any(
             self.matches(original, owner)
-            for original in bus.addressed_sources(owner.lookup, self.after_seq)
+            for record in bus.received(
+                owner.lookup, after=self.after_seq, limit=1, descending=False,
+                sender_lookups=tuple(target.incarnation.lookup for target in self.targets),
+                source=DirectReplySource,
+            )
+            for original in record.deliveries()
         )
 
 

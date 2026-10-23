@@ -10,7 +10,6 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
-from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
 from uuid import uuid4
@@ -35,8 +34,7 @@ from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
 from .errors import RelationViolationError
 from .importing import ImportLimits, ImportSnapshot, ThreadImported
-from .input_disposition import InputDispositions
-from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
+from .field_codec import FieldCodec, NullMember, RecordMember, SingleFieldValue, SubclassUnion
 from .launch_runtime import LaunchRuntime, TagListText
 from .message_bus import MessageBus
 from .native_arguments import ConfiguredBinary
@@ -52,7 +50,7 @@ from .private_registry_guard import (
 )
 from .registry_document import RegistrySnapshot
 from .registry_provenance import RegistryNames
-from .store_files import _atomic_write_text, _store_lock
+from .store_files import _atomic_write_text
 from .thread_identity import AgentThreadRole, ThreadRole
 from .thread_text import ForkedParent, GivenThreadText, NoThreadText, SavedSessionFile, ThreadText
 from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
@@ -61,10 +59,10 @@ from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread, curr
 
 
 class TagChoice(SubclassUnion, affix="Tags"):
-    """The tags a new thread takes: the ones given, or a fork's parent's."""
+    """Select explicit, inherited or changed tags from an existing set."""
 
-    @abstractmethod
-    def for_new(self) -> frozenset[str]: ...
+    def for_new(self) -> frozenset[str]:
+        return self.for_child(frozenset())
 
     @abstractmethod
     def for_child(self, parent: frozenset[str]) -> frozenset[str]: ...
@@ -87,20 +85,23 @@ class GivenTags(TagChoice):
     def schema(cls) -> dict[str, object]:
         return FieldCodec.value_schema(str)
 
-    def for_new(self) -> frozenset[str]:
-        return self.tags
-
     def for_child(self, parent: frozenset[str]) -> frozenset[str]:
         return self.tags
 
 
 @dataclass(frozen=True, slots=True)
 class InheritedTags(NullMember, TagChoice):
-    def for_new(self) -> frozenset[str]:
-        return frozenset()
-
     def for_child(self, parent: frozenset[str]) -> frozenset[str]:
         return parent
+
+
+@dataclass(frozen=True, slots=True)
+class ChangedTags(RecordMember, TagChoice):
+    add: frozenset[str]
+    remove: frozenset[str]
+
+    def for_child(self, parent: frozenset[str]) -> frozenset[str]:
+        return (parent | self.add) - self.remove
 
 
 class ImportDirectory(SubclassUnion, affix="Directory"):
@@ -136,7 +137,7 @@ class SourceDirectory(NullMember, ImportDirectory):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class NewThreadSpec:
-    """Prepares the session outside the wire lock, then registers the thread under it."""
+    """Prepare the session, then register the thread under its registry lock."""
 
     name: str
     project: str
@@ -159,7 +160,7 @@ class NewThreadSpec:
         thread = self.declaration(str(project), threads.registry)
         threads.registry.require_declaration_available(thread)
         location = thread.runtime.new_location(threads.root, project)
-        with _store_lock(threads._wire_lock_path):
+        with threads.registry.store.locked():
             yield replace(thread, session_file=SavedSessionFile(location.read_key))
 
 
@@ -182,11 +183,11 @@ class ForkSpec(NewThreadSpec):
 
     @contextmanager
     def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
-        # Copy saved history outside the wire lock, retaining writer→wire order.
+        # Copy saved history before locking the registry for its declaration.
         parent = self._parent(threads)
         threads.registry.require_declaration_available(self.child(parent, parent.runtime, threads.registry))
         location = asyncio.run(parent.backend.fork(parent, pi_bin, runtime))
-        with _store_lock(threads._wire_lock_path):
+        with threads.registry.store.locked():
             current = self._parent(threads)
             if current.incarnation != parent.incarnation or current.runtime != parent.runtime:
                 raise RelationViolationError(
@@ -228,10 +229,6 @@ class ThreadManagement:
     owners: OwnerLifecycle
     ledger: CollaborationLedger
 
-    @property
-    def _wire_lock_path(self) -> Path:
-        return self.root / "wire"
-
     def import_thread(
         self,
         history: History,
@@ -258,7 +255,7 @@ class ThreadManagement:
             session_file=SavedSessionFile(str(session_path)),
             title=snapshot.title,
         ))
-        with _store_lock(self._wire_lock_path):
+        with self.registry.store.locked():
             if self.registry.snapshot().taken(name):
                 raise ValueError(f"Thread name {name!r} is already reserved.")
             self.registry.require_declaration_available(thread, StoppedThreadStatus())
@@ -274,7 +271,7 @@ class ThreadManagement:
             _atomic_write_text(session_path, snapshot.pi_session(project))
             try:
                 self.registry._declare_unlocked(thread, StoppedThreadStatus())
-                self.bus.mark_delivered_through(name, self.bus.log.latest_sequence())
+                self.bus.mark_delivered_through(name, self.bus.bus.revision())
             except (OSError, ValueError, CoordinationError):
                 if name in self.registry:
                     self.registry.remove(name)
@@ -301,13 +298,13 @@ class ThreadManagement:
         without replacing existing owners or importing historical delivery state.
         """
         selected = tuple(dict.fromkeys(names))
-        with _store_lock(self._wire_lock_path):
+        with self.registry.store.locked():
             restored = self.registry.restore_stopped(source, selected)
             self._privacy().register_restored(self.registry.require(name) for name in selected)
             return restored
 
     def _privacy(self) -> RegistryPrivacy:
-        with _store_lock(self.registry.store.path):
+        with self.registry.store.locked():
             return self.registry.store.private_guard_unlocked()
 
     def claim_thread(
@@ -323,22 +320,21 @@ class ThreadManagement:
         role: type[ThreadRole] = AgentThreadRole,
     ) -> Thread:
         """Atomically register a unique thread; its inbox starts at its creation."""
-        with _store_lock(self._wire_lock_path):
-            thread = self.registry.new_thread(
-                name=RegistryNames.thread_slug(wanted),
-                tags=tags,
-                worktree=worktree,
-                process_identity=process,
-                model=model,
-                thinking_level=thinking_level,
-                auto_title_pending=auto_title_pending,
-                role=role,
-            )
-            return self.registry._claim_unlocked(thread)
+        thread = self.registry.new_thread(
+            name=RegistryNames.thread_slug(wanted),
+            tags=tags,
+            worktree=worktree,
+            process_identity=process,
+            model=model,
+            thinking_level=thinking_level,
+            auto_title_pending=auto_title_pending,
+            role=role,
+        )
+        return self.registry._claim_unlocked(thread)
 
     def rename_self(self, new_name: str, *, caller: ThreadCaller) -> RenameThreadResult:
         """Rename the bound caller's own thread, retaining its old aliases."""
-        with _store_lock(self._wire_lock_path):
+        with self.registry.store.locked():
             if self.registry.require(caller.name).auto_title_pending and (
                 len(new_name) > 48 or len(re.split(r"[-_]+", new_name)) > 6
             ):
@@ -351,7 +347,7 @@ class ThreadManagement:
         """Move one thread's project, preserving its owner and conversation."""
         if not path.strip():
             raise ValueError("Project path cannot be empty.")
-        with _store_lock(self._wire_lock_path):
+        with self.registry.store.locked():
             thread = self.registry.require(name)
             target = Path(path).expanduser()
             if not target.is_absolute():
@@ -375,7 +371,7 @@ class ThreadManagement:
         self, name: str, display_name: str, *, owner_pid: int
     ) -> RenameThreadResult:
         """Rename a locally managed running thread after proving process ownership."""
-        with _store_lock(self._wire_lock_path):
+        with self.registry.store.locked():
             thread = self.registry.require(name)
             if owner_pid <= 0 or thread.process_identity != ProcessIdentity.capture(owner_pid):
                 raise RelationViolationError(
@@ -387,9 +383,8 @@ class ThreadManagement:
     def _rename_thread(
         self, name: str, new_name: str, *, title: ThreadText = NoThreadText()
     ) -> RenameThreadResult:
-        # Keep direct callers under the same wire lock as public self/managed
-        # rename. Private owner migration and ordinary publication share it.
-        with _store_lock(self._wire_lock_path):
+        # Every rename checks and changes the same current registry declaration.
+        with self.registry.store.locked():
             return self._rename_thread_unlocked(name, new_name, title=title)
 
     def _rename_thread_unlocked(
@@ -398,8 +393,7 @@ class ThreadManagement:
         return ThreadRename.chosen(self, self.registry.require(name), new_name).applied(title)
 
     def heartbeat(self, name: str) -> None:
-        with _store_lock(self._wire_lock_path):
-            self.registry.heartbeat(name)
+        self.registry.heartbeat(name)
 
     def set_thread_configuration(
         self, original: Thread, configuration: NextTurnConfiguration,
@@ -410,7 +404,7 @@ class ThreadManagement:
         or project invalidates the native settings result acquired by the caller.
         """
         Thread.require_declaration(original)
-        with _store_lock(self._wire_lock_path):
+        with self.registry.store.locked():
             thread = self.registry.require(original.name)
             thread.require_original_model_configuration(original)
             thread.execution.require_native()
@@ -423,7 +417,7 @@ class ThreadManagement:
         self, name: str, *, model: ThreadModel, thinking_level: type[ThinkingChoice],
     ) -> Thread:
         """Persist one first-known producer observation through its declaration."""
-        with _store_lock(self._wire_lock_path):
+        with self.registry.store.locked():
             thread = self.registry.require(name)
             updated = thread.initialized_native_configuration(
                 model=model, thinking_level=thinking_level,
@@ -442,11 +436,11 @@ class ThreadManagement:
     def attach_session(
         self, original: Thread, source_path: str, *, process: ProcessState,
     ) -> Thread:
-        """Attach Pi state and retain its model once, outside the wire lock."""
+        """Read Pi state first, then publish its model under the registry lock."""
         path = Path(source_path).expanduser().resolve()
         location = original.backend.location_type(str(path))
         saved_model = ThreadModel.from_choice(location.model_choice) if path.is_file() else UndeclaredModel()
-        with _store_lock(self._wire_lock_path):
+        with self.registry.store.locked():
             current = self.registry.require(original.name)
             if current != original:
                 raise RelationViolationError("Original thread changed before native source publication")
@@ -462,7 +456,7 @@ class ThreadManagement:
 
     def archive(self, name: str) -> None:
         """Hide a stopped participant from presence while retaining messages."""
-        with _store_lock(self._wire_lock_path):
+        with self.registry.store.locked():
             self._archive_unlocked((self.registry.require(name),))
 
     def _archive_unlocked(self, originals: Sequence[Thread]) -> None:
@@ -492,7 +486,7 @@ class ThreadManagement:
 
     def delete(self, name: str) -> ThreadDeleted:
         """Permanently delete one stopped or archived thread."""
-        with _store_lock(self._wire_lock_path):
+        with self.registry.store.locked():
             return self._delete_unlocked((self.registry.require(name),))[0]
 
     def _delete_unlocked(self, originals: Sequence[Thread]) -> tuple[ThreadDeleted, ...]:
@@ -530,18 +524,11 @@ class ThreadManagement:
         runtime = LaunchRuntime.running()
         with spec.prepared(self, resolved_bin, runtime) as child:
             child = self.registry._declare_unlocked(child)
-            try:
-                owned = self.owners._launch_owner_unlocked(
-                    child, resolved_bin, initial_input=spec.task, launch_runtime=runtime,
-                )
-                spec.task.record_first_input(
-                    partial(InputDispositions(self.root).record, owner=owned.name, target=owned.name,
-                        claim_scope=self.registry.snapshot().claim_generation(owned.name),
-                    ))
-                return owned
-            except OSError:
-                self.registry.remove(spec.name)
-                raise
+        # A failed launch cannot erase a declaration another starter reserved,
+        # nor erase the first input if reservation committed before the failure.
+        return self.owners._launch_owner(
+            child, resolved_bin, initial_input=spec.task, launch_runtime=runtime,
+        )
 
     def adopt_current(self) -> Thread:
         """Declare and register the current process's thread from env."""
@@ -619,7 +606,7 @@ class PrivateOwnerRename(ThreadRename):
         if not coordinator.exists() or before.name == new_name:
             return self.registry_renamed()
         # Validate registry/SQL name refusals before renaming the private owner.
-        # The wire lock excludes cooperating sends until both agree.
+        # Registry readers cannot select a different owner while both stores change.
         registry.status(before.name).require_self_rename()
         if registry.snapshot().taken(new_name, owner=before.name):
             raise RelationViolationError(f"Thread name {new_name!r} is already in use.")
@@ -631,10 +618,10 @@ class PrivateOwnerRename(ThreadRename):
                 person = store.participants.get(before.incarnation.require_recorded().lookup)
             except ParticipantNotRegistered:
                 return self.registry_renamed()
-            if not person.committed or person.owner_thread != before.name:
+            if not person.committed or person.owner_identity.owner_thread != before.name:
                 raise RelationViolationError(
                     "Private coordinator owner differs from the registered owner.")
-            generation = person.participant_generation
+            generation = person.owner_identity.generation
             PrivateOwnerRenameIntent(lookup=person.lookup, old=before.name, new=new_name,
                                      generation=generation,
                                      wire_root_id=self.registry_privacy.root_id.hex(),
@@ -659,7 +646,7 @@ class PrivateOwnerRename(ThreadRename):
 
     def applied(self, title: ThreadText) -> RenameThreadResult:
         result = ThreadRename.applied(self, title)
-        # The wire lock and the check in renamed() make a present intent this rename's own;
+        # The registry lock and renamed() bind a present intent to this rename;
         # it completes only after both authorities and the ancillary stores agree.
         if PrivateOwnerRenameIntent.path_in(self.threads.root).exists():
             PrivateOwnerRenameIntent.complete(self.threads.root)

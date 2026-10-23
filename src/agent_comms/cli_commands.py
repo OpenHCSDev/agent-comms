@@ -17,18 +17,21 @@ import subprocess
 import time
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping
-from contextlib import aclosing
+from contextlib import aclosing, closing
 from dataclasses import dataclass, field, fields, replace
 from functools import partial
 from inspect import iscoroutinefunction, signature
 from itertools import dropwhile, takewhile
 from pathlib import Path
-from typing import Annotated, Any, ClassVar, Literal, Self, TextIO
+from types import get_original_bases
+from typing import Annotated, Any, ClassVar, Literal, Self, TextIO, cast, get_args, get_origin
 
 from acp.exceptions import RequestError
+
 from agent_comms.errors import ToolRefusedError
-from agent_comms.message_bus import HeldBusWrite
+from agent_comms.launch_root import LaunchRoot
 from agent_comms.lifecycle_capability import LifecycleCapability, Successful
+from agent_comms.message_bus import HeldBusWrite
 
 from .active_route import (
     ActiveRoute,
@@ -41,20 +44,39 @@ from .activity import ActivityState
 from .catalog_document import CatalogDocument
 from .channel_management import KeepThreadsTagDisposition, TagChangeResult, TagDisposition
 from .channel_targets import (
-    ChannelSelection, CommandTarget, NoChannel, OneChannel, ResolvedChannel,
-    ResolvedThread, SurroundingChannel,
+    ChannelSelection,
+    CommandTarget,
+    NoChannel,
+    OneChannel,
+    ResolvedChannel,
+    ResolvedThread,
+    SurroundingChannel,
 )
 from .channels import AnyChannel, Channel
 from .check_root import CheckRoot
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .cli_bridges.claude import ClaudeTranscript
 from .cli_bridges.history import (
-    AnySession, DefaultAddress, ExpectedSession, HarnessAddress, History, OfflineHistory, OnlineHistory,
+    AnySession,
+    DefaultAddress,
+    ExpectedSession,
+    HarnessAddress,
+    History,
+    OfflineHistory,
+    OnlineHistory,
 )
 from .cli_bridges.shared import ChoiceTargetField, DeclaredOptions, SendRequest, TargetField
 from .cli_protocol import ArrivedMessage, EarlierItems
 from .cli_result import CliResult
 from .command import Command
+from .commander.config import (
+    CommanderChoice,
+    CommanderConfigFile,
+    CommanderRecord,
+    KeptCommander,
+    KeptRepos,
+    RepoChoice,
+)
 from .comms import Comms, client_wire
 from .config_options import (
     ConfigOptions,
@@ -76,43 +98,51 @@ from .exporting import (
     UnsetScopeFlag,
 )
 from .field_codec import (
-    FieldCodec,
-    FieldPlan,
-    PathText,
-    WireForm,
     Argument,
     Catalog,
     Editor,
     EditorFormat,
     FactoryArgumentDefault,
+    FieldCodec,
+    FieldPlan,
     Multiline,
     NamedArgumentGroup,
     Normalize,
+    PathText,
     TargetBound,
+    WireForm,
     WireName,
     WireOmitDefault,
     boundary_decoder,
 )
-from agent_comms.launch_root import LaunchRoot
 from .harness_install import Harness
 from .history_result import HistoryPageResult
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
+from .input_origin import InputProvenance
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
+from .install_choices import InstallerChoice, LiveMode, RehearsalMode, RunMode, UnnamedInstaller
 from .maintenance_barrier import MaintenanceHeldError
 from .message_page import PageBounds
 from .message_reference import FirstUnreadStart, InboxStart, MessageReference
 from .messages import (
     Message,
 )
+from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary
 from .native_settings import NativeThreadDefaults
 from .native_turn_context import NativeContextData
 from .owner_lifecycle import OwnerRestartResult, OwnerStartResult
-from .restart_scope import AllOwners, OneOwner, RestartTarget
 from .page_traversal import NewestCursor, PageCursor
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
 from .presentation import CountedRead, InboxRead, ThreadRecord, ThreadView, UncountedRead
-from .read_basis import AnonymousViewer, DisplayViewer, OnReadWatchAcknowledgment, WatchAcknowledgment
+from .read_basis import (
+    AnonymousViewer,
+    DisplayViewer,
+    OnReadWatchAcknowledgment,
+    WatchAcknowledgment,
+)
 from .registry_document import RegistrySnapshot
+from .registry_store import RegistryStore
+from .restart_scope import AllOwners, OneOwner, RestartTarget
 from .runtime import RuntimeConnection, socket_path
 from .schema_report import StoreSchemaReport, StoreSchemaReports
 from .send_result import SendResult
@@ -126,17 +156,19 @@ from .thread_execution import (
     ThreadCommandAvailability,
     ThreadExecution,
 )
-from .thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
-from .commander.config import (
-    CommanderChoice, CommanderConfigFile, CommanderRecord, KeptCommander, KeptRepos, RepoChoice,
-)
-from .install_choices import InstallerChoice, UnnamedInstaller
-from .thread_model import ThreadModel
 from .thread_management import (
-    ForkSpec, GivenTags, ImportDirectory, InheritedTags, NewThreadSpec, SourceDirectory, TagChoice,
+    ForkSpec,
+    GivenTags,
+    ImportDirectory,
+    InheritedTags,
+    NewThreadSpec,
+    SourceDirectory,
+    TagChoice,
     ThreadDeleted,
 )
+from .thread_model import ThreadModel
 from .thread_status import ThreadStatus
+from .thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
 from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread
 from .tool_result import ToolResult
 from .turn_context import (
@@ -149,10 +181,10 @@ from .turn_context import (
     Provenance,
     TurnContext,
 )
-from .wire_log import WireLog
+from .typed_table import ReconciledFile
+from .recorded_bus import RecordedBusIdentity
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
-from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary
 
 
 def _duration_seconds(value: str) -> float:
@@ -508,7 +540,7 @@ class ThreadConfiguredResult(CliResult):
 @dataclass(frozen=True)
 class ConstraintPinnedResult(CliResult):
     pin: MessageReference
-    source: MessageReference
+    source: MessageReference | InputProvenance
 
 
 @dataclass(frozen=True)
@@ -754,7 +786,7 @@ class WorktreeArgument:
 
 
 @dataclass(frozen=True, kw_only=True)
-class CliCommand(
+class CliCommand[Answer: CliResult = CliResult](
     DeclaredFamily,
     DeclaredOptions,
     CliExecution,
@@ -765,6 +797,23 @@ class CliCommand(
     def catalog_declaration(cls) -> type[CliCommand]:
         """Concrete thread/channel variants declare their shared menu operation."""
         return cls
+
+    @classmethod
+    def result_type(cls) -> type[Answer]:
+        """The result this command declares once, as the family's type argument in its own or
+        an inherited class header."""
+        for declaration in cls.__mro__:
+            for base in get_original_bases(declaration):
+                origin, arguments = get_origin(base), get_args(base)
+                if isinstance(origin, type) and issubclass(origin, CliCommand) and arguments:
+                    (answer,) = arguments
+                    return cast(type[Answer], answer)
+        raise TypeError(f"{cls.__qualname__} declares no result in its class header")
+
+    @classmethod
+    def invocation(cls, *arguments: str) -> tuple[str, ...]:
+        """This command's invocation on the agent-comms command line."""
+        return (cls.declared_name, *arguments)
 
     @classmethod
     def selected_targets(cls, raw: CommandTarget | str | tuple[CommandTarget | str, ...]) -> TargetSelection:
@@ -865,7 +914,11 @@ class CliCommand(
 
     def run(self, ctx: Comms, output: TextIO) -> int:
         """Run this command and write its declared result."""
-        result: CliResult = self.apply(ctx)
+        return self.written(self.apply(ctx), output)
+
+    @staticmethod
+    def written(result: CliResult, output: TextIO) -> int:
+        """Write one declared result to the caller's stream; its exit code."""
         json.dump(result.to_wire(), output, indent=2)
         output.write("\n")
         return result.exit_code()
@@ -1127,9 +1180,8 @@ class ConfigureCliCommand(
 
     def apply(self, ctx: Comms) -> CliResult:
         thread = ctx.registry.require(self.name)
-        if ctx.registry.status(thread.name).active:
-            raise RelationViolationError(
-                f"{thread.name} is running; change its settings through its session")
+        ctx.registry.status(thread.name).require_inactive(
+            f"{thread.name} is running; change its settings through its session")
         asyncio.run(ConfigOptions.configured().validate(self.configured(thread)))
         updated = ctx.threads.set_thread_configuration(thread, self)
         return ThreadConfiguredResult(updated.name, updated.model, updated.thinking_level,
@@ -1311,7 +1363,7 @@ class ExportRetainedCliCommand(CliCommand, declared_name="export-retained"):
     )
 
     def apply(self, ctx: Comms) -> CliResult:
-        return ctx.bus.log.retained_context(self.thread, ctx.registry).export(
+        return ctx.views.retained_context(self.thread).export(
             self.output, overwrite=self.overwrite)
 
 
@@ -1381,7 +1433,7 @@ class AckCliCommand(ThreadArgument, CliCommand):
 class WhoCliCommand(CliCommand):
     help = "Presence: who is in the chat"
 
-    def apply(self, ctx: Comms) -> CliResult:
+    def apply(self, ctx: Comms) -> WhoResult:
         return WhoResult(ctx.views.who())
 
 
@@ -1391,10 +1443,7 @@ class StatusCliCommand(CliCommand):
 
     def apply(self, ctx: Comms) -> CliResult:
         snapshot = ctx.registry.snapshot()
-        running = (
-            thread for name, thread in snapshot.threads.items()
-            if snapshot.status(name).active
-        )
+        running = snapshot.active_threads(snapshot.threads.values())
         activities = ctx.agents.all_activity(running, snapshot=snapshot)
         return ActiveStatusResult(tuple(
             ThreadActivityRow(thread, activity.state, activity.detail, activity.timestamp)
@@ -1406,7 +1455,7 @@ class HistoryCliCommand(CliCommand):
     help = "Newest-first bounded history of a named target"
     target: Annotated[
         str, Argument(flags=("--target",), options={"help": "#channel or @peer"})
-    ] = AnyChannel.declared_name
+    ] = AnyChannel.address()
     me: Annotated[
         DisplayViewer,
         Argument(
@@ -1532,7 +1581,7 @@ class ThreadsCliCommand(CliCommand):
         False
     )
 
-    def apply(self, ctx: Comms) -> CliResult:
+    def apply(self, ctx: Comms) -> ThreadsResult:
         return ThreadsResult(ctx.views.list_threads(active_only=self.active_only))
 
 
@@ -1614,10 +1663,15 @@ class InstallCliCommand(CliCommand):
             options={"help": "The unit running this install; the next install's plan names it"},
         ),
     ] = UnnamedInstaller()
-    rehearse: Annotated[
-        bool,
-        Argument(flags=("--rehearse",), options={"help": "Carry and read a copy of the bus; change nothing"}),
-    ] = False
+    mode: Annotated[
+        RunMode,
+        WireName("rehearse"),
+        Normalize(bool),
+        Argument(flags=("--rehearse",), options={
+            "help": "Carry and read a copy of the bus; change nothing",
+            "action": "store_const", "const": FieldCodec.encode(RehearsalMode()),
+        }),
+    ] = dataclasses.field(default_factory=LiveMode)
     retire: Annotated[
         bool,
         Argument(
@@ -1706,6 +1760,88 @@ class SchemaReportCliCommand(CliCommand, declared_name="schema-report"):
     def apply(self, ctx: Comms) -> CliResult:
         return StoreSchemaReports(StoreSchemaReport.scan(ctx))
 
+
+@dataclass(frozen=True)
+class ReconciledStoresResult(CliResult):
+    """The bus files whose schema the reconcile changed, relative to the bus root."""
+
+    rewritten: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class BusReadBack(CliResult):
+    """What a bus's registry holds that a carry must keep: its threads."""
+
+    threads: int
+
+    def lines(self) -> tuple[str, ...]:
+        """A read-back proves the carried bus reads; only an answered message proves an
+        agent works on it, and an install answers none."""
+        return (f"Read back: {self.threads} threads",
+                "No live agent has answered a message on this install yet")
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReadBackCliCommand(CliCommand[BusReadBack], declared_name="read-back"):
+    help = ("Count the threads this bus's registry holds; the installer reads a bus back "
+            "with it before and after its carries")
+
+    def answer(self, root: Path) -> BusReadBack:
+        with RegistryStore.at(root).reading_snapshot() as snapshot:
+            return BusReadBack(len(snapshot.threads))
+
+    def apply(self, ctx: Comms) -> BusReadBack:
+        return self.answer(ctx.root)
+
+    def execute(self, route: CommsRoute, output: TextIO) -> int:
+        """Before its carries, the installer reads only the existing registry."""
+        return self.written(self.answer(route.root), output)
+
+
+@dataclass(frozen=True, kw_only=True)
+class StoreReconcileCliCommand(CliCommand[ReconciledStoresResult]):
+    """Every declared store whose schema differs from this runtime's declarations; each
+    member says what it does with one."""
+
+    @staticmethod
+    @abstractmethod
+    def changes(owner: type[ReconciledFile], path: Path) -> bool:
+        """Whether this member changes, or would change, the store at ``path``."""
+
+    def answer(self, root: Path) -> ReconciledStoresResult:
+        return ReconciledStoresResult(tuple(
+            str(path.relative_to(root))
+            for path, owner in sorted(ReconciledFile.existing_in(root).items())
+            if self.changes(owner, path)))
+
+    def apply(self, ctx: Comms) -> ReconciledStoresResult:
+        return self.answer(ctx.root)
+
+    def execute(self, route: CommsRoute, output: TextIO) -> int:
+        """Reconciliation reads its declared files before opening runtime consumers."""
+        return self.written(self.answer(route.root), output)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReconcileStoresCliCommand(StoreReconcileCliCommand, declared_name="reconcile-stores"):
+    help = ("Reconcile every declared store's schema onto this runtime's declarations; "
+            "the installer runs it under maintenance after the outgoing owners stop")
+
+    @staticmethod
+    def changes(owner: type[ReconciledFile], path: Path) -> bool:
+        return owner.reconcile_at(path)
+
+
+@dataclass(frozen=True, kw_only=True)
+class PlannedReconcileCliCommand(StoreReconcileCliCommand, declared_name="planned-reconcile"):
+    help = ("Name every store reconcile-stores would rewrite, reading each without writing; "
+            "the installer backs them up and checks them against its rehearsal first")
+
+    @staticmethod
+    def changes(owner: type[ReconciledFile], path: Path) -> bool:
+        schema = owner.schema_at(path)
+        with closing(owner.read_snapshot(path)) as db:
+            return schema.schema_differs(db)
 
 @dataclass(frozen=True, kw_only=True)
 class CheckpointCliCommand(NameArgument, CliCommand, declared_name="checkpoint"):
@@ -1802,7 +1938,8 @@ class ThreadLifecycleCliCommand(MultipleTargets, NamedThreadCliCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StopCliCommand(AppliedTogether, NativeOwnerCommand, OwnerLifecycleControl, ThreadLifecycleCliCommand):
+class StopCliCommand(AppliedTogether, NativeOwnerCommand, OwnerLifecycleControl,
+                     ThreadLifecycleCliCommand, CliCommand[ThreadStoppedResult]):
     help = "Stop process"
 
     def apply(self, ctx: Comms) -> ThreadStoppedResult:
@@ -1871,7 +2008,8 @@ class ReleaseCliCommand(NameArgument, CliCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ArchiveCliCommand(MultipleTargets, ArchiveOwnerControl, NamedThreadCliCommand):
+class ArchiveCliCommand(MultipleTargets, ArchiveOwnerControl, NamedThreadCliCommand,
+                        CliCommand[ThreadArchivedResult]):
     help = "Archive a stopped thread"
 
     def apply(self, ctx: Comms) -> ThreadArchivedResult:
@@ -2155,7 +2293,8 @@ class TargetActionCliCommand(TargetArguments, declared_name="target-action"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StartCliCommand(NativeOwnerCommand, StartOwnerControl, ThreadLifecycleCliCommand):
+class StartCliCommand(NativeOwnerCommand, StartOwnerControl, ThreadLifecycleCliCommand,
+                      CliCommand[OwnerStartResult]):
     help = 'Start thread'
 
     def apply(self, ctx: Comms) -> OwnerStartResult:
@@ -2400,6 +2539,5 @@ class ReplaceRouteCliCommand(CliCommand, declared_name=ActiveRoute.repair_comman
             "the old file is kept beside it")
 
     def apply(self, ctx: Comms) -> CliResult:
-        marker = WireLog(WireLog.path_in(ctx.root)).private_marker_unlocked()
-        route = ActiveRoute(ctx.root, marker.root_id)
+        route = ActiveRoute(ctx.root, RecordedBusIdentity.capture(ctx.bus.bus.path))
         return RouteReplacedResult(str(ctx.root), str(replace_unreadable_active_route(route)))

@@ -22,7 +22,7 @@ from .declared_family import DeclaredFamily
 from .repo import Checkout
 from .thread_identity import ThreadIncarnation
 from .typed_table import Column, DurableStore, JsonStorage, TypedTable
-from .wire_watch import ModifiedWatchSource, WireWatch
+from .watched import ChangeSignal, FileSource
 
 
 class RoomWork(DeclaredFamily, affix="RoomWork"):
@@ -287,13 +287,21 @@ class RoomAllocation:
                 with ledger.writing() as db:
                     claim.insert(db)
             await asyncio.to_thread(enqueue)
-            source = ModifiedWatchSource(ledger.root, frozenset(
-                os.fsencode(path.name) for path in ledger.source_paths(ledger.root)))
-            async for _ in WireWatch.observations(source, refresh_seconds=self.room_refresh_seconds):
-                if await asyncio.to_thread(self._admit, ticket):
-                    measurement = WorkMeasurement(self, process)
-                    admitted = True
-                    return MeasuredRoomReservation(self, ticket, measurement)
+            async with ChangeSignal.opened(*(
+                FileSource(path) for path in ledger.source_paths(ledger.root)
+            )) as changes:
+                while True:
+                    changes.prepare()
+                    if await asyncio.to_thread(self._admit, ticket):
+                        measurement = WorkMeasurement(self, process)
+                        admitted = True
+                        return MeasuredRoomReservation(self, ticket, measurement)
+                    # OS free space can change without any Core ledger write.
+                    try:
+                        async with asyncio.timeout(self.room_refresh_seconds):
+                            await changes.wait()
+                    except TimeoutError:
+                        pass
         finally:
             if not admitted:
                 await asyncio.to_thread(ledger.release, ticket)

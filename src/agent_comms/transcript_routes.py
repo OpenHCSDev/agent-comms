@@ -10,7 +10,6 @@ from typing import Annotated, ClassVar
 from agent_comms.native_session_files import NativeSessionFiles
 from agent_comms.native_session_reopen import NativeSessionIdentity
 
-from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .field_codec import MalformedRecord
 from .private_path import FileObservation, FileRevision
@@ -103,7 +102,7 @@ class TranscriptRoutes(DurableStore):
         target = self.path_in(destination)
         descriptor = os.open(target, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
         os.close(descriptor)
-        with self.snapshot() as source, closing(CoordinationStore.writer(target)) as output:
+        with self.snapshot() as source, closing(self.writer(target)) as output:
             source.backup(output)
             self.require_schema(output)
 

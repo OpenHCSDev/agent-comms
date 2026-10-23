@@ -533,6 +533,11 @@ class ThreadRole(DeclaredFamily, affix="ThreadRole"):
 
     @classmethod
     @abstractmethod
+    def unread_since(cls, since: float | None, recorded_delivery: bool) -> float | None:
+        """A routed display's unread boundary, never permission to start an input."""
+
+    @classmethod
+    @abstractmethod
     def displayed_recipient_effect(
         cls, reads: ReadLedger, message: Message, thread: Thread,
         snapshot: RegistryProvenance, document: ReadDocument | None,
@@ -593,6 +598,10 @@ class AgentThreadRole(ThreadRole):
     def require_maintenance_open(cls, barrier: MaintenanceBarrier, claims_owner: bool) -> None:
         if claims_owner:
             barrier.assert_open_unlocked()
+
+    @classmethod
+    def unread_since(cls, since: float | None, recorded_delivery: bool) -> float | None:
+        return since if recorded_delivery else None
 
     @classmethod
     def displayed_recipient_effect(
@@ -660,6 +669,10 @@ class UserThreadRole(ThreadRole):
     @classmethod
     def require_maintenance_open(cls, barrier: MaintenanceBarrier, claims_owner: bool) -> None:
         """A human claims no owner, so maintenance never gates its registration."""
+
+    @classmethod
+    def unread_since(cls, since: float | None, recorded_delivery: bool) -> float | None:
+        return since
 
     @classmethod
     def displayed_recipient_effect(

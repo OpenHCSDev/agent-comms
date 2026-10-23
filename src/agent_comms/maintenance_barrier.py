@@ -8,7 +8,6 @@ witness is never removed: a lost/corrupt state denies instead of returning OFF.
 
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 import stat
@@ -31,12 +30,21 @@ from .store_files import (
     _async_store_lock,
     _atomic_write_text,
     _store_lock,
-    store_lock_path,
 )
 
 
 class MaintenanceHeldError(RelationViolationError, ToolRefusedError):
     """The bus is in maintenance: its readers close and wait for READY."""
+
+
+class MaintenanceNotHeldError(RelationViolationError):
+    """Work only this root's maintenance holder may do, attempted by a process that does not
+    hold it."""
+
+    @classmethod
+    def unheld(cls, change: str) -> MaintenanceNotHeldError:
+        return cls(f"{change} needs this root's maintenance hold, and no install holds it: "
+                   "only agent-comms install changes it")
 
 
 class HeldSends:
@@ -84,6 +92,12 @@ class MaintenancePhase(DeclaredFamily, LifecycleState, affix="Phase"):
         raise MaintenanceHeldError('Another maintenance operation holds this root')
 
     @classmethod
+    def require_held_by(cls, state: MaintenanceState, holder: str, change: str) -> None:
+        if holder != state.nonce:
+            raise MaintenanceNotHeldError(
+                f"{change} needs this root's maintenance hold; another process holds it")
+
+    @classmethod
     def send_new(cls, delegate, *args):
         return cls.new_sends.open(delegate, *args)
 
@@ -128,6 +142,10 @@ class InstallingPhase(MaintenancePhase):
 
 class ReadyPhase(MaintenancePhase):
     new_sends = running_sends = GrantedSends
+
+    @classmethod
+    def require_held_by(cls, state: MaintenanceState, holder: str, change: str) -> None:
+        raise MaintenanceNotHeldError.unheld(change)
 
     @classmethod
     def holder_dead(cls, state: MaintenanceState) -> bool:
@@ -181,6 +199,11 @@ class MaintenanceStatus:
     def require_open_to(self, holder: str) -> None:
         """Open, or held by ``holder``: the operation holding maintenance still runs its own reads."""
         self.require_open()
+
+    def require_held_by(self, holder: str, change: str) -> None:
+        """``change`` runs only in the process holding this root's maintenance: a root that
+        never enabled maintenance has no holder."""
+        raise MaintenanceNotHeldError.unheld(change)
 
 
 @dataclass(frozen=True, eq=False)
@@ -237,6 +260,20 @@ class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
             raise RelationViolationError("Maintenance witness inconsistent; new turns held")
         return self
 
+    @contextmanager
+    def holding(self) -> Iterator[Self]:
+        """This process, and every child it starts, acts as this hold's holder while the
+        block lasts, restoring its previous holder afterward."""
+        previous = os.environ.get(HOLDER_NONCE)
+        os.environ[HOLDER_NONCE] = self.nonce
+        try:
+            yield self
+        finally:
+            if previous is None:
+                os.environ.pop(HOLDER_NONCE, None)
+            else:
+                os.environ[HOLDER_NONCE] = previous
+
     def successor(self, phase: type[MaintenancePhase], nonce: str) -> MaintenanceState:
         if not self.phase().may_become(phase()):
             raise ValueError('Maintenance transition requires a valid expected successor')
@@ -247,6 +284,9 @@ class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
     def require_open_to(self, holder: str) -> None:
         if holder != self.nonce:
             self.require_open()
+
+    def require_held_by(self, holder: str, change: str) -> None:
+        self.phase.require_held_by(self, holder, change)
 
     def require_draining(self) -> None:
         if self.phase is not DrainingPhase:
@@ -270,14 +310,13 @@ UNCOORDINATED_INGRESS = UncoordinatedIngress()
 class MaintenanceBarrier(MaintenanceIngress):
     """One root's phase owner; writer and readers use the same durable witness.
 
-    A phase transition acquires the wire lock, then the registry lock.
+    Phase transitions and input permission use the registry's existing lock.
     This is cooperative same-UID maintenance control, not authority over old code
     or hostile clients.
     """
 
     def __init__(self, registry_path: Path):
         self.registry_path = Path(registry_path)
-        self.wire_path = self.registry_path.parent / "wire"
         self.marker_path = MaintenanceMarker.path_in(self.registry_path.parent)
         self.state_path = MaintenanceState.path_in(self.registry_path.parent)
 
@@ -314,13 +353,10 @@ class MaintenanceBarrier(MaintenanceIngress):
         return value
 
     def _current_unlocked(self) -> MaintenanceStatus:
-        """Check the phase under the registry lock OR the wire lock.
+        """Read the paired witness; incomplete publication always refuses.
 
-        Clients may read it before taking locks only to refuse work, never to
-        permit a write. An incomplete phase change refuses that read.
-        For a send, the wire lock stays held through stdin.write; for a claim,
-        the registry lock spans the turn's durable transition. A phase change
-        takes both locks in wire -> registry order.
+        Admission reads under the registry lock that phase transitions own.
+        An unlocked observation can refuse work, never authorize a mutation.
         """
         marker = self._read(self.marker_path, MaintenanceMarker)
         state = self._read(self.state_path, MaintenanceState)
@@ -347,8 +383,8 @@ class MaintenanceBarrier(MaintenanceIngress):
         )
 
     def release_dead(self, expected: MaintenanceState) -> MaintenanceStatus:
-        # Registry acquisition already serializes every maintenance write. It is
-        # reentrant for a registry borrower and never upgrades a shared wire OFD.
+        # Registry acquisition serializes maintenance writes. Observation releases
+        # a dead holder before borrowing a shared registry input scope.
         with _store_lock(self.registry_path):
             return self._release_dead_unlocked(expected)
 
@@ -362,8 +398,7 @@ class MaintenanceBarrier(MaintenanceIngress):
         return hold
 
     def read(self) -> MaintenanceStatus:
-        with _store_lock(self.wire_path, mode=SharedLock()):
-            return self.current_unlocked()
+        return self.current_unlocked()
 
     def _write_unlocked(self, hold: MaintenanceState) -> None:
         marker = MaintenanceMarker(version=hold.version, root=hold.root,
@@ -377,7 +412,7 @@ class MaintenanceBarrier(MaintenanceIngress):
 
     def begin(self, operator: MaintenanceOperator) -> MaintenanceState:
         """Hold new turns before fleet drain; an uncertain write stays closed."""
-        with _store_lock(self.wire_path), _store_lock(self.registry_path):
+        with _store_lock(self.registry_path):
             current = self.current_unlocked()
             current.require_open()
             hold = MaintenanceState(version=2, root=str(self.registry_path.parent.resolve()),
@@ -396,7 +431,7 @@ class MaintenanceBarrier(MaintenanceIngress):
 
     def advance(self, expected: MaintenanceState,
                 phase: type[MaintenancePhase]) -> MaintenanceState:
-        with _store_lock(self.wire_path), _store_lock(self.registry_path):
+        with _store_lock(self.registry_path):
             return self._advance_unlocked(expected, phase)
 
     def clear(self, expected: MaintenanceState) -> MaintenanceState:
@@ -404,25 +439,8 @@ class MaintenanceBarrier(MaintenanceIngress):
         expected.require_draining()
         return self.advance(expected, ReadyPhase)
 
-    def clear_stopped(self, expected: MaintenanceState, wire_descriptor: int) -> MaintenanceState:
-        """Clear while the stopped batch holds its original exclusive wire OFD.
-
-        Reacquiring the wire by name would deadlock. An unrelated descriptor
-        cannot publish READY while another cutover holds the stopped workers' wire lock.
-        """
-        expected.require_draining()
-        if type(wire_descriptor) is not int or wire_descriptor < 0:
-            raise RelationViolationError('Maintenance needs the stopped wire descriptor')
-        opened = os.fstat(wire_descriptor)
-        named = store_lock_path(self.wire_path).stat()
-        if (opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino):
-            raise RelationViolationError('Maintenance wire lock changed')
-        fcntl.flock(wire_descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        with _store_lock(self.registry_path):
-            return self._advance_unlocked(expected, ReadyPhase)
-
     def require_draining_unlocked(self, expected: MaintenanceState) -> None:
-        """Require this cutover's captured phase while holding the wire lock."""
+        """Require this cutover's captured phase under the registry lock."""
         expected.require_draining()
         if self.current_unlocked() != expected:
             raise RelationViolationError(
@@ -431,16 +449,12 @@ class MaintenanceBarrier(MaintenanceIngress):
 
     @contextmanager
     def allow_input(self, *, blocking: bool = True) -> Iterator[MaintenanceStatus]:
-        """Hold the root lock through one synchronous input operation.
-
-        Do not await while inside this context. A child still needs to perform
-        its own claim/send checks, and old-import children are not protected.
-        Maintenance, stop and rename take the exclusive wire lock. Independent
-        inputs share this gate; their registry, input and journal owners retain
-        their own determining locks.
-        """
-        with _store_lock(self.wire_path, mode=SharedLock(), blocking=blocking):
-            yield self.assert_open_unlocked()
+        """Check input permission under its registry authority, never around a Bus write."""
+        self.current_unlocked()
+        with _store_lock(self.registry_path, mode=SharedLock(), blocking=blocking):
+            status = self._current_unlocked()
+            status.require_open_to(os.environ.get(HOLDER_NONCE, ""))
+            yield status
 
     @asynccontextmanager
     async def ingress_async(self) -> AsyncIterator[MaintenanceStatus]:
@@ -449,8 +463,9 @@ class MaintenanceBarrier(MaintenanceIngress):
         The borrower writes synchronously, then releases before waiting for
         pipe drain or a native response.
         """
-        async with _async_store_lock(self.wire_path, mode=SharedLock()):
-            yield await self._current_unlocked().observed_async(self)
+        await self._current_unlocked().observed_async(self)
+        async with _async_store_lock(self.registry_path, mode=SharedLock()):
+            yield self._current_unlocked()
 
 
 class CarriedDocument[T](DurableFile, LockedStore[T]):

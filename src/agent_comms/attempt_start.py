@@ -69,8 +69,8 @@ class AttemptStart:
         execution = snapshot.execution
         ordinal = execution.lifecycle.next_attempt_ordinal
         if not participant.committed or (
-            participant.owner_thread,
-            participant.participant_generation,
+            participant.owner_identity.owner_thread,
+            participant.owner_identity.generation,
         ) != (self.owner_thread, self.owner_generation):
             raise StaleFence("owner generation or thread changed")
         if (execution.revision, participant.pointer.pointer_revision) != (

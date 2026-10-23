@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 from .pi_events import PiEvent
 
 from .child_process import AttachedChild, ChildOutcome, join_retirement
+from .launch_runtime import INHERITED_ENVIRONMENT
 from .native_attestation import NativeAttestation, PendingAttestation
 from .native_pi import NativePiRpcLaunch
 from .native_failures import NativePiUnavailable
@@ -94,7 +95,8 @@ class PiChild:
         await asyncio.wait_for(self.proc.write(self.reader.encode(response)), timeout=2)
 
     @classmethod
-    async def start_command(cls, argv, *, cwd, env=None, pass_fds=(), event_type=PiEvent, **state):
+    async def start_command(cls, argv, *, cwd, env=INHERITED_ENVIRONMENT, pass_fds=(),
+                            event_type=PiEvent, **state):
         proc = await AttachedChild.start(argv, cwd=cwd, env=env, pass_fds=pass_fds)
         return cls(proc, PiRpcChannel(proc.stdout, event_type=event_type), **state)
 

@@ -36,6 +36,7 @@ from agent_comms.todos import (
     Derivation,
     DroppedVerdict,
     PeerAcceptedVerdict,
+    ReviewedHeadVerdict,
     SendBackVerdict,
     Slop,
     StrikeReason,
@@ -43,7 +44,7 @@ from agent_comms.todos import (
     Todo,
     ToolCallVerdict,
 )
-from agent_comms.tools import CommsUnjudgedTool, CommsVerdictTool
+from agent_comms.tools import CommsHeadVerdictTool, CommsUnjudgedTool, CommsVerdictTool
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tool_declaration import EditCall, ReplacementEdit
 from agent_comms.commander import order
@@ -107,7 +108,7 @@ def show(ctx, pending: list[Edit]) -> None:
 
 def roast(ctx, audience, thread, lines, text, fix, slop):
     """Every send-back is a lesson, sent to its verdict's audience: the quoted slop,
-    the required fact it restates and the declaration that derives it (paper 1's definition), why that is
+    the required fact it restates and the declaration that derives it (the OOPSLA paper's definition), why that is
     stupid, and what replaces it."""
     body = (f'{thread}, this is stupid slop and it is going back:\n'
             + '\n'.join(f'    {l.strip()}' for l in lines)
@@ -156,8 +157,30 @@ class AlarmVerb(JudgeVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
+class HeadVerb(JudgeVerb):
+    help = ("accept an order's reviewed PR head: every edit before it is judged and "
+            "agent-comms/review is posted on the commit")
+    problem: Annotated[str, Argument(flags=("problem",), options={"metavar": "PROBLEM"})]
+    head: Annotated[str, Argument(flags=("head",), options={"metavar": "SHA"})]
+    serves: Annotated[
+        str, Argument(options={"help": "exact words of the order the head carries out"})
+    ]
+
+    def run(self, ctx: order.Commander) -> None:
+        held = [todo for todo in ctx.held_orders() if todo.id == self.problem]
+        if not held:
+            sys.exit(f'Refused: {self.problem} is not an order this commander holds')
+        todo, = held
+        verdict = ReviewedHeadVerdict(todo.revision, ctx.actor_identity, todo.held(),
+                                      quote=self.serves, head=self.head)
+        ctx.call(CommsHeadVerdictTool(problem=todo.id, operation=verdict))
+        left = len(Edit.unjudged(ctx.comms, ctx.commander))
+        print(f'head {self.head} accepted on {todo.id}; {left} still unjudged')
+
+
+@dataclass(frozen=True, kw_only=True)
 class VerdictVerb(JudgeVerb):
-    """Every verdict, mine or a fork's, is made after reviewing paper 1's
+    """Every verdict, mine or a fork's, is made after reviewing the OOPSLA paper's
     correct-maintenance results. Each member's required options are the facts its verdict carries."""
 
     ids: Annotated[
@@ -351,7 +374,7 @@ class BackVerb(VerdictVerb):
 
     def report(self, ctx: order.Commander, todos: tuple[Todo, ...]) -> None:
         for todo in todos:
-            audience = todo.verdicts[-1].audience.of(todo.held().owner, todo.goal)
+            audience = todo.verdicts[-1].audience.of(todo.held().owner, todo)
             roast(ctx, audience, todo.holder, self.lines, self.roast, self.fix, self.slop())
             line = (f'{time.strftime("%Y-%m-%d %H:%M")} {todo.holder} '
                     f'(strike {todo.strike_count} on {todo.id}; caught by {ctx.actor_name} at review): '

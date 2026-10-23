@@ -23,7 +23,7 @@ import sys
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Mapping
 from concurrent.futures import Future, ProcessPoolExecutor
 from contextlib import (
     AbstractContextManager,
@@ -41,7 +41,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, NoReturn
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, NullMember, RecordMember, SubclassUnion
-from .launch_runtime import LaunchRuntime
+from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime
 from .sealed import Sealed
 
 if TYPE_CHECKING:
@@ -50,7 +50,6 @@ if TYPE_CHECKING:
     from .store_files import LockMode
     from .thread_identity import ThreadIncarnation, ThreadRole
     from .thread_presentation import ThreadOwnerBinding, ThreadPresentation
-    from .thread_status import ThreadStatus
     from .turn_lease import ActiveTurn
 
 STOP_GRACE_SECONDS = 2.0
@@ -81,9 +80,7 @@ class ProcessState(SubclassUnion, affix=""):
     @abstractmethod
     def allows_inactive_stop(self) -> bool: ...
     @abstractmethod
-    def allows_goal_observation(self, status: ThreadStatus) -> bool: ...
-    @abstractmethod
-    def claims_owner(self, status: ThreadStatus) -> bool: ...
+    def claims_owner(self) -> bool: ...
 
     @abstractmethod
     def require_held_by(self, role: type[ThreadRole]) -> None: ...
@@ -137,10 +134,7 @@ class NoProcess(NullMember, ProcessState):
     def allows_inactive_stop(self) -> bool:
         return True
 
-    def allows_goal_observation(self, status: ThreadStatus) -> bool:
-        return False
-
-    def claims_owner(self, status: ThreadStatus) -> bool:
+    def claims_owner(self) -> bool:
         return False
 
     def require_held_by(self, role: type[ThreadRole]) -> None:
@@ -213,11 +207,8 @@ class ProcessIdentity(RecordMember, ProcessState):
     def allows_inactive_stop(self) -> bool:
         return self.runs_here()
 
-    def allows_goal_observation(self, status: ThreadStatus) -> bool:
-        return status.active
-
-    def claims_owner(self, status: ThreadStatus) -> bool:
-        return status.active
+    def claims_owner(self) -> bool:
+        return True
 
     def require_held_by(self, role: type[ThreadRole]) -> None:
         role.require_executable(
@@ -967,7 +958,7 @@ class ChildLaunch(ABC):
         self,
         *,
         cwd=None,
-        env=None,
+        env: Mapping[str, str] = INHERITED_ENVIRONMENT,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -975,8 +966,8 @@ class ChildLaunch(ABC):
         """Record the launch handle before the platform allows exec."""
         with self.children_store.launching(self.runtime) as reservation:
             process = subprocess.Popen(
-                self.argv, cwd=cwd, env=env, stdin=stdin, stdout=stdout,
-                stderr=stderr, **self.options,
+                self.argv, cwd=cwd, env=self.runtime.child_environment(env), stdin=stdin,
+                stdout=stdout, stderr=stderr, **self.options,
             )
             identity = Platform.current().identity(process.pid)
             child = SpawnedProcess(process, identity, reservation.store)
@@ -991,7 +982,8 @@ class ChildLaunch(ABC):
     async def spawn_async(self, *, cwd, env, stdio: ChildStdio) -> AttachedChild:
         async with self.children_store.launching_async(self.runtime) as reservation:
             process = await asyncio.create_subprocess_exec(
-                self.argv[0], *self.argv[1:], cwd=cwd, env=env, **stdio.options, **self.options,
+                self.argv[0], *self.argv[1:], cwd=cwd, env=self.runtime.child_environment(env),
+                **stdio.options, **self.options,
             )
             identity = Platform.current().identity(process.pid)
             child = AttachedChild(process, identity, reservation.store)
@@ -1514,7 +1506,7 @@ class AttachedChild(ChildProcess):
         command: tuple[str, ...],
         *,
         cwd: str | Path | None = None,
-        env: dict[str, str] | None = None,
+        env: Mapping[str, str] = INHERITED_ENVIRONMENT,
         pass_fds: tuple[int, ...] = (),
         stdio: ChildStdio = StreamingChildStdio(),
         runtime: LaunchRuntime = LaunchRuntime.running(),
@@ -1679,7 +1671,7 @@ class BoundedRun:
         timeout: float,
         input: bytes | None = None,
         cwd: str | Path | None = None,
-        env: dict[str, str] | None = None,
+        env: Mapping[str, str] = INHERITED_ENVIRONMENT,
         pass_fds: tuple[int, ...] = (),
         runtime: LaunchRuntime = LaunchRuntime.running(),
     ):
@@ -1812,7 +1804,7 @@ class SpawnedProcess(SynchronousProcess):
         command: tuple[str, ...],
         *,
         cwd: str | Path | None = None,
-        env: dict[str, str] | None = None,
+        env: Mapping[str, str] = INHERITED_ENVIRONMENT,
         output: Any = subprocess.DEVNULL,
         before_start: Callable[[ProcessIdentity], None] | None = None,
         runtime: LaunchRuntime = LaunchRuntime.running(),
@@ -1974,7 +1966,7 @@ class NamespacedChild(ChildProcess):
         *,
         deadline: float,
         cwd: str | Path | None = None,
-        env: dict[str, str] | None = None,
+        env: Mapping[str, str] = INHERITED_ENVIRONMENT,
     ) -> NamespacedChild:
         platform = Platform.current()
         if not isinstance(platform, NamespaceContainment) or not isinstance(platform, PidfdHandles):

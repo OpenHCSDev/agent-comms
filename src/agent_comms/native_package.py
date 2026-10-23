@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText, Sha256Text, WireName
-from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
 from agent_comms.private_path import PrivateDirectoryRole, TrustedAncestorRole
 
@@ -424,8 +423,8 @@ class VerifiedNativePackage:
             raise NativePackageError("Pinned native Pi package path is not lexical")
         if root.parts[-3:] != ("node_modules", "@earendil-works", "pi-coding-agent"):
             raise NativePackageError("Canonical native Pi package layout is required")
-        if not root.is_relative_to(LaunchRuntime.running().prefix):
-            raise NativePackageError("Native Pi package is outside the running runtime prefix")
+        if not root.is_relative_to(MANIFEST.parent):
+            raise NativePackageError("Native Pi package is outside this code's native resources")
         for ancestor in (root, *root.parents):
             failed = TrustedAncestorRole.violation(ancestor.lstat())
             if failed is not None:

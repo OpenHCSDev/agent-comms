@@ -1,5 +1,6 @@
 """Original-byte ownership survives appends and refuses altered proof/source."""
 
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 import asyncio
 import json
 import os
@@ -167,7 +168,7 @@ async def test_joined_worker_retains_original_evidence_and_owns_sqlite_until_can
     before = session.read_bytes(), files.input_proof.read_bytes()
     path = tmp_path / 'coordination.sqlite3'
     with Coordination(str(path), clock_ms=lambda: 1234) as original:
-        original.install_private_runtime()
+        PrivateCoordinatorTable.install(original)
         original.participants.register('original', 'owner', 'owner', committed=True)
         original_connection = original.session._connection
         entered, release = threading.Event(), threading.Event()
@@ -178,7 +179,7 @@ async def test_joined_worker_retains_original_evidence_and_owns_sqlite_until_can
                 assert store.session.now() == original.session.now()
                 worker_connections.append(store.session._connection)
                 with store.session.read():
-                    assert store.participants.get('original').owner_thread == 'owner'
+                    assert store.participants.get('original').owner_identity.owner_thread == 'owner'
                     NativeContextProof.read_evidence(files, INPUT_ID, evidence=evidence,
                                                      session_entry_start=input_record.start)
                     entered.set()
@@ -203,7 +204,7 @@ async def test_joined_worker_retains_original_evidence_and_owns_sqlite_until_can
                 with pytest.raises(sqlite3.ProgrammingError):
                     _ = worker_connections[0].in_transaction
                 with original.session.read():
-                    assert original.participants.get('original').owner_thread == 'owner'
+                    assert original.participants.get('original').owner_identity.owner_thread == 'owner'
             finally:
                 release.set()
                 if not pending.done():

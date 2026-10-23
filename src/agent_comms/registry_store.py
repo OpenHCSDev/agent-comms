@@ -14,6 +14,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import Any, ClassVar
 
+from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, NullMember
 from .locked_store import DocumentConversion, RegistryFile
@@ -22,14 +23,18 @@ from .native_input_owner import RegistryOwner
 from .private_path import FileObservation, FileRevision, MissingFile
 from .private_registry_guard import PrivateRegistryGuard, PublicRegistry, RegistryPrivacy
 from .registration_change import NativeSourcePublication
-from .registry_document import RegistryDocument, RegistryEntry, RegistrySnapshot
+from .registry_document import (
+    HistoricalRootPurpose,
+    RegistryDocument,
+    RegistryEntry,
+    RegistrySnapshot,
+)
 from .routing import TurnRouting
 from .store_files import SharedLock
 from .thread_identity import TurnIdentity
 from .thread_text import SavedSessionFile
 from .threads import Thread
 from .turn_lease import ActiveTurn, RecordedGeneration, StoredTurnRecord
-from .wire_metadata import WireMetadata
 
 
 class CachedRegistry(ABC):
@@ -228,6 +233,10 @@ class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument]):
     cache: RegistryCache = field(init=False, compare=False, repr=False)
 
     def __post_init__(self) -> None:
+        from .private_runtime_schema import PrivateCoordinatorTable
+
+        # Guard-loss checks must know every private declaration before taking this store's lock.
+        PrivateCoordinatorTable.declarations()
         object.__setattr__(self, "cache", RegistryCache.for_path(self.path))
 
     record_type = RegistryDocument
@@ -352,9 +361,18 @@ class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument]):
     def editing(self) -> Iterator[RegistryEdit]:
         with self.locked():
             original = self.read_revision_unlocked()
+            original.document.purpose.require_write()
             yield RegistryEdit(self, original.document.copy(), original)
 
+    def mark_historical(self) -> None:
+        """Explicit archive creation/carry seals this declaration, idempotently."""
+        with self.locked():
+            original = self.read_revision_unlocked()
+            document = replace(original.document, purpose=HistoricalRootPurpose())
+            RegistryEdit(self, document, original).commit()
+
     def save_unlocked(self, document: RegistryDocument) -> None:
+        self.read_revision_unlocked().document.purpose.require_write()
         raw = self._encode(document)
         self._write_unlocked(json.dumps(raw, indent=2))
         # Still under the exclusive lock: the written file is this document.
@@ -367,43 +385,34 @@ class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument]):
         self.private_guard_unlocked().write(self.path, text)
 
     def private_guard_unlocked(self) -> RegistryPrivacy:
-        """Validate the private marker/guard BEFORE even a cached registry read.
+        """Validate registry authority before even a cached document read.
 
-        The directory, guard file and registry are one private root. A marker
-        without its committed guard (or a guard without a marker) is an
-        uncertain migration, never an invitation to bootstrap old metadata.
+        The guard owns its native namespace. Native runtime tables without
+        that guard are incomplete state, never a new namespace to initialize.
         """
-        marker_path = WireMetadata.path_in(self.path.parent)
-        guard_path = self.guard_path
         key = (
             _link_revision(self.path.parent),
-            _link_revision(marker_path),
-            FileRevision.capture(marker_path),
-            _link_revision(guard_path),
+            _link_revision(CoordinationStore.path_in(self.path.parent)),
+            _link_revision(self.guard_path),
             _link_revision(self.path),
         )
         if (checked := self.cache.guard) is not None and checked[0] == key:
             return checked[1]
-        guard = self._check_guard_unlocked(marker_path, guard_path)
+        guard = self._check_guard_unlocked()
         self.cache.guard = key, guard
         return guard
 
-    def _check_guard_unlocked(self, marker_path: Path, guard_path: Path) -> RegistryPrivacy:
-        guard_present = guard_path.exists() or guard_path.is_symlink()
-        if not marker_path.exists() and not marker_path.is_symlink():
-            if guard_present:
-                raise RelationViolationError("Private registry guard has no protocol marker")
-            return PublicRegistry()
-        from .wire_log import WireLog
+    def _check_guard_unlocked(self) -> RegistryPrivacy:
+        if self.guard_path.exists() or self.guard_path.is_symlink():
+            return PrivateRegistryGuard.load(self.path)
+        coordinator = CoordinationStore.path_in(self.path.parent)
+        if coordinator.exists() or coordinator.is_symlink():
+            from .private_runtime_schema import PrivateCoordinatorTable
 
-        marker = WireLog(WireLog.path_in(self.path.parent)).read_metadata_unlocked(required=True)
-        if not marker.private:
-            if guard_present:
-                raise RelationViolationError("Private registry guard marker is absent")
-            return PublicRegistry()
-        guard = PrivateRegistryGuard(self.path, marker.root_id)
-        guard.verify()
-        return guard
+            with CoordinationStore.observing(coordinator) as db:
+                if PrivateCoordinatorTable.stored_schema(db):
+                    raise RelationViolationError("Native runtime has no registry authority")
+        return PublicRegistry()
 
 
 def _link_revision(path: Path) -> FileObservation:

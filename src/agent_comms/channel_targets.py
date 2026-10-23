@@ -2,22 +2,28 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar, overload
 
-from .errors import RelationViolationError, UnregisteredThreadError
+from .declared_family import DeclaredFamily
+from .errors import HumanSendRefusedError, RelationViolationError, UnregisteredThreadError
 from .field_codec import NullMember, SingleFieldValue, SubclassUnion
 from .history_result import DmHistoryPageResult, HistoryPageResult
 from .response_policy import DirectPolicy, MentionedOnlyPolicy
 from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, UnmentionedWake
 
 if TYPE_CHECKING:
+    from .bus_activity_index import ActivityClocks
+    from .catalog_document import CatalogDocument
     from .channels import Channel
+    from .goal_management import Goals
     from .historical_views import ChannelHistory, DMHistory, HistoryView
+    from .history_views import HistoryViews
     from .messages import Message
     from .read_basis import ChannelConversation, Conversation, DisplayViewer, DMConversation
     from .registry_provenance import RegistryProvenance
+    from .thread_identity import ThreadIncarnation
     from .thread_status import ThreadStatus
     from .threads import Thread
 
@@ -79,8 +85,8 @@ class ResolvedChannel:
 def exact_stored_target(name: str) -> bool:
     from .channels import BuiltinChannelView
 
-    return (BuiltinChannelView.member_named(name).exact_stored_target()
-            if name in BuiltinChannelView.names() else True)
+    return (BuiltinChannelView.addressed(name).exact_stored_target()
+            if name in BuiltinChannelView.addresses() else True)
 
 
 class CommandTarget(ABC):
@@ -89,7 +95,7 @@ class CommandTarget(ABC):
 
     @staticmethod
     @overload
-    def named(name: str) -> NamedTarget: ...
+    def named(name: str | NamedTarget) -> NamedTarget: ...
 
     @staticmethod
     @overload
@@ -101,10 +107,10 @@ class CommandTarget(ABC):
             return name
         if not isinstance(name, str) or not name:
             raise ValueError("Select a named target")
-        name = name.removeprefix("@")
+        name = name.removeprefix(ThreadTarget.sigil)
         if not name:
             raise ValueError("Select a named target")
-        return ChannelTarget(name) if name.startswith("#") else ThreadTarget(name)
+        return ChannelTarget(name) if ChannelTarget.names_channel(name) else ThreadTarget(name)
 
     @staticmethod
     def arguments(names: tuple[str, ...], project: str):
@@ -139,21 +145,70 @@ class CommandTarget(ABC):
 @dataclass(frozen=True)
 class NamedTarget(CommandTarget):
     name: str
+    sigil: ClassVar[str]
     batchable = False
-    direct_names = ()
+
+    @property
+    def direct_names(self) -> tuple[str, ...]:
+        return ()
+
     guidance_scope = ""
     default_audience = MessageAudience.DIRECT
+
+    @classmethod
+    def address(cls, name: str) -> str:
+        """The target name an address of this kind names once its sigil is read."""
+        return name
+
+    @staticmethod
+    def sigils() -> tuple[str, ...]:
+        """Every named target kind's sigil, from the family."""
+        return tuple(kind.sigil for kind in NamedTarget.__subclasses__())
+
+    @staticmethod
+    def leads(text: str) -> bool:
+        """Whether text opens with a named target's address."""
+        return text.lstrip().startswith(NamedTarget.sigils())
 
     @property
     def names(self) -> tuple[str, ...]:
         return (self.name,)
 
     @abstractmethod
+    def direct(self, goals: Goals, message: Message) -> None:
+        """A plain owner message to this destination, recorded where it holds requests."""
+
+    @abstractmethod
     def conversation_key(self, sender: str, snapshot: RegistryProvenance,
                          channel: type[ChannelConversation], direct: type[DMConversation]) -> Conversation: ...
 
-    def canonical_name(self, canonical):
+    @abstractmethod
+    def pending_count(
+        self, counts: dict[str, int], snapshot: RegistryProvenance,
+        require_channel: Callable[[str], Channel],
+    ) -> int: ...
+
+    @abstractmethod
+    def changed_threads(
+        self, names: Iterable[str], snapshot: RegistryProvenance,
+        catalog: CatalogDocument, activity: ActivityClocks,
+    ) -> tuple[str, ...]: ...
+
+    @abstractmethod
+    def mark_view_read(self, views: HistoryViews, worktree: str) -> None: ...
+
+    def canonical_name(self, canonical: Callable[[str], str]) -> str:
         return self.name
+
+    def selected_name(self, snapshot: RegistryProvenance) -> str:
+        """Bind this destination inside the registry cut used by its consumer."""
+        return self.canonical_name(snapshot.canonical_name)
+
+    @abstractmethod
+    def validate(self, message: Message) -> None: ...
+
+    @abstractmethod
+    def reply_target(self, sender: str) -> str: ...
 
     def require_channel(self):
         raise ValueError(f"{self.name!r} is not a channel target.")
@@ -192,6 +247,7 @@ class NamedTarget(CommandTarget):
 
 
 class ThreadTarget(NamedTarget):
+    sigil = "@"
     history_result_type = DmHistoryPageResult
     kind = "thread"
     incoming_scope = "direct message"
@@ -200,18 +256,23 @@ class ThreadTarget(NamedTarget):
         message.role.require_recipients(self, audience)
 
     @property
-    def direct_names(self):
+    def direct_names(self) -> tuple[str, ...]:
         return self.names
 
-    def canonical_name(self, canonical):
+    def canonical_name(self, canonical: Callable[[str], str]) -> str:
         return canonical(self.name)
 
     def require_dm_peer(self):
         return self.name
 
+    def direct(self, goals: Goals, message: Message) -> None:
+        """A registered thread holds owner requests; a peer the registry lacks holds none."""
+        if self.name in goals.registry:
+            goals.direct(self.name, message)
+
     def history_view(self, viewer: DisplayViewer, require_channel: Callable[[str], Channel],
                      channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
-        return viewer.direct_history(direct, self.name)
+        return viewer.direct_history(direct, self)
 
     def history_result(self, require_channel: Callable[[str], Channel], messages: tuple[Message, ...],
                        has_older: bool) -> HistoryPageResult:
@@ -221,40 +282,43 @@ class ThreadTarget(NamedTarget):
         return declaration.selection_channels(channel, self.name)
 
     def available(self, snapshot) -> bool:
-        return self.canonical_name(snapshot.canonical_name) in snapshot.threads
+        return self.selected_name(snapshot) in snapshot.threads
 
-    def pending_count(self, counts, snapshot, require_channel):
-        return counts.get(snapshot.require(self.name).name, 0)
+    def pending_count(
+        self, counts: dict[str, int], snapshot: RegistryProvenance,
+        require_channel: Callable[[str], Channel],
+    ) -> int:
+        return counts.get(snapshot.require(self.selected_name(snapshot)).name, 0)
 
     def resolve(self, snapshot, require_channel) -> ResolvedThread:
-        thread = snapshot.require(self.name)
+        thread = snapshot.require(self.selected_name(snapshot))
         return ResolvedThread(thread, snapshot.status(thread.name))
 
     def bindings(self, declaration, comms, channel, resolved: ResolvedThread, *, snapshot, catalog):
         return declaration.thread_bindings(comms, resolved.thread, resolved.status, channel, catalog=catalog)
 
-    def validate(self, message):
+    def validate(self, message: Message) -> None:
         if message.sender == self.name and message.type.conversation_message:
             raise RelationViolationError(f"Thread {message.sender!r} cannot message itself.")
         allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
         if not set(self.name) <= allowed:
             raise ValueError(f"Message target {self.name!r} is not a thread name or #channel.")
 
-    def reply_target(self, sender):
+    def reply_target(self, sender: str) -> str:
         return sender
 
     def wake_policy(self, recipient, mentions):
         return FullWake()
 
     def require_publication(self, message, snapshot, require_channel):
-        target = self.canonical_name(snapshot.canonical_name)
+        target = self.selected_name(snapshot)
         if target not in snapshot.threads:
             raise UnregisteredThreadError(f"Target {self.name!r} is not a registered thread.")
         if target == snapshot.canonical_name(message.sender) and message.type.conversation_message:
             raise RelationViolationError(f"Thread {target!r} cannot message itself.")
 
     def initial_delivery(self, sender, message, snapshot, require_channel):
-        target = self.canonical_name(snapshot.canonical_name)
+        target = self.selected_name(snapshot)
         recipient = snapshot.require(target)
         snapshot.status(target).require_visible()
         if target == sender:
@@ -263,17 +327,46 @@ class ThreadTarget(NamedTarget):
         return ThreadTarget(target), message, names
 
     def display_scope(self, viewer, snapshot, require_channel, direct_scope):
-        return direct_scope.capture(viewer, snapshot.require(self.name).name, snapshot)
+        return direct_scope.capture(
+            viewer, snapshot.require(self.selected_name(snapshot)).name, snapshot)
 
     def conversation_key(self, sender, snapshot, channel, direct):
-        names = sorted({snapshot.canonical_name(sender), self.canonical_name(snapshot.canonical_name)})
+        names = sorted({snapshot.canonical_name(sender), self.selected_name(snapshot)})
         return direct(participants=tuple(snapshot.participant(name).incarnation for name in names))
 
-    def changed_threads(self, names, snapshot, catalog, activity):
-        return (self.canonical_name(snapshot.canonical_name),)
+    def changed_threads(
+        self, names: Iterable[str], snapshot: RegistryProvenance,
+        catalog: CatalogDocument, activity: ActivityClocks,
+    ) -> tuple[str, ...]:
+        return (self.selected_name(snapshot),)
 
-    def mark_view_read(self, views, worktree):
+    def mark_view_read(self, views: HistoryViews, worktree: str) -> None:
         views.mark_thread_user_read(self.name, worktree=worktree)
+
+
+@dataclass(frozen=True)
+class IncarnationThreadTarget(ThreadTarget):
+    """A retained DM addresses its original birth, never a name's successor."""
+
+    name: str = field(init=False)
+    incarnation: ThreadIncarnation
+
+    def __post_init__(self) -> None:
+        self.incarnation.require_recorded()
+        object.__setattr__(self, "name", self.incarnation.name)
+
+    def selected_name(self, snapshot: RegistryProvenance) -> str:
+        if not self.incarnation.current(snapshot):
+            raise UnregisteredThreadError(
+                f"Original DM peer {self.name!r} is no longer registered.")
+        return super().selected_name(snapshot)
+
+    def require_publication(self, message: Message, snapshot: RegistryProvenance,
+                            require_channel: Callable[[str], Channel]) -> None:
+        try:
+            super().require_publication(message, snapshot, require_channel)
+        except UnregisteredThreadError as error:
+            raise HumanSendRefusedError(error) from error
 
 
 class ChannelTarget(NamedTarget):
@@ -282,9 +375,25 @@ class ChannelTarget(NamedTarget):
     kind = "channel"
     default_audience = MessageAudience.COLLECTIVE
 
+    sigil = "#"
+
+    @classmethod
+    def address(cls, name: str) -> str:
+        return cls.normalize_name(name)
+
+    @classmethod
+    def names_channel(cls, name: str) -> bool:
+        return name.startswith(cls.sigil)
+
     @classmethod
     def normalize_name(cls, name: str) -> str:
-        return name if name.startswith("#") else f"#{name}"
+        """The channel address of a catalog name (a tag or saved view); an address is kept."""
+        return name if cls.names_channel(name) else f"{cls.sigil}{name}"
+
+    @classmethod
+    def bare_name(cls, name: str) -> str:
+        """The catalog name a channel address carries: its tag or saved view name."""
+        return name.removeprefix(cls.sigil)
 
     @property
     def incoming_scope(self):
@@ -297,6 +406,9 @@ class ChannelTarget(NamedTarget):
     def require_channel(self):
         return self
 
+    def direct(self, goals: Goals, message: Message) -> None:
+        """A channel holds no owner requests."""
+
     def history_view(self, viewer: DisplayViewer, require_channel: Callable[[str], Channel],
                      channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
         return channel(require_channel(self.name).history_scope())
@@ -306,7 +418,10 @@ class ChannelTarget(NamedTarget):
         result_type = require_channel(self.name).history_result_type
         return result_type.for_target(self.name, messages, has_older)
 
-    def pending_count(self, counts, snapshot, require_channel):
+    def pending_count(
+        self, counts: dict[str, int], snapshot: RegistryProvenance,
+        require_channel: Callable[[str], Channel],
+    ) -> int:
         return require_channel(self.name).pending_count(counts)
 
     def resolve(self, snapshot, require_channel) -> ResolvedChannel:
@@ -322,7 +437,7 @@ class ChannelTarget(NamedTarget):
     def validate(self, sender=None):
         from .channels import BuiltinChannelView
 
-        if self.name not in BuiltinChannelView.names():
+        if self.name not in BuiltinChannelView.addresses():
             Tag.validate(self.name[1:], label=f"Channel {self.name!r}")
 
     def response_policy(self, message):
@@ -330,7 +445,7 @@ class ChannelTarget(NamedTarget):
             return MentionedOnlyPolicy.instance()
         return message.sender_role.channel_policy()
 
-    def reply_target(self, sender):
+    def reply_target(self, sender: str) -> str:
         return self.name
 
     def effective_mentions(self, message, audience):
@@ -360,12 +475,15 @@ class ChannelTarget(NamedTarget):
     def conversation_key(self, sender, snapshot, channel, direct):
         return channel(target=self.name)
 
-    def changed_threads(self, names, snapshot, catalog, activity):
+    def changed_threads(
+        self, names: Iterable[str], snapshot: RegistryProvenance,
+        catalog: CatalogDocument, activity: ActivityClocks,
+    ) -> tuple[str, ...]:
         channel = catalog.require_channel(self.name, activity)
         return tuple(name for name in names if (thread := snapshot.threads.get(name)) is not None
                      and channel.matches(thread.tags))
 
-    def mark_view_read(self, views, worktree):
+    def mark_view_read(self, views: HistoryViews, worktree: str) -> None:
         from .presentation import ReadAll
 
         views.presentation.mark_channel_read(
@@ -406,5 +524,20 @@ class Tag:
     def validate(name: str, *, label: str = "Tags") -> None:
         from .channels import BuiltinChannelView
 
-        if not name or not set(name) <= _TAG_CHARS or f"#{name}" in BuiltinChannelView.names():
+        if (not name or not set(name) <= _TAG_CHARS
+                or ChannelTarget.normalize_name(name) in BuiltinChannelView.addresses()):
             raise ValueError(f"{label} must be lowercase alphanumeric with hyphens/underscores; built-in channel names are reserved.")
+
+
+class DeclaredTag(DeclaredFamily, affix="Tag"):
+    """A tag every bus has by declaration: its name is its class name, and its channel
+    resolves before any thread carries it. Membership is still by tag."""
+
+    @classmethod
+    def channel(cls) -> str:
+        return ChannelTarget.normalize_name(cls.declared_name)
+
+
+class CommsTag(DeclaredTag):
+    """The channel the fleet coordinates on: installer reports, Core's strike announcements
+    and the commander's posts address it."""

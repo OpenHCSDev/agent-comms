@@ -4,6 +4,8 @@ from html import escape
 import json
 import sqlite3
 
+from collections import Counter
+
 import pytest
 
 from conftest import declare_test_bus
@@ -19,7 +21,7 @@ from agent_comms.cli_bridges.shared import (
     BridgeStateTable, Binding, DeliveryRow, ObservedPart, ReceivingMonitor, UnrecordedMonitor, MonitorPart,
     ForeignMonitorFrame, Options, ObservedMonitor, MismatchedMonitor, Watch, StoredBinding, Operation,
 )
-from agent_comms.errors import MessageAcknowledgmentError, RelationViolationError
+from agent_comms.errors import MessageAcknowledgmentError
 from agent_comms.cli_protocol import UnconfirmedOutcome, EmittedOutcome, DeliveredOutcome
 from agent_comms.messages import InfoKind, Message
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
@@ -253,10 +255,12 @@ def _old_delivery_file(state):
     return path
 
 
-def test_old_delivery_index_set_is_refused_not_kept(tmp_path):
-    path = _old_delivery_file(tmp_path)
-    before = path.read_bytes()
-    with pytest.raises(RelationViolationError, match='BridgeStateTable differs'):
-        with Binding.open(tmp_path):
-            pass
-    assert path.read_bytes() == before
+def test_old_delivery_index_set_is_carried_onto_the_declaration_with_every_row(tmp_path):
+    """A durable store derives its declared schema on the writer's open (a5b3cd8a7): the old
+    index set is replaced by the declared one and no row is lost."""
+    _old_delivery_file(tmp_path)
+    with Binding.open(tmp_path) as db:
+        assert not BridgeStateTable.schema_differs(db)
+        assert {table: db.execute(f'SELECT count(*) FROM "{table}"').fetchone()[0]
+                for table in ('binding', 'delivery', 'observed_part')} == Counter(
+            table for table, _ in _OLD_DELIVERY_ROWS)

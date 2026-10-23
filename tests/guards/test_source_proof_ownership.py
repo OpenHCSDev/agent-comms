@@ -46,7 +46,6 @@ def test_no_retired_cursor_procedures_or_callers():
 
 def test_source_proof_owners_stay_within_s7_bounds():
     for name in (
-        "native_source_cursor",
         "cursor_owner",
         "proven_source_coverage",
         "source_proof_requirement",

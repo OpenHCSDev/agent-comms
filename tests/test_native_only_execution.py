@@ -1,5 +1,7 @@
 """Retained native execution, refusal, and canonical headless/runtime behavior."""
 
+from agent_comms.bus import Bus
+
 from bus_history import read_history
 import asyncio
 import os
@@ -52,7 +54,7 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
         project.mkdir()
         caller_project.mkdir()
         comms = Comms(base / "wire")
-        comms.messaging.initialize_private_initial_protocol()
+        Bus.install(Bus.path_in(comms.root))
         comms.registry.declare(comms.registry.new_thread('headless', frozenset(), str(project)))
         env = dict(
             os.environ,

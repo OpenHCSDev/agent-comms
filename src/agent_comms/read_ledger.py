@@ -7,12 +7,14 @@ identity still determine whether those reads apply.
 
 from __future__ import annotations
 
+import json
 from abc import abstractmethod
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .bus import Bus, BusReader
 from .channel_targets import CommandTarget
 from .coordination_errors import DMScopeChanged
 from .field_codec import FieldCodec, NullMember, SubclassUnion
@@ -27,20 +29,19 @@ from .read_basis import (
     DMConversation,
     ReadCursor,
 )
-from .recorded_bus import NoRecordedBus, RecordedBusIdentity
+from .recorded_bus import NoRecordedBus, RecordedBus, RecordedBusIdentity
 from .sealed import Sealed
 from .store_files import SharedLock
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
-from .wire_log import WireLog
 
 if TYPE_CHECKING:
-    from .bus_publication import CommittedDelivery
+    from .bus_publication import Delivered
     from .messages import Message
+    from .read_basis import MessageDisplayScope
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
     from .threads import Thread
-    from .wire_log import OpenedWireSource
 
 
 class ReadNotice(SubclassUnion, affix="ReadNotice"):
@@ -103,20 +104,20 @@ class ReadDocument:
     notice: ReadNotice = field(default_factory=NoReadNotice)
 
     def cursors(self, viewer: str, snapshot: RegistryProvenance,
-                source: ObservedPath | OpenedWireSource) -> Iterator[ReadCursor]:
+                source: ObservedPath) -> Iterator[ReadCursor]:
         if self.bus_identity.matches(source):
             thread = snapshot.threads[snapshot.canonical_name(viewer)]
             for owner in thread.incarnation.recorded_names(snapshot):
                 yield self.messages.get(owner, ReadCursor())
 
     def cursor(self, viewer: str, snapshot: RegistryProvenance,
-               source: ObservedPath | OpenedWireSource) -> ReadCursor:
+               source: ObservedPath) -> ReadCursor:
         return ReadCursor.union(cursor.current(snapshot)
                                 for cursor in self.cursors(viewer, snapshot, source))
 
     def for_conversation(self, viewer: str, conversation: Conversation,
                          snapshot: RegistryProvenance,
-                         source: ObservedPath | OpenedWireSource) -> ConversationCursor:
+                         source: ObservedPath) -> ConversationCursor:
         keys = tuple(conversation.recorded_keys(snapshot))
         return ConversationCursor.union(
             cursor.for_conversation(key)
@@ -145,7 +146,7 @@ class ReadLedger(Sealed, ThreadOwnedState, CarriedDocument[ReadDocument]):
     def conversation(message: Message, snapshot: RegistryProvenance) -> Conversation:
         return CommandTarget.named(message.target).conversation_key(message.sender, snapshot, ChannelConversation, DMConversation)
 
-    def capture_indexed(self, viewer, messages, snapshot, source, index, *,
+    def capture(self, viewer, messages, snapshot, source: BusReader, *,
                         document: ReadDocument, conversation_snapshot=None) -> DisplayBasis:
         viewer = snapshot.canonical_name(viewer)
         provenance = conversation_snapshot or snapshot
@@ -153,19 +154,35 @@ class ReadLedger(Sealed, ThreadOwnedState, CarriedDocument[ReadDocument]):
         for message in messages:
             conversation = self.conversation(message, provenance)
             grouped.setdefault(conversation, set()).add(message.seq)
-        return DisplayBasis(
-            viewer, snapshot.threads[viewer].created_at,
-            tuple(DisplayedConversation(
-                conversation, sequences := tuple(sorted(members)),
-                index.proved_read_prefix(conversation.scope(provenance),
-                    document.for_conversation(viewer, conversation, snapshot, source),
-                    sequences, source.boundary),
-            ) for conversation, members in grouped.items()),
-            source.bus_identity,
-        )
+        with source.reading() as captured:
+            return DisplayBasis(
+                viewer, snapshot.threads[viewer].created_at,
+                tuple(DisplayedConversation(
+                    conversation, sequences := tuple(sorted(members)),
+                    self._proved_read_prefix(
+                        captured, conversation.scope(provenance),
+                        document.for_conversation(viewer, conversation, snapshot, captured),
+                        sequences),
+                ) for conversation, members in grouped.items()),
+                RecordedBus(captured.identity),
+            )
+
+    @staticmethod
+    def _proved_read_prefix(
+        source: BusReader, scope: MessageDisplayScope, previous: ConversationCursor,
+        sequences: tuple[int, ...],
+    ) -> int:
+        """Find the first unread scoped seq; never decode the intervening history."""
+        through = max((*sequences, *previous.exceptions, previous.high_water))
+        predicate, parameters = scope.index_predicate
+        missing = source.scoped_page(
+            f"({predicate}) AND seq NOT IN (SELECT value FROM json_each(?))",
+            (*parameters, json.dumps((*sequences, *previous.exceptions))),
+            lower=previous.high_water, upper=through + 1, limit=1)
+        return missing[0].seq - 1 if missing else through
 
     def mark_displayed(self, viewer: str, displayed: DisplayBasis) -> None:
-        if not displayed.bus_identity.matches(ObservedPath.at(WireLog.path_in(self.path.parent))):
+        if not displayed.bus_identity.matches(ObservedPath.at(Bus.path_in(self.path.parent))):
             raise DMScopeChanged("Display bus changed; refresh the displayed page.")
         if viewer != displayed.viewer:
             raise DMScopeChanged("Display belongs to a different viewer.")
@@ -191,10 +208,10 @@ class ReadLedger(Sealed, ThreadOwnedState, CarriedDocument[ReadDocument]):
         self, viewer: str, snapshot: RegistryProvenance, *, document: ReadDocument | None = None
     ) -> ReadCursor:
         document = self.read() if document is None else document
-        return document.cursor(viewer, snapshot, ObservedPath.at(WireLog.path_in(self.path.parent)))
+        return document.cursor(viewer, snapshot, ObservedPath.at(Bus.path_in(self.path.parent)))
 
     def displayed_recipient(
-        self, original: CommittedDelivery, recipient, snapshot: RegistrySnapshot, *, document=None
+        self, original: Delivered, recipient, snapshot: RegistrySnapshot, *, document=None
     ):
         """Return recorded human display evidence for this exact frozen recipient.
 
@@ -226,7 +243,7 @@ class ReadLedger(Sealed, ThreadOwnedState, CarriedDocument[ReadDocument]):
         document = (self.read_conversation(incarnation.name, conversation, snapshot)
                     if document is None else document)
         if message.seq in document.for_conversation(
-            incarnation.name, conversation, snapshot, ObservedPath.at(WireLog.path_in(self.path.parent))
+            incarnation.name, conversation, snapshot, ObservedPath.at(Bus.path_in(self.path.parent))
         ):
             return (incarnation,)
         return ()

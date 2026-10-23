@@ -8,6 +8,9 @@ and the answer was never delivered.
 
 from __future__ import annotations
 
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
+from bus_record_fixture import prepare_native_comms
+
 from conftest import publish_initial
 import json
 import os
@@ -20,7 +23,6 @@ import pytest
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
 from agent_comms.coordinator import Coordination
@@ -40,14 +42,14 @@ def alice_batch(*sent: tuple[str, str]):
     with TemporaryDirectory(prefix="ac-answer-", dir="/var/tmp") as dirname:
         root = Path(dirname) / "wire"
         root.mkdir(mode=0o700)
-        comms = Comms(root)
+        comms = prepare_native_comms(Comms(root))
         for name, created in (("sender", 17021.0), ("Alice", 17022.0)):
             comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), dirname, process_identity=ProcessIdentity.capture(os.getpid()), created_at=created))
-        root_id = comms.messaging.initialize_private_initial_protocol()
+        root_id = comms.registry.prepare_native_root().namespace
         messages = [publish_initial(comms, "sender", target, text) for target, text in sent]
         with Coordination(str(root / "coordination.sqlite3")) as store:
-            install_private_cohort_schema(store)
-            deliveries = [comms.bus.log.read_delivery_cohort(root_id, m.seq) for m in messages]
+            PrivateCoordinatorTable.install(store)
+            deliveries = [comms.bus.bus.delivery(m.seq) for m in messages]
             for recipient in deliveries[0].audience.recipients:
                 store.participants.register(
                     recipient.recipient_lookup, recipient.canonical_thread,

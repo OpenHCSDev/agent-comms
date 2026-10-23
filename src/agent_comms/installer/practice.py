@@ -3,21 +3,20 @@
 from __future__ import annotations
 
 import shutil
-import sqlite3
 import subprocess
 import time
+from abc import ABC, abstractmethod
 from collections.abc import Iterator
-from contextlib import closing, contextmanager
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
+from agent_comms.field_codec import boundary_decoder
 from agent_comms.installer.backup import UpgradeRefused
-from agent_comms.locked_store import RegistryFile, RootFile, SQLiteFile
-from agent_comms.registry_store import RegistryStore
-from agent_comms.store_files import SharedLock, _store_lock
+from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.locked_store import RegistryFile, RootFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.storage_rules import StorageRule
-from agent_comms.wire_log import WireLog
 
 
 @dataclass(frozen=True)
@@ -36,51 +35,64 @@ class PracticeMeasurement:
         return cls(size, seconds)
 
 
-def prepare_runtime_home(home: Path) -> None:
-    home.mkdir(mode=0o700, parents=True, exist_ok=True)
-    pointer = home / ".local/share/agent-comms/current"
-    pointer.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    pointer.unlink(missing_ok=True)
-    installed = Path.home() / ".local/share/agent-comms/current"
-    if installed.exists():
-        pointer.symlink_to(installed.resolve(strict=True))
-    uv = home / ".local/state/agent-comms/upgrade-bus/uv"
-    uv.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    uv.unlink(missing_ok=True)
-    installed_uv = Path.home() / ".local/state/agent-comms/upgrade-bus/uv"
-    executable = shutil.which("uv", path=str(installed_uv.parent)) or shutil.which("uv")
-    if not executable:
-        raise UpgradeRefused("Preparing a private runtime home requires uv")
-    uv.symlink_to(executable)
-    cache = Path(subprocess.run(["npm", "config", "get", "cache"], capture_output=True,
-                                text=True, check=True).stdout.strip())
-    if not (home / ".npm").exists() and cache.is_dir():
-        (home / ".npm").symlink_to(cache, target_is_directory=True)
-    elif not (home / ".npm").exists():
-        (home / ".npm").mkdir(mode=0o700)
+@dataclass(frozen=True)
+class RuntimeHome(ABC):
+    """A private home a runtime build runs in; its kind declares its runtime link and uv."""
+
+    path: Path
+
+    @staticmethod
+    def uv_path(home: Path) -> Path:
+        return home / ".local/state/agent-comms/upgrade-bus/uv"
+
+    @property
+    @abstractmethod
+    def uv(self) -> Path: ...
+
+    def prepare(self) -> None:
+        source = self.uv
+        self.path.mkdir(mode=0o700, parents=True, exist_ok=True)
+        uv = self.uv_path(self.path)
+        uv.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        uv.unlink(missing_ok=True)
+        uv.symlink_to(source)
+        cache = Path(subprocess.run(["npm", "config", "get", "cache"], capture_output=True,
+                                    text=True, check=True).stdout.strip())
+        if not (self.path / ".npm").exists() and cache.is_dir():
+            (self.path / ".npm").symlink_to(cache, target_is_directory=True)
+        elif not (self.path / ".npm").exists():
+            (self.path / ".npm").mkdir(mode=0o700)
 
 
-def declared_files(root: Path) -> dict[Path, type[RootFile]]:
-    """Every existing file a declared owner names, with that owner, never a probe of listed
-    files: an undeclared file (a native writer's transient claim, a lock) has no owner, so
-    no rehearsal reads it and the copy never meets it."""
-    RootFile.load_declarations()
-    return {path: owner for owner, directory in RootFile.declarations_in(root)
-            for path in owner.matching_in(directory)}
+class RehearsalHome(RuntimeHome):
+    """The live install's rehearsal borrows the installed runtime and the installer's uv,
+    both resolved strictly before the home is touched, so a broken installation refuses
+    the rehearsal instead of rehearsing on PATH."""
+
+    @property
+    def uv(self) -> Path:
+        return self.uv_path(Path.home()).resolve(strict=True)
+
+    def prepare(self) -> None:
+        installed = LaunchRuntime.current_pointer()
+        selected = installed.resolve(strict=True)
+        super().prepare()
+        pointer = self.path / installed.relative_to(Path.home())
+        pointer.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        pointer.unlink(missing_ok=True)
+        pointer.symlink_to(selected)
 
 
-def _copy_database(source: Path, copy: Path) -> None:
-    """Copy one database's committed state through SQLite's backup; its companions never."""
-    copy.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    with (closing(sqlite3.connect(f"file:{source}?mode=ro", uri=True)) as original,
-          closing(sqlite3.connect(copy)) as copied):
-        original.backup(copied)
-    shutil.copymode(source, copy)  # SQLite creates the copy under the umask
+class TestHome(RuntimeHome):
+    """A source checkout's test build: no installed runtime, the uv its caller put on PATH."""
 
-
-def _copy_file(source: Path, copy: Path) -> None:
-    copy.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    shutil.copy2(source, copy)
+    @property
+    @boundary_decoder
+    def uv(self) -> Path:
+        executable = shutil.which("uv")
+        if executable is None:
+            raise UpgradeRefused("A private test runtime home requires uv on PATH")
+        return Path(executable)
 
 
 @contextmanager
@@ -89,8 +101,8 @@ def practice_copy(root: Path, into: Path) -> Iterator[tuple[Path, PracticeMeasur
     runtime's bugs cannot block the install of their fix, and the target cannot read a
     format its carries have not run on yet. The copy is the declared owners' files and
     nothing else: every SQLite owner's database copies through SQLite's backup, and its
-    -wal, -shm and journal never; the log's and the registry's cut_paths copy together
-    under each one's lock; every other declared file byte for byte.
+    -wal, -shm and journal never. Each declared owner copies its consistent file group;
+    the retired history converter alone knows its old marker relationship.
     The maintenance witnesses stay behind: the rehearsal holds its copy itself. Stored
     paths keep naming the live bus, and every step writes only inside the root it is given."""
     floor = StorageRule.load(root).floor_gib * 2**30
@@ -99,30 +111,14 @@ def practice_copy(root: Path, into: Path) -> Iterator[tuple[Path, PracticeMeasur
         raise UpgradeRefused("Insufficient free space before building the practice copy")
     started = time.monotonic()
     witnesses = set(MaintenanceBarrier(RegistryFile.path_in(root)).witness_paths)
-    log = WireLog(WireLog.path_in(root))
-    registry = RegistryStore.at(root)
-    files = declared_files(root)
+    files = RootFile.existing_in(root)
     into.mkdir(mode=0o700)
 
-    def copy(path: Path) -> None:
-        owner = files.get(path, RootFile)
-        (_copy_database if issubclass(owner, SQLiteFile) else _copy_file)(
-            path, into / path.relative_to(root))
-
-    # The log's own file lock, never WireLog.locked(): that checks the index with the
-    # target's code, which refuses a bus whose carries have not run yet. Each group is one
-    # cut, its paths read under its lock: a writer advancing the log between its copy and
-    # its checkpoint's would leave a checkpoint past the end of the copied log, and a turn
-    # claimed after the declared files were listed would leave the registry naming a
-    # missing turn.
-    locked_copies = ((_store_lock(log.path), log), (registry.locked(mode=SharedLock()), registry))
     copied: set[Path] = set()
-    for lock, owner in locked_copies:
-        with lock:
-            for path in owner.cut_paths:
-                if path.exists():
-                    copy(path)
-                    copied.add(path)
-    for path in files.keys() - copied - witnesses:
-        copy(path)
+    for path, owner in files.items():
+        if path in copied or path in witnesses:
+            continue
+        target = into / path.relative_to(root)
+        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        copied.update(owner.copy_group(path, target))
     yield into, PracticeMeasurement.of(into, time.monotonic() - started, floor)

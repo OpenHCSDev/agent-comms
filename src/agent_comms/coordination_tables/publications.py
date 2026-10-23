@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
-from typing import Annotated, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
@@ -13,7 +13,8 @@ from agent_comms.coordination_contracts import (
     validate_execution_id,
 )
 from agent_comms.coordination_errors import CoordinationError, IntegrityViolationError
-from agent_comms.coordination_schema import CoordinatorTable
+from agent_comms.coordination_schema import CoordinatorRow
+from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, MalformedRecord, WireName
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
@@ -23,13 +24,25 @@ from agent_comms.typed_table import (
     ExactStorage,
     ForeignKey,
     Generated,
-    TypedTable,
+    GuardedInserts,
+    ImmutableRows,
+    ValidatedInserts,
 )
+
+if TYPE_CHECKING:
+    from agent_comms.bus import BusReader
 
 
 @dataclass(frozen=True, slots=True)
-class PublicationIntents(CoordinatorTable, TypedTable):
+class PublicationIntents(
+    ValidatedInserts, GuardedInserts, ImmutableRows, CoordinatorRow
+):
     """One obligation route's frozen response: the exact Message it publishes."""
+
+    insert_condition = """NOT EXISTS (SELECT 1 FROM obligations
+        WHERE execution_id = NEW.execution_id AND exact_target = NEW.exact_target
+        AND state = 'pending')"""
+
 
     validator_function: ClassVar[str] = "coordination_validate_publication_intent"
 
@@ -46,6 +59,14 @@ class PublicationIntents(CoordinatorTable, TypedTable):
     def matches_publication(self, message: Message) -> bool:
         """Compare the frozen intent once against the Message-owned content snapshot."""
         return self.message == message.publication_snapshot
+
+    def published_message(self, source: BusReader) -> Message | None:
+        """The bounded durable match for this exact frozen publication intent."""
+        for message in source.keyed_messages(self.publication_key):
+            if not self.matches_publication(message):
+                raise RelationViolationError("Response publication key has different message content.")
+            return message
+        return None
 
     def validate_acknowledgement(self, acknowledgement: PublicationEvidence) -> None:
         if acknowledgement.message_id != self.expected_message_id:
@@ -126,44 +147,6 @@ class PublicationIntents(CoordinatorTable, TypedTable):
         )
 
     @classmethod
-    def trigger_bodies(cls):
-        return {
-            "publication_intent_envelope_authority": (
-                f""" BEFORE INSERT ON
-publication_intents
-WHEN {cls.validator_function}(
-  {", ".join("NEW." + field.name for field in fields(cls) if field.init)}) != 1
-BEGIN SELECT RAISE(ABORT, 'publication intent envelope is invalid' );
-END"""
-            ),
-            "publication_intent_requires_obligation": (
-                """
-BEFORE INSERT ON publication_intents
-WHEN NOT EXISTS (
-    SELECT 1 FROM obligations WHERE execution_id = NEW.execution_id
-      AND exact_target = NEW.exact_target AND state = 'pending'
-)
-BEGIN
-    SELECT RAISE(ABORT, 'publication intent requires matching pending obligation');
-END"""
-            ),
-            "publication_intent_update_frozen": (
-                """
-BEFORE UPDATE ON publication_intents
-BEGIN
-    SELECT RAISE(ABORT, 'publication intent is frozen');
-END"""
-            ),
-            "publication_intent_delete_frozen": (
-                """
-BEFORE DELETE ON publication_intents
-BEGIN
-    SELECT RAISE(ABORT, 'publication intent is frozen');
-END"""
-            ),
-        }
-
-    @classmethod
     def validate_sql(cls, *values: object) -> int:
         """SQLite positional input follows the declared columns; decode and validate once."""
         try:
@@ -179,7 +162,19 @@ END"""
 
 
 @dataclass(frozen=True, kw_only=True)
-class PublicationEvidence(CoordinatorTable, TypedTable, declared_name="publication_receipts"):
+class PublicationEvidence(
+    GuardedInserts,
+    ImmutableRows,
+    CoordinatorRow,
+    declared_name="publication_receipts",
+):
+    insert_condition = """(EXISTS (SELECT 1 FROM executions
+        WHERE execution_id = NEW.execution_id AND status = 'failed'))
+        OR (NEW.message_id != (SELECT expected_message_id FROM publication_intents
+        WHERE execution_id = NEW.execution_id AND exact_target = NEW.exact_target))
+        OR (NOT EXISTS (SELECT 1 FROM obligations WHERE execution_id = NEW.execution_id
+        AND exact_target = NEW.exact_target AND state = 'publishing'))"""
+
     @property
     def reference(self) -> MessageReference:
         return MessageReference(self.seq, self.message_id)
@@ -234,41 +229,3 @@ class PublicationEvidence(CoordinatorTable, TypedTable, declared_name="publicati
                 deferred=True,
             ),
         )
-
-    @classmethod
-    def trigger_bodies(cls):
-        return {
-            "publication_receipt_matches_authorities": (
-                """
-BEFORE INSERT ON publication_receipts
-BEGIN
-    SELECT RAISE(ABORT, 'failed execution cannot accept publication receipt')
-    WHERE EXISTS (SELECT 1 FROM executions
-                  WHERE execution_id = NEW.execution_id AND status = 'failed');
-    SELECT RAISE(ABORT, 'publication receipt message mismatch')
-    WHERE NEW.message_id != (
-        SELECT expected_message_id FROM publication_intents
-        WHERE execution_id = NEW.execution_id AND exact_target = NEW.exact_target
-    );
-    SELECT RAISE(ABORT, 'publication receipt requires publishing obligation')
-    WHERE NOT EXISTS (
-        SELECT 1 FROM obligations
-        WHERE execution_id = NEW.execution_id AND exact_target = NEW.exact_target AND state = 'publishing'
-    );
-END"""
-            ),
-            "publication_receipt_is_frozen": (
-                """
-BEFORE UPDATE ON publication_receipts
-BEGIN
-    SELECT RAISE(ABORT, 'publication receipt is frozen');
-END"""
-            ),
-            "publication_receipt_delete_frozen": (
-                """
-BEFORE DELETE ON publication_receipts
-BEGIN
-    SELECT RAISE(ABORT, 'publication receipt is frozen');
-END"""
-            ),
-        }

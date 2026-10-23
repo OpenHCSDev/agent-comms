@@ -124,7 +124,7 @@ class NativeThreadExecution(ThreadExecution):
     def restart_candidates(cls, thread: Thread, status):
         if thread.process_identity.runs_here():
             return ()
-        return thread.role.executor(thread) if status.active and thread.process_alive else ()
+        return status.restart_candidates(thread)
 
     @classmethod
     def prepare_conversation(cls, preparation: ConversationPreparation):
@@ -136,13 +136,7 @@ class NativeThreadExecution(ThreadExecution):
 
     @classmethod
     def owner_binding(cls, snapshot: RegistrySnapshot, thread: Thread):
-        from .thread_presentation import LiveThreadOwnerBinding, UnavailableThreadOwnerBinding
-
-        if not snapshot.status(thread.name).active or not thread.process_alive:
-            return UnavailableThreadOwnerBinding()
-        return LiveThreadOwnerBinding(
-            snapshot.owner_identity(thread.name), thread.require_process(),
-        )
+        return snapshot.status(thread.name).native_owner_binding(snapshot, thread)
 
     @classmethod
     def presentation(cls, thread: Thread, status: ThreadStatus, ordinary: ThreadPresentation,

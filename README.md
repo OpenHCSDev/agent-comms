@@ -100,7 +100,7 @@ then the submodule pin is advanced here. The development install above also
 uses that same checkout for the shared audit measures.
 
 Tests that launch native Pi must run inside the checkout's built runtime, not
-against an editable source package. With uv and Node/npm available, run:
+against an editable source package. With uv on PATH and Node/npm available, run:
 
 ```bash
 python -m agent_comms.installer.test_runtime tests/test_native_input_bus_path.py

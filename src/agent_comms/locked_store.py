@@ -1,26 +1,29 @@
-"""Typed JSON documents with canonical locks and durable atomic replacement."""
+"""Declared file behavior, owned SQLite connections, and durable JSON replacement."""
 
 from __future__ import annotations
 
 import hashlib
 import json
 import os
+import shutil
+import sqlite3
 import stat
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from dataclasses import dataclass
+from functools import cache
 from importlib import import_module
 from pathlib import Path
 from pkgutil import walk_packages
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, Self, TypeVar
+from typing import Any, ClassVar, Generic, Self, TypeVar
 
+from .coordination_errors import CoordinationReadUnavailable
 from .field_codec import FieldCodec, MalformedRecord
-from .store_files import SharedLock, StoreLock, StoreLockOwner, StoreOwner, store_lock_path
-
-if TYPE_CHECKING:
-    import sqlite3
+from .store_files import (
+    SharedLock, StoreLock, StoreLockOwner, StoreOwner, _store_lock, store_lock_path,
+)
 
 T = TypeVar("T")
 
@@ -167,20 +170,46 @@ class RootFile:
         path = cls.path_in(root)
         return frozenset((path,)) if path.is_file() else frozenset()
 
+    @staticmethod
+    def content_owner(path: Path) -> type[RootFile]:
+        """The file behavior for an arbitrary resource, including undeclared files."""
+        return SQLiteFile if SQLiteFile.is_database(path) else RootFile
+
+    @staticmethod
+    def copy_file(source: str | Path, target: str | Path) -> Path:
+        return Path(shutil.copy2(source, target))
+
     @classmethod
-    def load_declarations(cls) -> None:
-        """Import every module of the package, so ``declarations_in`` walks the whole family
-        and not only the owners some caller happened to import."""
+    def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
+        """Copy this owner's consistent file cut and name the source files included."""
+        with _store_lock(source, mode=SharedLock()):
+            cls.copy_file(source, target)
+        return frozenset((source,))
+
+    @staticmethod
+    def digest(path: Path) -> str:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    @staticmethod
+    def files(path: Path) -> tuple[Path, ...]:
+        return (path,)
+
+    @staticmethod
+    @cache
+    def load_declarations() -> None:
+        """Import every module of the package once per process, so ``declarations_in`` walks
+        the whole family and not only the owners some caller happened to import."""
         package = import_module(__package__)
         for module in walk_packages(package.__path__, f"{package.__name__}."):
             if not module.name.startswith(f"{package.__name__}.skills"):
                 import_module(module.name)
 
     @classmethod
-    def declarations_in(cls, root: Path) -> Iterator[tuple[type[RootFile], Path]]:
+    def declarations_in(cls, root: Path) -> Iterator[tuple[type[Self], Path]]:
         """Each declaring owner and its directory, once across composed capabilities."""
-        pending: list[type[RootFile]] = [cls]
-        visited: set[type[RootFile]] = set()
+        RootFile.load_declarations()
+        pending: list[type[Self]] = [cls]
+        visited: set[type[Self]] = set()
         while pending:
             family = pending.pop()
             if family in visited:
@@ -189,6 +218,14 @@ class RootFile:
             pending.extend(family.__subclasses__())
             if "filename" in vars(family):
                 yield family, root / family.root_directory
+
+    @classmethod
+    def existing_in(cls, root: Path) -> dict[Path, type[Self]]:
+        """Every existing file a declared owner names, with that owner, never a probe of
+        listed files: an undeclared file (a native writer's transient claim, a lock) has no
+        owner, so nothing that walks a bus by its declarations meets it."""
+        return {path: owner for owner, directory in cls.declarations_in(root)
+                for path in owner.matching_in(directory)}
 
     @classmethod
     def paths_in(cls, root: Path) -> frozenset[Path]:
@@ -238,15 +275,33 @@ class DurableFile(RootFile):
     __slots__ = ()
 
 
+class BusFile(DurableFile):
+    """Declared data and lifecycle files that rule out a fresh bus installation."""
+
+    @classmethod
+    def fresh(cls, root: Path) -> bool:
+        return not any(
+            path.exists() or path.is_symlink()
+            for owner, directory in cls.declarations_in(root)
+            for path in (owner.path_in(directory),)
+        )
+
+
 class WireWakeFile(RootFile):
-    """Commits to this primary file wake idle wire readers, unlike lock-file churn."""
+    """Declared commit signals wake idle readers, unlike lock-file churn."""
 
     __slots__ = ()
 
     @classmethod
+    def source_paths(cls, root: Path) -> tuple[Path, ...]:
+        return (cls.path_in(root),)
+
+    @classmethod
     def watched_paths_in(cls, root: Path) -> frozenset[Path]:
         return frozenset(
-            owner.path_in(directory) for owner, directory in cls.declarations_in(root)
+            path
+            for owner, directory in cls.declarations_in(root)
+            for path in owner.source_paths(directory)
         )
 
 
@@ -256,12 +311,187 @@ class RegistryFile(DurableFile, WireWakeFile):
     __slots__ = ()
     filename = "registry.json"
 
+    @classmethod
+    def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
+        from .registry_store import RegistryStore
+
+        registry = RegistryStore(source)
+        with registry.locked(mode=SharedLock()):
+            copied = frozenset(path for path in registry.cut_paths if path.exists())
+            for path in copied:
+                destination = target.parent / path.relative_to(source.parent)
+                destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                cls.copy_file(path, destination)
+        return copied
+
+
+class StoreContention(ABC):
+    """Typed SQLite busy behavior shared by snapshots and writers."""
+
+    @property
+    @abstractmethod
+    def timeout(self) -> float: ...
+
+    def reader(self, uri: str) -> sqlite3.Connection:
+        return sqlite3.connect(uri, uri=True, isolation_level=None, timeout=self.timeout)
+
+    def writer(
+        self, path: str | os.PathLike[str], options: dict[str, object]
+    ) -> sqlite3.Connection:
+        return sqlite3.connect(path, timeout=self.timeout, **options)
+
+
+@dataclass(frozen=True)
+class StoreWait(StoreContention):
+    timeout: ClassVar[float] = 5.0
+
+
+@dataclass(frozen=True)
+class StoreBusy(StoreContention):
+    """Do not wait when optional display or input work cannot acquire a SQLite lock."""
+
+    timeout: ClassVar[float] = 0.0
+
+    def reader(self, uri: str) -> sqlite3.Connection:
+        with CoordinationReadUnavailable.checking():
+            return super().reader(uri)
+
+
+DEFAULT_STORE_CONTENTION = StoreWait()
+
 
 class SQLiteFile(RootFile):
-    """A database and SQLite's companion files share their existing file owner."""
+    """SQLite connections, snapshots, copies and companions share one file owner."""
 
     __slots__ = ()
     companion_suffixes: ClassVar[tuple[str, ...]] = ("-wal", "-shm", "-journal")
+
+    @classmethod
+    def writer(
+        cls, path: str | os.PathLike[str], contention: StoreContention = DEFAULT_STORE_CONTENTION,
+        **options: object,
+    ) -> sqlite3.Connection:
+        """Open a writer through the store family's typed busy behavior."""
+        return cls.identifiers_only(contention.writer(path, options))
+
+    @staticmethod
+    def identifiers_only(db: sqlite3.Connection) -> sqlite3.Connection:
+        """A double-quoted name is an identifier, never a string: a missing column fails
+        as missing instead of reading back as a literal named after it."""
+        for option in (sqlite3.SQLITE_DBCONFIG_DQS_DML, sqlite3.SQLITE_DBCONFIG_DQS_DDL):
+            db.setconfig(option, False)
+        return db
+
+    @staticmethod
+    def begin_snapshot(db: sqlite3.Connection) -> None:
+        """Acquire one committed read revision before any consumer query."""
+        db.execute("BEGIN")
+        # BEGIN is lazy. Acquire the snapshot before schema decoders can
+        # reclassify BUSY as unsupported data or absent rows.
+        db.execute("SELECT name FROM sqlite_master LIMIT 1").fetchone()
+
+    @classmethod
+    def _configure_reader(cls, db: sqlite3.Connection) -> sqlite3.Connection:
+        try:
+            cls.identifiers_only(db)
+            db.row_factory = sqlite3.Row
+            db.execute("PRAGMA query_only=ON")
+            db.execute("PRAGMA foreign_keys=ON")
+            return db
+        except BaseException:
+            db.close()
+            raise
+
+    @classmethod
+    def _open_reader(
+        cls, path: Path, contention: StoreContention
+    ) -> sqlite3.Connection:
+        return cls._configure_reader(
+            contention.reader(path.resolve().as_uri() + "?mode=ro")
+        )
+
+    @classmethod
+    def _acquire_snapshot(cls, db: sqlite3.Connection) -> sqlite3.Connection:
+        try:
+            cls.begin_snapshot(db)
+            return db
+        except BaseException:
+            db.close()
+            raise
+
+    @classmethod
+    def read_snapshot(
+        cls, path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION
+    ) -> sqlite3.Connection:
+        """Open and acquire one consistent read-only snapshot with SQLite's busy handler."""
+        return cls._acquire_snapshot(cls._open_reader(path, contention))
+
+    @classmethod
+    def recovering_snapshot(cls, path: Path) -> sqlite3.Connection:
+        """Acquire evidence after SQLite is allowed to recover an existing hot journal."""
+        uri = path.resolve().as_uri() + "?mode=rw"
+        return cls._acquire_snapshot(cls._configure_reader(cls.writer(uri, uri=True)))
+
+    @classmethod
+    @contextmanager
+    def observing(
+        cls, path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION
+    ):
+        """Read existing committed data without initializing storage or permitting writes."""
+        with CoordinationReadUnavailable.checking():
+            try:
+                with closing(cls.read_snapshot(path, contention)) as db:
+                    try:
+                        yield db
+                    finally:
+                        if db.in_transaction:
+                            db.execute("ROLLBACK")
+            except sqlite3.OperationalError as error:
+                error.add_note(
+                    f"SQLite observation store: {path}; "
+                    f"SQLite error: {error.sqlite_errorname} ({error.sqlite_errorcode})"
+                )
+                raise
+
+    @classmethod
+    def is_database(cls, path: Path) -> bool:
+        if path.stat().st_size == 0:
+            return False
+        # Even a header-only plain open/read/close can cancel locks owned by
+        # another SQLite connection in this process. Let SQLite own the fd.
+        with CoordinationReadUnavailable.checking():
+            try:
+                with closing(cls.read_snapshot(path, StoreBusy())):
+                    return True
+            except sqlite3.DatabaseError as error:
+                if error.sqlite_errorcode & 0xFF == sqlite3.SQLITE_NOTADB:
+                    return False
+                raise
+
+    @classmethod
+    def copy_file(cls, source: str | Path, target: str | Path) -> Path:
+        """Copy a committed SQLite snapshot, excluding uncommitted companion bytes."""
+        source, target = Path(source), Path(target)
+        with (closing(cls.read_snapshot(source)) as original,
+              closing(cls.writer(target)) as copied):
+            original.backup(copied)
+        shutil.copystat(source, target)
+        return target
+
+    @classmethod
+    def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
+        """SQLite's snapshot owns the whole cut without a file lock spanning the copy."""
+        cls.copy_file(source, target)
+        return frozenset((source,))
+
+    @classmethod
+    def digest(cls, path: Path) -> str:
+        """Hash a consistent SQLite schema and row dump, including committed WAL data."""
+        with closing(cls.read_snapshot(path)) as database:
+            content = hashlib.sha256()
+            for statement in database.iterdump():
+                content.update(statement.encode())
+            return content.hexdigest()
 
     @classmethod
     def files(cls, path: Path) -> tuple[Path, ...]:
@@ -289,6 +519,49 @@ class SQLiteFile(RootFile):
             if connection.in_transaction:
                 connection.execute("ROLLBACK")
             raise
+
+
+class StoreCommittedError(OSError):
+    """COMMIT succeeded; change signalling or connection retirement failed."""
+
+
+class PublishedSQLiteFile(SQLiteFile):
+    """Publish only completed row changes, independently of database attachment."""
+
+    __slots__ = ()
+
+    @staticmethod
+    def _source_paths(path: Path) -> tuple[Path, ...]:
+        return (path.with_suffix(".changed"),)
+
+    @classmethod
+    def source_paths(cls, root: Path) -> tuple[Path, ...]:
+        return cls._source_paths(cls.path_in(root))
+
+    @classmethod
+    def member_paths(cls, path: Path) -> frozenset[Path]:
+        return super().member_paths(path) | frozenset(cls._source_paths(path))
+
+    @classmethod
+    @contextmanager
+    def publishing_changes(
+        cls, connection: sqlite3.Connection, path: Path,
+    ) -> Iterator[None]:
+        before = connection.total_changes
+        yield
+        if connection.total_changes != before:
+            cls.publish_change(path)
+
+    @classmethod
+    def publish_change(cls, path: Path) -> None:
+        """Announce a completed mutation or replacement of this owner's store."""
+        marker, = cls._source_paths(path)
+        try:
+            marker.write_bytes(b"")
+        except OSError as error:
+            raise StoreCommittedError(
+                f"Committed {path}, but change notification failed: {error}"
+            ) from error
 
 
 class RuntimeFile(RootFile):
