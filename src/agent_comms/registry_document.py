@@ -44,6 +44,7 @@ from .thread_identity import (
     GenerationCounter,
     OwnerIdentity,
     RecordedThreadIncarnation,
+    ThreadAuthority,
     TurnIdentity,
 )
 from .thread_presentation import ThreadOwnerBinding
@@ -874,6 +875,19 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
     def claimed_identity(self, name: str) -> ClaimedIdentity:
         canonical = self.canonical_name(name)
         return ClaimedIdentity(self.threads[canonical].incarnation, self.claim_generation(canonical))
+
+    def same_authority(self, name: str, other: RegistrySnapshot, other_name: str) -> bool:
+        """One participant retains its owner, input claim and registered presence.
+
+        Titles, aliases and unrelated rows do not allocate or revoke authority.
+        """
+        return (
+            self.authority(name) == other.authority(other_name)
+            and self.status(name) == other.status(other_name)
+        )
+
+    def authority(self, name: str) -> ThreadAuthority:
+        return ThreadAuthority(self.owner_identity(name), self.claimed_identity(name))
 
     def owner_binding(self, name: str) -> ThreadOwnerBinding:
         canonical = self.canonical_name(name)

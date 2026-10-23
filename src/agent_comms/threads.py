@@ -398,6 +398,17 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
                     thread.worktree, thread.execution, thread.model, thread.thinking_level)
         return launch(self) == launch(other)
 
+    def same_turn(self, other: Thread) -> bool:
+        """Compare captured references and epochs, including captures made while idle.
+
+        Reading the mutable turn files again could make two revoked leases look
+        equal. The saved references and registry generations retain their fence.
+        """
+        return (
+            self.turn_record == other.turn_record
+            and self.turn_generation == other.turn_generation
+        )
+
     def without_turn(self) -> Thread:
         """Drop the reference; the registry transaction owns revoking the record."""
         return replace(self, turn_record=NoTurnRecord())

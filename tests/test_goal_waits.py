@@ -30,5 +30,7 @@ def test_finished_turn_reads_only_its_waits_after_rename(tmp_path, monkeypatch):
         guard.setattr(RecordedGoalWait, "__post_init__", decoded_wait)
         guard.setattr(GoalWaits, "read", refuse_full_read)
         assert comms.goals.release_waits_after_terminal_turn(fence) == ("owner",)
-    assert decoded == [goal.id]
+    # Capturing and validating this same wait may each decode it; unrelated
+    # rows must never be decoded by either read.
+    assert set(decoded) == {goal.id}
     assert len(comms.goals.waits.read()) == 200
