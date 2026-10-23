@@ -21,8 +21,9 @@ from agent_comms.threads import Thread
 async def test_trusted_load_recovers_after_real_flock_contention(tmp_path, private_comms):
     # Draining an owned inbox publishes native cursors, which only a private root may do.
     comms = private_comms
-    owner = Thread('reader', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
-    comms.registry.declare(owner)
+    owner = comms.registry.declare(
+        Thread('reader', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+    )
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.participants.register(
             owner.incarnation.lookup, committed=True
