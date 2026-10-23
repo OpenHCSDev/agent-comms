@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from .channel_input_batch import SingleInputBatch
     from .private_registry_guard import RegistryPrivacy
     from .registry_document import RegistrySnapshot
-    from .thread_identity import TurnId
+    from .thread_identity import RegisteredTurn
     from .turn_lease import TurnLeaseFence
 
 
@@ -298,7 +298,7 @@ class InputDispositions(DurableStore):
         return self._update(*_members("key", (row.key for row in originals)), reserve)
 
     def reserve_turn(
-        self, owner: str, turn: TurnId, claim_scope: int, text: str, *, ownership: ExitStack,
+        self, owner: str, turn: RegisteredTurn, claim_scope: int, text: str, *, ownership: ExitStack,
     ) -> SingleInputBatch:
         """Enlist rollback before publication; caller retains the original wire scope."""
         from .channel_input_batch import SingleInputBatch

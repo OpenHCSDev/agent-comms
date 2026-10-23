@@ -28,7 +28,7 @@ from agent_comms.ordinary_turn_rules import (
 from .reservation_rules import ReservationRule, ReservationViolationError
 from .routing import TurnRouting
 from agent_comms.send_outcome import AuthorityChangedSend, DeferredSend, GrantedSend, RefusedSend, SendOutcome
-from .thread_identity import TurnId
+from .thread_identity import RegisteredTurn
 from .turn_input_source import (
     OriginalTurnInput,
     TurnInputSource,
@@ -52,7 +52,7 @@ class OwnedSend(CodingToolOwner):
     goal_store: GoalAttemptStore
     session_id: str
     thread: Thread
-    turn: TurnId
+    turn: RegisteredTurn
     claim_generation: int
     original: OriginalTurnInput
     goal_permit: GoalTurnPermit

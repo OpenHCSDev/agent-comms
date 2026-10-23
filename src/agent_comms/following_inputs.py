@@ -12,7 +12,7 @@ from .coordinator import Coordination
 from .owned_send import OwnedSend
 from agent_comms.goal_turn_permit import NoLaunchPermit
 from .queued_input import DeliveredInput, InputHandoffRefused
-from .thread_identity import ClaimedIdentity, TurnId
+from .thread_identity import ClaimedIdentity, RegisteredTurn
 from .turn_input_source import AcceptedFollowingInput
 
 if TYPE_CHECKING:
@@ -89,7 +89,7 @@ class OwnerFollowingInputs(FollowingInputs):
             goal_store=await Coordination.run_worker(inputs.comms.goals.open_goal_store),
             session_id=self.session_id,
             thread=thread,
-            turn=TurnId(lease.turn_id),
+            turn=RegisteredTurn(lease.turn_id),
             claim_generation=lease.claimed_generation,
             original=original,
             goal_permit=NoLaunchPermit(),

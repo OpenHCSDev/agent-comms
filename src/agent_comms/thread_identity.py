@@ -27,6 +27,7 @@ from .declared_family import (
 from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,
+    TurnId,
     SingleFieldValue,
     WireName,
     WireValue,
@@ -442,19 +443,8 @@ class ThreadIncarnationRecord:
 
 
 @dataclass(frozen=True, slots=True)
-class TurnId(ProjectionSource):
-    value: str
-
-    @classmethod
-    def for_registration(cls, value: str) -> TurnId:
-        value = FieldCodec.decode(str, value)
-        if not 0 < len(value) <= 128:
-            raise ValueError("live owner turn requires a bounded ID")
-        return cls(value)
-
-    def __post_init__(self) -> None:
-        if not self.value:
-            raise ValueError("Turn ID cannot be empty")
+class RegisteredTurn(ProjectionSource):
+    value: TurnId
 
 
 @dataclass(frozen=True, slots=True)
@@ -524,7 +514,7 @@ class TurnFence:
     """One exact turn identity and its recorded input generation."""
 
     identity: TurnIdentity
-    turn_id: str
+    turn_id: TurnId
     claimed_generation: int
 
     def renamed(self, name: str) -> Self:

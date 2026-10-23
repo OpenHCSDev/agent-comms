@@ -40,7 +40,7 @@ from agent_comms.messages import ClaimMessage, ClaimNoticeKind
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.read_basis import AllChannelDisplayScope, DMDisplayScope
 from agent_comms.selected_source_batch import SelectedSource
-from agent_comms.thread_identity import TurnId, TurnIdentity
+from agent_comms.thread_identity import RegisteredTurn, TurnIdentity
 from agent_comms.turn_context import (
     ContextManifest,
     OwnerProvenance,
@@ -66,7 +66,7 @@ def record_context(comms: Comms, name: str, generation: int) -> None:
     )
     comms.contexts.record_after(UNREAD_CONTEXT, ContextManifest(
         owner.incarnation,
-        RecordedContextTurn(TurnId(f"turn-{generation}"), TurnIdentity(owner.incarnation, generation)),
+        RecordedContextTurn(RegisteredTurn(f"turn-{generation}"), TurnIdentity(owner.incarnation, generation)),
         (segment,),
         "pi.estimateTokens",
     ))

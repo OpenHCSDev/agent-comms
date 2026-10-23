@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from .comms import Comms
     from .goals import Goal, GoalDeclaration
     from .pi_payloads import PiUsage
-    from .thread_identity import TurnId
+    from .thread_identity import RegisteredTurn
     from .threads import Thread
     from .turn_lease import TurnLeaseFence
 
@@ -34,7 +34,7 @@ class VerifiedGoalSettlement(MroDispatch):
     store: GoalAttemptStore
     permit: LaunchPermit
     goal: Goal
-    turn: TurnId
+    turn: RegisteredTurn
 
     @classmethod
     def settle_current(cls, account: TurnGoalAccount) -> None:
@@ -83,7 +83,7 @@ class OriginGoalSettlement(VerifiedGoalSettlement):
 class TurnGoalAccount:
     comms: Comms
     owner: Thread
-    turn: TurnId
+    turn: RegisteredTurn
     lease: TurnLeaseFence
     permit: GoalTurnPermit
     pending_origins: dict[str, str]

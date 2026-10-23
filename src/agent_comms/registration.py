@@ -20,7 +20,7 @@ from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import TurnRouting
 from .storage_rules import StorageRule
 from .thread_execution import CommanderForkExecution
-from .thread_identity import GenerationCounter, TurnId
+from .thread_identity import GenerationCounter, RegisteredTurn
 from .thread_status import (
     ConnectedThreadStatus,
     NoBridgeThreadStatus,
@@ -325,7 +325,7 @@ class Registration:
     ) -> tuple[Thread, int]:
         """Claim a turn against the input generation, allowing unrelated metadata changes."""
         Thread.require_declaration(expected)
-        turn = TurnId.for_registration(turn_id)
+        turn = RegisteredTurn(turn_id)
         generation = GenerationCounter.require_positive(expected_generation)
         with self.store.editing() as edit:
             owner = RegistryOwner.capture_local(edit.original.snapshot, expected.name)
@@ -344,7 +344,7 @@ class Registration:
     ) -> tuple[Thread, int]:
         """Claim against the exact captured declaration and stable owner generation."""
         Thread.require_declaration(expected)
-        turn = TurnId.for_registration(turn_id)
+        turn = RegisteredTurn(turn_id)
         generation = GenerationCounter.require_positive(expected_owner_generation)
         with self.store.editing() as edit:
             snapshot = edit.original.snapshot
@@ -359,7 +359,7 @@ class Registration:
         self, name: str, turn_id: str, *, routing: TurnRouting | None = None
     ) -> tuple[Thread, int]:
         """Atomic local begin-turn, never reviving a stopped or replaced owner."""
-        turn = TurnId.for_registration(turn_id)
+        turn = RegisteredTurn(turn_id)
         with self.store.editing() as edit:
             owner = RegistryOwner.capture_local(edit.original.snapshot, name)
             owner.thread.turn_record.read().require_idle()

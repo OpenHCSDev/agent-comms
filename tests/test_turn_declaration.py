@@ -5,7 +5,7 @@ import pytest
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
-from agent_comms.thread_identity import TurnId
+from agent_comms.thread_identity import RegisteredTurn
 from agent_comms.turn_lease import ActiveTurn, NoTurn, TurnDeclaration
 from agent_comms.turn_phase import ToolRunningPhase
 
@@ -22,7 +22,7 @@ def test_idle_turn_answers_without_an_active_record():
     assert FieldCodec.encode(idle) is None
     idle.require_idle()
     assert idle.report_turn == ''
-    assert not idle.matches(TurnId('turn'))
+    assert not idle.matches(RegisteredTurn('turn'))
     assert not idle.started_by(10000)
     assert idle.observed_id('finished') == 'finished'
     assert idle.without_claim() is idle
@@ -33,6 +33,6 @@ def test_idle_turn_answers_without_an_active_record():
     with pytest.raises(RelationViolationError):
         idle.require_active()
     with pytest.raises(RelationViolationError):
-        idle.require_turn(TurnId('turn'))
+        idle.require_turn(RegisteredTurn('turn'))
 
 

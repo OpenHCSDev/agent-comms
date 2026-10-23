@@ -21,7 +21,7 @@ from agent_comms.input_attempt import (
 )
 from agent_comms.input_disposition import InputDispositionRow, InputDispositions, InputDocument
 from agent_comms.errors import RelationViolationError
-from agent_comms.thread_identity import TurnId
+from agent_comms.thread_identity import RegisteredTurn
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from stored_inputs import insert_inputs, stored_inputs
 from agent_comms.threads import Thread
@@ -71,12 +71,12 @@ def test_failure_after_original_publication_retires_the_batch_and_schedule(tmp_p
         tuple(row.key for row in rows)
     ))
     with pytest.raises(OSError), ExitStack() as ownership:
-        store.reserve_turn("worker", TurnId("scheduled"), 1, "Original schedule", ownership=ownership)
+        store.reserve_turn("worker", RegisteredTurn("scheduled"), 1, "Original schedule", ownership=ownership)
         raise OSError("later failure")
     scheduled = stored_inputs(store.root)
     assert all(isinstance(row, NotSentInput) for row in scheduled.rows.values())
     with ExitStack() as ownership, pytest.raises(RelationViolationError):
-        store.reserve_turn("worker", TurnId("scheduled"), 1, "Replacement", ownership=ownership)
+        store.reserve_turn("worker", RegisteredTurn("scheduled"), 1, "Replacement", ownership=ownership)
     assert stored_inputs(store.root) == scheduled
 
 

@@ -6,7 +6,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.image_input import ImageInput
 from agent_comms.native_tool_call import OwnerToolConnection
 from agent_comms.pi_commands import Prompt
-from agent_comms.thread_identity import TurnId, TurnIdentity
+from agent_comms.thread_identity import RegisteredTurn, TurnIdentity
 from agent_comms.turn_context import (
     ContextManifest,
     OwnerProvenance,
@@ -23,7 +23,7 @@ from conftest import publish_initial
 def manifest(owner, generation=1):
     source=OwnerProvenance(owner.incarnation, 'original-input-source')
     segment=SegmentManifest(TranscriptSegment,(source,),hashlib.sha256(b'PRIVATE INPUT').hexdigest(),13,4)
-    return ContextManifest(owner.incarnation,RecordedContextTurn(TurnId('original-turn'),TurnIdentity(owner.incarnation,generation)),(segment,),'pi.estimateTokens')
+    return ContextManifest(owner.incarnation,RecordedContextTurn(RegisteredTurn('original-turn'),TurnIdentity(owner.incarnation,generation)),(segment,),'pi.estimateTokens')
 
 
 def corrupt_context_kind(comms, name, kind):

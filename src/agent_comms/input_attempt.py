@@ -13,6 +13,7 @@ from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,
     Id128Text,
+    TurnId,
     NullMember,
     PublicExclude,
     WireName,
@@ -357,7 +358,7 @@ class ReservedInput(Unresolved, RecoverableUnboundInput):
 @dataclass(frozen=True)
 class SentInput(StoredInput):
     has_native_binding = True
-    turn_id: Annotated[str, PublicExclude(), WireRequired()]
+    turn_id: Annotated[TurnId, PublicExclude(), WireRequired()]
     native_id: Annotated[
         str, PublicExclude(), WireRequired()
     ]
@@ -369,9 +370,6 @@ class SentInput(StoredInput):
     def __post_init__(self) -> None:
         super().__post_init__()
         try:
-            from .thread_identity import TurnId
-
-            TurnId.for_registration(self.turn_id)
             Id128Text.decode(self.native_id)
         except ValueError as error:
             raise ValueError("Invalid native input attempt") from error

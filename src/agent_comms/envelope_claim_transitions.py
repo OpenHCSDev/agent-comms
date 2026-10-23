@@ -19,6 +19,7 @@ from .field_codec import (
     EnvelopeSequence,
     FieldCodec,
     Id128Text,
+    TurnId,
     NullMember,
     ProjectionSequence,
     RecordMember,
@@ -30,7 +31,7 @@ from .field_codec import (
     WireRequired,
 )
 from .message_reference import MessageReference
-from .thread_identity import GenerationCounter, RecordedThreadIncarnation, TurnId
+from .thread_identity import GenerationCounter, RecordedThreadIncarnation
 
 if TYPE_CHECKING:
     from .coordination_tables.attempts import AttemptRecord
@@ -178,11 +179,10 @@ class RecordedScope(ClaimScope, declared_name=None):
 
     owner_claimed_generation: int
     operation_id: Annotated[str, Id128Text]
-    turn_id: str
+    turn_id: TurnId
 
     def __post_init__(self) -> None:
         GenerationCounter.require_positive(self.owner_claimed_generation)
-        TurnId.for_registration(self.turn_id)
 
     def held_at(self, claimed_generation: int) -> bool:
         return claimed_generation == self.owner_claimed_generation

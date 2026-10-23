@@ -14,7 +14,7 @@ from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_turn_context import NativeContextData, NativeContextManifestData
 from agent_comms.runtime_requests import (RuntimeRequest, ContextRecordedSegmentRuntimeRequest,
     ContextCoreRuntimeRequest, ContextCoreSourceRuntimeRequest)
-from agent_comms.thread_identity import TurnId, TurnIdentity
+from agent_comms.thread_identity import RegisteredTurn, TurnIdentity
 from agent_comms.thread_identity import RecordedThreadIncarnation, ReportedTools
 from agent_comms.turn_context import ObservedDispatchRequest, UnobservedDispatchRequest
 from agent_comms.turn_context import (
@@ -36,7 +36,7 @@ def identity(tmp_path):
 
 def recorded(segments):
     owner = RecordedThreadIncarnation("original-owner", 17002.0)
-    turn = RecordedContextTurn(TurnId("original-turn"), TurnIdentity(owner, 2))
+    turn = RecordedContextTurn(RegisteredTurn("original-turn"), TurnIdentity(owner, 2))
     return ContextManifest(owner, turn, tuple(segments), "pi.estimateTokens",
                            ObservedDispatchRequest("request-one"))
 

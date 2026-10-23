@@ -67,7 +67,7 @@ from .thread_identity import (
     ThreadIncarnationRecord,
     ThreadRole,
     TurnFence,
-    TurnId,
+    RegisteredTurn,
     TurnIdentity,
     UnobservedTools,
 )
@@ -488,7 +488,7 @@ class Thread(ThreadProvenance):
     def require_current_turn(self, claim_scope: int) -> None:
         self.turn_record.read().require_current(claim_scope, self.turn_generation)
 
-    def require_turn(self, turn_id: TurnId, claim_scope: int) -> None:
+    def require_turn(self, turn_id: RegisteredTurn, claim_scope: int) -> None:
         if not self.turn_lease.attests(claim_scope, turn_id):
             raise RelationViolationError("live owner does not hold the requested turn")
 
@@ -576,10 +576,10 @@ class Thread(ThreadProvenance):
     def require_turn_lease(self) -> TurnLeaseFence:
         return self.turn_lease.require(RelationViolationError("An authorized original turn is required"))
 
-    def has_authored_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
+    def has_authored_turn(self, identity: TurnIdentity, turn: RegisteredTurn) -> bool:
         return self.turn_lease.authored(identity, turn)
 
-    def has_observed_task_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
+    def has_observed_task_turn(self, identity: TurnIdentity, turn: RegisteredTurn) -> bool:
         """Check whether a task record can refer to this thread's current or preceding turn.
 
         Reject a different thread registration. During a turn, accept its exact
