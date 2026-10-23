@@ -10,7 +10,7 @@ import weakref
 
 import pytest
 
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import SavedSessionFile
 from agent_comms.view_unread import transcript_read_state
 from agent_comms.comms import wire
 from native_unread_fixture import native_reader

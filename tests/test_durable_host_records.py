@@ -3,7 +3,7 @@ import asyncio
 import json
 
 import pytest
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import SavedSessionFile
 from agent_comms.pi_payloads import ReportedText, RequestId
 from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.native_entries import NativeEntry, StoredEntry, TranscriptProjection

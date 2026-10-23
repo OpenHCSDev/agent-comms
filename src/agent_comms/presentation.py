@@ -74,7 +74,8 @@ from .revision_views import (
 )
 from .runtime_info import RuntimeInfo
 from .storage_room import RoomLedger
-from .thread_identity import ThreadIncarnation, ThreadProvenance
+from .thread_identity import ThreadIncarnation
+from .thread_provenance import ThreadProvenance
 from .thread_presentation import (
     ThreadOwnerBinding,
     ThreadPresentation,

@@ -1,5 +1,5 @@
 from conftest import transcript_records
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import SavedSessionFile
 from agent_comms.coordination_errors import TranscriptChanged
 import json
 from dataclasses import replace

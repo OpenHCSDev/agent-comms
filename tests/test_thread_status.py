@@ -8,7 +8,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import SavedSessionFile
 from agent_comms.activity import Activity, ActivityState
 from agent_comms.comms import wire
 from conftest import installed_comms

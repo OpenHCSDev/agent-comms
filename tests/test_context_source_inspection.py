@@ -8,7 +8,7 @@ import json
 
 import pytest
 
-from agent_comms.thread_text import NoSessionFile
+from agent_comms.session_file import NoSessionFile
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_turn_context import NativeContextData, NativeContextManifestData
