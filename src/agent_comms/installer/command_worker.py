@@ -1,4 +1,4 @@
-"""Run installed CLI commands over one interpreter's explicit request lifetime."""
+"""Run declared installer operations in one interpreter, one request per line."""
 
 from __future__ import annotations
 
@@ -9,29 +9,29 @@ from io import StringIO
 
 from agent_comms import cli
 from agent_comms.field_codec import FieldCodec
+from agent_comms.installer.interpreter_operation import RuntimeProbe
 
 
 @dataclass(frozen=True)
-class CommandReply:
+class CliOutput:
     returncode: int
     stdout: str
 
 
 @dataclass(frozen=True)
-class CommandRequest:
+class CliCommandProbe(RuntimeProbe[CliOutput]):
     arguments: tuple[str, ...]
 
-    def run(self) -> CommandReply:
+    def run(self) -> CliOutput:
         with StringIO() as output, redirect_stdout(output):
             returncode = cli.main(self.arguments)
-            return CommandReply(returncode, output.getvalue())
+            return CliOutput(returncode, output.getvalue())
 
 
 def main() -> None:
     for line in sys.stdin:
-        request = FieldCodec.decode(CommandRequest, FieldCodec.parse(line))
-        reply = request.run()
-        print(FieldCodec.compact(FieldCodec.encode(reply)), flush=True)
+        probe = FieldCodec.decode(RuntimeProbe, FieldCodec.parse(line))
+        print(probe.encode_answer(probe.run()), flush=True)
 
 
 if __name__ == "__main__":
