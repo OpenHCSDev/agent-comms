@@ -31,11 +31,12 @@ from agent_comms.runtime import present_session
 from agent_comms.thread_identity import ClaimedIdentity
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from stored_inputs import stored_inputs
+from agent_comms.threads import Thread
 
 
 def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, float, int]:
     comms = prepare_native_comms(wire(tmp_path / "wire"))
-    thread = comms.registry.new_thread('beta', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+    thread = Thread('beta', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(thread)
     agent = CommsAgent(comms)
     agent.sessions.bindings["beta"] = "beta"

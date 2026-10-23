@@ -20,6 +20,7 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.todos import TodoStore
 from agent_comms.typed_table import ReconciledFile
 from test_todos import order
+from agent_comms.threads import Thread
 
 
 @pytest.fixture
@@ -30,7 +31,7 @@ def comms(tmp_path: Path) -> Comms:
 
 def test_every_bus_file_is_a_declared_root_file(tmp_path: Path, source_repository, comms: Comms) -> None:
     for name in ("owner", "peer"):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     sent = comms.messaging.send("peer", "owner", "Declare the bus files").message
     resource = tmp_path / "owned.py"
     resource.write_text("owned\n")

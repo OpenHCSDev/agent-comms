@@ -7,10 +7,11 @@ import pytest
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
+from agent_comms.threads import Thread
 
 
 def _declare(comms, name, worktree):
-    comms.registry.declare(comms.registry.new_thread(
+    comms.registry.declare(Thread(
         name, frozenset(), worktree, process_identity=ProcessIdentity.capture(os.getpid())))
 
 

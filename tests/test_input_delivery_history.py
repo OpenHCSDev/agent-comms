@@ -9,6 +9,7 @@ from agent_comms.input_attempt import (
 )
 from agent_comms.input_disposition import InputDispositions
 from stored_inputs import stored_inputs
+from agent_comms.threads import Thread
 
 
 def seed(comms, name):
@@ -23,8 +24,8 @@ def seed(comms, name):
 
 def test_history_clear_is_notice_only_and_survives_rename_and_reopen(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path)))
-    comms.registry.declare(comms.registry.new_thread('peer', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('owner', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('peer', frozenset(), str(tmp_path)))
     ledger = seed(comms, "owner")
     scope = OwnerQueueInputDeliveryScope(frozenset({"bus:2", "bus:8", "acp:ui"}))
     ledger.record("bus:3", seq=3, owner="peer", claim_scope=1, target="peer", text="Peer")
@@ -72,7 +73,7 @@ def test_history_clear_is_notice_only_and_survives_rename_and_reopen(tmp_path):
 
 def test_no_owner_queue_observation_never_dismisses_inputs(tmp_path):
     comms = wire(tmp_path)
-    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('owner', frozenset(), str(tmp_path)))
     ledger = InputDispositions(tmp_path)
     ledger.record("bus:1", seq=1, owner="owner", claim_scope=1, target="owner", text="Hello")
     before = ledger.path.read_bytes()

@@ -23,6 +23,7 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms_hooks.session import started
 from agent_comms_hooks.watch import LiveWatch, WatchClaim, WatchRecord
+from agent_comms.threads import Thread
 
 
 def test_session_start_hook_exit_preserves_the_recorded_owner_for_install_pause(
@@ -31,7 +32,7 @@ def test_session_start_hook_exit_preserves_the_recorded_owner_for_install_pause(
     session = 'copied-session'
     comms = wire(tmp_path / 'bus')
     Bus.install(Bus.path_in(comms.root))
-    comms.registry.declare(comms.registry.new_thread(
+    comms.registry.declare(Thread(
         'bridge-copy', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
     transcript = tmp_path / f'{session}.jsonl'
     transcript.write_text('')

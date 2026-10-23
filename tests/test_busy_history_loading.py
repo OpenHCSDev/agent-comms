@@ -16,6 +16,7 @@ from agent_comms.ui_model.observation import (
     ObservationProcess, ReadBusy, ReadNotifications, ReadTranscript,
 )
 from agent_comms.thread_identity import UnrecordedThreadIncarnation
+from agent_comms.threads import Thread
 
 
 def saved_history(tmp_path):
@@ -27,7 +28,7 @@ def saved_history(tmp_path):
         {"type": "message", "id": "saved-answer", "parentId": None, "timestamp": timestamp,
          "message": {"role": "assistant", "content": [{"type": "text", "text": "Saved answer"}]}},
     )))
-    comms.registry.declare(comms.registry.new_thread('saved', frozenset(), str(tmp_path), session_file=str(session)))
+    comms.registry.declare(Thread('saved', frozenset(), str(tmp_path), session_file=str(session)))
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         PrivateCoordinatorTable.install(store)
     return comms, session

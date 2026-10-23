@@ -18,6 +18,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.context_segments.retained import RetainedSegment
 from agent_comms.turn_lease import NoTurnLease
 from stored_inputs import stored_inputs
+from agent_comms.threads import Thread
 
 
 pytestmark = pytest.mark.usefixtures("durable_home")
@@ -34,7 +35,7 @@ def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
     saved = tmp_path / "original.jsonl"
     saved_source(saved)
     goal = Goal("Original task goal, not an exported human constraint", "original-goal", published_seq=0, revision=7)
-    owner = comms.registry.declare(comms.registry.new_thread('reader', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(saved), comms.root), goal=goal))
+    owner = comms.registry.declare(Thread('reader', frozenset(), str(tmp_path), session_file=RegistrySessionLocation.from_path(str(saved), comms.root), goal=goal))
     wording = "Original human constraint λ; preserve UNKNOWN and its source."
     original = comms.messaging.send_user_message(CommandTarget.named(owner.name), wording, worktree=owner.worktree)
     comms.messaging.pin_user_constraint(owner.name, original.reference, worktree=owner.worktree)
@@ -61,8 +62,8 @@ def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
 
 def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
     Bus.install(Bus.path_in(comms.root))
-    owner = comms.registry.declare(comms.registry.new_thread('recipient', frozenset(), str(comms.root)))
-    other = comms.registry.declare(comms.registry.new_thread('unaddressed', frozenset(), str(comms.root)))
+    owner = comms.registry.declare(Thread('recipient', frozenset(), str(comms.root)))
+    other = comms.registry.declare(Thread('unaddressed', frozenset(), str(comms.root)))
     wording = "Never replay UNKNOWN.\nPreserve exact λ /source/owned bytes."
     original = comms.messaging.send_user_message(CommandTarget.named(owner.name), wording, worktree=owner.worktree)
     original_prefix = read_history(comms)
@@ -153,7 +154,7 @@ async def original_input_consumer_journey(tmp_path, command):
         claim_scope=origin.claimed_identity.claimed_generation, target="beta", text=wording)
     inputs = agent.inputs.dispositions
     original_inputs = inputs.path.read_bytes()
-    other = comms.registry.declare(comms.registry.new_thread('unaddressed', frozenset(), origin.project))
+    other = comms.registry.declare(Thread('unaddressed', frozenset(), origin.project))
 
     def invoke(*args):
         result = command(comms.root, args)

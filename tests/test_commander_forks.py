@@ -39,6 +39,7 @@ from agent_comms.todos import (
     DeclarationDerivation, PendingProblemOrder, ProblemAllocation, ReleaseTodo,
     Slop, StrikeReason, SupersededVerdict, Todo, TodoError,
 )
+from agent_comms.threads import Thread
 
 
 @pytest.fixture
@@ -56,7 +57,7 @@ def fork_bus(tmp_path):
     for name, worktree in units:
         source.git(source.checkout, 'worktree', 'add', '-q', '-b', f'{name}-work', str(worktree))
     for name, worktree in (('lead', source.checkout), *units):
-        comms.registry.declare(comms.registry.new_thread(
+        comms.registry.declare(Thread(
             name, frozenset({'comms'}), str(worktree),
             model=DeclaredModel('anthropic/claude-opus-4-6'), execution=ExternalThreadExecution))
     comms.goals.update_goal('lead', SetGoalAction(

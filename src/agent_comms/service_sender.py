@@ -16,9 +16,10 @@ class ServiceSender:
     @classmethod
     def register(cls, registry: Registration) -> None:
         """Declare the service sender before its first publication."""
+        from .threads import Thread
         if cls.sender not in registry:
             registry.declare(
-                registry.new_thread(
+                Thread(
                     cls.sender,
                     frozenset(),
                     str(registry.store.path.parent),

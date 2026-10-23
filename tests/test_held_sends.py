@@ -21,6 +21,7 @@ from agent_comms.store_files import _store_lock
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import invoke_tool
 from test_locked_store import event, process
+from agent_comms.threads import Thread
 
 
 def record_refusal(root, started):
@@ -56,7 +57,7 @@ def held_bus(tmp_path):
     comms = wire(tmp_path)
     Bus.install(Bus.path_in(comms.root))
     for name in ('sender', 'recipient'):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     assert comms.bus.inbox('recipient') == []
     barrier = comms.owners.maintenance
     hold = barrier.begin(MaintenanceOperator.current())

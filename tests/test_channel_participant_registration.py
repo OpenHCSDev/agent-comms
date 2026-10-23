@@ -12,6 +12,7 @@ from agent_comms.coordination_cohort import sealed_cohort_assignments
 from agent_comms.coordination_tables.participants import Participants
 from agent_comms.coordinator import Coordination
 from agent_comms.thread_status import StoppedThreadStatus
+from agent_comms.threads import Thread
 
 
 @pytest.mark.asyncio
@@ -19,7 +20,7 @@ async def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_coh
     comms = prepare_native_comms(wire(tmp_path / "wire"))
     root_id = comms.registry.prepare_native_root().namespace
     for name in ("sender", "receiver", "stopped-reviewer", "unstarted-reviewer"):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset({'team'}), str(tmp_path)))
     stopped = comms.registry.require("stopped-reviewer")
     comms.registry.register(stopped, StoppedThreadStatus())
     receiver = comms.registry.require("receiver")

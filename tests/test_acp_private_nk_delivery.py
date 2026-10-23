@@ -28,6 +28,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from test_coordinated_runtime import tmp_path as private_root_fixture
 from agent_comms.thread_model import DeclaredModel
+from agent_comms.threads import Thread
 
 tmp_path = private_root_fixture
 
@@ -36,9 +37,9 @@ def _private_comms(tmp_path):
     root = tmp_path / "wire"
     comms = prepare_native_comms(wire(root))
     comms.registry.declare(
-        comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+        Thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
-    owner = comms.registry.new_thread('beta', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('test/model'))
+    owner = Thread('beta', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('test/model'))
     comms.registry.declare(owner)
     root_id = comms.registry.prepare_native_root().namespace
     with Coordination(str(root / "coordination.sqlite3")) as store:

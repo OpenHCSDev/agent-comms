@@ -20,6 +20,7 @@ from agent_comms.private_path import FileRevision
 from agent_comms.store_files import _store_lock
 from test_acp_private_nk_delivery import _session
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
+from agent_comms.threads import Thread
 
 
 @pytest.mark.asyncio
@@ -119,7 +120,7 @@ async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path
 
 def _covered_session(tmp_path):
     comms, agent, root_id = _session(tmp_path)
-    other = comms.registry.new_thread('alpha', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+    other = Thread('alpha', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(other)
     with Coordination(comms.root / "coordination.sqlite3") as store:
         store.participants.register(

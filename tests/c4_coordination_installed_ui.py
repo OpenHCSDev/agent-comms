@@ -47,7 +47,7 @@ async def main():
     for name in (owner, 'stopped', 'archived'):
         source = root / (name + '.jsonl')
         source.touch()
-        comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(root), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
+        comms.registry.declare(Thread(name, frozenset({'team'}), str(root), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
     comms.owners.stop('stopped')
     comms.owners.stop('archived')
     comms.threads.archive('archived')

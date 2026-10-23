@@ -28,6 +28,7 @@ from agent_comms.maintenance_barrier import (
 )
 from agent_comms.registration import Registration
 from agent_comms.store_files import _async_store_lock, _store_lock
+from agent_comms.threads import Thread
 
 
 def test_nested_holds_restore_the_previous_authority_on_failure(tmp_path, monkeypatch):
@@ -124,7 +125,7 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
     gate = comms.owners.maintenance
     assert gate.read().phase is ReadyPhase
     comms.registry.declare(
-        comms.registry.new_thread(name='owner', tags=frozenset(), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+        Thread(name='owner', tags=frozenset(), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     assert comms.agents.begin_turn("owner", "before")
     comms.agents.finish_turn(comms.registry.require("owner").turn_lease)
@@ -213,7 +214,7 @@ async def test_direct_claim_and_bind_denied_after_phase_ack_in_other_process(tmp
     proc.start()
     assert proc.pid is not None
     comms.registry.declare(
-        comms.registry.new_thread(name='owner', tags=frozenset(), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(proc.pid))
+        Thread(name='owner', tags=frozenset(), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(proc.pid))
     )
     hold = comms.owners.maintenance.begin(MaintenanceOperator.current())
     ready.set()
@@ -229,7 +230,7 @@ async def test_direct_claim_and_bind_denied_after_phase_ack_in_other_process(tmp
 
 def test_rename_and_stopped_same_pid_cannot_reactivate_under_gate(tmp_path: Path) -> None:
     comms = wire(tmp_path / "wire")
-    owner = comms.registry.new_thread(name='owner', tags=frozenset(), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
+    owner = Thread(name='owner', tags=frozenset(), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(owner)
     comms.registry.rename("owner", "renamed")
     comms.registry.unregister("renamed")
@@ -250,7 +251,7 @@ def test_cross_process_claim_races_pause_at_registry_lock(tmp_path: Path) -> Non
     child.start()
     assert child.pid is not None
     comms.registry.declare(
-        comms.registry.new_thread(name='owner', tags=frozenset(), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(child.pid))
+        Thread(name='owner', tags=frozenset(), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(child.pid))
     )
     ready.set()
     hold = comms.owners.maintenance.begin(MaintenanceOperator.current())
@@ -361,7 +362,7 @@ async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> N
     from agent_comms.transcript_events import AssistantTranscript
 
     comms = wire(tmp_path)
-    comms.registry.declare(comms.registry.new_thread('cli', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('cli', frozenset(), str(tmp_path)))
     output = ThreadOutput(comms.transcripts.external('cli'), comms.agents)
     updates = [StartedItem('turn', 'item', ModelWaitPhase('Replying'),
                           TextDraft.from_parts(AssistantTranscript, ('prefix',), RecordedEventTime(1.), 'item')),
@@ -388,16 +389,16 @@ def test_a_registry_write_is_refused_to_all_but_the_maintenance_holder(tmp_path:
     from agent_comms.maintenance_barrier import HOLDER_NONCE
 
     comms = wire(tmp_path)
-    comms.registry.declare(comms.registry.new_thread(name='a', tags=frozenset(), worktree='/wt'))
+    comms.registry.declare(Thread(name='a', tags=frozenset(), worktree='/wt'))
     before = comms.registry.store.path.read_bytes()
     gate = MaintenanceBarrier(comms.registry.store.path)
     hold = gate.begin(MaintenanceOperator.current())
     monkeypatch.delenv(HOLDER_NONCE, raising=False)
     with pytest.raises(RelationViolationError):
-        comms.registry.declare(comms.registry.new_thread(name='b', tags=frozenset(), worktree='/wt'))
+        comms.registry.declare(Thread(name='b', tags=frozenset(), worktree='/wt'))
     assert comms.registry.store.path.read_bytes() == before
     monkeypatch.setenv(HOLDER_NONCE, hold.nonce)
-    comms.registry.declare(comms.registry.new_thread(name='b', tags=frozenset(), worktree='/wt'))
+    comms.registry.declare(Thread(name='b', tags=frozenset(), worktree='/wt'))
     assert 'b' in comms.registry
     gate.clear(hold)
 

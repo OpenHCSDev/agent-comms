@@ -32,6 +32,7 @@ from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.selected_triage import FullSelectedTriage
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from shared_bus_restart_native import attach
+from agent_comms.threads import Thread
 
 
 async def run(stage, package):
@@ -86,7 +87,7 @@ async def run(stage, package):
         environment.pop(key, None)
     os.environ.clear()
     os.environ.update(environment)
-    child = service.registry.new_thread('reply505', source.tags, source.worktree, parent=ForkedParent(source.name), task=source.task, session_file=RegistrySessionLocation.from_path(fork.session_file, service.root), model=source.model, thinking_level=source.thinking_level, execution=source.execution)
+    child = Thread('reply505', source.tags, source.worktree, parent=ForkedParent(source.name), task=source.task, session_file=RegistrySessionLocation.from_path(fork.session_file, service.root), model=source.model, thinking_level=source.thinking_level, execution=source.execution)
     service.registry.declare(child)
     assert 'openhcs' in child.tags
     packets = []

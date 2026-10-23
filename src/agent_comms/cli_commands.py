@@ -1653,7 +1653,7 @@ class RegisterCliCommand(NameArgument, CliCommand):
 
     def apply(self, ctx: Comms) -> CliResult:
 
-        thread = ctx.registry.new_thread(
+        thread = Thread(
             name=self.name,
             tags=self.tags,
             worktree=self.worktree,

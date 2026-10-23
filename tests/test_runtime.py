@@ -26,6 +26,7 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.native_arguments import GivenBinary
 from delivery_owner_fixture import canonical_agent
+from agent_comms.threads import Thread
 
 
 @pytest.fixture
@@ -46,7 +47,7 @@ def runtime_processes():
 
 async def test_dispatched_request_without_a_reply_remains_unknown_and_is_not_replayed(comms):
     process = ProcessIdentity.capture(os.getpid())
-    comms.registry.declare(comms.registry.new_thread(
+    comms.registry.declare(Thread(
         "reply-loss", frozenset(), str(comms.root.parent), process_identity=process,
     ))
     path = socket_path(comms.root, process.pid)
@@ -178,7 +179,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
     comms = wire(tmp_path / "wire")
     old, new = runtime_processes
     old_pid, new_pid = old.pid, new.pid
-    comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), process_identity=old))
+    comms.registry.declare(Thread('worker', frozenset(), str(tmp_path), process_identity=old))
     client = canonical_agent(comms)
     updates = []
 
@@ -277,7 +278,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
         comms.registry.begin_delete("renamed")
         comms.registry.remove("renamed")
         comms.registry.declare(
-            comms.registry.new_thread('worker', frozenset(), str(tmp_path), process_identity=ProcessIdentity(901003, 1))
+            Thread('worker', frozenset(), str(tmp_path), process_identity=ProcessIdentity(901003, 1))
         )
         with pytest.raises(RuntimeError):
             await proxy.request("cancel")

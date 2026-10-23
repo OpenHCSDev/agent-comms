@@ -50,6 +50,7 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsOrderDoneTool, CommsProblemCloseTool, CommsTodoCreateTool
 from order_scope_fixture import FIX_SCOPE
 from source_revision_fixture import SourceRepository
+from agent_comms.threads import Thread
 
 
 @dataclass(frozen=True)
@@ -233,7 +234,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
     Bus.install(Bus.path_in(source.root))
     for number, name in enumerate(("lead", "worker"), 1):
         source.registry.declare(
-            source.registry.new_thread(
+            Thread(
                 name, frozenset({"comms"}), str(tmp_path), created_at=float(number)
             )
         )
@@ -351,7 +352,7 @@ def test_install_due_compares_fetched_main_to_installed_build(
     Repo.git(checkout, "update-ref", "refs/remotes/origin/main", graph.oldest)
     before = Repo.git(checkout, "rev-parse", "HEAD")
     bus = wire(tmp_path / "bus")
-    bus.registry.declare(bus.registry.new_thread("lead", frozenset(), str(checkout)))
+    bus.registry.declare(Thread("lead", frozenset(), str(checkout)))
     Commander.on_root("lead", (graph.repository,), bus.root)
 
     due = InstallDue.violations(bus, "lead")
@@ -391,7 +392,7 @@ def test_install_waits_for_merges_to_settle_into_one_batch(
     Repo.git(checkout, "remote", "set-url", "origin", str(origin))
     Repo.git(checkout, "push", "origin", f"{graph.newer}:refs/heads/main")
     bus = wire(tmp_path / "bus")
-    bus.registry.declare(bus.registry.new_thread("lead", frozenset(), str(checkout)))
+    bus.registry.declare(Thread("lead", frozenset(), str(checkout)))
     Commander.on_root("lead", (graph.repository,), bus.root)
     merged = int(Repo.git(checkout, "log", "-1", "--format=%ct", graph.newer))
 

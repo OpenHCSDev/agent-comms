@@ -76,10 +76,11 @@ class Harness(DeclaredFamily, affix="Harness"):
 
     def register(self, comms: Comms, project: Path) -> tuple[str, ...]:
         """Declare this harness's bus threads; publication already linked and configured it."""
+        from .threads import Thread
         names = comms.registry.snapshot()
         registered = tuple(name for name in self.bus_threads if not names.taken(name))
         for name in registered:
-            comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset(), worktree=str(project),
+            comms.registry.declare(Thread(name=name, tags=frozenset(), worktree=str(project),
                                                                 execution=ExternalThreadExecution))
         return registered
 

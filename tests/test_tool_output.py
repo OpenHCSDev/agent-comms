@@ -19,6 +19,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.text_digest import TextDigest
 from stored_inputs import insert_inputs, stored_inputs
 from agent_comms.goal_waits import RecordedGoalWait
+from agent_comms.threads import Thread
 
 
 def seed_unknown(comms, count, text):
@@ -41,7 +42,7 @@ def inbox_comms(root):
 
     comms = canonical_goal_wire(root)
     for name in ("a", "b"):
-        comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset(), worktree='/wt'))
+        comms.registry.declare(Thread(name=name, tags=frozenset(), worktree='/wt'))
     return comms
 
 

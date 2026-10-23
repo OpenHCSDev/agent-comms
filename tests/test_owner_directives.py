@@ -11,12 +11,13 @@ from agent_comms.owner_requests import RequestDirective
 from agent_comms.tools import invoke_tool
 from agent_comms.typed_table import RowNotFoundError
 from goal_owner_fixture import canonical_goal_wire
+from agent_comms.threads import Thread
 
 
 def requesting_lead(tmp_path):
     comms = canonical_goal_wire(tmp_path)
     for name in ("lead", "claude-ai"):
-        comms.registry.declare(comms.registry.new_thread(name, frozenset({"base"}), str(tmp_path)))
+        comms.registry.declare(Thread(name, frozenset({"base"}), str(tmp_path)))
     comms.goals.todos.add_request(
         comms.registry.require("lead").incarnation, "Tristan's plans, in order")
     return comms

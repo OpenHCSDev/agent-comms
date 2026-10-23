@@ -6,7 +6,7 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Concatenate, Unpack
+from typing import TYPE_CHECKING, Concatenate
 
 from .catalog_store import ChannelCatalog
 from .child_process import NoProcess, ProcessIdentity
@@ -30,7 +30,7 @@ from .thread_status import (
     ThreadStatus,
 )
 from .thread_text import ForkedParent
-from .threads import NewThreadFields, Thread
+from .threads import Thread
 
 if TYPE_CHECKING:
     from .goal_management import Goals
@@ -104,7 +104,7 @@ class Registration:
                 if not existing.parent.named(parent.name):
                     raise RelationViolationError(f"Thread {name!r} is not a fork of {parent.name!r}.")
                 return self._declare_in(edit, existing, _RUNNING_STATUS)
-            child = self.new_thread(name, parent.tags, parent.worktree,
+            child = Thread(name, parent.tags, parent.worktree,
                 parent=ForkedParent(parent.name), model=parent.model,
                 thinking_level=parent.thinking_level, service_tier=parent.service_tier,
                 execution=CommanderForkExecution)
@@ -228,6 +228,11 @@ class Registration:
             channels.remember_tags(change.thread.tags)
 
     def _commit_registration(self, edit: RegistryEdit, change: RegistrationChange) -> RegistrationChange:
+        """Every registration commits here, after inheritance kept a redeclared thread's
+        roots; the registry assigns a new thread its storage roots in this one place."""
+        thread = change.thread
+        change = replace(change, thread=replace(
+            thread, storage_roots=thread.storage_roots.assigned(self.storage_rule, thread.name)))
         change.thread.role.require_maintenance_open(
             MaintenanceBarrier(self.store.path), change.claims_owner
         )
@@ -242,11 +247,6 @@ class Registration:
         if history is not None and intent:
             history.commit(intent)
         return change
-
-    def new_thread(self, name: str, tags: frozenset[str], worktree: str,
-                   **values: Unpack[NewThreadFields]) -> Thread:
-        return Thread(name, tags, worktree,
-                      storage_roots=self.storage_rule.initial_roots(name), **values)
 
     def decide_storage(self, name, effects):
         projection = StorageProjection(self.storage_rule, self.require(name))

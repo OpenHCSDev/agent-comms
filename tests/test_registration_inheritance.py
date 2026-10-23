@@ -15,7 +15,7 @@ from agent_comms.turn_lease import NoTurnLease
 
 
 def test_unchanged_registration_retains_creation_allocation(*, thread_registration):
-    incoming = thread_registration.new_thread('fresh', frozenset(), '/wt')
+    incoming = Thread('fresh', frozenset(), '/wt')
     assert incoming.for_registration("fresh", None) is incoming
     renamed = incoming.for_claim("allocated")
     assert renamed.created_at is incoming.created_at
@@ -42,7 +42,7 @@ def test_declared_new_inheritance_case_needs_no_registration_consumer_edit(threa
 
 def test_registry_redeclaration_inherits_metadata_but_respects_explicit_values(tmp_path):
     comms = wire(tmp_path)
-    initial = comms.registry.new_thread(
+    initial = Thread(
         "owner",
         frozenset({"team"}),
         '/old',
@@ -54,7 +54,7 @@ def test_registry_redeclaration_inherits_metadata_but_respects_explicit_values(t
     )
     initial = replace(initial, worktree=str(tmp_path))
     comms.registry.declare(initial)
-    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread('owner', frozenset(), str(tmp_path)))
     restored = comms.registry.require("owner")
     assert restored == initial
     assert restored.incarnation == initial.incarnation
@@ -69,9 +69,9 @@ def test_registry_redeclaration_inherits_metadata_but_respects_explicit_values(t
 
 def test_operational_alias_redeclaration_returns_preserved_current_owner(tmp_path):
     comms = wire(tmp_path)
-    first = comms.registry.declare(comms.registry.new_thread('before', frozenset({'team'}), str(tmp_path)))
+    first = comms.registry.declare(Thread('before', frozenset({'team'}), str(tmp_path)))
     comms.registry.rename("before", "after")
-    returned = comms.registry.declare(comms.registry.new_thread('before', frozenset(), str(tmp_path), title=GivenThreadText('new')))
+    returned = comms.registry.declare(Thread('before', frozenset(), str(tmp_path), title=GivenThreadText('new')))
     assert returned == comms.registry.require("after")
     assert returned.incarnation.created_at == first.created_at
     assert returned.name == "after" and returned.tags == first.tags
@@ -83,7 +83,7 @@ def test_project_round_trip_excludes_current_project_from_history(tmp_path):
     first.mkdir()
     second.mkdir()
     comms = wire(tmp_path / 'wire')
-    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(first)))
+    comms.registry.declare(Thread('owner', frozenset(), str(first)))
     comms.threads.set_project('owner', str(second))
     comms.threads.set_project('owner', str(first))
     current = comms.registry.require('owner')
@@ -104,7 +104,7 @@ def test_project_change_retains_executing_source_but_refuses_another_input(tmp_p
     old.mkdir()
     new.mkdir()
     comms = wire(tmp_path / 'wire')
-    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(old), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.declare(Thread('owner', frozenset(), str(old), process_identity=ProcessIdentity.capture(os.getpid())))
     original = comms.agents.begin_turn('owner', 'original-turn')
     try:
         comms.threads.set_project('owner', str(new))
@@ -139,7 +139,7 @@ def test_source_publication_refuses_unrecorded_project_replacement(tmp_path):
     from agent_comms.coordination_errors import StaleFence
 
     comms = wire(tmp_path)
-    comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path / 'old'), process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.declare(Thread('owner', frozenset(), str(tmp_path / 'old'), process_identity=ProcessIdentity.capture(os.getpid())))
     original = comms.agents.begin_turn('owner', 'original-turn')
     current = comms.registry.require('owner')
     comms.registry.register(replace(current, worktree=str(tmp_path / 'other')))

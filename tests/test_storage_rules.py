@@ -54,7 +54,7 @@ def test_registry_rule_supplies_new_thread_roots(tmp_path):
     }))
     comms = wire(tmp_path)
     rule = comms.registry.storage_rule
-    thread = comms.registry.new_thread('worker', frozenset(), str(tmp_path / 'home'))
+    thread = Thread('worker', frozenset(), str(tmp_path / 'home'))
     assert thread.storage_roots.scratch == tmp_path / 'scratch' / 'worker'
     assert rule.floor_gib == 47
     assert comms.registry.declare(thread).storage_roots == thread.storage_roots
@@ -71,8 +71,8 @@ def test_removed_worktree_frees_quota_and_another_home_cannot_claim_its_parent(t
     rule = StorageRule(checkout_base=base, scratch_base=tmp_path / 'scratch', floor_gib=0, max_checkouts=1)
     comms = wire(tmp_path / 'wire')
     comms.registry.storage_rule = rule
-    thread = comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(home)))
-    other = comms.registry.declare(comms.registry.new_thread('other', frozenset(), str(tmp_path)))
+    thread = comms.registry.declare(Thread('worker', frozenset(), str(home)))
+    other = comms.registry.declare(Thread('other', frozenset(), str(tmp_path)))
     assert rule.checkouts_of(thread) == (home, old)
     storage = UnitStorage.read(rule, thread)
     assert storage.home == home
@@ -105,7 +105,7 @@ def test_cannot_remove_current_project_but_can_remove_another_checkout(tmp_path)
     project_link.symlink_to(current, target_is_directory=True)
     comms = wire(tmp_path / 'wire')
     comms.registry.storage_rule = StorageRule(checkout_base=base, scratch_base=tmp_path / 'scratch')
-    thread = comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(project_link)))
+    thread = comms.registry.declare(Thread('worker', frozenset(), str(project_link)))
     assert thread.project_path == current
     assert UnitStorage.read(comms.registry.storage_rule, thread).home == current
     with pytest.raises(StorageDenied):

@@ -33,6 +33,7 @@ from agent_comms.thread_text import ForkedParent, GivenThreadText
 from agent_comms.typed_table import TypedTable
 from source_programs import SourcePrograms
 from source_revision_fixture import SourceRepository
+from agent_comms.threads import Thread
 
 pytest_plugins = (goal_owner_fixture.__name__,)
 
@@ -389,8 +390,8 @@ def thread_registration(tmp_path_factory):
 def wired(comms: Comms) -> Comms:
     """A wire with PR111 (parent) and fixer (child) registered."""
     return declare_test_bus(comms, channels=("base", "auth"), threads=(
-        comms.registry.new_thread(name='PR111', tags=frozenset({'base'}), worktree='/tmp/wt1'),
-        comms.registry.new_thread(name='fixer', tags=frozenset({'auth'}), worktree='/tmp/wt1', parent=ForkedParent('PR111'), task=GivenThreadText('fix auth')),
+        Thread(name='PR111', tags=frozenset({'base'}), worktree='/tmp/wt1'),
+        Thread(name='fixer', tags=frozenset({'auth'}), worktree='/tmp/wt1', parent=ForkedParent('PR111'), task=GivenThreadText('fix auth')),
     ))
 
 

@@ -85,6 +85,7 @@ def reserve_foreground_owner(
     Never attach to/replace an existing owner; even a stopped owner may retain
     an uncertain model input. This only works on an initialized private root.
     """
+    from .threads import Thread
     root = Path(root).absolute()
     if (
         type(opt_in) is not bool
@@ -99,7 +100,7 @@ def reserve_foreground_owner(
     worktree = root / "work"
     NativeSessionFiles.require_private_directory(worktree)
     comms = wire(root)
-    owner = comms.registry.new_thread(
+    owner = Thread(
         name, tags, str(worktree), process_identity=ProcessIdentity.capture(os.getpid()), task=GivenThreadText(task),
     )
     # Foreground attempts must reserve a fresh name, never replace an owner

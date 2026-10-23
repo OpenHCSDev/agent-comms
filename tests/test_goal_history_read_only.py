@@ -7,12 +7,13 @@ import pytest
 from agent_comms.goal_history import GoalHistoryError, GoalHistoryStore
 from agent_comms.goals import Goal
 from agent_comms.registration import Registration
+from agent_comms.threads import Thread
 
 
 def authored_history(root):
     root.mkdir(mode=0o700)
     registry = Registration(root / 'registry.json')
-    thread = registry.new_thread('author', frozenset(), str(root))
+    thread = Thread('author', frozenset(), str(root))
     registry.register(thread)
     registry.register(replace(thread, goal=Goal('Authored acquisition', 'first', published_seq=0)))
     return registry

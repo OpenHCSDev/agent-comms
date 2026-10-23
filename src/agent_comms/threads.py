@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, TypedDict
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
 from .channel_targets import Tag
@@ -49,7 +49,7 @@ from .registration_inheritance import (
     InheritPrevious,
 )
 from .session_file import NoSessionFile, SessionFile
-from .storage_rules import StoragePath, StorageRoots, StorageRule
+from .storage_rules import StoragePath, StorageRule, ThreadStorage, UnassignedThreadStorage
 from .store_files import AtomicFile
 from .task_sources import TaskScope
 from .thread_execution import NativeThreadExecution, ThreadExecution
@@ -247,28 +247,6 @@ class ThreadCatalog(DurableFile, PatternFile):
     filename: ClassVar[str] = "native-sessions/{lookup}/comms-catalog.json"
 
 
-class NewThreadFields(TypedDict, total=False):
-    """The declared ``Thread`` fields a registration's new thread may set, each with the
-    type its field declares."""
-
-    parent: ThreadParent
-    task: ThreadText
-    title: ThreadText
-    session_file: SessionFile
-    backend: type[AgentBackend]
-    process_identity: ProcessState
-    model: ThreadModel
-    thinking_level: ThinkingLevelField
-    service_tier: ServiceTier
-    goal: GoalDeclaration
-    created_at: CreationTime
-    auto_title_pending: bool
-    role: type[ThreadRole]
-    execution: type[ThreadExecution]
-    turn_record: TurnRecord
-    turn_generation: int
-
-
 @dataclass(frozen=True, slots=True)
 class Thread(ThreadProvenance):
     """Declares one agent thread's identity and provenance."""
@@ -295,8 +273,8 @@ class Thread(ThreadProvenance):
         default_factory=GeneratedCreationTime.now, kw_only=True
     )
     storage_roots: Annotated[
-        StorageRoots, RegistrationPolicy(InheritPrevious)
-    ] = field(kw_only=True)
+        ThreadStorage, RegistrationPolicy(InheritPrevious)
+    ] = field(default_factory=UnassignedThreadStorage, kw_only=True)
     # Projects this conversation ran in before its current one: a saved session
     # resumes from them and a started turn finishes in one of them.
     earlier_projects: Annotated[
@@ -648,7 +626,7 @@ def current_thread(registry) -> Thread:
     from .launch_runtime import ThreadLaunch
 
     launch = ThreadLaunch.current()
-    return registry.new_thread(
+    return Thread(
         name=launch.name,
         tags=launch.tags,
         worktree=launch.worktree,
