@@ -33,10 +33,11 @@ from .carry_finished_turns import FinishedTurns
 from .carry_owner_requests import OwnerRequests
 from .carry_turn_owner import TurnOwner
 from .retired_claim_fields import RetiredClaimFields
+from .thread_name_owners import ThreadNameOwners
 
 
 class ClaimFields(RetiredClaimFields, Carry):
-    precedes = (FinishedTurns, DeadTurns, OwnerRequests, TurnOwner, ContextRequestKey)
+    precedes = (FinishedTurns, DeadTurns, OwnerRequests, TurnOwner, ContextRequestKey, ThreadNameOwners)
 
     @staticmethod
     def documents(root: Path, files: dict[Path, type[RootFile]]) -> dict[Path, object]:
