@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
+from .repo import Repo
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -53,34 +54,26 @@ class MergedClaim(ProgressClaim):
     def verify(self, comms: Comms, worktree: Path) -> tuple[str, ...]:
         return self.origin_branches(worktree)
 
+    def unresolved(self) -> ValueError:
+        return ValueError(
+            f"A merged claim needs a commit sha that resolves on origin; {self.commit!r} does not.")
+
     def origin_branches(self, worktree: Path) -> tuple[str, ...]:
-        command = [
-            "git",
-            "-C",
-            str(worktree),
-            "for-each-ref",
-            f"--contains={self.commit}",
-            "--format=%(refname:strip=3)",
-            "refs/remotes/origin/",
-        ]
         try:
-            listed = subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                timeout=self.timeout,
-            )
+            if not self.commit.strip() or not Repo.answers(
+                    worktree, "rev-parse", "--verify", "--quiet", f"{self.commit}^{{commit}}"):
+                raise self.unresolved()
+            listed = Repo.git(worktree, "for-each-ref", f"--contains={self.commit}",
+                              "--format=%(refname:strip=3)", "refs/remotes/origin/",
+                              timeout=self.timeout)
         except subprocess.TimeoutExpired as expired:
             raise ValueError(
                 f"A merged claim needs a commit sha that resolves on origin; looking up "
                 f"{self.commit!r} took longer than {expired.timeout:g}s."
             ) from expired
-        if not self.commit.strip() or listed.returncode or not listed.stdout.strip():
-            raise ValueError(
-                f"A merged claim needs a commit sha that resolves on origin; "
-                f"{self.commit!r} does not."
-            )
-        return tuple(listed.stdout.splitlines())
+        if not listed.strip():
+            raise self.unresolved()
+        return tuple(listed.splitlines())
 
 
 @dataclass(frozen=True)

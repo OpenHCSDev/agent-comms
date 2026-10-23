@@ -47,10 +47,8 @@ from agent_comms.change_report import (
 )
 from agent_comms.channel_targets import CommandTarget, CommsTag, IncarnationThreadTarget, NamedTarget
 from agent_comms.child_process import (
-    BoundedRun,
     CheckPrinted,
     ChildResult,
-    ExitedOutcome,
     NoIntegerPrinted,
     OrderCheckFailedError,
 )
@@ -238,12 +236,6 @@ class CheckedDelivery(OrderDelivery, declared_name=None):
     def installation_build(self) -> BuildIdentity:
         return self.proof_build
 
-    async def run(self, check, *command):
-        result = await BoundedRun.run(tuple(command), cwd=check.directory, timeout=120)
-        if result.outcome != ExitedOutcome(0):
-            raise ValueError(result.stderr.decode(errors="replace") or "Delivery source check failed.")
-        return result.stdout.decode(errors="replace")
-
     def required_claims(self, claims: tuple[ProgressClaim, ...]) -> tuple[ProgressClaim, ...]:
         return claims
 
@@ -316,7 +308,8 @@ class RecordedCommitDelivery(CheckedDelivery, declared_name="commit"):
 
     async def delivery_time(self, check: OrderCheck) -> EventTime:
         return EventTime.capture(float(
-            await self.run(check, "git", "show", "-s", "--format=%ct", self.delivered)))
+            await asyncio.to_thread(Repo.git, check.directory, "show", "-s", "--format=%ct",
+                                    self.delivered)))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -329,13 +322,15 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
         return self.delivered_commit
 
     async def require_source(self, check: OrderCheck) -> None:
-        delivered = (await self.run(
-            check, "git", "rev-parse", f"{self.delivered}^{{commit}}")).strip()
-        base = await self.run(check, "git", "merge-base", self.delivered, self.commit)
+        delivered = (await asyncio.to_thread(
+            Repo.git, check.directory, "rev-parse", f"{self.delivered}^{{commit}}")).strip()
+        base = await asyncio.to_thread(Repo.git, check.directory, "merge-base", self.delivered,
+                                       self.commit)
         if base.strip() != delivered:
             raise ValueError(
                 f"Delivered commit {self.delivered} is not in the checked commit {self.commit}.")
-        parents = await self.run(check, "git", "rev-list", "--parents", "-n", "1", self.delivered)
+        parents = await asyncio.to_thread(Repo.git, check.directory, "rev-list", "--parents",
+                                          "-n", "1", self.delivered)
         if len(parents.split()) > 2:  # a main merge is never the unit's answer, only its arrival
             raise ValueError(f"Delivered commit {self.delivered} is a merge; deliver the unit's "
                              "first pushed commit that answers the order.")
@@ -3120,7 +3115,7 @@ class DroppedVerdict(ToolCallVerdict):
                  for entry in Repo.git(checkout, "worktree", "list", "--porcelain").splitlines()
                  if entry.startswith("HEAD ")]
         patterns = [arg for line in lines for arg in ("-e", line)]
-        found = Repo.grep_files(checkout, "-F", "--all-match", *patterns,
+        found = Repo.grep(checkout, "-l", "-F", "--all-match", *patterns,
                                 *sorted({*refs, *heads}), "--", f":(glob)**/{target.name}")
         if found:
             self.refuse(found[0].split(":", 1)[0])

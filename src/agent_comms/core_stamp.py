@@ -3,7 +3,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-import subprocess
 
 
 class CoreStamp(ABC):
@@ -33,6 +32,8 @@ class CheckoutStamp(CoreStamp):
     value: str
 
     def commit(self) -> str:
-        return subprocess.check_output(
-            ("git", "rev-parse", "HEAD"), cwd=self.value, text=True,
-        ).strip()
+        # Imported here: hatch_build.py loads this module with run_path in a build env
+        # holding only hatchling, where Repo's dependencies do not exist.
+        from agent_comms.repo import Repo
+
+        return Repo.git(self.value, "rev-parse", "HEAD").strip()
