@@ -4001,15 +4001,14 @@ class TodoStore(OwnerRequestStore):
                     result.upsert(db)
 
     def board_disagreements(
-        self, commander: ThreadIncarnation, registry: Registration,
+        self, commander: ThreadIncarnation, registry: Registration, pulls: ProgressRead,
     ) -> Iterator[tuple[Todo, MergedProgress]]:
-        """Open orders whose progress misses a linked merge, sharing one PR read cache."""
+        """Open orders whose progress misses a linked merge, read through the caller's frame."""
         todos = self.held_for_commander(commander)
-        pulls = ProgressRead(todos)
+        progress = pulls.progress(todos, registry)
         for todo in todos:
-            progress = OrderProgress.read(todo, registry, pulls)
             source = ProgressSource.of(todo, registry, pulls)
-            for merged in progress.missing_merges(source):
+            for merged in progress[todo.id].missing_merges(source):
                 yield todo, merged
 
     def holds_pending(self, owner: ThreadIncarnation) -> bool:

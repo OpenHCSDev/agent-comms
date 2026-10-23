@@ -28,6 +28,7 @@ from agent_comms.service_passes import ServicePassStore
 if TYPE_CHECKING:
     from agent_comms.bus import BusReader
     from agent_comms.comms import Comms
+    from agent_comms.heartbeat_frame import HeartbeatFrame
     from agent_comms.owner_requests import OwnerRequestId, RequestDirective
     from agent_comms.messages import Message
     from agent_comms.registry_document import RegistrySnapshot
@@ -56,7 +57,7 @@ class Degradation(DeclaredFamily, affix="Degradation"):
 
     @classmethod
     @abstractmethod
-    def found(cls, comms: Comms, commander: str) -> tuple[Sign, ...]:
+    def found(cls, comms: Comms, commander: str, frame: HeartbeatFrame) -> tuple[Sign, ...]:
         """How the signal shows now, one sign per occurrence; empty while it does not."""
 
     @classmethod
@@ -74,7 +75,7 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     @classmethod
     @abstractmethod
     def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState], pulls: ProgressRead) -> tuple[Self, ...]: ...
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]: ...
 
     @abstractmethod
     def line(self) -> str: ...
@@ -158,12 +159,12 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
 
     @classmethod
     def broken(cls, comms: Comms, commander: str, after: float = 0.0, *,
-               observed: Sequence[UnitState], pulls: ProgressRead) -> tuple[Self, ...]:
+               observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         """Read each owner once against the supplied frame and its one progress reader,
         preserving the requested family."""
         owners = dict.fromkeys(rule.scan_owner() for rule in cls.members_with(cls))
         return tuple(rule for owner in owners
-                     for rule in owner.scan_observed(comms, commander, observed, pulls)
+                     for rule in owner.scan_observed(comms, commander, observed, frame)
                      if isinstance(rule, cls) and rule.attention() and rule.broke_after(after))
 
 
@@ -176,7 +177,7 @@ class IndependentStandingRule(StandingRule, declared_name=None):
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState], pulls: ProgressRead) -> tuple[Self, ...]:
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         return cls.violations(comms, commander)
 
 
@@ -194,7 +195,7 @@ class LostTools(UndatedStandingRule):
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState], pulls: ProgressRead) -> tuple[Self, ...]:
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         found = []
         for unit in observed:
             thread = unit.source.thread
@@ -233,9 +234,9 @@ class HeldBranchRule(UndatedStandingRule, declared_name=None):
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState], pulls: ProgressRead) -> tuple[Self, ...]:
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         branches = tuple(
-            HeldBranch(todo, unit, pulls.branch_difference(
+            HeldBranch(todo, unit, frame.pulls.branch_difference(
                 state.source.thread.project_path), state.source)
             for state in observed for unit in state.readable_units() for todo in state.source.todos
         )
@@ -366,7 +367,7 @@ class AnswersOwedDegradation(Degradation, BlocksRelease):
     """Messages to the commander are waiting past their window; each message is one sign."""
 
     @classmethod
-    def found(cls, comms: Comms, commander: str) -> tuple[Sign, ...]:
+    def found(cls, comms: Comms, commander: str, frame: HeartbeatFrame) -> tuple[Sign, ...]:
         return tuple(sign for rule in OwedAnswer.violations(comms, commander)
                      for sign in rule.degradation_signs())
 
@@ -389,7 +390,7 @@ class ReasonedStandingRule(StandingRule, declared_name=None):
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState], pulls: ProgressRead) -> tuple[Self, ...]:
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         why = cls.reason(comms, commander)
         return (cls.found(why, comms, commander, observed),) if why else ()
 
@@ -408,10 +409,10 @@ class HeldOrderDue(DatedStandingRule, declared_name=None):
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState], pulls: ProgressRead) -> tuple[Self, ...]:
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         """Conditions read the frame's own progress facts, never a second forge read."""
         return tuple(cls(todo.id, todo.held().owner_identity, todo.order.checked().id, due)
-                     for todo, due in cls.conditions(comms, commander, pulls))
+                     for todo, due in cls.conditions(comms, commander, frame.pulls))
 
     @classmethod
     @abstractmethod
@@ -464,13 +465,13 @@ class DeliveredHeadReview(DatedStandingRule):
 
     @classmethod
     def scan_observed(
-        cls, comms: Comms, commander: str, observed: Sequence[UnitState], pulls: ProgressRead,
+        cls, comms: Comms, commander: str, observed: Sequence[UnitState], frame: HeartbeatFrame,
     ) -> tuple[Self, ...]:
         now = time.time()
         return tuple(
             rule
             for todo, claim, request in comms.goals.todos.claimed_heads_for_commander(
-                comms.registry.require(commander).incarnation, pulls,
+                comms.registry.require(commander).incarnation, frame.pulls,
             )
             for rule in cls.for_head(
                 todo.id, todo.held().owner_identity, todo.order.checked().id,
@@ -629,7 +630,7 @@ class ServicePassFailing(IndependentStandingRule, DatedStandingRule):
                 " -> fix the owner of the failing read this wake")
 
 @dataclass(frozen=True)
-class BoardDisagrees(IndependentStandingRule, UndatedStandingRule):
+class BoardDisagrees(UndatedStandingRule):
     """An open order reads as no commit despite its linked pull request having merged."""
 
     problem: str
@@ -637,11 +638,12 @@ class BoardDisagrees(IndependentStandingRule, UndatedStandingRule):
     merge: str
 
     @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         return tuple(
             cls(todo.id, todo.order.checked().id, merged.sha)
             for todo, merged in comms.goals.todos.board_disagreements(
-                comms.registry.require(commander).incarnation, comms.registry
+                comms.registry.require(commander).incarnation, comms.registry, frame.pulls
             )
         )
 
