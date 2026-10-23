@@ -62,7 +62,7 @@ from .locked_store import (
     StoreBusy,
     StoreCommittedError,
 )
-from .maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier
+from .maintenance_barrier import MaintenanceBarrier, MaintenanceHolder
 from .package_stamp import STAMP
 from .projection_source import ProjectionSource
 from .store_files import _store_lock
@@ -764,7 +764,7 @@ class HeldBusFile(SchemaChange):
         # Only the holder clears a hold, so a nonce this process holds cannot go stale while
         # it reads; the witness alone answers without the wire lock.
         barrier.current_unlocked().require_held_by(
-            os.environ.get(HOLDER_NONCE, ""), f"Changing the schema of {self.path}")
+            MaintenanceHolder.current().nonce, f"Changing the schema of {self.path}")
 
 
 class WriterOwnedFile(SchemaChange):
