@@ -1,0 +1,222 @@
+[
+  {
+    "rule": {
+      "kind": "branch_behind_main",
+      "problem": "P421",
+      "holder": {
+        "name": "unit-forks",
+        "created_at": 1792597158.9626734
+      },
+      "repository": "openhcsdev/agent-comms",
+      "branch": "fix/P421-owner-requests-unit-forks",
+      "behind": 1217
+    },
+    "evidence": [
+      "HEAD d5b9c0ab88d9b187a56f34d1f2f759f6029d9236",
+      "origin/main 50af024a6bef3fd61019f0647921878b754d4c4d",
+      "copied todos.sqlite3 order ee9f3ae89b05"
+    ]
+  },
+  {
+    "rule": {
+      "kind": "branch_behind_main",
+      "problem": "P404",
+      "holder": {
+        "name": "unit-heartbeat",
+        "created_at": 1792593889.2236354
+      },
+      "repository": "openhcsdev/agent-comms",
+      "branch": "fix/p404-report-lifetime-recovery",
+      "behind": 1250
+    },
+    "evidence": [
+      "HEAD c6cd8d4f92bb10a7015ffdf8e49359f537627b5e",
+      "origin/main 50af024a6bef3fd61019f0647921878b754d4c4d",
+      "copied todos.sqlite3 order 0339dcb4a04e"
+    ]
+  },
+  {
+    "rule": {
+      "kind": "branch_behind_main",
+      "problem": "P412",
+      "holder": {
+        "name": "unit-filebus",
+        "created_at": 1792599830.1696174
+      },
+      "repository": "openhcsdev/agent-comms",
+      "branch": "fix/p412-file-bus-filebus",
+      "behind": 916
+    },
+    "evidence": [
+      "HEAD 2afdaf2ce731c0dd4060e3c8ef09fb23e6b46e25",
+      "origin/main 50af024a6bef3fd61019f0647921878b754d4c4d",
+      "copied todos.sqlite3 order d3640fc90c9a"
+    ]
+  },
+  {
+    "rule": {
+      "kind": "branch_behind_main",
+      "problem": "P448",
+      "holder": {
+        "name": "unit-goalblock",
+        "created_at": 1792600625.441932
+      },
+      "repository": "openhcsdev/agent-comms",
+      "branch": "fix/p448-cli-source-proof",
+      "behind": 1286
+    },
+    "evidence": [
+      "HEAD 1a95b86fcbeee5ef1fb5ac6c629c028b26c5e4fc",
+      "origin/main 50af024a6bef3fd61019f0647921878b754d4c4d",
+      "copied todos.sqlite3 order 52678ab53c21"
+    ]
+  },
+  {
+    "rule": {
+      "kind": "branch_behind_main",
+      "problem": "P426",
+      "holder": {
+        "name": "unit-bus-b1",
+        "created_at": 1792589935.198687
+      },
+      "repository": "openhcsdev/agent-comms",
+      "branch": "integration/bus-batch-b1",
+      "behind": 904
+    },
+    "evidence": [
+      "HEAD c6e7714d1c179a659c3a5ec14ec63b59746c16c0",
+      "origin/main 50af024a6bef3fd61019f0647921878b754d4c4d",
+      "copied todos.sqlite3 order 2aa235b33a21"
+    ]
+  },
+  {
+    "rule": {
+      "kind": "branch_behind_main",
+      "problem": "P454",
+      "holder": {
+        "name": "unit-mi-1e",
+        "created_at": 1792592213.3010414
+      },
+      "repository": "openhcsdev/agent-comms",
+      "branch": "unit-mi-1e/p454-field-capabilities",
+      "behind": 1429
+    },
+    "evidence": [
+      "HEAD d5a6f477d160e840334ccbc23204f2b53ba61dab",
+      "origin/main 50af024a6bef3fd61019f0647921878b754d4c4d",
+      "copied todos.sqlite3 order 56ff63f7233a"
+    ]
+  },
+  {
+    "rule": {
+      "kind": "branch_behind_main",
+      "problem": "P444",
+      "holder": {
+        "name": "unit-unitstate",
+        "created_at": 1792597141.2449763
+      },
+      "repository": "openhcsdev/agent-comms",
+      "branch": "unit/p444-continue",
+      "behind": 1174
+    },
+    "evidence": [
+      "HEAD 306aa773aa262aebd9f738694e8c3de05f331aef",
+      "origin/main 50af024a6bef3fd61019f0647921878b754d4c4d",
+      "copied todos.sqlite3 order b1244139d35f"
+    ]
+  },
+  {
+    "rule": {
+      "kind": "spinning_unit",
+      "problem": "P404",
+      "holder": {
+        "name": "unit-heartbeat",
+        "created_at": 1792593889.2236354
+      },
+      "call_count": 35,
+      "elapsed_minutes": 2066.137584288915,
+      "last_commit": "c6cd8d4f92bb10a7015ffdf8e49359f537627b5e"
+    },
+    "evidence": [
+      "HEAD c6cd8d4f92bb10a7015ffdf8e49359f537627b5e",
+      "copied external_transcripts.sqlite3: 35 tool starts since 1792632614.0",
+      "src/agent_comms/turn_digests.py:223"
+    ]
+  },
+  {
+    "rule": {
+      "kind": "spinning_unit",
+      "problem": "P412",
+      "holder": {
+        "name": "unit-filebus",
+        "created_at": 1792599830.1696174
+      },
+      "call_count": 33,
+      "elapsed_minutes": 1985.5209176222484,
+      "last_commit": "2afdaf2ce731c0dd4060e3c8ef09fb23e6b46e25"
+    },
+    "evidence": [
+      "HEAD 2afdaf2ce731c0dd4060e3c8ef09fb23e6b46e25",
+      "copied external_transcripts.sqlite3: 33 tool starts since 1792637451.0",
+      "src/agent_comms/turn_digests.py:223"
+    ]
+  },
+  {
+    "rule": {
+      "kind": "spinning_unit",
+      "problem": "P448",
+      "holder": {
+        "name": "unit-goalblock",
+        "created_at": 1792600625.441932
+      },
+      "call_count": 140,
+      "elapsed_minutes": 2170.987584288915,
+      "last_commit": "1a95b86fcbeee5ef1fb5ac6c629c028b26c5e4fc"
+    },
+    "evidence": [
+      "HEAD 1a95b86fcbeee5ef1fb5ac6c629c028b26c5e4fc",
+      "copied external_transcripts.sqlite3: 140 tool starts since 1792626323.0",
+      "src/agent_comms/turn_digests.py:223"
+    ]
+  },
+  {
+    "rule": {
+      "kind": "spinning_unit",
+      "problem": "P454",
+      "holder": {
+        "name": "unit-mi-1e",
+        "created_at": 1792592213.3010414
+      },
+      "call_count": 207,
+      "elapsed_minutes": 2295.1209176222483,
+      "last_commit": "d5a6f477d160e840334ccbc23204f2b53ba61dab"
+    },
+    "evidence": [
+      "HEAD d5a6f477d160e840334ccbc23204f2b53ba61dab",
+      "copied external_transcripts.sqlite3: 207 tool starts since 1792618875.0",
+      "src/agent_comms/turn_digests.py:223"
+    ]
+  },
+  {
+    "rule": {
+      "kind": "unpushed_branch",
+      "problem": "P412",
+      "order": "d3640fc90c9a",
+      "holder": {
+        "name": "unit-filebus",
+        "created_at": 1792599830.1696174
+      },
+      "worktree": "/home/ts/wt/unit-filebus",
+      "unpublished": {
+        "head": "2afdaf2ce731c0dd4060e3c8ef09fb23e6b46e25",
+        "commits": 439,
+        "upstream": "refs/remotes/origin/fix/p412-file-bus-filebus"
+      }
+    },
+    "evidence": [
+      "HEAD 2afdaf2ce731c0dd4060e3c8ef09fb23e6b46e25",
+      "439 commits absent from refs/remotes/origin/fix/p412-file-bus-filebus",
+      "src/agent_comms/work_branches.py:279"
+    ]
+  }
+]

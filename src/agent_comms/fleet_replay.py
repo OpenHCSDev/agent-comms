@@ -97,8 +97,8 @@ class PullComparison:
 @dataclass(frozen=True)
 class FleetGitRead:
     checkout: Annotated[Path, PathText]
-    difference: BranchDifference
-    unpublished: tuple[UnpushedHead, ...]
+    difference: BranchDifference | None
+    unpublished: tuple[UnpushedHead, ...] | None
     comparisons: tuple[PullComparison, ...]
     references: tuple[GitReference, ...]
     uncommitted: tuple[Annotated[Path, PathText], ...]
@@ -149,7 +149,8 @@ class FleetInputs:
                       for selection in ListedPullRequest.members_with(ListedPullRequest))
         held = tuple(todo for commander in commanders
                      for todo in comms.goals.todos.held_for_commander(commander.incarnation))
-        paths = {snapshot.require(todo.held().owner).project_path.resolve() for todo in held}
+        primary_paths = {snapshot.require(todo.held().owner).project_path.resolve() for todo in held}
+        paths = set(primary_paths)
         paths.update(path.resolve() for todo in held
                      for path in comms.registry.storage_rule.checkout_paths(
                          snapshot.require(todo.held().owner)))
@@ -163,7 +164,7 @@ class FleetInputs:
             try:
                 checkout = reader.checkout(path)
                 branches = checkout.branches
-                difference = reader.branch_difference(path)
+                difference = reader.branch_difference(path) if path in primary_paths else None
                 requests = tuple(request for selection in pulls
                                  if selection.selection is UnmergedListedPullRequest
                                  and any(todo.id == selection.problem
@@ -174,9 +175,9 @@ class FleetInputs:
                     branches.pull_request_diff(request.base, request.head)) for request in requests)
                 references = tuple(GitReference(*line.split("\t")) for line in checkout.git(
                     "for-each-ref", "--format=%(refname)%09%(objectname)").splitlines())
-                references = (*references, GitReference("HEAD", difference.head),
-                              GitReference(f"origin/{branches.main}", difference.main))
-                git.append(FleetGitRead(path, difference, branches.unpushed(difference), comparisons,
+                references = (*references, GitReference("HEAD", checkout.git("rev-parse", "HEAD").strip()))
+                unpublished = branches.unpushed(difference) if difference is not None else None
+                git.append(FleetGitRead(path, difference, unpublished, comparisons,
                     references, branches.uncommitted(), branches.local_work,
                     tuple(GitWorktree(branch, paths) for branch, paths in branches.worktrees().items())))
             except (OSError, WorkBranchError) as error:
@@ -198,6 +199,18 @@ class FleetInputs:
                todo: Todo) -> tuple[PullRequest, ...]:
         return next(row.requests for row in self.pulls
                     if (row.repo, row.selection, row.problem) == (repo, selection, todo.id))
+
+    def branch_difference(self, path: Path) -> BranchDifference:
+        difference = self.checkout(path).difference
+        if difference is None:
+            raise WorkBranchError(f"No captured branch comparison for {path}")
+        return difference
+
+    def unpublished(self, path: Path) -> tuple[UnpushedHead, ...]:
+        unpublished = self.checkout(path).unpublished
+        if unpublished is None:
+            raise WorkBranchError(f"No captured publication comparison for {path}")
+        return unpublished
 
     def main_tree(self, repo: Repo) -> MainTree:
         return next(tree for tree in self.main_trees if tree.repo.github == repo.github)
