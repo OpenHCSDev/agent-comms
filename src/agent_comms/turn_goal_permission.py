@@ -6,9 +6,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .native_tool_call import SelectedToolDenied
 from .ordinary_turn_rules import OrdinaryGoalRule
 from .reservation_rules import ReservationViolationError
+from .tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
     from .goal_waits import GoalWait
