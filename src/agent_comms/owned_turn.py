@@ -29,7 +29,6 @@ from .native_input_owner import RegistryOwner
 from .native_failures import NativeRequestFailure
 from .coordinator import Coordination
 from .routing import MessageRoute, ScheduledTurn, TurnRouting
-from .controller import UNBOUND_CONTROLLER
 from .thread_identity import TurnId
 from .turn_goal_account import TurnGoalAccount
 from .turn_goal_permission import (
@@ -290,7 +289,7 @@ class OwnedTurn:
             if self.accepted_input_id is not None
             else self.runner.runtime.controller.get()
         )
-        if self.controller is UNBOUND_CONTROLLER:
+        if self.controller is not None and not self.controller.bound:
             self.controller = None  # Autonomous/channel/goal turns have no controller.
         self.runner.inputs.state(self.session_id).capture_first_source(self.original)
         self.input_cleanup.pop_all()

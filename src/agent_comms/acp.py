@@ -65,7 +65,7 @@ from .channel_targets import NamedTarget
 from .cohort_foreground import _accept_visible_deliveries
 from .comms import Comms, wire
 from .controller import (
-    ACP_PERMISSION_TIMEOUT_SECONDS, Controller, SessionUpdateSink, UNBOUND_CONTROLLER,
+    ACP_PERMISSION_TIMEOUT_SECONDS, Controller, SessionUpdateSink,
 )
 from .coordination_cohort import next_sealed_assignment
 from .coordination_database import CoordinationStore
@@ -300,7 +300,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
         owner = self.sessions.require(session_id)
         controller = self._runtime.controller.get()
-        attached = self.sessions.client if controller is UNBOUND_CONTROLLER else controller
+        attached = (
+            self.sessions.client if controller is not None and not controller.bound else controller
+        )
         if attached is None:
             raise RequestError.invalid_params(
                 {"reason": "Selected write requires attached ACP controller"}
@@ -355,7 +357,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             existing = self._runtime.controller.get()
             context = (
                 self._runtime.controller.set(self.sessions.client)
-                if existing is UNBOUND_CONTROLLER
+                if existing is not None and not existing.bound
                 else None
             )
             try:

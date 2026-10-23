@@ -29,7 +29,7 @@ from .comms import Comms
 from .coordination_cohort import next_sealed_assignment
 from .coordination_database import CoordinationStore
 from .coordinator import Coordination
-from .controller import UNBOUND_CONTROLLER, SessionUpdateSink
+from .controller import SessionUpdateSink
 from .cursor_owner import CursorOwner
 from .drain_failures import (
     DEFERRED_DRAIN_ERRORS,
@@ -708,7 +708,7 @@ class InputDrain(InputObservation):
     ) -> PromptResponse:
         inbox = self.state(session_id).require_inbox()
         controller = self.runtime.controller.get()
-        if controller is UNBOUND_CONTROLLER:
+        if controller is not None and not controller.bound:
             controller = self.sessions.client
         followup = UserFollowupSegment.capture(text.removeprefix(AGENT_PREFIX))
         async with QueuedInput.reserve(
