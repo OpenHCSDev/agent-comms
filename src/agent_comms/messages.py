@@ -444,13 +444,6 @@ class SendableMessageKind(MessageKind, declared_name=None):
 class ClaimNoticeKind(MessageKind, declared_name="claim-notice"):
     """A claim-owner record, not a delivery to a reader."""
 
-    @ClassFact
-    def writes(cls) -> tuple[type[ProducedRow], ...]:
-        from .bus_route_counts import BusRouteCounts
-        from .bus_tables import AwaitingAnswerSource
-        return (BusRouteCounts, AwaitingAnswerSource)
-
-
     conversation_message = False
 
     @classmethod
