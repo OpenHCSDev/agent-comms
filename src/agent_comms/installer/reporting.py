@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms.installer.interpreter_operation import InstallReportProbe
+from agent_comms.installer.probes.report import InstallReportProbe
 
 if TYPE_CHECKING:
     from agent_comms.installer.upgrade import RehearsedUpgrade, Stack

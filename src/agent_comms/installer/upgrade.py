@@ -45,13 +45,14 @@ from agent_comms.cli_bridges.shared import BridgeResume, Serve, SessionBridgeRes
 from agent_comms.cli_commands import (
     BusReadBack,
     CliCommand,
-    InstallResult,
     PlannedReconcileCliCommand,
     ReadBackCliCommand,
     ReconcileStoresCliCommand,
     StartCliCommand,
     StopCliCommand,
+    TargetActionCliCommand,
 )
+from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.cli_protocol import CoreError
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import wire
@@ -60,47 +61,28 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText
 from agent_comms.host_services import HostService, RestartedService
 from agent_comms.install_choices import InstallerChoice, RunMode
-from agent_comms.installer.backup import (
-    BackupReport,
-    RestoreSpace,
-    SavedFile,
-    StoreBackup,
-    UpgradeRefused,
-    bus_files,
-)
-from agent_comms.installer.carry import (
-    STEPS,
-    Carried,
-    Carry,
-    CarryChain,
-    CarryOperation,
-    CarryProbe,
-    FirstPendingOperation,
-    MigrateOperation,
-    RetireInputsOperation,
-)
+from agent_comms.installer.backup import BackupReport, RestoreSpace, SavedFile, StoreBackup, bus_files
+from agent_comms.installer.refusals import InstallRolledBack, UpgradeRefused
+from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, StartedOwner
+from agent_comms.installer.carry import STEPS, CarryChain
+from agent_comms.installer.probes.carry import Carried, Carry, CarryOperation, FirstPendingOperation, MigrateOperation, RetireInputsOperation
+from agent_comms.installer.probes.carry import CarryProbe
 from agent_comms.installer.commands import InstallCommands, TimedCommand
 from agent_comms.installer.declared_uv import DeclaredUv
-from agent_comms.installer.interpreter_operation import (
-    CliCommandProbe,
-    ClientImportsProbe,
-    PrepareNativeProbe,
-    PrepareProducerDigestsProbe,
-    ProbeProgram,
-    PublicationProbe,
-    RetainedProgram,
-    RunningOwnersProbe,
-    RuntimeProbe,
-    ServingProbe,
-    TargetProgram,
-)
+from agent_comms.installer.probes.commands import CliCommandProbe
+from agent_comms.installer.probes.imports import ClientImportsProbe
+from agent_comms.installer.probes.native import PrepareNativeProbe, PrepareProducerDigestsProbe
+from agent_comms.installer.interpreter_operation import ProbeProgram, RetainedProgram, RuntimeProbe, TargetProgram
+from agent_comms.installer.probes.publication import PublicationProbe
+from agent_comms.installer.probes.owners import RunningOwnersProbe
+from agent_comms.installer.probes.services import ServingProbe
 from agent_comms.installer.practice import (
     PracticeCopy,
     PracticeMeasurement,
     RehearsalHome,
     RuntimeHome,
 )
-from agent_comms.installer.publication import SelectedRouteProbe
+from agent_comms.installer.probes.publication import SelectedRouteProbe
 from agent_comms.installer.reporting import (
     RootWriter,
     RuntimeWriter,
@@ -115,7 +97,9 @@ from agent_comms.maintenance_barrier import (
     MaintenanceState,
 )
 from agent_comms.native_build_inputs import NativeBuildInputs
-from agent_comms.native_package import link_sealed_tree, pinned_package_for
+from agent_comms.native_package import (
+    NativePackageStore, pinned_package_for,
+)
 from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout, Repo, ScratchCheckout
@@ -189,57 +173,12 @@ def carried(
                           for file in before[key].values()))
 
 
-@dataclass(frozen=True)
-class OwnerStart(DeclaredFamily, affix="Owner"):
-    """What starting one stopped owner did. A unit that cannot start is reported by name;
-    the runtime and bus it would run on are installed either way."""
-
-    name: str
-
-    @abstractmethod
-    def lines(self) -> tuple[str, ...]: ...
-
-    @staticmethod
-    def attempt(stack: Stack, root: Path, name: str) -> OwnerStart:
-        try:
-            stack.cli(root, StartCliCommand, "--name", name)
-        except UpgradeRefused as error:
-            return RefusedOwner(name, str(error))
-        return StartedOwner(name)
 
 
-@dataclass(frozen=True)
-class StartedOwner(OwnerStart):
-    def lines(self) -> tuple[str, ...]:
-        return (f"Started owner: {self.name}",)
 
 
-@dataclass(frozen=True)
-class RefusedOwner(OwnerStart):
-    error: str
-
-    def lines(self) -> tuple[str, ...]:
-        return (f"Owner not started: {self.name}: {self.error}",)
 
 
-class InstallRolledBack(UpgradeRefused):
-    """The original installation was restored after a failed live pass."""
-
-    def __init__(self, error: BaseException, started: tuple[OwnerStart, ...], backup: str,
-                 *, runtime: LaunchRuntime):
-        self.error = error
-        self.started = started
-        self.backup = backup
-        self.runtime = runtime
-        super().__init__("; ".join(self.lines()))
-
-    def lines(self) -> tuple[str, ...]:
-        return (
-            f"Install rolled back: {type(self.error).__name__}: {self.error}",
-            f"Original runtime selected again: {self.runtime.prefix}",
-            *(line for owner in self.started for line in owner.lines()),
-            f"Backup: {self.backup}",
-        )
 
 
 @dataclass(frozen=True)
@@ -495,17 +434,16 @@ class Stack:
                           "--python", "3.14", cwd=self.checkout)
 
     @classmethod
-    def build(cls, checkout: Path, commands: InstallCommands, home: Path = HOME) -> Stack:
+    def build(cls, checkout: Checkout, commands: InstallCommands, home: Path = HOME) -> Stack:
         """Resolve current mains once, then build or reuse their immutable installation."""
-        Checkout(checkout).prepare()
-        source = cls(checkout, commands, home, runtime=LaunchRuntime.running())
+        source = cls(checkout.path, commands, home, runtime=LaunchRuntime.running())
         source.require_uv()
         source.resolve()
-        core = commands.git(checkout, "rev-parse", "HEAD").strip()
+        core = commands.git(checkout.path, "rev-parse", "HEAD").strip()
         resolution = hashlib.sha256(source.lock.read_bytes()).hexdigest()[:16]
         prefix = home / ".local/share/agent-comms/runtimes" / f"core-{core[:9]}-lock-{resolution}"
         built = replace(source, runtime=LaunchRuntime(prefix / "bin/python"),
-                        program=TargetProgram(checkout / STEPS.parent))
+                        program=TargetProgram(checkout.path / STEPS.parent))
         if prefix.exists():
             if not RuntimeResolution.at(prefix).matches(source.lock, built, core):
                 raise UpgradeRefused("Existing built runtime differs from its resolved inputs")
@@ -516,7 +454,7 @@ class Stack:
         prefix.mkdir(mode=0o700)
         try:
             commands.run(source.uv, "sync", "--project", "stack", "--locked", "--python", "3.14",
-                         "--no-editable", cwd=checkout,
+                          "--no-editable", cwd=checkout.path,
                          env={**built.environment(), "UV_PROJECT_ENVIRONMENT": str(prefix)})
             built.install_native()
             RuntimeResolution.capture(built, core).save(prefix)
@@ -551,59 +489,28 @@ class Stack:
     def imports(self) -> None:
         self.probe(ClientImportsProbe())
 
-    @property
-    def prepared_natives(self) -> Path:
-        """Every runtime's built native package, laid out as ``stack/`` is and keyed by the
-        pin, so a runtime whose pin was already built copies it instead of rebuilding it."""
-        return self.home / ".local/share/agent-comms/native"
-
     def stage_native(self) -> tuple[Path, Path]:
-        """The checkout's ``stack/`` holds this pin's build, because the checkout's own source
-        acquires its pin there (the installer runs that source and validates the route it
-        publishes with it). Copied from the prepared build, or built when no install has
-        built this pin yet. Answers the staged build and its layout under ``stack/``."""
+        """Prepare a missing artifact once; the checkout holds only its store link."""
         manifest = self.checkout / "stack/pi-native.sha256"
         try:
             NativeBuildInputs(self.checkout).require_pinned(manifest)
         except ValueError as error:
             raise UpgradeRefused(str(error)) from None
-        native = pinned_package_for(manifest)
-        layout = native.relative_to(manifest.parent)
-        prepared = self.prepared_natives / layout
-        if native.is_dir():
-            return native, layout
-        if prepared.is_dir():
-            native.parents[2].mkdir(mode=0o700)
-            link_sealed_tree(prepared, native)
-        else:
+        store = NativePackageStore.at_home(self.home)
+        native = store.package_for(manifest)
+        if not native.is_dir():
             self.commands.run(self.checkout / "stack/bin/prepare-pi-native", "--python",
                               self.python, cwd=self.checkout,
                               env=self.environment(self.checkout / "src"))
-            self.keep_native(native, layout)
-        return native, layout
+        store.link(manifest, manifest.parent)
+        return native, pinned_package_for(manifest).relative_to(manifest.parent)
 
     def install_native(self) -> None:
-        """Copy this pin's staged native package into the interpreter; qualifying the copy
-        checks it against the pin."""
-        native, layout = self.stage_native()
-        package = self.runtime.package_root
-        destination = package / "_native" / layout
-        destination.parents[2].mkdir(mode=0o700, parents=True)
-        link_sealed_tree(native, destination)
+        """Interpreters bind the store artifact; disposable trees contain only links."""
+        self.stage_native()
+        NativePackageStore.at_home(self.home).link(
+            self.checkout / "stack/pi-native.sha256", self.runtime.package_root / "_native")
         self.prepare_runtime()
-
-    def keep_native(self, native: Path, layout: Path) -> None:
-        """Publish a fresh build under its pin whole, and retire other pins' builds: each
-        runtime holds its own copy, so only the next runtime reads this one."""
-        self.prepared_natives.mkdir(mode=0o700, parents=True, exist_ok=True)
-        stage = Path(tempfile.mkdtemp(dir=self.prepared_natives, prefix=".stage-"))
-        try:
-            link_sealed_tree(native, stage / layout)
-            for retired in self.prepared_natives.glob(".pi-native-*"):
-                shutil.rmtree(retired)
-            stage.joinpath(layout.parts[0]).rename(self.prepared_natives / layout.parts[0])
-        finally:
-            shutil.rmtree(stage, ignore_errors=True)
 
     def prepare_runtime(self) -> None:
         self.probe(PrepareProducerDigestsProbe())
@@ -660,23 +567,27 @@ class Stack:
         """Use the restart request's receiving declaration in the selected runtime."""
         return self.probe(RunningOwnersProbe(root))
 
-    def owners(self, root: Path, command: type[CliCommand[CliResult]],
-               names: list[str]) -> None:
-        """Run the captured owner set together and join every request before proceeding.
+    def stop_owners(self, root: Path, names: list[str]) -> None:
+        """One target batch owns the signal pass and grace period for every owner."""
+        if not names:
+            return
+        invocation = TargetActionCliCommand.invocation(
+            "--operation", StopCliCommand.declared_name, "--targets", *names)
+        completed = self.probe(CliCommandProbe(("--root", str(root), *invocation)))
+        if completed.returncode:
+            raise UpgradeRefused(f"agent-comms {' '.join(invocation)}: {completed.stdout.strip()}")
 
-        Every request is submitted and the pool's exit joins them all; only then does a
-        failure propagate, naming each failed owner. ``Executor.map`` is not used: it
-        cancels the requests not yet started the moment the first result raises."""
-        with ThreadPoolExecutor(max_workers=max(1, len(names))) as pool:
-            requests = [pool.submit(self.cli, root, command, "--name", name) for name in names]
-        if failures := [request.exception() for request in requests if request.exception()]:
-            raise UpgradeRefused("; ".join(str(failure.args[0]) for failure in failures)
-                                 ) from failures[0]
+    def start_owner(self, root: Path, name: str) -> OwnerStart:
+        try:
+            self.cli(root, StartCliCommand, "--name", name)
+        except UpgradeRefused as error:
+            return RefusedOwner(name, str(error))
+        return StartedOwner(name)
 
     def start(self, root: Path, names: list[str]) -> tuple[OwnerStart, ...]:
         """Start the captured owner set together; each owner's outcome is its own."""
         with ThreadPoolExecutor(max_workers=max(1, len(names))) as pool:
-            return tuple(pool.map(lambda name: OwnerStart.attempt(self, root, name), names))
+            return tuple(pool.map(lambda name: self.start_owner(root, name), names))
 
     def restart_services(self) -> tuple[RestartedService, ...]:
         """Every running host service moves onto this runtime, which owns the root and so
@@ -812,7 +723,7 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
         installed.require_uv()
         if not installed.python.exists():
             raise UpgradeRefused(f"No installed stack at {installed.python}")
-        staged = Stack.build(tree.path, commands)
+        staged = Stack.build(ScratchCheckout(tree.path), commands)
         report.starting(mode.destination(member.initial_writer(root, installed)), target)
         install, rehearsal = member.rehearsed(checkout, root, current, target, chain,
                                               installed, staged, tree, installer, spill_dir)
@@ -1038,7 +949,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
         holder.enter_context(held.holding())  # this run's own CLI calls read under its hold
         try:
             try:
-                self.installed.owners(self.root, StopCliCommand, running)
+                self.installed.stop_owners(self.root, running)
                 held = maintenance.retarget(held, self.staged.runtime)
                 holder.close()
                 holder.enter_context(held.holding())
@@ -1181,7 +1092,7 @@ class RetiringInstall(FreshInstall):
 
     def live(self, rehearsal: FreshRehearsal, report: InstallReport) -> RetiredRun:
         running = self.installed.running_owners(self.root)
-        self.installed.owners(self.root, StopCliCommand, running)
+        self.installed.stop_owners(self.root, running)
         retired = self.root.with_name(f"{self.root.name}.retired-{time.strftime('%Y%m%dT%H%M%S')}")
         self.root.rename(retired)
         return super().live(rehearsal, report).extended(

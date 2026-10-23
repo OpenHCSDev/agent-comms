@@ -11,18 +11,10 @@ from pathlib import Path
 import pytest
 from tools.debt_ratchet import UncarriedRecordFormat, git
 
-from agent_comms.cli_commands import ArchiveCliCommand
-from agent_comms.installer.backup import (
-    StoreBackup,
-    UpgradeRefused,
-    bus_files,
-)
-from agent_comms.installer.carry import (
-    STEPS,
-    Carried,
-    Carry,
-    MigrateOperation,
-)
+from agent_comms.installer.backup import StoreBackup, bus_files
+from agent_comms.installer.refusals import UpgradeRefused
+from agent_comms.installer.carry import STEPS
+from agent_comms.installer.probes.carry import Carried, Carry, MigrateOperation
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import TargetProgram
 from agent_comms.installer.upgrade import (
@@ -38,7 +30,7 @@ from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_execution import ExternalThreadExecution
-from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
+from agent_comms.thread_status import RunningThreadStatus
 from agent_comms.threads import Thread
 from fixture_git import IDENTITY
 
@@ -47,7 +39,7 @@ REPO = Path(__file__).resolve().parents[1]
 
 def step_source() -> str:
     return (
-        "from agent_comms.installer.carry import Carried, Carry\n\n"
+        "from agent_comms.installer.probes.carry import Carried, Carry\n\n"
         "class Step(Carry):\n"
         "    opened_files = ()\n"
         "    def carry(self, *, apply):\n        return Carried(0)\n"
@@ -152,7 +144,7 @@ def noisy_step(tmp_path_factory):
     module = tree.path / "tools" / "cutover" / "carry_noisy.py"
     module.write_text(
         "from pathlib import Path\n"
-        "from agent_comms.installer.carry import Carry, Carried\n"
+        "from agent_comms.installer.probes.carry import Carry, Carried\n"
         "class Noisy(Carry):\n"
         "    opened_files = ()\n"
         "    def carry(self, *, apply):\n"
@@ -236,19 +228,18 @@ def test_restart_selection_uses_receiving_declaration_with_connected_cli_inbox(c
             external.execution.require_native()
 
 
-def test_owner_request_failure_joins_the_entire_set_before_propagating(comms, stack):
+def test_owner_stop_batch_reports_refusal_after_stopping_available_owners(comms, stack):
     names = ["failed", "other", "last"]
     for name in names[1:]:
         comms.registry.declare(
-            Thread(name, frozenset(), str(comms.root)), StoppedThreadStatus()
+            Thread(name, frozenset(), str(comms.root)), RunningThreadStatus()
         )
 
-    # The first real CLI request fails; both other children must finish their writes
-    # before owners propagates that failure. No replacement Stack.cli is involved.
+    # A missing target must not prevent the batch from stopping its available owners.
     with pytest.raises(UpgradeRefused, match="failed"):
-        stack.owners(comms.root, ArchiveCliCommand, names)
+        stack.stop_owners(comms.root, names)
     saved = comms.registry.snapshot()
-    assert tuple(saved.status(name) for name in names[1:]) == (ArchivedThreadStatus(),) * 2
+    assert all(saved.status(name).stopped for name in names[1:])
 
 
 def test_upgrade_refuses_at_start_without_its_own_uv(stack):

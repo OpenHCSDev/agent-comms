@@ -258,6 +258,7 @@ class Registration:
         # The registry write refuses during maintenance; refuse first, so the goal journal
         # never records an intent for a registration that cannot commit.
         self.store.require_maintenance_open()
+        change.prepare_participant(self.store.path.parent)
         thread = change.thread
         change = replace(change, thread=replace(
             thread, storage_roots=thread.storage_roots.assigned(self.storage_rule, thread.name)))
@@ -283,7 +284,12 @@ class Registration:
                 return result
         return change
 
-    restore_stopped = changing(RegistryDocument.restore_stopped)
+    def restore_stopped(self, source: RegistrySnapshot, names: Sequence[str]) -> tuple[str, ...]:
+        with self.store.editing() as edit:
+            restored = edit.restore_stopped(source, names)
+            edit.commit()
+            return restored
+
     rename = changing(RegistryDocument.rename)
     set_work_state = changing(RegistryDocument.set_work_state)
     observe_offered_tools = changing(RegistryDocument.observe_offered_tools)

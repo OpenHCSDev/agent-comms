@@ -263,7 +263,12 @@ class Checkout:
     @classmethod
     def add(cls, repository: Path | str, path: Path | str, revision: str, *options: str) -> Self:
         Repo.git(repository, "worktree", "add", *options, str(path), revision)
-        checkout = cls(Path(path))
+        return cls.prepared(Path(path))
+
+    @classmethod
+    def prepared(cls, path: Path) -> Self:
+        """Prepare this checkout's pinned submodules before handing it to a consumer."""
+        checkout = cls(path)
         checkout.prepare()
         return checkout
 

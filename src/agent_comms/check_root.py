@@ -120,7 +120,7 @@ class CheckRoot:
                 turn_generation=0,
             )
         with copied.registry.store.editing() as edit:
-            edit.document.restore_stopped(snapshot, names)
+            edit.restore_stopped(snapshot, names)
             edit.document.threads.update(declarations)
             # Old messages can name people outside the selected workers. Keep
             # only their deleted-name record, never their sessions or authority.

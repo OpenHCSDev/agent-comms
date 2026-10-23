@@ -14,6 +14,7 @@ from pathlib import Path
 from agent_comms.installer.practice import TestHome
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.upgrade import Stack
+from agent_comms.repo import Checkout
 from agent_comms.storage_rules import StorageRule
 
 
@@ -34,7 +35,7 @@ def main() -> None:
             parser.error("--home must not name the live home")
         TestHome(home).prepare()
         with InstallCommands() as commands:
-            Stack.build(Path.cwd(), commands, home).test(*arguments)
+            Stack.build(Checkout.prepared(Path.cwd()), commands, home).test(*arguments)
 
 
 if __name__ == "__main__":

@@ -18,9 +18,10 @@ import shutil
 import stat
 import tempfile
 from _hashlib import HASH
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, ClassVar, Literal
 
 from agent_comms.child_process import Platform
 from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText, Sha256Text, WireName
@@ -71,23 +72,30 @@ def pinned_package_for(manifest: Path) -> Path:
 
 
 def pinned_location() -> Path:
-    return pinned_package_for(MANIFEST)
+    return pinned_package_for(MANIFEST).resolve()
 
 
 def pinned_native_package() -> Path:
     if not (package := pinned_location()).is_dir():
         raise NativePackageMissing(f"Pinned native package directory is missing: {package}; "
                                    f"run {MANIFEST.parent / 'bin/prepare-pi-native'} first")
-    return package
+    return package.resolve(strict=True)
 
 
 @dataclass
-class PackageInventory:
-    """One bounded package walk and its ordered content commitment."""
+class PackageInventory(ABC):
+    """The bounded traversal and filesystem identity checks shared by build and install."""
 
     entries: int = 1
     bytes: int = 0
-    digest: HASH = field(default_factory=hashlib.sha256, repr=False)
+
+    def inspect(self, root: Path) -> None:
+        if os.name != "posix":
+            raise NativePackageError("Native package filesystem verification requires POSIX")
+        try:
+            self.visit(os.fspath(root), ".", 0)
+        except OSError as error:
+            raise NativePackageError("Native package could not be verified") from error
 
     @staticmethod
     def identity(info: os.stat_result) -> tuple[int, ...]:
@@ -116,8 +124,7 @@ class PackageInventory:
         if before.st_uid not in (0, os.getuid()) or before.st_mode & 0o022:
             raise NativePackageError("Native package is not owner-controlled")
         if stat.S_ISDIR(before.st_mode):
-            record = ["directory", relative, before.st_mode & 0o111]
-            self.digest.update((json.dumps(record, ensure_ascii=True) + "\n").encode())
+            self.directory(relative, before)
             names = []
             with os.scandir(path) as entries:
                 for entry in entries:
@@ -131,44 +138,116 @@ class PackageInventory:
                 raise NativePackageError("Native package shared resource is writable")
             self.bytes += before.st_size
             self.require_byte_limit()
-            content = hashlib.sha256()
-            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-            try:
-                if self.identity(os.fstat(fd)) != self.identity(before):
-                    raise NativePackageError("Native package changed while opening")
-                remaining = before.st_size
-                while remaining:
-                    block = os.read(fd, min(remaining, 1024 * 1024))
-                    if not block:
-                        raise NativePackageError("Native package truncated while hashing")
-                    content.update(block)
-                    remaining -= len(block)
-                if os.read(fd, 1) or self.identity(os.fstat(fd)) != self.identity(before):
-                    raise NativePackageError("Native package changed while hashing")
-            finally:
-                os.close(fd)
-            record = ["file", relative, before.st_mode & 0o111, before.st_size, content.hexdigest()]
-            self.digest.update((json.dumps(record, ensure_ascii=True) + "\n").encode())
+            self.file(path, relative, before)
         else:
             raise NativePackageError("Native package contains symlinks or special files")
         if self.identity(os.lstat(path)) != self.identity(before):
             raise NativePackageError("Native package changed during verification")
 
+    @abstractmethod
+    def directory(self, relative: str, info: os.stat_result) -> None: ...
+
+    @abstractmethod
+    def file(self, path: str, relative: str, info: os.stat_result) -> None: ...
+
+
+@dataclass
+class PackageContentInventory(PackageInventory):
+    """Build preparation alone reads content to establish the manifest commitment."""
+
+    digest: HASH = field(default_factory=hashlib.sha256, repr=False)
+
+    def directory(self, relative: str, info: os.stat_result) -> None:
+        record = ["directory", relative, SealedPackageInventory.permissions & 0o111]
+        self.digest.update((json.dumps(record, ensure_ascii=True) + "\n").encode())
+
+    def file(self, path: str, relative: str, before: os.stat_result) -> None:
+        content = hashlib.sha256()
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        try:
+            if self.identity(os.fstat(fd)) != self.identity(before):
+                raise NativePackageError("Native package changed while opening")
+            remaining = before.st_size
+            while remaining:
+                block = os.read(fd, min(remaining, 1024 * 1024))
+                if not block:
+                    raise NativePackageError("Native package truncated while hashing")
+                content.update(block)
+                remaining -= len(block)
+            if os.read(fd, 1) or self.identity(os.fstat(fd)) != self.identity(before):
+                raise NativePackageError("Native package changed while hashing")
+        finally:
+            os.close(fd)
+        record = ["file", relative, before.st_mode & 0o111, before.st_size, content.hexdigest()]
+        self.digest.update((json.dumps(record, ensure_ascii=True) + "\n").encode())
+
+
+class SealedPackageInventory(PackageInventory):
+    """An installed build is accepted through its seal without opening file contents."""
+
+    permissions: ClassVar[int] = 0o500
+
+    def directory(self, relative: str, info: os.stat_result) -> None:
+        if stat.S_IMODE(info.st_mode) != self.permissions:
+            raise NativePackageError(f"Native package directory is not sealed 0500: {relative}")
+
+    def file(self, path: str, relative: str, info: os.stat_result) -> None:
+        if info.st_mode & 0o222:
+            raise NativePackageError(f"Native package file is writable: {relative}")
+
+
+def seal_native_tree(root: Path) -> None:
+    """Preparation freezes files first, then directories from the leaves to the root."""
+    for directory, _, files in os.walk(root, topdown=False):
+        for name in files:
+            path = Path(directory) / name
+            path.chmod(stat.S_IMODE(path.lstat().st_mode) & ~0o222)
+        Path(directory).chmod(SealedPackageInventory.permissions)
+
+
+@dataclass(frozen=True)
+class NativePackageStore:
+    """Prepared trees live here; checkouts and interpreters publish links to them."""
+
+    path: Path
+
+    @classmethod
+    def at_home(cls, home: Path) -> NativePackageStore:
+        return cls(home / ".local/share/agent-comms/native")
+
+    def prepare(self) -> None:
+        self.path.mkdir(mode=0o700, parents=True, exist_ok=True)
+
+    def package_for(self, manifest: Path) -> Path:
+        return self.path / pinned_package_for(manifest).relative_to(manifest.parent)
+
+    def link(self, manifest: Path, resources: Path) -> None:
+        build = self.package_for(manifest).parents[2]
+        destination = resources / build.name
+        resources.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if destination.is_symlink() and destination.resolve(strict=True) == build.resolve(strict=True):
+            return
+        destination.symlink_to(build, target_is_directory=True)
+
+    def retire(self, build: Path) -> None:
+        """Only this store retires sealed trees; shared file inodes stay read-only."""
+        if build.parent.resolve() != self.path.resolve() or build.is_symlink():
+            raise NativePackageError("Sealed native retirement requires an owned store directory")
+        for directory, _, _ in os.walk(build):
+            path = Path(directory)
+            path.chmod(stat.S_IMODE(path.lstat().st_mode) | stat.S_IWUSR)
+        shutil.rmtree(build)
+
 
 def package_tree_digest(root: Path) -> str:
-    """Hash sorted path/type/execute-mode/size/content records with bounded reads."""
-    if os.name != "posix":
-        raise NativePackageError("Native package filesystem verification requires POSIX")
-    inventory = PackageInventory()
-    try:
-        inventory.visit(os.fspath(root), ".", 0)
-    except OSError as error:
-        raise NativePackageError("Native package could not be verified") from error
+    """Hash sorted content records with final sealed directory modes and bounded reads."""
+    inventory = PackageContentInventory()
+    inventory.inspect(root)
     return inventory.digest.hexdigest()
 
 
 def share_native_resources(root: Path, deployments: Path) -> dict[str, int]:
-    """Seal a NEW patched package, then reuse matching frozen resource inodes.
+    """Share a new package's read-only file inodes before final directory sealing.
 
     The existing build lifetime calls this only after every patch. Old handed
     packages have a different import fence and are never changed or borrowed.
@@ -225,22 +304,6 @@ def share_native_resources(root: Path, deployments: Path) -> dict[str, int]:
     package_tree_digest(root)
     return {"shared_files": shared_files, "shared_content_bytes": shared_bytes}
 
-
-def link_sealed_tree(source: Path, destination: Path) -> None:
-    """Publish a sealed build at another path by sharing its file inodes.
-
-    A sealed build never changes in place: every regular file is read-only, and a declared
-    source replaces its own inode (``install_declared_sources``). So each copy of a build
-    holds the same bytes, and sharing the inodes is the copy. A writable file would become a
-    mutable shared resource, which the package inventory refuses, so it is refused here first.
-    """
-
-    def link(original: str, copy: str) -> None:
-        if os.lstat(original).st_mode & 0o222:
-            raise NativePackageError(f"Native package resource is writable: {original}")
-        os.link(original, copy, follow_symlinks=False)
-
-    shutil.copytree(source, destination, symlinks=True, copy_function=link)
 
 def write_native_manifest(root: Path) -> None:
     """Commit an assembled package through the existing diagnostic/tree format.
@@ -412,8 +475,8 @@ class VerifiedNativePackage:
     path: Path
 
     @classmethod
-    def qualify(cls, root: Path) -> VerifiedNativePackage:
-        """Compare a mutable build/install tree with the pin before publication."""
+    def prepare(cls, root: Path) -> VerifiedNativePackage:
+        """Compare build content with its pin, then seal it before publication."""
         pins = [
             line[len(TREE_PREFIX) :]
             for line in MANIFEST.read_text().splitlines()
@@ -427,6 +490,16 @@ class VerifiedNativePackage:
             raise NativePackageError("Pinned native package tree commitment unavailable") from error
         if package_tree_digest(root) != digest:
             raise NativePackageError("Native package tree differs from pinned artifact")
+        seal_native_tree(root)
+        return cls(root)
+
+    @classmethod
+    def qualify(cls, root: Path) -> VerifiedNativePackage:
+        """Check this manifest's named, sealed build without reading package files."""
+        layout = pinned_package_for(MANIFEST).relative_to(MANIFEST.parent).parts
+        if root.parts[-len(layout):] != layout:
+            raise NativePackageError("Native package directory differs from its manifest-derived name")
+        SealedPackageInventory().inspect(root)
         return cls(root)
 
     @property
@@ -451,9 +524,11 @@ class VerifiedNativePackage:
         root = root.absolute()  # Do not resolve away symlink components.
         if ".." in root.parts:
             raise NativePackageError("Pinned native Pi package path is not lexical")
-        if root.parts[-3:] != ("node_modules", "@earendil-works", "pi-coding-agent"):
+        layout = Path(PACKAGE_LAYOUT).parts
+        if root.parts[-len(layout):] != layout:
             raise NativePackageError("Canonical native Pi package layout is required")
-        if not root.is_relative_to(MANIFEST.parent):
+        binding = MANIFEST.parent / root.parents[2].name / PACKAGE_LAYOUT
+        if binding.resolve() != root:
             raise NativePackageError("Native Pi package is outside this code's native resources")
         for ancestor in (root, *root.parents):
             failed = TrustedAncestorRole.violation(ancestor.lstat())

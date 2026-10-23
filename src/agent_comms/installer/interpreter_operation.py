@@ -6,28 +6,23 @@ supplies its own imports even when it predates this file.
 
 from __future__ import annotations
 
+import base64
 import inspect
 import json
 import os
 import sys
 from abc import ABC, abstractmethod
-from contextlib import redirect_stdout
 from dataclasses import dataclass
-from importlib import import_module
-from importlib.metadata import distributions
-from io import StringIO
+from io import BytesIO
 from pathlib import Path
-from typing import Annotated, ClassVar, Self, cast
+from typing import cast
+from zipfile import ZIP_DEFLATED, ZipFile
 
-from pydantic import BaseModel, RootModel
-from pydantic.json_schema import DEFAULT_REF_TEMPLATE
 from typing_extensions import TypeForm
 
-import agent_comms
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec, PathText, WireValue
+from agent_comms.field_codec import FieldCodec
 from agent_comms.maintenance_barrier import HOLDER_NONCE
-from agent_comms.service_sender import ServiceSender
 
 
 class InterpreterOperation[Answer, *Arguments](ABC):
@@ -84,19 +79,32 @@ class TargetProgram(InstalledProgram):
 
 @dataclass(frozen=True)
 class RetainedProgram(ProbeProgram):
-    """A source operation that must finish after its owning checkout closes. It runs as the
-    interpreter's main module, so the selected runtime's own imports keep its declarations."""
+    """Worker declarations that survive retirement of their source checkout."""
 
     source: str
 
     @classmethod
     def current(cls) -> RetainedProgram:
-        """The operation family and its worker loop, as this checkout holds them now."""
-        path = Path(inspect.getfile(RuntimeProbe))
+        """The snapshot owns the whole installer package; the selected runtime owns the rest of Core."""
+        directory = Path(inspect.getfile(RuntimeProbe)).parent
+        output = BytesIO()
+        with ZipFile(output, "w", compression=ZIP_DEFLATED) as archive:
+            for path in sorted(directory.rglob("*.py")):
+                archive.write(path, str(path.relative_to(directory.parent.parent)))
+        payload = base64.b85encode(output.getvalue()).decode("ascii")
         return cls(
-            f"__file__ = {str(path)!r}\n"
-            f"exec(compile({path.read_text()!r}, __file__, 'exec'))\n"
-            "serve()\n"
+            "import base64\n"
+            "from pathlib import Path\n"
+            "from tempfile import TemporaryDirectory\n"
+            "import agent_comms.installer\n"
+            "cache = Path.home() / '.cache'\n"
+            "cache.mkdir(parents=True, exist_ok=True)\n"
+            "with TemporaryDirectory(prefix='agent-comms-probes-', dir=cache) as retained:\n"
+            "    archive = Path(retained) / 'installer.zip'\n"
+            f"    archive.write_bytes(base64.b85decode({payload!r}))\n"
+            "    agent_comms.installer.__path__ = [str(archive) + '/agent_comms/installer']\n"
+            "    from agent_comms.installer.interpreter_operation import serve\n"
+            "    serve()\n"
         )
 
     def entry(self) -> tuple[str, str]:
@@ -108,29 +116,9 @@ class RuntimeProbe[Answer](
     InterpreterOperation[Answer],
     DeclaredFamily,
     affix="Probe",
-    discovery_package="agent_comms.installer",
+    discovery_package="agent_comms.installer.probes",
 ):
     """A declared operation handled by the install's selected interpreter worker."""
-
-
-@dataclass(frozen=True)
-class CliOutput:
-    returncode: int
-    stdout: str
-
-
-@dataclass(frozen=True)
-class CliCommandProbe(RuntimeProbe[CliOutput]):
-    """One command-line call, answered by the selected runtime's own command line."""
-
-    arguments: tuple[str, ...]
-
-    def run(self) -> CliOutput:
-        from agent_comms import cli
-
-        with StringIO() as output, redirect_stdout(output):
-            returncode = cli.main(self.arguments)
-            return CliOutput(returncode, output.getvalue())
 
 
 @dataclass(frozen=True)
@@ -162,195 +150,3 @@ def serve() -> None:
             file=answers,
             flush=True,
         )
-
-
-class ClientImportsProbe(RuntimeProbe[None]):
-    def run(self) -> None:
-        import_module("toad.app")
-        import_module("agent_comms.acp")
-
-
-class PrepareNativeProbe(RuntimeProbe[None]):
-    def run(self) -> None:
-        from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
-        from agent_comms.unit_instructions import UnitInstructions
-
-        VerifiedNativePackage.qualify(pinned_native_package())
-        UnitInstructions.prepare()
-
-
-class PrepareProducerDigestsProbe(RuntimeProbe[None]):
-    """Only the staged runtime's installer publishes its producer declarations."""
-
-    def run(self) -> None:
-        from agent_comms.store_files import AtomicFile
-        from agent_comms.typed_table import BuiltDigests, BuildProducerDigests, ProducedTable
-
-        rows = ProducedTable.members_with(ProducedTable)
-        built = BuiltDigests({row.declared_name: row.producer_digest() for row in rows})
-        destination = BuildProducerDigests.current().path
-        print(f"install: producer digests from {agent_comms.__file__}", file=sys.stderr)
-        AtomicFile(destination).write_text(
-            FieldCodec.compact(FieldCodec.encode(built), sort_keys=True) + "\n")
-
-
-@dataclass(frozen=True)
-class RunningOwnersProbe(RuntimeProbe[list[str]]):
-    root: Annotated[Path, PathText]
-
-    def run(self) -> list[str]:
-        from agent_comms.comms import wire
-        from agent_comms.owner_restart import OwnerRestartRequest
-
-        snapshot = wire(self.root).registry.snapshot()
-        return [thread.name for thread in OwnerRestartRequest().scope.threads(snapshot)]
-
-
-@dataclass(frozen=True)
-class InstallReportProbe(RuntimeProbe[None], ServiceSender):
-    """Publish using the selected runtime's own registry, schema and publisher."""
-
-    sender: ClassVar[str] = "installer"
-    root: Annotated[Path, PathText]
-    body: str
-
-    def run(self) -> None:
-        from agent_comms.channel_targets import CommsTag
-        from agent_comms.comms import client_wire
-
-        with client_wire(self.root) as comms:
-            self.register(comms.registry)
-            comms.messaging.send(self.sender, CommsTag.channel(), self.body)
-
-
-class ServingProbe(RuntimeProbe[None]):
-    """Every running host service serves the root, proven by the runtime that owns it."""
-
-    def run(self) -> None:
-        from agent_comms.host_services import HostService
-
-        for member in HostService.members_with(HostService):
-            for instance in member.running():
-                instance.serves()
-
-
-class PublicationProbe(RuntimeProbe[None]):
-    """The selected interpreter publishes itself: console launchers and harness links move
-    to it, then ``current`` does."""
-
-    def run(self) -> None:
-        # Imported here: publication -> runtime_resolution -> interpreter_operation is a cycle.
-        from agent_comms.installer.publication import RuntimePublication
-
-        RuntimePublication.installed().publish_links()
-
-
-class DistributionVersionsProbe(RuntimeProbe[dict[str, str]]):
-    def run(self) -> dict[str, str]:
-        from packaging.utils import canonicalize_name
-
-        return {canonicalize_name(dist.metadata["Name"]): dist.version for dist in distributions()}
-
-
-@dataclass(frozen=True)
-class PackagePin:
-    version: str
-
-
-@dataclass(frozen=True)
-class GitPin(PackagePin):
-    commit: str
-
-
-@dataclass(frozen=True)
-class ArchivePin(PackagePin):
-    url: str
-
-
-class CommitRecord(BaseModel):
-    commit_id: str
-
-
-class SourceRecord(BaseModel):
-    url: str
-
-    def revision(self) -> str:
-        raise ValueError("The installed package does not record a Git revision")
-
-
-class ArchiveRecord(SourceRecord):
-    def pin(self, version: str) -> PackagePin:
-        return ArchivePin(version, self.url)
-
-
-class GitRecord(SourceRecord):
-    vcs_info: CommitRecord
-
-    def revision(self) -> str:
-        return self.vcs_info.commit_id
-
-    def pin(self, version: str) -> PackagePin:
-        return GitPin(version, self.vcs_info.commit_id)
-
-
-class RegistryRecord(RootModel[None]):
-    """null is the build record's declared registry-package representation."""
-
-    def revision(self) -> str:
-        raise ValueError("A registry package does not record a Git revision")
-
-    def pin(self, version: str) -> PackagePin:
-        return PackagePin(version)
-
-
-class PackageRecord(BaseModel, WireValue):
-    version: str
-    source: GitRecord | ArchiveRecord | RegistryRecord
-
-    def pin(self) -> PackagePin:
-        return self.source.pin(self.version)
-
-    def to_wire(self) -> dict[str, object]:
-        return self.model_dump(mode="json")
-
-    @classmethod
-    def from_wire(cls, data: object) -> Self:
-        return cls.model_validate(data)
-
-    @classmethod
-    def schema(
-        cls, by_alias: bool = True, ref_template: str = DEFAULT_REF_TEMPLATE
-    ) -> dict[str, object]:
-        return cls.model_json_schema(by_alias=by_alias, ref_template=ref_template)
-
-
-@dataclass(frozen=True)
-class InstalledPackagesProbe(RuntimeProbe[dict[str, PackageRecord]]):
-    core: str
-
-    def run(self) -> dict[str, PackageRecord]:
-        from packaging.utils import canonicalize_name
-
-        from agent_comms.package_stamp import STAMP
-
-        if not Path(agent_comms.__file__).resolve().is_relative_to(Path(sys.prefix).resolve()):
-            raise ValueError("Core is editable, not a built runtime package")
-        actual = STAMP.commit()
-        if actual != self.core:
-            raise ValueError(
-                "The wheel stamp does not name the selected source: "
-                f"installed {actual}, requested {self.core}"
-            )
-        return {
-            canonicalize_name(dist.name): PackageRecord.from_wire(
-                {
-                    "version": dist.version,
-                    "source": (
-                        json.loads(source)
-                        if (source := dist.read_text("direct_url.json"))
-                        else None
-                    ),
-                }
-            )
-            for dist in distributions()
-        }
