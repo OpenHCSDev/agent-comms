@@ -87,6 +87,7 @@ class DeclaredFailures(RetiredClaimFields, Carry):
                 with closing(SQLiteFile.read_snapshot(path)) as original:
                     original.backup(prepared)
                 columns = FailedTurnEvidence.stored_columns(prepared)
+                replacements = self.retired_columns(FailedTurnEvidence, columns)
                 if "reason" in columns:
                     for (reason,) in prepared.execute(
                         f'SELECT DISTINCT reason FROM "{FailedTurnEvidence.declared_name}"'
@@ -97,8 +98,8 @@ class DeclaredFailures(RetiredClaimFields, Carry):
                         f"WHEN {sql_literal(old)} THEN {sql_literal(kind)}"
                         for old, kind in self.old_names.items()
                     )
-                    replacements = {"failure": f"CASE reason {cases} END"}
-                    replacements.update(self.retired_columns(FailedTurnEvidence, columns))
+                    replacements["failure"] = f"CASE reason {cases} END"
+                if replacements:
                     FailedTurnEvidence.rebuild(prepared, replacements)
                     changed += 1
                 if AttemptRecord.stored_columns(prepared):

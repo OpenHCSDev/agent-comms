@@ -68,10 +68,13 @@ class RetiredClaimFields:
 
     @classmethod
     def retired_columns(cls, record: type[TypedTable], stored: tuple[str, ...]) -> dict[str, str]:
-        return {field.name: _identifier(old)
-                for field in record._fields()
-                if field.column.record_key
-                and (old := cls.retired_fields(record).get(field.name)) in stored}
+        fields = record._fields()
+        changed = {field.name: _identifier(old)
+                   for field in fields if field.column.record_key
+                   and (old := cls.retired_fields(record).get(field.name)) in stored}
+        if any(field.wire_name in stored for field in fields if field.name in changed):
+            raise RelationViolationError(f"{record.__name__} contains old and new claim columns")
+        return changed
 
     @classmethod
     def rename_record(cls, record: type, raw: dict[str, object]) -> dict[str, object]:

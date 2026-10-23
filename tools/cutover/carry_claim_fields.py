@@ -127,9 +127,6 @@ class ClaimFields(RetiredClaimFields, Carry):
             for row in tables:
                 stored = row.stored_columns(db)
                 renamed = cls.retired_columns(row, stored)
-                if any(field.wire_name in stored for field in row._fields()
-                       if field.name in renamed):
-                    raise RelationViolationError(f"{row.__name__} contains old and new claim columns")
                 json_fields = tuple(field for field in row._fields()
                                     if issubclass(field.storage, JsonStorage) and field.wire_name in stored
                                     and field.value.contains_records(cls.selects_record))
