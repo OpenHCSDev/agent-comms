@@ -13,7 +13,6 @@ from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError
 from .goal_actions import GoalActionContext, SetGoalAction
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
-from .maintenance_barrier import MaintenanceBarrier
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import PrivateRegistryGuard
 from .registration_change import RegistrationChange
@@ -230,12 +229,12 @@ class Registration:
     def _commit_registration(self, edit: RegistryEdit, change: RegistrationChange) -> RegistrationChange:
         """Every registration commits here, after inheritance kept a redeclared thread's
         roots; the registry assigns a new thread its storage roots in this one place."""
+        # The registry write refuses during maintenance; refuse first, so the goal journal
+        # never records an intent for a registration that cannot commit.
+        self.store.require_maintenance_open()
         thread = change.thread
         change = replace(change, thread=replace(
             thread, storage_roots=thread.storage_roots.assigned(self.storage_rule, thread.name)))
-        change.thread.role.require_maintenance_open(
-            MaintenanceBarrier(self.store.path), change.claims_owner
-        )
         before = change.prior_goal
         history = None
         intent = None

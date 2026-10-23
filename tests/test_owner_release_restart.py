@@ -117,7 +117,7 @@ print(json.dumps(FieldCodec.encode(result)), flush=True)
         target_environment = dict(environment)
         target_environment.update(PATH=str(Path(sys.executable).parent)+os.pathsep+os.defpath,
                                   VIRTUAL_ENV=str(Path(sys.executable).parent.parent))
-        results = await asyncio.to_thread(comms.owners.restart_owners, (name,),
+        results = await asyncio.to_thread(comms.owners.restart_owners, OwnersNamed((name,)),
             agent_bin=GivenBinary(str(Path(sys.executable).with_name('pi-comms-native'))),
             runtime=RestartEnvironment.inherit(target_environment), expected=selection)
         assert len(results) == 1 and results[0].previous_pid == original.require_process().pid
@@ -265,7 +265,7 @@ def test_voluntary_exit_during_grace_is_reaped_without_force(releasing_owner):
 def test_changed_owner_after_release_refuses_escalation_and_replacement(releasing_owner, change):
     comms, child = releasing_owner
     with ThreadPoolExecutor(max_workers=1) as pool:
-        stopping = pool.submit(comms.owners.restart_owners, ["worker"], agent_bin=GivenBinary(sys.executable))
+        stopping = pool.submit(comms.owners.restart_owners, OwnersNamed(("worker",)), agent_bin=GivenBinary(sys.executable))
         wait_for(comms.root / "released")
         current = comms.registry.require("worker")
         if change == "birth":
