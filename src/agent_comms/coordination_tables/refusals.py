@@ -14,7 +14,6 @@ from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.coordination_session import CoordinationSession
 from agent_comms.errors import RelationViolationError, ToolRefusedError
 from agent_comms.maintenance_barrier import MaintenanceBarrier
-from agent_comms.store_files import SharedLock, _store_lock
 from agent_comms.typed_table import Column, Index
 
 from ..locked_store import RegistryFile
@@ -45,8 +44,8 @@ class SendRefusal(CoordinatorRow):
 
     @classmethod
     def record(cls, root: Path, sender: str, target: str, error: ToolRefusedError) -> None:
-        with guard_original_root_write(root), _store_lock(root / "wire", mode=SharedLock()):
-            MaintenanceBarrier(RegistryFile.path_in(root)).assert_open_unlocked()
+        with (guard_original_root_write(root),
+              MaintenanceBarrier(RegistryFile.path_in(root)).allow_input()):
             with (
                 CoordinationSession(str(CoordinationStore.path_in(root))) as store,
                 store.writing() as db,
