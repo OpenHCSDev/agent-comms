@@ -978,8 +978,11 @@ NO_CHILD_REGISTRATION = NoChildRegistration()
 
 
 class ChildLaunch(ABC):
-    # The composition root binds the store after process types are declared.
-    children_store: ClassVar[type[RuntimeChildrenStore]]
+    @property
+    def children_store(self) -> type[RuntimeChildrenStore]:
+        from .runtime_children import RuntimeChildrenStore
+
+        return RuntimeChildrenStore
 
     def __init__(self, runtime: LaunchRuntime):
         self.runtime = runtime

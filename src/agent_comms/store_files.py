@@ -145,6 +145,8 @@ class StoreLock:
     @contextmanager
     def ordered(cls, requests: Mapping[StoreLockOwner, LockMode], *, blocking=True, contention=None):
         """Acquire store owners by their declared rank, never their filenames."""
+        # The declared order ranks every owner before the first ordered acquisition.
+        from . import store_order  # noqa: F401
         with ExitStack() as resources:
             yield {owner: resources.enter_context(owner.locked(
                 mode=requests[owner], blocking=blocking, contention=contention))
