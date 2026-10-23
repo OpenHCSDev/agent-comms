@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from functools import partial
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from acp.schema import AgentMessageChunk, TextContentBlock
 
@@ -21,22 +21,28 @@ from .turn_lease import TurnState
 from .ui_model.observation import ObservationProcess, ReadTranscript, SubscribeTranscript
 
 if TYPE_CHECKING:
+    from acp.agent.connection import AgentSideConnection
+
     from .acp_extension import TranscriptSnapshotUpdate
     from .comms import Comms
-    from .runtime import RuntimeServer, SocketClient
+    from .runtime import RuntimeServer, SessionUpdateSink, SocketClient
 
 
 @dataclass(frozen=True, kw_only=True)
 class TranscriptUpdate(DeclaredFamily, affix="TranscriptUpdate"):
     @abstractmethod
-    async def publish(self, session_id: str, client: Any) -> None: ...
+    async def publish(
+        self, session_id: str, client: SessionUpdateSink | AgentSideConnection,
+    ) -> None: ...
 
 
 @dataclass(frozen=True, kw_only=True)
 class TurnTranscriptUpdate(TranscriptUpdate):
     state: TurnState
 
-    async def publish(self, session_id: str, client: Any) -> None:
+    async def publish(
+        self, session_id: str, client: SessionUpdateSink | AgentSideConnection,
+    ) -> None:
         await client.session_update(
             session_id=session_id,
             update=AgentMessageChunk(
