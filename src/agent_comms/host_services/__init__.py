@@ -133,9 +133,7 @@ class SystemdUserService(HostService, declared_name=None):
     service_options: ClassVar[tuple[str, ...]] = ("Type=notify", "NotifyAccess=main")
 
     @classmethod
-    def unit_file(cls, home: Path | None = None) -> Path:
-        if home is None:
-            home = Path.home()
+    def unit_file(cls, home: Path) -> Path:
         return home / ".config/systemd/user" / cls.unit
 
     def unit_name(self) -> str:
@@ -166,7 +164,7 @@ class SystemdUserService(HostService, declared_name=None):
         return cls.render_unit(cls.command_line(arguments))
 
     @classmethod
-    def install(cls, arguments: tuple[str, ...] = (), *, home: Path | None = None) -> None:
+    def install(cls, arguments: tuple[str, ...] = (), *, home: Path) -> None:
         unit = cls.unit_file(home)
         unit.parent.mkdir(parents=True, exist_ok=True)
         unit.write_text(cls.unit_text(arguments), encoding="utf-8")
@@ -182,7 +180,7 @@ class SystemdUserService(HostService, declared_name=None):
         The user manager belongs to the UID, not HOME; a private install must not
         discover or restart the real home's service through that shared manager.
         """
-        unit = cls.unit_file()
+        unit = cls.unit_file(Path.home())
         if not unit.is_file():
             return 0
         loaded = subprocess.check_output(

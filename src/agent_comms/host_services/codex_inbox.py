@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Self
 
 from ..launch_runtime import LaunchRuntime
@@ -34,7 +35,7 @@ class CodexInboxService(SystemdUserService):
 
     @classmethod
     def running(cls) -> tuple[Self, ...]:
-        if not cls.unit_file().is_file():
+        if not cls.unit_file(Path.home()).is_file():
             return ()
         prefix = cls.unit.removesuffix(".service")
         listed = subprocess.check_output(

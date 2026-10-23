@@ -83,7 +83,7 @@ def test_the_connector_is_a_declared_service():
 
 def test_a_private_home_does_not_discover_the_real_user_service(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
-    assert not SystemdConnectorService.unit_file().exists()
+    assert not SystemdConnectorService.unit_file(tmp_path).exists()
     assert SystemdConnectorService.running() == ()
 
 
@@ -104,7 +104,7 @@ def test_codex_inbox_template_publication_reloads_each_rewrite(tmp_path, monkeyp
     monkeypatch.setattr(LaunchRuntime, "current_pointer", classmethod(lambda cls: runtime))
 
     assert CodexHarness(home).configure() == (template,)
-    assert not CodexInboxService.unit_file().exists()
+    assert not CodexInboxService.unit_file(Path.home()).exists()
     assert len(loaded) == 1
     assert str(runtime / "bin/agent-comms-codex-bridge") in loaded[0]
     assert '"watch" --session "%i"' in loaded[0]

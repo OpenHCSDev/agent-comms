@@ -121,9 +121,9 @@ class InstallServiceVerb(ConnectorOptions, declared_name="install-service"):
             store=ctx,
             port=self.port,
         )
-        service.install(service.exec_arguments(self.issuer))
+        service.install(service.exec_arguments(self.issuer), home=Path.home())
         service.enable()
-        print(service.unit_file())
+        print(service.unit_file(Path.home()))
         return 0
 
 
