@@ -34,7 +34,6 @@ from agent_comms.installer.upgrade import (
     InstalledUpgrade,
     RehearsedUpgrade,
     Stack,
-    UncopiedRehearsal,
     Upgrade,
 )
 from agent_comms.maintenance_barrier import MaintenanceBarrier
@@ -88,7 +87,7 @@ def install_checkout(tmp_path) -> Path:
     return checkout
 
 
-def drop_one_index(root: Path) -> None:
+def drop_one_index(root: Path) -> str:
     """One declared store's schema drifts from both runtimes' declarations."""
     for path in sorted(ReconciledFile.existing_in(root)):
         with closing(sqlite3.connect(path)) as db:
@@ -97,24 +96,25 @@ def drop_one_index(root: Path) -> None:
             if index:
                 db.execute(f'DROP INDEX "{index[0]}"')
                 db.commit()
-                return
+                return str(path.relative_to(root))
     raise AssertionError("No declared store has an index to drop")
 
 
 @pytest.mark.timeout(280)
-@pytest.mark.parametrize("repos, rehearsal", (
-    ((), UncopiedRehearsal), (("--repos",), CarriedRehearsal),
-), ids=("kept-repos-nothing-to-carry", "given-repos-drifted-store"))
+@pytest.mark.parametrize("repos, drifted", (
+    ((), False), (("--repos",), True),
+), ids=("kept-repos-current-stores", "given-repos-drifted-store"))
 def test_install_rehearses_without_changing_the_bus(private_comms, installed_home, install_checkout, tmp_path,
-                                                    repos, rehearsal):
-    """A bus with nothing to carry is rehearsed without a copy; one store whose schema
-    drifted makes the rehearsal copy the bus and carry it. Neither changes the bus."""
+                                                    repos, drifted):
+    """Retained carry steps inspect a practice copy, even when no step is pending.
+
+    Only the deliberately drifted store is rewritten; neither case changes the bus.
+    """
     comms = private_comms
     declare_test_bus(comms, channels=("comms",), threads=(
         comms.registry.new_thread(name="worker", tags=frozenset(), worktree=str(tmp_path)),))
     publish_initial(comms, "worker", "#all", "One message before the install")
-    if rehearsal is CarriedRehearsal:
-        drop_one_index(comms.root)
+    rewritten = (drop_one_index(comms.root),) if drifted else ()
     checkout = install_checkout
     before = bus_files(comms.root)
     given = (*repos, str(checkout)) if repos else ()
@@ -125,7 +125,10 @@ def test_install_rehearses_without_changing_the_bus(private_comms, installed_hom
         capture_output=True, text=True, timeout=270)
     assert installed.returncode == 0, installed.stderr
     result = FieldCodec.decode(Upgrade, FieldCodec.parse(installed.stdout))
-    assert isinstance(result, RehearsedUpgrade) and type(result.rehearsal) is rehearsal
+    assert isinstance(result, RehearsedUpgrade)
+    assert isinstance(result.rehearsal, CarriedRehearsal)
+    assert result.pending == ()
+    assert result.rehearsal.files.names == rewritten
     assert bus_files(comms.root) == before
 
 
