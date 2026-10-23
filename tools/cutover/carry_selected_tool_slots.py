@@ -18,9 +18,10 @@ from agent_comms.locked_store import SQLiteFile
 from agent_comms.native_runtime_input import (
     AcknowledgedSlot,
     ConsumedSlot,
+    SelectedSlotState,
     SelectedToolSlot,
 )
-from agent_comms.threads import ThreadCatalog
+from agent_comms.native_session_files import SavedSessionFile
 from agent_comms.typed_table import HeldBusFile
 
 
@@ -37,7 +38,7 @@ class LedgerSlot:
 
     def read(self) -> SelectedToolSlot:
         original = self.consumed.read_bytes()
-        state = ConsumedSlot
+        state: type[SelectedSlotState] = ConsumedSlot
         for acknowledgement in self.acknowledgements:
             if acknowledgement.read_bytes() != original:
                 raise RelationViolationError(
@@ -54,9 +55,11 @@ class SelectedToolSlots(Carry):
 
     def slots(self) -> tuple[LedgerSlot, ...]:
         slots = []
-        for directory in sorted(self.root.glob(str(
-            ThreadCatalog.pattern().parent / "selected-tool-ledger"
-        ))):
+        directories = {
+            path for owner, root in SavedSessionFile.declarations_in(self.root)
+            for path in root.glob(str(owner.pattern().parent / "selected-tool-ledger"))
+        }
+        for directory in sorted(directories):
             self.require_confined(self.root, directory)
             files = frozenset(directory.iterdir())
             for path in files:
