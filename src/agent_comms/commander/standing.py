@@ -9,7 +9,6 @@ from typing import ClassVar, Self
 
 from agent_comms.build_identity import RecordedBuildIdentity
 from agent_comms.bus import BusReader
-from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import Comms
@@ -18,11 +17,12 @@ from agent_comms.message_bus import WatchPass
 from agent_comms.message_page import MessageReadRequest
 from agent_comms.messages import Message
 from agent_comms.owner_requests import OwnerRequestId
-from agent_comms.phase_evidence import PlanReading
+from agent_comms.phase_evidence import MainTree, PlanReading
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegistrySnapshot
+from agent_comms.repo import Repo
 from agent_comms.standing_rules import (
     DatedStandingRule,
     IndependentStandingRule,
@@ -54,11 +54,11 @@ class InstallDue(IndependentStandingRule, UndatedStandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        config = CommanderConfig.read_root(comms.root)
+        repos = comms.registry.snapshot().commander_project.require().repos
         installed = RecordedBuildIdentity.installed()
         now = time.time()
         due: list[Self] = []
-        for repo in config.repos:
+        for repo in repos:
             repo.git(repo.checkout, "fetch", "-q", "origin", "main")
             main = repo.git(repo.checkout, "rev-parse", "origin/main").strip()
             if installed.contains(main, repo.checkout):
@@ -113,8 +113,11 @@ class PlanRule(IndependentStandingRule, UndatedStandingRule, declared_name=None)
 
     @staticmethod
     def plan_reading(comms: Comms, commander: str) -> PlanReading:
-        return CommanderConfig.read_root(comms.root).plan_reading(
-            comms.goals.todos.history_for_commander(comms.registry.require(commander).incarnation)
+        snapshot = comms.registry.snapshot()
+        repository = Repo.declaring(snapshot.commander_project.require().repos, PlanPhase.__module__)
+        return PlanReading(
+            comms.goals.todos.history_for_commander(snapshot.require(commander).incarnation),
+            MainTree.of(repository),
         )
 
 
