@@ -95,9 +95,11 @@ from agent_comms.recorded_time import (
     RecordedEventTime,
     UnrecordedEventTime,
 )
+from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageRule
+from agent_comms.store_files import SharedLock
 from agent_comms.thread_identity import (
     CoreWatcherIncarnation,
     RecordedThreadIncarnation,
@@ -2492,6 +2494,22 @@ class TodoError(ToolRefusedError):
     """A todo request is invalid or its persisted state cannot be trusted."""
 
 
+class SharedWorktreeRefusal(ValueError):
+    """Two different order holders cannot write into the same physical worktree."""
+
+    def __init__(self, problem: str, holding_problem: str, holder: ThreadIncarnation,
+                 holding_holder: ThreadIncarnation, worktree: Path) -> None:
+        self.problem = problem
+        self.holding_problem = holding_problem
+        self.holder = holder
+        self.holding_holder = holding_holder
+        self.worktree = worktree
+        super().__init__(
+            f"{problem} for {holder.name} shares worktree {worktree} with "
+            f"{holding_problem} held by {holding_holder.name}."
+        )
+
+
 class TodoStoreUnwritable(TodoError):  # noqa: N818 - domain-specific storage failure
     """The todo store could not complete its write; its original cause is preserved."""
 
@@ -2700,7 +2718,7 @@ class TodoCommand(Command, DeclaredFamily, affix="TodoOperation"):
     def after_record(self, goals: Goals, changed: Todo) -> None:
         """Most operations have no automatic public effect."""
 
-    def validate(self, db: sqlite3.Connection, current: Todo) -> None:
+    def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
         """Validate related records inside the operation's write transaction."""
 
     def apply(self, current: Todo) -> Todo:
@@ -2744,8 +2762,8 @@ class AssignTodo(TodoOperation):
         return replace(self, actor=actor, proposed=replace(self.proposed,
                        parent=actor.name, parent_created=actor.wire_birth))
 
-    def validate(self, db: sqlite3.Connection, current: Todo) -> None:
-        TodoStore.require_unit_in(db, self.proposed.owner_identity, self.actor)
+    def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
+        store.require_assignment_in(db, current.id, self.proposed.owner_identity, self.actor)
         OwnerRequest.require(db, id=self.request).require_open(current.creator_identity)
 
     def apply(self, current: Todo) -> Todo:
@@ -3807,7 +3825,8 @@ class TodoStore(OwnerRequestStore):
     @contextmanager
     def writing(self) -> Iterator[sqlite3.Connection]:
         try:
-            with super(TodoStore, self).writing() as connection:
+            with (RegistryStore.at(self.root).locked(mode=SharedLock()),
+                  super(TodoStore, self).writing() as connection):
                 yield connection
         except sqlite3.Error as error:
             raise TodoStoreUnwritable(
@@ -3835,6 +3854,23 @@ class TodoStore(OwnerRequestStore):
                 f"{unit.name} is assigned by {todo.held().parent} on open order "
                 f"{todo.order.checked().id} ({todo.id}); "
                 "finish or release that order before assigning it again.")
+
+    def require_assignment_in(self, db: sqlite3.Connection, problem: str,
+                              unit: ThreadIncarnation, assigner: ThreadIncarnation) -> None:
+        """Creation and reassignment share this decision under registry then Todo locks."""
+        self.require_unit_in(db, unit, assigner)
+        snapshot = RegistryStore.at(self.root).read_snapshot_unlocked()
+        owner = snapshot.by_lookup[unit.require_recorded().lookup]
+        worktree = owner.project_path
+        for held in self._open(db, "assignment IS NOT NULL", ()):
+            previous = held.held().owner_identity
+            if held.id == problem or previous == unit:
+                continue
+            for other in snapshot.threads_for(previous.require_recorded()):
+                if worktree == other.project_path:
+                    raise SharedWorktreeRefusal(
+                        problem, held.id, owner.incarnation, other.incarnation, worktree
+                    )
 
     def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
         hunt.require_commander(self, commander)
@@ -4094,7 +4130,7 @@ class TodoStore(OwnerRequestStore):
             todo_id, repo, text, identity, Assignment.of(assignee, assigner, generation),
             review_at, order, request)
         with self.writing() as db:
-            self.require_unit_in(db, assignee, assigner)
+            self.require_assignment_in(db, todo_id, assignee, assigner)
             OwnerRequest.require(db, id=request).require_open(identity)
             proposed.insert_if_absent(db)
             current = self._current(db, todo_id)
@@ -4109,7 +4145,7 @@ class TodoStore(OwnerRequestStore):
             result = command.apply(current)
             if result == current:
                 return current
-            command.validate(db, current)
+            command.validate(db, current, self)
             result.upsert(db)
             return self._current(db, todo_id)
 
