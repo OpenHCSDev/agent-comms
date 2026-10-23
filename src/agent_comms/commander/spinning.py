@@ -30,17 +30,20 @@ class SpinningUnit(UndatedStandingRule):
         found = []
         for state in observed:
             source = state.source
-            for todo in source.todos:
+            if not source.todos:
+                continue
+            for holder in state.readable_units():
                 branch = source.pulls.branch_difference(source.thread.project_path)
-                since = max(branch.moved_at, todo.order.checked().at.recorded_at("A held order"))
-                elapsed = (source.now - since) / 60
-                if elapsed < cls.minutes:
-                    continue
-                count = OrderToolCallCountRead(
-                    comms.root, source.thread, TurnsSince(since), todo,
-                ).read()
-                if count >= cls.calls:
-                    found.append(cls(todo.id, state.unit, count, elapsed, branch.head))
+                for todo in source.todos:
+                    since = max(branch.moved_at, todo.order.checked().at.recorded_at("A held order"))
+                    elapsed = (source.now - since) / 60
+                    if elapsed < cls.minutes:
+                        continue
+                    count = OrderToolCallCountRead(
+                        comms.root, source.thread, TurnsSince(since), todo,
+                    ).read()
+                    if count >= cls.calls:
+                        found.append(cls(todo.id, holder, count, elapsed, branch.head))
         return tuple(found)
 
     def line(self) -> str:
