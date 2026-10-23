@@ -216,7 +216,8 @@ class SelectedWritePlans(DurableFile, PatternFile):
             record = AcceptedWriteIntent(
                 schema=1, root_id=self.root_id, source_seq=source_seq,
                 source_message_id=source_message_id, claim_id=selected[0].assignment_id,
-                owner=owner.name, incarnation=owner.created_at, claim_epoch=claimed_generation,
+                owner=owner.name, incarnation=owner.created_at.to_wire(),
+                claim_epoch=claimed_generation,
                 expected_attempt_ordinal=1, operation_id=operation_id, resource=str(path),
                 contents_b64=base64.b64encode(raw).decode("ascii"), digest=hashlib.sha256(raw).hexdigest(),
             )
