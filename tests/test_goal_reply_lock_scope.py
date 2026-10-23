@@ -55,8 +55,9 @@ class RegistryProbeBus(Bus):
                 fcntl.flock(lock, fcntl.LOCK_UN)
 
     @contextmanager
-    def observing(self):
-        with super().observing() as db:
+    def observing(self, *args, **kwargs):
+        # Bus.observing owns its parameters; the probe only traces the snapshot.
+        with super().observing(*args, **kwargs) as db:
             db.set_trace_callback(self.probe)
             try:
                 yield db
