@@ -59,24 +59,19 @@ class RetryProgress:
 class PiEvent(OpenPayload, affix=""):
     """One declaration-owned record received by the Pi RPC channel."""
 
-    _start_phases: ClassVar[dict[type[object], tuple[type[phases.TurnPhase], ...]]] = {}
-    _end_events: ClassVar[dict[type[object], frozenset[type[object]]]] = {}
+    starts: ClassVar[type[phases.TurnPhase] | None] = None
+    ends: ClassVar[tuple[type[phases.TurnPhase], ...]] = ()
 
     def on(self, current: phases.TurnPhase) -> phases.TurnPhase:
-        for event_type in type(self).__mro__:
-            for member in self._start_phases.get(event_type, ()):
-                return self.enter(member, current)
+        if self.starts is not None:
+            return self.enter(self.starts, current)
         return self.leave(current) if self.matches_end(current) else current
 
     def enter(self, member: type[phases.TurnPhase], current: phases.TurnPhase) -> phases.TurnPhase:
         return member()
 
     def matches_end(self, current: phases.TurnPhase) -> bool:
-        return any(
-            event_type in self._end_events.get(member, frozenset())
-            for member in type(current).__mro__
-            for event_type in type(self).__mro__
-        )
+        return isinstance(current, self.ends)
 
     def leave(self, current: phases.TurnPhase) -> phases.TurnPhase:
         return phases.ModelWaitPhase()
@@ -87,9 +82,9 @@ class PiEvent(OpenPayload, affix=""):
     ) -> None:
         super().__init_subclass__(**kwargs)
         if starts is not None:
-            cls._start_phases[cls] = (starts,)
+            cls.starts = starts
         if ends is not None:
-            cls._end_events[ends] = cls._end_events.get(ends, frozenset()) | {cls}
+            cls.ends = (*cls.ends, ends)
 
     @staticmethod
     def unowned_event(event):
