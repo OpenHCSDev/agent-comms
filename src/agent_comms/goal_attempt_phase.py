@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
+from .errors import UnresolvedAttemptError
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Failed, Terminal
 
@@ -26,6 +27,10 @@ class ReadyAttempt(ABC):
 class GoalAttemptPhase(DeclaredFamily, LifecycleState, affix="Attempt"):
     launched: ClassVar[bool] = False
     verified_progress: ClassVar[bool] = False
+    permits_retirement: ClassVar[bool] = False
+
+    def require_retryable(self) -> None:
+        raise UnresolvedAttemptError("Only a blocked, recorded failure may be retried explicitly.")
 
 
 class ReservedAttempt(GoalAttemptPhase):
@@ -43,6 +48,11 @@ class ClaimedAttempt(GoalAttemptPhase):
 
 
 class FailedAttempt(Failed, ReadyAttempt, GoalAttemptPhase):
+    permits_retirement: ClassVar[bool] = True
+
+    def require_retryable(self) -> None:
+        pass
+
     def record_ready(self, attempt: AttemptRecord, db: sqlite3.Connection, note: str) -> None:
         attempt.advance(db, self, resolution=note)
 

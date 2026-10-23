@@ -27,7 +27,7 @@ from .message_page import (
     PageBounds,
 )
 from .messages import Message
-from .page_traversal import HistoryCursor, NewerTraversal, OlderTraversal
+from .page_traversal import HistoryCursor, OlderTraversal
 from .private_path import FileObservation, FileRevision, ObservedPath
 from .read_basis import (
     AnonymousViewer,
@@ -565,29 +565,37 @@ class HistoryArchive(DurableFile):
         if not self.sources() and not historical:
             return view.live_page(presentation, bounds)
         history_revision = FileRevision.capture(self.path)
-        if not historical:
-            page = view.live_page(presentation, bounds)
-            if page.messages or isinstance(bounds.traversal, NewerTraversal):
-                return replace(
-                    page,
-                    has_older=page.has_older or bool(self.sources()),
-                    selection=replace(page.selection, history_revision=history_revision),
-                )
-        history = self.page(
-            view, presentation, bounds if historical else replace(bounds, traversal=OlderTraversal())
-        )
-        if history.messages:
-            latest = view.live_page(presentation, PageBounds(limit=1))
-            return replace(
-                history,
-                selection=replace(history.selection, history_revision=history_revision),
-                has_newer=history.has_newer or bool(latest.messages),
+        def historical_page() -> MessagePage:
+            history = self.page(
+                view, presentation, bounds if historical else replace(bounds, traversal=OlderTraversal())
             )
-        if historical and isinstance(bounds.traversal, NewerTraversal):
-            live = view.live_page(presentation, replace(bounds, traversal=NewerTraversal()))
-            return replace(live, selection=replace(live.selection, history_revision=history_revision))
-        selected = history if historical else page
-        return replace(selected, selection=replace(selected.selection, history_revision=history_revision))
+            if history.messages:
+                latest = view.live_page(presentation, PageBounds(limit=1))
+                return replace(
+                    history,
+                    selection=replace(history.selection, history_revision=history_revision),
+                    has_newer=history.has_newer or bool(latest.messages),
+                )
+            selected = history if historical else page
+            result = replace(selected, selection=replace(selected.selection, history_revision=history_revision))
+            if historical:
+                return bounds.traversal.after_exhausted_history(
+                    lambda traversal: view.live_page(presentation, replace(bounds, traversal=traversal)),
+                    result,
+                )
+            return result
+
+        if historical:
+            return historical_page()
+        page = view.live_page(presentation, bounds)
+        return bounds.traversal.source_page(
+            replace(
+                page,
+                has_older=page.has_older or bool(self.sources()),
+                selection=replace(page.selection, history_revision=history_revision),
+            ),
+            historical_page,
+        )
 
     def threads(self, name: str | None = None) -> tuple[HistoricalThread, ...]:
         result: list[HistoricalThread] = []

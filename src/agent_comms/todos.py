@@ -2876,6 +2876,10 @@ class VerdictAudience:
 @dataclass(frozen=True)
 class OrderVerdict(TodoCommand, StoryEvent, declared_name=None):
     """The commander's verdict on one tool call the holder made for its order, kept on the order."""
+
+    def send_back_times(self) -> tuple[float, ...]:
+        return ()
+
     audience: ClassVar[type[VerdictAudience]] = VerdictAudience
     actor: ThreadIncarnation
     previous: Assignment
@@ -3083,6 +3087,9 @@ class DroppedVerdict(ToolCallVerdict):
 class SendBackVerdict(ToolCallVerdict, CitedStrike, FleetEvent):
     """The tool call goes back; the same write strikes the holder and revises the order Goal."""
     reason: StrikeReason
+
+    def send_back_times(self) -> tuple[float, ...]:
+        return (self.at.recorded_at("A send-back"),)
 
     @property
     def line(self) -> str:

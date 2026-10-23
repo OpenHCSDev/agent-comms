@@ -102,6 +102,12 @@ class GoalAttemptError(RuntimeError):
         return self.diagnostic_text
 
 
+class UnresolvedAttemptError(GoalAttemptError):
+    """A blocked or in-flight attempt needs an explicit resolution."""
+
+    diagnostic_text = "Goal attempt unresolved; inspect diagnostics before Retry."
+
+
 class StaleAttemptError(GoalAttemptError):
     """A late outcome cannot modify the current goal generation."""
 

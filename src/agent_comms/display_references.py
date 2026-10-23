@@ -30,6 +30,9 @@ class DisplayReference(DeclaredFamily, affix="Reference"):
     def current_in(self, references: DisplayReferences) -> bool:
         return references.contains(self)
 
+    def historical_entry(self, recorded: DisplayReference | None) -> DisplayReference | None:
+        return recorded
+
 
 @dataclass(frozen=True)
 class ThreadReferenceIdentity:
@@ -57,6 +60,9 @@ class HistoricalDisplayReference(ThreadReferenceIdentity, DisplayReference):
 @dataclass(frozen=True)
 class ChannelDisplayReference(DisplayReference):
     target: str
+
+    def historical_entry(self, recorded: DisplayReference | None) -> DisplayReference:
+        return self
 
     @property
     def name(self) -> str:
@@ -159,8 +165,8 @@ class DisplayReferences(RootedReferences):
             return self
         recorded = self.recorded(self.root, source)
         return DisplayReferences(self.root, {
-            **{name: reference for name, reference in self.targets.items()
-               if isinstance(reference, ChannelDisplayReference)},
+            **{name: entry for name, reference in self.targets.items()
+               if (entry := reference.historical_entry(recorded.targets.get(name))) is not None},
             **recorded.targets,
         })
 

@@ -30,7 +30,6 @@ from agent_comms.todos import (
     OrderProgress,
     ProgressRead,
     ProgressSource,
-    SendBackVerdict,
     Todo,
 )
 from agent_comms.transcript_events import OrderCall, TurnDigest
@@ -360,10 +359,10 @@ class Spinning(NeedsCommanderAttention, PendingWorkState, UnitState):
     @classmethod
     def matches(cls, source: UnitObservation) -> bool:
         sends = sorted(
-            verdict.at.recorded_at("A send-back")
+            at
             for todo in source.pending
             for verdict in todo.verdicts
-            if isinstance(verdict, SendBackVerdict)
+            for at in verdict.send_back_times()
         )
         calls = source.calls
         repeats = len(calls) >= 2 and calls[-1].digest == calls[-2].digest

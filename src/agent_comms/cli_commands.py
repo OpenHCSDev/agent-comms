@@ -375,6 +375,16 @@ class OneTarget(TargetSelection):
                                              snapshot=snapshot, catalog=catalog)
 
 
+@dataclass(frozen=True)
+class TargetBatchSchedule:
+    """One bound command's position and the batch collections it schedules into."""
+
+    position: int
+    target: CommandTarget
+    outcomes: list[tuple[int, TargetCompleted | TargetFailed]]
+    together: dict[type[AppliedTogether], list[tuple[int, CommandTarget, AppliedTogether]]]
+
+
 class TargetBatch(TargetSelection):
     """Every other selection: each target's failure is collected and a TargetBatchResult returns."""
 
@@ -420,13 +430,10 @@ class TargetBatch(TargetSelection):
                         resolved=name.resolve(current, comms.bus.require_channel)):
                     scope = f' in {context}' if context is not None else ''
                     raise CommandSelectionChanged(f'The bound command for {name}{scope} changed; refresh the selection')
-                if isinstance(command, AppliedTogether):
-                    together.setdefault(type(command), []).append((position, name, command))
-                    continue
-                result = TargetCompleted(name.name, command, command.apply(comms))
+                command.schedule(TargetBatchSchedule(position, name, outcomes, together), comms)
             except ToolRefusedError as error:
                 result = TargetFailed(name.name, type(error).__name__, str(error))
-            outcomes.append((position, result))
+                outcomes.append((position, result))
         for declaration, members in together.items():
             results = declaration.apply_together(comms, tuple(command for _, _, command in members))
             outcomes.extend((position, TargetCompleted(name.name, command, result))
@@ -436,6 +443,9 @@ class TargetBatch(TargetSelection):
 
 class AppliedTogether:
     """A command whose bindings in one target batch are applied as one operation."""
+
+    def schedule(self, batch: TargetBatchSchedule, comms: Comms) -> None:
+        batch.together.setdefault(type(self), []).append((batch.position, batch.target, self))
 
     @classmethod
     @abstractmethod
@@ -793,6 +803,10 @@ class CliCommand[Answer: CliResult = CliResult](
     affix="CliCommand",
     discovery_package="agent_comms.tools",
 ):
+    def schedule(self, batch: TargetBatchSchedule, comms: Comms) -> None:
+        result = TargetCompleted(batch.target.name, self, self.apply(comms))
+        batch.outcomes.append((batch.position, result))
+
     @classmethod
     def catalog_declaration(cls) -> type[CliCommand]:
         """Concrete thread/channel variants declare their shared menu operation."""

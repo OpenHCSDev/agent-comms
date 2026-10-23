@@ -10,7 +10,6 @@ import sys
 from pathlib import Path
 
 from agent_comms.cli_bridges.codex_rollout import CodexRollout
-from agent_comms.runtime_updates import FinishedItem
 
 thread, count = sys.argv[1], int(sys.argv[2]) if len(sys.argv) > 2 else 40
 rollouts = sorted(
@@ -22,7 +21,6 @@ if not rollouts:
 events = [
     event
     for update in CodexRollout(rollouts[-1]).read()
-    if isinstance(update, FinishedItem)
-    for event in update.events
+    for event in update.trail_events()
 ]
 print("\n".join(repr(event)[:700] for event in events[-count:]))

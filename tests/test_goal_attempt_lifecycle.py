@@ -4,12 +4,8 @@ import sqlite3
 
 import pytest
 
-from agent_comms.goal_attempts import (
-    AttemptRecord,
-    GoalAttemptStore,
-    GoalWorkDecision,
-    UnresolvedAttemptError,
-)
+from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore, GoalWorkDecision
+from agent_comms.errors import UnresolvedAttemptError
 from agent_comms.goal_generation import BlockedGeneration, CancelledGeneration, ReadyGeneration
 
 
