@@ -235,18 +235,29 @@ takes 76 SQLite instructions after index reconciliation versus 45,088 before;
 both return no message. All exact-pair queries use the declared covering index.
 Reconciliation preserves every bus sequence and both bus/address row counts;
 integrity and foreign-key checks pass, and a repeated reconciliation is a no-op.
-Its current unconditional projection rebuild costs 39.83 seconds even for this
-index-only change; that installer/schema defect remains open with the commander.
+The baseline unconditional projection rebuild costs 39.83 seconds even for this
+index-only change; the separate schema repair below removes it.
 Installed full-session/parity acceptance and the complete control-plane phase
 remain open. The source census has zero parse omissions; unprojected declarations
 remain visible.
 
-The schema follow-through is a separate change stacked on #2624. Its starting
-defect is `ComposedSchemas.carry_schema` invoking every family, so an index-only
-change resets unchanged bus projections. The repair must retain replay when
-source rows or projection contents actually become invalid, while deleting
-history decoding for catalog-only changes. The retained replay and source
-evidence above are its baseline; #2624 remains independently reviewable.
+The schema follow-through, draft #2629, is stacked on #2624. `ComposedSchemas`
+now derives preceding row-write counts from SQLite's existing connection;
+`DerivedTables` owns whether changed source rows or its own changed table shape
+require replay. Catalog-only changes use the existing schema derivation without
+resetting projection contents. On the same retained bus copy, adding the index
+now takes 24.845 milliseconds with zero row writes; every source/projection count
+is preserved, integrity and foreign-key checks pass, and a second reconciliation
+is a no-op. Four focused controls cover source/projection indexes, source-row
+conversion with unchanged projection schema, changed projection tables and
+explicit content repair. Two existing held-CLI cases confirm both composed
+schemas reconcile through the actual installer command path.
+
+The automatic carry has no witness for decoder/projector behavior changes with
+identical stored DDL, as before; those still require explicit conversion/reset.
+This repair adds no version stamp or second dependency registry. The earlier
+heartbeat checkpoint remains independently reviewable; installed qualification
+of both changes belongs to the integration owner.
 
 ### Phase 8: cutover
 

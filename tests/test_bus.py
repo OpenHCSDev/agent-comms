@@ -15,9 +15,11 @@ from agent_comms.bus import (
 )
 from agent_comms.bus_publication import Delivered, HumanOrigin, KeyedPublication
 from agent_comms.bus_tables import (
+    Addressed,
     AnsweredSource,
     BusProjectionTables,
     BusRow,
+    BusSchema,
     BusTables,
     DirectReplySource,
     MessageIdentitySource,
@@ -41,7 +43,9 @@ from agent_comms.message_reference import MessageReference
 from agent_comms.response_acknowledgement import (
     canonical_publication_key,
 )
-from agent_comms.typed_table import RowNotFoundError, SQLiteTableName, TypedTable
+from agent_comms.typed_table import (
+    RowNotFoundError, SQLiteSchemaObject, SQLiteTableName, TypedTable, WriterOwnedFile,
+)
 from bus_record_fixture import publication_processes, record_from
 
 
@@ -82,6 +86,49 @@ def test_install_refuses_existing_schema_changes_until_an_explicit_rebuild(bus):
         BusProjectionTables.reset_schema(db)
     Bus.install(bus.path)
     assert bus.page(3, 2) == (second, record)
+
+
+def test_schema_carry_preserves_metadata_only_rows_and_rebuilds_invalidated_projections(bus):
+    record = bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("author", "worker", "preserved source", InfoKind, seq=seq),
+    ))
+    with bus.writer_connection() as db:
+        # Both source and projection indexes are metadata, not reasons to replay history.
+        for table in (Addressed.table, MessageIdentitySource):
+            db.execute(f'DROP INDEX "{table.indexes[0].name(table)}"')
+            before = db.total_changes
+            assert BusSchema.reconcile_schema(db, WriterOwnedFile())
+            assert db.total_changes == before
+            assert MessageIdentitySource.require(db, seq=record.seq).message_id == record.message_id
+
+        # An unchanged projection schema still needs replay after a real source-row carry.
+        projected_schema = MessageIdentitySource.stored_objects(db)
+        db.execute(Message.table._sql(
+            f'ALTER TABLE "{Message.table.declared_name}" DROP COLUMN {{report}}'))
+        before = db.total_changes
+        assert BusSchema.reconcile_schema(db, WriterOwnedFile())
+        assert db.total_changes - before > Message.table.count(db)
+        assert not SQLiteSchemaObject.differences(
+            MessageIdentitySource.stored_objects(db),
+            {item.name: item.sql for item in projected_schema},
+        )
+        assert MessageIdentitySource.require(db, seq=record.seq).message_id == record.message_id
+
+        # A changed projection table needs its source even when no source row was written.
+        db.execute(f'ALTER TABLE "{MessageIdentitySource.declared_name}" '
+                   'ADD COLUMN retired_value TEXT')
+        before = db.total_changes
+        assert BusSchema.reconcile_schema(db, WriterOwnedFile())
+        assert db.total_changes > before
+        assert MessageIdentitySource.require(db, seq=record.seq).message_id == record.message_id
+        assert not BusSchema.reconcile_schema(db, WriterOwnedFile())
+
+        # Explicit content repair remains an unconditional rebuild.
+        MessageIdentitySource.update(db, where="{seq}=?", parameters=(record.seq,),
+                                     sender="outdated-author")
+        BusProjectionTables.reset_schema(db)
+        assert MessageIdentitySource.require(db, seq=record.seq).sender == record.sender
+    assert bus.lookup(record.seq) == record
 
 
 @pytest.mark.parametrize("declaration", BusRecord.members_with(BusRecord))

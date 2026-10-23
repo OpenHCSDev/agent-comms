@@ -790,6 +790,15 @@ class TableSchema(ABC):
         return bool(SQLiteSchemaObject.differences(cls.stored_schema(db), cls.declared_schema()))
 
     @classmethod
+    def table_schema_differs(cls, db: sqlite3.Connection) -> bool:
+        """Whether stored row shapes differ, independently of indexes, triggers and views."""
+        tables = frozenset(table.name for table in cls.stored_tables(db))
+        return bool(SQLiteSchemaObject.differences(
+            [item for item in cls.stored_schema(db) if item.name in tables],
+            {row.declared_name: row._table_sql() for row in cls.schema_rows()},
+        ))
+
+    @classmethod
     def require_schema(cls, db: sqlite3.Connection) -> None:
         """Readers use only the declared schema, whichever kind of file this is."""
         if cls.schema_differs(db):
@@ -845,8 +854,8 @@ class TableSchema(ABC):
 
     @classmethod
     @abstractmethod
-    def carry_schema(cls, db: sqlite3.Connection) -> None:
-        """Inside the reconcile's transaction: this kind of file's way onto its declaration."""
+    def carry_schema(cls, db: sqlite3.Connection, *, source_changes: int = 0) -> None:
+        """Carry this family's schema after the preceding families' row writes."""
 
 
 class ComposedSchemas:
@@ -863,9 +872,11 @@ class ComposedSchemas:
         ))
 
     @classmethod
-    def carry_schema(cls, db: sqlite3.Connection) -> None:
+    def carry_schema(cls, db: sqlite3.Connection, *, source_changes: int = 0) -> None:
+        """Carry in declaration order; later families see preceding row writes."""
+        before = db.total_changes - source_changes
         for family in cls.schema_families():
-            family.carry_schema(db)
+            family.carry_schema(db, source_changes=db.total_changes - before)
 
 
 class RowMutation(Enum):
@@ -1330,8 +1341,11 @@ class DerivedTables(TableSchema):
         cls.create_schema(db)
 
     @classmethod
-    def carry_schema(cls, db: sqlite3.Connection) -> None:
-        cls.reset_schema(db)
+    def carry_schema(cls, db: sqlite3.Connection, *, source_changes: int = 0) -> None:
+        if source_changes or cls.table_schema_differs(db):
+            cls.reset_schema(db)
+        else:
+            cls.derive_schema(db)
 
 
 class DurableTables(TableSchema):
@@ -1342,7 +1356,7 @@ class DurableTables(TableSchema):
     __slots__ = ()
 
     @classmethod
-    def carry_schema(cls, db: sqlite3.Connection) -> None:
+    def carry_schema(cls, db: sqlite3.Connection, *, source_changes: int = 0) -> None:
         cls.derive_schema(db)
 
 
