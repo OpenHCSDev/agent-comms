@@ -116,8 +116,11 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
         """What Core does itself when this rule breaks; a rule that only reports does nothing."""
 
     @staticmethod
-    def enforce_all(comms: Comms, commander: str,
-                    rules: Iterable[StandingRule]) -> Mapping[StandingRule, RejectedEnforcementError]:
+    def enforce_all(
+        comms: Comms,
+        commander: str,
+        rules: Iterable[StandingRule],
+    ) -> Mapping[StandingRule, RejectedEnforcementError]:
         rejected: dict[StandingRule, RejectedEnforcementError] = {}
         for rule in rules:
             try:
