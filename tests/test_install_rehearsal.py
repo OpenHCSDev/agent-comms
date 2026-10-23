@@ -111,9 +111,9 @@ def test_runtime_producer_digests_ignore_foreign_source(installed_home, tmp_path
         commands.probe(PrepareProducerDigestsProbe(), runtime.interpreter, cwd=home,
                        env=runtime.environment(environment), program=InstalledProgram())
         diagnostics = "\n".join(worker.errors() for worker in commands.workers.values())
-        assert f"install: producer digests from {runtime.package_root / '__init__.py'}" in diagnostics
+        assert f"stamped producer digests from {runtime.package_root / '__init__.py'}" in diagnostics
         print(diagnostics)
-    path = runtime.prefix / "agent-comms-producers.json"
+    path = runtime.package_root / "package_stamp.py"
     original = path.read_bytes()
     read = """
 import json
@@ -125,12 +125,13 @@ from agent_comms.typed_table import ProjectionProducer
 rows = BusProjectionTables.projection_rows()
 print(json.dumps({'source': agent_comms.__file__, 'stamp': type(STAMP).__name__,
                   'computed': {row.declared_name: row.producer_digest() for row in rows},
-                  'read': ProjectionProducer.digests_for(rows)}))
+                  'read': ProjectionProducer.digests_for(rows),
+                  'stamped': STAMP.producer_digests({})}))
 """
     own = json.loads(subprocess.check_output(
         [runtime.interpreter, "-I", "-c", read], env=installed_home, text=True))
     assert own["stamp"] == "WheelStamp"
-    assert own["computed"] == own["read"] == json.loads(original)["digests"]
+    assert own["computed"] == own["read"] == own["stamped"]
     reviewed = json.loads(subprocess.check_output(
         [runtime.interpreter, "-P", "-c", read], cwd=foreign, env=environment, text=True))
     assert reviewed["stamp"] == "CheckoutStamp"

@@ -12,7 +12,10 @@ from pathlib import Path
 import pytest
 
 import agent_comms.native_package as native_package
+from agent_comms.bus import Bus
 from agent_comms.core_stamp import WheelStamp
+from agent_comms.messages import BusProjectionTables
+from agent_comms.typed_table import ProjectionProducer
 from agent_comms.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.native_package import (
@@ -129,7 +132,7 @@ def launcher(tmp_path):
     source.mkdir(parents=True)
     shutil.copytree(repo / 'src/agent_comms', source, dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns('__pycache__'))
-    WheelStamp(STAMP.commit(), STAMP.producer_digests({})).write(source / 'package_stamp.py')
+    WheelStamp(STAMP.commit(), ProjectionProducer.digests_for(BusProjectionTables.projection_rows())).write(source / 'package_stamp.py')
     # The environment `uv sync --project stack` installs: this checkout's agent_comms, editable,
     # with its dependencies.
     interpreter = stack / ".venv/bin/python"

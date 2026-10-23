@@ -91,8 +91,10 @@ def projection_source_digest(source: Path) -> str:
             "-I",
             "-c",
             "import sys; sys.path.insert(0, sys.argv[1]); "
+            "import json; from agent_comms.bus import Bus; "
             "from agent_comms.messages import BusProjectionTables; "
-            "print(BusProjectionTables._producer_digest())",
+            "print(json.dumps({row.declared_name: row.producer_digest() "
+            "for row in BusProjectionTables.projection_rows()}, sort_keys=True))",
             str(source.parent),
         ),
         check=True,
@@ -245,7 +247,8 @@ def test_every_class_that_produces_projection_rows_is_in_the_digest(bus):
     bus.append(lambda seq, db: PublicRecord.from_message(
         Message("worker", "author", "reply", InfoKind, seq=seq, answers=(first.reference,)),
     ))
-    owners = set(BusProjectionTables.producer_owners())
+    owners = {owner for row in BusProjectionTables.projection_rows()
+              for owner in row.producer_owners()}
     missing = sorted(
         f"{owner.__module__}.{owner.__qualname__}"
         for owner in projection_rebuild_classes(bus)
