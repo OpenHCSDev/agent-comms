@@ -51,7 +51,6 @@ async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, b
     try:
         agent.inputs.ensure_live_drain("beta")
         await until(lambda: agent.inputs.state("beta").observation_watcher is not None)
-        agent.inputs.wake_observer("beta")
         await until(
             lambda: owner_view(comms).activity.readiness.source_diagnostic().holds_event_current
         )

@@ -192,7 +192,11 @@ class InputObservation(ABC):
         lookup = initial.entry.thread.incarnation.require_recorded().lookup
         state = self.state(session_id)
         state.forget_observation()
-        sources = tuple(FileSource(path) for path in bus.source_paths(self.comms.root))
+        # The drain reads the coordination store, so its replacement or rewrite
+        # wakes this observer; ordinary wire observers do not watch it.
+        sources = tuple(FileSource(path) for path in (
+            *bus.source_paths(self.comms.root), CoordinationStore.path_in(self.comms.root),
+        ))
         async with aclosing(bus.watch_sources(*sources)) as observations:
             async for watcher in observations:
                 state.observation_watcher = watcher
