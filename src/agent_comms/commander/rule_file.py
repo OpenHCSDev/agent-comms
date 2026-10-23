@@ -115,6 +115,7 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
         """The reminder hook's one-line tells, one declared by each packaged rule."""
         return tuple(rule.drift for rule in cls.packaged())
 
+
 class FeedbackRuleFile(RuleFile):
     """A rule that supplies feedback in the commander's instructions."""
 
