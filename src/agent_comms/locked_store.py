@@ -693,12 +693,9 @@ class LockedStore(FileStore, LockedFile, JsonDocument[T], declared_name=None):
 
     path: Path
     @contextmanager
-    def reading(self, *sources, blocking: bool = True) -> Iterator[T]:
+    def reading(self, *sources) -> Iterator[T]:
         """Retain dependent source owners before this document's shared lock."""
-        with StoreLock.ordered(
-            dict.fromkeys((*sources, self), SharedLock()),
-            contention=StoreLockContention.for_blocking(blocking),
-        ):
+        with StoreLock.ordered(dict.fromkeys((*sources, self), SharedLock())):
             yield self._read_unlocked()
 
     def read(self) -> T:

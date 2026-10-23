@@ -261,9 +261,7 @@ class MessageBus[Writes: Publisher]:
             )
             self.reads.mark_displayed(canonical, displayed)
 
-    def awareness_segments(
-        self, owner: Thread, relations: Sequence[PeerRelation], *, blocking: bool = False
-    ):
+    def awareness_segments(self, owner: Thread, relations: Sequence[PeerRelation]):
         """Bounded frozen-recipient pointers, independent of UI read state.
 
         The window is the newest received rows, shown in sequence order. Peer relevance
