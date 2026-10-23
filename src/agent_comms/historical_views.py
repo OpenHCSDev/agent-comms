@@ -259,6 +259,10 @@ class HistorySource:
     snapshot_registry_revision: FileObservation
     provenance: RegistryProvenance
 
+    def __post_init__(self) -> None:
+        # Archived transcripts stay with the original root; the snapshot copies no sessions.
+        object.__setattr__(self, "provenance", self.provenance.bound_to(Path(self.original_root)))
+
     @property
     def key(self) -> str:
         return self.root

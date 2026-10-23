@@ -199,6 +199,11 @@ class ThreadProvenance:
         """The codec decoded both stored fields; their record owns this binding."""
         return self.session_file.location(self.backend)
 
+    @cached_property
+    def writable_runtime(self) -> RuntimeLocation:
+        """The runtime a launch writes; a copied bus refuses a harness transcript."""
+        return self.session_file.writable_location(self.backend)
+
     @property
     def display_title(self) -> str:
         return self.title.otherwise(self.name)

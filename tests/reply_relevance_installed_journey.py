@@ -5,7 +5,7 @@ from agent_comms.channel_targets import CommandTarget
 
 from bus_record_fixture import prepare_native_comms
 from agent_comms.lifecycle_capability import Complete
-from agent_comms.session_file import SavedSessionFile
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.native_entries import NativeEvidenceScope
 import asyncio
 import hashlib
@@ -86,7 +86,7 @@ async def run(stage, package):
         environment.pop(key, None)
     os.environ.clear()
     os.environ.update(environment)
-    child = service.registry.new_thread('reply505', source.tags, source.worktree, parent=ForkedParent(source.name), task=source.task, session_file=SavedSessionFile(fork.session_file), model=source.model, thinking_level=source.thinking_level, execution=source.execution)
+    child = service.registry.new_thread('reply505', source.tags, source.worktree, parent=ForkedParent(source.name), task=source.task, session_file=RegistrySessionLocation.from_path(fork.session_file, service.root), model=source.model, thinking_level=source.thinking_level, execution=source.execution)
     service.registry.declare(child)
     assert 'openhcs' in child.tags
     packets = []

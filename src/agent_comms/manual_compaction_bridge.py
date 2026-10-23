@@ -73,7 +73,7 @@ async def compact_context(
         if await Coordination.run_worker(partial(runner.session_busy, session_id)):
             return FailedCompaction("Wait for the current response before compacting.")
         thread = await Coordination.run_worker(partial(runner.comms.registry.require, thread_name))
-        return await thread.runtime.compact(partial(
+        return await thread.writable_runtime.compact(partial(
             _compact_started, runner, session_id, thread_name, instructions,
         ))
 

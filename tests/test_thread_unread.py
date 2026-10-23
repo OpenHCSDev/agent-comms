@@ -10,7 +10,7 @@ from multiprocessing import get_context
 
 import pytest
 
-from agent_comms.session_file import SavedSessionFile
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.private_path import FileRevision
@@ -49,7 +49,7 @@ def setup_thread(tmp_path):
     session(source)
     comms = installed_comms(tmp_path / 'wire')
     comms.registry.declare(comms.registry.new_thread('worker', frozenset({'ci'}),
-        str(tmp_path), session_file=SavedSessionFile(str(source))))
+        str(tmp_path), session_file=RegistrySessionLocation.from_path(str(source), comms.root)))
     return comms, source
 
 

@@ -32,7 +32,7 @@ from .registry_document import (
 from .routing import TurnRouting
 from .store_files import SharedLock
 from .thread_identity import TurnIdentity
-from .session_file import SavedSessionFile
+from .session_file import RegistrySessionLocation
 from .threads import Thread
 from .turn_lease import ActiveTurn, RecordedGeneration, StoredTurnRecord
 
@@ -147,8 +147,9 @@ class RegistryEdit:
     def prepare_native_source(self, owner: RegistryOwner, session_file: str) -> NativeSourcePublication:
         current = owner.require_source_snapshot(self.original.snapshot)
         status = self.document.status(current.name)
+        location = RegistrySessionLocation.from_path(session_file, self.store.path.parent)
         return NativeSourcePublication(
-            thread=replace(current, session_file=SavedSessionFile(session_file)), status=status,
+            thread=replace(current, session_file=location), status=status,
             previous=current, previous_status=status,
         )
 
@@ -284,9 +285,11 @@ class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument]):
         return FieldCodec.encode(value)
 
     def _bind_thread(self, thread: Thread) -> Thread:
-        record = thread.turn_record
-        bound = record.bound_to(self.path, thread.turn_identity)
-        return thread if bound is record else replace(thread, turn_record=bound)
+        record = thread.turn_record.bound_to(self.path, thread.turn_identity)
+        session = thread.session_file.bound_to(self.path.parent)
+        if record is thread.turn_record and session is thread.session_file:
+            return thread
+        return replace(thread, turn_record=record, session_file=session)
 
     def _bind_document(self, document: RegistryDocument) -> RegistryDocument:
         for name, thread in document.threads.items():
@@ -312,6 +315,7 @@ class RegistryStore(RegistryFile, CarriedDocument[RegistryDocument]):
 
     def save_unlocked(self, document: RegistryDocument) -> None:
         self.read_revision_unlocked().document.purpose.require_write()
+        document = self._bind_document(document)
         raw = self._encode(document)
         self._write_unlocked(json.dumps(raw, indent=2))
         # Still under the exclusive lock: the written file is this document.

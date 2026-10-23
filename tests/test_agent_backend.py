@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import runpy
 import sys
+from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType, SimpleNamespace
 
@@ -19,7 +20,7 @@ from agent_comms.pi_native_backend import PI_0_85_1_EVENT_KINDS, PiNativeBackend
 from agent_comms.threads import Thread
 from agent_comms.unstarted_runtime import UnstartedRuntime
 from agent_comms.thread_model import DeclaredModel
-from agent_comms.session_file import NoSessionFile, SavedSessionFile
+from agent_comms.session_file import NoSessionFile, RegistrySessionLocation
 
 # -- registry ---------------------------------------------------------------
 
@@ -52,12 +53,14 @@ def test_pi_native_serves_threads_with_every_thread_capability():
 
 
 @pytest.mark.parametrize("session_file, location", [
-    (SavedSessionFile("/home/ts/wt/test/session.jsonl"), PiSessionFile("/home/ts/wt/test/session.jsonl")),
+    (RegistrySessionLocation.from_path("/home/ts/wt/test/session.jsonl", Path("/home/ts/wt")),
+     PiSessionFile("/home/ts/wt/test/session.jsonl")),
     (NoSessionFile(), UnstartedRuntime(PiNativeBackend)),
 ])
 def test_runtime_location_round_trip_uses_declared_backend(session_file, location, *, thread_registration):
     thread = thread_registration.new_thread('location', frozenset(), '/home/ts/wt/test', session_file=session_file)
     restored = FieldCodec.decode(Thread, FieldCodec.encode(thread))
+    restored = replace(restored, session_file=restored.session_file.bound_to(Path("/home/ts/wt")))
     assert restored.runtime == location
     assert restored.runtime is restored.runtime
     assert restored.backend is PiNativeBackend

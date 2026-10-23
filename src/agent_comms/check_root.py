@@ -27,7 +27,7 @@ from .read_basis import MemberActivityDisplayScope
 from .registry_document import RosterVisibility
 from .storage_rules import StorageRoots
 from .thread_text import NoThreadText
-from .session_file import SavedSessionFile
+from .session_file import RegistrySessionLocation
 from .threads import Thread
 from .transcript_routes import TranscriptRoutes
 from .turn_lease import NoTurnRecord
@@ -114,7 +114,7 @@ class CheckRoot:
                 task=NoThreadText(),
                 goal=NoGoal(),
                 process_identity=NoProcess(),
-                session_file=SavedSessionFile(session),
+                session_file=RegistrySessionLocation.from_path(session, copied.root),
                 earlier_projects=(),
                 project_resume_due=False,
                 storage_roots=StorageRoots(copied.root / "scratch" / slot),
