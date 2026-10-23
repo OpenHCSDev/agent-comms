@@ -386,7 +386,7 @@ class FailedProviderRetry(ProviderRetryOutcome, declared_name="failed"):
     def finish_request(self, session) -> None:
         from .turn_failure import ModelRequestFailed
 
-        session.output.record_failure(ModelRequestFailed(self.final_error))
+        session.output.request_exhausted(ModelRequestFailed(self.final_error))
         session.finish_request()
 
     def retry_wire(self) -> dict[str, object]:
