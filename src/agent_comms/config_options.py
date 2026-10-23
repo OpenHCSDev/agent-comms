@@ -374,8 +374,7 @@ class SessionConfigOptions(ConfigOptions):
     ) -> SetSessionConfigOptionResponse:
         try:
             member = CatalogConfigOption.member_named(config_id)
-            if not isinstance(value, str):
-                raise ValueError("Expected string setting")
+            value = FieldCodec.decode(str, value)
         except ValueError:
             raise RequestError.invalid_params(
                 {"reason": f"Unknown session configuration option: {config_id!r}"}
