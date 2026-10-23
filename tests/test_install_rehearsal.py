@@ -23,7 +23,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.field_codec import FieldCodec
-from agent_comms.history_result import HistoryPageResult
+from agent_comms.history_result import ChannelHistoryPageResult
 from agent_comms.installer.backup import bus_files
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.practice import TestHome
@@ -38,6 +38,7 @@ from agent_comms.installer.upgrade import (
 )
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import MaintenanceBarrier
+from agent_comms.messages import Message
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout, ScratchCheckout
 from agent_comms.root_runtime import RootRuntime
@@ -100,7 +101,7 @@ def install_checkout(tmp_path_factory) -> Path:
     return checkout
 
 
-def drop_one_index(root: Path) -> str:
+def drop_one_index(root: Path) -> Path:
     """One declared store's schema drifts from both runtimes' declarations."""
     for path in sorted(ReconciledFile.existing_in(root)):
         with closing(sqlite3.connect(path)) as db:
@@ -109,7 +110,7 @@ def drop_one_index(root: Path) -> str:
             if index:
                 db.execute(f'DROP INDEX "{index[0]}"')
                 db.commit()
-                return str(path.relative_to(root))
+                return path.relative_to(root)
     raise AssertionError("No declared store has an index to drop")
 
 
@@ -277,7 +278,8 @@ def test_installed_entry_reports_completion_after_target_source_retirement(
     # The bus now belongs to the installed runtime, so its own CLI reads it.
     read = subprocess.run([outgoing, "--root", root, "history", "--target", "#comms"],
                           env=installed_home, capture_output=True, text=True, check=True, timeout=60)
-    history = tuple(reversed(FieldCodec.decode(HistoryPageResult, FieldCodec.parse(read.stdout)).messages))
+    page = FieldCodec.parse(read.stdout)[ChannelHistoryPageResult.messages_key]
+    history = tuple(reversed(FieldCodec.decode(tuple[Message, ...], page)))
     assert len(history) == (1 if fresh else 2)
     assert history[-1].sender == "installer"
     assert history[-1].body.startswith("Install finished")
