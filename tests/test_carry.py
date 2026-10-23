@@ -36,7 +36,7 @@ from agent_comms.installer.upgrade import (
     TargetTree,
     carried,
 )
-from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_execution import ExternalThreadExecution
@@ -154,8 +154,9 @@ def test_a_store_compares_by_its_rows_and_not_by_its_companion_files(tmp_path):
 
 @pytest.fixture
 def stack(tmp_path):
-    """Use the test interpreter, not an unrelated installed runtime under HOME."""
-    return Stack(REPO, InstallCommands(), home=tmp_path, runtime=LaunchRuntime.running())
+    """CLI children keep the test's source path rather than an editable install's checkout."""
+    return Stack(REPO, InstallCommands(), home=tmp_path,
+                 runtime=RestoredRuntime(LaunchRuntime.running().interpreter))
 
 
 @pytest.fixture(scope="module")

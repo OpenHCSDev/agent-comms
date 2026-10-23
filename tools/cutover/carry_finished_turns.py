@@ -99,7 +99,8 @@ class FinishedTurns(Carry):
             if not carried:
                 return Carried(0)
             raw = json.dumps(document)
-            registry._decode(FieldCodec.parse(raw))
+            # Later carries still own other predecessor fields, including goal
+            # orders. A current registry decode belongs after those carries.
             rewritten: tuple[str, ...] = ()
             if apply:
                 registry._write_unlocked(raw)
