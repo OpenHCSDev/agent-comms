@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Annotated
 
 
-from .agent_backend import AgentBackend
+from .agent_backend import AgentBackend, NewThreadBackend
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .cli_result import ThreadToolCatalogResult
 from .context_segments.wake_values import WakeWorkContext
@@ -202,7 +202,7 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
         type[AgentBackend],
         WireOmitDefault(),
         RegistrationPolicy(InheritPrevious),
-    ] = field(default_factory=AgentBackend.for_new_threads, kw_only=True)
+    ] = field(default_factory=NewThreadBackend.selected, kw_only=True)
     turn_record: TurnRecord = field(default_factory=NoTurnRecord)
     channel_scope_generation: int = 0
     turn_generation: int = 0
