@@ -987,7 +987,8 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
                 object.__setattr__(
                     self, plan.name, SnapshotValue.of(plan).freeze(getattr(self, plan.name)),
                 )
-        super(RegistrySnapshot, self).__post_init__()
+        # ThreadRows validates names when rows enter; aliases belong to this cut.
+        self.require_alias_names()
 
     @cached_property
     def by_lookup(self) -> Mapping[str, Thread]:
