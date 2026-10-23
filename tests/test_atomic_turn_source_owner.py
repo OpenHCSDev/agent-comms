@@ -1,5 +1,7 @@
 """Original begin/attachment ownership with real registry and callback resources."""
 
+from agent_comms.active_route import resolve_comms_route
+
 from contextlib import AsyncExitStack
 import os
 
@@ -63,7 +65,7 @@ async def test_begin_callback_and_native_attachment_share_original_owner(tmp_pat
 
 @pytest.mark.parametrize("replacement", ["same-turn-id", "new-claim_scope"])
 def test_source_attachment_refuses_replaced_original_owner(tmp_path, replacement):
-    comms = Comms(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path))
     comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     original = comms.agents.begin_turn("owner", "same-id")
     assert comms.agents.finish_turn(original.turn_lease)
@@ -78,7 +80,7 @@ def test_source_attachment_refuses_replaced_original_owner(tmp_path, replacement
 
 
 def test_native_source_publication_retains_original_claim_across_rename(tmp_path):
-    comms = Comms(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path))
     comms.registry.declare(comms.registry.new_thread(
         'owner', frozenset(), str(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid()),
@@ -97,7 +99,7 @@ def test_native_source_publication_retains_original_claim_across_rename(tmp_path
 
 
 def test_native_source_publication_retains_captured_configuration(tmp_path):
-    comms = Comms(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path))
     comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('test/old')))
     original = comms.agents.begin_turn("owner", "configuration-source-check")
     comms.threads.set_thread_configuration(

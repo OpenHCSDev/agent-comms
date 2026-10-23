@@ -1,5 +1,7 @@
 """Relationship owner contracts: corruption, locks and durability."""
 
+from agent_comms.active_route import resolve_comms_route
+
 import os
 import stat
 
@@ -14,7 +16,7 @@ from test_relationships import setup_wire
 
 
 def _read_adopter(root, done):
-    service = Comms(root).relationships
+    service = Comms(resolve_comms_route(root)).relationships
     service.collaborations("owner")
     service.contacts("owner")
     service.snapshot("owner")

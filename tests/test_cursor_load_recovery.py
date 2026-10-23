@@ -1,5 +1,7 @@
 """A contended trusted load must not suppress its later real cursor recovery."""
 
+from agent_comms.active_route import resolve_comms_route
+
 from agent_comms.bus import Bus
 
 from bus_history import read_history
@@ -20,7 +22,7 @@ from agent_comms.store_files import _store_lock
 
 
 async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
-    comms = Comms(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"))
     owner = comms.registry.new_thread('reader', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(owner)
     Bus.install(Bus.path_in(comms.root))

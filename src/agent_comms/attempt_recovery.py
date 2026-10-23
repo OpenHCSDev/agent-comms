@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.active_route import resolve_comms_route
+
 from agent_comms.native_session_files import NativeSessionFiles
 from .native_failures import NativePiUnavailable
 
@@ -84,7 +86,7 @@ class VerifiedOwnerLoss(ABC):
 
         if store.session.path.name != CoordinationStore.filename:
             raise RecoveryBlocked("native recovery requires the canonical coordination store")
-        comms = Comms(store.session.path.parent)
+        comms = Comms(resolve_comms_route(store.session.path.parent))
         with store.session.boundary(comms.bus) as boundary:
             registry = boundary.registry
             NativeRuntimeTable.require_installed(store.session._connection)
@@ -287,7 +289,7 @@ class RecoveryMonitorCapability:
         """An explicit stop retires only the exited owner's original local attempt."""
         from .comms import Comms
 
-        comms = Comms(root)
+        comms = Comms(resolve_comms_route(root))
         acknowledgement = comms.owners.releases.get(owner.name)
         if not acknowledgement.matches(owner):
             raise RecoveryBlocked("stopped attempt requires the exact exited owner release")

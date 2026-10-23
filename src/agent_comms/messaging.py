@@ -130,7 +130,7 @@ class Messaging:
         with guard_original_root_write(self.root), self.registry.store.locked():
             return self.registry.user_thread().or_create(lambda: self._register_user(worktree))
 
-    def send_user_message(self, target: str | NamedTarget, body: str, *, worktree: str,
+    def send_user_message(self, target: NamedTarget, body: str, *, worktree: str,
                           task: TaskAttachment = NoTaskAttachment()) -> Message:
         """Cooperative local UI send, not cryptographic same-UID authentication."""
         # The historical root write fence precedes identity creation and
@@ -173,12 +173,11 @@ class Messaging:
                 "Pinned constraint from its original source",
                 task, role=NoticeRole())
 
-    def _publish_user(self, user: Thread, target: str | NamedTarget, body: str,
+    def _publish_user(self, user: Thread, target: NamedTarget, body: str,
                       task: TaskAttachment, *, role: MessageRole = ConversationRole()) -> Message:
-        destination = CommandTarget.named(target)
         return self._publish(
-            Message(user.name, destination.name, body, InfoKind, task=task, role=role),
-            HumanOrigin.of(user), destination=destination,
+            Message(user.name, target.name, body, InfoKind, task=task, role=role),
+            HumanOrigin.of(user), destination=target,
         )
 
     def acknowledge(

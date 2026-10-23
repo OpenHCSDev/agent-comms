@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.active_route import resolve_comms_route
+
 import json
 from dataclasses import asdict
 from pathlib import Path
@@ -89,7 +91,7 @@ def test_exact_goal_mentions_are_mutual_read_only_awareness_with_provenance(
     assert tool["collaborations"] == []
     assert tool["visible_collaborators"][0]["sources"] == ["goal_mention"]
     assert {item["token"] for item in tool["unresolved_goal_mentions"]} == {"owner", "unknown"}
-    reopened = Comms(comms.root)
+    reopened = Comms(resolve_comms_route(comms.root))
     assert _rows(reopened, "peer")[0]["owner"].goal_contacts == (contact,)
     assert not comms.relationships.store.path.exists()
     assert comms.bus.bus.revision() == 0
@@ -248,7 +250,7 @@ def test_old_writer_text_change_drops_derived_links_without_erasing_goal(tmp_pat
     raw["threads"]["owner"]["goal"]["text"] = "No mention"
     raw["threads"]["owner"]["goal"]["revision"] += 1
     path.write_text(json.dumps(raw))
-    reopened = Comms(comms.root)
+    reopened = Comms(resolve_comms_route(comms.root))
     assert reopened.registry.require("owner").goal.text == "No mention"
     assert _rows(reopened, "owner")[0] == {}
     assert reopened.relationships.goal_contacts("owner")[0] == ()

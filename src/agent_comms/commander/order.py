@@ -15,6 +15,8 @@ sees the review time: when it is up, the heartbeat tells the commander to read t
 """
 from __future__ import annotations
 
+from agent_comms.active_route import resolve_comms_route
+
 import argparse
 import ast
 import dataclasses
@@ -339,7 +341,7 @@ class CommanderContext(BaseModel):
     _comms: Comms = PrivateAttr()
 
     def model_post_init(self, context: object) -> None:
-        self._comms = Comms(self.root)
+        self._comms = Comms(resolve_comms_route(self.root))
 
     @classmethod
     def read_root(cls, root: Path | str) -> Self:

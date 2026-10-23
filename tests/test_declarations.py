@@ -1,4 +1,6 @@
 
+from agent_comms.active_route import resolve_comms_route
+
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from agent_comms.bus import Bus
 from bus_record_fixture import prepare_native_comms
@@ -43,20 +45,20 @@ def test_native_root_checks_relative_and_absolute_ancestor_permissions(
     unsafe.chmod(0o777)
     monkeypatch.chdir(unsafe)
     for root in (Path("relative-wire"), unsafe / "absolute-wire"):
-        candidate = Comms(root)
+        candidate = Comms(resolve_comms_route(root))
         with pytest.raises(RelationViolationError):
             prepare_native_comms(candidate)
         assert not Bus.path_in(root).exists()
         assert not candidate.registry.store.guard_path.exists()
     monkeypatch.chdir(tmp_path)
-    safe = prepare_native_comms(Comms(Path("safe-relative")))
+    safe = prepare_native_comms(Comms(resolve_comms_route(Path("safe-relative"))))
     assert safe.registry.prepare_native_root().namespace == PrivateRegistryGuard.load(safe.registry.store.path).namespace
 
 
 @pytest.mark.skipif(os.name == "posix", reason="Windows private-bus fail-closed contract")
 def test_native_root_rejects_unattestable_windows_ownership(tmp_path: Path) -> None:
     with pytest.raises(RelationViolationError):
-        prepare_native_comms(Comms(tmp_path))
+        prepare_native_comms(Comms(resolve_comms_route(tmp_path)))
 
 
 class TestAgentRuntimeInfo:
@@ -316,7 +318,7 @@ class TestRegistration:
         assert "turn_epochs" not in leased.to_wire()
 
     def test_comms_begin_turn_cannot_revive_stopped_owner(self, tmp_path: Path) -> None:
-        comms = Comms(tmp_path / "wire")
+        comms = Comms(resolve_comms_route(tmp_path / "wire"))
         comms.registry.declare(comms.registry.new_thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid())))
         comms.registry.unregister("a")
         with pytest.raises(RelationViolationError):
@@ -328,9 +330,9 @@ class TestRegistration:
     def test_native_guard_can_precede_first_registry_snapshot(self, tmp_path: Path) -> None:
         root = tmp_path / "private-fresh"
         root.mkdir(mode=0o700)
-        comms = Comms(root)
+        comms = Comms(resolve_comms_route(root))
         prepare_native_comms(comms)
-        reopened = Comms(root)
+        reopened = Comms(resolve_comms_route(root))
         reopened.registry.declare(reopened.registry.new_thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid())))
         assert reopened.registry.snapshot().owner_identity("a").generation > 0
 
@@ -340,7 +342,7 @@ class TestRegistration:
     ) -> None:
         root = tmp_path / "private-wire"
         root.mkdir(mode=0o700)
-        comms = Comms(root)
+        comms = Comms(resolve_comms_route(root))
         comms.registry.declare(comms.registry.new_thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid())))
         prepare_native_comms(comms)
         registry_path = root / "registry.json"
@@ -360,7 +362,7 @@ class TestRegistration:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stage: str
     ) -> None:
         root = tmp_path / "private"
-        comms = Comms(root)
+        comms = Comms(resolve_comms_route(root))
         comms.registry.declare(comms.registry.new_thread(name='a', tags=frozenset(), worktree='/wt'))
         prepare_native_comms(comms)
         original_pwrite = os.pwrite
@@ -393,7 +395,7 @@ class TestRegistration:
         from agent_comms.coordinator import Coordination
 
         root = tmp_path / "guarded"
-        comms = Comms(root)
+        comms = Comms(resolve_comms_route(root))
         comms.registry.declare(comms.registry.new_thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid())))
         prepare_native_comms(comms)
         # A native coordinator is retained evidence of private mode even if its guard vanishes.
@@ -522,7 +524,7 @@ class TestCurrentThread:
     def test_owner_launch_environment_declares_the_same_thread(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ):
-        registry = Comms(tmp_path).registry
+        registry = Comms(resolve_comms_route(tmp_path)).registry
         launched = registry.new_thread(
             "worker", frozenset({"a", "b"}), str(tmp_path / "project"), parent=ForkedParent("lead"), task=GivenThreadText("Ship it")
         )

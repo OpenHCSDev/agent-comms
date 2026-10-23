@@ -84,7 +84,8 @@ def clear_module():
     synchronize.sys = None
 
 from agent_comms.comms import Comms
-comms = Comms(Path(sys.argv[1]))
+from agent_comms.active_route import resolve_comms_route
+comms = Comms(resolve_comms_route(Path(sys.argv[1])))
 print("Comms created; interpreter exits normally")
 ''')
     environment = os.environ.copy()

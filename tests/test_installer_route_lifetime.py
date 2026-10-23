@@ -1,5 +1,7 @@
 """The installer publishes and undoes its own route, leaving other publishers alone."""
 
+from agent_comms.active_route import resolve_comms_route
+
 import errno
 import fcntl
 import json
@@ -33,7 +35,7 @@ from test_carry_bus_history import OUTGOING_V2, predecessor_history
 @pytest.fixture
 def route_bus(tmp_path):
     root = tmp_path / "wire"
-    prepare_native_comms(Comms(root))
+    prepare_native_comms(Comms(resolve_comms_route(root)))
     return ActiveRoute(root, RecordedBusIdentity.capture(Bus.path_in(root)))
 
 
@@ -68,7 +70,7 @@ def test_route_publication_and_rollback_with_no_sql_changes(tmp_path, route_bus,
 
 def test_install_of_another_bus_keeps_the_published_selection(tmp_path, route_bus):
     other_root = tmp_path / "other"
-    prepare_native_comms(Comms(other_root))
+    prepare_native_comms(Comms(resolve_comms_route(other_root)))
     other = ActiveRoute(other_root, RecordedBusIdentity.capture(Bus.path_in(other_root)))
     path = tmp_path / "state" / "active-route.json"
     route_new_bus(other, path)
@@ -105,7 +107,7 @@ def test_concurrent_publication_after_rebind_is_preserved_on_rollback(tmp_path, 
     Bus.copy_file(database, replacement)
     os.replace(replacement, database)
     other_root = tmp_path / "other"
-    prepare_native_comms(Comms(other_root))
+    prepare_native_comms(Comms(resolve_comms_route(other_root)))
     other = ActiveRoute(other_root, RecordedBusIdentity.capture(Bus.path_in(other_root)))
     route_new_bus(other, path)
     concurrent = path.read_bytes()

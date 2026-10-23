@@ -1,5 +1,7 @@
 """Read evidence follows displayed messages across projections and restarts."""
 
+from agent_comms.active_route import resolve_comms_route
+
 import random
 from dataclasses import replace
 
@@ -113,7 +115,7 @@ def test_typed_read_keys_round_trip_through_the_store_codec():
 
 
 def test_sidebar_presents_pending_read_reset_notice_once(tmp_path):
-    comms = Comms(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path))
     Bus.install(Bus.path_in(comms.root))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     notice = PendingReadNotice("Read positions were reset; reopen conversations to review them.")
@@ -125,7 +127,7 @@ def test_sidebar_presents_pending_read_reset_notice_once(tmp_path):
     assert first.read_marker_notice == notice
     assert comms.bus.reads.read().notice == NoReadNotice()
 
-    second = Comms(tmp_path).views.presentation.roster(viewer)
+    second = Comms(resolve_comms_route(tmp_path)).views.presentation.roster(viewer)
     assert second.read_marker_notice == NoReadNotice()
 
 

@@ -1,5 +1,7 @@
 """Real send entrypoints wait through a private bus hold and publish once."""
 
+from agent_comms.active_route import resolve_comms_route
+
 from agent_comms.bus import Bus
 import asyncio
 import os
@@ -52,7 +54,7 @@ def test_refusal_writer_keeps_registry_permission_until_its_sql_write_finishes(p
 
 @pytest.fixture
 def held_bus(tmp_path):
-    comms = Comms(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path))
     Bus.install(Bus.path_in(comms.root))
     for name in ('sender', 'recipient'):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))

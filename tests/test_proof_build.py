@@ -1,5 +1,7 @@
 """Build-bound close uses real repositories and a retained-history bus copy."""
 
+from agent_comms.active_route import resolve_comms_route
+
 import subprocess
 import sys
 import time
@@ -228,7 +230,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
         for graph in proof_build_checkouts
         if graph.repository.github == CorePackage.repository
     )
-    source = Comms(tmp_path / "bus")
+    source = Comms(resolve_comms_route(tmp_path / "bus"))
     Bus.install(Bus.path_in(source.root))
     for number, name in enumerate(("lead", "worker"), 1):
         source.registry.declare(
@@ -349,7 +351,7 @@ def test_install_due_compares_fetched_main_to_installed_build(
     # Deliberately stale: the rule must fetch rather than trust the existing remote ref.
     Repo.git(checkout, "update-ref", "refs/remotes/origin/main", graph.oldest)
     before = Repo.git(checkout, "rev-parse", "HEAD")
-    bus = Comms(tmp_path / "bus")
+    bus = Comms(resolve_comms_route(tmp_path / "bus"))
     bus.registry.declare(bus.registry.new_thread("lead", frozenset(), str(checkout)))
     Commander.on_root("lead", (graph.repository,), bus.root)
 
@@ -389,7 +391,7 @@ def test_install_waits_for_merges_to_settle_into_one_batch(
     subprocess.run(("git", "init", "--bare", str(origin)), check=True, capture_output=True)
     Repo.git(checkout, "remote", "set-url", "origin", str(origin))
     Repo.git(checkout, "push", "origin", f"{graph.newer}:refs/heads/main")
-    bus = Comms(tmp_path / "bus")
+    bus = Comms(resolve_comms_route(tmp_path / "bus"))
     bus.registry.declare(bus.registry.new_thread("lead", frozenset(), str(checkout)))
     Commander.on_root("lead", (graph.repository,), bus.root)
     merged = int(Repo.git(checkout, "log", "-1", "--format=%ct", graph.newer))

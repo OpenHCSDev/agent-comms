@@ -1,5 +1,7 @@
 """A stopped registry incarnation loses every claim at the next original transition."""
 
+from agent_comms.active_route import resolve_comms_route
+
 from agent_comms.bus import Bus
 
 import os
@@ -45,4 +47,4 @@ def test_stopped_incarnation_claims_expire_on_next_transition(comms, tmp_path):
     # The next transition touches neither old resource; both still have to disappear.
     committed = acquire("next", (new_path,), "b" * 32)
     assert set(committed.expired) == set(old_paths)
-    assert set(Comms(comms.root).bus.bus.claim_projection()) == {new_path}
+    assert set(Comms(resolve_comms_route(comms.root)).bus.bus.claim_projection()) == {new_path}

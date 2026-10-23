@@ -1,5 +1,7 @@
 """The real bus publishes only files declared by their existing state owners."""
 
+from agent_comms.active_route import resolve_comms_route
+
 from contextlib import closing
 from pathlib import Path
 import sqlite3
@@ -24,7 +26,7 @@ from test_todos import order
 @pytest.fixture
 def comms(tmp_path: Path) -> Comms:
     root = tmp_path / "bus"
-    return prepare_native_comms(Comms(root))
+    return prepare_native_comms(Comms(resolve_comms_route(root)))
 
 
 def test_every_bus_file_is_a_declared_root_file(tmp_path: Path, source_repository, comms: Comms) -> None:

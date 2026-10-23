@@ -1,5 +1,7 @@
 """Installed snapshot values, original notification evidences and real sidebar rows."""
 
+from agent_comms.active_route import resolve_comms_route
+
 from agent_comms.bus import Bus
 from conftest import publish_initial
 from agent_comms.session_file import SavedSessionFile
@@ -40,7 +42,7 @@ async def main():
     root.mkdir(mode=0o700, parents=True, exist_ok=False)
     os.environ.update(XDG_CONFIG_HOME=str(root / 'config'), XDG_STATE_HOME=str(root / 'state'),
                       XDG_DATA_HOME=str(root / 'data'), AGENT_COMMS_ROOT=str(root / 'wire'))
-    comms = Comms(root / 'wire')
+    comms = Comms(resolve_comms_route(root / 'wire'))
     Bus.install(Bus.path_in(comms.root))
     owner = root.name
     for name in (owner, 'stopped', 'archived'):

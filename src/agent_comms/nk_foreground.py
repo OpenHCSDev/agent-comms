@@ -11,6 +11,8 @@ provider until a separate reviewed enforced cap exists; tests use a fake model.
 
 from __future__ import annotations
 
+from agent_comms.active_route import resolve_comms_route
+
 import argparse
 import asyncio
 import os
@@ -97,7 +99,7 @@ def reserve_foreground_owner(
         raise MalformedRecord("A private wire-root ID is required")
     worktree = root / "work"
     NativeSessionFiles.require_private_directory(worktree)
-    comms = Comms(root)
+    comms = Comms(resolve_comms_route(root))
     owner = comms.registry.new_thread(
         name, tags, str(worktree), process_identity=ProcessIdentity.capture(os.getpid()), task=GivenThreadText(task),
     )

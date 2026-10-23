@@ -1,5 +1,7 @@
 """The real console adapter forks, routes messages, polls and acknowledges."""
 
+from agent_comms.active_route import resolve_comms_route
+
 import json
 import os
 
@@ -35,7 +37,7 @@ class TestEndToEndLifecycle:
         root = native.root
         await cli(source_programs, root, 'register', '--name', 'PR111',
                   '--worktree', str(native.project), '--execution', 'native')
-        comms = Comms(root)
+        comms = Comms(resolve_comms_route(root))
         parent = comms.registry.require('PR111')
         comms.threads.attach_session(parent, str(native.session), process=parent.process_identity)
         try:
@@ -95,5 +97,5 @@ class TestEndToEndLifecycle:
                 target, viewer=NamedViewer('cli-agent')).messages] == ['from the cli side']
             await cli(source_programs, native.root, 'send', '--from', 'cli-agent', '--to', session,
                       '--body', 'roger')
-            assert [message.body for message in Comms(native.root).views.history_page(
+            assert [message.body for message in Comms(resolve_comms_route(native.root)).views.history_page(
                 target, viewer=NamedViewer('cli-agent')).messages] == ['from the cli side', 'roger']

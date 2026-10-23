@@ -1,4 +1,6 @@
 """A fresh carry generation says nothing about the old goal's execution."""
+
+from agent_comms.active_route import resolve_comms_route
 from contextlib import closing
 from dataclasses import replace
 import os
@@ -21,7 +23,7 @@ from agent_comms.input_disposition import InputDispositions
 
 
 def test_carried_blocked_goal_requires_explicit_retry_preserving_unknown(tmp_path):
-    comms = Comms(tmp_path / 'wire')
+    comms = Comms(resolve_comms_route(tmp_path / 'wire'))
     store = comms.goals.open_goal_store()
     goal = Goal(published_seq=0, text='Historical objective; past execution is uncertain', id=uuid4().hex,
                 state=BlockedGoal('Inspect uncertain original work before explicit Retry'))

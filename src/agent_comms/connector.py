@@ -17,6 +17,8 @@ Usage:
 
 from __future__ import annotations
 
+from agent_comms.active_route import resolve_comms_route
+
 import asyncio
 import base64
 import hashlib
@@ -563,7 +565,7 @@ class Connector:
     @contextmanager
     def opened_wire(self) -> Iterator[Comms]:
         """The connector's caller must exist at startup and at each later call."""
-        with client_wire(self.root) as comms:
+        with client_wire(resolve_comms_route(self.root)) as comms:
             comms.registry.require(CALLER.name)
             yield comms
 
@@ -574,7 +576,7 @@ class Connector:
         Waiting with a client route borrowed would hold up its replacement. The
         pass inherits the bus's hold wait; requests retain client_wire's fast refusal.
         """
-        yield Comms(self.root)
+        yield Comms(resolve_comms_route(self.root))
 
     def invoke(
         self, tool: type[ToolRequest] | type[ConnectorTool], arguments: Mapping[str, object]

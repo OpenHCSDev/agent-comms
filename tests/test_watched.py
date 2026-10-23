@@ -1,5 +1,7 @@
 """The declared bus watch uses real native commit and replacement notifications."""
 
+from agent_comms.active_route import resolve_comms_route
+
 import asyncio
 import errno
 from contextlib import aclosing
@@ -27,7 +29,7 @@ from agent_comms.view_unread import (
 @pytest.fixture
 def watched_bus(tmp_path):
     Bus.install(Bus.path_in(tmp_path / "bus"))
-    comms = Comms(tmp_path / "bus")
+    comms = Comms(resolve_comms_route(tmp_path / "bus"))
     for name in ("owner", "peer"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
     return Bus.at(comms.root), comms

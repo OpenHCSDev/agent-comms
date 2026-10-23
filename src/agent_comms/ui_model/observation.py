@@ -1271,11 +1271,11 @@ class ObservationService:
 
 def serve(route: CommsRoute, connection: Connection) -> None:
     """Observe the caller's selected route, including its reviewed native package."""
-    from agent_comms.comms import wire
+    from agent_comms.comms import Comms
 
     try:
         with route.hold_client_route():
-            asyncio.run(ObservationService(wire(route), connection).run())
+            asyncio.run(ObservationService(Comms(route), connection).run())
     except BaseException:
         try:
             connection.send(ObservationFailed(traceback.format_exc()))

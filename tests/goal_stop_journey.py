@@ -1,5 +1,7 @@
 """Real install-style stop on a copied private bus with a controlled provider."""
 
+from agent_comms.active_route import resolve_comms_route
+
 import asyncio
 import json
 from contextlib import closing
@@ -30,7 +32,7 @@ async def stopped_goal_journey(
         fixture.provider.response_gate = asyncio.Event()
         copied = base / "copy"
         shutil.copytree(fixture.root, copied)
-        comms = Comms(copied)
+        comms = Comms(resolve_comms_route(copied))
         comms.registry.declare(comms.registry.new_thread(
             "stop-copy", frozenset(), str(fixture.project)))
         comms.goals.update_goal("stop-copy", SetGoalAction(

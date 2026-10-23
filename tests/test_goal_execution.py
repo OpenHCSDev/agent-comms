@@ -1,4 +1,6 @@
 """Real turn acquisition and terminal handling share the execution owner."""
+
+from agent_comms.active_route import resolve_comms_route
 import os
 import sqlite3
 from contextlib import AsyncExitStack, asynccontextmanager, closing
@@ -118,7 +120,7 @@ async def test_owner_stop_beats_backend_failure_and_next_turn_runs_without_retry
         await turn.progress.done(events.Done("dying backend", False))
         turn.runner.owner_stop.request()
     # A new reader observes the same retained bus, without a Retry or goal write.
-    relaunched = Comms(comms.root)
+    relaunched = Comms(resolve_comms_route(comms.root))
     assert isinstance(relaunched.goals.goal_execution("worker"), RunnableExecution)
     assert relaunched.registry.require("worker").goal.state == ActiveGoal()
     assert failure_count(relaunched) == 0

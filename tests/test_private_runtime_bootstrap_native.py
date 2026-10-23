@@ -1,5 +1,7 @@
 """Fresh production bootstrap wakes a real native owner before and after restart."""
 
+from agent_comms.active_route import resolve_comms_route
+
 from bus_history import read_history
 from agent_comms.pi_vocabulary import OffThinkingLevel
 import json
@@ -103,7 +105,7 @@ def test_production_peer_wake_and_restart(tmp_path, monkeypatch, base_only_owner
     )
     for name in ("PI_PROMPT", "PI_PARENT_ID", "AGENT_COMMS_THREAD"):
         monkeypatch.delenv(name, raising=False)
-    comms = Comms(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"))
     for name in ("sender", "recipient"):
         comms.registry.declare(
             comms.registry.new_thread(name, frozenset(), str(tmp_path), model=DeclaredModel('selected-offline/fixture'), thinking_level=OffThinkingLevel)

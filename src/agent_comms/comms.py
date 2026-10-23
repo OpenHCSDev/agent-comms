@@ -31,9 +31,9 @@ from .transcripts import Transcripts
 
 class Comms:
     def __init__(
-        self, root: CommsRoute | Path, publisher: type[Publisher] = OwnerPublisher,
+        self, root: CommsRoute, publisher: type[Publisher] = OwnerPublisher,
     ) -> None:
-        self.route = resolve_comms_route(root)
+        self.route = root
         RootRuntime.require_attachable(self.route.root, LaunchRuntime.running())
         self.route.observe_root()
         self.registry = Registration(RegistryFile.path_in(self.root))
@@ -73,18 +73,17 @@ class Comms:
         return self.route.root
 
 
-def wire(root: CommsRoute | Path | str | None = None) -> Comms:
+def wire(root: Path | str | None = None) -> Comms:
     """Build a Comms wire from an explicit root or the active default route."""
     return Comms(resolve_comms_route(root))
 
 
 @contextmanager
-def client_wire(root: CommsRoute | Path) -> Iterator[Comms]:
+def client_wire(route: CommsRoute) -> Iterator[Comms]:
     """One client call: it borrows the published route until it retires and answers in full.
 
     Every reader observes committed bus rows without preparing another store.
     """
-    route = resolve_comms_route(root)
     # Refuse before borrowing a route or opening stores held by maintenance.
     # This grants nothing: writes still check under their determining locks.
     MaintenanceBarrier(RegistryFile.path_in(route.root)).assert_open_unlocked()

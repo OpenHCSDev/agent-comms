@@ -1,5 +1,9 @@
 """The stored registry revision owns human identity and UI history uses it."""
 
+from agent_comms.channel_targets import CommandTarget
+
+from agent_comms.active_route import resolve_comms_route
+
 from dataclasses import replace
 
 from agent_comms.comms import Comms
@@ -11,7 +15,7 @@ from conftest import installed_comms
 
 
 def test_user_answer_follows_revisions_and_stays_out_of_wire_fields(tmp_path):
-    comms = Comms(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path))
     human = comms.messaging.user_identity(str(tmp_path))
     comms.registry.rename(human.name, 'renamed-human')
     assert comms.registry.user_thread().existing()[0].name == 'renamed-human'
@@ -31,8 +35,8 @@ def test_user_answer_follows_revisions_and_stays_out_of_wire_fields(tmp_path):
 def test_channel_and_dm_history_keep_the_human_as_sender(tmp_path):
     comms = installed_comms(tmp_path)
     comms.registry.declare(comms.registry.new_thread('peer', frozenset({'comms'}), str(tmp_path)))
-    channel = comms.messaging.send_user_message('#comms', 'own channel message', worktree=str(tmp_path))
-    direct = comms.messaging.send_user_message('peer', 'own DM message', worktree=str(tmp_path))
+    channel = comms.messaging.send_user_message(CommandTarget.named('#comms'), 'own channel message', worktree=str(tmp_path))
+    direct = comms.messaging.send_user_message(CommandTarget.named('peer'), 'own DM message', worktree=str(tmp_path))
     human = comms.registry.user_thread().existing()[0]
     assert channel.sender == direct.sender == human.name
     assert channel.sender_role is direct.sender_role is UserThreadRole

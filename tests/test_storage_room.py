@@ -1,4 +1,6 @@
 """Measured admission, not estimates; the claim also owns displayed waiting."""
+
+from agent_comms.active_route import resolve_comms_route
 import asyncio
 import os
 import shutil
@@ -17,13 +19,13 @@ from agent_comms.thread_status import RunningThreadStatus
 
 
 def copied_root(tmp_path):
-    original = Comms(tmp_path / 'original')
+    original = Comms(resolve_comms_route(tmp_path / 'original'))
     for name in ('gate-one', 'gate-two'):
         original.registry.declare(original.registry.new_thread(name, frozenset(), str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid())), RunningThreadStatus())
     root = tmp_path / 'copied'
     shutil.copytree(original.root, root)
-    comms = Comms(root)
+    comms = Comms(resolve_comms_route(root))
     comms.registry.storage_rule = StorageRule(volume=tmp_path, floor_gib=0, memory_gib=0,
         checkout_base=tmp_path, scratch_base=tmp_path / 'scratch')
     return comms

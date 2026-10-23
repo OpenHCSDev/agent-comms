@@ -1,5 +1,7 @@
 """Shared fixtures: an isolated Comms wire per test."""
 
+from agent_comms.active_route import resolve_comms_route
+
 import asyncio
 import fcntl
 import os
@@ -120,7 +122,7 @@ async def await_event_or_task(event: Awaitable[object], task: asyncio.Task) -> o
 
 def reader(root: Path) -> Comms:
     """A Comms over an existing wire that makes no private write."""
-    return Comms(root, Publisher)
+    return Comms(resolve_comms_route(root), Publisher)
 
 
 def responder(root: Path, registry: Registration) -> MessageBus[ParticipantPublisher]:
@@ -270,7 +272,7 @@ def private_comms(private_directory):
     from bus_record_fixture import prepare_native_comms
 
     root = private_directory / "wire"
-    comms = prepare_native_comms(Comms(root))
+    comms = prepare_native_comms(Comms(resolve_comms_route(root)))
     from agent_comms.launch_root import LaunchRoot
 
     with LaunchRoot.from_path(root).selected():
@@ -353,7 +355,7 @@ def declare_test_bus(comms: Comms, *, channels=(), threads=()) -> Comms:
 def installed_comms(root: Path) -> Comms:
     """A root as the installer leaves it: its bus exists before any reader opens it."""
     Bus.install(Bus.path_in(root))
-    return Comms(root)
+    return Comms(resolve_comms_route(root))
 
 
 @pytest.fixture

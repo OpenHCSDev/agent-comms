@@ -87,8 +87,9 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
         assert not selected_write
         inspection = (
             'from pathlib import Path; from agent_comms.comms import Comms; from agent_comms.publisher import Publisher; '
+            'from agent_comms.active_route import resolve_comms_route; '
             'from agent_comms.turn_phase import ToolRunningPhase; '
-            f'c=Comms(Path({str(root)!r}), Publisher); '
+            f'c=Comms(resolve_comms_route(Path({str(root)!r})), Publisher); '
             'assert isinstance(c.registry.require("beta").turn_record.read().require_active().phase, ToolRunningPhase); '
             'print("CANONICAL_TOOL_RUNNING")'
         )

@@ -1,5 +1,7 @@
 """PID registration is not an original loaded-session resource."""
 
+from agent_comms.active_route import resolve_comms_route
+
 import asyncio
 import json
 import os
@@ -26,7 +28,7 @@ from agent_comms.threads import Thread
 @pytest.mark.parametrize("wire", (b"{invalid json\n", b"[]\n"))
 async def test_malformed_runtime_request_receives_failure_before_socket_closes(tmp_path, wire):
     async with AsyncExitStack() as resources:
-        owner = CommsAgent(Comms(tmp_path / "wire"), runtime_enabled=True, auto_wake=False)
+        owner = CommsAgent(Comms(resolve_comms_route(tmp_path / "wire")), runtime_enabled=True, auto_wake=False)
         resources.push_async_callback(owner.shutdown)
         await owner._runtime.start()
         with PrivateSocketRole.address(owner._runtime.path) as address:
@@ -47,7 +49,7 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
     root = tmp_path / "wire"
     project = tmp_path / "project"
     project.mkdir()
-    comms = Comms(root)
+    comms = Comms(resolve_comms_route(root))
     owner = CommsAgent(comms, runtime_enabled=True, auto_wake=False)
     client = CommsAgent(comms, auto_wake=False)
     registered = await asyncio.to_thread(

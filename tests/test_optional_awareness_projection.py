@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.active_route import resolve_comms_route
+
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from bus_record_fixture import prepare_native_comms
 from agent_comms.lifecycle_capability import Executing
@@ -44,7 +46,7 @@ def _root(
 ) -> tuple[Comms, Coordination, WakeCandidateIndex, str]:
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    comms = prepare_native_comms(Comms(root))
+    comms = prepare_native_comms(Comms(resolve_comms_route(root)))
     comms.registry.declare(
         comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )

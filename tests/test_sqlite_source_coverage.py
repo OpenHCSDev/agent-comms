@@ -1,5 +1,7 @@
 """SQLite delivery prefixes preserve native gaps without a file checkpoint."""
 
+from agent_comms.active_route import resolve_comms_route
+
 import pytest
 
 from agent_comms.bus import BusRecord, PrivateRecord, PublicRecord
@@ -18,7 +20,7 @@ from bus_record_fixture import prepare_native_comms, record_from
 
 @pytest.fixture
 def coverage(tmp_path):
-    comms = prepare_native_comms(Comms(tmp_path, ResponseWrites))
+    comms = prepare_native_comms(Comms(resolve_comms_route(tmp_path), ResponseWrites))
     with NativeBoundary(comms.bus) as boundary:
         root_id = boundary.privacy.namespace
     with Coordination(str(CoordinationStore.path_in(tmp_path))) as store:

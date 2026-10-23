@@ -6,6 +6,8 @@ activate private processing for existing public sessions.
 
 from __future__ import annotations
 
+from agent_comms.active_route import resolve_comms_route
+
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from bus_record_fixture import prepare_native_comms
 
@@ -33,7 +35,7 @@ tmp_path = private_root_fixture
 
 def _private_comms(tmp_path):
     root = tmp_path / "wire"
-    comms = prepare_native_comms(Comms(root))
+    comms = prepare_native_comms(Comms(resolve_comms_route(root)))
     comms.registry.declare(
         comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )

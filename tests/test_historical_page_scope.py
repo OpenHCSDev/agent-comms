@@ -1,4 +1,6 @@
 """Source-owned history predicates and sound sequence-indexed membership."""
+
+from agent_comms.active_route import resolve_comms_route
 from dataclasses import replace
 
 import pytest
@@ -15,7 +17,7 @@ from agent_comms.read_basis import NamedViewer
 
 @pytest.fixture
 def history(tmp_path):
-    old = Comms(tmp_path / "old")
+    old = Comms(resolve_comms_route(tmp_path / "old"))
     old.registry.declare(old.registry.new_thread('alice-old', frozenset({'api'}), str(old.root), created_at=10))
     for created, name in enumerate(("bob", "carol"), start=11):
         old.registry.declare(old.registry.new_thread(name, frozenset({'ops'}), str(old.root), created_at=created))
@@ -46,7 +48,7 @@ def history(tmp_path):
             lambda seq, db: PublicRecord.from_message(replace(message, seq=seq))
         )
         rows.append(Message.from_message(published))
-    live = Comms(tmp_path / "live")
+    live = Comms(resolve_comms_route(tmp_path / "live"))
     Bus.install(Bus.path_in(live.root))
     # Deliberately different membership: source scope must not use live tags.
     live.registry.declare(live.registry.new_thread('alice', frozenset({'ops'}), str(live.root), created_at=500))

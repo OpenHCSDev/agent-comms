@@ -7,6 +7,8 @@ Retains request/response/timing/trace files under the supplied owned output path
 
 from __future__ import annotations
 
+from agent_comms.active_route import resolve_comms_route
+
 from agent_comms.bus import Bus
 from agent_comms.repository_name import RepositoryName
 
@@ -46,7 +48,7 @@ from order_scope_fixture import FIX_SCOPE
 
 def seed(root: Path, project: Path) -> None:
     root.mkdir(mode=0o700)
-    comms = Comms(root)
+    comms = Comms(resolve_comms_route(root))
     for name in ("claude-ai", "worker", "archivable"):
         comms.registry.declare(
             comms.registry.new_thread(name, frozenset({"probe"}), str(project)),
@@ -283,7 +285,7 @@ def run(output: Path, checkout: Path, selected: list[str]) -> None:
         case.mkdir()
         root, home = case / "wire", case / "home"
         shutil.copytree(original, root)
-        comms = Comms(root)
+        comms = Comms(resolve_comms_route(root))
         args = arguments(comms, name, project, checkout)
         for worker in threading.enumerate():
             if worker.name.startswith("agent-comms-"):

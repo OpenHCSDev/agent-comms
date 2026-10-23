@@ -1,5 +1,7 @@
 """Real participant which releases on TERM but lets its caller control OS exit."""
 
+from agent_comms.active_route import resolve_comms_route
+
 import signal
 import sys
 import time
@@ -14,7 +16,7 @@ def main() -> None:
     (directory,) = sys.argv[1:]
     root = Path(directory)
     LaunchRoot.from_path(root).install()
-    comms = Comms(root)
+    comms = Comms(resolve_comms_route(root))
 
     def release(signum, frame):
         comms.owners.release('worker')

@@ -1,4 +1,6 @@
 
+from agent_comms.active_route import resolve_comms_route
+
 from agent_comms.bus import Bus
 from agent_comms.field_codec import FieldCodec
 
@@ -141,7 +143,7 @@ def test_invalid_runtime_parameters_use_canonical_decode_and_domain_errors(param
 def test_normal_history_cli_keeps_migrated_content_and_source_identity(
     tmp_path, capsys, monkeypatch, arguments, result_type, per_root
 ):
-    old, live = Comms(tmp_path / "old"), Comms(tmp_path / "live")
+    old, live = Comms(resolve_comms_route(tmp_path / "old")), Comms(resolve_comms_route(tmp_path / "live"))
     for comms in (old, live):
         Bus.install(Bus.path_in(comms.root))
         for name in ("alice", "bob"):

@@ -1,5 +1,7 @@
 """Selected check history is small, non-executable and scoped to the command."""
 
+from agent_comms.active_route import resolve_comms_route
+
 from agent_comms.bus import Bus
 import json
 from pathlib import Path
@@ -19,7 +21,7 @@ from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 @pytest.fixture
 def source(scratch_root, durable_home):
     root = scratch_root / "source"
-    c = Comms(root)
+    c = Comms(resolve_comms_route(root))
     Bus.install(Bus.path_in(c.root))
     for name in ("A", "B", "other"):
         c.registry.declare(c.registry.new_thread(name, frozenset({"comms"}), str(scratch_root)),

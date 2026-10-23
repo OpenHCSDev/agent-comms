@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.active_route import resolve_comms_route
+
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 import asyncio
 import json
@@ -92,7 +94,7 @@ def test_owner_mode_denies_unreserved_input_before_consuming_ledger(tmp_path: Pa
     root.mkdir(mode=0o700)
     session_dir = tmp_path / "session"
     session_dir.mkdir(mode=0o700)
-    comms = Comms(root)
+    comms = Comms(resolve_comms_route(root))
     claim_scope = WakeClaim(
         wire_root_id="a" * 32,
         source_seq=1,

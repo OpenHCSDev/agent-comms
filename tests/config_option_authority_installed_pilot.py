@@ -6,6 +6,8 @@ root, setting, native journal or historical input is changed.
 """
 from __future__ import annotations
 
+from agent_comms.active_route import resolve_comms_route
+
 from agent_comms.bus import Bus
 
 import argparse
@@ -106,7 +108,7 @@ async def run(stage, package, models, ui, menu_contention=False):
     stage.mkdir(mode=0o700, parents=True, exist_ok=False)
     project = stage / 'project'
     project.mkdir()
-    service = Comms(stage / 'wire')
+    service = Comms(resolve_comms_route(stage / 'wire'))
     Bus.install(Bus.path_in(service.root))
     environment = dict(os.environ)
     environment.update(

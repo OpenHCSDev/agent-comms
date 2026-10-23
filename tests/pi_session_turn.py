@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.active_route import resolve_comms_route
+
 from contextlib import aclosing
 from pathlib import Path
 
@@ -16,7 +18,7 @@ async def one_turn_events(agent_bin, agent_args, task, cwd, env_extra=None,
                           *, package: Path, tool_mode=NoSelectedTools(), **kwargs):
     """Run ``backend.stream_agent_events`` on a fresh session and close its child after."""
     session = PersistentPiSession()
-    comms = Comms(Path(cwd))
+    comms = Comms(resolve_comms_route(Path(cwd)))
     owner = comms.registry.declare(comms.registry.new_thread(
         "independent-turn", frozenset(), cwd,
     )).incarnation.require_recorded()

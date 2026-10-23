@@ -1,5 +1,7 @@
 """Registry snapshots own recipient lookup; activity reads own their requested set."""
 
+from agent_comms.active_route import resolve_comms_route
+
 from dataclasses import replace
 
 import pytest
@@ -22,7 +24,7 @@ from goal_owner_fixture import canonical_goal_wire
 
 
 def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_owner(tmp_path):
-    comms = Comms(tmp_path / "bus")
+    comms = Comms(resolve_comms_route(tmp_path / "bus"))
     for name, birth in (("old", 1700.0), ("second", 1701.0)):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path), created_at=birth))
     source = comms.registry.snapshot()

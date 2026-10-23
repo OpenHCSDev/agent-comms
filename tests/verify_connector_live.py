@@ -5,6 +5,8 @@ The caller selects scratch; each subprocess run retires its temporary directory.
 """
 from __future__ import annotations
 
+from agent_comms.active_route import resolve_comms_route
+
 from agent_comms.bus import Bus
 
 import json
@@ -40,7 +42,7 @@ def main(scratch: Path):
         root = base / "wire"
         root.mkdir(mode=0o700)
         Bus.install(Bus.path_in(root))
-        comms = Comms(root)
+        comms = Comms(resolve_comms_route(root))
         for name in ("claude-ai", "worker"):
             comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(base)))
         Bus.install(Bus.path_in(comms.root))

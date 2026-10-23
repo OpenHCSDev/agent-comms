@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.active_route import resolve_comms_route
+
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from bus_record_fixture import prepare_native_comms
 from conftest import responder
@@ -47,7 +49,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(tmp_path, native_runtime_
         root, work = native.root, native.project
         resource = work / "module.py"
         resource.write_bytes(b"before\n")
-        comms = prepare_native_comms(Comms(root))
+        comms = prepare_native_comms(Comms(resolve_comms_route(root)))
         sender_pid = os.getpid()
         comms.registry.declare(
             comms.registry.new_thread('sender', frozenset(), str(work), process_identity=ProcessIdentity.capture(sender_pid), created_at=61001.0)
@@ -135,7 +137,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(tmp_path, native_runtime_
             result = await event("terminal")
             assert result["pid"] == process.pid and result["drained"] == 1
             assert native.provider.posts == 1 and resource.read_bytes() == b"after second pid\n"
-            with Comms(root).bus.bus.reading() as source:
+            with Comms(resolve_comms_route(root)).bus.bus.reading() as source:
                 assert source.claim_operation_used(acknowledgement.operation_id)
                 assert source.resource_owner(str(resource)) == UnclaimedResource()
             rows = list((root / "selected-write-plans").glob("*.json"))

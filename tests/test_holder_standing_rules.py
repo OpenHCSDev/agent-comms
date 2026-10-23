@@ -1,5 +1,7 @@
 """Held-order recovery and unanswered DMs on an independently copied bus."""
 
+from agent_comms.active_route import resolve_comms_route
+
 from agent_comms.channel_targets import CommandTarget
 import asyncio
 import json
@@ -104,7 +106,7 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
     configured_repository(comms)
     copied = tmp_path / "copied-bus"
     StoreBackup.copy_tree(comms.root, copied)
-    copied_bus = Comms(copied)
+    copied_bus = Comms(resolve_comms_route(copied))
     configured_repository(copied_bus)
     return copied_bus
 

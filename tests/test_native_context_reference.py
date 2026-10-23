@@ -1,5 +1,7 @@
 """Original nullable SQL groups cannot mint a partial recorded native reference."""
 
+from agent_comms.active_route import resolve_comms_route
+
 import sqlite3
 from dataclasses import fields, replace
 from functools import partial
@@ -138,7 +140,7 @@ def historical_source(recorded):
 def test_cursor_owner_enforces_exact_settlement_without_restricting_refresh(
     tmp_path, recorded, historical_source, make_owner, permitted,
 ):
-    thread = Comms(tmp_path).registry.new_thread("owner", frozenset(), str(tmp_path))
+    thread = Comms(resolve_comms_route(tmp_path)).registry.new_thread("owner", frozenset(), str(tmp_path))
     original = replace(
         recorded, owner_lookup=thread.incarnation.require_recorded().lookup,
         verdict=DecidedTriageRecord(IgnoreSelectedTriage),

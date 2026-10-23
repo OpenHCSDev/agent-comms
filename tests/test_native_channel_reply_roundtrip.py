@@ -1,5 +1,7 @@
 """A published native reply automatically reaches the original channel sender."""
 
+from agent_comms.active_route import resolve_comms_route
+
 from bus_record_fixture import prepare_native_comms
 from bus_history import read_history
 from agent_comms.pi_vocabulary import OffThinkingLevel
@@ -225,7 +227,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
         monkeypatch.setenv(key, value)
     for key in ("PI_PROMPT", "PI_PARENT_ID", "AGENT_COMMS_THREAD"):
         monkeypatch.delenv(key, raising=False)
-    comms = prepare_native_comms(Comms(tmp_path / "wire"))
+    comms = prepare_native_comms(Comms(resolve_comms_route(tmp_path / "wire")))
     projects = {}
     for name in (("questioner", "answerer", "answerer2") if broadcast else ("questioner", "answerer")):
         project = tmp_path / name

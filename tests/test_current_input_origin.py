@@ -1,5 +1,7 @@
 """Original authored ingress and neutral historical evidence share one input store."""
 
+from agent_comms.channel_targets import CommandTarget
+
 from agent_comms.lifecycle_capability import Unresolved
 from agent_comms.messages import Message, NoticeRole
 from contextlib import ExitStack
@@ -274,13 +276,13 @@ async def test_direct_human_input_pin_shares_original_source_lineage_without_rep
     assert row.matches_owner(owner.incarnation)
     assert not row.matches_owner(replace(owner.incarnation, created_at=owner.created_at + 1))
     assert captured(owner.name).original_text_source(second_pin.reference) == stored_inputs(inputs.root).lookup(second.key)
-    revised = comms.messaging.send_user_message(owner.name, 'Exact human correction.', worktree=origin.project,
+    revised = comms.messaging.send_user_message(CommandTarget.named(owner.name), 'Exact human correction.', worktree=origin.project,
         task=UserTaskSupersession(CorrectionTaskChange(repeated.reference)))
     current = captured(owner.name)
     assert current.current_authored_sources(owner, comms.registry.snapshot()) == (
         Message.from_message(revised), Message.from_message(second_pin),
     )
-    comms.messaging.send_user_message(owner.name, 'Drop the second original.', worktree=origin.project,
+    comms.messaging.send_user_message(CommandTarget.named(owner.name), 'Drop the second original.', worktree=origin.project,
         task=UserTaskDrop(CorrectionTaskChange(second_pin.reference)))
     assert captured(owner.name).current_authored_sources(owner, comms.registry.snapshot()) == (Message.from_message(revised),)
     assert stored_inputs(inputs.root).lookup(row.key) == row

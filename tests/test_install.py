@@ -1,6 +1,8 @@
 """agent-comms install: the bus it creates or practises on, and the route to it."""
 from __future__ import annotations
 
+from agent_comms.active_route import resolve_comms_route
+
 import json
 import os
 import sqlite3
@@ -31,7 +33,7 @@ REPO = Path(__file__).resolve().parents[1]
 def bus(directory: Path) -> tuple[Path, RecordedBusIdentity]:
     """An installed native root holding a real published message."""
     root = directory / "wire"
-    comms = prepare_native_comms(Comms(root))
+    comms = prepare_native_comms(Comms(resolve_comms_route(root)))
     comms.channels.create_tag("team")
     comms.registry.declare(comms.registry.new_thread("worker", frozenset({"team"}), str(directory)))
     comms.messaging.send("worker", "#team", "hello")
@@ -119,7 +121,7 @@ def test_a_message_sent_while_the_bus_is_copied_preserves_one_database_cut(
     root, _ = bus(private_directory)
     (root / "storage.json").write_text(json.dumps({"floor_gib": 0}))
     bus_path = Bus.path_in(root)
-    writer = threading.Thread(target=lambda: Comms(root).messaging.send("worker", "#team", "late"))
+    writer = threading.Thread(target=lambda: Comms(resolve_comms_route(root)).messaging.send("worker", "#team", "late"))
     copy_file = Bus.copy_file
 
     def copy_then_write(cls, source, target):
@@ -164,7 +166,7 @@ def test_an_install_on_a_bus_with_no_commander_writes_no_commander_config(privat
 
     root = private_directory / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms(root)
+    comms = Comms(resolve_comms_route(root))
     home = _harnessless_home(private_directory, monkeypatch)
     result = InstallCliCommand(project=private_directory).apply(comms)
     assert result.config == NoCommanderProject()
@@ -184,7 +186,7 @@ def test_an_install_refuses_flags_a_bus_without_a_commander_record_cannot_use(
     root = private_directory / "wire"
     root.mkdir(mode=0o700)
     home = _harnessless_home(private_directory, monkeypatch)
-    comms = Comms(root)
+    comms = Comms(resolve_comms_route(root))
     comms.registry.declare(comms.registry.new_thread("lead", frozenset(), str(private_directory)))
     with pytest.raises(UpgradeRefused):
         InstallCliCommand(project=private_directory, **flags).apply(comms)
@@ -198,7 +200,7 @@ def test_an_install_without_flags_keeps_native_commander_and_parked_state(
 
     root = (private_directory / "wire").resolve()
     root.mkdir(mode=0o700)
-    comms = Comms(root)
+    comms = Comms(resolve_comms_route(root))
     comms.registry.declare(comms.registry.new_thread("lead", frozenset(), str(private_directory)))
     comms.registry.declare(comms.registry.new_thread(
         "parked-unit", frozenset(), str(private_directory)))
@@ -208,7 +210,7 @@ def test_an_install_without_flags_keeps_native_commander_and_parked_state(
     home = _harnessless_home(private_directory, monkeypatch)
     result = InstallCliCommand(project=private_directory).apply(comms)
     assert result.config == recorded
-    assert Comms(root).registry.snapshot().commander_project == recorded
+    assert Comms(resolve_comms_route(root)).registry.snapshot().commander_project == recorded
     assert not (root / "commander.json").exists()
     assert not (home / ".config/agent-comms/commander.json").exists()
     assert comms.registry.require("parked-unit").work_state == ParkedThreadWorkState()
@@ -241,6 +243,6 @@ def test_practice_copy_takes_turn_files_in_the_registry_cut(private_directory):
     assert turn in comms.registry.store.cut_paths
 
     with practice_copy(root, private_directory / "practice/bus") as (copy, _):
-        copied = Comms(copy).registry.require("owner")
+        copied = Comms(resolve_comms_route(copy)).registry.require("owner")
         assert copied.turn_lease.identity == lease.identity
         assert copied.executing

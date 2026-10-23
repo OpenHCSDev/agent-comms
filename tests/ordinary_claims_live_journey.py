@@ -6,6 +6,8 @@ cancels one turn and kills one acquired scratch native child. Never replays inpu
 """
 from __future__ import annotations
 
+from agent_comms.active_route import resolve_comms_route
+
 from agent_comms.bus import Bus
 
 import argparse
@@ -81,7 +83,7 @@ async def journey(arguments):
                       AGENT_COMMS_NATIVE_CONFIG_DIR=str(Path.home() / '.pi/agent'),
                       PI_CODING_AGENT_DIR=str(Path.home() / '.pi/agent'))
     env = dict(os.environ)
-    comms = Comms(root)
+    comms = Comms(resolve_comms_route(root))
     Bus.install(Bus.path_in(comms.root))
     name = 'scratch-sleeper'
     comms.registry.declare(replace(comms.registry.new_thread(

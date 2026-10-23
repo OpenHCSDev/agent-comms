@@ -14,6 +14,8 @@ current owner fence, but never creates an absent row or manufactures owner loss.
 
 from __future__ import annotations
 
+from agent_comms.active_route import resolve_comms_route
+
 import time
 from dataclasses import dataclass
 from functools import partial
@@ -287,7 +289,7 @@ class LiveResponseOwner(RegistryOwner):
         # can close or report cancellation; no input/goal is reconstructed.
         from .comms import Comms
 
-        goals = Comms(bus.bus.path.parent).goals
+        goals = Comms(resolve_comms_route(bus.bus.path.parent)).goals
         for assignment in published.assignments:
             goals.consume_reply_wait(self, assignment.source)
         return published

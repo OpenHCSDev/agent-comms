@@ -1,5 +1,9 @@
 """One configured saved-helper fork and fresh USER channel request, never a retry."""
 
+from agent_comms.channel_targets import CommandTarget
+
+from agent_comms.active_route import resolve_comms_route
+
 from bus_record_fixture import prepare_native_comms
 from agent_comms.lifecycle_capability import Complete
 from agent_comms.session_file import SavedSessionFile
@@ -63,7 +67,7 @@ async def run(stage, package):
             settings_hashes[str(original)] = hashlib.sha256(original.read_bytes()).hexdigest()
     # Only the offline canonical fork helper's output directory differs. Workers
     # retain the actual original model/settings/auth/extension environment.
-    service = prepare_native_comms(Comms(stage / 'w'))
+    service = prepare_native_comms(Comms(resolve_comms_route(stage / 'w')))
     fork = await ForkSessionHelper.run(
         ForkSessionRequest(str(package), str(source_file), source.worktree, str(stage / 'forks')),
         cwd=Path(source.worktree),
@@ -119,7 +123,7 @@ async def run(stage, package):
             await client.initialize(protocol_version=1)
             await client.load_session(cwd=source.worktree, session_id=child.name, mcp_servers=[])
             persist('ordinary-installed-acp-saved-load-ready-before-input')
-            original = service.messaging.send_user_message('#openhcs',
+            original = service.messaging.send_user_message(CommandTarget.named('#openhcs'),
                 'Please reply tersely if you receive this. This is a distinct current '
                 'connectivity request, not continuation of your assigned task or a retry. '
                 'Reply with Received 505-20261002-a1.', worktree=source.worktree)

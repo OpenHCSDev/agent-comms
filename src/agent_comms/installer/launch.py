@@ -6,6 +6,8 @@ rehearsal and harness setup are the target's, never the outgoing runtime's.
 """
 from __future__ import annotations
 
+from agent_comms.active_route import resolve_comms_route
+
 import glob
 import json
 import os
@@ -160,5 +162,5 @@ class InstallRun:
                        self.harnesses, InstallReport())
 
     def harnesses(self) -> InstallResult:
-        with client_wire(self.root) as comms:
+        with client_wire(resolve_comms_route(self.root)) as comms:
             return self.command.apply(comms)

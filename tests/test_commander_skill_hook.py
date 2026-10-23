@@ -1,5 +1,7 @@
 """The real SessionStart command works before a commander connects to the bus."""
 
+from agent_comms.active_route import resolve_comms_route
+
 import json
 import os
 import subprocess
@@ -141,7 +143,7 @@ def test_failure_catalog_numbers_every_evidenced_member_once():
 
 @pytest.fixture
 def commander_bus(tmp_path):
-    bus = Comms(tmp_path / "bus")
+    bus = Comms(resolve_comms_route(tmp_path / "bus"))
     for name in ("claude-code", "unit-x"):
         bus.registry.declare(bus.registry.new_thread(
             name, frozenset(), str(tmp_path),

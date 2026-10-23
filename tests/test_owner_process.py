@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.active_route import resolve_comms_route
+
 import asyncio
 import os
 import shlex
@@ -43,7 +45,7 @@ async def native_workers(tmp_path, native_runtime_package, source_programs):
 
 
 async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path, native_workers) -> None:
-    comms = Comms(native_workers.root)
+    comms = Comms(resolve_comms_route(native_workers.root))
     declared = comms.registry.new_thread('worker', frozenset(), str(tmp_path), task=GivenThreadText('retained task'))
     comms.registry.declare(declared)
     first = await Coordination.run_worker(partial(
@@ -86,7 +88,7 @@ async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path,
                 assert not replacement.process_alive
 
         (installed,) = await Coordination.run_worker(partial(
-            Comms(comms.root).owners.restart_owners,
+            Comms(resolve_comms_route(comms.root)).owners.restart_owners,
             OwnersNamed(("worker",)), agent_bin=GivenBinary("pi"),
             agent_args=GivenArguments(()), cutover=KeepFixtureRuntime(),
         ))
@@ -108,7 +110,7 @@ async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path,
 def test_stale_stored_birth_does_not_signal_real_process(tmp_path: Path) -> None:
     child = SpawnedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
     try:
-        comms = Comms(tmp_path)
+        comms = Comms(resolve_comms_route(tmp_path))
         comms.registry.declare(
             comms.registry.new_thread('stale', frozenset(), str(tmp_path), process_identity=replace(child.identity, start_time=child.identity.start_time + 1))
         )
@@ -128,7 +130,7 @@ def test_stale_stored_birth_does_not_signal_real_process(tmp_path: Path) -> None
 
 def test_failed_real_worker_startup_retains_private_trace(tmp_path: Path, monkeypatch) -> None:
     """The production detached launch retains a failure before socket creation."""
-    comms = Comms(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path))
     comms.registry.declare(comms.registry.new_thread('failed-start', frozenset(), str(tmp_path)))
     result = comms.owners.start("failed-start")
     owner = comms.registry.require("failed-start")
@@ -161,7 +163,7 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
 
     model = 'response-local/fixture'
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", model)
-    comms = Comms(native_workers.root)
+    comms = Comms(resolve_comms_route(native_workers.root))
     package = native_workers.package.path
 
     async def thinking_options():

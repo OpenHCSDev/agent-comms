@@ -1,5 +1,7 @@
 """The actual background drain exposes broken SQLite state and observes recovery."""
 
+from agent_comms.active_route import resolve_comms_route
+
 import asyncio
 import json
 import os
@@ -30,7 +32,7 @@ async def until(predicate):
 
 def owner_view(comms):
     return next(
-        view for view in Comms(comms.root).views.thread_views() if view.thread.name == "beta"
+        view for view in Comms(resolve_comms_route(comms.root)).views.thread_views() if view.thread.name == "beta"
     )
 
 

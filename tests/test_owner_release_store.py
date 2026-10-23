@@ -1,4 +1,6 @@
 """Release proof follows process identity, not unrelated thread metadata."""
+
+from agent_comms.active_route import resolve_comms_route
 from dataclasses import replace
 
 from agent_comms.comms import Comms
@@ -7,7 +9,7 @@ from agent_comms.thread_text import GivenThreadText
 
 
 def test_release_survives_metadata_changes_and_reads_only_its_row(tmp_path):
-    comms = Comms(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path))
     originals = [comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
                  for name in ('worker', 'other')]
     generation = comms.registry.snapshot().claim_generation('worker')
@@ -30,7 +32,7 @@ def test_release_survives_metadata_changes_and_reads_only_its_row(tmp_path):
 
 
 def test_empty_release_store_is_not_proof(tmp_path):
-    comms = Comms(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path))
     thread = comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path)))
     record = comms.owners.releases.get(thread.name)
     assert isinstance(record, NoRelease)

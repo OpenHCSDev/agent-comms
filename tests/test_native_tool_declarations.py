@@ -1,5 +1,7 @@
 """One tool declaration controls presentation without granting coding authority."""
 
+from agent_comms.active_route import resolve_comms_route
+
 from conftest import transcript_records
 from dataclasses import dataclass
 import asyncio
@@ -181,7 +183,7 @@ def test_native_call_fields_are_not_model_arguments():
 
 @pytest.fixture
 async def acp_tools(tmp_path):
-    owner = canonical_agent(Comms(tmp_path / "sdk-wire"), auto_wake=False)
+    owner = canonical_agent(Comms(resolve_comms_route(tmp_path / "sdk-wire")), auto_wake=False)
     received = asyncio.Queue()
 
     class Client(acp.Client):

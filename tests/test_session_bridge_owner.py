@@ -1,5 +1,7 @@
 """The real SessionStart program must leave an installable serve after hook exit."""
 
+from agent_comms.active_route import resolve_comms_route
+
 from agent_comms.bus import Bus
 
 import asyncio
@@ -28,7 +30,7 @@ def test_session_start_hook_exit_preserves_the_recorded_owner_for_install_pause(
         tmp_path, bridge_home, source_programs):
     home = bridge_home
     session = 'copied-session'
-    comms = Comms(tmp_path / 'bus')
+    comms = Comms(resolve_comms_route(tmp_path / 'bus'))
     Bus.install(Bus.path_in(comms.root))
     comms.registry.declare(comms.registry.new_thread(
         'bridge-copy', frozenset(), str(tmp_path), execution=ExternalThreadExecution))

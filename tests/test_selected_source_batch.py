@@ -1,5 +1,7 @@
 """Canonical original-bus batch capture and one-use native reservation."""
 
+from agent_comms.active_route import resolve_comms_route
+
 from bus_record_fixture import prepare_native_comms
 from conftest import publish_initial
 
@@ -26,7 +28,7 @@ async def test_a_mixed_route_wave_turns_one_route_at_a_time(tmp_path, *, cursor_
     """
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    comms = prepare_native_comms(Comms(root))
+    comms = prepare_native_comms(Comms(resolve_comms_route(root)))
     for name in ("sender", "receiver"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('openai-codex/gpt-6-sol')))
     root_id = comms.registry.prepare_native_root().namespace

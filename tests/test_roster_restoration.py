@@ -1,5 +1,9 @@
 """Restoration changes visibility without replay or transferring live ownership."""
 
+from agent_comms.channel_targets import CommandTarget
+
+from agent_comms.active_route import resolve_comms_route
+
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from bus_record_fixture import prepare_native_comms
 from conftest import installed_comms
@@ -31,7 +35,7 @@ def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity
     missing = old.agents.begin_turn("missing", "old-turn").thread
     old.messaging.send("live", "missing", "Old pending work must not be replayed").message.message_id
     current.registry.declare(replace(live, title=GivenThreadText("Current live title")))
-    current.messaging.send_user_message("#comms", "Current message", worktree=str(tmp_path))
+    current.messaging.send_user_message(CommandTarget.named('#comms'), "Current message", worktree=str(tmp_path))
     before = current.registry.snapshot()
     bus = current.bus.bus.revision()
     old_bus = old.bus.bus.revision()
@@ -55,8 +59,8 @@ def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity
 
 @pytest.mark.parametrize("collision", ["name", "incarnation", "alias"])
 def test_restore_conflict_has_no_partial_registry_write(tmp_path, collision):
-    old = Comms(tmp_path / "old")
-    current = Comms(tmp_path / "current")
+    old = Comms(resolve_comms_route(tmp_path / "old"))
+    current = Comms(resolve_comms_route(tmp_path / "current"))
     original = current.registry.new_thread('owner', frozenset(), str(tmp_path))
     current.registry.declare(original)
     good = old.registry.new_thread('good', frozenset(), str(tmp_path))
@@ -77,8 +81,8 @@ def test_restore_conflict_has_no_partial_registry_write(tmp_path, collision):
 
 
 def test_restore_keeps_archived_status(tmp_path):
-    old = Comms(tmp_path / "old")
-    new = Comms(tmp_path / "new")
+    old = Comms(resolve_comms_route(tmp_path / "old"))
+    new = Comms(resolve_comms_route(tmp_path / "new"))
     thread = old.registry.new_thread('archived', frozenset(), str(tmp_path))
     old.registry.register(thread, ArchivedThreadStatus())
     new.registry.restore_stopped(old.registry.snapshot(), (thread.name,))
@@ -127,7 +131,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
     from agent_comms.coordination_cohort import accept_delivery_cohort
     from agent_comms.coordinator import Coordination
 
-    old, current = Comms(tmp_path / "old"), prepare_native_comms(Comms(tmp_path / "current"))
+    old, current = Comms(resolve_comms_route(tmp_path / "old")), prepare_native_comms(Comms(resolve_comms_route(tmp_path / "current")))
     live = current.registry.new_thread('live', frozenset({'comms'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     missing = old.registry.new_thread('missing', frozenset({'comms'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     old.registry.declare(missing)
@@ -143,7 +147,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
             current.registry.restore_stopped(source, (missing.name,))
         message = (
             current.messaging.send_user_message(
-                "#comms", "@live Reply once", worktree=str(tmp_path)
+                CommandTarget.named('#comms'), "@live Reply once", worktree=str(tmp_path)
             )
             if repair_existing
             else None
@@ -162,7 +166,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
             assert current.bus.bus.revision() == bus_before
         else:
             message = current.messaging.send_user_message(
-                "#comms", "@live Reply once", worktree=str(tmp_path)
+                CommandTarget.named('#comms'), "@live Reply once", worktree=str(tmp_path)
             )
         accept_delivery_cohort(current.bus, root_id, message.seq, store)
         assert tuple(
@@ -184,7 +188,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
 
 
 def test_public_restoration_does_not_create_coordinator(tmp_path):
-    old, current = Comms(tmp_path / "old"), Comms(tmp_path / "current")
+    old, current = Comms(resolve_comms_route(tmp_path / "old")), Comms(resolve_comms_route(tmp_path / "current"))
     old.registry.declare(old.registry.new_thread('missing', frozenset({'comms'}), str(tmp_path)))
     assert current.threads.restore_stopped(old.registry.snapshot(), ("missing",)) == ("missing",)
     assert not (current.root / "coordination.sqlite3").exists()

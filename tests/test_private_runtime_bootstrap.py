@@ -1,5 +1,7 @@
 """Explicit installation may fill absent schemas, never repair an existing drift."""
 
+from agent_comms.active_route import resolve_comms_route
+
 from agent_comms.bus import Bus
 
 import sqlite3
@@ -13,7 +15,7 @@ from bus_history import read_history
 
 
 def test_drifted_private_owner_refused_and_readers_leave_missing_schema_alone(tmp_path):
-    comms = Comms(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"))
     comms.registry.prepare_native_root()
     Bus.install(Bus.path_in(comms.root))
     comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path)))
@@ -21,7 +23,7 @@ def test_drifted_private_owner_refused_and_readers_leave_missing_schema_alone(tm
     with sqlite3.connect(database) as db:
         db.execute("DROP TABLE claim_batch_members")
         before = db.execute("SELECT name, sql FROM sqlite_master ORDER BY name").fetchall()
-    assert read_history(Comms(comms.root)) == []
+    assert read_history(Comms(resolve_comms_route(comms.root))) == []
     with Coordination(str(database)):
         pass  # Opening a store is not explicit private-runtime installation.
     with pytest.raises(SchemaVersionError):

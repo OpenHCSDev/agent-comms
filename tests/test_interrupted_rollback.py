@@ -1,5 +1,7 @@
 """A killed restore must be completed by the next install, before it reads the bus."""
 
+from agent_comms.active_route import resolve_comms_route
+
 import os
 import signal
 import subprocess
@@ -58,7 +60,7 @@ raise AssertionError("The selected registry publication was never restored")
 def test_next_install_completes_a_killed_registry_restore(tmp_path, monkeypatch, publication):
     # HOME selects only this test's route. Neither process can replace the developer's route.
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    comms = prepare_native_comms(Comms(tmp_path / "wire"))
+    comms = prepare_native_comms(Comms(resolve_comms_route(tmp_path / "wire")))
     comms.registry.declare(comms.registry.new_thread("worker", frozenset(), str(tmp_path)))
     registry = RegistryStore.at(comms.root)
     route = active_route_path()

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.active_route import resolve_comms_route
+
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from bus_record_fixture import prepare_native_comms
 
@@ -51,7 +53,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
         parent.mkdir(mode=0o700)
         resource = parent / "module.py"
         resource.write_text("value = 1\n")
-        comms = prepare_native_comms(Comms(root))
+        comms = prepare_native_comms(Comms(resolve_comms_route(root)))
         comms.channels.create_tag("team")
         for name, created in (("sender", 17021.0), ("Alice", 17022.0), ("Bob", 17023.0)):
             comms.registry.declare(
@@ -127,7 +129,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             publish_selected_resource_claim(
                 comms, store, claim_scope, owner.name, ExistingFileClaim(Path(resource))
             )
-            selected_owner = Comms(root).bus.bus.claim_projection()[str(resource)]
+            selected_owner = Comms(resolve_comms_route(root)).bus.bus.claim_projection()[str(resource)]
             assert selected_owner.resource_scope == claim_scope
             assert selected_owner.resource == str(resource)
             assert (

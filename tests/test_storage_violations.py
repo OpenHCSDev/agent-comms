@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.active_route import resolve_comms_route
+
 import json
 import shutil
 import subprocess
@@ -91,7 +93,7 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
     (root / "storage.json").write_text(
         json.dumps(FieldCodec.encode(StorageRule(checkout_base=base)))
     )
-    comms = Comms(root)
+    comms = Comms(resolve_comms_route(root))
     lead = comms.registry.declare(comms.registry.new_thread("lead", frozenset(), str(repository)))
     worker = comms.registry.declare(
         comms.registry.new_thread("worker", frozenset(), str(home))

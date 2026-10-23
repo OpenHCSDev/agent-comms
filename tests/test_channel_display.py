@@ -105,7 +105,7 @@ def test_mode_rejects_builtins_union_view_and_unknown_without_sidecar_mutation(t
 
 def test_opt_in_user_input_activity_uses_same_member_scope(tmp_path):
     comms = populated(tmp_path)
-    comms.messaging.send_user_message("alice", "human input to member", worktree=str(tmp_path))
+    comms.messaging.send_user_message(CommandTarget.named('alice'), "human input to member", worktree=str(tmp_path))
     off = comms.views.viewer_snapshot(str(tmp_path)).channels["#api"]
     assert off.last_user_input == 0
     comms.channels.set_channel_any_mode("#api", True)
@@ -155,7 +155,7 @@ def test_alias_retag_and_tag_rename_reproject_without_new_wire_row(tmp_path):
 def test_human_marker_unread_and_own_alias_exclusion(tmp_path):
     comms = populated(tmp_path)
     viewer = comms.messaging.user_identity(str(tmp_path)).name
-    comms.messaging.send_user_message("#api", "owned before rename", worktree=str(tmp_path))
+    comms.messaging.send_user_message(CommandTarget.named('#api'), "owned before rename", worktree=str(tmp_path))
     comms.registry.rename(viewer, "human")
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"].count == 0
     comms.messaging.send("alice", "bob", "before threshold").message.message_id
@@ -167,7 +167,7 @@ def test_human_marker_unread_and_own_alias_exclusion(tmp_path):
     comms.messaging.send("bob", "alice", "after threshold").message.message_id
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"].count == 2
     # The old user sender is still an alias of the current human viewer.
-    comms.messaging.send_user_message("#api", "human owned", worktree=str(tmp_path))
+    comms.messaging.send_user_message(CommandTarget.named('#api'), "human owned", worktree=str(tmp_path))
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"].count == 2
     comms.views.mark_user_view_read("#api", worktree=str(tmp_path))
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"].count == 0

@@ -1,5 +1,7 @@
 """Canonical bus setup for owner lifecycle tests with no automatic model work."""
 
+from agent_comms.active_route import resolve_comms_route
+
 import shutil
 
 import pytest
@@ -10,7 +12,7 @@ from agent_comms.comms import Comms
 
 def canonical_goal_wire(root):
     """Create an empty real checked source for goal/wait fixture operations."""
-    comms = Comms(root)
+    comms = Comms(resolve_comms_route(root))
     Bus.install(Bus.path_in(comms.root))
     return comms
 
@@ -20,6 +22,6 @@ def copied_goal_bus(tmp_path):
     source = canonical_goal_wire(tmp_path / "source")
     target = tmp_path / "copy"
     shutil.copytree(source.root, target)
-    return Comms(target)
+    return Comms(resolve_comms_route(target))
 
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.active_route import resolve_comms_route
+
 import os
 from pathlib import Path
 
@@ -33,7 +35,7 @@ from stored_inputs import stored_inputs
 
 
 def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, float, int]:
-    comms = prepare_native_comms(Comms(tmp_path / "wire"))
+    comms = prepare_native_comms(Comms(resolve_comms_route(tmp_path / "wire")))
     thread = comms.registry.new_thread('beta', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(thread)
     agent = CommsAgent(comms)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.active_route import resolve_comms_route
+
 import os
 import subprocess
 from collections.abc import Iterator, Sequence
@@ -70,7 +72,7 @@ class CheckRoot:
             raise ValueError("A check root cannot be inside its source")
         root.mkdir(mode=0o700, parents=True)  # Refuse an existing directory, including a symlink.
         try:
-            copied = Comms(root)
+            copied = Comms(resolve_comms_route(root))
             self._populate(copied)
             try:
                 yield copied

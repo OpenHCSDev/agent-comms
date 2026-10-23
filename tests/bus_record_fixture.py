@@ -1,5 +1,7 @@
 """Typed values and prepared crash-test workers share their existing owners."""
 
+from agent_comms.active_route import resolve_comms_route
+
 import os
 from multiprocessing.context import ForkServerContext
 from pathlib import Path
@@ -30,7 +32,7 @@ def prepare_native_comms(comms: Comms) -> Comms:
 
 def context_comms(directory: Path) -> Comms:
     """The shared native-context dataset, built through canonical bus/guard owners."""
-    comms = prepare_native_comms(Comms(directory / "wire"))
+    comms = prepare_native_comms(Comms(resolve_comms_route(directory / "wire")))
     for tag in ("team", "else"):
         comms.channels.create_tag(tag)
     process = ProcessIdentity.capture(os.getpid())

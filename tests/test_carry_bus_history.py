@@ -1,6 +1,8 @@
 """The migration consumes a bus made by the predecessor's real publisher."""
 from __future__ import annotations
 
+from agent_comms.active_route import resolve_comms_route
+
 import json
 import os
 import shutil
@@ -45,7 +47,7 @@ def publish_predecessor_history(directory: Path) -> None:
     project.mkdir()
     resource = project / "a.py"
     resource.write_text("original source\n")
-    comms = Comms(directory / "wire")
+    comms = Comms(resolve_comms_route(directory / "wire"))
     for name in ("sender", "owner"):
         comms.registry.declare(comms.registry.new_thread(
             name, frozenset({"team"}), worktree=str(project),
@@ -95,7 +97,7 @@ def publish_predecessor_history(directory: Path) -> None:
     archived = HistoryArchive(destination / "bus.jsonl").attach(comms.root)
     ReadLedger.at(archived.root).replace(replace(
         document, bus_identity=RecordedBusIdentity.capture(Path(archived.root) / "bus.jsonl")))
-    empty = Comms(directory / "empty")
+    empty = Comms(resolve_comms_route(directory / "empty"))
     empty.messaging.initialize_private_initial_protocol(history=())
 
 

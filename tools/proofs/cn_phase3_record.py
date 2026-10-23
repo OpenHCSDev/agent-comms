@@ -6,6 +6,8 @@ session path. All observations below are CLI tool results, not hand-constructed 
 
 from __future__ import annotations
 
+from agent_comms.active_route import resolve_comms_route
+
 from agent_comms.bus import Bus
 
 import argparse
@@ -71,7 +73,7 @@ def cli[Caller: ToolCaller](caller: str, tool: ToolRequest[Caller]) -> str:
 def setup() -> None:
     if ROOT.exists():
         raise RuntimeError(f"Refusing to reuse an existing proof root: {ROOT}")
-    comms = Comms(ROOT)
+    comms = Comms(resolve_comms_route(ROOT))
     Bus.install(Bus.path_in(comms.root))
     for name in ("record-lead", "record-worker"):
         comms.registry.declare(
@@ -92,7 +94,7 @@ def setup() -> None:
 def create_order(problem: str = "P1") -> None:
     now = time.time()
     repo = Repo.of(CHECKOUT)
-    comms = Comms(ROOT)
+    comms = Comms(resolve_comms_route(ROOT))
     request = NewestOpenRequest().for_order(
         comms.goals.todos, comms.registry.require('record-lead').incarnation)
     cli(
@@ -105,7 +107,7 @@ def create_order(problem: str = "P1") -> None:
                 text="Show the real verdict and strike records without a second source",
                 request=request,
                 commander="record-lead",
-                assigner=Comms(ROOT).registry.require("record-lead").incarnation,
+                assigner=Comms(resolve_comms_route(ROOT)).registry.require("record-lead").incarnation,
                 review_at=RecordedEventTime(now + 3600),
                 order=PendingProblemOrder(
                     id=f"record-order-{problem}",
@@ -131,7 +133,7 @@ def create_order(problem: str = "P1") -> None:
 def record(session: Path) -> None:
     retained = ROOT / "record-worker.jsonl"
     shutil.copy2(session, retained)
-    comms = Comms(ROOT)
+    comms = Comms(resolve_comms_route(ROOT))
     worker = comms.registry.require("record-worker")
     comms.registry.register(
         replace(worker, session_file=str(retained)), comms.registry.status(worker.name)
