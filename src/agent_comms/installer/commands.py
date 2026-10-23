@@ -18,6 +18,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.interpreter_operation import (
     ProbeProgram,
     ProbeRequest,
+    ProbeReply,
     RuntimeProbe,
     SourceProgram,
 )
@@ -178,7 +179,7 @@ class InstallCommands:
             except InterpreterWorkerDied:
                 self.close_workers((key,))
                 raise
-            decoded = probe.decode_answer(answer)
-            self.clock.include(probe.phase_timings(decoded), measured)
-            return decoded
+            reply = FieldCodec.decode(ProbeReply, FieldCodec.parse(answer))
+            self.clock.include(reply.phases, measured)
+            return FieldCodec.decode(probe.answer_type(), reply.answer)
 

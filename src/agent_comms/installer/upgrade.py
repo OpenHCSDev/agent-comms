@@ -569,8 +569,7 @@ class Stack:
         come from the tree (``TargetProgram``)."""
         if not steps:
             return ()
-        reply = self.probe(CarryProbe(operation, steps))
-        return operation.decode_answer(reply.answer)
+        return self.probe(CarryProbe(operation, steps))
 
     def running_owners(self, root: Path) -> list[str]:
         """Use the restart request's receiving declaration in the selected runtime."""
@@ -714,11 +713,10 @@ class PracticeBus:
 
 def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice, mode: RunMode,
             retire: bool, spill_dir: Path, scratch: Path,
-            harnesses: Callable[[Stack], InstallResult], report: InstallReport,
-            phases: list[PhaseTiming]) -> Upgrade:
+            harnesses: Callable[[Stack], InstallResult], report: InstallReport) -> Upgrade:
     """``scratch`` holds the target's worktree the launcher runs this source from; this
     run owns it and removes it. A live run ends by registering the ``harnesses``."""
-    commands = InstallCommands(clock=InstallClock(phases))
+    commands = InstallCommands()
     tree = TargetTree(checkout, scratch, target)
     bridges = report.bridges
     with InstallRunPhase().running(commands.clock), commands, report.running(tree, commands.clock):

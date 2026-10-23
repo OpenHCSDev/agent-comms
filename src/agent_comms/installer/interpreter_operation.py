@@ -14,20 +14,21 @@ import sys
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import field
 from threading import Lock
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
-from typing import cast
+from typing import ClassVar, cast
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from typing_extensions import TypeForm
 
 from agent_comms.child_process import Platform
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, JsonValue
 from agent_comms.maintenance_barrier import HOLDER_NONCE
 
 
@@ -181,10 +182,19 @@ class InstallClock:
     records its full duration. There is no per-command or per-copy timer.
     """
 
+    current: ClassVar[ContextVar[InstallClock]] = ContextVar("install_clock")
     phases: list[PhaseTiming] = field(default_factory=list)
     active: list[PhaseTiming] = field(default_factory=list, init=False)
     lock: Lock = field(default_factory=Lock, init=False)
     previous: float = field(default_factory=time.monotonic, init=False)
+
+    @contextmanager
+    def selected(self) -> Iterator[InstallClock]:
+        token = self.current.set(self)
+        try:
+            yield self
+        finally:
+            self.current.reset(token)
 
     def advance(self) -> float:
         now = time.monotonic()
@@ -210,13 +220,6 @@ class InterpreterOperation[Answer, *Arguments](ABC):
 
     def answer_type(self) -> TypeForm[Answer]:
         return cast(TypeForm[Answer], inspect.signature(self.run, eval_str=True).return_annotation)
-
-    def encode_answer(self, answer: Answer) -> str:
-        return json.dumps(FieldCodec.encode(answer, self.answer_type()))
-
-    def decode_answer(self, answer: str) -> Answer:
-        return FieldCodec.decode(self.answer_type(), FieldCodec.parse(answer))
-
 
 class ProbeProgram(ABC):
     """Where an operation's declaration is executable by the selected interpreter."""
@@ -300,9 +303,13 @@ class RuntimeProbe[Answer](
     def install_phase(self) -> InstallPhase:
         return ProbePhase(type(self).__name__)
 
-    def phase_timings(self, answer: Answer) -> list[PhaseTiming]:
-        """Nested phases the worker measured while answering this operation."""
-        return []
+
+@dataclass(frozen=True)
+class ProbeReply:
+    """One worker answer, encoded according to its probe, and that request's phases."""
+
+    answer: JsonValue
+    phases: list[PhaseTiming]
 
 
 @dataclass(frozen=True)
@@ -313,12 +320,15 @@ class ProbeRequest:
     probe: RuntimeProbe
     holder: str
 
-    def answer(self) -> str:
+    def answer(self) -> ProbeReply:
         """The worker acts as its caller's holder for this request. Its runtime may predate
         ``MaintenanceHolder``, so this sets the variable that owner reads; every request
         sets it, so no earlier request's holder remains."""
         os.environ[HOLDER_NONCE] = self.holder
-        return self.probe.encode_answer(self.probe.run())
+        clock = InstallClock()
+        with clock.selected(), self.probe.install_phase().running(clock):
+            answer = FieldCodec.encode(self.probe.run(), self.probe.answer_type())
+        return ProbeReply(answer, clock.phases)
 
 
 def serve() -> None:
@@ -330,7 +340,8 @@ def serve() -> None:
     os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
     for line in sys.stdin:
         print(
-            FieldCodec.decode(ProbeRequest, FieldCodec.parse(line)).answer(),
+            FieldCodec.compact(FieldCodec.encode(
+                FieldCodec.decode(ProbeRequest, FieldCodec.parse(line)).answer())),
             file=answers,
             flush=True,
         )

@@ -51,6 +51,7 @@ class InstallReport(MroDispatch):
     writer: RootWriter = field(default_factory=UnpostedWriter)
     outcome: InstallOutcome = field(default_factory=UnfinishedInstall, init=False)
     bridges: SessionBridgeResumes = field(default_factory=SessionBridgeResumes, init=False)
+    inherited_phases: list[PhaseTiming] = field(default_factory=list)
 
     def complete(self, result: RehearsedUpgrade) -> RehearsedUpgrade:
         self.outcome = FinishedInstall(result)
@@ -81,7 +82,7 @@ class InstallReport(MroDispatch):
             finally:
                 with TreeClosePhase().running(clock):
                     tree.__exit__(*sys.exc_info())
-            lines = self.outcome.lines()
+            lines = self.outcome.lines(tuple(self.inherited_phases))
         except BaseException as error:
             failure = (*next(self.handlers_for(error))(error), *self.bridges.lines())
             try:
@@ -152,7 +153,6 @@ class InstallRun:
         logs = InstallLogs(self.root).minted()
         result, errors = logs / "result.json", logs / "stderr.log"
         clock = InstallClock(self.phases)
-        inherited = len(clock.phases)
         with InstallerProcessPhase().running(clock) as measured:
             with result.open("xb") as stdout, errors.open("xb") as stderr:
                 process = subprocess.Popen(
@@ -168,9 +168,7 @@ class InstallRun:
                       file=sys.stderr)
                 return process.returncode
             answer = FieldCodec.decode(RehearsedUpgrade, FieldCodec.parse(result.read_text()))
-            # The child received our existing records plus this active launch.
-            # Only its subsequent operations are new measurements.
-            clock.include(answer.phases[inherited + 1:], measured)
+            clock.include(answer.phases, measured)
         output.write(json.dumps(FieldCodec.encode(replace(answer, phases=clock.phases)), indent=2))
         return process.returncode
 
@@ -178,7 +176,7 @@ class InstallRun:
         command = self.command
         return upgrade(command.checkout, self.root, self.target, command.installer,
                        command.mode, command.retire, command.spill_dir, self.scratch,
-                       self.harnesses, InstallReport(), self.phases)
+                       self.harnesses, InstallReport(inherited_phases=self.phases))
 
     def harnesses(self, stack: Stack) -> InstallResult:
         # The target runtime is published by now, and only its installed package
