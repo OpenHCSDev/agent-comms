@@ -9,8 +9,8 @@ claim append or file mutation, and UNKNOWN is never retried automatically.
 from __future__ import annotations
 
 import logging
-import os
 import re
+import sqlite3
 import stat
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -18,17 +18,15 @@ from functools import partial
 from pathlib import Path
 from typing import ClassVar
 
-from agent_comms.child_process import Platform
-from agent_comms.coordinator import Coordination
-
 from .comms import Comms
-from agent_comms.native_runtime_input import NativeRuntimeTable
 from .coordination_errors import CoordinationReadUnavailable
+from .coordination_session import ReadNativeCoordinationSession
 from .coordination_tables.participants import OwnerGenerations
+from .coordinator import Coordination
 from .envelope_claim_transitions import ExistingFileClaim, WakeClaim
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .native_input_record import FullNativeExecution, NativeInputIdentity
-from .native_runtime_input import NativeRuntimeInput
+from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable, SelectedToolSlot
 from .native_tool_call import (
     CoordinationBusy,
     NativeToolCall,
@@ -41,7 +39,6 @@ from .native_tool_transport import (
     ToolTransport,
     UnboundToolTransport,
 )
-from .private_path import PrivateDirectoryRole, PrivateFileRole
 from .selected_actions import SelectedAction
 from .selected_claim import publish_selected_resource_claim, write_selected_claimed_file
 from .turn_context import InstructionFile
@@ -73,7 +70,6 @@ class SelectedToolIntent(SelectedAction):
             owner.store,
             owner.resource_scope,
             owner.owner_name,
-            owner.session_dir,
             owner.input_id,
         )
 
@@ -136,11 +132,11 @@ class SelectedToolRequest(NativeToolCall):
     declared_name: ClassVar[str] = "selected_claimed_write"
 
     def commit_terminal(
-        self, is_error: bool, directory: Path, input_id: str, round_number: int
+        self, is_error: bool, coordination_path: Path, input_id: str, round_number: int
     ) -> None:
         if is_error:
             raise SelectedToolDenied("Native Pi selected tool did not finish successfully")
-        verify_selected_terminal(directory, input_id, self.call_id)
+        verify_selected_terminal(coordination_path, input_id, self.call_id)
 
     def claim_failed(self) -> None:
         raise SelectedToolDenied("Native Pi selected tool claim_scope failed; outcome UNKNOWN")
@@ -173,59 +169,27 @@ def selected_extension(package: Path) -> Path:
     return source
 
 
-def consume_selected_slot(directory: Path, input_id: str, call_id: str) -> None:
-    """Persist one consumed slot BEFORE a bus append; even failed fsync is UNKNOWN.
-
-    The caller must provide a private, physical owner-owned session directory.
-    An existing slot is never reopened or reclaimed, even after a process crash.
-    """
+def consume_selected_slot(store: Coordination, input_id: str, call_id: str) -> None:
+    """Commit consumption BEFORE any action; a failed commit is UNKNOWN, never retried."""
     try:
         Id128Text.decode(input_id)
     except MalformedRecord as error:
         raise SelectedToolDenied("Selected input identity is invalid") from error
     if type(call_id) is not str or not _CALL_ID.fullmatch(call_id):
         raise SelectedToolDenied("Selected tool call identity is invalid")
-    directory = Path(directory).absolute()
-    info = directory.lstat()
-    if PrivateDirectoryRole.violation(info) is not None or directory.resolve() != directory:
-        raise SelectedToolDenied("Selected tool session directory is not private")
-    ledger = directory / "selected-tool-ledger"
     try:
-        ledger.mkdir(mode=0o700, exist_ok=True)
-        info = ledger.lstat()
-        if PrivateDirectoryRole.violation(info) is not None:
-            raise SelectedToolDenied("Selected tool ledger is not private")
-        Platform.current().sync_directory(directory)
-        fd = os.open(ledger / input_id, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-    except FileExistsError as error:
-        raise SelectedToolDenied(
-            "Selected tool input already consumed; outcome may be UNKNOWN"
-        ) from error
-    except OSError as error:
-        raise SelectedToolDenied("Selected tool ledger unavailable; outcome UNKNOWN") from error
-    try:
-        with os.fdopen(fd, "wb") as stream:
-            stream.write((call_id + "\n").encode("ascii"))
-            stream.flush()
-            os.fsync(stream.fileno())
-        Platform.current().sync_directory(ledger)
-    except OSError as error:
-        # Do NOT remove the visible slot; a failed fsync or a crash may have
-        # committed it. No automatic re-append, retry, or write follows.
+        with store.session.writing() as db:
+            SelectedToolSlot.consume(db, input_id, call_id)
+    except sqlite3.Error as error:
         raise SelectedToolDenied("Selected tool consumption UNKNOWN; do not retry") from error
 
 
-def record_selected_terminal(directory: Path, input_id: str, call_id: str) -> None:
-    """Only a synced terminal acknowledgement lets the tool return success."""
-    result = Path(directory).absolute() / "selected-tool-ledger" / (input_id + ".done")
+def record_selected_terminal(coordination_path: Path, input_id: str, call_id: str) -> None:
+    """Only a committed terminal acknowledgement lets the tool return success."""
     try:
-        descriptor = os.open(result, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-        with os.fdopen(descriptor, "wb") as output:
-            output.write((call_id + "\n").encode("ascii"))
-            output.flush()
-            os.fsync(output.fileno())
-        Platform.current().sync_directory(result.parent)
-    except OSError as error:
+        with Coordination(str(coordination_path)) as store, store.session.writing() as db:
+            SelectedToolSlot.require(db, input_id=input_id).acknowledge(db, call_id)
+    except sqlite3.Error as error:
         raise SelectedToolDenied("Selected tool terminal acknowledgement UNKNOWN; no retry") from error
 
 
@@ -234,7 +198,6 @@ def selected_tool_mode_for_owner(
     store: Coordination,
     claim_scope: WakeClaim,
     owner_name: str,
-    session_dir: Path,
     input_id: str,
 ) -> SelectedToolMode:
     """Capture only owner-derived typed fields for this one FULL selected input.
@@ -257,7 +220,7 @@ def selected_tool_mode_for_owner(
         with Coordination(path) as worker_store:
             verify_sent_full_input(worker_store, claim_scope, owner_name, input_id)
             perform_selected_write(
-                comms, worker_store, claim_scope, owner_name, session_dir, input_id, request
+                comms, worker_store, claim_scope, owner_name, input_id, request
             )
 
     return SelectedToolMode(owner_action)
@@ -306,18 +269,14 @@ def _require_sent_full_input(
         raise SelectedToolDenied("Selected input was already settled")
 
 
-def verify_selected_terminal(directory: Path, input_id: str, call_id: str) -> None:
+def verify_selected_terminal(coordination_path: Path, input_id: str, call_id: str) -> None:
     """Corroborate a live owner result; a persisted acknowledgement alone grants nothing."""
     try:
         Id128Text.decode(input_id)
     except MalformedRecord as error:
         raise SelectedToolDenied("Selected input identity is invalid") from error
-    acknowledgement = Path(directory).absolute() / "selected-tool-ledger" / (input_id + ".done")
-    info = acknowledgement.lstat()
-    if PrivateFileRole.violation(info) is not None:
-        raise SelectedToolDenied("Selected tool acknowledgement is not private")
-    if acknowledgement.read_bytes() != (call_id + "\n").encode("ascii"):
-        raise SelectedToolDenied("Selected tool has no matching terminal acknowledgement")
+    with Coordination(str(coordination_path), session_type=ReadNativeCoordinationSession) as store, store.session.read():
+        SelectedToolSlot.require(store.session._connection, input_id=input_id).verify(call_id)
 
 
 def perform_selected_write(
@@ -325,12 +284,11 @@ def perform_selected_write(
     store: Coordination,
     claim_scope: WakeClaim,
     owner_name: str,
-    session_dir: Path,
     input_id: str,
     request: SelectedToolRequest,
 ) -> None:
     """Only the owner calls the existing selected claim and writer boundaries."""
-    consume_selected_slot(session_dir, input_id, request.call_id)
+    consume_selected_slot(store, input_id, request.call_id)
     # Any exception from here leaves the slot consumed. The caller reports
     # UNKNOWN and never automatically reissues the claim or mutation.
     claimed = publish_selected_resource_claim(
@@ -339,7 +297,7 @@ def perform_selected_write(
     write_selected_claimed_file(
         comms, store, claim_scope, owner_name, claimed, request.arguments.contents.encode("utf-8")
     )
-    record_selected_terminal(session_dir, input_id, request.call_id)
+    record_selected_terminal(store.session.path, input_id, request.call_id)
 
 
 class SelectedToolSocket(ToolTransport[SelectedToolRequest]):
