@@ -713,10 +713,10 @@ class FleetAwarenessPhase(CommanderNativePhase, declared_name=None):
     after = (SkillPhase, BusDeletionPhase, InheritanceCleanupPhase, TransitionScaffoldingPhase)
 
 
-class OneHolderPerFilePhase(FleetAwarenessPhase):
-    """One holder per file, refused at order time."""
+class OneHolderPerWorktreePhase(FleetAwarenessPhase):
+    """One holder per worktree, refused at order time."""
 
-    evidence = PatternPresent(r"class HeldFileRefusal\(", ("src/agent_comms",))
+    evidence = PatternPresent(r"class SharedWorktreeRefusal\(", ("src/agent_comms",))
 
 
 class DriftOverlapRulesPhase(FleetAwarenessPhase):
@@ -764,7 +764,7 @@ class FleetReplayPhase(FleetAwarenessPhase):
     """Replaying the copied fleet state raises each incident from Core alone, once each, with no script."""
 
     after = (
-        OneHolderPerFilePhase,
+        OneHolderPerWorktreePhase,
         DriftOverlapRulesPhase,
         SpinningUnitPhase,
         UnpushedWorkPhase,
