@@ -6,7 +6,7 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Concatenate
+from typing import TYPE_CHECKING, Concatenate, Unpack
 
 from .catalog_store import ChannelCatalog
 from .child_process import NoProcess, ProcessIdentity
@@ -29,8 +29,8 @@ from .thread_status import (
     RunningThreadStatus,
     ThreadStatus,
 )
-from .thread_text import ForkedParent, NoThreadText, ThreadText
-from .threads import Thread
+from .thread_text import ForkedParent
+from .threads import NewThreadFields, Thread
 
 if TYPE_CHECKING:
     from .goal_management import Goals
@@ -243,14 +243,10 @@ class Registration:
             history.commit(intent)
         return change
 
-    def new_thread(
-        self, name, tags, worktree, *, kind: type[Thread] = Thread,
-        task: ThreadText = NoThreadText(), title: ThreadText = NoThreadText(), **values,
-    ) -> Thread:
-        return kind(
-            name, tags, worktree, task=task, title=title,
-            storage_roots=self.storage_rule.initial_roots(name), **values,
-        )
+    def new_thread(self, name: str, tags: frozenset[str], worktree: str,
+                   **values: Unpack[NewThreadFields]) -> Thread:
+        return Thread(name, tags, worktree,
+                      storage_roots=self.storage_rule.initial_roots(name), **values)
 
     def decide_storage(self, name, effects):
         projection = StorageProjection(self.storage_rule, self.require(name))

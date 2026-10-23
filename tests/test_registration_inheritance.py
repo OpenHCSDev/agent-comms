@@ -32,7 +32,8 @@ def test_declared_new_inheritance_case_needs_no_registration_consumer_edit(threa
     class CountedThread(Thread):
         count: Annotated[int, field_codec.RegistrationPolicy(InheritUnsetCount)] = -1
 
-    previous = thread_registration.new_thread('owner', frozenset(), '/wt', kind=CountedThread, created_at=42.0, count=9)
+    previous = CountedThread('owner', frozenset(), '/wt', created_at=42.0, count=9,
+                             storage_roots=thread_registration.storage_rule.initial_roots('owner'))
     omitted = replace(previous, count=-1)
     assert omitted.for_registration("owner", previous) == previous
     explicit = replace(previous, count=0)

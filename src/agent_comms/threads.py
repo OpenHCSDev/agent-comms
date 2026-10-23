@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar, TypedDict
 
 from .agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
 from .channel_targets import Tag
@@ -245,6 +245,28 @@ class ThreadCatalog(DurableFile, PatternFile):
 
     __slots__ = ()
     filename: ClassVar[str] = "native-sessions/{lookup}/comms-catalog.json"
+
+
+class NewThreadFields(TypedDict, total=False):
+    """The declared ``Thread`` fields a registration's new thread may set, each with the
+    type its field declares."""
+
+    parent: ThreadParent
+    task: ThreadText
+    title: ThreadText
+    session_file: SessionFile
+    backend: type[AgentBackend]
+    process_identity: ProcessState
+    model: ThreadModel
+    thinking_level: ThinkingLevelField
+    service_tier: ServiceTier
+    goal: GoalDeclaration
+    created_at: CreationTime
+    auto_title_pending: bool
+    role: type[ThreadRole]
+    execution: type[ThreadExecution]
+    turn_record: TurnRecord
+    turn_generation: int
 
 
 @dataclass(frozen=True, slots=True)

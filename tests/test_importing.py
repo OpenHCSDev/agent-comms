@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.session_file import RegistrySessionLocation
+
 from agent_comms.importing import ImportLimits
 from agent_comms.cli import main
 from agent_comms.cli_bridges.claude import ClaudeBridge, ClaudeTranscript, RunningClaude
@@ -299,7 +301,8 @@ def test_codex_instructions_are_authenticated_historical_references_not_current_
             comms.registry, replace(original_owner, created_at=original_owner.created_at + 1))
     with pytest.raises(ValueError):
         ImportedSessionMetadata.sources_for_owner(
-            comms.registry, replace(original_owner, session_file=str(tmp_path / "other.jsonl")))
+            comms.registry, replace(original_owner, session_file=RegistrySessionLocation.from_path(
+                str(tmp_path / "other.jsonl"), comms.root)))
     assert main(["--root", str(comms.root), "context", "historical", "--imported"]) == 0
     result = json.loads(capsys.readouterr().out)
     assert FieldCodec.decode(tuple[CodexRolloutProvenance, ...], result["sources"]) == refs
