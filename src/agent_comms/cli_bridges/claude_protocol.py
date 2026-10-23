@@ -23,6 +23,7 @@ from agent_comms.runtime_updates import (
     FinishedItem,
     HiddenItem,
     HistoryNotice,
+    OfferedToolsObserved,
     ReadingPhase,
     RuntimeUpdate,
     SessionFacts,
@@ -41,6 +42,7 @@ from agent_comms.transcript_events import (
     UserTranscript,
 )
 from agent_comms.thread_text import ThreadText
+from agent_comms.thread_identity import OfferedTools, ToolName, UnobservedTools
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 
 from .shared import (
@@ -137,6 +139,11 @@ class ClaudeReaderPhase(ReadingPhase):
 @dataclass
 class CatchUp(ClaudeReaderPhase):
     pending: tuple[StatusUpdate, ...] = ()
+    latest_tools: tuple[OfferedToolsObserved, ...] = ()
+
+    def offered(self, update: OfferedToolsObserved) -> tuple[RuntimeUpdate, ...]:
+        self.latest_tools = (update,)
+        return ()
 
     def status(self, update: StatusUpdate) -> tuple[RuntimeUpdate, ...]:
         self.pending = (update,)
@@ -144,7 +151,7 @@ class CatchUp(ClaudeReaderPhase):
 
     def window_ended(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         session.phase = Live()
-        return self.pending
+        return (*self.latest_tools, *self.pending)
 
     def missing_tool(self, tool_id: str) -> tuple[RuntimeUpdate, ...]:
         return ()
@@ -233,6 +240,17 @@ class ClaudeSession:
     tools: dict[str, ClaudeToolDraft] = field(default_factory=dict)
     phase: ClaudeReaderPhase = field(default_factory=CatchUp)
     project: str = ''
+    offered_tools: OfferedTools = field(default_factory=UnobservedTools)
+
+    def version_reported(self, version: str | None) -> tuple[RuntimeUpdate, ...]:
+        if version is None:
+            return ()
+        return tuple(update for offered in self.offered_tools.on_version(version)
+                     for update in self.offered(offered))
+
+    def offered(self, offered: OfferedTools) -> tuple[RuntimeUpdate, ...]:
+        self.offered_tools = offered
+        return (OfferedToolsObserved(offered),)
 
     def located(self, cwd: str) -> tuple[RuntimeUpdate, ...]:
         if not cwd or cwd == self.project:
@@ -296,6 +314,7 @@ class ClaudeHeader(WireHeader):
 class ClaudeRecord(TaggedWire, ABC, affix=""):
     header = ClaudeHeader
     cwd: str = ''
+    version: str | None = None
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return ()
@@ -674,7 +693,7 @@ class SystemRecord(ClaudeRecord, declared_name='system'):
     def decode_subtype(cls, value: dict) -> dict:
         # Claude places both discriminators on one envelope. Decode that shape
         # once; its declared subtype owns the behavior and any retained fields.
-        return {'subtype': value}
+        return {**value, 'subtype': value}
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return self.subtype.updates(session)
@@ -766,8 +785,26 @@ class ApiRequest(MetadataRecord, declared_name='api-request'):
     """The parameters of one model request the harness sent."""
 
 
+class OfferedClaudeTool(WireModel):
+    name: str
+
+
+class ClaudeRequestShape(WireModel):
+    tools: list[OfferedClaudeTool] | None = None
+
+    def offered(self, previous: OfferedTools) -> tuple[OfferedTools, ...]:
+        if self.tools is None:
+            return previous.without_catalogue()
+        return previous.on_catalogue(frozenset(ToolName(tool.name) for tool in self.tools))
+
+
 class ApiRequestShape(MetadataRecord, declared_name='api-request-shape'):
     """The system prompt and tools a request was sent with, stored once by hash."""
+
+    shape: ClaudeRequestShape
+    def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
+        return tuple(update for offered in self.shape.offered(session.offered_tools)
+                     for update in session.offered(offered))
 
 
 class ApiRequestBlob(MetadataRecord, declared_name='api-request-blob'):
