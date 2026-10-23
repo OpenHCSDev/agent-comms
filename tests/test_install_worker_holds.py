@@ -36,17 +36,18 @@ def test_probes_under_successive_holds_share_one_worker():
         assert HOLDER_NONCE not in dict(key.environment)
 
 
-def test_worker_answers_each_request_as_that_request_s_holder(monkeypatch):
+def test_worker_answers_each_request_as_that_request_s_holder(monkeypatch, tmp_path):
     holders = ("first-hold", "second-hold", "")
     lines = "".join(FieldCodec.compact(FieldCodec.encode(ProbeRequest(HolderSeenProbe(), holder)))
                     + "\n" for holder in holders)
-    answers = io.StringIO()
+    # serve() takes over the descriptor of its stdout, so the answers need a real file.
+    answers = tmp_path / "answers"
     monkeypatch.setattr("sys.stdin", io.StringIO(lines))
-    monkeypatch.setattr("sys.stdout", answers)
+    monkeypatch.setattr("sys.stdout", answers.open("w"))
     monkeypatch.setenv(HOLDER_NONCE, "the test's own hold")
     serve()
     assert [HolderSeenProbe().decode_answer(line)
-            for line in answers.getvalue().splitlines()] == list(holders)
+            for line in answers.read_text().splitlines()] == list(holders)
 
 
 def test_a_raising_probe_ends_its_worker_and_refuses_with_its_traceback():

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms.installer.interpreter_operation import InstallReportProbe, ProbeProgram
+from agent_comms.installer.interpreter_operation import InstallReportProbe
 
 if TYPE_CHECKING:
     from agent_comms.installer.upgrade import RehearsedUpgrade, Stack
@@ -46,7 +46,6 @@ class UnpostedWriter(RootWriter):
 class RuntimeWriter(RootWriter):
     root: Path
     stack: Stack
-    program: ProbeProgram
 
     def post(self, lines: tuple[str, ...]) -> None:
-        self.stack.probe(InstallReportProbe(self.root, "\n".join(lines)), program=self.program)
+        self.stack.probe(InstallReportProbe(self.root, "\n".join(lines)))

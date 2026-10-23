@@ -23,12 +23,13 @@ from agent_comms.installer.carry import (
     Carried,
     Carry,
     CarryChain,
-    CarryRequest,
+    CarryProbe,
     FirstPendingOperation,
     MigrateOperation,
 )
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.commands import InstallCommands
+from agent_comms.installer.interpreter_operation import ProbeRequest, TargetProgram
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.installer.upgrade import (
     BackedUpMigration,
@@ -87,12 +88,12 @@ class Repository:
 
 
 def test_every_declared_step_crosses_to_the_worker(tmp_path):
-    """Pending encodes the whole chain in one request; a step whose fields the codec
-    cannot spell stops every install before its first dry run."""
+    """Pending encodes the whole chain in one worker request; a step whose fields the
+    codec cannot spell stops every install before its first dry run."""
     steps = tuple(step(tmp_path, tmp_path, tmp_path / "spill")
                   for step in CarryChain.at(REPO).steps)
-    request = CarryRequest(FirstPendingOperation(), steps)
-    assert FieldCodec.decode(CarryRequest, FieldCodec.encode(request)) == request
+    request = ProbeRequest(CarryProbe(FirstPendingOperation(), steps), "holder")
+    assert FieldCodec.decode(ProbeRequest, FieldCodec.encode(request)) == request
 
 
 @pytest.mark.parametrize("pending", (False, True))
@@ -110,20 +111,23 @@ def test_pending_uses_one_worker_on_a_real_bus(comms, stack, private_directory, 
     if pending:
         # ParkedThreads must run before CommanderProjectCarry can decode this.
         (comms.root / "commander.json").write_text('{"parked": []}')
+    staged = replace(stack, program=TargetProgram(tree.steps_package))
     position = len(chain.steps)
     for index, step in enumerate(chain.steps):
-        (answer,) = stack.call_steps(
-            (step(comms.root, comms.root, practice.spill_dir),), tree, MigrateOperation(False))
+        (answer,) = staged.call_steps(
+            (step(comms.root, comms.root, practice.spill_dir),), MigrateOperation(False))
         if answer.changed:
             position = index
             break
-    before = len(stack.commands.ran)
-    assert practice.pending(chain, stack, tree) == chain.steps[position:]
-    commands = stack.commands.ran[before:]
+    before = len(staged.commands.ran)
+    assert practice.pending(chain, staged) == chain.steps[position:]
+    commands = staged.commands.ran[before:]
     assert len(commands) == 1
-    assert "-m agent_comms.installer.step_worker " in commands[0].command
-    assert practice.pending(CarryChain(()), stack, tree) == ()
-    assert len(stack.commands.ran) == before + 1
+    assert commands[0].command.endswith(" CarryProbe")
+    assert practice.pending(CarryChain(()), staged) == ()
+    assert len(staged.commands.ran) == before + 1
+    # Every pass, the per-step reads and the whole-chain pending, went to one interpreter.
+    assert len(staged.commands.workers) == 1
     assert not practice.copy.copied
 
 def record_source(version: int, fields: str) -> str:
@@ -193,6 +197,7 @@ def stack(tmp_path):
 def noisy_step(tmp_path_factory):
     tree = TargetTree(REPO, tmp_path_factory.mktemp("noisy-step"), "noisy-step")
     (tree.path / "tools" / "cutover").mkdir(parents=True)
+    (tree.path / "tools" / "cutover" / "__init__.py").touch()
     (tree.path / "src").symlink_to(REPO / "src", target_is_directory=True)
     module = tree.path / "tools" / "cutover" / "carry_noisy.py"
     module.write_text(
@@ -224,38 +229,45 @@ def noisy_step(tmp_path_factory):
     return tree, Noisy
 
 
+@pytest.fixture
+def staged(stack, noisy_step):
+    """The runtime built from the noisy tree takes its carry steps from that tree."""
+    tree, _ = noisy_step
+    return replace(stack, program=TargetProgram(tree.steps_package))
+
+
 def test_step_answers_are_separate_from_diagnostics_and_keep_their_types(
-        stack, tmp_path, noisy_step):
+        staged, tmp_path, noisy_step):
     """Every invocation crosses the real worker process, including a noisy migration."""
-    tree, step = noisy_step
+    _, step = noisy_step
     root = tmp_path / "bus"
     root.mkdir()
     request = step(root, root, tmp_path / "spill")
-    assert stack.call_steps((request,), tree, MigrateOperation(False)) == (
+    assert staged.call_steps((request,), MigrateOperation(False)) == (
         Carried(1, {"applied": False}, (Path("saved"),)),)
     assert not (root / "saved").exists()
-    assert stack.call_steps((request,), tree, MigrateOperation(True)) == (
+    assert staged.call_steps((request,), MigrateOperation(True)) == (
         Carried(1, {"applied": True}, (Path("saved"),)),)
     assert (root / "saved").read_text() == "migrated"
 
 
-def test_backed_up_migration_restores_a_real_worker_failure(comms, stack, noisy_step):
-    tree, step = noisy_step
+def test_backed_up_migration_restores_a_real_worker_failure(comms, staged, noisy_step):
+    _, step = noisy_step
     saved = comms.root / "saved"
     saved.write_text("original")
     (comms.root / "fail").touch()
     maintenance = MaintenanceBarrier(RegistryStore.at(comms.root).path)
     hold = maintenance.begin(MaintenanceOperator.current())
     with hold.holding():
-        migration = PreparedMigration.capture(hold, stack).extended(
+        migration = PreparedMigration.capture(hold, staged).extended(
             BackedUpMigration, backup=StoreBackup.take(
                 comms.root, comms.root / "no-route", (saved,), comms.root.parent / "spill"))
         with pytest.raises(UpgradeRefused, match="failed after changing the saved file"):
-            migration.carry((step(comms.root, comms.root, comms.root.parent / "spill"),), stack, tree)
+            migration.carry((step(comms.root, comms.root, comms.root.parent / "spill"),), staged)
         assert saved.read_text() == "migrated"
         migration.restore()
         assert saved.read_text() == "original"
-        assert stack.verify(comms.root) == migration.read
+        assert staged.verify(comms.root) == migration.read
     maintenance.clear(hold)
 
 
