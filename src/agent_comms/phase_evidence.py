@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.commander_parity import ParityRow
-from agent_comms.field_codec import DefaultExternalName, ExternalName, FieldCodec
+from agent_comms.field_codec import FieldCodec
 from agent_comms.head_review import HeadReview
 from agent_comms.pinned_audit import ForeignAbsenceProbe, GodFunction, ParsedModule
 from agent_comms.repo import Repo
@@ -361,31 +361,6 @@ class ParityEvidence(PhaseEvidence):
         return "every parity row passes"
 
 
-class BypassMode(ExternalName, affix="Bypass"):
-    """How a ruleset's bypass actor may skip its rules: GitHub's ``bypass_mode``, decoded
-    once. A mode this family does not name is taken as able to skip them."""
-
-    @classmethod
-    def keeps_gate(cls) -> bool:
-        return False
-
-
-class AlwaysBypass(BypassMode):
-    """Skips the rules on every merge."""
-
-
-class PullRequestBypass(BypassMode):
-    """Skips the rules only through a pull request it bypasses for; the queue still gates."""
-
-    @classmethod
-    def keeps_gate(cls) -> bool:
-        return True
-
-
-class UnlistedBypass(DefaultExternalName, BypassMode):
-    """A mode GitHub names that this family does not."""
-
-
 @dataclass(frozen=True)
 class BranchRule:
     """An active rule GitHub applies to main: its ruleset and the status checks it requires."""
@@ -399,15 +374,16 @@ class BranchRule:
 
 @dataclass(frozen=True)
 class RulesetGates(PhaseEvidence):
-    """The merge queue refuses a head without the review's verdict: an active rule on main
-    requires the queue job that reads ``HeadReview.context``, and no actor of that rule's
-    ruleset skips it. A required check an actor skips gates nothing. GitHub's rules change
-    without a main commit, so this is read once per reading, never cached by main's commit."""
+    """Main requires HeadReview's exact status and no actor can bypass that rule.
+
+    GitHub's rules change without a main commit, so read them once per reading,
+    never cache them by main's commit. Both bypass modes can skip a direct gate.
+    """
 
     rules_query: ClassVar[str] = (
         "[.[] | {ruleset: .ruleset_id, required: [.parameters.required_status_checks[]?.context]}]"
     )
-    bypass_query: ClassVar[str] = "[.bypass_actors[].bypass_mode]"
+    bypass_query: ClassVar[str] = ".bypass_actors | length == 0"
 
     def holds(self, reading: PlanReading) -> bool:
         main = reading.main
@@ -418,16 +394,14 @@ class RulesetGates(PhaseEvidence):
         return any(
             self.unskipped(main, rule.ruleset)
             for rule in rules
-            if rule.requires(HeadReview.queue_check)
+            if rule.requires(HeadReview.context)
         )
 
     def unskipped(self, main: MainTree, ruleset: int) -> bool:
-        modes = FieldCodec.decode_external(
-            tuple[type[BypassMode], ...],
+        return FieldCodec.decode(
+            bool,
             self.api(main, f"rulesets/{ruleset}", self.bypass_query),
-            {},
         )
-        return all(mode.keeps_gate() for mode in modes)
 
     @staticmethod
     def api(main: MainTree, path: str, query: str) -> object:
@@ -438,8 +412,8 @@ class RulesetGates(PhaseEvidence):
 
     def describe(self) -> str:
         return (
-            f"an active rule on {MainTree.branch} requires {HeadReview.queue_check}, the queue"
-            f" job that reads {HeadReview.context}, and no actor of its ruleset skips it"
+            f"an active rule on {MainTree.branch} requires {HeadReview.context} directly"
+            " and no actor of its ruleset can bypass it"
         )
 
 

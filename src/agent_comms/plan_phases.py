@@ -160,9 +160,10 @@ class RecordPlanePhase(CommanderNativePhase):
 
 
 class ReviewQueuePhase(CommanderNativePhase):
-    """Revised 2026-10-21: a verdict per PR head gates the merge queue. Done when the ruleset
-    requires the queue job that reads ``agent-comms/review`` and an unreviewed PR cannot
-    merge, which an always-bypass actor would defeat."""
+    """A verdict per PR head gates merging through main's required review status.
+
+    No GitHub merge queue is required. A bypass actor defeats the review gate.
+    """
 
     after = (RecordPlanePhase,)
     evidence = RulesetGates()
