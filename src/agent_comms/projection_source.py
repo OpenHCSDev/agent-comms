@@ -13,8 +13,6 @@ class ProducedRow(ABC):
     @abstractmethod
     def producer_digest(cls) -> str: ...
 
-
-
 class ProjectionSource:
     """A writer declares ``writes`` as table classes, inherited by its members.
 
@@ -26,7 +24,7 @@ class ProjectionSource:
 
     __slots__ = ()
     writes: ClassVar[tuple[type[ProducedRow], ...]]
-    _declarations: ClassVar[dict[type[ProjectionSource], set[type]]] = {}
+    _declarations: ClassVar[dict[type[ProjectionSource], set[type[ProjectionSource]]]] = {}
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
