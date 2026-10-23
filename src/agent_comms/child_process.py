@@ -938,8 +938,11 @@ NO_CHILD_REGISTRATION = NoChildRegistration()
 
 
 class ChildLaunch(ABC):
-    # The composition root binds the store after process types are declared.
-    children_store: ClassVar[type[RuntimeChildrenStore]]
+    @property
+    def children_store(self) -> type[RuntimeChildrenStore]:
+        from .runtime_children import RuntimeChildrenStore
+
+        return RuntimeChildrenStore
 
     def __init__(self, runtime: LaunchRuntime):
         self.runtime = runtime
@@ -1205,6 +1208,12 @@ class NoCountYetPrinted(NoIntegerPrinted):
 class ChildOutcome(DeclaredFamily, affix="Outcome"):
     interrupted: ClassVar[bool] = False
 
+    def report_shutdown(self, report_timeout: Callable[[], None]) -> None:
+        pass
+
+    def fork_failure(self, interrupted_consequence: Callable[[], str]) -> str:
+        return ""
+
     def printed_count(self, stdout: bytes) -> CheckPrinted:
         return NoCountYetPrinted()
 
@@ -1237,8 +1246,15 @@ class ExitedOutcome(ChildOutcome):
         return self.code == 0
 
 
+class InterruptedForkOutcome(ChildOutcome):
+    """A killed helper may leave its native writer locks behind."""
+
+    def fork_failure(self, interrupted_consequence: Callable[[], str]) -> str:
+        return interrupted_consequence()
+
+
 @dataclass(frozen=True)
-class SignaledOutcome(ChildOutcome):
+class SignaledOutcome(InterruptedForkOutcome):
     interrupted: ClassVar[bool] = True
     signal_number: int
 
@@ -1252,8 +1268,11 @@ class SignaledOutcome(ChildOutcome):
 
 
 @dataclass(frozen=True)
-class TimedOutOutcome(ChildOutcome):
+class TimedOutOutcome(InterruptedForkOutcome):
     termination: ChildOutcome
+
+    def report_shutdown(self, report_timeout: Callable[[], None]) -> None:
+        report_timeout()
 
     @property
     def summary(self) -> str:

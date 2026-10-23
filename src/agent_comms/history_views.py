@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .activity_clocks import ChannelActivity
 import logging
 import time
 from abc import abstractmethod
@@ -28,7 +29,6 @@ if TYPE_CHECKING:
 from agent_comms.thread_presentation import NoThreadPresentation, ThreadPresentation
 
 from .agent_activity import AgentActivity
-from .bus_activity_index import ChannelActivity
 from .channel_management import ChannelManagement
 from .channel_targets import CommandTarget, ThreadTarget
 from .channels import ChannelMemberIndex

@@ -9,13 +9,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.audience_manifest import FrozenAudience
-from agent_comms.bus_tables import BusRow
+from agent_comms.messages import BusRow, BusRecord, Message
 from agent_comms.errors import (
     CommittedMessageError,
     HumanSendRefusedError,
     RelationViolationError,
 )
-from agent_comms.messages import BusRecord, Message
 from agent_comms.response_acknowledgement import (
     KeyedResponseAcknowledgement,
 )

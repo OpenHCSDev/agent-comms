@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .errors import StaleAttemptError
 import asyncio
 from abc import ABC, abstractmethod
 from contextlib import suppress
@@ -9,7 +10,6 @@ from typing import TYPE_CHECKING
 
 from .turn_failure import BackendFailed, TurnFailure
 from .goal_failure_observation import FailedTurnObservation
-from .goal_attempts import StaleAttemptError
 
 if TYPE_CHECKING:
     from .agent_events import Done

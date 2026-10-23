@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Self
 
 from .declared_family import DeclaredFamily
 from .pi_counts import PiCount
-from .pi_vocabulary import ThinkingLevelField
+from .pi_vocabulary import CompactionReason, ThinkingLevelField
 from .send_outcome import SendBoundary
 from .tool_result import DeclaredReply
 
@@ -250,6 +250,9 @@ class ClearQueue(TurnInboxItem):
 class CompactionOutcome(DeclaredFamily, DeclaredReply, affix="Compaction"):
     """The result of one requested compaction."""
 
+    def completion_event[T](self, event: Callable[..., T], reason: type[CompactionReason]) -> T:
+        return event(reason=reason, aborted=True)
+
 
 @dataclass(frozen=True)
 class PlacedCompaction(CompactionOutcome):
@@ -258,6 +261,9 @@ class PlacedCompaction(CompactionOutcome):
     summary: str
     first_kept: str | None
     tokens_before: PiCount
+
+    def completion_event[T](self, event: Callable[..., T], reason: type[CompactionReason]) -> T:
+        return event(reason=reason, aborted=False, summary=self.summary)
 
 
 @dataclass(frozen=True)

@@ -554,7 +554,7 @@ class MaintenanceBarrier(MaintenanceIngress):
             yield self._current_unlocked()
 
 
-class CarriedDocument[T](DurableFile, LockedStore[T]):
+class CarriedDocument[T](DurableFile, LockedStore[T], declared_name=None):
     """A JSON document every installation carries: while maintenance runs, only its holder
     replaces it, so the install's carry check never charges another writer's change."""
 

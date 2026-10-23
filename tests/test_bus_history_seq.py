@@ -10,7 +10,8 @@ import pytest
 
 from agent_comms.bus import Bus, BusSnapshot, PublicRecord
 from agent_comms.bus_publication import AgentOrigin, HumanOrigin
-from agent_comms.bus_tables import BusRow, MessageIdentitySource
+from agent_comms.bus_tables import MessageIdentitySource
+from agent_comms.messages import BusRow, InfoKind, Message
 from agent_comms.comms import Comms
 from agent_comms.errors import HumanSendRefusedError
 from agent_comms.field_codec import FieldCodec, MalformedRecord
@@ -18,7 +19,6 @@ from agent_comms.historical_views import HistoryArchive
 from agent_comms.locked_store import RegistryFile
 from agent_comms.message_bus import MessageBus
 from agent_comms.message_page import MessagePageRequest, PageBounds
-from agent_comms.messages import InfoKind, Message
 from agent_comms.native_transcript import NativeTranscript
 from agent_comms.page_traversal import LiveCursor, OlderTraversal
 from agent_comms.presentation import WireRevision

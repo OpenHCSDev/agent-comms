@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.activity_clocks import ActivityClocks
 import asyncio
 import inspect
 from abc import ABC, abstractmethod
@@ -20,7 +21,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent_comms.bus import Bus, BusSnapshot
-from agent_comms.bus_activity_index import ActivityClocks
 from agent_comms.channel_targets import NamedTarget
 from agent_comms.channels import AnyChannel
 from agent_comms.coordinator import Coordination
