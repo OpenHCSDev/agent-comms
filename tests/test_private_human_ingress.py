@@ -2,39 +2,74 @@
 
 from __future__ import annotations
 
-from agent_comms.private_runtime_schema import PrivateCoordinatorTable
-from bus_record_fixture import prepare_native_comms
-
-from agent_comms.channel_targets import CommandTarget
 import os
 import subprocess
 import sys
+from abc import abstractmethod
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Annotated, NoReturn
 
 import pytest
 
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.bus_publication import HumanOrigin
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_cohort import accept_delivery_cohort
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_results import Applied
 from agent_comms.coordinator import Coordination
-from agent_comms.coordination_database import CoordinationStore
-from agent_comms.launch_root import LaunchRoot
 from agent_comms.errors import (
     CommittedMessageError,
     RelationViolationError,
     UnregisteredThreadError,
 )
-from agent_comms.messages import Message, InfoKind
-from agent_comms.thread_identity import UserThreadRole
+from agent_comms.field_codec import PathText
+from agent_comms.launch_root import LaunchRoot
+from agent_comms.message_reference import MessageReference
+from agent_comms.messages import InfoKind, Message
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from agent_comms.read_basis import NamedViewer
-from agent_comms.task_sources import NoTaskAttachment
+from agent_comms.task_sources import TaskAttachment
+from agent_comms.thread_identity import RecordedThreadIncarnation, UserThreadRole
+from bus_record_fixture import prepare_native_comms
 
 pytestmark = pytest.mark.skipif(
     os.name != "posix", reason="private bus requires POSIX owner/directory durability"
 )
+
+
+@dataclass(frozen=True)
+class CompletionFailureTaskAttachment(TaskAttachment, declared_name=None):
+    completed: Annotated[Path, PathText]
+
+    def direct(self, goals: object, message: Message) -> None:
+        with self.completed.open("a", encoding="utf-8") as stream:
+            stream.write(message.message_id + "\n")
+        self.fail(message.reference)
+
+    @staticmethod
+    @abstractmethod
+    def fail(reference: MessageReference) -> NoReturn: ...
+
+
+class RuntimeCompletionTaskAttachment(CompletionFailureTaskAttachment):
+    @staticmethod
+    def fail(reference: MessageReference) -> NoReturn:
+        raise RuntimeError(reference)
+
+
+class ExitCompletionTaskAttachment(CompletionFailureTaskAttachment):
+    @staticmethod
+    def fail(reference: MessageReference) -> NoReturn:
+        raise SystemExit(reference)
+
+
+class InterruptCompletionTaskAttachment(CompletionFailureTaskAttachment):
+    @staticmethod
+    def fail(reference: MessageReference) -> NoReturn:
+        raise KeyboardInterrupt(reference)
 
 
 def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
@@ -58,25 +93,29 @@ def _public_messages(comms: Comms) -> tuple[Message, ...]:
 
 
 @pytest.mark.parametrize("notification_fails", [False, True])
-def test_owner_completion_failure_retains_the_committed_send(tmp_path, monkeypatch, notification_fails):
+@pytest.mark.parametrize("attachment_type,failure_type", [
+    (RuntimeCompletionTaskAttachment, RuntimeError),
+    (ExitCompletionTaskAttachment, SystemExit),
+    (InterruptCompletionTaskAttachment, KeyboardInterrupt),
+])
+def test_owner_completion_failure_retains_the_committed_send(
+    tmp_path, notification_fails, attachment_type, failure_type,
+):
     comms, store, _, _ = _root(tmp_path)
-    completions = []
-
-    def fail_direct(self, goals, message):
-        completions.append(message.reference)
-        raise RuntimeError("Directive recording failed after commit")
-
-    monkeypatch.setattr(NoTaskAttachment, "direct", fail_direct)
+    completed = tmp_path / "completed"
     if notification_fails:
         comms.bus.bus.path.with_suffix(".changed").mkdir()
     try:
         with pytest.raises(CommittedMessageError) as failed:
-            comms.messaging.send_user_message("alice", "One committed input", worktree=str(tmp_path))
+            comms.messaging.send_user_message(
+                "alice", "One committed input", worktree=str(tmp_path),
+                task=attachment_type(completed))
         committed = failed.value.record.message
         assert comms.bus.bus.lookup(committed.seq) == committed
         assert _public_messages(comms) == (Message.from_message(committed),)
-        assert completions == [committed.reference]
-        assert isinstance(failed.value.__cause__, RuntimeError)
+        assert completed.read_text().splitlines() == [committed.message_id]
+        assert isinstance(failed.value.__cause__, failure_type)
+        assert failed.value.__cause__.args == (committed.reference,)
         publication_failure = failed.value.__cause__.__context__
         if notification_fails:
             assert isinstance(publication_failure, CommittedMessageError)

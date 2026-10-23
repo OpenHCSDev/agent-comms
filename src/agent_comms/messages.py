@@ -404,7 +404,7 @@ class Message(Addressed, BusCapability):
         from .bus_tables import AnsweredSource, MessageIdentitySource
 
         yield from super().projections()
-        yield BusActivityIndex.from_message(self, target=self.target)
+        yield BusActivityIndex.from_message(self)
         participants = {self.sender, *CommandTarget.named(self.target).direct_names,
                         *(mention.thread for mention in self.mentions)}
         for participant in participants:
@@ -434,7 +434,7 @@ class Message(Addressed, BusCapability):
         return self
 
     @classmethod
-    def envelope_type(cls) -> type[Message]:
+    def envelope_type(cls) -> builtins.type[Message]:
         """The public message declaration this class's values carry."""
         return Message
 
@@ -541,10 +541,9 @@ class Message(Addressed, BusCapability):
     @classmethod
     def from_wire(cls, data: Mapping) -> Message:
         # Content identity is derived from the declared message fields.
-        public = {key: value for key, value in data.items() if key != "id"}
         plan = FieldCodec.field_plan(Message, 'type')
-        kind = cast(type[MessageKind], plan.value.decode(plan.raw(public)))
-        return kind.decode_message({"ts": 0.0, **public})
+        kind = cast(builtins.type[MessageKind], plan.value.decode(plan.raw(data)))
+        return kind.decode_message({"ts": 0.0, **data})
 
     def response_eligibility(
         self, audience: Sequence[str], *, aliases: Mapping[str, str] | None = None
@@ -579,7 +578,7 @@ class BusRecord(Message, DeclaredFamily, affix="Record"):
         return Message.from_message(self).publication_snapshot
 
     @classmethod
-    def envelope_type(cls) -> type[Message]:
+    def envelope_type(cls) -> builtins.type[Message]:
         """A record carries the envelope of the message declaration after it in the MRO."""
         return super().envelope_type()
 
@@ -623,7 +622,7 @@ class ClaimMessage(Claimed, Message):
     """A claimed message binds its transition to its public envelope identity."""
 
     @classmethod
-    def envelope_type(cls) -> type[Message]:
+    def envelope_type(cls) -> builtins.type[Message]:
         return ClaimMessage
 
     @classmethod

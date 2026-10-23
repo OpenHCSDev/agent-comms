@@ -204,6 +204,12 @@ class NamedTarget(CommandTarget):
         """Bind this destination inside the registry cut used by its consumer."""
         return self.canonical_name(snapshot.canonical_name)
 
+    @abstractmethod
+    def validate(self, message: Message) -> None: ...
+
+    @abstractmethod
+    def reply_target(self, sender: str) -> str: ...
+
     def require_channel(self):
         raise ValueError(f"{self.name!r} is not a channel target.")
 
@@ -291,14 +297,14 @@ class ThreadTarget(NamedTarget):
     def bindings(self, declaration, comms, channel, resolved: ResolvedThread, *, snapshot, catalog):
         return declaration.thread_bindings(comms, resolved.thread, resolved.status, channel, catalog=catalog)
 
-    def validate(self, message):
+    def validate(self, message: Message) -> None:
         if message.sender == self.name and message.type.conversation_message:
             raise RelationViolationError(f"Thread {message.sender!r} cannot message itself.")
         allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
         if not set(self.name) <= allowed:
             raise ValueError(f"Message target {self.name!r} is not a thread name or #channel.")
 
-    def reply_target(self, sender):
+    def reply_target(self, sender: str) -> str:
         return sender
 
     def wake_policy(self, recipient, mentions):
@@ -439,7 +445,7 @@ class ChannelTarget(NamedTarget):
             return MentionedOnlyPolicy.instance()
         return message.sender_role.channel_policy()
 
-    def reply_target(self, sender):
+    def reply_target(self, sender: str) -> str:
         return self.name
 
     def effective_mentions(self, message, audience):

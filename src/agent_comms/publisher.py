@@ -19,7 +19,7 @@ from agent_comms.coordination_tables.publications import (
     PublicationIntents,
 )
 from agent_comms.field_codec import Id128Text
-from agent_comms.messages import ClaimNoticeKind, Message
+from agent_comms.messages import BusRecord, ClaimNoticeKind, Message
 from agent_comms.response_acknowledgement import canonical_publication_key
 
 from .active_route import guard_original_root_write
@@ -190,7 +190,7 @@ class InitialWrites(Publisher):
     """Publish an initial message and its frozen delivery decisions together."""
 
     def publish_ordinary(self, message: Message, *, origin: InitialOrigin,
-                         destination: NamedTarget) -> Message:
+                         destination: NamedTarget) -> BusRecord:
         """Hold the registry/catalog cut; check source conditions in the append transaction."""
         with (
             self.opened_activity() as activity,
