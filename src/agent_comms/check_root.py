@@ -94,8 +94,7 @@ class CheckRoot:
         )
         scope = MemberActivityDisplayScope("#check", targets, participant_names=selected | aliases)
         with self.source.bus.bus.reading() as source:
-            messages = tuple(reversed(scope.records(
-                source, descending=True, limit=self.max_records)))
+            messages = scope.history(source, limit=self.max_records)
         copied.registry.prepare_native_root()
         Bus.install(Bus.path_in(copied.root), history=messages)
         copied.channels.catalog.replace(catalog)

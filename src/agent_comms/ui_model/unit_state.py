@@ -154,11 +154,11 @@ class UnitState(UndatedStandingRule, declared_name=None):
 
     @classmethod
     def observations(
-        cls, comms: Comms, commander: str, pulls: ProgressRead
+        cls, comms: Comms, commander: str, frame: HeartbeatFrame
     ) -> tuple[UnitObservation, ...]:
         snapshot, now = comms.registry.snapshot(), time.time()
-        held = StandingRule.holders(comms, commander)
-        requests = pulls.register(tuple(todo for todos in held.values() for todo in todos))
+        held = frame.holders
+        requests = frame.pulls
         with comms.bus.bus.reading() as source:
             questions = UnansweredUnitAsks.for_orders(source, snapshot, commander, held, now)
         readings = tuple(
@@ -189,8 +189,8 @@ class UnitState(UndatedStandingRule, declared_name=None):
         return tuple(reading for reading in readings if reading.thread.incarnation in eligible)
 
     @classmethod
-    def current(cls, comms: Comms, commander: str, pulls: ProgressRead) -> tuple[UnitState, ...]:
-        states = tuple(cls.read(source) for source in cls.observations(comms, commander, pulls))
+    def current(cls, comms: Comms, commander: str, frame: HeartbeatFrame) -> tuple[UnitState, ...]:
+        states = tuple(cls.read(source) for source in cls.observations(comms, commander, frame))
         return tuple(
             state for member in cls.worst_first() for state in states if isinstance(state, member)
         )

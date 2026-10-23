@@ -23,7 +23,7 @@ from .activity_clocks import ActivityClocks, ChannelActivity
 from .channel_targets import CommandTarget, ThreadTarget
 from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged, HistoricalSourceChanged
 from .declared_family import DeclaredFamily
-from .errors import UnregisteredThreadError
+from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from .mentions import ThreadMention
 from .message_reference import MessageReference
@@ -836,6 +836,36 @@ class MessageDisplayScope(DeclaredFamily, ABC, ProjectionSource, affix="DisplayS
         predicate, parameters = self.index_predicate
         return source.scoped_page(predicate, parameters, lower=lower, upper=upper,
                                   descending=descending, limit=limit, kinds=kinds)
+
+    def history(self, source: BusReader, *, limit: int) -> tuple[Message, ...]:
+        """A bounded recent selection closed over its answers, without crossing this scope."""
+        selected: dict[int, Message] = {}
+        with source.reading() as reader:
+            for message in self.records(reader, descending=True, limit=limit):
+                added: dict[int, Message] = {}
+                pending = [message]
+                while pending and len(selected) + len(added) <= limit:
+                    original = pending.pop()
+                    if original.seq in selected or original.seq in added:
+                        continue
+                    if not self.includes(original):
+                        raise RelationViolationError(
+                            f"History answer {original.seq} is outside the selected scope"
+                        )
+                    added[original.seq] = original
+                    references = tuple(dict.fromkeys(
+                        reference for reference in original.answers
+                        if reference.seq not in selected and reference.seq not in added
+                    ))
+                    pending.extend(reader.messages_for_references(references))
+                if len(selected) + len(added) > limit:
+                    if not selected:
+                        raise RelationViolationError(
+                            f"Newest history and its answered originals exceed {limit} records"
+                        )
+                    break
+                selected.update(added)
+        return tuple(selected[seq] for seq in sorted(selected))
 
     def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
                     source: BusSnapshot, *, document: ReadDocument, through: int) -> DisplayBasis:

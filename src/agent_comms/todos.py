@@ -2255,9 +2255,6 @@ class ClaimedProblemOrder(DeliverableProblemOrder):
     def commander_claims(self) -> tuple[OrderClaim, ...]:
         return (self.claim,)
 
-    def observed_merges(self, repo: Repo, source: ProgressSource) -> tuple[MergedProblemOrder, ...]:
-        return ()
-
 
 @dataclass(frozen=True, kw_only=True)
 class DeliveredProblemOrder(AwaitingInstallationProblemOrder):
