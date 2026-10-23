@@ -2,22 +2,23 @@
 
 import hashlib
 import importlib.util
-import sys
 import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 import agent_comms.native_package as native_package
-from agent_comms.core_stamp import CheckoutStamp
+from agent_comms.core_stamp import WheelStamp
 from agent_comms.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.native_package import (
     package_tree_digest,
 )
+from agent_comms.package_stamp import STAMP
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX native package filesystem")
 
@@ -98,7 +99,7 @@ def launcher(tmp_path):
     source.mkdir(parents=True)
     shutil.copytree(repo / 'src/agent_comms', source, dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns('__pycache__'))
-    CheckoutStamp(str(repo)).write(source / 'package_stamp.py')
+    WheelStamp(STAMP.commit()).write(source / 'package_stamp.py')
     # The environment `uv sync --project stack` installs: this checkout's agent_comms, editable,
     # with its dependencies.
     interpreter = stack / ".venv/bin/python"

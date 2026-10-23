@@ -1,4 +1,5 @@
 """Select the package's Core stamp using the build target."""
+import subprocess
 from pathlib import Path
 from runpy import run_path
 from shutil import copyfile
@@ -17,11 +18,14 @@ class CoreBuildHook(BuildHookInterface):
         source = root / relative
         # These definitions need no application dependencies in the build env.
         types = run_path(str(root / "src/agent_comms/core_stamp.py"))
-        checkout = types["CheckoutStamp"](str(root.resolve()))
         # Never overwrite a source checkout's stamp while building its wheel.
         path = Path(self.directory) / ".core_stamp.py"
         if (root / ".git").exists():
-            types["WheelStamp"](checkout.commit()).write(path)
+            # Repo.git cannot load here, so the build reads its commit directly.
+            commit = subprocess.check_output(
+                ("git", "-C", str(root.resolve()), "rev-parse", "HEAD"), text=True,
+            ).strip()
+            types["WheelStamp"](commit).write(path)
         elif not (commit := "$Format:%H$").startswith("$Format"):
             types["WheelStamp"](commit).write(path)
         else:

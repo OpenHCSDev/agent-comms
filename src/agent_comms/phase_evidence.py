@@ -11,7 +11,6 @@ from __future__ import annotations
 import ast
 import copy
 import re
-import subprocess
 from abc import ABC, abstractmethod
 from collections import Counter
 from collections.abc import Iterable, Iterator
@@ -41,7 +40,13 @@ class MainTree:
         return cls(repo, Repo.git(repo.checkout, "rev-parse", f"origin/{cls.branch}").strip())
 
     def has(self, path: str) -> bool:
-        return self.git("cat-file", "-e", f"{self.commit}:{path}").returncode == 0
+        return not self.missing(f"{self.commit}:{path}\n")[0]
+
+    def missing(self, requests: str) -> tuple[bool, ...]:
+        """For each ``REV:PATH`` line, whether this repository lacks it; any other failure
+        is a GitCommandError, never an absence."""
+        return tuple(line.endswith(" missing") for line in Repo.git(
+            self.repo.checkout, "cat-file", "--batch-check", input=requests).splitlines())
 
     def grep(self, *options: str, pattern: str, paths: tuple[str, ...]) -> list[str]:
         """``git grep -E`` rows in this tree, like ``module`` and ``modules``.
@@ -49,8 +54,8 @@ class MainTree:
         A submodule is another repository's tree, regardless of local recurse settings.
         Git pathspecs such as ``:!file`` exclude.
         """
-        run = self.git(
-            "grep",
+        return list(Repo.grep(
+            self.repo.checkout,
             "--no-recurse-submodules",
             *options,
             "-E",
@@ -59,10 +64,7 @@ class MainTree:
             self.commit,
             "--",
             *paths,
-        )
-        if run.returncode not in (0, 1):
-            run.check_returncode()
-        return run.stdout.splitlines()
+        ))
 
     def count(self, pattern: str, paths: tuple[str, ...]) -> int:
         """Matching lines under ``paths``."""
@@ -80,37 +82,24 @@ class MainTree:
         )
 
     def module(self, path: str) -> ParsedModule:
-        run = self.git("show", f"{self.commit}:{path}")
-        run.check_returncode()
-        return ParsedModule(path, run.stdout, ast.parse(run.stdout, filename=path), path)
+        source = Repo.git(self.repo.checkout, "show", f"{self.commit}:{path}")
+        return ParsedModule(path, source, ast.parse(source, filename=path), path)
 
     def present_modules(self, paths: tuple[str, ...]) -> Iterator[ParsedModule]:
         """The parsed modules of the ``paths`` main holds. Plans finish by deleting files, so
         a declared path main no longer holds has no module, and nothing it held is left."""
-        checked = subprocess.run(
-            ("git", "-C", str(self.repo.checkout), "cat-file", "--batch-check"),
-            input="".join(f"{self.commit}:{path}\n" for path in paths),
-            capture_output=True,
-            text=True,
-            timeout=60,
-            check=True,
-        ).stdout.splitlines()
-        for path, line in zip(paths, checked, strict=True):
-            if not line.endswith(" missing"):
+        missing = self.missing("".join(f"{self.commit}:{path}\n" for path in paths))
+        for path, absent in zip(paths, missing, strict=True):
+            if not absent:
                 yield self.module(path)
 
     def modules(self, paths: tuple[str, ...]) -> Iterator[ast.Module]:
         """Every Python module under ``paths``, read in one ``git cat-file --batch``."""
-        listed = self.git("ls-tree", "-r", "--name-only", self.commit, "--", *paths)
-        listed.check_returncode()
-        names = [name for name in listed.stdout.splitlines() if name.endswith(".py")]
-        batch = subprocess.run(
-            ("git", "-C", str(self.repo.checkout), "cat-file", "--batch"),
-            input="".join(f"{self.commit}:{name}\n" for name in names).encode(),
-            capture_output=True,
-            timeout=60,
-            check=True,
-        ).stdout
+        listed = Repo.git(self.repo.checkout, "ls-tree", "-r", "--name-only", self.commit, "--",
+                          *paths)
+        names = [name for name in listed.splitlines() if name.endswith(".py")]
+        batch = Repo.git_bytes(self.repo.checkout, "cat-file", "--batch",
+                               input="".join(f"{self.commit}:{name}\n" for name in names))
         for name in names:
             header, _, batch = batch.partition(b"\n")
             size = int(header.rsplit(b" ", 1)[1])
@@ -119,14 +108,6 @@ class MainTree:
 
     def contains(self, sha: str) -> bool:
         return self.repo.contains(sha, self.commit)
-
-    def git(self, *args: str) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            ("git", "-C", str(self.repo.checkout), *args),
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
 
 
 class UnreadableEvidenceError(Exception):
