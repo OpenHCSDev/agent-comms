@@ -386,8 +386,7 @@ def test_declared_scalar_capabilities_and_new_case_use_the_same_boundary() -> No
     for key in encoded:
         with pytest.raises((TypeError, ValueError)):
             FieldCodec.decode(Scalars, {**encoded, key: 7})
-    with pytest.raises(TypeError):
-        FieldCodec.encode(value.path)
+    assert FieldCodec.encode(value.path) == "/saved/history"
 
     @dataclass(frozen=True)
     class ScalarRow(TypedTable, declared_name="field_representation_rows"):

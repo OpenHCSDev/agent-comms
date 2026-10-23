@@ -388,7 +388,7 @@ class TestRegistration:
             comms.registry.register(Thread(name='b', tags=frozenset(), worktree='/wt'))
         monkeypatch.undo()
         with pytest.raises(RelationViolationError):
-            Registration(root / "registry.json")
+            Registration(root / "registry.json").require("a")
 
     @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")
     @pytest.mark.parametrize("damage", ["missing", "corrupt", "truncated", "strip_epochs"])
