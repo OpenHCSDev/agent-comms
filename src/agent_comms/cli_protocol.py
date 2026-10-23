@@ -26,7 +26,7 @@ from typing_extensions import TypeForm
 from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .external_transcript import RequestedEarlierPage
-from .field_codec import FieldCodec, TimestampText
+from .field_codec import TimestampText
 from .mro_dispatch import MroDispatch, handles
 from .maintenance_barrier import MaintenanceHeldError
 from .messages import Message
@@ -57,8 +57,7 @@ class TimestampedWire(WireModel):
     @model_validator(mode='before')
     @classmethod
     def require_source_time(cls, value):
-        value = FieldCodec.decode(dict[str, object], value)
-        if value.get('timestamp') is None:
+        if isinstance(value, dict) and value.get('timestamp') is None:
             raise UnrecordedTimeError(f'{cls.__name__} has no recorded timestamp')
         return value
 

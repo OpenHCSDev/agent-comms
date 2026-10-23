@@ -250,7 +250,10 @@ class ThreadSection(MroDispatch):
     plan: FieldPlan
 
     def rows(self, raw: Mapping[str, object]) -> dict[str, object]:
-        return FieldCodec.decode(dict[str, object], raw.get(self.plan.key))
+        rows = raw.get(self.plan.key)
+        if not isinstance(rows, dict):
+            raise MalformedRecord(f"registry section {self.plan.key} must be an object")
+        return rows
 
     def decoded(self, document: object) -> MutableMapping[str, object]:
         rows = self.plan.current(document)

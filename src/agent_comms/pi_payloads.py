@@ -197,7 +197,8 @@ class PiPayload(ExternalField):
 
     @classmethod
     def decode_external_value(cls, value: object, record: Mapping[str, object]) -> object:
-        value = FieldCodec.decode(dict[str, object], value)
+        if not isinstance(value, dict):
+            raise MalformedRecord(f"Expected {cls.__name__} object")
         member = cls.wire_member(value)
         return FieldCodec.construct(member, member.decode_fields(value, {}))
 
