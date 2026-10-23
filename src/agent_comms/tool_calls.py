@@ -15,13 +15,13 @@ from typing import ClassVar
 
 from pydantic import AliasChoices, Field, JsonValue, ValidationError
 
-from .cli_protocol import WireModel
-from .declared_family import DeclaredWireFamily, UniqueExternalSelector
+from .declared_family import UniqueExternalSelector
 from .field_codec import FieldCodec, MalformedRecord
 from .native_tools import BashTool, EditTool, GlobTool, GrepTool, ReadTool, WriteTool
 from .tool_declaration import ReplacementEdit, ToolDeclaration
 from .tool_results import ToolDiff
 from .transcript_events import ToolEndTranscript, ToolStartTranscript
+from .wire_models import DeclaredWireFamily, WireModel
 
 
 @dataclass(frozen=True)

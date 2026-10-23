@@ -11,46 +11,46 @@ from acp.exceptions import RequestError
 from acp.schema import (
     PromptResponse,
 )
+from pydantic import JsonValue
 
-from .image_inputs import ImageInput, prompt_images
-from .following_inputs import OwnerFollowingInputs
-from .queued_input import InitialInput
-from .input_origin import InputOrigin, UnattributedInputOrigin
 from . import agent_events as events
 from .agent_backend import AgentBackend
 from .agent_event_updates import AcpEventConsumer, TurnEventConsumer
 from .channel_targets import NamedTarget
 from .channels import AllChannel
-from .comms import Comms
-from .coordinator import Coordination
 from .controller import Controller
+from .coordinator import Coordination
 from .errors import RelationViolationError
+from .following_inputs import OwnerFollowingInputs
 from .goal_actions import (
     GoalPrecondition,
     OwnerInvocable,
     PausedGoalAction,
 )
 from .goal_scheduler import GoalScheduler
+from .image_inputs import ImageInput, prompt_images
+from .input_origin import InputOrigin, UnattributedInputOrigin
 from .messages import Message
 from .mro_dispatch import MroDispatch, handles
 from .native_arguments import LaunchArguments, LaunchBinary
 from .native_input_owner import RegistryOwner
+from .pi_payloads import StateData
+from .queued_input import InitialInput
 from .routing import TurnRouting
 from .runtime import (
     RuntimeServer,
     SubscriberClosed,
 )
-from .pi_payloads import StateData
 from .threads import Thread
 from .transcript_updates import TurnTranscriptUpdate
 from .turn_effects import PromptBlock, TurnEffects
-from pydantic import JsonValue
 from .turn_lease import TurnLeaseFence, TurnState
 from .turn_phase import CancellingPhase, TurnPhase
 from .turn_terminal import EndedWithoutResult, TurnInterruption, TurnTerminal
 
 if TYPE_CHECKING:
     from . import pi_events as pi
+    from .comms import Comms
     from .coordinated_runtime import SelectedExecution
     from .input_drain import DrainTurn, InputDrain
     from .session_lifecycle import SessionLifecycle
