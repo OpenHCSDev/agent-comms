@@ -13,6 +13,8 @@ from agent_comms.active_route import (
     ActiveRoute,
     RoutePublicationUnknownError,
     RouteReadersHold,
+    NoRouteSelection,
+    PublishedRouteSelection,
     read_active_route,
     route_new_bus,
 )
@@ -20,11 +22,7 @@ from agent_comms.bus import Bus
 from agent_comms.comms import wire
 from agent_comms.installer.backup import StoreBackup, UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.interpreter_operation import (
-    NoRouteSelection,
-    PublishedRouteSelection,
-    SelectedRouteProbe,
-)
+from agent_comms.installer.interpreter_operation import SelectedRouteProbe
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.recorded_bus import RecordedBusIdentity
 from bus_record_fixture import prepare_native_comms

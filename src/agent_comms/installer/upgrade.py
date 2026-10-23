@@ -37,7 +37,9 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from pydantic import TypeAdapter
 
-from agent_comms.active_route import ActiveRoute, RouteFile, active_route_path, route_directory
+from agent_comms.active_route import (
+    ActiveRoute, RouteFile, RouteSelection, active_route_path, route_directory,
+)
 from agent_comms.bus import Bus
 from agent_comms.cli_bridges.shared import BridgeResume, Serve, SessionBridgeResumes
 from agent_comms.cli_commands import (
@@ -87,7 +89,6 @@ from agent_comms.installer.interpreter_operation import (
     ProbeProgram,
     PublicationProbe,
     RetainedProgram,
-    RouteSelection,
     RunningOwnersProbe,
     RuntimeProbe,
     SelectedRouteProbe,
