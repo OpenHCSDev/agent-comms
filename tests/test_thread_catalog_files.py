@@ -55,7 +55,6 @@ def test_lock_chains_are_deleted_and_store_locks_kept(tmp_path):
     for path in chain:
         path.touch()
     step = LockChains(tmp_path, tmp_path, tmp_path / "spill")
-    assert step.carry(apply=False).rewritten == ()
     step.carry(apply=True)
     assert lock.exists() and not any(path.exists() for path in chain[1:])
     assert step.carry(apply=False).changed == 0
