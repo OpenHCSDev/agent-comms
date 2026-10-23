@@ -50,7 +50,7 @@ class PackageVerb(NativePackageVerb):
 
 @dataclass(frozen=True, kw_only=True)
 class QualifiedPackageVerb(PackageVerb):
-    """A build/publication boundary qualifies the mutable package before using it."""
+    """Publication checks the manifest-named sealed build before using it."""
 
     def _native_package(self) -> VerifiedNativePackage:
         package = VerifiedNativePackage.qualify(self.package)
@@ -60,7 +60,7 @@ class QualifiedPackageVerb(PackageVerb):
 
 @dataclass(frozen=True, kw_only=True)
 class VerifyVerb(PackageVerb):
-    """Qualify a copied build without publishing it."""
+    """Verify build contents and seal the tree before publishing it."""
 
     help = "Verify a copied package against the source pin"
 
@@ -154,7 +154,7 @@ class InstallSourcesVerb(SourceInstallationVerb):
 
 @dataclass(frozen=True, kw_only=True)
 class PublishSourcesVerb(QualifiedPackageVerb, SourceInstallationVerb):
-    """Build publication qualifies a mutable package before installing its sources."""
+    """Build publication checks its sealed package before installing external sources."""
 
     help = "Qualify a build package and install its declared sources before publication"
 

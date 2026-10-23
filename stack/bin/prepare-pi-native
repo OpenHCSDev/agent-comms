@@ -216,5 +216,6 @@ if [[ -e "$target" ]]; then
     exit 0
 fi
 mv -- "$stage" "$target"
+trap 'rm -rf -- "$scratch_root" "$stock_root"' EXIT
 accept
 printf '%s\n' "$preparation_stamp" > "$target/$stamp_name"

@@ -56,6 +56,8 @@ def test_sealed_tree_is_published_by_sharing_its_inodes(tmp_path):
     resource = sealed / "dist/cli.js"
     resource.write_text("console.log(1)\n")
     resource.chmod(0o500)
+    (sealed / "dist").chmod(0o500)
+    sealed.chmod(0o500)
     published = tmp_path / "published"
     link_sealed_tree(sealed, published)
     assert (published / "dist/cli.js").stat().st_ino == resource.stat().st_ino
@@ -117,6 +119,8 @@ def stamp_prepared(stack, env):
         env.get("PI_MCP_DEPENDENCY_PACKAGE", ""),
     )
     prepared = native_package.pinned_package_for(manifest).parents[2]
+    namespace = load_resource_module(stack.parent / "src/agent_comms/native_package.py")
+    namespace["VerifiedNativePackage"].prepare(native_package.pinned_package_for(manifest))
     (prepared / ".prepared-inputs.sha256").write_text(stamp + "\n")
 
 
@@ -204,6 +208,7 @@ def test_publication_installs_declared_source_with_one_link(launcher, tmp_path):
     os.link(stale_link, destination)
 
     imports = package / "dist/agent-comms-imports.json"
+    imports.chmod(0o600)
     imports.write_text(json.dumps({
         "version": 2,
         "extensionEntries": [{
@@ -244,7 +249,7 @@ def test_publication_installs_declared_source_with_one_link(launcher, tmp_path):
         assert result.returncode == 0, result.stderr
 
     run()
-    assert (deployments / f"native-current-{build}").is_dir()
+    assert (deployments / f".pi-native-{build}").is_dir()
     assert destination.read_bytes() == content
     assert destination.stat().st_nlink == 1
     assert stale_link.read_bytes() == b"stale\n"
@@ -279,6 +284,7 @@ def test_prepare_imports_agent_comms_with_the_stack_interpreter_not_path_python3
 
 def test_publication_refuses_unlisted_dependency_drift(launcher, tmp_path):
     stack, package = launcher
+    (package / "dependency.js").chmod(0o600)
     (package / "dependency.js").write_text("// unpinned dependency change\n")
     other = stack / ".pi-native-0123456789abcdef"
     other.mkdir()
@@ -291,6 +297,6 @@ def test_publication_refuses_unlisted_dependency_drift(launcher, tmp_path):
     assert not any(deployments.iterdir())
     assert result.returncode != 0
     assert not result.stdout
-    assert b"differs from pinned artifact" in result.stderr
+    assert b"writable" in result.stderr
     assert (package / "dependency.js").read_text() == "// unpinned dependency change\n"
     assert other.is_dir()  # a refused build retires nothing

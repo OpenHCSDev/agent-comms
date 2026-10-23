@@ -21,7 +21,7 @@ from _hashlib import HASH
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, ClassVar, Literal
 
 from agent_comms.child_process import Platform
 from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText, Sha256Text, WireName
@@ -150,7 +150,7 @@ class PackageContentInventory(PackageInventory):
     digest: HASH = field(default_factory=hashlib.sha256, repr=False)
 
     def directory(self, relative: str, info: os.stat_result) -> None:
-        record = ["directory", relative, info.st_mode & 0o111]
+        record = ["directory", relative, SealedPackageInventory.permissions & 0o111]
         self.digest.update((json.dumps(record, ensure_ascii=True) + "\n").encode())
 
     def file(self, path: str, relative: str, before: os.stat_result) -> None:
@@ -177,8 +177,10 @@ class PackageContentInventory(PackageInventory):
 class SealedPackageInventory(PackageInventory):
     """An installed build is accepted through its seal without opening file contents."""
 
+    permissions: ClassVar[int] = 0o500
+
     def directory(self, relative: str, info: os.stat_result) -> None:
-        if stat.S_IMODE(info.st_mode) != 0o500:
+        if stat.S_IMODE(info.st_mode) != self.permissions:
             raise NativePackageError(f"Native package directory is not sealed 0500: {relative}")
 
     def file(self, path: str, relative: str, info: os.stat_result) -> None:
@@ -192,7 +194,7 @@ def seal_native_tree(root: Path) -> None:
         for name in files:
             path = Path(directory) / name
             path.chmod(stat.S_IMODE(path.lstat().st_mode) & ~0o222)
-        Path(directory).chmod(0o500)
+        Path(directory).chmod(SealedPackageInventory.permissions)
 
 
 def unseal_native_directories(root: Path) -> None:
@@ -209,7 +211,7 @@ def remove_native_tree(root: Path) -> None:
 
 
 def package_tree_digest(root: Path) -> str:
-    """Hash sorted path/type/execute-mode/size/content records with bounded reads."""
+    """Hash sorted content records with final sealed directory modes and bounded reads."""
     if os.name != "posix":
         raise NativePackageError("Native package filesystem verification requires POSIX")
     inventory = PackageContentInventory()
@@ -221,7 +223,7 @@ def package_tree_digest(root: Path) -> str:
 
 
 def share_native_resources(root: Path, deployments: Path) -> dict[str, int]:
-    """Seal a NEW patched package, then reuse matching frozen resource inodes.
+    """Share a new package's read-only file inodes before final directory sealing.
 
     The existing build lifetime calls this only after every patch. Old handed
     packages have a different import fence and are never changed or borrowed.
@@ -486,7 +488,10 @@ class VerifiedNativePackage:
     @classmethod
     def qualify(cls, root: Path) -> VerifiedNativePackage:
         """Check this manifest's named, sealed build without reading package files."""
-        if root.parts[-3:] != ("node_modules", "@earendil-works", "pi-coding-agent") or root.parents[2].name != pinned_package_for(MANIFEST).parents[2].name:
+        if (
+            root.parts[-3:] != ("node_modules", "@earendil-works", "pi-coding-agent")
+            or root.parents[2].name != pinned_package_for(MANIFEST).parents[2].name
+        ):
             raise NativePackageError("Native package directory differs from its manifest-derived name")
         try:
             SealedPackageInventory().visit(os.fspath(root), ".", 0)

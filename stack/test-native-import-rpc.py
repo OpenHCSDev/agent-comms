@@ -16,7 +16,9 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from agent_comms.native_package import PACKAGE_LAYOUT, VerifiedNativePackage, pinned_native_package
+from agent_comms.native_package import (
+    PACKAGE_LAYOUT, VerifiedNativePackage, pinned_native_package, remove_native_tree,
+)
 
 
 def network_denial() -> Callable[[], None]:
@@ -337,9 +339,12 @@ def main(launch: VerifiedNativePackage, root: Path) -> None:
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory(prefix="native-import-rpc-") as directory:
         root = Path(directory)
-        native_root = root / "native"
+        native_root = root / pinned_native_package().parents[2].name
         native_root.mkdir(mode=0o700)
         package = native_root / PACKAGE_LAYOUT
         package.parent.mkdir(parents=True, mode=0o700)
         shutil.copytree(pinned_native_package(), package)
-        main(VerifiedNativePackage.qualify(package), root)
+        try:
+            main(VerifiedNativePackage.qualify(package), root)
+        finally:
+            remove_native_tree(native_root)
