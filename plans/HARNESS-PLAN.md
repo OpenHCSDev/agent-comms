@@ -297,3 +297,27 @@ The growth alarm is commander-native phase 7's (`plans/commander-native-plan.md`
 - Each change deletes what it replaces in the same commit.
 - Never touch a file another plan deletes (2026-10-21: the reverted 047bccc65 added 16 conflicts to #2549).
 - Say what is slow or broken the moment it shows, out loud, instead of working around it.
+
+
+### Installer reporting implementation checkpoint; user pause
+
+Draft #2620 now moves publication into the existing RuntimeProbe/ServiceSender family,
+selects the runtime that owns each migration stage, and keeps terminal reporting outside
+TargetTree cleanup. RunMode owns rehearsal/live behavior while FieldCodec retains the
+single Boolean launcher representation. The outgoing report retains its declared probe
+source in memory; the incoming report runs its installed module after source retirement.
+Probe commands use runtime home instead of the retired checkout. Existing bridge resume
+ownership now covers partial pause failure and decodes a broken socket into the existing
+per-bridge failure type.
+
+Latest focused report/cleanup tests pass14/14 (22.44s); the preceding command/bridge batch
+passed43/43 before retained-source execution was added. These are source checks. Actual
+new installer build/rollback/fresh-root qualification and the paired installed journey
+remain open. The earlier package-probe test failure from the main editable environment
+is retained in the root evidence. Bridge state discovery still misses custom/default
+Claude directories; this is an unresolved installer defect owned by root. The full old
+nominal bridge-outcome port is not claimed complete.
+
+Tristan explicitly paused the fleet to reopen Codex after its thread tools retained a
+dead MCP address. Preserve current dirty owned checkouts and uncertain inputs. The
+existing root handoff contains precise heads, results and remaining integration work.

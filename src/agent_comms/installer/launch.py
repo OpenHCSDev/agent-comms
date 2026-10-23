@@ -13,52 +13,75 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from dataclasses import dataclass, replace
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Annotated, ClassVar, TextIO
+from traceback import extract_tb
+from typing import Annotated, TextIO
 
 import agent_comms.installer
-from agent_comms.bus_publication import AgentOrigin
-from agent_comms.channel_targets import CommsTag
+from agent_comms.cli_bridges.shared import SessionBridgeResumes
 from agent_comms.cli_commands import InstallCliCommand, InstallResult
 from agent_comms.comms import client_wire
 from agent_comms.field_codec import FieldCodec, Id128Text, PathText
 from agent_comms.installer.backup import StoreBackup, UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
+from agent_comms.installer.reporting import (
+    FinishedInstall, InstallOutcome, RootWriter, UnfinishedInstall, UnpostedWriter,
+)
 from agent_comms.installer.upgrade import (
-    InstalledUpgrade,
+    RehearsedUpgrade,
     TargetTree,
     Upgrade,
     upgrade,
 )
-from agent_comms.messages import InfoKind, Message
-from agent_comms.service_sender import ServiceSender
+from agent_comms.mro_dispatch import MroDispatch, handles
 from agent_comms.storage_rules import StorageRule
 
 
-@dataclass(frozen=True)
-class InstallReport(ServiceSender):
-    """Publish the install's own typed result, never an interpretation of its logs."""
+@dataclass
+class InstallReport(MroDispatch):
+    """The operation owns one terminal report, after its resources have closed."""
 
-    sender: ClassVar[str] = "installer"
-    root: Path
+    writer: RootWriter = field(default_factory=UnpostedWriter)
+    outcome: InstallOutcome = field(default_factory=UnfinishedInstall, init=False)
+    bridges: SessionBridgeResumes = field(default_factory=SessionBridgeResumes, init=False)
 
-    def post(self, lines: tuple[str, ...]) -> Message:
-        with client_wire(self.root) as comms:
-            self.register(comms.registry)
-            return comms.bus.publisher.publish_ordinary(
-                Message(sender=self.sender, target=CommsTag.channel(),
-                        body="\n".join(lines),
-                        type=InfoKind), origin=AgentOrigin())
+    def complete(self, result: RehearsedUpgrade) -> RehearsedUpgrade:
+        self.outcome = FinishedInstall(result)
+        return result
 
-    def starting(self, upgrade: Upgrade) -> Message:
-        return self.post(("Install starting", *upgrade.lines()))
+    def starting(self, writer: RootWriter, target: str) -> None:
+        self.writer = writer
+        self.writer.post(("Install starting", f"Target: {target[:12]}"))
 
-    def finished(self, upgrade: InstalledUpgrade) -> Message:
-        return self.post((upgrade.finished, *upgrade.lines()))
+    @handles(UpgradeRefused)
+    def refused(self, error: UpgradeRefused) -> tuple[str, ...]:
+        return error.lines()
 
-    def failed(self, error: UpgradeRefused) -> Message:
-        return self.post(error.lines())
+    @handles(BaseException)
+    def crashed(self, error: BaseException) -> tuple[str, ...]:
+        frame = extract_tb(error.__traceback__)[-1]
+        return (f"Install failed: {type(error).__name__}: {error}",
+                f"{frame.filename}:{frame.lineno}")
+
+    @contextmanager
+    def running(self, tree: TargetTree) -> Iterator[None]:
+        try:
+            with tree:
+                yield
+            lines = self.outcome.lines()
+        except BaseException as error:
+            failure = (*next(self.handlers_for(error))(error), *self.bridges.lines())
+            try:
+                self.writer.post(failure)
+            except BaseException as publication_error:
+                error.add_note(f"Install failure report also failed: {publication_error}")
+                print(f"install: failure report also failed: {publication_error}", file=sys.stderr)
+            raise
+        else:
+            self.writer.post(lines)
 
 
 @dataclass(frozen=True)
@@ -136,8 +159,8 @@ class InstallRun:
     def run(self) -> Upgrade:
         command = self.command
         return upgrade(command.checkout, self.root, self.target, command.installer,
-                       command.rehearse, command.retire, command.spill_dir, self.scratch,
-                       self.harnesses, InstallReport(self.root))
+                       command.mode, command.retire, command.spill_dir, self.scratch,
+                       self.harnesses, InstallReport())
 
     def harnesses(self) -> InstallResult:
         with client_wire(self.root) as comms:

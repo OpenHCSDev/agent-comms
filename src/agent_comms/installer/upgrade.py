@@ -31,7 +31,7 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import ExitStack, contextmanager
+from contextlib import AbstractContextManager, ExitStack, contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
@@ -59,7 +59,7 @@ from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText
 from agent_comms.host_services import HostService, RestartedService
-from agent_comms.install_choices import InstallerChoice
+from agent_comms.install_choices import InstallerChoice, RunMode
 from agent_comms.installer import publication, step_worker
 from agent_comms.installer.backup import (
     BackupReport,
@@ -90,13 +90,19 @@ from agent_comms.installer.practice import (
 from agent_comms.installer.commands import InstallCommands, TimedCommand
 from agent_comms.installer.interpreter_operation import (
     ClientImportsProbe,
+    InstallReportProbe,
+    InstalledProgram,
     PackageRootProbe,
     PinnedLocationProbe,
     PrepareNativeProbe,
+    ProbeProgram,
+    RetainedProgram,
     RunningOwnersProbe,
     RuntimeProbe,
+    SourceProgram,
 )
 from agent_comms.installer.runtime_resolution import RuntimeResolution
+from agent_comms.installer.reporting import RootWriter, RuntimeWriter, UnpostedWriter
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator, MaintenanceState
 from agent_comms.locked_store import BusFile, RootFile
@@ -376,6 +382,8 @@ class RehearsedUpgrade(Upgrade):
     commands: tuple[TimedCommand, ...] = field(kw_only=True)
     """Every command the install ran, in the order each finished, with its time."""
 
+    finished: ClassVar[str] = "Install rehearsed"
+
     def lines(self) -> tuple[str, ...]:
         slowest = sorted(self.commands, key=lambda timed: timed.seconds, reverse=True)[:5]
         return (*super().lines(),
@@ -482,9 +490,10 @@ class Stack:
                 *pytest_arguments, cwd=self.checkout, env=self.environment()), end="")
 
     def probe[Answer](self, probe: RuntimeProbe[Answer], *,
-                      source: tuple[Path, ...] = ()) -> Answer:
-        return self.commands.probe(probe, self.python, cwd=self.checkout,
-                                   env=self.environment(*source))
+                      source: tuple[Path, ...] = (),
+                      program: ProbeProgram = SourceProgram()) -> Answer:
+        return self.commands.probe(probe, self.python, cwd=self.home,
+                                   env=self.environment(*source), program=program)
 
     def imports(self) -> None:
         self.probe(ClientImportsProbe())
@@ -585,7 +594,7 @@ class Stack:
 
 
 @dataclass(frozen=True)
-class TargetTree:
+class TargetTree(AbstractContextManager):
     """The temporary worktree of the target revision the install runs from."""
 
     repo: Path
@@ -607,6 +616,14 @@ class TargetTree:
         """Retire the tree; a failed add left nothing to retire."""
         if self.path.is_dir():
             ScratchCheckout(self.path).retire()
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *exception: object) -> None:
+        self.close()
+        if self.scratch.exists():
+            shutil.rmtree(self.scratch)
 
 
 @dataclass(frozen=True)
@@ -645,15 +662,19 @@ class PracticeBus:
             MigrateOperation(apply=False)))
 
 
-def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice, rehearse_only: bool,
+def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice, mode: RunMode,
             retire: bool, spill_dir: Path, scratch: Path,
             harnesses: Callable[[], InstallResult], report: InstallReport) -> Upgrade:
     """``scratch`` holds the target's worktree the launcher runs this source from; this
     run owns it and removes it. A live run ends by registering the ``harnesses``."""
     commands = InstallCommands()
-    current = commands.run("git", "-C", checkout, "rev-parse", "HEAD").strip()
     tree = TargetTree(checkout, scratch, target)
-    try:
+    bridges = report.bridges
+    with report.running(tree):
+        installed = Stack(checkout, commands)
+        member = Install.member(root, retire)
+        report.starting(mode.destination(member.initial_writer(root, installed)), target)
+        current = commands.run("git", "-C", checkout, "rev-parse", "HEAD").strip()
         ancestry = ["git", "-C", str(checkout), "merge-base", "--is-ancestor", current, target]
         with commands.timing(" ".join(ancestry)):
             answer = subprocess.run(ancestry)
@@ -666,8 +687,6 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
             chain = CarryChain.at(tree.path)
         except ValueError as error:
             raise UpgradeRefused(str(error)) from None
-        member = Install.member(root, retire)
-        installed = Stack(checkout, commands)
         installed.require_uv()
         if not installed.python.exists():
             raise UpgradeRefused(f"No installed stack at {installed.python}")
@@ -675,26 +694,11 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
         install, rehearsal = member.rehearsed(checkout, root, current, target, chain,
                                               installed, staged, tree, installer, spill_dir)
         names = tuple(step.name() for step in install.pending)
-        if rehearse_only:
-            return RehearsedUpgrade(current, target, root, names, rehearsal,
+        rehearsed = RehearsedUpgrade(current, target, root, names, rehearsal,
                                     commands=tuple(commands.ran))
-        install.announce(report)
-        bridges = SessionBridgeResumes()
-        live_run = install.install(rehearsal, bridges)
-        finished = InstalledUpgrade(current, target, root, names, rehearsal, live_run,
-                                    harnesses(), commands=tuple(commands.ran))
-        result = (finished.extended(UnresumedUpgrade, unresumed=bridges.lines())
-                  if bridges.failures else finished)
-        report.finished(result)
-        bridges.require_resumed()
-        return result
-    except UpgradeRefused as error:
-        if not rehearse_only:
-            report.failed(error)
-        raise
-    finally:
-        tree.close()
-        shutil.rmtree(scratch, ignore_errors=True)
+        result = report.complete(mode.finish(install, rehearsed, bridges, harnesses, report))
+    bridges.require_resumed()
+    return result
 
 
 @dataclass(frozen=True)
@@ -713,9 +717,9 @@ class Install[Rehearsed: Rehearsal](ABC):
     installer: InstallerChoice
     spill_dir: Path
 
-    def announce(self, report: InstallReport) -> None:
-        report.starting(Upgrade(self.current, self.target, self.root,
-                                tuple(step.name() for step in self.pending)))
+    @staticmethod
+    def initial_writer(root: Path, installed: Stack) -> RootWriter:
+        return RuntimeWriter(root, installed, RetainedProgram.of(InstallReportProbe))
 
     @staticmethod
     def member(root: Path, retire: bool) -> type[Install]:
@@ -733,7 +737,17 @@ class Install[Rehearsed: Rehearsal](ABC):
                   installer: InstallerChoice, spill_dir: Path) -> tuple[Install, Rehearsal]:
         """This member's install, with what is pending, and its rehearsal."""
 
-    def install(self, rehearsal: Rehearsed, bridges: SessionBridgeResumes) -> LiveRun:
+    def finished(self, rehearsed: RehearsedUpgrade, bridges: SessionBridgeResumes,
+                 harnesses: Callable[[], InstallResult], report: InstallReport) -> InstalledUpgrade:
+        live_run = self.install(rehearsed.rehearsal, bridges, report)
+        finished = InstalledUpgrade(
+            rehearsed.source, rehearsed.target, rehearsed.root, rehearsed.pending,
+            rehearsed.rehearsal, live_run, harnesses(), commands=tuple(self.staged.commands.ran))
+        return (finished.extended(UnresumedUpgrade, unresumed=bridges.lines())
+                if bridges.failures else finished)
+
+    def install(self, rehearsal: Rehearsed, bridges: SessionBridgeResumes,
+                report: InstallReport) -> LiveRun:
         """Session bridges close their bus resources before units stop, then exec in place.
 
         Each serve retains its recorded owner's PID and start time after the hook exits.
@@ -741,13 +755,16 @@ class Install[Rehearsed: Rehearsal](ABC):
         installed pointer, not a copied target version, selects its successor.
         """
         with ExitStack() as resources:
-            for bridge in Serve.running(self.installed.home):
-                bridges.pause(bridge, resources)
-            resources.callback(bridges.resume)
-            return self.live(rehearsal)
+            try:
+                for bridge in Serve.running(self.installed.home):
+                    bridges.pause(bridge, resources)
+                return self.live(rehearsal, report)
+            finally:
+                # A later pause may fail; resume captured peers before closing their sockets.
+                bridges.resume()
 
     @abstractmethod
-    def live(self, rehearsal: Rehearsed) -> LiveRun: ...
+    def live(self, rehearsal: Rehearsed, report: InstallReport) -> LiveRun: ...
 
 
 class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
@@ -867,7 +884,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
     def uncopied(self) -> UncopiedRehearsal:
         return UncopiedRehearsal()
 
-    def live(self, rehearsal: RehearsedFiles) -> CarriedRun:
+    def live(self, rehearsal: RehearsedFiles, report: InstallReport) -> CarriedRun:
         expected = frozenset(rehearsal.files.names) | frozenset(
             str(path.relative_to(self.root))
             for path in self.staged.backup_files(self.pending, self.tree))
@@ -939,6 +956,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                                         runtime=self.installed.runtime) from error
             # Installed: the carries ran and the runtime is published. Starting the owners it
             # stopped is reported per owner and never rolls the install back.
+            report.writer = RuntimeWriter(self.root, self.staged, InstalledProgram())
             try:
                 retirement = tuple(replace(
                     step, spill_dir=migration.backup.spill_directory(self.spill_dir),
@@ -964,8 +982,9 @@ class UnchangedInstall(ExistingBusInstall[UnchangedRehearsal]):
     def uncopied(self) -> UnchangedRehearsal:
         return UnchangedRehearsal()
 
-    def live(self, rehearsal: UnchangedRehearsal) -> UnchangedRun:
+    def live(self, rehearsal: UnchangedRehearsal, report: InstallReport) -> UnchangedRun:
         self.installed.publish()
+        report.writer = RuntimeWriter(self.root, self.installed, InstalledProgram())
         return UnchangedRun()
 
 
@@ -982,13 +1001,15 @@ class FreshInstall(Install[FreshRehearsal]):
                       tree, installer, spill_dir)
         return install, install.rehearsal()
 
-    def announce(self, report: InstallReport) -> None:
+    @staticmethod
+    def initial_writer(root: Path, installed: Stack) -> RootWriter:
         """A fresh bus has nowhere to publish a start message yet."""
+        return UnpostedWriter()
 
     def rehearsal(self) -> FreshRehearsal:
         return FreshRehearsal()
 
-    def live(self, rehearsal: FreshRehearsal) -> CreatedRun:
+    def live(self, rehearsal: FreshRehearsal, report: InstallReport) -> CreatedRun:
         self.staged.commands.run("git", "-C", self.checkout, "merge", "--ff-only", "-q",
                                  self.target)
         Checkout(self.checkout).prepare()
@@ -996,6 +1017,7 @@ class FreshInstall(Install[FreshRehearsal]):
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         Comms(self.root).registry.prepare_native_root()
         bus = Bus.install(Bus.path_in(self.root))
+        report.writer = RuntimeWriter(self.root, self.staged, InstalledProgram())
         self.staged.publish()
         route = route_new_bus(ActiveRoute(
             self.root.absolute(), RecordedBusIdentity.capture(bus.path)), active_route_path())
@@ -1010,9 +1032,10 @@ class RetiringInstall(FreshInstall):
     def rehearsal(self) -> RetiringRehearsal:
         return RetiringRehearsal()
 
-    def live(self, rehearsal: FreshRehearsal) -> RetiredRun:
+    def live(self, rehearsal: FreshRehearsal, report: InstallReport) -> RetiredRun:
         running = self.installed.running_owners(self.root)
         self.installed.owners(self.root, StopCliCommand, running)
         retired = self.root.with_name(f"{self.root.name}.retired-{time.strftime('%Y%m%dT%H%M%S')}")
         self.root.rename(retired)
-        return super().live(rehearsal).extended(RetiredRun, stopped=tuple(running), retired=retired)
+        return super().live(rehearsal, report).extended(
+            RetiredRun, stopped=tuple(running), retired=retired)

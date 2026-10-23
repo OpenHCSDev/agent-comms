@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from agent_comms.installer.backup import UpgradeRefused
-from agent_comms.installer.interpreter_operation import RuntimeProbe
+from agent_comms.installer.interpreter_operation import ProbeProgram, RuntimeProbe, SourceProgram
 
 
 @dataclass(frozen=True)
@@ -55,9 +55,10 @@ class InstallCommands:
         return completed.stdout
 
     def probe[Answer](self, probe: RuntimeProbe[Answer], python: Path, *,
-                      cwd: Path = Path(), env: Mapping[str, str] = os.environ) -> Answer:
+                      cwd: Path = Path(), env: Mapping[str, str] = os.environ,
+                      program: ProbeProgram = SourceProgram()) -> Answer:
         with tempfile.TemporaryDirectory() as scratch:
             result = Path(scratch) / "result.json"
-            self.run(*probe.command(python, result), cwd=cwd, env=env)
+            self.run(*probe.command(python, result, program=program), cwd=cwd, env=env)
             return probe.decode_answer(result.read_text())
 

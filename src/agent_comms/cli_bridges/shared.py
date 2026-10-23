@@ -673,7 +673,11 @@ class PausedSessionBridge:
         if not observed.owner.alive():
             print(f'Session bridge {name}: owner exited; left stopped', file=sys.stderr)
             return f'{name}: owner exited; left stopped'
-        self.peer.sendall((json.dumps(FieldCodec.encode(runtime)) + '\n').encode())
+        try:
+            self.peer.sendall((json.dumps(FieldCodec.encode(runtime)) + '\n').encode())
+        except OSError as error:
+            raise SessionBridgeResumeError(
+                f'Session bridge {name}: resume transport failed: {error}') from error
         deadline = time.monotonic() + 30
         while observed.process.alive() and time.monotonic() < deadline:
             try:

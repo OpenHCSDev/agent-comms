@@ -120,7 +120,7 @@ from .history_result import HistoryPageResult
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
 from .input_origin import InputProvenance
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
-from .install_choices import InstallerChoice, UnnamedInstaller
+from .install_choices import InstallerChoice, LiveMode, RehearsalMode, RunMode, UnnamedInstaller
 from .maintenance_barrier import MaintenanceHeldError
 from .message_page import PageBounds
 from .message_reference import FirstUnreadStart, InboxStart, MessageReference
@@ -1663,10 +1663,15 @@ class InstallCliCommand(CliCommand):
             options={"help": "The unit running this install; the next install's plan names it"},
         ),
     ] = UnnamedInstaller()
-    rehearse: Annotated[
-        bool,
-        Argument(flags=("--rehearse",), options={"help": "Carry and read a copy of the bus; change nothing"}),
-    ] = False
+    mode: Annotated[
+        RunMode,
+        WireName("rehearse"),
+        Normalize(bool),
+        Argument(flags=("--rehearse",), options={
+            "help": "Carry and read a copy of the bus; change nothing",
+            "action": "store_const", "const": FieldCodec.encode(RehearsalMode()),
+        }),
+    ] = dataclasses.field(default_factory=LiveMode)
     retire: Annotated[
         bool,
         Argument(

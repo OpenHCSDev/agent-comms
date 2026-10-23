@@ -11,10 +11,11 @@ import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, PathText
+from agent_comms.service_sender import ServiceSender
 
 
 class InterpreterOperation[Answer](ABC):
@@ -33,10 +34,49 @@ class InterpreterOperation[Answer](ABC):
         return FieldCodec.decode(self.answer_type(), FieldCodec.parse(answer))
 
 
+class ProbeProgram(ABC):
+    """Where an operation's declaration is executable by the selected interpreter."""
+
+    @abstractmethod
+    def entry(self, probe: RuntimeProbe) -> tuple[str | Path, ...]: ...
+
+
+class SourceProgram(ProbeProgram):
+    """The target's file can run against a predecessor that does not declare it yet."""
+
+    def entry(self, probe: RuntimeProbe) -> tuple[Path]:
+        return (Path(inspect.getfile(type(probe))),)
+
+
+class InstalledProgram(ProbeProgram):
+    """A published runtime owns its declaration after the target tree is retired."""
+
+    def entry(self, probe: RuntimeProbe) -> tuple[str, str]:
+        return "-m", type(probe).__module__
+
+
+@dataclass(frozen=True)
+class RetainedProgram(ProbeProgram):
+    """A source operation that must finish after its owning checkout closes."""
+
+    path: Path
+    source: str
+
+    @classmethod
+    def of(cls, declaration: type[RuntimeProbe]) -> RetainedProgram:
+        path = Path(inspect.getfile(declaration))
+        return cls(path, path.read_text())
+
+    def entry(self, probe: RuntimeProbe) -> tuple[str, str]:
+        return "-c", (f"__file__ = {str(self.path)!r}\n"
+                      f"exec(compile({self.source!r}, __file__, 'exec'))")
+
+
 @dataclass(frozen=True)
 class RuntimeProbe[Answer](InterpreterOperation[Answer], DeclaredFamily, affix="Probe"):
-    def command(self, python: Path, result: Path) -> tuple[str | Path, ...]:
-        return (python, "-P", Path(inspect.getfile(type(self))),
+    def command(self, python: Path, result: Path, *,
+                program: ProbeProgram = SourceProgram()) -> tuple[str | Path, ...]:
+        return (python, "-P", *program.entry(self),
                 json.dumps(FieldCodec.encode(self)), result)
 
 
@@ -75,6 +115,27 @@ class RunningOwnersProbe(RuntimeProbe[list[str]]):
         from agent_comms.owner_restart import OwnerRestartRequest
         snapshot = Comms(self.root).registry.snapshot()
         return [thread.name for thread in OwnerRestartRequest().scope.threads(snapshot)]
+
+
+@dataclass(frozen=True)
+class InstallReportProbe(RuntimeProbe[None], ServiceSender):
+    """Publish using the selected runtime's own registry, schema and publisher."""
+
+    sender: ClassVar[str] = "installer"
+    root: Annotated[Path, PathText]
+    body: str
+
+    def run(self) -> None:
+        from agent_comms.bus_publication import AgentOrigin
+        from agent_comms.channel_targets import CommsTag
+        from agent_comms.comms import client_wire
+        from agent_comms.messages import InfoKind, Message
+
+        with client_wire(self.root) as comms:
+            self.register(comms.registry)
+            comms.bus.publisher.publish_ordinary(
+                Message(sender=self.sender, target=CommsTag.channel(),
+                        body=self.body, type=InfoKind), origin=AgentOrigin())
 
 
 @dataclass(frozen=True)
