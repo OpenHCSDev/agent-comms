@@ -948,11 +948,11 @@ class WireValue(WireForm):
     __slots__ = ()
 
     @abstractmethod
-    def to_wire(self) -> Any: ...
+    def to_wire(self) -> JsonValue: ...
 
     @classmethod
     @abstractmethod
-    def from_wire(cls, data: Any) -> Self: ...
+    def from_wire(cls, data: JsonValue) -> Self: ...
 
     @classmethod
     def decode(cls, value: object) -> Self:
@@ -1526,14 +1526,14 @@ class FieldCodec(MroDispatch, Sealed):
 
     @overload
     @classmethod
-    def encode(cls, value: DeclaredFamily) -> dict[str, Any]: ...
+    def encode(cls, value: DeclaredFamily) -> dict[str, JsonValue]: ...
 
     @overload
     @classmethod
-    def encode(cls, value: object, annotation: object = None) -> Any: ...
+    def encode(cls, value: object, annotation: object = None) -> JsonValue: ...
 
     @classmethod
-    def encode(cls, value: object, annotation: object = None) -> Any:
+    def encode(cls, value: object, annotation: object = None) -> JsonValue:
         return compile_decoder(annotation).encode(value)
 
     @staticmethod
@@ -1566,7 +1566,7 @@ class FieldCodec(MroDispatch, Sealed):
         return cast(T, compile_decoder(declared).decode_document(data))
 
     @classmethod
-    def encode_record(cls, value: object) -> dict[str, Any]:
+    def encode_record(cls, value: object) -> dict[str, JsonValue]:
         """Encode a record: its family tag, then its declared fields."""
         return {**cls._tag(value), **cls.encode_fields(value)}
 
@@ -1760,7 +1760,7 @@ class FieldCodec(MroDispatch, Sealed):
         raise TypeError(f"No declared JSON schema for {annotation}")
 
     @classmethod
-    def project(cls, value: object, view: str, annotation: object = None) -> Any:
+    def project(cls, value: object, view: str, annotation: object = None) -> JsonValue:
         """Encode a redacted view using field exclusions and owned properties.
 
         A family record carries its tag at every depth, as in its wire form.
