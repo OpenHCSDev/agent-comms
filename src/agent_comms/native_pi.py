@@ -103,10 +103,9 @@ class NativePiInputNotSent(NativePiUnavailable):
         self.attestation = attestation
         super().__init__(f"Native Pi failed before prompt claim_scope; input not sent: {error}")
 
-    @property
     def diagnostic_evidence(self):
         return {
-            **super().diagnostic_evidence,
+            **super().diagnostic_evidence(),
             "input_disposition": "not_sent",
             "initialization": self.attestation.diagnostic_evidence,
         }
@@ -134,9 +133,8 @@ class NativePiOperationFailed(NativePiUnavailable):
         self.event = event
         super().__init__("Native Pi refused an operation (see diagnostic)")
 
-    @property
-    def diagnostic_evidence(self) -> dict[str, str]:
-        return {**super().diagnostic_evidence, "operation": self.event.error}
+    def diagnostic_evidence(self) -> dict[str, object]:
+        return {**super().diagnostic_evidence(), "operation": self.event.error}
 
 
 def main() -> int:

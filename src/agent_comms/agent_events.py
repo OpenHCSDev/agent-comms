@@ -28,6 +28,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import NullMember
 from .input_attempt import InputAttempt
 from .mro_dispatch import MroDispatch, handles
+from .native_failures import NativePiUnavailable
 from .pi_counts import PiCount, UnreportedCount
 from .thread_model import ThreadModel, UndeclaredModel
 from .pi_payloads import McpLiveAcknowledgement, PiDiagnostic, PiRequestId, PiUsage
@@ -62,6 +63,12 @@ class AgentEvent(ABC):
     @abstractmethod
     def __init__(self) -> None:
         """Concrete dataclass declarations supply their own payload constructor."""
+
+    def require_preparation_success(self) -> None:
+        pass
+
+    def retain_terminal(self, turn) -> None:
+        pass
 
 
 class GoalChange(ABC):
@@ -263,6 +270,13 @@ class Done(AgentEvent, FailedGoalTurn):
     outcome: NativeTurnOutcome = field(default_factory=UnresolvedNativeTurnOutcome)
     # Immutable completion snapshot of TurnOutput's already decoded result.
     retry_result: ProviderRetryResult | None = None
+
+    def require_preparation_success(self) -> None:
+        if not self.ok:
+            raise NativePiUnavailable(self.text)
+
+    def retain_terminal(self, turn) -> None:
+        turn.terminal = self
 
     def resolve(
         self, error: Error | None, document: InputDocument, original: OriginalTurnInput,
