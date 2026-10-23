@@ -1,11 +1,10 @@
 """Attached retained history remains readable and refuses publication."""
 
-from agent_comms.active_route import resolve_comms_route
 
 import pytest
 
 from agent_comms.bus import Bus
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.channels import AnyChannel
 from agent_comms.errors import RelationViolationError
 from test_private_human_ingress import _root
@@ -17,9 +16,9 @@ def test_archived_snapshot_preserves_rows_and_refuses_new_publication(tmp_path):
     sent = source.messaging.send("alice", "bob", "retained message").message.reference
     reader_root = tmp_path / "reader"
     Bus.install(Bus.path_in(reader_root))
-    reader = Comms(resolve_comms_route(reader_root))
+    reader = wire(reader_root)
     attached = reader.bus.history.attach(source.root)
-    snapshot = Comms(resolve_comms_route(attached.root))
+    snapshot = wire(attached.root)
     before = snapshot.bus.bus.revision()
     assert [message.reference for message in snapshot.views.history_page(AnyChannel.target()).messages] == [sent]
     with pytest.raises(RelationViolationError):

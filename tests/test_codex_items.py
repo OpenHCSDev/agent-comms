@@ -1,16 +1,15 @@
 
-from agent_comms.active_route import resolve_comms_route
 from agent_comms.cli_bridges.codex_protocol import BusInput, ItemsPage
 from agent_comms.transcript_events import UserTranscript
 
 
 def _output(tmp_path):
-    from agent_comms.comms import Comms
+    from agent_comms.comms import wire as wire_comms
     from agent_comms.runtime_updates import ThreadOutput
     from agent_comms.thread_execution import ExternalThreadExecution
     from agent_comms.threads import Thread
 
-    comms = Comms(resolve_comms_route(tmp_path))
+    comms = wire_comms(tmp_path)
     comms.registry.declare(comms.registry.new_thread('cli', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
     return ThreadOutput(comms.transcripts.external('cli'), comms.agents)
 

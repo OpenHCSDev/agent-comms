@@ -1,6 +1,5 @@
 """Acquired original native fixture shared by pytest and installed drivers."""
 
-from agent_comms.active_route import resolve_comms_route
 
 from agent_comms.bus import Bus
 from agent_comms.native_package import VerifiedNativePackage
@@ -17,7 +16,7 @@ from unittest.mock import patch
 import agent_comms.agent_events as events
 import agent_comms.backend as backend
 from agent_comms.agent_backend import InputContent, InputId, InputRequest, TurnInbox, SteerInputPolicy
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.child_process import BoundedRun, join_retirement
 from agent_comms.coordinator import Coordination
@@ -45,7 +44,7 @@ class NativeBackendFixture:
     @staticmethod
     def participant_at(root: Path, project: Path) -> RecordedThreadIncarnation:
         """The real thread incarnation used by a direct native turn on this bus."""
-        return Comms(resolve_comms_route(root)).registry.new_thread(
+        return wire(root).registry.new_thread(
             'direct-native', frozenset(), str(project),
         ).incarnation.require_recorded()
 
@@ -115,7 +114,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
                          native_options=("--no-tools",), client=None):
         """Acquire the real saved ACP owner and attested idle native child."""
         agent = canonical_agent(
-            Comms(resolve_comms_route(self.root)), auto_wake=auto_wake, runtime_enabled=runtime_enabled, agent_bin=GivenBinary("pi"),
+            wire(self.root), auto_wake=auto_wake, runtime_enabled=runtime_enabled, agent_bin=GivenBinary("pi"),
             agent_args=GivenArguments(tuple(self.native_arguments(native_options))),
         )
         agent.on_connect(client)
@@ -263,7 +262,7 @@ async def native_backend_fixture(tmp_path, *, package: VerifiedNativePackage,
     (root / "storage.json").write_text(json.dumps(FieldCodec.encode(
         StorageRule(scratch_base=project.parent),
     )))
-    Bus.install(Bus.path_in(Comms(resolve_comms_route(root)).root))
+    Bus.install(Bus.path_in(wire(root).root))
     environment = {
         NativeArguments.binary_key: NativeArguments.default_binary,
         "AGENT_COMMS_ROOT": str(root),

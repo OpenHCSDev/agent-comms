@@ -1,6 +1,5 @@
 """Relationship owner contracts: corruption, locks and durability."""
 
-from agent_comms.active_route import resolve_comms_route
 
 import os
 import stat
@@ -8,7 +7,7 @@ import stat
 import pytest
 
 from agent_comms.relationships import RelationshipEdit
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.relationships import RelationshipDocument, RelationshipStore
 from agent_comms.store_files import SharedLock, _store_lock
 from test_locked_store import _hold_lock, assert_writer_excluded, event, process
@@ -16,7 +15,7 @@ from test_relationships import setup_wire
 
 
 def _read_adopter(root, done):
-    service = Comms(resolve_comms_route(root)).relationships
+    service = wire(root).relationships
     service.collaborations("owner")
     service.contacts("owner")
     service.snapshot("owner")

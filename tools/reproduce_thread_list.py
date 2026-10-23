@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from agent_comms.active_route import resolve_comms_route
 
 import argparse
 import faulthandler
@@ -14,7 +13,7 @@ from pathlib import Path
 
 from agent_comms.bus import Bus
 from agent_comms.cli_bridges.claude import ClaudeTranscript
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.storage_rules import StorageRoots
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.threads import Thread
@@ -32,7 +31,7 @@ def declaration(root: Path, name: str, created_at: float = 1) -> Thread:
 
 
 def writer(root: Path, stop: Event, result: Queue[int], imports: bool) -> None:
-    comms = Comms(resolve_comms_route(root))
+    comms = wire(root)
     count = 0
     while not stop.is_set():
         name = f"writer-{count % 85}"
@@ -65,7 +64,7 @@ def main() -> None:
         faulthandler.dump_traceback_later(args.dump_after)
     root = args.root.resolve()
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
-    comms = Comms(resolve_comms_route(root))
+    comms = wire(root)
     Bus.install(Bus.path_in(comms.root))
     event = dict(
         timestamp="2026-10-19T00:00:00Z",

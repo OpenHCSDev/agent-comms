@@ -5,7 +5,6 @@ Ordinary conversation sends no longer acquire or manually release files.
 """
 from __future__ import annotations
 
-from agent_comms.active_route import resolve_comms_route
 
 from agent_comms.bus import Bus
 
@@ -26,7 +25,7 @@ from threading import Barrier
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import Comms
+from agent_comms.comms import Comms, wire
 from agent_comms.coordination_session import NativeBoundary
 from agent_comms.envelope_claim_transitions import ClaimConflict, ExistingFileClaim, NativeClaim
 from agent_comms.errors import RelationViolationError
@@ -41,7 +40,7 @@ def _participants(tmp_path: Path) -> tuple[Comms, Path]:
     worktree.mkdir()
     (worktree / "a.py").write_text("one")
     (worktree / "b.py").write_text("two")
-    comms = Comms(resolve_comms_route(tmp_path / "wire"))
+    comms = wire(tmp_path / "wire")
     for name in ("alice", "bob", "observer"):
         owner = comms.registry.new_thread(name, frozenset({'team'}), str(worktree))
         comms.registry.declare(
@@ -92,7 +91,7 @@ def test_scoped_acquisition_is_one_original_and_conflict_appends_nothing(tmp_pat
     with pytest.raises(ClaimConflict) as loss:
         acquire_message(comms, "bob", Path("a.py"))
     assert loss.value.existing.owner == "alice"
-    assert read_history(Comms(resolve_comms_route(comms.root))) == [sent]
+    assert read_history(wire(comms.root)) == [sent]
 
 
 def test_absolute_claim_outside_worktree_uses_one_global_key(tmp_path):
@@ -102,7 +101,7 @@ def test_absolute_claim_outside_worktree_uses_one_global_key(tmp_path):
     outside.write_text("shared")
     claimed = acquire_message(comms, "alice", outside)
     assert claimed.claim_transition.claims == (str(outside),)
-    projection = Comms(resolve_comms_route(comms.root)).bus.bus.claim_projection()
+    projection = wire(comms.root).bus.bus.claim_projection()
     assert list(projection) == [str(outside)]
     assert projection[str(outside)].owner == "alice"
     with pytest.raises(ClaimConflict):
@@ -146,7 +145,7 @@ def test_saved_colliding_creation_id_blocks_claim_write_before_append(tmp_path):
         threads = edit.document.threads
         threads["bob"] = replace(threads["bob"], created_at=threads["alice"].created_at)
         edit.commit()
-    reopened = Comms(resolve_comms_route(comms.root))
+    reopened = wire(comms.root)
     with pytest.raises(RelationViolationError):
         acquire_message(reopened, "bob", Path("a.py"))
     assert reopened.bus.bus.since(0, 2) == (claimed,)
@@ -170,7 +169,7 @@ def test_concurrent_acquisition_exactly_one_winner(tmp_path):
     def attempt(name):
         simultaneous.wait(timeout=3)
         try:
-            acquire_message(Comms(resolve_comms_route(comms.root)), name, Path("a.py"))
+            acquire_message(wire(comms.root), name, Path("a.py"))
         except ClaimConflict:
             return "lost"
         return "won"
@@ -197,8 +196,8 @@ def test_large_release_reopens_and_exports_without_a_second_parser_limit(tmp_pat
     history = read_history(comms)
     committed = history[-1]
     assert len(json.dumps(committed.to_wire()["claim_transition"])) > 16_384
-    assert not Comms(resolve_comms_route(comms.root)).bus.bus.claim_projection()
-    assert read_history(Comms(resolve_comms_route(comms.root))) == history
+    assert not wire(comms.root).bus.bus.claim_projection()
+    assert read_history(wire(comms.root)) == history
     assert comms.bus.bus.messages_for_references((committed.reference,)) == (committed,)
     destination = tmp_path / "safe-export.jsonl"
     acknowledgement = comms.views.export_wire(
@@ -238,11 +237,10 @@ from pathlib import Path
 sys.path.insert(0, sys.argv[2])
 sys.path.insert(0, str(Path(sys.argv[2]).parent / 'tests'))
 from agent_comms.bus import Bus
-from agent_comms.comms import Comms
-from agent_comms.active_route import resolve_comms_route
+from agent_comms.comms import wire
 from test_envelope_bus_integration import acquire_message
 """ + kill + """
-acquire_message(Comms(resolve_comms_route(Path(sys.argv[1]))), 'alice', Path('a.py'))
+acquire_message(wire(Path(sys.argv[1])), 'alice', Path('a.py'))
 """
     source = str(Path(__file__).resolve().parents[1] / "src")
     env = os.environ.copy()

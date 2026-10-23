@@ -6,7 +6,6 @@ supplies its own imports even when it predates this file.
 
 from __future__ import annotations
 
-from agent_comms.active_route import resolve_comms_route
 
 import inspect
 import json
@@ -167,10 +166,10 @@ class RunningOwnersProbe(RuntimeProbe[list[str]]):
     root: Annotated[Path, PathText]
 
     def run(self) -> list[str]:
-        from agent_comms.comms import Comms
+        from agent_comms.comms import wire
         from agent_comms.owner_restart import OwnerRestartRequest
 
-        snapshot = Comms(resolve_comms_route(self.root)).registry.snapshot()
+        snapshot = wire(self.root).registry.snapshot()
         return [thread.name for thread in OwnerRestartRequest().scope.threads(snapshot)]
 
 
@@ -186,7 +185,7 @@ class InstallReportProbe(RuntimeProbe[None], ServiceSender):
         from agent_comms.channel_targets import CommsTag
         from agent_comms.comms import client_wire
 
-        with client_wire(resolve_comms_route(self.root)) as comms:
+        with client_wire(self.root) as comms:
             self.register(comms.registry)
             comms.messaging.send(self.sender, CommsTag.channel(), self.body)
 

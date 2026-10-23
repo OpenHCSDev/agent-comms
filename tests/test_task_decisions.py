@@ -1,6 +1,5 @@
 """One original decision/correction journey through declared tools and wire ownership."""
 
-from agent_comms.active_route import resolve_comms_route
 
 from agent_comms.channel_targets import CommandTarget
 
@@ -250,9 +249,9 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     with pytest.raises(ValueError):
         invoke_tool(comms, "comms_decision", request)
     assert read_history(comms) == before
-    from agent_comms.comms import Comms
+    from agent_comms.comms import wire
 
-    assert read_history(Comms(resolve_comms_route(comms.root))) == rows
+    assert read_history(wire(comms.root)) == rows
 
 
 def test_equal_text_choices_keep_original_identity_through_rename_and_goal_replacement(comms, monkeypatch):
@@ -374,9 +373,9 @@ def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_ch
     assert current.source == Message.from_message(corrected)
     assert FieldCodec.decode(RetainedTaskFacts, FieldCodec.encode(retained)) == retained
     assert original.task.chosen in retained.text and original.task.rejected[0] in retained.text
-    from agent_comms.comms import Comms
+    from agent_comms.comms import wire
 
-    reopened = Comms(resolve_comms_route(comms.root))
+    reopened = wire(comms.root)
     assert read_history(reopened)[1] == corrected
 
 

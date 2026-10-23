@@ -5,7 +5,6 @@ Only private scratch and the loopback server are changed; no installed service i
 """
 from __future__ import annotations
 
-from agent_comms.active_route import resolve_comms_route
 
 from agent_comms.bus import Bus
 
@@ -20,7 +19,7 @@ import threading
 import time
 from pathlib import Path
 
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.maintenance_barrier import (
     InstallingPhase, MaintenanceBarrier, MaintenanceOperator, PausedPhase,
@@ -34,7 +33,7 @@ def prove(scratch: Path) -> None:
     scratch.mkdir(mode=0o700, parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="maintenance-proof-", dir=scratch) as directory:
         base = Path(directory)
-        original = Comms(resolve_comms_route(base / "original"))
+        original = wire(base / "original")
         for name in ("claude-ai", "worker"):
             original.registry.declare(original.registry.new_thread(name, frozenset(), str(base)))
         Bus.install(Bus.path_in(original.root))

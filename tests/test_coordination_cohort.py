@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.active_route import resolve_comms_route
 
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from bus_record_fixture import prepare_native_comms
@@ -30,7 +29,7 @@ from agent_comms.assignment_states import (
 from agent_comms.cohort_schema import ClaimBatchAcknowledgements, CohortDeliveries
 from agent_comms.messages import Message
 from agent_comms.private_registry_guard import RegistryPrivacy
-from agent_comms.comms import Comms
+from agent_comms.comms import Comms, wire
 from agent_comms.coordination_cohort import (
     accept_delivery_cohort,
     pending_sealed_assignments,
@@ -59,7 +58,7 @@ pytestmark = pytest.mark.skipif(
 def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
     root = tmp_path / "comms"
     root.mkdir(mode=0o700)
-    comms = prepare_native_comms(Comms(resolve_comms_route(root)))
+    comms = prepare_native_comms(wire(root))
     people = {
         "sender": (17001.0, {"team"}),
         "Alice": (17002.0, {"team"}),
@@ -134,7 +133,7 @@ def test_crash_before_sql_and_lost_ack_replay_after_rename_and_tags(tmp_path: Pa
     message = publish_initial(comms, "sender", "#team", "all must respond")
     # Full bus fsync occurred; coordinator process crashes before BEGIN IMMEDIATE.
     coordinator.close()
-    reopened = Comms(resolve_comms_route(tmp_path / "comms"))
+    reopened = wire(tmp_path / "comms")
     reopened.registry.rename("Alice", "Alicia")
     reopened.registry.register(replace(reopened.registry.require("Bob"), tags=frozenset({"other"})))
     store = Coordination(str(tmp_path / "comms" / "coordinator.sqlite"), clock_ms=lambda: 4788)
@@ -356,7 +355,7 @@ def test_private_issuer_rejects_untrusted_ancestor_and_collision(tmp_path: Path)
     open_parent.chmod(0o777)
     try:
         with pytest.raises(RelationViolationError):
-            Comms(resolve_comms_route(root)).registry.prepare_native_root()
+            wire(root).registry.prepare_native_root()
         assert not Bus.path_in(root).exists()
     finally:
         open_parent.chmod(0o700)

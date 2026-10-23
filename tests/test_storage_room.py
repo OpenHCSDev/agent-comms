@@ -1,6 +1,5 @@
 """Measured admission, not estimates; the claim also owns displayed waiting."""
 
-from agent_comms.active_route import resolve_comms_route
 import asyncio
 import os
 import shutil
@@ -9,7 +8,7 @@ import pytest
 
 from agent_comms.activity import ActivityState
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.storage_room import (
     BuildRoomWork, RoomClaim, TestGateRoomWork, UnitStartRoomWork,
     WaitingRoomPhase,
@@ -19,13 +18,13 @@ from agent_comms.thread_status import RunningThreadStatus
 
 
 def copied_root(tmp_path):
-    original = Comms(resolve_comms_route(tmp_path / 'original'))
+    original = wire(tmp_path / 'original')
     for name in ('gate-one', 'gate-two'):
         original.registry.declare(original.registry.new_thread(name, frozenset(), str(tmp_path),
             process_identity=ProcessIdentity.capture(os.getpid())), RunningThreadStatus())
     root = tmp_path / 'copied'
     shutil.copytree(original.root, root)
-    comms = Comms(resolve_comms_route(root))
+    comms = wire(root)
     comms.registry.storage_rule = StorageRule(volume=tmp_path, floor_gib=0, memory_gib=0,
         checkout_base=tmp_path, scratch_base=tmp_path / 'scratch')
     return comms

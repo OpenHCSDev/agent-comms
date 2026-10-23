@@ -1,7 +1,6 @@
 """An order's progress is read from its unit's checkout and PRs; no clock strikes or releases it.
 The commander's review timer comes back every window until delivery, and the unit never sees it."""
 
-from agent_comms.active_route import resolve_comms_route
 
 from agent_comms.bus import Bus
 import json
@@ -14,7 +13,7 @@ import pytest
 from test_todos import order
 from source_revision_fixture import SourceRepository
 
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.native_tools import NativeRequestTools
 from agent_comms.recorded_time import RecordedEventTime
@@ -119,7 +118,7 @@ def held(tmp_path):
     root.mkdir(mode=0o700)
     source = SourceRepository.create(tmp_path / 'source')
     (root / 'storage.json').write_text(json.dumps({'checkout_base': str(tmp_path / 'wt')}))
-    comms = Comms(resolve_comms_route(root))
+    comms = wire(root)
     Bus.install(Bus.path_in(comms.root))
     for name in ('lead', 'worker'):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))

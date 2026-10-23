@@ -2,11 +2,10 @@
 
 from agent_comms.channel_targets import CommandTarget
 
-from agent_comms.active_route import resolve_comms_route
 from agent_comms.messages import NoticeRole
 from dataclasses import replace
 
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.retained_task_facts import RetainedTaskFacts
 from bus_record_fixture import context_comms
 
@@ -44,7 +43,7 @@ def test_original_channel_recipient_reuse_and_new_member_do_not_inherit_old_fact
     assert facts_for(comms, replacement) == ()
 
     second = comms.messaging.send_user_message(CommandTarget.named('#team'), "New exact user constraint", worktree=str(tmp_path))
-    reopened = Comms(resolve_comms_route(comms.root))
+    reopened = wire(comms.root)
     assert [fact.source.reference for fact in facts_for(reopened, replacement)] == [second.reference]
     assert [fact.source.reference for fact in facts_for(reopened, outsider)] == [second.reference]
     assert [fact.source.reference for fact in facts_for(reopened, original)] == [first.reference]

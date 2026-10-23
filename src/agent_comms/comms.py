@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
+from typing import ClassVar
 
 from .active_route import CommsRoute, resolve_comms_route
 from .agent_activity import AgentActivity
@@ -30,8 +31,10 @@ from .transcripts import Transcripts
 
 
 class Comms:
+    default_publisher: ClassVar[type[Publisher]] = OwnerPublisher
+
     def __init__(
-        self, root: CommsRoute, publisher: type[Publisher] = OwnerPublisher,
+        self, root: CommsRoute, publisher: type[Publisher] = default_publisher,
     ) -> None:
         self.route = root
         RootRuntime.require_attachable(self.route.root, LaunchRuntime.running())
@@ -72,20 +75,29 @@ class Comms:
     def root(self) -> Path:
         return self.route.root
 
+    @classmethod
+    @contextmanager
+    def client(cls, route: CommsRoute) -> Iterator[Comms]:
+        """Borrow this selected route for one complete client call."""
+        # Refuse before borrowing a route or opening stores held by maintenance.
+        # This grants nothing: writes still check under their determining locks.
+        MaintenanceBarrier(RegistryFile.path_in(route.root)).assert_open_unlocked()
+        with route.hold_client_route():
+            yield cls(route)
 
-def wire(root: Path | str | None = None) -> Comms:
+
+def wire(
+    root: Path | str | None = None,
+    publisher: type[Publisher] = Comms.default_publisher,
+) -> Comms:
     """Build a Comms wire from an explicit root or the active default route."""
-    return Comms(resolve_comms_route(root))
+    route = resolve_comms_route(root)
+    return Comms(route, publisher)
 
 
-@contextmanager
-def client_wire(route: CommsRoute) -> Iterator[Comms]:
+def client_wire(root: Path | str | None = None) -> AbstractContextManager[Comms]:
     """One client call: it borrows the published route until it retires and answers in full.
 
     Every reader observes committed bus rows without preparing another store.
     """
-    # Refuse before borrowing a route or opening stores held by maintenance.
-    # This grants nothing: writes still check under their determining locks.
-    MaintenanceBarrier(RegistryFile.path_in(route.root)).assert_open_unlocked()
-    with route.hold_client_route():
-        yield Comms(route)
+    return Comms.client(resolve_comms_route(root))

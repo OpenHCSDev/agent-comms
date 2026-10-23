@@ -1,5 +1,4 @@
 
-from agent_comms.active_route import resolve_comms_route
 
 from agent_comms.bus import Bus
 import json
@@ -58,7 +57,7 @@ class TestCliSuccess:
         assert (named["thread"]["name"], named["thread"]["pending"], named["inbox"]) == ("b", 0, [])
 
     def test_tool_catalog_and_generic_invocation(self, cli, tmp_path, monkeypatch):
-        from agent_comms.comms import Comms
+        from agent_comms.comms import wire
         from agent_comms.pi_vocabulary import ServiceTier
 
         monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
@@ -67,7 +66,7 @@ class TestCliSuccess:
         assert "service_tier" not in out
         assert "comms_archive" in {tool["name"] for tool in out["tools"]}
         cli(tmp_path, "register", "--name", "a", "--worktree", "/wt", "--execution", "native")
-        comms = Comms(resolve_comms_route(tmp_path))
+        comms = wire(tmp_path)
         for tier in ServiceTier:
             comms.threads.set_thread_configuration(
             comms.registry.require("a"), NextTurnConfiguration(service_tier=ChosenServiceTier(tier)))

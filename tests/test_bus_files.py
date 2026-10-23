@@ -1,6 +1,5 @@
 """The real bus publishes only files declared by their existing state owners."""
 
-from agent_comms.active_route import resolve_comms_route
 
 from contextlib import closing
 from pathlib import Path
@@ -12,7 +11,7 @@ from agent_comms.installer.backup import bus_files
 from bus_record_fixture import prepare_native_comms
 from agent_comms.native_pi import NativeContextJournal
 from agent_comms.native_session_files import NativeInputProof
-from agent_comms.comms import Comms
+from agent_comms.comms import Comms, wire
 from agent_comms.coordination_session import NativeBoundary
 from agent_comms.envelope_claim_transitions import ExistingFileClaim, NativeClaim
 from agent_comms.locked_store import DurableFile, RootFile, RuntimeFile, SQLiteFile
@@ -26,7 +25,7 @@ from test_todos import order
 @pytest.fixture
 def comms(tmp_path: Path) -> Comms:
     root = tmp_path / "bus"
-    return prepare_native_comms(Comms(resolve_comms_route(root)))
+    return prepare_native_comms(wire(root))
 
 
 def test_every_bus_file_is_a_declared_root_file(tmp_path: Path, source_repository, comms: Comms) -> None:

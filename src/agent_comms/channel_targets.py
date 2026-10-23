@@ -95,7 +95,7 @@ class CommandTarget(ABC):
 
     @staticmethod
     def named(name: str) -> NamedTarget:
-        if not isinstance(name, str) or not name:
+        if not name:
             raise ValueError("Select a named target")
         name = name.removeprefix(ThreadTarget.sigil)
         if not name:

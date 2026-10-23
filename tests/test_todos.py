@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.active_route import resolve_comms_route
 
 from agent_comms.bus import Bus
 
@@ -26,7 +25,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander.order import Commander, PullRequestVerb
 from agent_comms.commander.standing import UnownedOrderWatch
 from agent_comms.commander_heartbeat import CommanderHeartbeat
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import SetGoalAction
@@ -311,8 +310,8 @@ def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, configured_reposi
     rule = StorageRule(checkout_base=source.checkout.parent)
     (tmp_path / "storage.json").write_text(json.dumps(FieldCodec.encode(rule)))
     Registration(tmp_path / "registry.json").register(lead)
-    configured_repository(Comms(resolve_comms_route(tmp_path)), source)
-    bus = Comms(resolve_comms_route(tmp_path))
+    configured_repository(wire(tmp_path), source)
+    bus = wire(tmp_path)
     bus.goals.todos.add_request(lead.incarnation, "Repair the copied order workflow")
     return Commander.read_root(tmp_path)
 
@@ -425,7 +424,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
         copied_path = ctx.root.parent / f"{ctx.root.name}-watchers"
         with practice_copy(ctx.root, copied_path) as (root, _measurement):
             (root / 'storage.json').write_text(json.dumps(FieldCodec.encode(c.registry.storage_rule)))
-            copied = Comms(resolve_comms_route(root))
+            copied = wire(root)
             with LaunchRoot.from_path(root).selected():
                 with copied.bus.bus.writer_connection():
                     pass  # Create the writer lock through its owner before the child probes it.

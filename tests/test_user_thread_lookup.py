@@ -2,11 +2,10 @@
 
 from agent_comms.channel_targets import CommandTarget
 
-from agent_comms.active_route import resolve_comms_route
 
 from dataclasses import replace
 
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.registry_document import NoUserThread, RegistryDocument
 from agent_comms.thread_identity import UserThreadRole
@@ -15,7 +14,7 @@ from conftest import installed_comms
 
 
 def test_user_answer_follows_revisions_and_stays_out_of_wire_fields(tmp_path):
-    comms = Comms(resolve_comms_route(tmp_path))
+    comms = wire(tmp_path)
     human = comms.messaging.user_identity(str(tmp_path))
     comms.registry.rename(human.name, 'renamed-human')
     assert comms.registry.user_thread().existing()[0].name == 'renamed-human'

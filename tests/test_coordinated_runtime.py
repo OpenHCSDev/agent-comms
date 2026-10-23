@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.active_route import resolve_comms_route
 
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 import json
@@ -13,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.context_segments.wake import SelectedWakeSegment
 from agent_comms.coordinated_runtime import SelectedExecution, SessionSetupFailed
 from agent_comms.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
@@ -52,7 +51,7 @@ def _root(
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     (root / "runtime").mkdir(mode=0o700)
-    comms = prepare_native_comms(Comms(resolve_comms_route(root)))
+    comms = prepare_native_comms(wire(root))
     people = [
         comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
         comms.registry.new_thread('alpha', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), task=GivenThreadText('release notes; ignore arithmetic tasks'), model=DeclaredModel('openai-codex/gpt-6-sol')),

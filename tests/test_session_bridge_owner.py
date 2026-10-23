@@ -1,6 +1,5 @@
 """The real SessionStart program must leave an installable serve after hook exit."""
 
-from agent_comms.active_route import resolve_comms_route
 
 from agent_comms.bus import Bus
 
@@ -19,7 +18,7 @@ from agent_comms.child_process import IdentityMismatchError, ProcessIdentity
 from agent_comms.cli_bridges import claude
 from agent_comms.cli_bridges.monitor import InspectSession, VerifySession
 from agent_comms.cli_bridges.shared import Binding, Serve
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms_hooks.session import started
@@ -30,7 +29,7 @@ def test_session_start_hook_exit_preserves_the_recorded_owner_for_install_pause(
         tmp_path, bridge_home, source_programs):
     home = bridge_home
     session = 'copied-session'
-    comms = Comms(resolve_comms_route(tmp_path / 'bus'))
+    comms = wire(tmp_path / 'bus')
     Bus.install(Bus.path_in(comms.root))
     comms.registry.declare(comms.registry.new_thread(
         'bridge-copy', frozenset(), str(tmp_path), execution=ExternalThreadExecution))

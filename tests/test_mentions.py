@@ -1,5 +1,4 @@
 
-from agent_comms.active_route import resolve_comms_route
 from bus_history import read_history
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.messages import NoticeRole
@@ -7,7 +6,7 @@ import pytest
 from agent_comms.tool_caller import NoThreadCaller
 
 from agent_comms.mentions import MentionQuery
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.mentions import MentionCandidate, ThreadMention
@@ -30,7 +29,7 @@ def test_mentions_are_addressees_without_changing_channel_delivery(tmp_path):
     assert [message.body[item.start : item.end] for item in message.mentions] == ["@alpha", "@beta"]
     assert [item.message_id for item in comms.bus.inbox("alpha")] == [message.message_id]
     assert [item.message_id for item in comms.bus.inbox("beta")] == [message.message_id]
-    assert read_history(Comms(resolve_comms_route(tmp_path)), "#team")[0].mentions == message.mentions
+    assert read_history(wire(tmp_path), "#team")[0].mentions == message.mentions
     assert Message.from_wire(message.to_wire()) == message.envelope
     scheduled = ScheduledTurn.incoming(message)
     assert scheduled.origin.exact_reply_target == "#team"
@@ -235,7 +234,7 @@ def test_inbox_rejects_an_empty_target(tmp_path):
 
     from agent_comms.tools import invoke_tool
 
-    comms = Comms(resolve_comms_route(tmp_path))
+    comms = wire(tmp_path)
     comms.registry.declare(comms.registry.new_thread('beta', frozenset({'team'}), str(tmp_path)))
     with pytest.raises(ValueError):
         invoke_tool(comms, "comms_inbox", {"thread": "beta", "target": ""}, caller=NoThreadCaller())

@@ -1,6 +1,5 @@
 """Real SDK/stdio session setup preserves new-ID admission and known-ID replay order."""
 
-from agent_comms.active_route import resolve_comms_route
 
 import asyncio
 import os
@@ -11,7 +10,7 @@ from acp import spawn_agent_process
 from acp.connection import StreamDirection, StreamEvent
 
 from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.launch_root import LaunchRoot
 from bus_record_fixture import prepare_native_comms
 
@@ -51,7 +50,7 @@ async def test_new_response_precedes_updates_and_load_replays_before_response(tm
     project.mkdir()
     config = tmp_path / "native-config"
     config.mkdir()
-    comms = prepare_native_comms(Comms(resolve_comms_route(tmp_path / "wire")))
+    comms = prepare_native_comms(wire(tmp_path / "wire"))
     packets = SessionPackets()
     environment = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1] / "src"),
                        AGENT_COMMS_NATIVE_CONFIG_DIR=str(config), PI_CODING_AGENT_DIR=str(config))

@@ -1,7 +1,6 @@
 """Released-owner recovery refuses damaged original evidence; it grants no replay."""
 from __future__ import annotations
 
-from agent_comms.active_route import resolve_comms_route
 
 import asyncio
 import json
@@ -19,7 +18,7 @@ from typing import NamedTuple
 import pytest
 
 from agent_comms.attempt_recovery import RecoveryMonitorCapability
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.coordination_errors import IdentityConflict, RecoveryBlocked
 from agent_comms.coordination_tables.executions import ExecutionProvenance, WireOrigin
 from agent_comms.coordinator import Coordination
@@ -246,7 +245,7 @@ class ToolDamage(EvidenceDamage):
 
 class WrongEpochDamage(EvidenceDamage):
     def alter(self, source):
-        releases = Comms(resolve_comms_route(source.root)).owners.releases
+        releases = wire(source.root).owners.releases
         original = releases.get("beta")
         with releases.writing() as db:
             OwnerReleaseEvidence.update(db, where="name=?", parameters=("beta",), before=original.after + 1)

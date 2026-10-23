@@ -1,6 +1,5 @@
 """Normal coding policies use existing claims; no provider or user work is touched."""
 
-from agent_comms.active_route import resolve_comms_route
 
 from agent_comms.bus import Bus
 
@@ -17,7 +16,7 @@ import pytest
 from agent_comms.native_tool_call import CodingCall
 from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.storage_room import NoRoomNeeded
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.envelope_claim_transitions import (
     ClaimConflict,
     ClaimTransitionError,
@@ -38,7 +37,7 @@ def test_create_claim_competes_before_file_exists_and_releases_without_creation(
         root.mkdir(mode=0o700)
         work = Path(directory) / "work"
         work.mkdir()
-        c = Comms(resolve_comms_route(root))
+        c = wire(root)
         for name, created in [("a", 21.0), ("b", 22.0)]:
             thread = c.registry.new_thread(name, frozenset({'team'}), str(work), created_at=created)
             c.registry.declare(replace(thread, process_identity=ProcessIdentity.capture(os.getpid())))
@@ -73,7 +72,7 @@ def test_stopped_holder_reclaimed_in_copied_root(tmp_path, monkeypatch, existing
     resource = WritableFileClaim(work / "shared.py")
     if existing:
         resource.resource.write_text("original\n")
-    original = Comms(resolve_comms_route(tmp_path / "original"))
+    original = wire(tmp_path / "original")
     for name in ("holder-a", "holder-b"):
         thread = original.registry.new_thread(name, frozenset(), str(work))
         original.registry.declare(replace(
@@ -96,7 +95,7 @@ def test_stopped_holder_reclaimed_in_copied_root(tmp_path, monkeypatch, existing
 
     first = acquire(original, "holder-a")
     original_revision = original.bus.bus.revision()
-    copied = Comms(resolve_comms_route(shutil.copytree(original.root, tmp_path / "copied")))
+    copied = wire(shutil.copytree(original.root, tmp_path / "copied"))
     assert first.live(copied.registry.snapshot())
     with pytest.raises(ClaimConflict):
         acquire(copied, "holder-b")

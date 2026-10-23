@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.active_route import resolve_comms_route
 
 from agent_comms.native_session_files import NativeSessionFiles
 from .native_failures import NativePiUnavailable
@@ -81,12 +80,12 @@ class VerifiedOwnerLoss(ABC):
         active turn does not establish the predecessor's lifetime. Missing
         input still settles UNKNOWN, never unsent or safe to replay.
         """
-        from agent_comms.comms import Comms
+        from agent_comms.comms import wire
         from agent_comms.native_runtime_input import NativeRuntimeTable
 
         if store.session.path.name != CoordinationStore.filename:
             raise RecoveryBlocked("native recovery requires the canonical coordination store")
-        comms = Comms(resolve_comms_route(store.session.path.parent))
+        comms = wire(store.session.path.parent)
         with store.session.boundary(comms.bus) as boundary:
             registry = boundary.registry
             NativeRuntimeTable.require_installed(store.session._connection)
@@ -287,9 +286,9 @@ class RecoveryMonitorCapability:
     @classmethod
     def settle_stopped_owner(cls, root: Path, owner) -> None:
         """An explicit stop retires only the exited owner's original local attempt."""
-        from .comms import Comms
+        from .comms import wire
 
-        comms = Comms(resolve_comms_route(root))
+        comms = wire(root)
         acknowledgement = comms.owners.releases.get(owner.name)
         if not acknowledgement.matches(owner):
             raise RecoveryBlocked("stopped attempt requires the exact exited owner release")

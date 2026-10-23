@@ -1,6 +1,5 @@
 """Real installed Toad/ACP/native waits with only the localhost provider controlled."""
 
-from agent_comms.active_route import resolve_comms_route
 
 from agent_comms.bus import Bus
 from agent_comms.lifecycle_capability import Unresolved
@@ -16,7 +15,7 @@ import socket
 import sys
 import time
 
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_package import VerifiedNativePackage
@@ -99,7 +98,7 @@ async def run(arguments):
     (config / "auth.json").write_text(json.dumps({"wait-local": {"type": "api_key", "key": "local-only"}}))
     (config / "settings.json").write_text(json.dumps({"compaction": {"enabled": False},
         "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}}}))
-    service = Comms(resolve_comms_route(stage / "wire"))
+    service = wire(stage / "wire")
     Bus.install(Bus.path_in(service.root))
     environment = dict(os.environ, AGENT_COMMS_ROOT=str(service.root),
         AGENT_COMMS_NATIVE_CONFIG_DIR=str(config), PI_CODING_AGENT_DIR=str(config),

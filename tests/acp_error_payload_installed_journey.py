@@ -6,7 +6,6 @@ journey. The isolated root is retained on failure, including uncertain inputs.
 
 from __future__ import annotations
 
-from agent_comms.active_route import resolve_comms_route
 
 from agent_comms.bus import Bus
 
@@ -30,7 +29,7 @@ from acp.schema import TextContentBlock
 import agent_comms
 from agent_comms.acp_extension import RequestFailedUpdate, decode_updates
 from agent_comms.acp_failure import RequestFailure, ProviderQuotaFailure
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions
@@ -126,7 +125,7 @@ async def journey(package: Path, evidence: Path, installed: Path, *, repeat_load
         "compaction": {"enabled": False},
         "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}},
     }))
-    comms = Comms(resolve_comms_route(root))
+    comms = wire(root)
     Bus.install(Bus.path_in(comms.root))
     fresh = create_fresh_private_session(evidence / "sessions", worktree=project)
     comms.registry.declare(comms.registry.new_thread('error-native', frozenset(), str(project), session_file=SavedSessionFile(str(fresh.path)), model=DeclaredModel('error-local/error-fixture'), thinking_level=OffThinkingLevel))

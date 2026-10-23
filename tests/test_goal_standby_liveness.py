@@ -1,6 +1,5 @@
 """Standby liveness preserves goal authority and never replays an input."""
 
-from agent_comms.active_route import resolve_comms_route
 
 from agent_comms.messages import ConversationRole, NoticeRole
 import os
@@ -11,7 +10,7 @@ import pytest
 from agent_comms.turn_lease import NoFinishedTurn
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.goal_actions import (
     EditGoalAction,
     GoalPrecondition,
@@ -112,7 +111,7 @@ def test_last_target_finishes_silently_releases_once_and_reopens(tmp_path):
     assert comms.goals.release_waits_after_terminal_turn(other_fence) == ()
     child_fence = _finish(comms, "child", "child-turn")
     assert comms.goals.release_waits_after_terminal_turn(child_fence) == ("owner",)
-    reopened = Comms(resolve_comms_route(comms.root))
+    reopened = wire(comms.root)
     continued = reopened.registry.require("owner").goal
     assert continued.id == goal.id and continued.state.declared_name == "active"
     assert continued.revision == goal.revision + 2

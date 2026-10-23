@@ -1,6 +1,5 @@
 """The declared bus watch uses real native commit and replacement notifications."""
 
-from agent_comms.active_route import resolve_comms_route
 
 import asyncio
 import errno
@@ -12,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.bus import Bus, PublicRecord
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.goal_attempts import Generation, GoalAttemptStore, StorageUncertainError
 from agent_comms.errors import UnresolvedAttemptError
 from agent_comms.goal_presentation import GoalWaitTarget
@@ -30,7 +29,7 @@ from agent_comms.view_unread import (
 @pytest.fixture
 def watched_bus(tmp_path):
     Bus.install(Bus.path_in(tmp_path / "bus"))
-    comms = Comms(resolve_comms_route(tmp_path / "bus"))
+    comms = wire(tmp_path / "bus")
     for name in ("owner", "peer"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
     return Bus.at(comms.root), comms

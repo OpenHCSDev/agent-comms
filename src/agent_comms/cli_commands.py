@@ -76,7 +76,7 @@ from .commander.config import (
     KeptRepos,
     RepoChoice,
 )
-from .comms import Comms, client_wire
+from .comms import Comms
 from .registry_document import CommanderProject
 from .config_options import (
     ConfigOptions,
@@ -945,7 +945,7 @@ class CliCommand[Answer: CliResult = CliResult](
     def execute(self, route: CommsRoute, output: TextIO) -> int:
         """Open the bus this command reads, then run it; a command that must act before
         the bus opens overrides this."""
-        with client_wire(route) as comms:
+        with Comms.client(route) as comms:
             return self.run(comms, output)
 
     @classmethod

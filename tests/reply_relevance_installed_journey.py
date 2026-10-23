@@ -2,7 +2,6 @@
 
 from agent_comms.channel_targets import CommandTarget
 
-from agent_comms.active_route import resolve_comms_route
 
 from bus_record_fixture import prepare_native_comms
 from agent_comms.lifecycle_capability import Complete
@@ -19,7 +18,7 @@ import time
 import acp
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_text import ForkedParent
-from agent_comms.comms import Comms, wire
+from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.publications import PublicationEvidence
@@ -67,7 +66,7 @@ async def run(stage, package):
             settings_hashes[str(original)] = hashlib.sha256(original.read_bytes()).hexdigest()
     # Only the offline canonical fork helper's output directory differs. Workers
     # retain the actual original model/settings/auth/extension environment.
-    service = prepare_native_comms(Comms(resolve_comms_route(stage / 'w')))
+    service = prepare_native_comms(wire(stage / 'w'))
     fork = await ForkSessionHelper.run(
         ForkSessionRequest(str(package), str(source_file), source.worktree, str(stage / 'forks')),
         cwd=Path(source.worktree),

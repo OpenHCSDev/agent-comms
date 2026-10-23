@@ -1,6 +1,5 @@
 """Shared fixtures: an isolated Comms wire per test."""
 
-from agent_comms.active_route import resolve_comms_route
 
 import asyncio
 import fcntl
@@ -21,7 +20,7 @@ import goal_owner_fixture
 from agent_comms.bus import Bus
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.channel_targets import CommandTarget
-from agent_comms.comms import Comms
+from agent_comms.comms import Comms, wire
 from agent_comms.locked_store import RegistryFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.message_bus import MessageBus
@@ -122,7 +121,7 @@ async def await_event_or_task(event: Awaitable[object], task: asyncio.Task) -> o
 
 def reader(root: Path) -> Comms:
     """A Comms over an existing wire that makes no private write."""
-    return Comms(resolve_comms_route(root), Publisher)
+    return wire(root, Publisher)
 
 
 def responder(root: Path, registry: Registration) -> MessageBus[ParticipantPublisher]:
@@ -272,7 +271,7 @@ def private_comms(private_directory):
     from bus_record_fixture import prepare_native_comms
 
     root = private_directory / "wire"
-    comms = prepare_native_comms(Comms(resolve_comms_route(root)))
+    comms = prepare_native_comms(wire(root))
     from agent_comms.launch_root import LaunchRoot
 
     with LaunchRoot.from_path(root).selected():
@@ -355,7 +354,7 @@ def declare_test_bus(comms: Comms, *, channels=(), threads=()) -> Comms:
 def installed_comms(root: Path) -> Comms:
     """A root as the installer leaves it: its bus exists before any reader opens it."""
     Bus.install(Bus.path_in(root))
-    return Comms(resolve_comms_route(root))
+    return wire(root)
 
 
 @pytest.fixture

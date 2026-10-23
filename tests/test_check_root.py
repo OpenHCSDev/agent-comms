@@ -1,6 +1,5 @@
 """Selected check history is small, non-executable and scoped to the command."""
 
-from agent_comms.active_route import resolve_comms_route
 
 from agent_comms.bus import Bus
 import json
@@ -11,7 +10,7 @@ import pytest
 
 from agent_comms.check_root import CheckRoot
 from agent_comms.cli import main
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript, UserTranscript
 from agent_comms.native_entries import NativeEntry
@@ -21,7 +20,7 @@ from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 @pytest.fixture
 def source(scratch_root, durable_home):
     root = scratch_root / "source"
-    c = Comms(resolve_comms_route(root))
+    c = wire(root)
     Bus.install(Bus.path_in(c.root))
     for name in ("A", "B", "other"):
         c.registry.declare(c.registry.new_thread(name, frozenset({"comms"}), str(scratch_root)),

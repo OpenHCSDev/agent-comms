@@ -1,7 +1,6 @@
 """The migration consumes a bus made by the predecessor's real publisher."""
 from __future__ import annotations
 
-from agent_comms.active_route import resolve_comms_route
 
 import json
 import os
@@ -24,7 +23,7 @@ REPOSITORY = Path(__file__).resolve().parents[1]
 def publish_predecessor_history(directory: Path) -> None:
     from agent_comms.audience_manifest import FrozenRecipient
     from agent_comms.child_process import ProcessIdentity
-    from agent_comms.comms import Comms
+    from agent_comms.comms import wire
     from agent_comms.coordination_tables.publications import PublicationIntents
     from agent_comms.coordination_tables.responses import ResponseObligation
     from agent_comms.goal_actions import SetGoalAction
@@ -47,7 +46,7 @@ def publish_predecessor_history(directory: Path) -> None:
     project.mkdir()
     resource = project / "a.py"
     resource.write_text("original source\n")
-    comms = Comms(resolve_comms_route(directory / "wire"))
+    comms = wire(directory / "wire")
     for name in ("sender", "owner"):
         comms.registry.declare(comms.registry.new_thread(
             name, frozenset({"team"}), worktree=str(project),
@@ -97,7 +96,7 @@ def publish_predecessor_history(directory: Path) -> None:
     archived = HistoryArchive(destination / "bus.jsonl").attach(comms.root)
     ReadLedger.at(archived.root).replace(replace(
         document, bus_identity=RecordedBusIdentity.capture(Path(archived.root) / "bus.jsonl")))
-    empty = Comms(resolve_comms_route(directory / "empty"))
+    empty = wire(directory / "empty")
     empty.messaging.initialize_private_initial_protocol(history=())
 
 

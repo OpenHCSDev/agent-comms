@@ -1,6 +1,5 @@
 """Original nullable SQL groups cannot mint a partial recorded native reference."""
 
-from agent_comms.active_route import resolve_comms_route
 
 import sqlite3
 from dataclasses import fields, replace
@@ -12,7 +11,7 @@ import pytest
 from agent_comms.acp_extension import EmptyCursorObservation, VerifiedCursorObservation
 from agent_comms.agent_backend import InputId
 from agent_comms.assignment_states import TriagePendingAssignment
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.cursor_owner import (
     CommittedCursorOwner,
@@ -140,7 +139,7 @@ def historical_source(recorded):
 def test_cursor_owner_enforces_exact_settlement_without_restricting_refresh(
     tmp_path, recorded, historical_source, make_owner, permitted,
 ):
-    thread = Comms(resolve_comms_route(tmp_path)).registry.new_thread("owner", frozenset(), str(tmp_path))
+    thread = wire(tmp_path).registry.new_thread("owner", frozenset(), str(tmp_path))
     original = replace(
         recorded, owner_lookup=thread.incarnation.require_recorded().lookup,
         verdict=DecidedTriageRecord(IgnoreSelectedTriage),

@@ -30,7 +30,7 @@ import threading
 
 from compaction_loopback import LoopbackProvider
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.acp import CommsAgent, CommsClient
 from agent_comms.acp_extension import decode_updates
 from agent_comms.messages import Message, InfoKind
@@ -87,7 +87,7 @@ def configured_stage(arguments, configured, snapshot, *, continue_existing=False
             source_hashes[str(original)] = hashlib.sha256(original.read_bytes()).hexdigest()
     if not continue_existing:
         (project/'batch-values.txt').write_text('PUBLIC_VALUE=17\n')
-    service = prepare_native_comms(Comms(resolve_comms_route(stage/'wire')))
+    service = prepare_native_comms(wire(stage/'wire'))
     root_id = service.registry.prepare_native_root().namespace
     binary = Path(sys.executable).with_name('pi-comms-native')
     environment.update(AGENT_COMMS_ROOT=str(service.root),
@@ -611,7 +611,7 @@ async def retained_owner():
     from agent_comms.private_nk_entrypoint import RootLaunch
     launch = RootLaunch.derive(resolve_comms_route(os.environ['AGENT_COMMS_ROOT'])).require_private()
     launch.validate()
-    service = Comms(resolve_comms_route(launch.validated_root))
+    service = wire(launch.validated_root)
     name = os.environ['AGENT_COMMS_THREAD']
     agent = CommsAgent(service, runtime_enabled=True,
         )
@@ -802,7 +802,7 @@ async def run(arguments):
         'type': 'api_key', 'key': 'local-only'}}))
     (config/'settings.json').write_text(json.dumps({'compaction':{'enabled':False},
         'retry':{'enabled':False,'maxRetries':0,'provider':{'maxRetries':0}}}))
-    service = prepare_native_comms(Comms(resolve_comms_route(stage/'wire')))
+    service = prepare_native_comms(wire(stage/'wire'))
     root_id = service.registry.prepare_native_root().namespace
     env = dict(os.environ, AGENT_COMMS_ROOT=str(service.root),
         AGENT_COMMS_NATIVE_CONFIG_DIR=str(config), PI_CODING_AGENT_DIR=str(config),

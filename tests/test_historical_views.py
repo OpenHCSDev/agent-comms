@@ -1,6 +1,5 @@
 """Actual saved buses and transcripts, with colliding live/source sequences."""
 
-from agent_comms.active_route import resolve_comms_route
 
 import json
 from dataclasses import replace
@@ -10,7 +9,7 @@ import pytest
 
 from agent_comms.bus import Bus, PublicRecord
 from agent_comms.channel_targets import CommandTarget
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.coordination_errors import HistoricalSourceChanged
 from agent_comms.historical_views import HistoricalMessage, HistoryArchive
 from agent_comms.installer.backup import bus_files
@@ -50,7 +49,7 @@ def test_missing_catalogue_is_empty_without_creating_it(tmp_path):
 
 
 def setup(root, count=5):
-    comms = Comms(resolve_comms_route(root))
+    comms = wire(root)
     comms.registry.declare(comms.registry.new_thread('alice', frozenset({'team'}), str(root), created_at=10.0))
     comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team'}), str(root), created_at=11.0))
     Bus.install(Bus.path_in(comms.root))

@@ -15,7 +15,6 @@ sees the review time: when it is up, the heartbeat tells the commander to read t
 """
 from __future__ import annotations
 
-from agent_comms.active_route import resolve_comms_route
 
 import argparse
 import ast
@@ -37,7 +36,7 @@ from agent_comms.change_report import FileLine, MainRevision, NoSourceReference
 from agent_comms.channel_targets import CommsTag
 from agent_comms.cli_bridges.shared import DeclaredVerb
 from agent_comms.commander.standing import UnownedWheelSpin
-from agent_comms.comms import Comms
+from agent_comms.comms import Comms, wire
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import (
@@ -341,7 +340,7 @@ class CommanderContext(BaseModel):
     _comms: Comms = PrivateAttr()
 
     def model_post_init(self, context: object) -> None:
-        self._comms = Comms(resolve_comms_route(self.root))
+        self._comms = wire(self.root)
 
     @classmethod
     def read_root(cls, root: Path | str) -> Self:

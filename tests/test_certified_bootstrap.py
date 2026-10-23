@@ -2,7 +2,6 @@
 
 from agent_comms.channel_targets import CommandTarget
 
-from agent_comms.active_route import resolve_comms_route
 
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 import os
@@ -10,7 +9,7 @@ import os
 import pytest
 
 from agent_comms.acp import CommsAgent
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.channels import AnyChannel
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
@@ -39,7 +38,7 @@ def test_fresh_root_claims_source_gaps_and_empty_cursor(tmp_path, *, source_read
         selected = reader.since(UnstartedCursor(), source_reads=source_reads)
         assert selected.blocked_seq == sent.seq  # Selection cannot manufacture native proof.
         assert selected.covered_seq == 0 and selected.injected_source_seqs == ()
-        assert Comms(resolve_comms_route(comms.root)).bus.bus.revision() == sent.seq
+        assert wire(comms.root).bus.bus.revision() == sent.seq
 
 
 def test_truncated_coverage_cannot_hide_an_unproven_source(tmp_path, *, source_reads):
@@ -62,7 +61,7 @@ def test_truncated_coverage_cannot_hide_an_unproven_source(tmp_path, *, source_r
 
 
 async def test_unconfigured_acp_attach_refuses_before_creating_owner(tmp_path):
-    comms = Comms(resolve_comms_route(tmp_path / "wire"))
+    comms = wire(tmp_path / "wire")
     agent = CommsAgent(comms)
     with pytest.raises(PublicationActivationBlocked):
         await agent.new_session(cwd=str(tmp_path))
@@ -74,7 +73,7 @@ async def test_unconfigured_acp_attach_refuses_before_creating_owner(tmp_path):
     reason="Prepared native package required; no provider request",
 )
 async def test_configured_acp_new_and_retained_attach_use_same_checked_root(tmp_path):
-    comms = prepare_native_comms(Comms(resolve_comms_route(tmp_path / "wire")))
+    comms = prepare_native_comms(wire(tmp_path / "wire"))
     agent = CommsAgent(comms, auto_wake=False)
     try:
         fresh = await agent.new_session(cwd=str(tmp_path))

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.active_route import resolve_comms_route
 
 import json
 import sys
@@ -61,7 +60,7 @@ class ConnectorService:
                 raise ServiceNotServingError(
                     f"Connector round trip returned an error: {' '.join(item.text for item in reply.content)}"
                 )
-            with client_wire(resolve_comms_route(self.launch.path)) as comms:
+            with client_wire(self.launch.path) as comms:
                 if reply.structured_content != CommsChannelsTool.invoke(comms, {}, caller=CALLER):
                     raise ServiceNotServingError(
                         f"Connector on port {self.port} reads another bus than {self.launch.path}"

@@ -1,6 +1,5 @@
 """Real Core board reads consume the recorded check run result, never run the check."""
 
-from agent_comms.active_route import resolve_comms_route
 
 import argparse
 import shlex
@@ -8,7 +7,7 @@ import subprocess
 
 from proofs.cn_phase3_record import CHECKOUT, ROOT, cli, create_order
 
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import CheckedCommit, CountCheckResult, OrderCheck
 from agent_comms.todos import CorrectCheckTodo, DistanceReadings, PushedProgress, Todo
@@ -20,7 +19,7 @@ MARKER_CONTENT = b"x"
 
 def prepare() -> None:
     create_order("P6")
-    comms = Comms(resolve_comms_route(ROOT))
+    comms = wire(ROOT)
     todo = comms.goals.todos.get("P6")
     check = OrderCheck(
         str(CHECKOUT), f"printf x >> {shlex.quote(str(MARKER))}; printf 0", CountCheckResult(0)
@@ -48,7 +47,7 @@ def board(todo: Todo) -> DistanceReadings:
 
 
 def verify() -> None:
-    comms = Comms(resolve_comms_route(ROOT))
+    comms = wire(ROOT)
     todo = comms.goals.todos.get("P6")
     check = todo.order.checked().check
     checkout = comms.registry.storage_rule.order_checkout(todo.held().owner, todo.id)

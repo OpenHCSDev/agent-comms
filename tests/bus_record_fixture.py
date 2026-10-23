@@ -1,6 +1,5 @@
 """Typed values and prepared crash-test workers share their existing owners."""
 
-from agent_comms.active_route import resolve_comms_route
 
 import os
 from multiprocessing.context import ForkServerContext
@@ -8,7 +7,7 @@ from pathlib import Path
 
 from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
 from agent_comms.bus import Bus, PrivateRecord
-from agent_comms.comms import Comms
+from agent_comms.comms import Comms, wire
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.bus_publication import Delivered, KeyedPublication
 from agent_comms.envelope_claim_transitions import UnscopedClaims
@@ -32,7 +31,7 @@ def prepare_native_comms(comms: Comms) -> Comms:
 
 def context_comms(directory: Path) -> Comms:
     """The shared native-context dataset, built through canonical bus/guard owners."""
-    comms = prepare_native_comms(Comms(resolve_comms_route(directory / "wire")))
+    comms = prepare_native_comms(wire(directory / "wire"))
     for tag in ("team", "else"):
         comms.channels.create_tag(tag)
     process = ProcessIdentity.capture(os.getpid())

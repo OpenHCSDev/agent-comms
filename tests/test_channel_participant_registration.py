@@ -1,6 +1,5 @@
 """Real publication must register the entire audience, without test SQL setup."""
 
-from agent_comms.active_route import resolve_comms_route
 
 from bus_record_fixture import prepare_native_comms
 
@@ -8,7 +7,7 @@ import pytest
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.cohort_foreground import _accept_visible_deliveries
-from agent_comms.comms import Comms
+from agent_comms.comms import wire
 from agent_comms.coordination_cohort import sealed_cohort_assignments
 from agent_comms.coordination_tables.participants import Participants
 from agent_comms.coordinator import Coordination
@@ -17,7 +16,7 @@ from agent_comms.thread_status import StoppedThreadStatus
 
 @pytest.mark.asyncio
 async def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_cohort(tmp_path):
-    comms = prepare_native_comms(Comms(resolve_comms_route(tmp_path / "wire")))
+    comms = prepare_native_comms(wire(tmp_path / "wire"))
     root_id = comms.registry.prepare_native_root().namespace
     for name in ("sender", "receiver", "stopped-reviewer", "unstarted-reviewer"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path)))

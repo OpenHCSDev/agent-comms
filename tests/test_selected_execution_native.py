@@ -86,10 +86,9 @@ async def test_native_full_four_tools_publish_and_release(tmp_path, monkeypatch,
     if entrypoint := os.environ.get('AC_HEADLESS_ENTRYPOINT'):
         assert not selected_write
         inspection = (
-            'from pathlib import Path; from agent_comms.comms import Comms; from agent_comms.publisher import Publisher; '
-            'from agent_comms.active_route import resolve_comms_route; '
+            'from pathlib import Path; from agent_comms.comms import wire; from agent_comms.publisher import Publisher; '
             'from agent_comms.turn_phase import ToolRunningPhase; '
-            f'c=Comms(resolve_comms_route(Path({str(root)!r})), Publisher); '
+            f'c=wire(Path({str(root)!r}), Publisher); '
             'assert isinstance(c.registry.require("beta").turn_record.read().require_active().phase, ToolRunningPhase); '
             'print("CANONICAL_TOOL_RUNNING")'
         )
