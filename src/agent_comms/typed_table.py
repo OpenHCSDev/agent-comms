@@ -64,6 +64,7 @@ from .locked_store import (
     StoreCommittedError,
 )
 from .maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier
+from .package_stamp import STAMP
 from .store_files import _store_lock
 
 if TYPE_CHECKING:
@@ -1382,6 +1383,12 @@ class DerivedTables(TableSchema):
                 or not ProjectionProducer.matches(db, cls.projection_rows()))
 
     @classmethod
+    def reconcile_schema(cls, db: sqlite3.Connection, change: SchemaChange) -> bool:
+        changed = super().reconcile_schema(db, change)
+        refreshed = ProjectionProducer.verify_build(db, cls.projection_rows(), change)
+        return changed or refreshed
+
+    @classmethod
     def create_schema(cls, db: sqlite3.Connection) -> None:
         super().create_schema(db)
         for producer in ProjectionProducer.records_for(cls.projection_rows()):
@@ -1413,8 +1420,8 @@ class DurableTables(TableSchema):
         cls.derive_schema(db)
 
 
-class ProjectionProducerTables(SharedFileTables, DurableTables):
-    """The producer declaration last committed with each rebuilt projection."""
+class ProjectionProducerTables(SharedFileTables, DerivedTables):
+    """Verification metadata recreated with its projections when its schema changes."""
 
 
 class ProducedRow(ABC):
@@ -1958,10 +1965,15 @@ class TypedTable(
 class ProjectionProducer(TypedTable, ProjectionProducerTables):
     projection: Annotated[str, Column(primary_key=True)]
     commit: str
+    producer_digest: str
 
     @classmethod
     def records_for(cls, rows: tuple[type[TypedTable], ...]) -> tuple[Self, ...]:
-        return tuple(cls(row.declared_name, row.producer_digest()) for row in rows)
+        commit = STAMP.commit()
+        return tuple(cls(row.declared_name, commit, row.producer_digest()) for row in rows)
+
+    def verifies(self, row: type[ProducedRow], commit: str) -> bool:
+        return self.commit == commit or self.producer_digest == row.producer_digest()
 
     @classmethod
     def matches(cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...]) -> bool:
@@ -1970,7 +1982,29 @@ class ProjectionProducer(TypedTable, ProjectionProducerTables):
         if not cls.present(db):
             return False
         stored = {record.projection: record for record in cls.select(db)}
-        return all(stored.get(record.projection) == record for record in cls.records_for(rows))
+        commit = STAMP.commit()
+        return all(row.declared_name in stored and stored[row.declared_name].verifies(row, commit)
+                   for row in rows)
+
+    @classmethod
+    def verify_build(cls, db: sqlite3.Connection, rows: tuple[type[TypedTable], ...],
+                     change: SchemaChange) -> bool:
+        """After schema verification, record the current build without rebuilding its rows."""
+        if not rows:
+            return False
+        commit = STAMP.commit()
+        names = {row.declared_name for row in rows}
+        outdated = tuple(record for record in cls.select(
+            db, where="{commit} != ?", parameters=(commit,),
+        ) if record.projection in names)
+        if not outdated:
+            return False
+        change.require()
+        with SQLiteFile.write_transaction(db):
+            for record in outdated:
+                cls.update(db, where="{projection}=?", parameters=(record.projection,),
+                           commit=commit)
+        return True
 
 
 class StoreWriter(PublishedSQLiteFile, FileStore):
