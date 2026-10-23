@@ -58,7 +58,7 @@ def test_pi_native_serves_threads_with_every_thread_capability():
     (NoSessionFile(), UnstartedRuntime(PiNativeBackend)),
 ])
 def test_runtime_location_round_trip_uses_declared_backend(session_file, location, *, thread_registration):
-    thread = Thread('location', frozenset(), '/home/ts/wt/test', session_file=session_file)
+    thread = thread_registration.declare(Thread('location', frozenset(), '/home/ts/wt/test', session_file=session_file))
     restored = FieldCodec.decode(Thread, FieldCodec.encode(thread))
     restored = replace(restored, session_file=restored.session_file.bound_to(Path("/home/ts/wt")))
     assert restored.runtime == location
@@ -221,7 +221,7 @@ def test_pi_event_family_matches_pi_0_85_1_when_imported_fresh():
 
 
 def test_thread_declares_its_backend_once_and_keeps_it_on_reregistration(*, thread_registration):
-    thread = Thread('owner', frozenset(), '/tmp/owner')
+    thread = thread_registration.declare(Thread('owner', frozenset(), '/tmp/owner'))
     assert thread.backend is PiNativeBackend
     encoded = FieldCodec.encode(thread)
     assert "backend" not in encoded

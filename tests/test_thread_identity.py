@@ -53,7 +53,7 @@ def test_saved_thread_text_round_trips_null_and_supplied_values(tmp_path):
         thread = Thread(
             name, frozenset({"team"}), str(tmp_path), title=title, task=task,
         )
-        comms.registry.declare(thread)
+        thread = comms.registry.declare(thread)
         encoded = json.dumps(FieldCodec.encode(thread), sort_keys=True, separators=(",", ":"))
         saved = wire(tmp_path).registry.require(name)
         assert json.dumps(FieldCodec.encode(saved), sort_keys=True, separators=(",", ":")) == encoded
