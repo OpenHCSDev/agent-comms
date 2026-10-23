@@ -1253,7 +1253,6 @@ def test_populated_durable_authorities_reject_delete_and_survive_reopen(db):
     c, path = db
     sql_wire_execution(c)
     activate(c)
-    c.execute("INSERT INTO participant_aliases VALUES ('old-worker','p',100)")
     c.execute("INSERT INTO replay_assessments VALUES ('e',0,1,0,1)")
     c.execute("INSERT INTO connectivity VALUES ('e','connected','connected',1,100)")
     c.execute(
@@ -1263,7 +1262,6 @@ def test_populated_durable_authorities_reject_delete_and_survive_reopen(db):
     )
     tables = (
         "participants",
-        "participant_aliases",
         "owner_generations",
         "executions",
         "attempts",
@@ -1414,7 +1412,6 @@ def test_recovery_and_connectivity_monotonic_reopen(db):
         "publication_receipts",
         "connectivity",
         "recovery_audit",
-        "participant_aliases",
     ],
 )
 def test_all_durable_tables_reject_delete_even_when_empty(db, table):

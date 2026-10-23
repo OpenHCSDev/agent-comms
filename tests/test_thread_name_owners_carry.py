@@ -24,6 +24,7 @@ PREDECESSOR = "f2f80357091809ec925b306b46a4b9ed6db812a5"
 def generate(root):
     """Run under the predecessor's declarations, including its transition guards."""
     from agent_comms.native_input_record import FullNativeExecution
+    from agent_comms.private_sidecar import create_sidecar_file, sidecar_connection
     from test_coordination_response import _ready
 
     root.mkdir()
@@ -31,16 +32,17 @@ def generate(root):
     try:
         row = NativeRuntimeInput(
             input_id="1" * 32, stage=FullNativeExecution,
-            execution_id="exec", attempt_ordinal=1,
+            **FullNativeExecution("exec", 1).binding_fields(),
             owner_lookup=case.owner_lookup, owner_thread="owner", owner_generation=1,
             owner_token_digest=case.fence.authority.token_digest,
         )
         row.insert(case.store.session._connection)
-        with closing(SQLiteFile.writer(PromptBinding.path_in(case.comms.root))) as db:
-            PromptBinding.create(db)
+        binding_path = PromptBinding.path_in(case.comms.root)
+        create_sidecar_file(binding_path, PromptBinding)
+        with sidecar_connection(binding_path, PromptBinding) as db:
             PromptBinding(
                 input_id=row.input_id, stage=FullNativeExecution,
-                execution_id="exec", attempt_ordinal=1,
+                **FullNativeExecution("exec", 1).binding_fields(),
                 owner_lookup=case.owner_lookup, owner_thread="owner", owner_generation=1,
                 wire_root_id=case.root_id, expected_prompt_digest="a" * 64, bound_at_ms=1,
             ).insert(db)
@@ -66,9 +68,8 @@ def test_carry_keeps_existing_attempts_inputs_and_bindings(tmp_path):
     before = {path: path.read_bytes() for path in step.backup_files()}
     pending = step.carry(apply=False)
     assert pending.changed > 0
-    assert pending.detail["attempts_before"] == pending.detail["attempts_after"] == 1
-    assert pending.detail["native_runtime_inputs_before"] == pending.detail["native_runtime_inputs_after"] == 1
-    assert pending.detail["prompt_binding_before"] == pending.detail["prompt_binding_after"] == 1
+    for table in (AttemptRecord, NativeRuntimeInput, PromptBinding):
+        assert pending.detail[f"{table.declared_name}_before"] == pending.detail[f"{table.declared_name}_after"] == 1
     assert all(path.read_bytes() == original for path, original in before.items())
     with pytest.raises(MaintenanceNotHeldError):
         step.carry(apply=True)
