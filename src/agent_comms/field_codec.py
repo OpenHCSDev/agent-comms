@@ -38,7 +38,7 @@ from typing import (
 from uuid import uuid4
 from weakref import WeakKeyDictionary
 
-from pydantic import JsonValue
+from pydantic import BaseModel, JsonValue
 from typing_extensions import TypeAliasType, TypeForm
 
 from .declared_family import DeclaredFamily
@@ -1782,6 +1782,8 @@ class FieldCodec(MroDispatch, Sealed):
             return cls._family_schema(annotation)
         if isinstance(annotation, type) and is_dataclass(annotation):
             return cls.record_schema(annotation)
+        if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+            return annotation.model_json_schema(by_alias=True)
         raise TypeError(f"No declared JSON schema for {annotation}")
 
     @classmethod
@@ -2946,6 +2948,22 @@ def _structural_decoder(annotation: object) -> ValueDecoder[object]:
     return _member_decoder(annotation)
 
 
+@dataclass(frozen=True, slots=True)
+class _PydanticDecoder(ValueDecoder[object]):
+    """An external model owns its validation and JSON representation."""
+
+    target: type[BaseModel]
+
+    @boundary_decoder
+    def decode(self, data: object) -> BaseModel:
+        return self.target.model_validate(data)
+
+    def encode(self, value: object) -> object:
+        if not isinstance(value, self.target):
+            raise TypeError(f"Expected {self.target.__name__}, received {type(value).__name__}")
+        return value.model_dump(mode="json", by_alias=True, exclude_none=True)
+
+
 @lru_cache(maxsize=None)
 def _member_decoder(target: object) -> ValueDecoder[object]:
     """A concrete record, enum or scalar, after any family tag is removed."""
@@ -2953,4 +2971,6 @@ def _member_decoder(target: object) -> ValueDecoder[object]:
         return _RecordDecoder(target)
     if isinstance(target, type) and issubclass(target, Enum):
         return _EnumDecoder.from_annotation(target, ())
+    if isinstance(target, type) and issubclass(target, BaseModel):
+        return _PydanticDecoder(target)
     raise TypeError(f"Unsupported JSON type: {target}")
