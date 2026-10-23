@@ -1972,13 +1972,14 @@ class ProducedTable(ProducedRow, TypedTable, declared_name=None):
     @classmethod
     @cache
     def _producer_digest(cls) -> str:
+        producers = cls.producer_classes()
         owners = {
             owner
             for row in (cls, *cls.members_with(cls))
             for owner in row.__mro__
             if issubclass(owner, cls)
         }
-        for producer in cls.producer_classes():
+        for producer in producers:
             root = producer.family_root()
             owners.update(owner for owner in producer.__mro__
                           if issubclass(owner, cls) or issubclass(owner, root))
