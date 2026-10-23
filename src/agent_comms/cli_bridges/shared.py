@@ -540,20 +540,30 @@ class Serve(Watch):
         runtime = LaunchRuntime.installed()
         command = self.command(record, runtime)
         log = claim.path.with_suffix('.log')
+        offset = log.stat().st_size if log.exists() else 0
         with log.open('ab') as output:
             child = SpawnedProcess.launch(
                 command, env=runtime.environment(os.environ), output=output, runtime=runtime,
                 lifetime=OutlivesLauncherLifetime)
-        deadline = time.monotonic() + 30
-        while child.alive() and time.monotonic() < deadline:
+        announced = False
+        while child.alive():
             try:
                 request.exchange(claim.socket_path)
                 return
             except (FileNotFoundError, ConnectionRefusedError):
+                if not announced:
+                    print(
+                        f'Waiting for session bridge PID {child.pid} to answer; log {log}',
+                        file=sys.stderr, flush=True,
+                    )
+                    announced = True
                 time.sleep(.05)
+        summary = child.reap().summary()
+        with log.open('rb') as recorded:
+            recorded.seek(offset)
+            appended = recorded.read().decode(errors='replace').strip()
         raise RuntimeError(
-            f'Session bridge startup not observed (PID {child.pid}); inspect {log}. '
-            'No launch retry.'
+            f'Session bridge PID {child.pid} exited before answering ({summary}): {appended}'
         )
 
     @staticmethod
