@@ -653,19 +653,23 @@ class KindFamiliesPhase(RemainingSlopPhase):
 class RostersPhase(RemainingSlopPhase):
     """6.4: remove the known internal registries; external producer ABI stays independent."""
 
-    evidence = AllEvidence((
-        PatternAbsent(r"^\s*THREAD_CAPABILITIES\s*[:=]"),
-        ClassFlagsAbsent(r"^\s*serves_(new_)?threads\s*[:=]"),
-        *(ClassFlagsAbsent(r"^\s*" + attribute + r"\s*[:=]", class_names=(owner,))
-          for owner, attribute in (
-              ("Carry", "declared"),
-              ("ThreadRename", "kinds"),
-              ("BirthlessIncarnation", "members"),
-              ("CliToolArguments", "types"),
-              ("PiTurnPhase", "_start_phases"),
-              ("PiTurnPhase", "_end_events"),
-          )),
-    ))
+    evidence = AllEvidence(
+        (
+            PatternAbsent(r"^\s*THREAD_CAPABILITIES\s*[:=]"),
+            ClassFlagsAbsent(r"^\s*serves_(new_)?threads\s*[:=]"),
+            *(
+                ClassFlagsAbsent(r"^\s*" + attribute + r"\s*[:=]", class_names=(owner,))
+                for owner, attribute in (
+                    ("Carry", "declared"),
+                    ("ThreadRename", "kinds"),
+                    ("BirthlessIncarnation", "members"),
+                    ("CliToolArguments", "types"),
+                    ("PiTurnPhase", "_start_phases"),
+                    ("PiTurnPhase", "_end_events"),
+                )
+            ),
+        )
+    )
 
 
 class RecordsPhase(RemainingSlopPhase):

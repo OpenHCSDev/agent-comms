@@ -16,6 +16,7 @@ from abc import ABC, abstractmethod
 from collections import Counter
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.commander_parity import ParityRow
@@ -49,8 +50,17 @@ class MainTree:
         A submodule is another repository's tree, regardless of local recurse settings.
         Git pathspecs such as ``:!file`` exclude.
         """
-        run = self.git("grep", "--no-recurse-submodules", *options,
-                       "-E", "-e", pattern, self.commit, "--", *paths)
+        run = self.git(
+            "grep",
+            "--no-recurse-submodules",
+            *options,
+            "-E",
+            "-e",
+            pattern,
+            self.commit,
+            "--",
+            *paths,
+        )
         if run.returncode not in (0, 1):
             run.check_returncode()
         return run.stdout.splitlines()
@@ -272,6 +282,8 @@ class BusStorageAbsent(MainEvidence, ast.NodeVisitor):
 
     symbols = re.compile(r"WireLog|wire_log|_wire_lock_path|has_private_wire_fields")
     filenames = re.compile(r"bus[.]jsonl|bus_meta[.]json")
+    lock_name: ClassVar[str] = "wire"
+    path_methods: ClassVar[tuple[str, ...]] = (Path.with_name.__name__, Path.joinpath.__name__)
     found = False
 
     def read(self, main: MainTree) -> bool:
@@ -316,15 +328,14 @@ class BusStorageAbsent(MainEvidence, ast.NodeVisitor):
 
     def visit_BinOp(self, node: ast.BinOp) -> None:
         match node:
-            case ast.BinOp(op=ast.Div(), right=ast.Constant(value="wire")):
-                self.found = True
+            case ast.BinOp(op=ast.Div(), right=ast.Constant(value=value)):
+                self.found |= value == self.lock_name
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:
         match node:
-            case ast.Call(func=ast.Attribute(attr="with_name" | "joinpath"),
-                          args=[*_, ast.Constant(value="wire")]):
-                self.found = True
+            case ast.Call(func=ast.Attribute(attr=method), args=[*_, ast.Constant(value=value)]):
+                self.found |= method in self.path_methods and value == self.lock_name
         self.generic_visit(node)
 
 

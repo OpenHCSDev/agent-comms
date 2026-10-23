@@ -44,22 +44,22 @@ class SendRefusal(CoordinatorRow):
 
     @classmethod
     def record(cls, root: Path, sender: str, target: str, error: ToolRefusedError) -> None:
-        with (guard_original_root_write(root),
-              MaintenanceBarrier(RegistryFile.path_in(root)).allow_input()):
-            with (
-                CoordinationSession(str(CoordinationStore.path_in(root))) as store,
-                store.writing() as db,
-            ):
-                cls.require_schema(db)
-                # SQLite allocates this attempt's identity. The text is exactly
-                # the refusal returned to the caller, not a page's summary.
-                cls.insert_values(
-                    db,
-                    sender=sender,
-                    target=target,
-                    reason=str(error),
-                    refused_at_ms=time.time_ns() // 1_000_000,
-                )
+        with (
+            guard_original_root_write(root),
+            MaintenanceBarrier(RegistryFile.path_in(root)).allow_input(),
+            CoordinationSession(str(CoordinationStore.path_in(root))) as store,
+            store.writing() as db,
+        ):
+            cls.require_schema(db)
+            # SQLite allocates this attempt's identity. The text is exactly
+            # the refusal returned to the caller, not a page's summary.
+            cls.insert_values(
+                db,
+                sender=sender,
+                target=target,
+                reason=str(error),
+                refused_at_ms=time.time_ns() // 1_000_000,
+            )
 
     @classmethod
     def recent(
