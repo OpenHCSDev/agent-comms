@@ -227,7 +227,8 @@ def test_configure_command_keeps_active_configuration_in_its_session(tmp_path, s
 
 
 def test_roster_and_controls_keep_archived_threads_dormant():
-    from agent_comms.tools import CommsStartTool, ToolRequest
+    from agent_comms.tools import CommsStartTool
+    from agent_comms.tool_request import ToolRequest
     from agent_comms.thread_execution import OwnerLifecycleControl
     from agent_comms.child_process import NoProcess
 

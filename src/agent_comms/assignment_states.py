@@ -21,6 +21,7 @@ from .notification_progress import (
     PassiveProgress,
     UnrecordedProgress,
 )
+from .source_proof_requirement import ProvedByInput, SettledWithoutInput, SourceSettlement, Unproved
 from .typed_table import sql_literal
 from .wake_policy import BoundedTriageWake, Engagement, FullWake, PassiveWake, WakePolicy
 
@@ -33,7 +34,7 @@ if TYPE_CHECKING:
     from .bus_publication import Delivered
     from .coordination_tables.assignments import WakeAssignment
     from .coordination_tables.responses import ResponseObligation
-    from .historical_native_inputs import FailedTriageHistoricalNativeInput
+    from .historical_native_inputs import FailedTriageHistoricalNativeInput, HistoricalNativeInput
     from .native_input_record import TriageNativeExecution
     from .notification_assignment import AssignmentActivity
     from .presentation import MessageNotification
@@ -62,6 +63,17 @@ class PendingDecision:
 
 @dataclass(frozen=True)
 class AssignmentState(CoordinatorVocabulary, LifecycleState, affix="Assignment"):
+    def source_settlement(
+        self, evidence: tuple[HistoricalNativeInput, ...], policy: WakePolicy, claim_id: str,
+    ) -> SourceSettlement:
+        if not policy.items_with(Active, policy):
+            return SettledWithoutInput()
+        if policy.proves_source(evidence) and all(
+            proof.assignment_id == claim_id for proof in evidence
+        ):
+            return ProvedByInput(evidence)
+        return Unproved()
+
     @classmethod
     def sql_vocabulary(cls) -> dict[str, str]:
         members = cls.members_with(cls)
@@ -528,6 +540,12 @@ class DeliveredAssignment(
 
 
 class FailedAssignment(Failed, Terminal, InterruptedAssignment):
+    def source_settlement(
+        self, evidence: tuple[HistoricalNativeInput, ...], policy: WakePolicy, claim_id: str,
+    ) -> SourceSettlement:
+        return (super().source_settlement(evidence, policy, claim_id)
+                if evidence else SettledWithoutInput())
+
     def notification(
         self,
         recipient: FrozenRecipient,

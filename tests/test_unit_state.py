@@ -16,6 +16,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.thread_text import ForkedParent
 from agent_comms.session_file import RegistrySessionLocation
+from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.todos import DeliverTodo, OperationDelivery, ProgressRead
 from agent_comms.ui_model.unit_state import (
     AwaitingCommander,
@@ -154,7 +155,8 @@ def test_unit_state_family_uses_real_records(held_bus, tmp_path, member):
             pass  # Assigned work, before its first-call deadline.
         else:
             pytest.fail(f"New UnitState needs its real-record scenario: {member}")
-        states = UnitState.current(comms, "lead", ProgressRead())
+        states = UnitState.current(
+            comms, "lead", HeartbeatFrame.read(comms, "lead", ProgressRead()))
         (state,) = (state for state in states if state.unit.name == unit)
         assert isinstance(state, member)
         assert state.unit == comms.registry.require(unit).incarnation
@@ -190,7 +192,8 @@ def test_stopped_child_without_lead_orders_remains_in_the_frame(held_bus):
     with LaunchRoot.from_path(held_bus.root).selected():
         (state,) = (
             state
-            for state in UnitState.current(held_bus, "lead", ProgressRead())
+            for state in UnitState.current(
+                held_bus, "lead", HeartbeatFrame.read(held_bus, "lead", ProgressRead()))
             if state.unit == child.incarnation
         )
         assert isinstance(state, Idle)

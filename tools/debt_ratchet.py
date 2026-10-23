@@ -2148,10 +2148,9 @@ class UncarriedRecordFormat(ChangeMeasure):
         with tempfile.TemporaryDirectory(prefix="debt-ratchet-formats-") as scratch:
             source = git(repo, "archive", ref, "--", str(package))
             subprocess.run(["tar", "-x", "-C", scratch], input=source, check=True, timeout=60)
-            # Extracted source is stamped with its commit the way a build stamps it.
-            for stamp in Path(scratch).rglob("package_stamp.py"):
-                WheelStamp(revision(repo, ref)).write(stamp)
             tree = Path(scratch)
+            for stamp in tree.rglob("package_stamp.py"):
+                WheelStamp.of_source(tree / package, revision(repo, ref)).write(stamp)
             paths = dict.fromkeys((str(tree / package), *cls.source_paths(root, tree)))
             result = SpawnedProcess.run(
                 (sys.executable, "-c", cls.probe,

@@ -13,6 +13,7 @@ from acp.schema import (
     TextContentBlock,
     ToolCallProgress,
     ToolCallStart,
+    ToolKind,
     UsageUpdate,
 )
 
@@ -27,6 +28,14 @@ from .acp_extension import (
 from .context_reading import ContextUsage, UnmeasuredContext
 from .coordinator import Coordination
 from .mro_dispatch import MroDispatch, handles
+from .tool_declaration import (
+    EditAction,
+    ExecuteAction,
+    OtherAction,
+    ReadAction,
+    SearchAction,
+    ToolAction,
+)
 from .tool_results import tool_result_content
 from .transcript_updates import TranscriptUpdate
 
@@ -34,6 +43,40 @@ if TYPE_CHECKING:
     from .controller import SessionUpdateSink
     from .routing import MessageRoute
     from .turn_effects import TurnEffects
+
+
+class AcpToolAction(MroDispatch):
+    """Translate the tool's capability only when building an ACP message."""
+
+    @handles(SearchAction)
+    @staticmethod
+    def search(action: type[SearchAction]) -> ToolKind:
+        return "search"
+
+    @handles(ReadAction)
+    @staticmethod
+    def read(action: type[ReadAction]) -> ToolKind:
+        return "read"
+
+    @handles(ExecuteAction)
+    @staticmethod
+    def execute(action: type[ExecuteAction]) -> ToolKind:
+        return "execute"
+
+    @handles(EditAction)
+    @staticmethod
+    def edit(action: type[EditAction]) -> ToolKind:
+        return "edit"
+
+    @handles(OtherAction)
+    @staticmethod
+    def other(action: type[OtherAction]) -> ToolKind:
+        return "other"
+
+    @classmethod
+    def kind(cls, action: type[ToolAction]) -> ToolKind:
+        kind: ToolKind = cls.handler_for(action)(action)
+        return kind
 
 
 @dataclass(eq=False, repr=False)
@@ -48,7 +91,8 @@ class AcpEventConsumer(MroDispatch):
 
     def text_update(self, text: str) -> AgentMessageChunk:
         return AgentMessageChunk(
-            session_update="agent_message_chunk", content=TextContentBlock(type="text", text=text),
+            session_update="agent_message_chunk",
+            content=TextContentBlock(type="text", text=text),
         )
 
     @handles(events.GoalChanged)
@@ -70,7 +114,7 @@ class AcpEventConsumer(MroDispatch):
             session_update="tool_call",
             tool_call_id=event.id,
             title=event.title or event.name or "tool",
-            kind=event.kind,
+            kind=AcpToolAction.kind(event.kind),
             status="in_progress",
         )
         if event.args is not None:
@@ -109,7 +153,9 @@ class AcpEventConsumer(MroDispatch):
             status="completed" if event.ok else "failed",
             content=[
                 ContentToolCallContent.model_validate(item)
-                for item in tool_result_content(event.id, event.output or "", event.diff, event.sent_message)
+                for item in tool_result_content(
+                    event.id, event.output or "", event.diff, event.sent_message
+                )
             ],
         )
         await client.publish_update(session_id=session_id, update=end_update)
@@ -142,9 +188,7 @@ class AcpEventConsumer(MroDispatch):
         await self.agent.sessions.publish_metadata(self.session_id)
 
     @handles(events.CompactionEvent)
-    async def on_compaction(
-        self, event: events.CompactionEvent
-    ) -> None:
+    async def on_compaction(self, event: events.CompactionEvent) -> None:
         await self.agent.turns.observe_compaction(self.session_id, event)
         await self.client.publish_update(
             session_id=self.session_id,

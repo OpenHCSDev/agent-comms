@@ -17,7 +17,7 @@ import os
 from pathlib import Path
 import sys
 
-from acp.exceptions import RequestError
+from agent_comms.coordination_errors import RequestRefused
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
 from agent_comms.pi_vocabulary import OffThinkingLevel, HighThinkingLevel
@@ -160,7 +160,7 @@ async def run(stage, package, models, ui, menu_contention=False):
                 try:
                     async with asyncio.timeout(15):
                         await repeated.request('set_config_option', config_id='thinking_level', value='off')
-                except RequestError:
+                except RequestRefused:
                     pass
                 else:
                     raise AssertionError('Unsupported explicit thinking selection was accepted')

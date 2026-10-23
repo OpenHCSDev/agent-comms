@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 from tools.debt_ratchet import UncarriedRecordFormat, git
 
+from agent_comms.cli_commands import StopCliCommand
 from agent_comms.installer.backup import StoreBackup, bus_files
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.carry import STEPS
@@ -237,7 +238,7 @@ def test_owner_stop_batch_reports_refusal_after_stopping_available_owners(comms,
 
     # A missing target must not prevent the batch from stopping its available owners.
     with pytest.raises(UpgradeRefused, match="failed"):
-        stack.stop_owners(comms.root, names)
+        stack.owners(comms.root, StopCliCommand, names).require_success(UpgradeRefused)
     saved = comms.registry.snapshot()
     assert all(saved.status(name).stopped for name in names[1:])
 

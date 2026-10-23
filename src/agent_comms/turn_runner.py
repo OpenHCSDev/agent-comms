@@ -7,7 +7,7 @@ from contextlib import AsyncExitStack, asynccontextmanager
 from functools import partial
 from typing import TYPE_CHECKING
 
-from acp.exceptions import RequestError
+from agent_comms.coordination_errors import RequestRefused
 from acp.schema import (
     PromptRequest,
     PromptResponse,
@@ -29,7 +29,7 @@ from .goal_actions import (
     PausedGoalAction,
 )
 from .goal_scheduler import GoalScheduler
-from .image_inputs import ImageInput
+from .image_input import ImageInput
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from .messages import Message
 from .mro_dispatch import MroDispatch, handles
@@ -289,7 +289,7 @@ class TurnRunner:
             outcome = await controller.request_ui_permission(self, session_id, permission)
             if outcome is None:
                 return pi.CancelledUiChoice()
-        except (TimeoutError, SubscriberClosed, RequestError):
+        except (TimeoutError, SubscriberClosed, RequestRefused):
             # A timed-out, departed or explicitly refusing controller grants no permission.
             # Unexpected decoder and transport defects propagate.
             return pi.CancelledUiChoice()

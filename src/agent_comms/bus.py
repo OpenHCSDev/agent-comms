@@ -388,7 +388,7 @@ class BusReader(RouteCounts, ABC):
     def replies(self, references: tuple[MessageReference, ...]) -> tuple[BusRecord, ...]:
         with self.observing() as db:
             sequences = {row.seq for original in references
-                         for row in AnsweredSource.select(db, original=original)}
+                         for row in AnsweredSource.select(db, original=original.seq)}
             headers = (BusRow.require(db, seq=seq) for seq in sorted(sequences))
             return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
@@ -501,7 +501,9 @@ class Bus(BusReader, ReconciledFile, WalStore, CarriedWriter, BusFile, Watched):
 
     def _insert(self, db: sqlite3.Connection, build: RecordBuilder) -> int:
         seq = BusRow.next_seq(db)
-        return build(seq, db).append_to(db, seq)
+        record = build(seq, db)
+        FieldCodec.require_fields(record)
+        return record.append_to(db, seq)
 
     def append(self, build: RecordBuilder) -> BusRecord:
         return self._publish(lambda db: self._insert(db, build))

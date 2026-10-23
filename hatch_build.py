@@ -1,9 +1,6 @@
 """Select the package's Core stamp using the build target."""
 
-import json
-import os
 import subprocess
-import sys
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 from shutil import copyfile
@@ -35,9 +32,9 @@ class CoreBuildHook(BuildHookInterface):
                 ("git", "-C", str(root.resolve()), "rev-parse", "HEAD"),
                 text=True,
             ).strip()
-            types.WheelStamp(commit, self.producer_digests(root)).write(path)
+            types.WheelStamp.of_source(root / "src", commit).write(path)
         elif not (commit := "$Format:%H$").startswith("$Format"):
-            types.WheelStamp(commit, self.producer_digests(root)).write(path)
+            types.WheelStamp.of_source(root / "src", commit).write(path)
         else:
             # A source distribution already carries its generated wheel value.
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -45,21 +42,6 @@ class CoreBuildHook(BuildHookInterface):
         destination = relative.removeprefix("src/") if self.target_name == "wheel" else relative
         self.build_config.build_reserved_paths.add(destination)
         build_data["force_include"][str(path)] = destination
-
-    def producer_digests(self, root: Path) -> dict[str, str]:
-        """Import the bus's declared schema once while building its immutable wheel.
-
-        The custom hook requires the project's runtime dependencies in pyproject.toml;
-        hatchling alone cannot import the application in an isolated build.
-        """
-        return json.loads(
-            subprocess.check_output(
-                (sys.executable, "-m", "agent_comms.producer_stamp"),
-                cwd=root,
-                env={**os.environ, "PYTHONPATH": str(root / "src")},
-                text=True,
-            )
-        )
 
     def finalize(self, version, build_data, artifact_path):
         (Path(self.directory) / ".core_stamp.py").unlink(missing_ok=True)

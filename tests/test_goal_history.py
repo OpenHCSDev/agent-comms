@@ -22,7 +22,7 @@ from agent_comms.goal_actions import (
 from agent_comms.goal_history import GoalHistoryError, GoalHistoryStore
 from agent_comms.goals import NoGoal
 from agent_comms.goal_states import ActiveGoal
-from agent_comms.tools import ToolRequest
+from agent_comms.tool_request import ToolRequest
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.threads import Thread
 

@@ -16,7 +16,7 @@ from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import CommsOrderDoneTool, CommsTodoCreateTool
+from agent_comms.order_tools import CommsOrderDoneTool, CommsTodoCreateTool
 from agent_comms.todos import (
     CommitDelivery, DoneTodoState, FixShape, OrderScope,
     PendingProblemOrder, ReportDelivery, ReportedProblemOrder, TriageScope,

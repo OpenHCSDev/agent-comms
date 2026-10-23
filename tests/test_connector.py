@@ -50,7 +50,8 @@ from agent_comms.maintenance_barrier import (
     InstallingPhase, MaintenanceBarrier, MaintenanceOperator, PausedPhase, ReadyPhase,
 )
 from agent_comms.store_files import _store_lock
-from agent_comms.tools import CommsChannelsTool, ReadTool, ToolRequest, invoke_tool
+from agent_comms.tools import CommsChannelsTool, invoke_tool
+from agent_comms.tool_request import ReadTool, ToolRequest
 from agent_comms.threads import Thread
 
 LIST = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
