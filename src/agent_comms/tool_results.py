@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from difflib import unified_diff
-from typing import Any, Literal, TYPE_CHECKING
+from typing import Literal, TYPE_CHECKING
 from urllib.parse import quote
+
+from pydantic import JsonValue
 
 from .field_codec import NullMember
 
@@ -84,7 +86,7 @@ class ToolDiff:
 def tool_result_content(
     tool_call_id: str, output: str, diff: ToolDiff | NoToolDiff = NoToolDiff(),
     sent_message: SentTranscript | NoSentMessage = NoSentMessage(),
-) -> list[dict[str, Any]]:
+) -> list[dict[str, JsonValue]]:
     """Use ACP's embedded text resource for patches with original hunk positions.
 
     ACP's oldText/newText diff describes complete file versions. Native Pi

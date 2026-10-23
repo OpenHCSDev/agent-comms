@@ -13,7 +13,9 @@ import subprocess
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, ClassVar
+
+from pydantic import JsonValue
 
 from agent_comms.errors import ToolRefusedError
 
@@ -177,7 +179,7 @@ class FileLine(WireValue, SourceReference):
         return f"{self.file}:{self.line}"
 
     @classmethod
-    def from_wire(cls, data: Any) -> FileLine:
+    def from_wire(cls, data: JsonValue) -> FileLine:
         if not isinstance(data, str):
             raise MalformedRecord("Expected a 'file.py:line' string.")
         file, separator, line = data.rpartition(":")
@@ -186,7 +188,7 @@ class FileLine(WireValue, SourceReference):
         return cls(file=file, line=int(line))
 
     @classmethod
-    def schema(cls) -> dict[str, Any]:
+    def schema(cls) -> dict[str, JsonValue]:
         return {"type": "string", "description": "Source reference spelled file.py:line"}
 
     @classmethod
