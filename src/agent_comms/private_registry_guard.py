@@ -171,9 +171,16 @@ class RegistryPrivacy(ABC):
     def coordinator_schema(self) -> type[TableSchema]:
         """The complete schema this root's authority requires during reconciliation."""
 
+    @abstractmethod
+    def publication_connection(self, connection: sqlite3.Connection) -> sqlite3.Connection | None:
+        """This root's recorded native publications, or no private publication source."""
+
 
 
 class PublicRegistry(RegistryPrivacy):
+    def publication_connection(self, connection: sqlite3.Connection) -> None:
+        """Public attached history has no private native publication relations."""
+
     def coordinator_schema(self) -> type[TableSchema]:
         from .coordination_schema import CoordinatorTable
 
@@ -232,6 +239,13 @@ class PublicRegistry(RegistryPrivacy):
 
 class PrivateRegistryGuard(DurableFile, WireWakeFile, RegistryPrivacy):
     filename = ".registry-owner-guard"
+
+    def publication_connection(self, connection: sqlite3.Connection) -> sqlite3.Connection:
+        from .coordination_response import ResponseTable
+
+        NativeRuntimeTable.require_installed(connection)
+        ResponseTable.require_installed(connection)
+        return connection
 
     def coordinator_schema(self) -> type[TableSchema]:
         from .private_runtime_schema import PrivateCoordinatorSchema, PrivateCoordinatorTable
