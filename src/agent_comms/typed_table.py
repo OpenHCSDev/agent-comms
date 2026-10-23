@@ -1358,6 +1358,8 @@ class DerivedTables(TableSchema):
     @classmethod
     def reset_schema(cls, db: sqlite3.Connection) -> None:
         """Inside the caller's transaction: rebuild only this schema's derived tables."""
+        for row in cls.schema_rows():
+            row.take_previous_name(db)
         for stored in cls.stored_tables(db):
             stored.drop(db)
         cls.create_schema(db)

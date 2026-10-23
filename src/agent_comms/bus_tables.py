@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Generator, Iterator
+from collections.abc import Iterator
 from contextlib import closing
 from dataclasses import Field, dataclass, fields, make_dataclass
 from functools import cache
 from inspect import get_annotations
-from itertools import islice
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, get_origin, get_type_hints
 
 from agent_comms import messages
@@ -95,8 +94,39 @@ class ReceivedSource(ParticipantSource):
         return query, (*parameters, *sender_lookups)
 
 
-class DirectReplySource(ReceivedSource):
-    """Frozen deliveries whose declared response policy starts a direct turn."""
+@dataclass(frozen=True)
+class AwaitingAnswerSource(ReceivedSource):
+    """The scope owner's append-time answer eligibility for a frozen recipient."""
+
+    recipient: str
+    starts_direct_turn: bool
+    renamed_from = ("direct_reply_source",)
+    indexes = (
+        Index(("recipient", "seq")),
+        Index(("lookup", "starts_direct_turn", "seq")),
+    )
+
+    @classmethod
+    def recipient_predicate(
+        cls, sequence: str, recipients: frozenset[str],
+    ) -> tuple[str, tuple[str, ...]]:
+        marks = ",".join("?" for _ in recipients)
+        return (
+            f'EXISTS (SELECT 1 FROM "{cls.declared_name}" AS awaiting '
+            f'WHERE awaiting.seq={sequence} AND awaiting.recipient IN ({marks}))',
+            tuple(recipients),
+        )
+
+
+class DirectReplySource(AwaitingAnswerSource, declared_name=None):
+    """A bounded selection of the same answer index, with no second stored table."""
+
+    @classmethod
+    def query(
+        cls, lookup: str, sender_lookups: tuple[str, ...] = (),
+    ) -> tuple[str, tuple[object, ...]]:
+        query, parameters = AwaitingAnswerSource.query(lookup, sender_lookups)
+        return query + " AND starts_direct_turn=?", (*parameters, True)
 
 
 @dataclass(frozen=True)
@@ -158,6 +188,9 @@ class AnsweredSource(TypedTable, BusProjectionTables):
         """Read unanswered originals through the existing reference and sender indexes."""
         requesters, responders = scope.second_names - scope.first_names, scope.first_names
         reference = MessageIdentitySource.reference_sql("asked")
+        eligible, eligibility = AwaitingAnswerSource.recipient_predicate(
+            "asked.seq", scope.first_names,
+        )
         asking = ",".join("?" for _ in requesters)
         replying = ",".join("?" for _ in responders)
         kind_filter = (
@@ -170,70 +203,72 @@ class AnsweredSource(TypedTable, BusProjectionTables):
             f'JOIN "{messages.Message.table.declared_name}" AS message USING(seq) '
             f'WHERE asked.sender IN ({asking}) AND '
             + messages.Message.table._sql('message.{timestamp} BETWEEN ? AND ? ')
-            + f'AND asked.seq < ? {kind_filter}AND NOT EXISTS ('
+            + f'AND asked.seq < ? {kind_filter}AND ({eligible}) AND NOT EXISTS ('
             f'SELECT 1 FROM "{cls.declared_name}" AS answered '
             f'JOIN "{MessageIdentitySource.declared_name}" AS author ON author.seq=answered.seq '
             + cls._sql(f'WHERE answered.{{original}}={reference} ')
-            + f'AND author.sender IN ({replying})) ORDER BY asked.seq DESC'
+            + f'AND author.sender IN ({replying})) ORDER BY asked.seq DESC LIMIT ?'
         )
-        with closing(db.execute(query, (
+        sequences = db.execute(query, (
             *requesters, since, before, upper, *(kind.declared_name for kind in kinds),
-            *responders,
-        ))) as sequences:
-            headers = (BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in sequences)
-            originals = (header.kind.read_from(db, header.seq) for header in headers)
-            return tuple(islice(
-                (original for original in originals if scope.includes(original)), limit,
-            ))
+            *eligibility, *responders, limit,
+        ))
+        headers = (BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in sequences)
+        return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
     @classmethod
-    def _answer_values[V](
+    def _answer_rows(
         cls, db: sqlite3.Connection, scope: RepliesDisplayScope,
-        since: float, selection: str, value_type: type[V],
-    ) -> Generator[V]:
-        """Visit each linked original once, in the requested answer order."""
+        since: float, selection: str,
+    ) -> sqlite3.Cursor:
         requesters, responders = scope.second_names, scope.first_names
+        eligible, eligibility = AwaitingAnswerSource.recipient_predicate(
+            "asked.seq", scope.first_names,
+        )
         asking = ",".join("?" for _ in requesters)
         replying = ",".join("?" for _ in responders)
         identity = MessageIdentitySource.declared_name
         content = messages.Message.table
         query = (
-            f'SELECT asked.seq, MAX({selection}) AS value '
-            f'FROM "{identity}" AS asked '
-            f'JOIN "{content.declared_name}" AS question ON question.seq=asked.seq '
-            f'JOIN "{cls.declared_name}" AS answered ON '
+            'WITH matches AS (SELECT reply.seq, '
+            + content._sql('reply_message.{timestamp} AS timestamp ')
+            + f'FROM "{identity}" AS reply '
+            f'JOIN "{content.declared_name}" AS reply_message USING(seq) '
+            f'WHERE reply.sender IN ({replying}) AND '
+            + content._sql('reply_message.{timestamp} >= ? AND EXISTS (')
+            + f'SELECT 1 FROM "{cls.declared_name}" AS answered '
+            f'JOIN "{identity}" AS asked ON '
             + cls._sql(f'answered.{{original}}={MessageIdentitySource.reference_sql("asked")} ')
-            + f'JOIN "{identity}" AS reply ON reply.seq=answered.seq '
-            f'JOIN "{content.declared_name}" AS reply_message ON reply_message.seq=reply.seq '
-            f'WHERE asked.sender IN ({asking}) AND reply.sender IN ({replying}) '
-            f'AND asked.seq<reply.seq AND '
-            + content._sql('question.{timestamp} >= ? AND reply_message.{timestamp} >= ? ')
-            + 'GROUP BY asked.seq ORDER BY value DESC'
+            + f'JOIN "{content.declared_name}" AS question ON question.seq=asked.seq '
+            f'WHERE answered.seq=reply.seq AND asked.seq<reply.seq '
+            f'AND asked.sender IN ({asking}) AND '
+            + content._sql('question.{timestamp} >= ? ')
+            + f'AND ({eligible}))) ' + selection
         )
-        with closing(db.execute(query, (*requesters, *responders, since, since))) as rows:
-            for original, value in rows:
-                header = BusRow.require(db, seq=FieldCodec.decode(int, original))
-                if scope.includes(header.kind.read_from(db, header.seq)):
-                    yield FieldCodec.decode(value_type, value)
+        return db.execute(query, (*responders, since, *requesters, since, *eligibility))
 
     @classmethod
     def latest_answer(
         cls, db: sqlite3.Connection, scope: RepliesDisplayScope,
         since: float,
     ) -> tuple[messages.BusRecord, ...]:
-        with closing(cls._answer_values(db, scope, since, 'reply.seq', int)) as sequences:
-            headers = (BusRow.require(db, seq=seq) for seq in islice(sequences, 1))
-            return tuple(header.kind.read_from(db, header.seq) for header in headers)
+        sequences = cls._answer_rows(
+            db, scope, since,
+            'SELECT seq FROM matches ORDER BY seq DESC LIMIT 1',
+        )
+        headers = (BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in sequences)
+        return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
     @classmethod
     def answer_timestamp(
         cls, db: sqlite3.Connection, scope: RepliesDisplayScope,
         since: float,
     ) -> float:
-        with closing(cls._answer_values(
-            db, scope, since, messages.Message.table._sql('reply_message.{timestamp}'), float,
-        )) as timestamps:
-            return next(timestamps, 0.0)
+        row = cls._answer_rows(
+            db, scope, since,
+            'SELECT COALESCE(MAX(timestamp),0.0) FROM matches',
+        ).fetchone()
+        return FieldCodec.decode(float, row[0])
 
 
 @dataclass(frozen=True)

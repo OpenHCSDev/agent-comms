@@ -435,11 +435,17 @@ def test_latest_answer_retains_the_original_response_eligibility(
     original = held_bus.bus.publisher.publish_ordinary(
         Message(sender, target, body, InfoKind, timestamp=now - 20, role=role), destination=CommandTarget.named(target), origin=origin,
     )
-    reply = publish(held_bus, "lead", sender, now - 10, answers=(original.reference,))
     scope = RepliesDisplayScope(frozenset({"lead"}), frozenset({sender}))
     assert scope.includes(original) is eligible
+    assert held_bus.bus.bus.unanswered_page(
+        scope, since=now - 60, before=now, upper=original.seq + 1, limit=1,
+    ) == ((original,) if eligible else ())
+    reply = publish(held_bus, "lead", sender, now - 10, answers=(original.reference,))
     found = AnswersTo(scope, now - 60).read_opened(held_bus.bus.bus)
     assert found == ((reply,) if eligible else ())
+    assert held_bus.bus.bus.unanswered_page(
+        scope, since=now - 60, before=now, upper=reply.seq + 1, limit=1,
+    ) == ()
 
 
 def test_latest_answer_retains_the_original_commander_alias(held_bus):
