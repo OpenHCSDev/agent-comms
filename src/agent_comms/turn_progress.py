@@ -272,10 +272,6 @@ class TurnProgress(events.AgentEventConsumer):
             return
         with self.publication_measurements.measuring():
             published = await self.consumer.dispatch(publication)
-        if isinstance(published, events.Done):
-            # ACP publication may replace Done with its notification acknowledgement;
-            # terminal consumers retain that exact completed outcome.
-            self.turn.terminal = published
         await self.publication.dispatch(published)
 
     def publish_success(self) -> tuple[SendResult, ...]:
