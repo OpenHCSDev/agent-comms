@@ -830,7 +830,10 @@ class ClaimIdsPhase(Id128NominalPhase):
     after = (NominalIdTypePhase,)
     evidence = AllEvidence(
         (
-            PatternAbsent(r"\b(nonce|operation_id|generation): (str\b|Id128\b|Annotated\[(str|Id128)\b)"),
+            PatternAbsent(
+                r"\b(nonce|operation_id|generation): "
+                r"(str\b|Id128\b|Annotated\[(str|Id128)\b)"
+            ),
             PatternAbsent(r"Id128Text\.decode\(self\.(nonce|operation_id)\)"),
         )
     )
@@ -842,7 +845,10 @@ class MessageIdsPhase(Id128NominalPhase):
     after = (ClaimIdsPhase,)
     evidence = AllEvidence(
         (
-            PatternAbsent(r"\b(message_id|source_message_id): (str\b|Id128\b|Annotated\[(str|Id128)\b)"),
+            PatternAbsent(
+                r"\b(message_id|source_message_id): "
+                r"(str\b|Id128\b|Annotated\[(str|Id128)\b)"
+            ),
             PatternAbsent(r"Annotated\[str, *MessageIdText\]"),
         )
     )
@@ -867,7 +873,9 @@ class GoalIdsPhase(Id128NominalPhase):
     """6: goal ids are ``GoalId``, minted by it, never by a hand-written ``uuid4().hex``."""
 
     after = (TurnIdsPhase,)
-    evidence = PatternAbsent(r"\b(goal_id|original_goal_id): (str\b|Id128\b|Annotated\[(str|Id128)\b)")
+    evidence = PatternAbsent(
+        r"\b(goal_id|original_goal_id): (str\b|Id128\b|Annotated\[(str|Id128)\b)"
+    )
 
 
 class RootIdsPhase(Id128NominalPhase):
@@ -877,7 +885,8 @@ class RootIdsPhase(Id128NominalPhase):
     evidence = AllEvidence(
         (
             PatternAbsent(
-                r"\b(wire_root_id|root_id|lookup|recipient_lookup): (str\b|Id128\b|Annotated\[(str|Id128)\b)"
+                r"\b(wire_root_id|root_id|lookup|recipient_lookup): "
+                r"(str\b|Id128\b|Annotated\[(str|Id128)\b)"
             ),
             PatternAbsent(r"Id128Text\.decode\((self\.)?(owner\.)?(wire_root_id|root_id|lookup)\)"),
             PatternAbsent(r"FieldCodec\.decode\(Annotated\[str, *Id128Text\]"),
@@ -891,7 +900,10 @@ class InputIdsPhase(Id128NominalPhase):
     after = (RootIdsPhase,)
     evidence = AllEvidence(
         (
-            PatternAbsent(r"\b(input_id|accepted_input_id|native_id): (str\b|Id128\b|Annotated\[(str|Id128)\b)"),
+            PatternAbsent(
+                r"\b(input_id|accepted_input_id|native_id): "
+                r"(str\b|Id128\b|Annotated\[(str|Id128)\b)"
+            ),
             PatternAbsent(r"Id128Text\.(decode|from_text)\((self\.)?(input_id|native_id)\)"),
         )
     )

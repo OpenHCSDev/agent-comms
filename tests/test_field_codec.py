@@ -986,7 +986,8 @@ def test_nominal_ids_roundtrip_preserves_wire_schema_and_refuses_wrong_kind() ->
     assert type(decoded.turn) is TurnId
 
     spelling = {"type": "string", "pattern": "^(?:[0-9a-f]{32})$"}
-    assert FieldCodec.value_schema(Id128) == FieldCodec.value_schema(Annotated[str, Id128Text]) == spelling
+    assert FieldCodec.value_schema(Id128) == spelling
+    assert FieldCodec.value_schema(Annotated[str, Id128Text]) == spelling
     assert FieldCodec.record_schema(_NominalIdentityRow)["properties"] == {
         "nominal": spelling, "annotated": spelling, "plain": {"type": "string"}, "turn": spelling,
     }
