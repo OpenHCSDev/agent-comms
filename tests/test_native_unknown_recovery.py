@@ -367,7 +367,7 @@ def test_abandon_requires_real_release(released_unknown, damage):
     process, exit_allowed, root, _root_id, execution_id, _input_id = released_unknown
     leave(process, exit_allowed)
     releases = wire(root).owners.releases
-    original = releases.get("beta")
+    original = releases.read_many(("beta",))["beta"]
     with releases.writing() as db:
         damage(db, original)
     with Coordination(str(root / "coordination.sqlite3")) as store:

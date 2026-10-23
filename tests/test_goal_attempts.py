@@ -459,7 +459,7 @@ def test_stop_recovers_claim_after_owner_exits_without_turn_cleanup(comms, claim
 
     stopped = comms.registry.require(claimed_owner.name)
     assert not stopped.process_alive
-    assert comms.owners.releases.get(stopped.name).matches(claimed_owner)
+    assert comms.owners.releases.read_many((stopped.name,))[stopped.name].matches(claimed_owner)
     successor = store.require_generation(goal_id)
     assert successor.number == before.number + 1
     assert successor.lifecycle == ReadyGeneration()
@@ -472,12 +472,12 @@ def test_stop_recovers_claim_after_owner_exits_without_turn_cleanup(comms, claim
     assert stopped.goal == claimed_owner.goal
     stopped.goal.require().require_active()
     # Repeated recovery is a no-op; it never creates another ready generation.
-    RecoveryMonitorCapability.settle_stopped_owner(comms.root, stopped)
+    RecoveryMonitorCapability.settle_stopped_owners(comms.root, (stopped,))
     assert store.require_generation(goal_id) == successor
     # Even without native coordination, a foreign release must be rejected.
     substituted = replace(claimed_owner, created_at=claimed_owner.created_at + 1)
     with pytest.raises(RecoveryBlocked):
-        RecoveryMonitorCapability.settle_stopped_owner(comms.root, substituted)
+        RecoveryMonitorCapability.settle_stopped_owners(comms.root, (substituted,))
     assert store.require_generation(goal_id) == successor
 
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from abc import ABC, abstractmethod
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
@@ -169,6 +169,17 @@ class OwnerRelease(ABC):
         source.sent_owner_claimed_generation.require_release(release, snapshot, current)
         return release
 
+    def require_stopping_owner(self, snapshot: RegistrySnapshot, thread: Thread,
+                               claimed_generation: int) -> None:
+        if self.current(snapshot, thread, claimed_generation):
+            return
+        try:
+            snapshot.require_stopping_owner(thread, claimed_generation)
+        except RelationViolationError as error:
+            raise RelationViolationError(
+                f"Owner changed while stopping {thread.name!r}; refusing a stale signal."
+            ) from error
+
 
 class NoRelease(OwnerRelease):
     def current(self, snapshot, expected, claim_scope) -> bool:
@@ -246,14 +257,28 @@ class OwnerReleaseStore(ThreadOwnedState, DurableStore):
     filename = "owner_releases.sqlite3"
     tables = OwnerReleaseStoreRows
 
-    def get(self, name: str) -> OwnerRelease:
-        with self.snapshot() as db, closing(OwnerReleaseEvidence.stream(db, name=name)) as records:
-            return next(records, NoRelease())
+    @contextmanager
+    def reading(self) -> Iterator[Callable[[str], OwnerRelease]]:
+        with self.snapshot() as db:
+            def read(name: str) -> OwnerRelease:
+                with closing(OwnerReleaseEvidence.stream(db, name=name)) as records:
+                    return next(records, NoRelease())
+            yield read
 
-    def record(self, thread: Thread, before: int, after: int) -> None:
-        thread.turn_record.read().require_idle()
+    def read_many(self, names: Sequence[str]) -> dict[str, OwnerRelease]:
+        with self.reading() as read:
+            return {name: read(name) for name in names}
+
+    def record(self, snapshot: RegistrySnapshot, owners: Sequence[tuple[Thread, int]]) -> None:
+        if not owners:
+            return
         with self.writing() as db:
-            OwnerReleaseEvidence(thread.name, thread.incarnation.wire_birth, thread.process_identity, before, after).upsert(db)
+            for original, before in owners:
+                thread = snapshot.require(original.name)
+                thread.turn_record.read().require_idle()
+                OwnerReleaseEvidence(thread.name, thread.incarnation.wire_birth,
+                                     thread.process_identity, before,
+                                     snapshot.claim_generation(thread.name)).upsert(db)
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
         with self.writing() as db:
@@ -459,9 +484,9 @@ class OwnerLifecycle:
         # Stop is explicit abandonment of this exited local owner, not replay
         # permission. The existing recovery owner checks its exact release and
         # native-child absence before terminal settlement.
-        for thread, generation in owners:
-            self._finish_stopped_owner(thread, generation)
-            RecoveryMonitorCapability.settle_stopped_owner(self.root, thread)
+        self._finish_stopped_owners(owners)
+        RecoveryMonitorCapability.settle_stopped_owners(
+            self.root, tuple(thread for thread, _ in owners))
 
     def require_private_launch(self) -> PrivateNkLaunch:
         """The launch authority of a root that must be private."""
@@ -513,22 +538,25 @@ class OwnerLifecycle:
         # Voluntary release advances the input generation and marks STOPPED before Python
         # finishes shutting down. Its exact acknowledgement preserves the signaled
         # incarnation; it does not prove OS exit or authorize a replacement PID.
-        if self.releases.get(thread.name).current(snapshot, thread, claimed_generation):
-            return
-        try:
-            snapshot.require_stopping_owner(thread, claimed_generation)
-        except RelationViolationError as error:
-            raise RelationViolationError(
-                f"Owner changed while stopping {thread.name!r}; refusing a stale signal."
-            ) from error
+        release = self.releases.read_many((thread.name,))[thread.name]
+        release.require_stopping_owner(snapshot, thread, claimed_generation)
 
-    def _finish_stopped_owner(self, thread: Thread, claimed_generation: int) -> None:
-        with self.registry.store.locked():
-            snapshot = self.registry.snapshot()
-            if self.releases.get(thread.name).current(snapshot, thread, claimed_generation):
-                return  # An exact, durably attested release of the signaled owner.
-            self._require_same_stop_owner(thread, claimed_generation)
-            self._retire_owner_unlocked(thread, claimed_generation)
+    def _finish_stopped_owners(self, owners: Sequence[tuple[Thread, int]]) -> None:
+        if not owners:
+            return
+        with self.registry.store.editing() as edit:
+            snapshot = edit.original.snapshot
+            releases = self.releases.read_many(tuple(thread.name for thread, _ in owners))
+            retiring = []
+            for thread, generation in owners:
+                release = releases[thread.name]
+                if release.current(snapshot, thread, generation):
+                    continue  # The original owner durably acknowledged its own release.
+                release.require_stopping_owner(snapshot, thread, generation)
+                retiring.append((thread, generation))
+                edit.document.unregister(thread.name)
+            edit.commit()
+            self.releases.record(edit.original.snapshot, retiring)
 
     def release(self, name: str) -> None:
         """Let the calling participant mark itself stopped without signalling."""
@@ -550,4 +578,4 @@ class OwnerLifecycle:
         """Share retirement only after the caller's distinct identity checks."""
         self.registry.unregister(thread.name)
         after = self.registry.snapshot()
-        self.releases.record(after.threads[thread.name], before, after.claim_generation(thread.name))
+        self.releases.record(after, ((thread, before),))
