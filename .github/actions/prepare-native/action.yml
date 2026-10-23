@@ -5,6 +5,10 @@ inputs:
     description: Installed Core interpreter command or executable path
     required: false
     default: python
+  host-dependencies:
+    description: Also install the locked runtime host packages Core's durable host imports from beside it (src/agent_comms)
+    required: false
+    default: "false"
 runs:
   using: composite
   steps:
@@ -18,3 +22,8 @@ runs:
     - name: Prepare pinned native Pi
       shell: bash
       run: stack/bin/prepare-pi-native --python "$(command -v '${{ inputs.python }}')"
+    - name: Install locked runtime host dependencies
+      if: inputs.host-dependencies == 'true'
+      shell: bash
+      working-directory: src/agent_comms
+      run: npm ci --ignore-scripts --omit=dev --no-audit --no-fund

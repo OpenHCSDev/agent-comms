@@ -1,0 +1,11 @@
+name: Prepare Python
+description: Set up the interpreter pyproject.toml names and install Core, the refactor-audit skill and the test dependencies, editable.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version-file: pyproject.toml
+    - name: Install agent-comms and test dependencies
+      shell: bash
+      run: python -m pip install -e src/agent_comms/skills/refactor-audit -e '.[dev]'

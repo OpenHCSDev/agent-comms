@@ -72,18 +72,13 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version-file: pyproject.toml
+      - name: Prepare Python
+        uses: ./.github/actions/prepare-python
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e src/agent_comms/skills/refactor-audit -e ".[dev]"
-
-      - name: Prepare pinned native Pi
+      - name: Prepare pinned native Pi and its runtime host dependencies
         uses: ./.github/actions/prepare-native
+        with:
+          host-dependencies: "true"
 
       - name: Check the native pin matches the tree
         run: pytest tests/test_native_pin.py --no-cov -q
@@ -94,12 +89,6 @@ jobs:
       - name: Install pinned Pi loopback fixture
         run: |
           npm install -g --prefix "$HOME/.local/pi-npm" --ignore-scripts --no-audit --no-fund @earendil-works/pi-coding-agent@0.85.1
-
-      # The durable host imports pi-durable, pi-ai and chord from beside it.
-      - name: Install locked runtime host dependencies
-        working-directory: src/agent_comms
-        shell: bash
-        run: npm ci --ignore-scripts --omit=dev --no-audit --no-fund
 
       - name: Run tests with coverage (85% enforced on Linux)
         if: matrix.os == 'ubuntu-latest'
