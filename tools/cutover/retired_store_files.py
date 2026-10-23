@@ -1,39 +1,43 @@
-"""File declarations required to snapshot and restore superseded store artifacts.
-
-The cutover tool deletes these resources. Their declarations remain available to
-cold backup recovery while retained snapshots still name them.
-"""
+"""Retired store declarations. Delete with carry_retired_stores.py."""
 
 from pathlib import Path
 
-from agent_comms.locked_store import DurableFile, PatternFile, PublishedSQLiteFile, RootFile, SQLiteFile
+from agent_comms.locked_store import DurableFile, PatternFile, PublishedSQLiteFile, SQLiteFile
 
 
 class RetiredRootFile(DurableFile, PatternFile):
-    """An obsolete resource remains declared until its carry and rollback finish."""
+    """Unwritten artifacts and their companions use byte copies."""
+
+    @classmethod
+    def primaries_in(cls, root: Path) -> frozenset[Path]:
+        return super().matching_in(root)
+
+    @classmethod
+    def matching_in(cls, root: Path) -> frozenset[Path]:
+        return frozenset(
+            member
+            for primary in cls.primaries_in(root)
+            for member in cls.retirement_paths(primary)
+            if member.is_file()
+        )
 
     @classmethod
     def retirement_paths(cls, path: Path) -> tuple[Path, ...]:
         return cls.files(path)
 
 
-class RetiredSQLiteStore(SQLiteFile, RetiredRootFile):
-    """Declared SQLite snapshot behavior remains available throughout rollback."""
-
-
-class RetiredPublishedSQLiteStore(PublishedSQLiteFile, RetiredSQLiteStore):
-    @classmethod
-    def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
-        copied = set(super().copy_group(source, target))
-        for original, destination in zip(cls._source_paths(source), cls._source_paths(target), strict=True):
-            if original.exists():
-                RootFile.copy_file(original, destination)
-                copied.add(original)
-        return frozenset(copied)
+class RetiredSQLiteStore(RetiredRootFile):
+    """A retired database has no writer; preserve its physical companions as bytes."""
 
     @classmethod
     def retirement_paths(cls, path: Path) -> tuple[Path, ...]:
-        return (*super().retirement_paths(path), *cls._source_paths(path))
+        return SQLiteFile.files(path)
+
+
+class RetiredPublishedSQLiteStore(RetiredSQLiteStore):
+    @classmethod
+    def retirement_paths(cls, path: Path) -> tuple[Path, ...]:
+        return (*super().retirement_paths(path), *PublishedSQLiteFile._source_paths(path))
 
 
 class RetiredTodoAllocationSnapshot(RetiredSQLiteStore):

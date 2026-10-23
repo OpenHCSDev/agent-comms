@@ -21,9 +21,9 @@ from agent_comms.typed_table import (
     TableSchema,
 )
 
-from .declared_family import DeclaredFamily
 from .child_process import Platform
-from .locked_store import DEFAULT_STORE_CONTENTION, SQLiteFile, StoreBusy, StoreContention
+from .declared_family import DeclaredFamily
+from .locked_store import DEFAULT_STORE_CONTENTION, StoreBusy, StoreContention
 
 
 class StoreFile(DeclaredFamily):
@@ -94,7 +94,10 @@ class CoordinationStore(CarriedWriter, ReconciledFile):
                 return InvalidStore("Coordinator is not a regular file")
             if not info.st_size:
                 return InvalidStore("Coordinator is empty")
-            with CoordinationReadUnavailable.checking(), closing(cls.read_snapshot(path, StoreBusy())):
+            with (
+                CoordinationReadUnavailable.checking(),
+                closing(cls.read_snapshot(path, StoreBusy())),
+            ):
                 pass
         except FileNotFoundError:
             return MissingStore()
@@ -105,7 +108,8 @@ class CoordinationStore(CarriedWriter, ReconciledFile):
         return ReadableStore(path)
 
     def __init__(
-        self, path: str | os.PathLike[str],
+        self,
+        path: str | os.PathLike[str],
         contention: StoreContention = DEFAULT_STORE_CONTENTION,
     ) -> None:
         super().__init__(Path(path))
