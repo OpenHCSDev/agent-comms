@@ -56,7 +56,7 @@ def walk(ctx: Commander, turns: dict[str, list[str]], thread: str,
         if len(turns[thread]) >= 25:
             emit(turns, thread)
     if message.stop_reason.items_with(Successful, message):
-        text = ''.join(part.text for part in message.parts if isinstance(part, TextContent))
+        text = ''.join(text for part in message.parts for text in part.text_parts())
         emit(turns, thread, text)
 
 

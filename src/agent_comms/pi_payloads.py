@@ -442,6 +442,9 @@ class UnreportedUsage(PiUsage):
 
 @dataclass(frozen=True)
 class PiContent(OpenPayload, affix="Content"):
+    def text_parts(self) -> tuple[str, ...]:
+        return ()
+
     def tool_calls(self) -> tuple[ToolCallContent, ...]:
         return ()
 
@@ -467,6 +470,9 @@ class PiContent(OpenPayload, affix="Content"):
 
 @dataclass(frozen=True)
 class TextContent(PiContent):
+    def text_parts(self) -> tuple[str, ...]:
+        return (self.text,)
+
     def user_transcript(self, position: int, timestamp: float):
         from .transcript_events import UserTranscript
 
@@ -933,7 +939,7 @@ class UserMessage(PiMessage):
 
         routing, display = context.routing, context.input_display
         # Preserve exact separators, including empty text blocks, for provenance.
-        raw_text = "\n".join(part.text for part in self.parts if isinstance(part, TextContent))
+        raw_text = "\n".join(text for part in self.parts for text in part.text_parts())
         if display is not None and display.sent_text_digest is not None:
             if self.content is not None and display.matches(raw_text):
                 routing = display.routing
@@ -976,7 +982,7 @@ class ToolResultMessage(PiMessage, declared_name="toolResult"):
 
         if not self.parts:
             return []
-        output = "\n".join(part.text for part in self.parts if isinstance(part, TextContent))
+        output = "\n".join(text for part in self.parts for text in part.text_parts())
         result = ProvidedToolResult(content=self.parts, details=self.details)
         events = [
             ToolEndTranscript(
