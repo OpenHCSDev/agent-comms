@@ -656,7 +656,7 @@ class RuntimeFile(RootFile):
 
 
 @dataclass(frozen=True, slots=True)
-class LockedStore(FileStore, StoreLockOwner, JsonDocument[T]):
+class LockedStore(FileStore, StoreLockOwner, JsonDocument[T], declared_name=None):
     """Ordered document transactions; callbacks never mutate or reenter."""
 
     path: Path

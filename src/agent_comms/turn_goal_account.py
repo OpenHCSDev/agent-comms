@@ -6,20 +6,19 @@ owns only the live turn's permits and observations, never a reconstructed grant.
 
 from __future__ import annotations
 
+from agent_comms.errors import GoalAttemptError
 from contextlib import ExitStack
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from acp import RequestError
 
-from agent_comms.goal_attempts import (
-    GoalAttemptError, GoalAttemptStore, LaunchPermit,
-)
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from .mro_dispatch import MroDispatch, handles
 
 if TYPE_CHECKING:
+    from .goal_attempts import GoalAttemptStore, LaunchPermit
     from . import agent_events as events
     from .turn_terminal import TurnTerminal
     from .comms import Comms

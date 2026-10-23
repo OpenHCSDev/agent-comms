@@ -18,4 +18,3 @@ STORE_LOCK_ORDER = (
     RuntimeChildrenStore, RootRuntimeStore, ServicePassStore,
 )
 
-StoreLockOwner.declare_lock_order(STORE_LOCK_ORDER)

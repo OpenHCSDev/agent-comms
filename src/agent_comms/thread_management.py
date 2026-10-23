@@ -30,7 +30,7 @@ from .agent_backend import RuntimeLocation
 from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, NullMember, RecordMember, SingleFieldValue, SubclassUnion
+from .field_codec import DeclaredWireType, FieldCodec, NullMember, RecordMember, SingleFieldValue, SubclassUnion
 from .importing import ImportLimits, ImportSnapshot, ThreadImported
 from .launch_runtime import LaunchRuntime, TagListText
 from .message_bus import MessageBus
@@ -71,21 +71,18 @@ class TagChoice(SubclassUnion, affix="Tags"):
 
 
 @dataclass(frozen=True, slots=True)
-class GivenTags(TagChoice):
+class GivenTags(DeclaredWireType, TagChoice):
     """Tags spelled as comma-separated text on the command line, in the editor and in tools."""
 
+    wire_type = str
     tags: frozenset[str]
 
     @classmethod
     def from_wire(cls, data: object) -> Self:
-        return cls(TagListText.from_text(FieldCodec.decode(str, data)))
+        return cls(TagListText.from_text(FieldCodec.decode(cls.wire_type, data)))
 
     def to_wire(self) -> str:
         return TagListText.encode(self.tags)
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        return FieldCodec.value_schema(str)
 
     def for_child(self, parent: frozenset[str]) -> frozenset[str]:
         return self.tags

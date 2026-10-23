@@ -1,10 +1,10 @@
 """Activity and viewer clocks are read-only projections of committed bus appends."""
+from agent_comms.activity_clocks import ChannelActivity
 from dataclasses import replace
 
 import pytest
 
 from agent_comms.bus import PublicRecord
-from agent_comms.bus_activity_index import ChannelActivity
 from agent_comms.mentions import ThreadMention
 from agent_comms.messages import InfoKind, Message, NoticeRole
 from agent_comms.read_basis import (

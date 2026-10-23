@@ -14,22 +14,11 @@ from agent_comms.bus import (
     PublicRecord,
 )
 from agent_comms.bus_publication import Delivered, HumanOrigin, KeyedPublication
-from agent_comms.bus_tables import (
-    AnsweredSource,
+from agent_comms.bus_tables import AnsweredSource, BusSchema, MessageIdentitySource
+from agent_comms.messages import (
     BusProjectionTables,
     BusRow,
-    BusSchema,
     BusTables,
-    MessageIdentitySource,
-)
-from agent_comms.coordination_tables.publications import PublicationIntents
-from agent_comms.errors import (
-    CommittedMessageError,
-    HumanSendRefusedError,
-    RelationViolationError,
-    UnclaimedError,
-)
-from agent_comms.messages import (
     Claimed,
     ClaimHistoryKind,
     InfoKind,
@@ -37,6 +26,13 @@ from agent_comms.messages import (
     Message,
     MessageRoleWire,
     NoticeRole,
+)
+from agent_comms.coordination_tables.publications import PublicationIntents
+from agent_comms.errors import (
+    CommittedMessageError,
+    HumanSendRefusedError,
+    RelationViolationError,
+    UnclaimedError,
 )
 from agent_comms.message_reference import MessageReference
 from agent_comms.response_acknowledgement import (

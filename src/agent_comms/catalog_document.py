@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from .activity_clocks import ActivityClocks
 import time
 from dataclasses import dataclass, field, replace
 
-from .bus_activity_index import ActivityClocks
 from . import channels
 from .channel_targets import ChannelTarget, DeclaredTag, Tag
 from .channels import (
