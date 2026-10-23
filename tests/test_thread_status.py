@@ -79,7 +79,7 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status,
         assert raw["threads"]["owner"]["created_at"] == 12.5
         reopened = Registration(comms.registry.store.path)
         assert reopened.snapshot() == before
-        expected = status.registered(thread, before.seen_at(thread.name))
+        expected = status.declaration().registered(thread, before.seen_at(thread.name))
         assert reopened.status("owner") == expected
         assert FieldCodec.decode(ThreadStatus, FieldCodec.encode(status)) == status
         assert comms.views.thread_detail("owner", CountedRead()).to_wire()["status"] == expected.declared_name
@@ -105,7 +105,7 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status,
             comms.views.thread_presentations(("missing",)).require("missing")
         child.kill()
         child.wait(timeout=5)
-        expected = status.registered(thread, before.seen_at(thread.name))
+        expected = status.declaration().registered(thread, before.seen_at(thread.name))
         assert reopened.status("owner") == expected
         assert comms.agents.is_live(thread.incarnation, reopened.snapshot()) == expected.running
         assert comms.registry.store.path.read_bytes() == saved

@@ -268,12 +268,6 @@ class HeartbeatThreadStatus(RunningThreadStatus):
     def when_seen(self, last_seen: float) -> ThreadStatus:
         return self if time.time() - last_seen <= self.max_age else StoppedThreadStatus()
 
-    def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
-        return self.when_seen(last_seen)
-
-    def declaration(self) -> ThreadStatus:
-        return self
-
 
 class IdleThreadStatus(ActiveThreadPresence):
     pass
