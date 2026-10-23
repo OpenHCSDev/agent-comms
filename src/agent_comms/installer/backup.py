@@ -19,12 +19,13 @@ from string import Formatter
 from typing import ClassVar, Iterator, Self
 
 from agent_comms.child_process import Platform
-from agent_comms.active_route import ActiveRoute, _route_directory, route_directory
+from agent_comms.active_route import ActiveRoute, _route_directory, active_route_path, route_directory
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.interpreter_operation import RouteSelection
 from agent_comms.locked_store import LockedStore, RootFile, RuntimeFile, SQLiteFile
 from agent_comms.private_path import FileObservation, FileRevision, MissingFile
+from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import AtomicFile
 
 
@@ -176,6 +177,19 @@ class StoreBackup(ResourceBackup):
         return FieldCodec.decode(dict[str, str],
                                  FieldCodec.parse((self.path / 'files.json').read_text()))
 
+    @classmethod
+    def interrupted(cls, root: Path, spill_dir: Path) -> tuple[StoreBackup, ...]:
+        if not spill_dir.exists():
+            return ()
+        route = active_route_path()
+        backups = (
+            cls(root, route, spill_dir / name.value)
+            for name in sorted(BackupName.matching(
+                root, (path.name for path in spill_dir.iterdir() if path.is_dir())
+            ), reverse=True)
+        )
+        return tuple(backup for backup in backups if not backup.original())
+
     def retire(self) -> Path:
         archived = self.path.with_name(f'{self.path.name}.restored-{time.time_ns()}')
         self.path.rename(archived)
@@ -226,6 +240,9 @@ class StoreBackup(ResourceBackup):
 
     @classmethod
     def take(cls, root: Path, route: Path, files: tuple[Path, ...], spill_dir: Path) -> StoreBackup:
+        registry = RegistryStore.at(root).written
+        if any(path in files for path in registry):
+            files = tuple(dict.fromkeys((*files, *registry)))
         path = spill_dir / BackupName.now(root).value
         backup = cls(root, route, path)
         selected = tuple(str(file.relative_to(root)) for file in files)
@@ -338,7 +355,15 @@ class StoreBackup(ResourceBackup):
 
     def restore(self) -> None:
         saved = self.files()
-        for name in json.loads((self.path / 'selected.json').read_text()):
+        selected = json.loads((self.path / 'selected.json').read_text())
+        registry = tuple(str(path.relative_to(self.root)) for path in RegistryStore.at(self.root).written)
+        # The registry owns this ordering: restore its snapshot before publishing
+        # the matching guard, after every unrelated selected file.
+        ordered = (
+            *(name for name in selected if name not in registry),
+            *(name for name in registry if name in selected),
+        )
+        for name in ordered:
             if self.file_original(name, saved):
                 continue
             target = self.root / name
