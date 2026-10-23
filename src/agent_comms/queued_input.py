@@ -13,7 +13,7 @@ from dataclasses import dataclass, field, replace
 from functools import partial
 from typing import TYPE_CHECKING, Generic, Self, TypeVar
 
-from acp import RequestError
+from agent_comms.coordination_errors import RequestRefused
 
 
 from .assignment_states import DeferredAssignment, DeliveredAssignment
@@ -157,7 +157,7 @@ class QueuedInput:
     def require_capacity(cls, inputs: InputDrain, sources: tuple[TurnInputSource, ...]) -> None:
         """Follow-ups cannot exceed the original live awaiting-start allowance."""
         if cls.remaining_capacity(inputs, sources) <= 0:
-            raise RequestError.invalid_params(
+            raise RequestRefused.invalid_params(
                 {"reason": "Too many follow-up inputs awaiting their own user start."}
             )
 

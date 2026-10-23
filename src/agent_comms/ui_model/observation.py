@@ -30,7 +30,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self, final
 
-from acp import RequestError
+from agent_comms.coordination_errors import RequestRefused
 
 from agent_comms.acp_extension import TranscriptDraftUpdate, TranscriptSnapshotUpdate
 from agent_comms.active_route import CommsRoute
@@ -385,7 +385,7 @@ class OwnerRead(AwaitedRead):
     def refusal_errors(self) -> tuple[type[Exception], ...]:
         return (
             *super().refusal_errors,
-            RequestError, CoordinationError, ToolRefusedError, ConnectionError, TimeoutError,
+            RequestRefused, CoordinationError, ToolRefusedError, ConnectionError, TimeoutError,
         )
 
     def receive(self, service: ObservationService) -> None:

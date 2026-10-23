@@ -8,7 +8,7 @@ from functools import partial
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from acp.exceptions import RequestError
+from agent_comms.coordination_errors import RequestRefused
 from acp.schema import AgentMessageChunk, PromptResponse, TextContentBlock
 
 from . import agent_events as events
@@ -48,15 +48,15 @@ class CompactionReply(MroDispatch):
 
     @handles(NothingToCompaction)
     def nothing(self, outcome: NothingToCompaction) -> PromptResponse:
-        raise RequestError(-32603, "Nothing to compact.", {"reason": "nothing_to_compact"})
+        raise RequestRefused.internal_error({"reason": "nothing_to_compact"}, message="Nothing to compact.")
 
     @handles(FailedCompaction)
     def failed(self, outcome: FailedCompaction) -> PromptResponse:
-        raise RequestError(-32603, outcome.message, {"reason": outcome.message})
+        raise RequestRefused.internal_error({"reason": outcome.message}, message=outcome.message)
 
     @handles(StaleCompaction)
     def stale(self, outcome: StaleCompaction) -> PromptResponse:
-        raise RequestError(-32603, "The history moved past the summary.", {"reason": "stale"})
+        raise RequestRefused.internal_error({"reason": "stale"}, message="The history moved past the summary.")
 
 
 async def compact_context(

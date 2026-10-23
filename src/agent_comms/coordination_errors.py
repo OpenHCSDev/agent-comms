@@ -4,7 +4,38 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 from copyreg import __newobj__
-from typing import Never
+from typing import ClassVar, Never, Self
+
+
+class RequestRefused(Exception):
+    """A Core request refusal, independent of the transport carrying it."""
+
+    INVALID_PARAMS: ClassVar[int] = -32602
+    METHOD_NOT_FOUND: ClassVar[int] = -32601
+    INTERNAL_ERROR: ClassVar[int] = -32603
+
+    code: int
+    message: str
+    data: object
+
+    def __init__(self, code: int, message: str, data: object = None) -> None:
+        self.code, self.message, self.data = code, message, data
+        super().__init__(code, message, data)
+
+    def __str__(self) -> str:
+        return self.message
+
+    @classmethod
+    def invalid_params(cls, data: object = None) -> Self:
+        return cls(cls.INVALID_PARAMS, "Invalid params", data)
+
+    @classmethod
+    def method_not_found(cls, method: str) -> Self:
+        return cls(cls.METHOD_NOT_FOUND, "Method not found", {"method": method})
+
+    @classmethod
+    def internal_error(cls, data: object = None, *, message: str = "Internal error") -> Self:
+        return cls(cls.INTERNAL_ERROR, message, data)
 
 
 class DrainDeferred(Exception):  # noqa: N818 - capability, not an outcome

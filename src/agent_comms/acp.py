@@ -23,9 +23,9 @@ import os
 import re
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from contextlib import AsyncExitStack
-from functools import partial
+from functools import partial, wraps
 from typing import TYPE_CHECKING
 
 from acp import RequestError
@@ -52,7 +52,7 @@ from acp.schema import (
 from acp.stdio import stdio_streams
 from pydantic import BaseModel, JsonValue, ValidationError
 
-from agent_comms.coordination_errors import IdentityConflict
+from agent_comms.coordination_errors import IdentityConflict, RequestRefused
 from agent_comms.coordinator import Coordination
 
 from . import acp_extension
@@ -100,6 +100,20 @@ from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArgume
 from .turn_runner import RELAY_PREFIX
 
 
+def answers_refusals[**Parameters, Answer](
+    method: Callable[Parameters, Awaitable[Answer]],
+) -> Callable[Parameters, Awaitable[Answer]]:
+    """Only declared ACP entries translate Core refusals into SDK wire errors."""
+    @wraps(method)
+    async def answer(*args: Parameters.args, **kwargs: Parameters.kwargs) -> Answer:
+        try:
+            return await method(*args, **kwargs)
+        except RequestRefused as error:
+            raise RequestError(error.code, error.message, error.data) from error
+
+    return answer
+
+
 class SdkSessionConnection(AgentSideConnection, Controller, SessionUpdateSink):
     """The SDK connection and controller publish one Core acceptance answer."""
 
@@ -118,12 +132,15 @@ class SdkSessionConnection(AgentSideConnection, Controller, SessionUpdateSink):
     ) -> dict[str, object] | None:
         tool_call, options = request
         if self is runner.sessions.client:
-            response = await asyncio.wait_for(
-                self.request_permission(
-                    session_id=session_id, tool_call=tool_call, options=options
-                ),
-                timeout=ACP_PERMISSION_TIMEOUT_SECONDS,
-            )
+            try:
+                response = await asyncio.wait_for(
+                    self.request_permission(
+                        session_id=session_id, tool_call=tool_call, options=options
+                    ),
+                    timeout=ACP_PERMISSION_TIMEOUT_SECONDS,
+                )
+            except RequestError as error:
+                raise RequestRefused(error.code, str(error), error.data) from error
             return RequestPermissionResponse.model_validate(response).outcome.model_dump(
                 by_alias=True, exclude_none=True
             )
@@ -201,6 +218,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
     # ─── ACP methods ─────────────────────────────────────────────────────────
 
+    @answers_refusals
     async def initialize(
         self,
         protocol_version: int,
@@ -226,6 +244,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         except ValidationError as error:
             raise RequestError.invalid_params({"reason": str(error)}) from error
 
+    @answers_refusals
     async def new_session(
         self, cwd: str, mcp_servers: Sequence[BaseModel] | None = None, **kwargs: JsonValue
     ) -> NewSessionResponse:
@@ -237,6 +256,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         )
         return await self.sessions.new_session(request)
 
+    @answers_refusals
     async def load_session(
         self,
         cwd: str,
@@ -253,6 +273,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         )
         return await self.sessions.load_session(request)
 
+    @answers_refusals
     async def prompt(
         self, session_id: str, prompt: Sequence[BaseModel], **kwargs: JsonValue
     ) -> PromptResponse:
@@ -396,12 +417,15 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             with open(debug_path, "a") as debug_log:
                 debug_log.write(f"[{time.time():.3f}] {message}\n")
 
+    @answers_refusals
     async def cancel(self, session_id: str, **kwargs: JsonValue) -> None:
         return await self.turns.cancel(session_id, **kwargs)
 
+    @answers_refusals
     async def close_session(self, session_id: str, **kwargs: JsonValue):
         return await self.sessions.close_session(session_id)
 
+    @answers_refusals
     async def set_config_option(
         self, config_id: str, session_id: str, value: str | bool, **kwargs: JsonValue
     ) -> SetSessionConfigOptionResponse:
