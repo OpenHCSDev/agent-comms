@@ -45,7 +45,10 @@ def inbox_comms(root):
     return comms
 
 
-@pytest.mark.parametrize("count,text", [(930, "historical input " * 65), (1, "🧪漢" * 40_000)])
+@pytest.mark.parametrize("count,text", [
+    pytest.param(930, "historical input " * 65, id="many-inputs"),
+    pytest.param(1, "🧪漢" * 40_000, id="large-unicode"),
+])
 def test_large_uncertain_inputs_do_not_stop_the_message_page_draining(inbox_comms, count, text):
     comms = inbox_comms
     ledger = seed_unknown(comms, count, text)
