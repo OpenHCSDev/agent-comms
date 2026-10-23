@@ -46,7 +46,7 @@ fi
 manifest="$stack_root/pi-native.sha256"
 # Build verification renders the unit prompt, never a unit's first turn.
 identity=$("$python" -I "$repo_root/src/agent_comms/native_build_inputs.py" \
-    "$repo_root" "$(node --version)" "$(npm --version)")
+    "$repo_root" "$(node --version)" "$(npm --version)" "${PI_MCP_DEPENDENCY_PACKAGE:-}")
 read -r build_id preparation_stamp <<< "$identity"
 target="$stack_root/.pi-native-$build_id"
 stamp_name=.prepared-inputs.sha256
@@ -189,7 +189,7 @@ native share_resources \
 if [[ "$update_pins" == true ]]; then
     native write_manifest "$native_package"
     identity=$("$python" -I "$repo_root/src/agent_comms/native_build_inputs.py" \
-        "$repo_root" "$(node --version)" "$(npm --version)")
+        "$repo_root" "$(node --version)" "$(npm --version)" "${PI_MCP_DEPENDENCY_PACKAGE:-}")
     read -r build_id preparation_stamp <<< "$identity"
     target="$stack_root/.pi-native-$build_id"
 fi

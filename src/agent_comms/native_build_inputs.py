@@ -2,6 +2,7 @@
 
 import hashlib
 import platform
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -63,8 +64,21 @@ class NativeBuildInputs:
         if INPUTS_PREFIX + self.digest(manifest) not in manifest.read_text().splitlines():
             raise ValueError("Native build inputs changed; rebuild with --update-pins")
 
-    def preparation_digest(self, manifest: Path, node: str, npm: str) -> str:
-        """One completion stamp for the recipe, pin and build toolchain, never outputs."""
+    def preparation_digest(
+        self, manifest: Path, node: str, npm: str, dependency_package: str = ""
+    ) -> str:
+        """Hash the recipe, pin, toolchain and supplied MCP input, never our output."""
+        dependency_digest = ""
+        if dependency_package:
+            dependency_digest = subprocess.check_output(
+                [
+                    str(self.root / "stack/bin/native-source"),
+                    sys.executable,
+                    "digest",
+                    dependency_package,
+                ],
+                text=True,
+            ).strip()
         digest = hashlib.sha256()
         for value in (
             self.digest(manifest),
@@ -74,6 +88,7 @@ class NativeBuildInputs:
             sys.version,
             sys.platform,
             platform.machine(),
+            dependency_digest,
         ):
             digest.update(value.encode() + b"\0")
         return digest.hexdigest()
