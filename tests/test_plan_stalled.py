@@ -58,30 +58,28 @@ FIRST = 1000.0
 def stalled_reading(monkeypatch):
     """BusWriterPhase is the only phase, ready unless a test lands its evidence."""
     held = {"reading": reading(HeldTodo(SentOrder(RecordedEventTime(FIRST))))}
-    monkeypatch.setattr(standing.PlanRule, "plan_reading",
-                        staticmethod(lambda comms, commander: held["reading"]))
     monkeypatch.setattr(PlanPhase, "members_with", classmethod(lambda cls, base: (BusWriterPhase,)))
     monkeypatch.setattr(BusWriterPhase, "ready", classmethod(lambda cls, reading: True))
     return held
 
 
-def stalled_at(monkeypatch, now: float) -> tuple:
+def stalled_at(held, monkeypatch, now: float) -> tuple:
     monkeypatch.setattr(standing.time, "time", lambda: now)
-    return standing.PlanStalled.violations(None, "claude-code")
+    return standing.PlanStalled.found(held["reading"])
 
 
 def test_fires_past_the_window(stalled_reading, monkeypatch):
-    (rule,) = stalled_at(monkeypatch, FIRST + standing.PlanStalled.window + 1)
+    (rule,) = stalled_at(stalled_reading, monkeypatch, FIRST + standing.PlanStalled.window + 1)
     assert (rule.phase, rule.since) == (BusWriterPhase, FIRST)
 
 
 def test_quiet_under_the_window(stalled_reading, monkeypatch):
-    assert stalled_at(monkeypatch, FIRST + standing.PlanStalled.window - 1) == ()
+    assert stalled_at(stalled_reading, monkeypatch, FIRST + standing.PlanStalled.window - 1) == ()
 
 
 def test_clears_when_the_phase_lands_on_main(stalled_reading, monkeypatch):
     monkeypatch.setattr(BusWriterPhase, "ready", classmethod(lambda cls, reading: False))
-    assert stalled_at(monkeypatch, FIRST + 10 * standing.PlanStalled.window) == ()
+    assert stalled_at(stalled_reading, monkeypatch, FIRST + 10 * standing.PlanStalled.window) == ()
 
 
 def test_a_replacement_order_keeps_it_firing(stalled_reading, monkeypatch):
@@ -89,4 +87,4 @@ def test_a_replacement_order_keeps_it_firing(stalled_reading, monkeypatch):
     stalled_reading["reading"] = reading(HeldTodo(
         SentOrder(RecordedEventTime(replaced)), prior_orders=(SentOrder(RecordedEventTime(FIRST)),),
     ))
-    assert stalled_at(monkeypatch, replaced + 60)
+    assert stalled_at(stalled_reading, monkeypatch, replaced + 60)
