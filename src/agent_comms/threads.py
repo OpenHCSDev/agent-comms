@@ -6,12 +6,14 @@ import json
 import os
 import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
+from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Annotated
 
 
-from .agent_backend import AgentBackend, NewThreadBackend
+from .agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
+from .channel_targets import Tag
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .cli_result import ThreadToolCatalogResult
 from .context_segments.wake_values import WakeWorkContext
@@ -47,9 +49,10 @@ from .thread_execution import NativeThreadExecution, ThreadExecution
 from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 from .thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
 from .session_file import NoSessionFile, SessionFile
-from .thread_provenance import ThreadProvenance
 from .thread_identity import (
     AgentThreadRole,
+    ThreadIncarnation,
+    ThreadIncarnationRecord,
     ThreadRole,
     TurnFence,
     TurnId,
@@ -139,23 +142,72 @@ class NextTurnConfiguration:
         return self.service_tier.configured(self.model.configured(thought))
 
 
+@dataclass(frozen=True, kw_only=True)
+class ThreadProvenance:
+    """Recorded thread identity, without permission to own a process or start a turn."""
+
+    name: str = field(kw_only=False)
+    tags: Annotated[frozenset[str], RegistrationPolicy(InheritEmpty)] = field(kw_only=False)
+    worktree: str = field(kw_only=False)
+    created_at: Annotated[float, WireRequired()]
+    session_file: Annotated[SessionFile, RegistrationPolicy(InheritApplied)] = field(
+        default_factory=NoSessionFile
+    )
+    title: Annotated[ThreadText, RegistrationPolicy(InheritApplied)] = field(
+        default_factory=NoThreadText
+    )
+    backend: Annotated[
+        type[AgentBackend], WireOmitDefault(), RegistrationPolicy(InheritPrevious)
+    ] = field(default_factory=NewThreadBackend.selected)
+
+    @cached_property
+    def runtime(self) -> RuntimeLocation:
+        """The codec decoded both stored fields; their record owns this binding."""
+        return self.session_file.location(self.backend)
+
+    @property
+    def display_title(self) -> str:
+        return self.title.otherwise(self.name)
+
+    @staticmethod
+    def require_name(name: str) -> None:
+        allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
+        if not name or not set(name) <= allowed:
+            raise ValueError(f"Thread name {name!r} must be alphanumeric with hyphens/underscores.")
+
+    def __post_init__(self) -> None:
+        self.require_name(self.incarnation.name)
+        if not self.worktree:
+            raise ValueError("Thread worktree cannot be empty.")
+        for tag in self.tags:
+            Tag.validate(tag)
+
+    @staticmethod
+    def capture(thread: ThreadProvenance) -> ThreadProvenance:
+        """Freeze only determining provenance from the original typed declaration."""
+        return ThreadProvenance(
+            **{
+                item.name: getattr(thread, item.name)
+                for item in fields(ThreadProvenance)
+                if item.init
+            }
+        )
+
+    @cached_property
+    def incarnation(self) -> ThreadIncarnation:
+        """The declaration's birth member, created once and shared by its readers."""
+        return ThreadIncarnationRecord(self.name, self.created_at).incarnation()
+
+
 @dataclass(frozen=True, slots=True)
 class Thread(DurableFile, PatternFile, ThreadProvenance):
     filename: ClassVar[str] = "native-sessions/{lookup}/{name}"
     catalog_filename: ClassVar[str] = "comms-catalog.json"
     """Declares one agent thread's identity and provenance."""
 
-    name: str = field(kw_only=False)
-    tags: Annotated[frozenset[str], RegistrationPolicy(InheritEmpty)] = field(
-        kw_only=False
-    )
-    worktree: str = field(kw_only=False)
     parent: ThreadParent = field(default_factory=NoParent)
     task: ThreadText = field(default_factory=NoThreadText)
     process_identity: ProcessState = field(default_factory=NoProcess)
-    session_file: Annotated[SessionFile, RegistrationPolicy(InheritApplied)] = (
-        field(default_factory=NoSessionFile, kw_only=True)
-    )
     model: Annotated[ThreadModel, RegistrationPolicy(InheritApplied)] = field(
         default_factory=UndeclaredModel
     )
@@ -190,20 +242,12 @@ class Thread(DurableFile, PatternFile, ThreadProvenance):
     project_resume_due: Annotated[
         bool, RegistrationPolicy(InheritPrevious), WireOmitDefault()
     ] = False
-    title: Annotated[ThreadText, RegistrationPolicy(InheritApplied)] = field(
-        default_factory=NoThreadText, kw_only=True
-    )
     role: Annotated[type[ThreadRole], RegistrationPolicy(InheritPrevious)] = (
         AgentThreadRole
     )
     execution: Annotated[type[ThreadExecution], WireOmitDefault()] = field(
         default=NativeThreadExecution, kw_only=True
     )
-    backend: Annotated[
-        type[AgentBackend],
-        WireOmitDefault(),
-        RegistrationPolicy(InheritPrevious),
-    ] = field(default_factory=NewThreadBackend.selected, kw_only=True)
     turn_record: TurnRecord = field(default_factory=NoTurnRecord)
     channel_scope_generation: int = 0
     turn_generation: int = 0

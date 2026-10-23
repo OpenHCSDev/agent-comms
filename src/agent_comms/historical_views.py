@@ -49,7 +49,7 @@ from .registry_provenance import RegistryProvenance
 from .revision_views import BusSourceView
 from .store_files import _atomic_write_text, _store_lock
 from .thread_identity import UnrecordedThreadIncarnation
-from .thread_provenance import ThreadProvenance
+from .threads import ThreadProvenance
 
 if TYPE_CHECKING:
     from .catalog_document import CatalogDocument

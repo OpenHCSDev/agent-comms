@@ -49,8 +49,15 @@ from .thread_text import ForkedParent, GivenThreadText, NoThreadText, ThreadText
 from .session_file import SavedSessionFile
 from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 from .thread_owned_state import ThreadOwnedState
-from .thread_rename import RenameThreadResult, ThreadRename
+from .tool_result import ToolResult
 from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread, current_thread
+
+
+@dataclass(frozen=True, slots=True)
+class RenameThreadResult(ToolResult):
+    previous: str
+    current: str
+    changed: bool
 
 
 class TagChoice(SubclassUnion, affix="Tags"):
@@ -380,7 +387,21 @@ class ThreadManagement:
     def _rename_thread_unlocked(
         self, name: str, new_name: str, *, title: ThreadText = NoThreadText()
     ) -> RenameThreadResult:
-        return ThreadRename.chosen(self, self.registry.require(name), new_name).applied(title)
+        privacy = self._privacy()
+        previous, current = privacy.rename(self, self.registry.require(name), new_name)
+        thread = self.registry.require(current)
+        titled = replace(thread, auto_title_pending=False, title=title.applied(thread.title))
+        if titled != thread:
+            self.registry.register(titled, self.registry.status(current))
+        changed = previous != current
+        if changed:
+            self.agents.activity.rename_thread(previous, current)
+            self.agents.runtime_info.rename_thread(previous, current)
+            self.ledger.rename_thread(previous, current)
+            with self.catalog.editing() as document:
+                document.rename_thread(previous, current)
+        privacy.rename_applied(self.root)
+        return RenameThreadResult(previous, current, changed)
 
     def heartbeat(self, name: str) -> None:
         self.registry.heartbeat(name)

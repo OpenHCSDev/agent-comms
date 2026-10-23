@@ -113,11 +113,11 @@ def test_roster_evidence_keeps_external_abi_and_each_remaining_internal_registry
         "class Backend:\n    serves_threads = True\n",
         "class Backend:\n    serves_new_threads: ClassVar[bool] = True\n",
         "class Carry:\n    declared: ClassVar[dict] = {}\n",
-        "class ThreadRename:\n    kinds = {}\n",
+        "class RegistryPrivacy:\n    kinds = {}\n",
         "class BirthlessIncarnation:\n    members = {}\n",
         "class CliToolArguments:\n    types = {}\n",
-        "class PiTurnPhase:\n    _start_phases = {}\n",
-        "class PiTurnPhase:\n    _end_events = {}\n",
+        "class PiEvent:\n    _start_phases = {}\n",
+        "class PiEvent:\n    _end_events = {}\n",
     ):
         (tmp_path / "src/remaining.py").write_text(remaining)
         git(tmp_path, "add", ".")
