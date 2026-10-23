@@ -270,6 +270,7 @@ class Registration:
     restore_stopped = changing(RegistryDocument.restore_stopped)
     rename = changing(RegistryDocument.rename)
     set_work_state = changing(RegistryDocument.set_work_state)
+    set_commander_project = changing(RegistryDocument.set_commander_project)
 
     def fence_idle_owners(
         self, selected: Sequence[tuple[Thread, int]]
