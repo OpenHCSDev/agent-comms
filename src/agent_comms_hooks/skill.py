@@ -19,6 +19,7 @@ from pydantic import ValidationError
 
 from agent_comms.behaviour_patterns import PostmortemFailure
 from agent_comms.commander.config import CommanderConfig
+from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import RuleFile
 from agent_comms.todos import Slop
 from agent_comms_hooks import ClaudeHookProgram
@@ -82,9 +83,9 @@ class CommanderStart(CommanderDeck):
         """The voice, the indictment, the drift tells and the recorded failures, one slice of each
         per round, so each comes back every fourth slice and the longest source runs through once.
         The failures are the habits caught so far; they are called out by name, repeatedly."""
-        voice = cls.paragraphs(CommanderConfig.packaged_voice().read_text(encoding="utf-8"))
+        voice = cls.paragraphs(CommanderPackage.voice().read_text(encoding="utf-8"))
         indictment = cls.paragraphs(
-            CommanderConfig.packaged_indictment().read_text(encoding="utf-8"))
+            CommanderPackage.indictment().read_text(encoding="utf-8"))
         tells = RuleFile.drift_tells()
         failures = tuple(f"Recorded failure {line}" for line in PostmortemFailure.catalog().splitlines())
         streams = (voice, indictment, tells, failures)
@@ -109,10 +110,10 @@ class CommanderStart(CommanderDeck):
         return "\n\n".join(
             (
                 cls.notice(),
-                CommanderConfig.packaged_voice().read_text(encoding="utf-8", newline=""),
-                CommanderConfig.packaged_indictment().read_text(encoding="utf-8", newline=""),
+                CommanderPackage.voice().read_text(encoding="utf-8", newline=""),
+                CommanderPackage.indictment().read_text(encoding="utf-8", newline=""),
                 "# Recorded failures\n\n" + PostmortemFailure.catalog(),
-                RuleFile.document(CommanderConfig.packaged_skill())[1],
+                RuleFile.document(CommanderPackage.skill())[1],
                 *(rule.render() for rule in RuleFile.packaged()),
                 (Slop.catalog() / "README.md").read_text(encoding="utf-8", newline=""),
             )
