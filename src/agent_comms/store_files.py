@@ -273,6 +273,12 @@ def store_lock_path(store_path: Path) -> Path:
     return store_path.with_name(f'.{store_path.name}.lock')
 
 
+def is_store_lock(path: Path) -> bool:
+    """Whether ``path`` is the lock ``store_lock_path`` names, present or not its store."""
+    store = path.with_name(path.name.removeprefix('.').removesuffix('.lock'))
+    return store != path and store_lock_path(store) == path
+
+
 @contextmanager
 def _store_lock_file(store_path: Path):
     """Open read-only: lock retirement must not generate a close-write watch event."""
