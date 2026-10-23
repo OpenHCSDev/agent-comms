@@ -61,32 +61,67 @@ def projection_source(tmp_path: Path) -> Path:
     (source / "skills").symlink_to(original / "skills", target_is_directory=True)
     subprocess.run(("git", "init", "-q", str(checkout)), check=True, capture_output=True)
     subprocess.run(
-        ("git", "-C", str(checkout), "-c", "user.name=Digest fixture",
-         "-c", "user.email=digest@example.invalid", "-c", "commit.gpgsign=false",
-         "-c", "core.hooksPath=/dev/null", "commit", "--allow-empty", "-qm", "Source fixture"),
-        check=True, capture_output=True,
+        (
+            "git",
+            "-C",
+            str(checkout),
+            "-c",
+            "user.name=Digest fixture",
+            "-c",
+            "user.email=digest@example.invalid",
+            "-c",
+            "commit.gpgsign=false",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "commit",
+            "--allow-empty",
+            "-qm",
+            "Source fixture",
+        ),
+        check=True,
+        capture_output=True,
     )
     return source
 
 
 def projection_source_digest(source: Path) -> str:
     return subprocess.run(
-        (sys.executable, "-I", "-c",
-         "import sys; sys.path.insert(0, sys.argv[1]); "
-         "from agent_comms.messages import BusProjectionTables; "
-         "print(BusProjectionTables._producer_digest())", str(source.parent)),
-        check=True, capture_output=True, text=True, timeout=60,
+        (
+            sys.executable,
+            "-I",
+            "-c",
+            "import sys; sys.path.insert(0, sys.argv[1]); "
+            "from agent_comms.messages import BusProjectionTables; "
+            "print(BusProjectionTables._producer_digest())",
+            str(source.parent),
+        ),
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=60,
     ).stdout.strip()
 
 
-@pytest.mark.parametrize(("module", "old", "new"), (
-    ("typed_table.py", "Durable files compare their stored DDL text",
-     "An unrelated infrastructure docstring: durable files compare their stored DDL text"),
-    ("field_codec.py", "class TimestampText(",
-     "def unrelated_projection_probe():\n    return 17\n\n\nclass TimestampText("),
-))
+@pytest.mark.parametrize(
+    ("module", "old", "new"),
+    (
+        (
+            "typed_table.py",
+            "Durable files compare their stored DDL text",
+            "An unrelated infrastructure docstring: durable files compare their stored DDL text",
+        ),
+        (
+            "field_codec.py",
+            "class TimestampText(",
+            "def unrelated_projection_probe():\n    return 17\n\n\nclass TimestampText(",
+        ),
+    ),
+)
 def test_projection_digest_ignores_infrastructure_source(
-    projection_source: Path, module: str, old: str, new: str,
+    projection_source: Path,
+    module: str,
+    old: str,
+    new: str,
 ) -> None:
     before = projection_source_digest(projection_source)
     path = projection_source / module
@@ -96,13 +131,27 @@ def test_projection_digest_ignores_infrastructure_source(
     assert projection_source_digest(projection_source) == before
 
 
-@pytest.mark.parametrize(("module", "old", "new"), (
-    ("bus_publication.py", "yield SentSource(self.audience.sender_lookup, self.seq)",
-     "yield SentSource(self.audience.sender_lookup, self.seq + 1)"),
-    ("bus_activity_index.py", '=max("{name}",excluded.', '=min("{name}",excluded.'),
-))
+@pytest.mark.parametrize(
+    ("module", "old", "new"),
+    (
+        (
+            "bus_publication.py",
+            "yield SentSource(self.audience.sender_lookup, self.seq)",
+            "yield SentSource(self.audience.sender_lookup, self.seq + 1)",
+        ),
+        ("bus_activity_index.py", '=max("{name}",excluded.', '=min("{name}",excluded.'),
+        (
+            "messages.py",
+            "for record in BusCapability.history(db):",
+            "for record in reversed(tuple(BusCapability.history(db))):",
+        ),
+    ),
+)
 def test_projection_digest_tracks_producing_source(
-    projection_source: Path, module: str, old: str, new: str,
+    projection_source: Path,
+    module: str,
+    old: str,
+    new: str,
 ) -> None:
     before = projection_source_digest(projection_source)
     path = projection_source / module

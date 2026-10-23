@@ -1981,8 +1981,11 @@ class ProducedTable(ProducedRow, TypedTable, declared_name=None):
         }
         for producer in producers:
             root = producer.family_root()
-            owners.update(owner for owner in producer.__mro__
-                          if issubclass(owner, cls) or issubclass(owner, root))
+            owners.update(
+                owner
+                for owner in producer.__mro__
+                if issubclass(owner, cls) or issubclass(owner, root)
+            )
         source = "\0".join(
             f"{owner.__module__}.{owner.__qualname__}\0{getsource(owner)}"
             for owner in sorted(owners, key=lambda owner: (owner.__module__, owner.__qualname__))
