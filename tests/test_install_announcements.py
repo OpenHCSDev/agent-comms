@@ -42,6 +42,7 @@ from agent_comms.installer.upgrade import (
 from agent_comms.install_choices import LiveMode, RehearsalMode, UnnamedInstaller
 from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
 from agent_comms.thread_execution import ExternalThreadExecution
+from cli_command import core
 from conftest import declare_test_bus
 from source_revision_fixture import SourceRepository
 
@@ -131,11 +132,7 @@ def test_rollback_and_refusal_are_published_from_their_error_types(private_comms
     assert all(line in messages[1].body for line in restored.lines())
     assert str(error) in messages[1].body
     assert str(runtime.prefix) in messages[1].body
-    completed = subprocess.run(
-        [sys.executable, "-m", "agent_comms.cli", "--root", str(comms.root),
-         "history", "--target", "#comms"],
-        capture_output=True, text=True, timeout=30,
-    )
+    completed = core("--root", str(comms.root), "history", "--target", "#comms")
     assert completed.returncode == 0, completed.stderr
     assert FieldCodec.parse(completed.stdout) == HistoryCliCommand(target="#comms").apply(comms).to_wire()
 

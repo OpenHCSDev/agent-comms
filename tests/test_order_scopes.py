@@ -1,10 +1,6 @@
 """Order scope is decoded once and owns its allowed delivery all the way to storage."""
 from dataclasses import replace
 import json
-import os
-import subprocess
-import sys
-from pathlib import Path
 
 import pytest
 
@@ -14,6 +10,7 @@ from source_revision_fixture import SourceRepository
 from agent_comms.change_report import FileLine, MissingSourceLine, PullRequestHeadRevision
 from agent_comms.check_root import CheckRoot
 from agent_comms.commander.order import OrderFile
+from cli_command import core
 from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.recorded_time import RecordedEventTime
@@ -109,12 +106,8 @@ def test_report_returns_through_the_real_cli_on_a_selected_history_copy(comms, t
         report = 'The copied native order needs classification only; no source was changed.'
         request = CommsOrderDoneTool(problem=current.id, order_id=current.order.id,
                                      delivery=ReportDelivery(report=report), claims=())
-        result = subprocess.run(
-            (sys.executable, '-m', 'agent_comms.cli', '--root', str(copied.root), 'tool',
-             '--from', 'lead', '--tool', request.declared_name,
-             '--arguments', json.dumps(request.arguments)),
-            env={**os.environ, 'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src')},
-            capture_output=True, text=True, timeout=30)
+        result = core('--root', str(copied.root), 'tool', '--from', 'lead',
+                      '--tool', request.declared_name, '--arguments', json.dumps(request.arguments))
         assert result.returncode == 0, result.stderr
         assert report in result.stdout
         assert copied.goals.todos.get(current.id).state is DoneTodoState

@@ -104,6 +104,10 @@ python_functions = ["test_*"]
 asyncio_mode = "auto"
 # A hung test fails by name instead of holding the whole job.
 timeout = 60
+# A test blocked inside a C call (SQLite, flock) never runs a SIGALRM handler, so the signal
+# method never fires; the thread method dumps every stack and ends the worker, and xdist
+# replaces it and runs the rest of its queue.
+timeout_method = "thread"
 # An interpreter missing a plugin refuses to start instead of silently ignoring `timeout`.
 required_plugins = ["pytest-timeout>=2.3", "pytest-xdist>=3.6", "pytest-asyncio>=0.23"]
 markers = ["refactor_guard: permanent architecture guards selected by the required debt check"]
