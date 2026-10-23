@@ -17,6 +17,7 @@ from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import _atomic_write_text, _store_lock
 
 from .carry_bus_history import BusHistory, CarryCatalogSource
+from .carry_dead_turns import DeadTurns
 from .carry_owner_requests import OwnerRequests
 from .carry_turn_owner import TurnOwner
 
@@ -24,7 +25,7 @@ RETIRED = "last_finished_turn_id"
 
 
 class FinishedTurns(Carry):
-    precedes = (BusHistory, OwnerRequests, TurnOwner)
+    precedes = (BusHistory, DeadTurns, OwnerRequests, TurnOwner)
     """Each decodes the registry, which refuses the retired field."""
 
     def backup_files(self) -> tuple[Path, ...]:
