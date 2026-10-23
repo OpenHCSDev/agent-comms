@@ -196,12 +196,17 @@ def active_route_path() -> Path:
     return Path.home() / ".local/state/agent-comms" / RouteFile.filename
 
 
+class RouteFileNotPrivate(ValueError):
+    def __init__(self) -> None:
+        super().__init__("active comms route must be one owner-only regular file")
+
+
 def read_active_route(path: Path | None = None) -> ActiveRoute | None:
     """Decode the one trusted default route; explicit roots bypass this file."""
     path = active_route_path() if path is None else path
+    refusal = RouteFileNotPrivate()
     try:
-        fd = PrivateFileRole.read(
-            path, ValueError("active comms route must be one owner-only regular file"))
+        fd = PrivateFileRole.read(path, refusal)
     except FileNotFoundError:
         return None
     try:
@@ -209,7 +214,7 @@ def read_active_route(path: Path | None = None) -> ActiveRoute | None:
             path.parent.lstat(), ValueError("active comms route directory must be owner-only"))
         info = os.fstat(fd)
         if not 0 < info.st_size <= 4096:
-            raise ValueError("active comms route must be one owner-only regular file")
+            raise refusal
         raw = os.read(fd, 4097)
     finally:
         os.close(fd)
@@ -505,7 +510,7 @@ def _publish_active_route_locked(
         payload = route.encoded()
         temporary = f".active-route-{uuid.uuid4().hex}.tmp"
         fd = PrivateFileRole.create(
-            temporary, ValueError("active comms route must be one owner-only regular file"),
+            temporary, RouteFileNotPrivate(),
             dir_fd=directory)
         try:
             view = memoryview(payload)

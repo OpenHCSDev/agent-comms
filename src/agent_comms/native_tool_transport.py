@@ -201,10 +201,10 @@ class ToolListener:
         self.session_directory = Path(directory).absolute()
         self.token = token
         self._resources = AsyncExitStack()
+        refusal = SelectedToolDenied("Selected tool requires a peer-credential Unix socket")
         if not hasattr(socket, "SO_PEERCRED"):
-            raise SelectedToolDenied("Selected tool requires a peer-credential Unix socket")
-        Platform.current().require_pinned_paths(
-            SelectedToolDenied("Selected tool requires a peer-credential Unix socket"))
+            raise refusal
+        Platform.current().require_pinned_paths(refusal)
         PrivateDirectoryRole.require(
             self.session_directory.lstat(), RelationViolationError("Selected tool socket parent is not private"))
         if self.session_directory.resolve() != self.session_directory:

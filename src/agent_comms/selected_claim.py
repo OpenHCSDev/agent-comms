@@ -191,10 +191,10 @@ def _opened_selected_file(
     This does not promise hostile same-UID rename exclusion during a write.
     """
     relative = Path(normalized).relative_to(worktree)
-    Platform.current().require_pinned_paths(
-        IdentityConflict("Selected write needs a physical directory chain"))
+    refusal = IdentityConflict("Selected write needs a physical directory chain")
+    Platform.current().require_pinned_paths(refusal)
     if not relative.parts:
-        raise IdentityConflict("Selected write needs a physical directory chain")
+        raise refusal
     directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
     with ExitStack() as opened:
         try:

@@ -852,11 +852,11 @@ class PrivateEvidenceRead:
         Each observation fences the next: growth seen on the descriptor cannot
         be hidden by shrinking the named file back.
         """
+        refusal = NativePiUnavailable("Native Pi evidence has an unsafe ancestor")
         try:
-            TrustedAncestorRole.require_path(
-                self.path.parent, NativePiUnavailable("Native Pi evidence has an unsafe ancestor"))
+            TrustedAncestorRole.require_path(self.path.parent, refusal)
         except OSError as error:
-            raise NativePiUnavailable("Native Pi evidence has an unsafe ancestor") from error
+            raise refusal from error
         # Detect replacement before classifying the old descriptor's now-zero
         # links: observing a new named source takes the existing reverify path.
         for info in (self.path.lstat(), os.fstat(self.stream.fileno())):

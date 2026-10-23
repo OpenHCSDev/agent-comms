@@ -51,6 +51,11 @@ from .typed_table import (
 _MAX_SIDECAR_BYTES = 32 * 1024 * 1024
 
 
+class UnprivateSidecarFile(IdentityConflict):
+    def __init__(self) -> None:
+        super().__init__("Private sidecar file must be regular, owner-only and unaliased.")
+
+
 class SidecarCommitUnknown(IdentityConflict):
     """No successful durability acknowledgement; callers must not send or retry input."""
 
@@ -83,8 +88,7 @@ class _PinnedDirectory:
             locked = self.stat(self.lock_name)
             if locked is None or _identity(locked) != self.lock_identity:
                 raise IdentityConflict("Private sidecar lock identity changed.")
-            PrivateFileRole.require(locked, IdentityConflict(
-                "Private sidecar file must be regular, owner-only and unaliased."))
+            PrivateFileRole.require(locked, UnprivateSidecarFile())
 
     def stat(self, name: str) -> os.stat_result | None:
         try:
@@ -101,8 +105,7 @@ class _PinnedDirectory:
         elif actual is None or _identity(actual) != _identity(expected):
             raise IdentityConflict("Private sidecar inode changed.")
         else:
-            PrivateFileRole.require(actual, IdentityConflict(
-                "Private sidecar file must be regular, owner-only and unaliased."))
+            PrivateFileRole.require(actual, UnprivateSidecarFile())
             if (actual.st_size, actual.st_mtime_ns, actual.st_ctime_ns) != (
                 expected.st_size,
                 expected.st_mtime_ns,
@@ -141,8 +144,7 @@ def _locked_directory(path: Path) -> Iterator[_PinnedDirectory]:
             dir_fd=fd,
         )
         stack.callback(os.close, lock)
-        PrivateFileRole.require(os.fstat(lock), IdentityConflict(
-            "Private sidecar file must be regular, owner-only and unaliased."))
+        PrivateFileRole.require(os.fstat(lock), UnprivateSidecarFile())
         fcntl.flock(lock, fcntl.LOCK_EX)
         stack.callback(fcntl.flock, lock, fcntl.LOCK_UN)
         directory.unchanged(lock_name, os.fstat(lock))
@@ -161,8 +163,7 @@ def _locked_directory(path: Path) -> Iterator[_PinnedDirectory]:
 def _read_snapshot(directory: _PinnedDirectory, name: str) -> tuple[bytes, os.stat_result] | None:
     # O_NONBLOCK ensures a FIFO substitution cannot hang before fstat rejects it.
     try:
-        fd = PrivateFileRole.read(name, IdentityConflict(
-            "Private sidecar file must be regular, owner-only and unaliased."), dir_fd=directory.fd)
+        fd = PrivateFileRole.read(name, UnprivateSidecarFile(), dir_fd=directory.fd)
     except FileNotFoundError:
         return None
     try:
@@ -262,8 +263,7 @@ def _publish(
     # explicit diagnosis, never replay of a reserved input or a guessed rollback.
     begun = False
     try:
-        marker = PrivateFileRole.create(intent, IdentityConflict(
-            "Private sidecar file must be regular, owner-only and unaliased."), dir_fd=directory.fd)
+        marker = PrivateFileRole.create(intent, UnprivateSidecarFile(), dir_fd=directory.fd)
         begun = True
         try:
             _write_all(marker, b"sidecar-snapshot-v1\n")
@@ -271,8 +271,7 @@ def _publish(
         finally:
             os.close(marker)
         os.fsync(directory.fd)
-        fd = PrivateFileRole.create(staging, IdentityConflict(
-            "Private sidecar file must be regular, owner-only and unaliased."), dir_fd=directory.fd)
+        fd = PrivateFileRole.create(staging, UnprivateSidecarFile(), dir_fd=directory.fd)
         try:
             _write_all(fd, raw)
             os.fsync(fd)
@@ -288,8 +287,7 @@ def _publish(
         actual = directory.stat(name)
         if actual is None or _identity(actual) != _identity(staged):
             raise IdentityConflict("Private sidecar replacement identity changed.")
-        PrivateFileRole.require(actual, IdentityConflict(
-            "Private sidecar file must be regular, owner-only and unaliased."))
+        PrivateFileRole.require(actual, UnprivateSidecarFile())
         os.unlink(intent, dir_fd=directory.fd)
         os.fsync(directory.fd)
     except BaseException as error:

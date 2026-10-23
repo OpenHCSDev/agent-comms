@@ -165,13 +165,14 @@ class SavedSelectedSession(SelectedSession):
 
     def verify_start(self, actual: NativeSessionIdentity) -> Path:
         self.identity.require_same_session(actual)
+        refusal = IdentityConflict("native start requires the exact saved session")
         try:
             if self.path.resolve(strict=True) != self.path:
                 raise ValueError("redirected saved session")
             info = self.path.lstat()
         except (OSError, ValueError) as error:
-            raise IdentityConflict("native start requires the exact saved session") from error
-        PrivateFileRole.require(info, IdentityConflict("native start requires the exact saved session"))
+            raise refusal from error
+        PrivateFileRole.require(info, refusal)
         return self.path
 
     def require_context(self, context) -> None:

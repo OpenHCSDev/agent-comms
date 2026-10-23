@@ -667,10 +667,10 @@ class DarwinPlatform(PosixPlatform):
 
 
 class Win32Platform(Platform):
+    """Kernel creation times and named job objects bind the complete child tree."""
+
     def require_pinned_paths(self, refusal: Exception) -> None:
         raise refusal
-
-    """Kernel creation times and named job objects bind the complete child tree."""
 
     class InputLockOffset(ctypes.Structure):
         _fields_ = [
