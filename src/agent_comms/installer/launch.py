@@ -29,11 +29,13 @@ from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.reporting import (
-    FinishedInstall, InstallOutcome, RootWriter, UnfinishedInstall, UnpostedWriter,
+    FailedInstall, FinishedInstall, InstallOutcome, ObservedInstall, RootWriter,
+    UnfinishedInstall, UnpostedWriter,
 )
 from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.installer.probes.harnesses import HarnessesProbe
 from agent_comms.installer.upgrade import (
+    LiveRun,
     RehearsedUpgrade,
     Stack,
     TargetTree,
@@ -53,6 +55,10 @@ class InstallReport(MroDispatch):
     outcome: InstallOutcome = field(default_factory=UnfinishedInstall, init=False)
     bridges: SessionBridgeResumes = field(default_factory=SessionBridgeResumes, init=False)
     source: Repo = field(init=False, repr=False)
+
+    def record_live(self, result: LiveRun) -> LiveRun:
+        self.outcome = ObservedInstall(result)
+        return result
 
     def complete(self, result: RehearsedUpgrade) -> RehearsedUpgrade:
         self.outcome = FinishedInstall(result)
@@ -90,9 +96,9 @@ class InstallReport(MroDispatch):
                 yield
             lines = self.outcome.lines()
         except BaseException as error:
-            failure = (*next(self.handlers_for(error))(error), *self.bridges.lines())
+            self.outcome = FailedInstall(self.outcome, next(self.handlers_for(error))(error))
             try:
-                self.writer.post(failure)
+                self.writer.post((*self.outcome.lines(), *self.bridges.lines()))
             except BaseException as publication_error:
                 error.add_note(f"Install failure report also failed: {publication_error}")
                 print(f"install: failure report also failed: {publication_error}", file=sys.stderr)
