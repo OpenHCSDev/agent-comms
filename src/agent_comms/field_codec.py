@@ -967,7 +967,14 @@ class ValueDecoder[T](DecoderPlan):
         try:
             return cls._by_annotation[annotation]
         except KeyError:
-            return cls._by_origin[get_origin(annotation) or annotation]
+            pass
+        declarations = annotation.__mro__ if isinstance(annotation, type) else (annotation,)
+        for declaration in declarations:
+            try:
+                return cls._by_origin[get_origin(declaration) or declaration]
+            except KeyError:
+                continue
+        raise KeyError(annotation)
 
     @classmethod
     def with_representation(
@@ -1000,6 +1007,14 @@ class ValueDecoder[T](DecoderPlan):
 
     @abstractmethod
     def encode(self, value: T) -> object: ...
+
+    def comparison(self, value: T) -> object:
+        """The nominal value and its declaration-owned comparison content."""
+        declaration = type(value)
+        return (declaration.__module__, declaration.__qualname__, self.compared(value))
+
+    def compared(self, value: T) -> object:
+        return self.encode(value)
 
     def decode_external(self, data: object, record: Mapping[str, object]) -> T:
         for decode in self.external_decoders(data):
@@ -1112,6 +1127,10 @@ class _RepresentedDecoder[T](ValueDecoder[T]):
     def encode(self, value: T) -> object:
         return None if value is None else self.representation.encode(value)
 
+    def compared(self, value: T) -> object:
+        # Wire spellings (including rename labels) do not own value comparison.
+        return _structural_decoder(type(value)).compared(value)
+
     def accepts_value(self, value: object) -> bool:
         return self.structural.accepts_value(value)
 
@@ -1133,6 +1152,9 @@ class _NominalTextDecoder[T](_RepresentedDecoder[T]):
         if not isinstance(value, target):
             raise TypeError(f"Expected {target}, received {type(value).__name__}")
         return self.representation.encode(value)
+
+    def compared(self, value: T) -> object:
+        return self.encode(value)
 
 
 class FieldRepresentation[T](MroDispatch, ABC):
@@ -2284,203 +2306,6 @@ class FieldCodec(MroDispatch, Sealed):
 
 
 
-<<<<<<< HEAD
-=======
-    target: object
-
-    @property
-    def wire_children(self) -> tuple[DecoderPlan, ...]:
-        return ()
-
-    def fits_wire(self, data: object) -> bool:
-        """Check outer wire shape without decoding nested values.
-
-        This may pass a value decoding rejects, but must never reject one decoding accepts.
-        """
-        return True
-
-    def shape_refusal(self, data: object) -> MalformedRecord:
-        """Why fits_wire refused data; it states a refusal and never decides one."""
-        return MalformedRecord(f"Expected {self.target}, received {type(data).__name__}")
-
-    def fits_external(self, data: object) -> bool:
-        """A sibling-aware external reader may accept more than the stored wire shape."""
-        return any(self.external_decoders(data)) or self.fits_wire(data)
-
-    def external_decoders(self, data: object) -> Iterable[ExternalDecoder]:
-        return ()
-
-    def selects_record(self, select: WireRecordFilter) -> bool:
-        return False
-
-    def contains_records(
-        self, select: WireRecordFilter, seen: frozenset[object] = frozenset(),
-    ) -> bool:
-        """Whether this immutable plan reaches a selected declared record; no payload read."""
-        if self in seen:
-            return False
-        return self.selects_record(select) or any(
-            child.contains_records(select, seen | {self}) for child in self.wire_children
-        )
-
-    def rewrite_records(
-        self, data: object, change: WireRecordChange, select: WireRecordFilter,
-    ) -> object:
-        """Transform declared raw records without decoding opaque JSON or losing other keys.
-
-        The caller owns the record change. This decoder owns wire layout, child
-        membership and union selection. ``select`` is a pure declaration predicate.
-        """
-        if data is None or not self.contains_records(select):
-            return data
-        return self._rewrite_records(data, change, select)
-
-    def _rewrite_records(
-        self, data: object, change: WireRecordChange, select: WireRecordFilter,
-    ) -> object:
-        return data
-
-    def rewrite_document(
-        self, data: object, change: WireRecordChange, select: WireRecordFilter,
-    ) -> object:
-        return self.rewrite_records(data, change, select)
-
-@dataclass(frozen=True, slots=True)
-class ValueDecoder[T](DecoderPlan):
-    """One annotation owns its wire conversion, draft projection and choice domain."""
-
-    _by_origin: ClassVar[dict[object, type[ValueDecoder[object]]]] = {}
-    _by_annotation: ClassVar[dict[object, type[ValueDecoder[object]]]] = {}
-
-    def __init_subclass__(cls):
-        super(ValueDecoder, cls).__init_subclass__()
-        for origin in cls.__dict__.get("origins", ()):
-            cls._by_origin[origin] = cls
-        for annotation in cls.__dict__.get("annotations", ()):
-            cls._by_annotation[annotation] = cls
-
-    @classmethod
-    def from_annotation(cls, target: object, args: tuple[object, ...]) -> ValueDecoder[T]:
-        return cls(target)
-
-    @classmethod
-    def annotation_class(cls, annotation: object) -> type[ValueDecoder[object]]:
-        try:
-            return cls._by_annotation[annotation]
-        except KeyError:
-            pass
-        declarations = annotation.__mro__ if isinstance(annotation, type) else (annotation,)
-        for declaration in declarations:
-            try:
-                return cls._by_origin[get_origin(declaration) or declaration]
-            except KeyError:
-                continue
-        raise KeyError(annotation)
-
-    @classmethod
-    def with_representation(
-        cls, annotation: object, target: object, args: tuple[object, ...],
-        representation: type[FieldRepresentation],
-    ) -> ValueDecoder[T]:
-        return _RepresentedDecoder(
-            annotation, representation,
-            cast(ValueDecoder[object], cls.representation_plan(target, args, representation)),
-        )
-
-    @classmethod
-    def representation_plan(
-        cls, target: object, args: tuple[object, ...], representation: type[FieldRepresentation],
-    ) -> ValueDecoder[T]:
-        return cls.from_annotation(target, args)
-
-    @classmethod
-    @cache
-    def for_members[M](cls, members: tuple[type[M], ...]) -> UnionDecoder[M]:
-        return UnionDecoder(
-            reduce(or_, members),
-            tuple(compile_decoder(member) for member in members),
-        )
-
-    @abstractmethod
-    def decode(self, data: object) -> T:
-        """Decode raw wire input; callers enter through decode_bound."""
-        ...
-
-    @abstractmethod
-    def encode(self, value: T) -> object: ...
-
-    def comparison(self, value: T) -> object:
-        """The nominal value and its declaration-owned comparison content."""
-        declaration = type(value)
-        return (declaration.__module__, declaration.__qualname__, self.compared(value))
-
-    def compared(self, value: T) -> object:
-        return self.encode(value)
-
-    def decode_external(self, data: object, record: Mapping[str, object]) -> T:
-        for decode in self.external_decoders(data):
-            return self.decode_resolved(cast(T, decode(data, record)))
-        return self.decode_bound(data, record)
-
-    def decode_resolved(self, value: T) -> T:
-        if not self.accepts_value(value):
-            raise MalformedRecord(f"Resolved value does not match {self.target}")
-        return value
-
-    def accepts_value(self, value: object) -> bool:
-        """Select an in-process union case using its compiled declaration."""
-        return isinstance(value, self.target)
-
-    def accepts_external_value(self, value: object) -> bool:
-        """A structural container match does not validate its contents."""
-        return False
-
-    def encode_document(self, value: T) -> object:
-        return self.encode(value)
-
-    def decode_document(self, data: object) -> T:
-        return self.decode_bound(data, {})
-
-    def decode_bound(self, data: object, context: Mapping[str, object]) -> T:
-        return self.decode(data)
-
-    field_names: ClassVar[tuple[str, ...]] = ()
-
-    @property
-    def uses_representation(self) -> bool:
-        return False
-
-    def decode_selected(self, data, selections, *, fields: tuple[str, ...]):
-        return self.decode_bound(data, {})
-
-    def decode_keys(self, data, keys, selections):
-        raise TypeError("Selected keys require a mapping field")
-
-    editor_annotation = str
-
-    def encode_editor(self, value):
-        encoded = FieldCodec.encode(value, self.target)
-        return json.dumps(encoded)
-
-    @boundary_decoder
-    def decode_editor(self, value):
-        return None if value is None else json.loads(value)
-
-    def editor_choices(self) -> tuple[tuple[str, object], ...]:
-        raise TypeError("The declared decoder does not offer finite choices")
-
-    def argument_options(self, argument: Argument) -> dict[str, object]:
-        """argparse options for this annotation's command-line text."""
-        return {}
-
-    def argument_text(self, encoded: object) -> object:
-        """The command-line spelling of an encoded value."""
-        return encoded
-
-    def argument_payload(self, text: object) -> object:
-        """The payload value that command-line text spells."""
-        return text
->>>>>>> origin/main
 
 
 class _ContextDecoder[T](ValueDecoder[T]):
@@ -2608,58 +2433,6 @@ class _RealDecoder(_NumberDecoder[float]):
 
 
 
-<<<<<<< HEAD
-=======
-    @property
-    def wire_structure(self) -> DecoderPlan:
-        return self.representation.wire_structure(self.structural)
-
-    @property
-    def wire_children(self) -> tuple[DecoderPlan, ...]:
-        return (self.wire_structure,)
-
-    @boundary_decoder
-    def fits_wire(self, data: object) -> bool:
-        # Null handlers can change the structural null contract; leave that decision to decode.
-        return data is None or self.wire_structure.fits_wire(data)
-
-    def fits_external(self, data: object) -> bool:
-        # The representation reads through its wire structure, so an external read takes
-        # whatever that structure's external reader takes.
-        return ValueDecoder.fits_external(self, data) or self.wire_structure.fits_external(data)
-
-    def shape_refusal(self, data: object) -> MalformedRecord:
-        return self.wire_structure.shape_refusal(data)
-
-    def _rewrite_records(
-        self, data: object, change: WireRecordChange, select: WireRecordFilter,
-    ) -> object:
-        return self.wire_structure.rewrite_records(data, change, select)
-
-    def external_decoders(self, data: object) -> Iterable[ExternalDecoder]:
-        return FieldCodec.external_decoders(self.representation)
-
-    @property
-    def uses_representation(self) -> bool:
-        return True
-
-    def argument_options(self, argument: Argument) -> dict[str, object]:
-        return self.representation.argument_options(argument)
-
-    def encode(self, value: T) -> object:
-        return None if value is None else self.representation.encode(value)
-
-    def compared(self, value: T) -> object:
-        # Wire spellings (including rename labels) do not own value comparison.
-        return _structural_decoder(type(value)).compared(value)
-
-    def accepts_value(self, value: object) -> bool:
-        return self.structural.accepts_value(value)
-
-    @boundary_decoder
-    def decode(self, data: object) -> T:
-        return self.representation.decode_field(data, self.structural)
->>>>>>> origin/main
 
 
 class _JsonValueRepresentation(FieldRepresentation[JsonValue]):
