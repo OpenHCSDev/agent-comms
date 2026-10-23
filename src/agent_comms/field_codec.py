@@ -855,8 +855,12 @@ class FieldRepresentation(MroDispatch, ABC):
     @classmethod
     def decode_field(cls, data: object, structural: ValueDecoder[object]) -> object:
         handler = cls.handler_for(type(data))
-        with MalformedRecord.refusing(f"Invalid {cls.__name__}"):
+        try:
             return cast(object, handler(data, structural))
+        except MalformedRecord:
+            raise
+        except ValueError as error:
+            raise MalformedRecord(f"Invalid {cls.__name__}: {error}") from error
 
     @handles(type(None))
     @classmethod
@@ -1157,8 +1161,12 @@ class TextRepresentation[V](FieldRepresentation):
 
     @classmethod
     def decode(cls, value: object) -> V:
-        with MalformedRecord.refusing(f"Invalid {cls.__name__}"):
+        try:
             return cls.from_text(FieldCodec.decode(str, value))
+        except MalformedRecord:
+            raise
+        except ValueError as error:
+            raise MalformedRecord(f"Invalid {cls.__name__}: {error}") from error
 
     @classmethod
     @abstractmethod
@@ -1560,11 +1568,15 @@ class FieldCodec(MroDispatch, Sealed):
     @staticmethod
     def parse(text: str | bytes) -> object:
         """External JSON text is data: strict UTF-8, syntax and duplicate keys refuse it."""
-        with MalformedRecord.refusing("Invalid JSON"):
+        try:
             return json.loads(
                 text.decode("utf-8") if isinstance(text, bytes) else text,
                 object_pairs_hook=_unique_object,
             )
+        except MalformedRecord:
+            raise
+        except ValueError as error:
+            raise MalformedRecord(f"Invalid JSON: {error}") from error
 
     @classmethod
     def require_fields(cls, record: DataclassInstance, *names: str) -> None:
@@ -1586,8 +1598,12 @@ class FieldCodec(MroDispatch, Sealed):
     @staticmethod
     def construct(target: Callable[..., T], values: dict[str, object]) -> T:
         """A record built from decoded data refuses its values as a malformed record."""
-        with MalformedRecord.refusing(f"Invalid {target.__name__}"):
+        try:
             return target(**values)
+        except MalformedRecord:
+            raise
+        except ValueError as error:
+            raise MalformedRecord(f"Invalid {target.__name__}: {error}") from error
 
     @staticmethod
     def alternatives_schema(
@@ -2133,8 +2149,14 @@ class _JsonValueRepresentation(FieldRepresentation):
 
     @classmethod
     def decode(cls, data):
-        with MalformedRecord.refusing("Expected a JSON value with string keys and finite numbers"):
+        try:
             return cls.validator().validate_python(data, strict=True)
+        except MalformedRecord:
+            raise
+        except ValueError as error:
+            raise MalformedRecord(
+                f"Expected a JSON value with string keys and finite numbers: {error}"
+            ) from error
 
     @classmethod
     def encode(cls, value):
@@ -2438,8 +2460,12 @@ class _FixedTupleDecoder(_TupleDecoder):
         return super().admits_wire(data) and len(cast(list[object], data)) == len(self.items)
 
     def plan_items(self, data: list[object]) -> Iterable[tuple[ValueDecoder[object], object]]:
-        with MalformedRecord.refusing("Tuple length does not match declaration"):
+        try:
             return tuple(zip(self.items, data, strict=True))
+        except MalformedRecord:
+            raise
+        except ValueError as error:
+            raise MalformedRecord(f"Tuple length does not match declaration: {error}") from error
 
     def encode_items(self, items: Iterable[object]) -> list[object]:
         return [plan.encode(item) for plan, item in zip(self.items, items, strict=True)]
@@ -2750,8 +2776,12 @@ class _EnumDecoder(_ChoiceDecoder[Any]):
         return tuple((str(member.value), member.value) for member in self.target)
 
     def decode(self, data):
-        with MalformedRecord.refusing(f"Invalid {self.target.__name__}"):
+        try:
             return self.target(data)
+        except MalformedRecord:
+            raise
+        except ValueError as error:
+            raise MalformedRecord(f"Invalid {self.target.__name__}: {error}") from error
 
 
 @overload
