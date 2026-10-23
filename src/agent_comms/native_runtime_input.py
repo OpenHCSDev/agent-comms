@@ -16,8 +16,10 @@ from agent_comms.coordination_tables.participants import Participants
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
+from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, MalformedRecord, NativeContext
 from .native_claim_epoch import NativeClaimEpoch, UnrecordedNativeClaim
+from .native_tool_call import SelectedToolDenied
 from .native_input_record import (
     NativeColumn,
     NativeInputContext,
@@ -43,6 +45,7 @@ from .typed_table import (
     Column,
     FinalizedColumn,
     FrozenColumn,
+    ForeignKey,
     IntegerStorage,
     MonotoneColumns,
     NoDelete,
@@ -330,6 +333,70 @@ class NativeRuntimeInput(
         )
         if updated.rowcount != 1:
             raise StaleFence("native proof was previously committed")
+
+class SelectedSlotState(DeclaredFamily, affix="Slot"):
+    """Consumption is irreversible; only a matching live terminal can acknowledge it."""
+
+    @classmethod
+    def acknowledge(cls) -> type[SelectedSlotState]:
+        raise SelectedToolDenied("Selected tool terminal was already acknowledged; no retry")
+
+    @classmethod
+    def require_acknowledged(cls) -> None:
+        raise SelectedToolDenied("Selected tool outcome UNKNOWN; no terminal acknowledgement")
+
+
+class ConsumedSlot(SelectedSlotState):
+    @classmethod
+    def acknowledge(cls) -> type[SelectedSlotState]:
+        return AcknowledgedSlot
+
+
+class AcknowledgedSlot(SelectedSlotState):
+    @classmethod
+    def require_acknowledged(cls) -> None:
+        pass
+
+
+@dataclass(frozen=True)
+class SelectedToolSlot(WriteOnceColumns, NativeRuntimeTable, WithoutRowid):
+    """One durable tool slot, retained and retired with its original native input."""
+
+    input_id: Annotated[str, FrozenColumn(primary_key=True)]
+    call_id: Annotated[str, FrozenColumn()]
+    native_input_id: Annotated[str, FrozenColumn(index=True)]
+    state: Annotated[
+        type[SelectedSlotState], Column(check=SelectedSlotState.sql_constraint("state"))
+    ] = ConsumedSlot
+
+    foreign_keys = (
+        ForeignKey(target=NativeRuntimeInput, target_columns=("input_id",),
+                   columns=("native_input_id",), on_delete="CASCADE"),
+    )
+
+    @classmethod
+    def consume(
+        cls, db: sqlite3.Connection, input_id: str, call_id: str, native_input_id: str,
+    ) -> None:
+        if cls(input_id, call_id, native_input_id).insert_if_absent(db).rowcount != 1:
+            raise SelectedToolDenied("Selected tool input already consumed; outcome may be UNKNOWN")
+
+    def require_call(self, call_id: str) -> None:
+        if self.call_id != call_id:
+            raise SelectedToolDenied("Selected tool has no matching terminal acknowledgement")
+
+    def acknowledge(self, db: sqlite3.Connection, call_id: str) -> None:
+        self.require_call(call_id)
+        state = self.state.acknowledge()
+        if self.update(db, where="input_id=? AND state=?", parameters=(
+            self.input_id, self.state.declared_name,
+        ), state=state).rowcount != 1:
+            raise SelectedToolDenied("Selected tool terminal changed; outcome UNKNOWN; no retry")
+
+    def verify(self, call_id: str) -> None:
+        self.require_call(call_id)
+        self.state.require_acknowledged()
+
 
 @dataclass(frozen=True)
 class CurrentNativeCursor(
