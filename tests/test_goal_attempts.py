@@ -36,6 +36,7 @@ from agent_comms.goal_generation import (
 from agent_comms.pi_counts import PiCount, UnreportedCount
 from agent_comms.pi_payloads import PiUsage
 from agent_comms.threads import Thread
+from agent_comms.thread_creation import RecordedCreationTime
 
 pytestmark = pytest.mark.skipif(
     os.name != "posix", reason="POSIX fork and directory fsync crash instrumentation."
@@ -475,7 +476,8 @@ def test_stop_recovers_claim_after_owner_exits_without_turn_cleanup(comms, claim
     RecoveryMonitorCapability.settle_stopped_owners(comms.root, (stopped,))
     assert store.require_generation(goal_id) == successor
     # Even without native coordination, a foreign release must be rejected.
-    substituted = replace(claimed_owner, created_at=claimed_owner.created_at + 1)
+    substituted = replace(claimed_owner,
+                          created_at=RecordedCreationTime(claimed_owner.created_at + 1))
     with pytest.raises(RecoveryBlocked):
         RecoveryMonitorCapability.settle_stopped_owners(comms.root, (substituted,))
     assert store.require_generation(goal_id) == successor
