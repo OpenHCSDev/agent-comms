@@ -97,7 +97,8 @@ def test_every_declared_step_crosses_to_the_worker(tmp_path):
 
 @pytest.mark.parametrize("pending", (False, True))
 def test_pending_uses_one_worker_on_a_real_bus(comms, stack, private_directory, pending):
-    chain = CarryChain((DropConnectivity, ParkedThreads, CommanderProjectCarry))
+    # The pending step's changed count is one, while its position is zero.
+    chain = CarryChain((ParkedThreads, DropConnectivity, CommanderProjectCarry))
     # The worker uses this checkout's actual source and carry declarations.
     tree = TargetTree(REPO, private_directory, "pending")
     tree.path.mkdir()
