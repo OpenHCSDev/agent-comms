@@ -118,6 +118,7 @@ class CarryPhase(InstallPhase):
 
     operation: type[CarryOperation]
 
+    @property
     def subject(self) -> str:
         return self.operation.declared_name
 
@@ -128,6 +129,7 @@ class CarryStepPhase(InstallPhase):
 
     step: type[Carry]
 
+    @property
     def subject(self) -> str:
         return self.step.declared_name
 

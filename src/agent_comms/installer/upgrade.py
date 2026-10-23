@@ -126,6 +126,7 @@ class OwnersPhase(InstallPhase):
 
     command: type[CliCommand]
 
+    @property
     def subject(self) -> str:
         return self.command.declared_name
 

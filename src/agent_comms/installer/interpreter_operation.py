@@ -37,9 +37,10 @@ class InstallPhase(DeclaredFamily, affix="Phase"):
     detail: str = ""
 
     def label(self) -> str:
-        subject = self.subject()
+        subject = self.subject
         return f"{type(self).__name__}: {subject}" if subject else type(self).__name__
 
+    @property
     def subject(self) -> str:
         return self.detail
 
@@ -96,6 +97,7 @@ class ProbePhase(InstallPhase):
 
     probe: type[RuntimeProbe]
 
+    @property
     def subject(self) -> str:
         return self.probe.declared_name
 
