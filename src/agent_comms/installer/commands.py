@@ -22,7 +22,7 @@ from agent_comms.installer.interpreter_operation import (
     RuntimeProbe,
     SourceProgram,
 )
-from agent_comms.installer.phase import CommandPhase, GitPhase, InstallClock, InstallPhase, PhaseTiming, ProbePhase, WorkerClosePhase
+from agent_comms.installer.phase import CommandPhase, GitPhase, InstallClock, InstallPhase, PhaseTiming, WorkerClosePhase
 from agent_comms.launch_runtime import RestoredRuntime
 from agent_comms.maintenance_barrier import MaintenanceHolder
 from agent_comms.repo import Repo
@@ -155,13 +155,8 @@ class InstallCommands:
     def run(self, *command: str | Path, cwd: Path = Path(),
             env: Mapping[str, str] = os.environ, label: str = "") -> str:
         with self.timing(CommandPhase(label or " ".join(map(str, command)))):
-            return self.execute(*command, cwd=cwd, env=env)
-
-    def execute(self, *command: str | Path, cwd: Path = Path(),
-                env: Mapping[str, str] = os.environ) -> str:
-        """Execute inside the caller's declared phase, without a second clock."""
-        completed = subprocess.run([str(part) for part in command], cwd=cwd, env=env,
-                                   capture_output=True, text=True)
+            completed = subprocess.run([str(part) for part in command], cwd=cwd, env=env,
+                                       capture_output=True, text=True)
         if completed.returncode:
             raise UpgradeRefused(f"{command[0]} failed: {completed.stdout.strip()}\n"
                                  f"{completed.stderr.strip()}")
@@ -172,20 +167,12 @@ class InstallCommands:
         with self.timing(GitPhase(f"git -C {checkout} {' '.join(args)}")):
             return Repo.git(checkout, *args)
 
-    @contextmanager
-    def exchange(self, encoded: str) -> Iterator[tuple[Path, Path]]:
-        """Keep one request and its answer alive until the caller reads the result."""
-        with tempfile.TemporaryDirectory() as scratch:
-            request = Path(scratch) / "request.json"
-            request.write_text(encoded)
-            yield request, Path(scratch) / "result.json"
-
     def probe[Answer](self, probe: RuntimeProbe[Answer], python: Path, *,
                       cwd: Path = Path(), env: Mapping[str, str] = os.environ,
                       program: ProbeProgram = SourceProgram()) -> Answer:
         key = InterpreterWorkerKey(python, tuple(map(str, program.entry())), cwd.absolute(),
                                    tuple(sorted(MaintenanceHolder.outside(env).items())))
-        with self.timing(ProbePhase(f"{python} {type(probe).__name__}")):
+        with self.timing(probe.install_phase()) as measured:
             with self.worker_lock:
                 if key not in self.workers:
                     # Linux binds a child's lifetime to its launching thread. Keep that
@@ -198,5 +185,7 @@ class InstallCommands:
             except InterpreterWorkerDied:
                 self.close_workers((key,))
                 raise
-        return probe.decode_answer(answer)
+            decoded = probe.decode_answer(answer)
+            self.clock.include(probe.phase_timings(decoded), measured)
+            return decoded
 

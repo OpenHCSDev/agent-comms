@@ -31,7 +31,6 @@ from agent_comms.installer.reporting import (
     FinishedInstall, InstallOutcome, RootWriter, UnfinishedInstall, UnpostedWriter,
 )
 from agent_comms.installer.harness_probe import HarnessesProbe
-from agent_comms.installer.interpreter_operation import InstalledProgram
 from agent_comms.installer.upgrade import (
     RehearsedUpgrade,
     Stack,
@@ -174,5 +173,5 @@ class InstallRun:
 
     def harnesses(self, stack: Stack) -> InstallResult:
         # The target runtime is published by now, and only its installed package
-        # declares harness registration beside the operation family.
-        return stack.probe(HarnessesProbe(self.root, self.command), program=InstalledProgram())
+        # declares harness registration beside the operation family (``TargetProgram``).
+        return stack.probe(HarnessesProbe(self.root, self.command))

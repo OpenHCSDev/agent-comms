@@ -1,8 +1,9 @@
 """The steps a retained bus is carried through when its durable format changes.
 
 A step is one module in ``tools/cutover`` holding one ``Carry``
-subclass. Only ``agent-comms install`` runs it, with the target revision's ``src`` and
-``tools``, so every step runs against the source it is installed with. A step is
+subclass. Only ``agent-comms install`` runs it, in the runtime built from the target
+revision with that revision's ``tools``, so every step runs against the source it is
+installed with. A step is
 idempotent: data it already carried reports no change, so a step's own dry run is the
 one owner of whether a bus still needs it. Declared dependencies constrain the order
 the main line added steps, starting at the first whose dry run reports a change.
@@ -21,8 +22,8 @@ from typing import Annotated, ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec, PathText
-from agent_comms.installer.interpreter_operation import InterpreterOperation
+from agent_comms.field_codec import PathText
+from agent_comms.installer.interpreter_operation import InterpreterOperation, RuntimeProbe
 from agent_comms.installer.phase import CarryPhase, InstallClock, PhaseTiming
 from agent_comms.locked_store import RootFile
 from agent_comms.repo import Repo
@@ -149,16 +150,22 @@ class CarryReply:
 
 
 @dataclass(frozen=True)
-class CarryRequest:
-    """One operation and its ordered, typed inputs, sent together to the worker."""
+class CarryProbe(RuntimeProbe[CarryReply]):
+    """One carry pass and its measurements, answered by the staged worker."""
 
     operation: CarryOperation
     steps: tuple[Carry, ...]
 
-    def run(self) -> str:
+    def install_phase(self) -> CarryPhase:
+        return CarryPhase(self.operation.declared_name)
+
+    def phase_timings(self, answer: CarryReply) -> list[PhaseTiming]:
+        return answer.phases
+
+    def run(self) -> CarryReply:
         clock = InstallClock()
         answer = self.operation.encode_answer(self.operation.run(self.steps, clock))
-        return FieldCodec.compact(FieldCodec.encode(CarryReply(answer, clock.phases)))
+        return CarryReply(answer, clock.phases)
 
 
 @dataclass(frozen=True)

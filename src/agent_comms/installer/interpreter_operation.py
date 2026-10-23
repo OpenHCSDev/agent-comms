@@ -14,6 +14,7 @@ from abc import ABC, abstractmethod
 from contextlib import redirect_stdout
 from dataclasses import dataclass
 from importlib import import_module
+from importlib.metadata import distributions
 from io import StringIO
 from pathlib import Path
 from typing import Annotated, ClassVar, Self, cast
@@ -23,6 +24,7 @@ from pydantic.json_schema import DEFAULT_REF_TEMPLATE
 from typing_extensions import TypeForm
 
 import agent_comms
+from agent_comms.installer.phase import InstallPhase, PhaseTiming, ProbePhase
 from agent_comms.active_route import ActiveRoute, RouteFile, SelectingRoute, active_route_path
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, PathText, WireValue
@@ -52,6 +54,10 @@ class ProbeProgram(ABC):
     @abstractmethod
     def entry(self) -> tuple[str | Path, ...]: ...
 
+    def import_roots(self) -> tuple[Path, ...]:
+        """Directories the interpreter imports from beside its own packages."""
+        return ()
+
 
 class SourceProgram(ProbeProgram):
     """The target's file can run against a predecessor that does not declare it yet."""
@@ -65,6 +71,17 @@ class InstalledProgram(ProbeProgram):
 
     def entry(self) -> tuple[str, str]:
         return "-c", f"from {__name__} import serve; serve()"
+
+
+@dataclass(frozen=True)
+class TargetProgram(InstalledProgram):
+    """The runtime built from the target tree declares every operation, carry passes
+    included; their steps ship in no runtime, so the tree's ``steps`` supply them."""
+
+    steps: Path
+
+    def import_roots(self) -> tuple[Path]:
+        return (self.steps,)
 
 
 @dataclass(frozen=True)
@@ -96,6 +113,13 @@ class RuntimeProbe[Answer](
     discovery_package="agent_comms.installer",
 ):
     """A declared operation handled by the install's selected interpreter worker."""
+
+    def install_phase(self) -> InstallPhase:
+        return ProbePhase(type(self).__name__)
+
+    def phase_timings(self, answer: Answer) -> list[PhaseTiming]:
+        """Nested phases the worker measured while answering this operation."""
+        return []
 
 
 @dataclass(frozen=True)
@@ -137,11 +161,16 @@ class ProbeRequest:
 def serve() -> None:
     """Answer declared operations from stdin, one encoded answer per request line, until it
     closes. An operation that raises ends the worker: its traceback goes to stderr, and the
-    caller reads the exit in place of an answer."""
+    caller reads the exit in place of an answer. The answers own stdout's descriptor; every
+    other write, an operation's exit handlers included, lands on stderr."""
+    answers = os.fdopen(os.dup(sys.stdout.fileno()), "w")
+    os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
     for line in sys.stdin:
-        with redirect_stdout(sys.stderr):
-            answer = FieldCodec.decode(ProbeRequest, FieldCodec.parse(line)).answer()
-        print(answer, flush=True)
+        print(
+            FieldCodec.decode(ProbeRequest, FieldCodec.parse(line)).answer(),
+            file=answers,
+            flush=True,
+        )
 
 
 class ClientImportsProbe(RuntimeProbe[None]):
@@ -236,10 +265,19 @@ class ServingProbe(RuntimeProbe[None]):
                 instance.serves()
 
 
+class PublicationProbe(RuntimeProbe[None]):
+    """The selected interpreter publishes itself: console launchers and harness links move
+    to it, then ``current`` does."""
+
+    def run(self) -> None:
+        # Imported here: publication -> runtime_resolution -> interpreter_operation is a cycle.
+        from agent_comms.installer.publication import RuntimePublication
+
+        RuntimePublication.installed().publish_links()
+
+
 class DistributionVersionsProbe(RuntimeProbe[dict[str, str]]):
     def run(self) -> dict[str, str]:
-        from importlib.metadata import distributions
-
         from packaging.utils import canonicalize_name
 
         return {canonicalize_name(dist.metadata["Name"]): dist.version for dist in distributions()}
@@ -322,8 +360,6 @@ class InstalledPackagesProbe(RuntimeProbe[dict[str, PackageRecord]]):
     core: str
 
     def run(self) -> dict[str, PackageRecord]:
-        from importlib.metadata import distributions
-
         from packaging.utils import canonicalize_name
 
         from agent_comms.package_stamp import STAMP
