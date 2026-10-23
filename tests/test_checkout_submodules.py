@@ -8,11 +8,12 @@ from pathlib import Path
 import pytest
 
 from agent_comms.repo import Checkout, CheckoutHoldsWorkError, ScratchCheckout
+from fixture_git import IDENTITY
 
 
 def git(path: Path, *args: str) -> str:
     return subprocess.run(
-        ("git", "-C", str(path), "-c", "user.name=t", "-c", "user.email=t@t", *args),
+        ("git", *IDENTITY, "-C", str(path), *args),
         check=True,
         capture_output=True,
         text=True,
