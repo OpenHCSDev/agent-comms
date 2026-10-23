@@ -59,7 +59,6 @@ class CommanderConfig(CommanderRole, BaseModel, DurableFile):
     worktrees: Path
     scratch: Path
     disk: Path
-    parked: frozenset[str] = frozenset()
 
     @staticmethod
     def path(home: Path | None = None) -> Path:
@@ -81,10 +80,9 @@ class CommanderConfig(CommanderRole, BaseModel, DurableFile):
         return cls.model_validate_json(cls.path_in(root).read_text(), context=root)
 
     @classmethod
-    def on_machine(cls, commander: str, repos: tuple[Repo, ...], root: Path, home: Path,
-                   parked: frozenset[str] = frozenset()) -> Self:
+    def on_machine(cls, commander: str, repos: tuple[Repo, ...], root: Path, home: Path) -> Self:
         """The recorded commander and repos, with the paths this machine derives."""
-        return cls(commander=commander, repos=repos, parked=parked, root=root,
+        return cls(commander=commander, repos=repos, root=root,
                    state=home / '.local/state/agent-comms/commander', worktrees=home / 'wt',
                    scratch=home / '.cache/agent-scratch', disk=home)
 
@@ -152,7 +150,7 @@ class RecordedCommander(CommanderRecord):
 
     def commanded_by(self, name: str, repos: RepoChoice, root: Path, home: Path) -> RecordedCommander:
         return RecordedCommander(CommanderConfig.on_machine(
-            name, repos.applied(self.config.repos), root, home, self.config.parked))
+            name, repos.applied(self.config.repos), root, home))
 
     def rehomed(self, repos: RepoChoice, root: Path, home: Path) -> RecordedCommander:
         return self.commanded_by(self.config.commander, repos, root, home)
