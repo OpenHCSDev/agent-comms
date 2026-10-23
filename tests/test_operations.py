@@ -6,6 +6,7 @@ import subprocess
 import sys
 from dataclasses import replace
 from pathlib import Path
+from pydantic import JsonValue
 
 import pytest
 
@@ -25,7 +26,9 @@ from agent_comms.message_page import PageBounds
 from agent_comms.messages import QuestionKind
 from agent_comms.pi_counts import PiCount
 from agent_comms.pi_vocabulary import HighThinkingLevel
-from agent_comms.presentation import CountedRead, UncountedRead
+from agent_comms.presentation import CountedInbox, CountedRead, UncountedRead
+from agent_comms.context_reading import ContextUsage
+from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript, ToolStartTranscript, ToolEndTranscript
 from agent_comms.read_basis import NamedViewer
 from agent_comms.thread_management import ForkSpec
 from agent_comms.tool_caller import ThreadCaller
@@ -190,9 +193,12 @@ class TestThreadOps:
             "tool_end",
             "assistant",
         ]
-        assert events[2].raw_input == {"to": "child"}
-        assert events[3].text == "sent"
-        row = next(row.to_wire() for row in wired.views.presence() if row.thread.name == "transcript-thread")
+        start, end = events[2:4]
+        assert isinstance(start, ToolStartTranscript)
+        assert isinstance(end, ToolEndTranscript)
+        assert start.raw_input == {"to": "child"}
+        assert end.text == "sent"
+        row = FieldCodec.decode(dict[str, JsonValue], next(row.to_wire() for row in wired.views.presence() if row.thread.name == "transcript-thread"))
         assert row["resumable"] is True
 
     def test_thread_transcript_includes_saved_compaction_summary(self, wired: Comms, tmp_path: Path) -> None:
@@ -210,8 +216,10 @@ class TestThreadOps:
         events = wired.transcripts.thread_transcript_page("compacted-thread").events
 
         assert len(events) == 1
-        assert events[0].declared_name == "notice"
-        assert "Important decisions" in events[0].text
+        notice = events[0]
+        assert notice.declared_name == "notice"
+        assert isinstance(notice, NoticeTranscript)
+        assert "Important decisions" in notice.text
 
     def test_claimed_thread_inbox_starts_at_its_creation(self, wired: Comms) -> None:
         wired.messaging.send("PR111", "#all", "before claim").message.message_id
@@ -232,7 +240,7 @@ class TestThreadOps:
         wired.agents.observe_runtime_info(
             "fixer", AgentInfo(model=DeclaredModel('observed/model'), context_size=PiCount.from_wire(100))
         )
-        row = next(row.to_wire() for row in wired.views.who() if row.thread.name == "fixer")
+        row = FieldCodec.decode(dict[str, JsonValue], next(row.to_wire() for row in wired.views.who() if row.thread.name == "fixer"))
         assert row["model"] == "configured/model"
         assert (row["context_used"], row["context_size"]) == (25, 100)
         assert wired.agents.agent_info_of("fixer").context_used == PiCount.from_wire(25)
@@ -242,13 +250,15 @@ class TestThreadOps:
         wired.agents.observe_runtime_info("fixer", AgentInfo(model=DeclaredModel('observed/model'), context_size=PiCount.from_wire(100)))
         answer = wired.configuration.answer("fixer")
         assert answer.model == "observed/model"
-        assert answer.context_usage.label == "25/100 tokens (25.0%)"
+        assert answer.context_usage == ContextUsage(25, 100)
         wired.threads.set_thread_configuration(
             wired.registry.require("fixer"), NextTurnConfiguration(model=ChosenModel(DeclaredModel('configured/model')))
         )
         answer = wired.configuration.answer("fixer")
         assert answer.model == "configured/model"
-        assert answer.context_usage.used == 25
+        usage = answer.context_usage
+        assert isinstance(usage, ContextUsage)
+        assert usage.used == 25
 
     def test_runtime_info_rejects_unknown_thread(self, wired: Comms) -> None:
         with pytest.raises(UnregisteredThreadError):
@@ -259,7 +269,7 @@ class TestThreadOps:
         assert set(rows) == {"PR111", "fixer"}
         assert rows["fixer"].status.declared_name == "running"
         assert rows["fixer"].thread.parent == ForkedParent("PR111")
-        assert rows["fixer"].pending.value == 0
+        assert rows["fixer"].pending == CountedInbox(0)
 
     def test_list_active_only(self, wired: Comms) -> None:
         wired.owners.stop("fixer")
@@ -278,10 +288,11 @@ class TestThreadOps:
             **({"list": next(row.to_wire() for row in views.list_threads() if row.thread.name == "fixer")}
                if counted else {}),
         }
-        record = rows["detail"]
+        records = {name: FieldCodec.decode(dict[str, JsonValue], row) for name, row in rows.items()}
+        record = records["detail"]
         assert ("pending" in record) is counted
         assert record["is_fork"] is True and record["task"] == "fix auth"
-        for row in rows.values():
+        for row in records.values():
             assert {key: row[key] for key in record} == record
 
     def test_thread_detail_fail_closed(self, wired: Comms) -> None:
@@ -363,8 +374,10 @@ class TestThreadOps:
         assert wired.registry.require("planner").tags == frozenset({"base"})
         assert wired.registry.require("fixer").parent == ForkedParent("planner")
         assert wired.agents.activity.current_for(("planner",), active=frozenset({"planner"}))["planner"].detail == "renaming"
-        assert wired.agents.agent_info_of("planner").model == DeclaredModel("test/model")
-        assert FieldCodec.encode(wired.ledger.read())["owner"] == "planner"
+        assert wired.agents.agent_info_of("planner").model_or("") == "test/model"
+        ledger = FieldCodec.encode(wired.ledger.read())
+        assert isinstance(ledger, dict)
+        assert ledger["owner"] == "planner"
         assert wired.bus.pending_count("planner", CommandTarget.named("fixer")) == 0
 
         wired.messaging.send("fixer", "PR111", "old alias routes").message.message_id
@@ -518,7 +531,11 @@ class TestLedgerOps:
         )
         page = wired.transcripts.thread_transcript_page("large")
         assert page.has_older
-        assert [event.text for event in page.events] == [str(index) for index in range(80, 100)]
+        texts: list[str] = []
+        for event in page.events:
+            assert isinstance(event, AssistantTranscript)
+            texts.append(event.text)
+        assert texts == [str(index) for index in range(80, 100)]
         assert PiSessionFile(str(path)).model_choice == ("test", "one")
 
     def test_merge_requires_registered_author(self, wired: Comms) -> None:
@@ -527,24 +544,31 @@ class TestLedgerOps:
 
     def test_merge_records_author(self, wired: Comms) -> None:
         wired.ledger.merge({"k": "v"}, author="PR111")
-        assert FieldCodec.encode(wired.ledger.read())["last_updated_by"] == "PR111"
+        ledger = FieldCodec.encode(wired.ledger.read())
+        assert isinstance(ledger, dict)
+        assert ledger["last_updated_by"] == "PR111"
 
 
 class TestPollAndWire:
     def test_poll_snapshot(self, wired: Comms) -> None:
         wired.messaging.send("PR111", "fixer", "hello").message.message_id
-        snap = wired.views.poll(NamedThreadTarget("fixer")).to_wire()
-        assert snap["thread"]["name"] == "fixer"
-        assert len(snap["inbox"]) == 1
-        assert [peer["name"] for peer in snap["peers"]] == ["PR111"]
-        assert snap["peers"][0]["activity"] == "idle"
+        snap = FieldCodec.decode(dict[str, JsonValue], wired.views.poll(NamedThreadTarget("fixer")).to_wire())
+        thread = FieldCodec.decode(dict[str, JsonValue], snap["thread"])
+        inbox = snap["inbox"]
+        assert isinstance(inbox, list)
+        peers = FieldCodec.decode(list[dict[str, JsonValue]], snap["peers"])
+        assert thread["name"] == "fixer"
+        assert len(inbox) == 1
+        assert [peer["name"] for peer in peers] == ["PR111"]
+        assert peers[0]["activity"] == "idle"
         assert "ledger" in snap
 
     def test_poll_current_thread_from_env(self, wired: Comms, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
         monkeypatch.setenv("PI_WORKTREE", str(tmp_path))
-        snap = wired.views.poll(CallingThreadTarget()).to_wire()
-        assert snap["thread"]["name"] == "fixer"
+        snap = FieldCodec.decode(dict[str, JsonValue], wired.views.poll(CallingThreadTarget()).to_wire())
+        thread = FieldCodec.decode(dict[str, JsonValue], snap["thread"])
+        assert thread["name"] == "fixer"
 
     def test_adopt_current_registers_from_env(self, comms: Comms, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         monkeypatch.setenv("AGENT_COMMS_THREAD", "me")
