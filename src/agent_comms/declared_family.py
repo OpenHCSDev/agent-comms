@@ -18,6 +18,8 @@ from metaclass_registry import (
 )
 from metaclass_registry.discovery import import_module_preserving_root_logging
 
+from .mro_dispatch import MroDispatch, handles
+
 
 def declared_words(stem: str) -> str:
     """A class-name stem as its declared name: ``StallWatcher`` -> ``stall_watcher``."""
@@ -37,10 +39,11 @@ class FamilyMeta(AutoRegisterMeta, ABCMeta):
         discovery_package: str | None = None,
         **class_options: Any,
     ) -> FamilyMeta:
+        family_bases = FamilyBases.of(bases)
         roots = {
             base._family_root
-            for base in bases
-            if isinstance(base, FamilyMeta) and base is not DeclaredFamily
+            for base in family_bases
+            if base is not DeclaredFamily
         }
         if len(roots) > 1:
             raise TypeError("A declaration cannot belong to two families.")
@@ -50,7 +53,7 @@ class FamilyMeta(AutoRegisterMeta, ABCMeta):
         # Explicit child roots reuse family behavior; a slots-rebuilt root
         # carries its own registry in the copied class namespace.
         is_root = affix is not None or "__registry__" in namespace or (
-            not roots and any(isinstance(base, FamilyMeta) for base in bases)
+            not roots and bool(family_bases)
         )
         if is_root:
             # slots dataclasses recreate the root without its class-header keywords.
@@ -100,6 +103,24 @@ class FamilyMeta(AutoRegisterMeta, ABCMeta):
         # Check constructed declarations; lazy discovery cannot run inside class construction.
         cls.validate_selection(dict.values(config.registry_dict))
         return AutoRegisterMeta._register_class(cls, key, config, replaces=replaces)
+
+
+class FamilyBases(MroDispatch):
+    """What each base contributes to its family, by the base's metaclass."""
+
+    @handles(FamilyMeta)
+    @staticmethod
+    def declared(base: FamilyMeta) -> tuple[FamilyMeta, ...]:
+        return (base,)
+
+    @handles(type)
+    @staticmethod
+    def plain(base: type) -> tuple[FamilyMeta, ...]:
+        return ()
+
+    @classmethod
+    def of(cls, bases: tuple[type, ...]) -> tuple[FamilyMeta, ...]:
+        return tuple(family for base in bases for family in cls.handler_for(type(base))(base))
 
 
 class UnknownFamilyMember(ValueError):

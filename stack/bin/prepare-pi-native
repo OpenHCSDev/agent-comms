@@ -45,8 +45,11 @@ if [[ ! -x "$python" ]]; then
 fi
 manifest="$stack_root/pi-native.sha256"
 # Build verification renders the unit prompt, never a unit's first turn.
-build_id=$(native build_id)
+identity=$("$python" -I "$repo_root/src/agent_comms/native_build_inputs.py" \
+    "$repo_root" "$(node --version)" "$(npm --version)" "${PI_MCP_DEPENDENCY_PACKAGE:-}")
+read -r build_id preparation_stamp <<< "$identity"
 target="$stack_root/.pi-native-$build_id"
+stamp_name=.prepared-inputs.sha256
 bedrock=node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
 
 verify() (
@@ -97,19 +100,10 @@ accept() (
     done
 )
 
-if [[ "$update_pins" == false && -e "$target" ]]; then
-    # Publication qualifies the final copied tree before exposing it. Do not
-    # launch a second verifier over the prepared input of that same operation.
-    if [[ -n "$publish_root" ]]; then
-        accept
-        exit 0
-    fi
-    if verify "$target"; then
-        accept
-        exit 0
-    fi
-    printf 'Existing native Pi copy differs from the pinned build: %s\n' "$target" >&2
-    exit 1
+if [[ "$update_pins" == false && -f "$target/$stamp_name" \
+      && $(< "$target/$stamp_name") == "$preparation_stamp" ]]; then
+    accept
+    exit 0
 fi
 
 # Stock Pi is the published package with the dependencies its own
@@ -194,7 +188,9 @@ native share_resources \
     "$stage/node_modules/@earendil-works/pi-coding-agent" "$stack_root"
 if [[ "$update_pins" == true ]]; then
     native write_manifest "$native_package"
-    build_id=$(native build_id)
+    identity=$("$python" -I "$repo_root/src/agent_comms/native_build_inputs.py" \
+        "$repo_root" "$(node --version)" "$(npm --version)" "${PI_MCP_DEPENDENCY_PACKAGE:-}")
+    read -r build_id preparation_stamp <<< "$identity"
     target="$stack_root/.pi-native-$build_id"
 fi
 if ! verify "$stage"; then
@@ -213,11 +209,11 @@ node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$session"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$rpc"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$services"
 if [[ -e "$target" ]]; then
-    if [[ -z "$publish_root" ]]; then
-        verify "$target"
-    fi
+    verify "$target"
     accept
+    printf '%s\n' "$preparation_stamp" > "$target/$stamp_name"
     exit 0
 fi
 mv -- "$stage" "$target"
 accept
+printf '%s\n' "$preparation_stamp" > "$target/$stamp_name"
