@@ -16,7 +16,6 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from agent_comms.registry_store import RegistryStore
 from typing import TYPE_CHECKING, TextIO
 
 if TYPE_CHECKING:
@@ -172,12 +171,9 @@ class WatchState:
         """Whether this session can be the bus thread named; unbound, it cannot be ruled out."""
         return True
 
-    def commander_sources(self) -> bool:
-        """An unbound session may read the package before it joins a bus."""
-        return True
-
-    def commander_notice(self) -> str:
-        return "Commander session is not bound to a bus."
+    def bindings(self) -> tuple[WatchRecord, ...]:
+        """No session binding exists until this watch is enrolled."""
+        return ()
 
     def await_socket(self, absent: OSError) -> None:
         """No bridge holds the claim, so its socket is gone, not between bridges."""
@@ -193,18 +189,8 @@ class RecordedWatch(WatchState):
     claim: WatchClaim
     record: WatchRecord
 
-    def commander_sources(self) -> bool:
-        snapshot = RegistryStore.at(Path(self.record.root)).read_snapshot_unlocked()
-        subject = snapshot.require(self.record.bus)
-        return any(
-            thread.incarnation == subject.incarnation
-            for thread in snapshot.commander_project.commanders(snapshot)
-        )
-
-    def commander_notice(self) -> str:
-        snapshot = RegistryStore.at(Path(self.record.root)).read_snapshot_unlocked()
-        commanders = snapshot.commander_project.commanders(snapshot)
-        return "Commander: " + ", ".join(thread.name for thread in commanders) + "."
+    def bindings(self) -> tuple[WatchRecord, ...]:
+        return (self.record,)
 
     def connect(self, serve: Callable[[], Serve],
                 request: Callable[[Serve], SessionRequest]) -> None:
