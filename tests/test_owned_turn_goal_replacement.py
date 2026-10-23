@@ -12,7 +12,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.agent_backend import InputContent
 from agent_comms.channel_input_batch import InputBatch
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import Comms
+from conftest import installed_comms
 from agent_comms.field_codec import Id128Text
 from agent_comms.goal_actions import (
     BlockedGoalAction, CreateProblemGoalAction, OrderGoalAction, SetGoalAction,
@@ -116,7 +116,7 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
 @pytest.mark.asyncio
 async def test_goal_published_during_preparation_is_current_at_reservation(tmp_path):
     source = SourceRepository.create(tmp_path / 'source')
-    comms = Comms(tmp_path)
+    comms = installed_comms(tmp_path)
     for name in ('lead', 'worker'):
         comms.registry.declare(comms.registry.new_thread(
             name, frozenset(), str(tmp_path),
@@ -181,7 +181,7 @@ async def test_order_reactivating_a_blocked_goal_keeps_the_running_turn(tmp_path
     carries no active goal id and captures the blocked state; the order then makes the goal
     active, and that running turn keeps its tool calls."""
     source = SourceRepository.create(tmp_path / 'source')
-    comms = Comms(tmp_path)
+    comms = installed_comms(tmp_path)
     for name in ('lead', 'worker'):
         comms.registry.declare(comms.registry.new_thread(
             name, frozenset(), str(tmp_path),

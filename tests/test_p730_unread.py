@@ -4,7 +4,7 @@ from dataclasses import fields
 
 import pytest
 
-from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.ui_model.sidebar import SidebarModel
 from agent_comms.ui_model.unread import ExactUnread, IndexingUnread, UnreadPresentation
@@ -12,7 +12,7 @@ from agent_comms.presentation import CoordinationSnapshot
 
 
 def test_indexing_roster_and_exact_count_share_required_maps(tmp_path):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     comms.registry.declare(comms.registry.new_thread(
         "peer", frozenset(), str(tmp_path / "peer"), execution=ExternalThreadExecution,
     ))

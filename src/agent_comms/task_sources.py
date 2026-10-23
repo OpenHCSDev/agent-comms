@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, field
-from typing import Annotated, TYPE_CHECKING
-
+from typing import TYPE_CHECKING, Annotated
 
 from .channel_targets import CommandTarget
 from .declared_family import DeclaredFamily
@@ -24,10 +23,10 @@ from .turn_context import Provenance, WireProvenance
 
 if TYPE_CHECKING:
     from .goal_management import Goals
+    from .bus import BusReader
     from .input_attempt import StoredInput
     from .input_disposition import InputDispositions
     from .messages import Message
-    from .private_bus_checkpoint import CheckedRead
     from .registry_document import RegistrySnapshot
     from .threads import Thread
 
@@ -143,7 +142,7 @@ class ExplicitTaskScopeSelection(TaskScopeSelection, declared_name="explicit"):
 class TaskChange(DeclaredFamily, affix="TaskChange"):
     @abstractmethod
     def require_publication(self, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot,
-                            original_source: CheckedRead | None) -> None: ...
+                            original_source: BusReader) -> None: ...
 
     @abstractmethod
     def root_source(self, message: Message,
@@ -163,11 +162,8 @@ class OriginalTaskChange(TaskChange, declared_name="original"):
 class CorrectionTaskChange(TaskChange, declared_name="correction"):
     original: MessageReference
 
-    def require_original(self, original_source: CheckedRead | None) -> Message:
-        if original_source is None:
-            raise RelationViolationError("Decision correction requires the original publication read")
-
-        delivery, = original_source.references((self.original,))
+    def require_original(self, original_source: BusReader) -> Message:
+        delivery, = original_source.messages_for_references((self.original,))
         original = delivery.message
         if original.reference != self.original:
             raise RelationViolationError("Decision correction requires its original wire reference")
@@ -485,7 +481,7 @@ class HumanConstraintPin(ScopedTaskDeclaration):
         return self
 
     def annotation_rules(self, message: Message, facts) -> tuple[str, ...]:
-        return (self.original_wording(facts.original_text_source(message)),)
+        return (self.original_wording(facts.original_text_source(message.reference)),)
 
     def require_previous(self, original):
         return original.task.require_human_constraint()
@@ -535,7 +531,7 @@ class HumanConstraintPin(ScopedTaskDeclaration):
         self.change.require_publication(self, registry, original_source)
 
     def require_wording_publication(self, registry, original_source):
-        delivery, = original_source.references((self.subject,))
+        delivery, = original_source.deliveries_for_references((self.subject,))
         delivery.message.sender_role.require_user(
             RelationViolationError("Original wording must come from a human sender")
         )
@@ -579,12 +575,13 @@ class NativeInputConstraintPin(HumanConstraintPin):
 
     def require_wording_publication(self, registry, original_source):
         from .input_disposition import InputDispositions
+        from .registry_store import RegistryStore
 
-        original_source.require_current()
+        privacy = RegistryStore.at(original_source.path.parent).private_guard_unlocked()
         row = self.subject.require_human_input().require_original(
             InputDispositions(original_source.path.parent))
         origin = row.origin.require_human()
-        if origin.root_id != original_source.witness.root_id:
+        if origin.root_id != privacy.namespace:
             raise RelationViolationError("USER input pin belongs to another wire root")
         original_author = RecordedThreadIncarnation(origin.author.sender, origin.author.created_at)
         if original_author.resolved(registry) != self.source_user.resolved(registry):

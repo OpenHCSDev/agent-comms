@@ -12,17 +12,19 @@ from uuid import uuid4
 import pytest
 
 from agent_comms import agent_events as events
-from agent_comms.bus_publication import AgentOrigin
+from agent_comms.bus import Bus
+from agent_comms.bus_publication import AgentOrigin, HumanOrigin
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.order import Commander, OrderFile, SayVerb, SendVerb
-from agent_comms.commander.questions import UnansweredUnitAsks
+from agent_comms.commander.questions import UnansweredBurst, UnansweredUnitAsks
 from agent_comms.commander.standing import (
     HeartbeatSilent,
+    AnswersTo,
     UnitAskUnanswered,
 )
-from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import Comms
+from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
@@ -39,10 +41,11 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.message_page import MessagePageRequest
-from agent_comms.messages import InfoKind, Message, QuestionKind
+from agent_comms.messages import ConversationRole, InfoKind, Message, NoticeRole, QuestionKind
+from agent_comms.message_reference import MessageReference
 from agent_comms.native_arguments import GivenBinary
 from agent_comms.order_runs import MechanicalOrderRun
-from agent_comms.read_basis import DMDisplayScope
+from agent_comms.read_basis import DMDisplayScope, RepliesDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import StandingRule
@@ -68,7 +71,7 @@ def held_bus(comms, tmp_path, source_repository, configured_repository):
     """One setup owner: real declarations, checked orders, UNKNOWN row, then a copy."""
     source = source_repository
     scope = source.scope()
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     declare_test_bus(comms, channels=('comms',), threads=tuple(
         comms.registry.new_thread(name=name, tags=frozenset({'comms'}), worktree=str(source.checkout))
         for name in ('lead', 'worker', 'outsider')
@@ -284,6 +287,87 @@ def test_unanswered_uses_age_direct_target_and_later_answer_references(held_bus)
     assert unanswered(held_bus) == ()
 
 
+def test_latest_answer_uses_the_complete_original_reference_and_time_cut(held_bus):
+    since = time.time() - 60
+    question = publish(held_bus, "worker", "lead", since + 1)
+    reply = publish(held_bus, "lead", "worker", since + 2, answers=(question.reference,))
+    publish(held_bus, "lead", "worker", since + 3)
+    publish(held_bus, "lead", "worker", since + 4,
+            answers=(MessageReference(question.seq, "wrong-original"),))
+    expired = publish(held_bus, "worker", "lead", since - 1)
+    publish(held_bus, "lead", "worker", since + 5, answers=(expired.reference,))
+    scope = RepliesDisplayScope(frozenset({"lead"}), frozenset({"worker"}))
+    assert tuple(message.reference for message in AnswersTo(scope, since).read_opened(
+        held_bus.bus.bus)) == (reply.reference,)
+    latest = publish(held_bus, "lead", "worker", since + 6, answers=(question.reference,))
+    assert tuple(message.reference for message in AnswersTo(scope, since).read_opened(
+        held_bus.bus.bus)) == (latest.reference,)
+
+
+def test_unanswered_pages_match_the_complete_answer_reference(held_bus):
+    now = time.time()
+    questions = tuple(publish(held_bus, "worker", "lead", now - 900 - offset)
+                      for offset in range(105))
+    publish(held_bus, "lead", "worker", now,
+            answers=(MessageReference(questions[0].seq, "not-the-original-hash"),))
+    answered = (questions[1].reference, questions[-1].reference)
+    held_bus.messaging.send("lead", "outsider", "Answers retain their original references",
+                            answers=answered)
+    assert tuple(item.message.reference for item in UnitAskUnanswered.violations(held_bus, "lead")) == tuple(
+        question.reference for question in reversed(questions) if question.reference not in answered
+    )
+
+
+def test_answering_an_unrelated_peer_does_not_clear_the_commander_burst(held_bus):
+    now = time.time()
+    owed = publish(held_bus, "worker", "lead", now - 30)
+    unrelated = publish(held_bus, "worker", "outsider", now - 20)
+    publish(held_bus, "lead", "outsider", now - 10, answers=(unrelated.reference,))
+    scope = RepliesDisplayScope(frozenset({"lead"}), frozenset({"worker"}))
+    assert AnswersTo(scope, now - 60).read_opened(held_bus.bus.bus) == ()
+    assert UnansweredBurst(scope, now - 60, now).read_opened(held_bus.bus.bus) == (owed,)
+    reply = publish(held_bus, "lead", "worker", now - 5, answers=(owed.reference,))
+    assert AnswersTo(scope, now - 60).read_opened(held_bus.bus.bus) == (reply,)
+    assert UnansweredBurst(scope, now - 60, now).read_opened(held_bus.bus.bus) == ()
+
+
+@pytest.mark.parametrize("target,body,role,human,eligible", (
+    ("lead", "Direct question", ConversationRole(), False, True),
+    ("lead", "Direct informational message", NoticeRole(), False, True),
+    ("outsider", "Question for another peer", ConversationRole(), False, False),
+    ("#comms", "@lead Your question", ConversationRole(), False, True),
+    ("#comms", "@outsider Another question", ConversationRole(), False, False),
+    ("#comms", "@lead Informational notice", NoticeRole(), False, False),
+    ("#comms", "Collective question", ConversationRole(), True, True),
+))
+def test_latest_answer_retains_the_original_response_eligibility(
+    held_bus, target, body, role, human, eligible,
+):
+    now = time.time()
+    user = held_bus.messaging.user_identity(str(held_bus.root)) if human else None
+    sender = user.name if user else "worker"
+    origin = HumanOrigin.of(user) if user else AgentOrigin()
+    original = held_bus.bus.publisher.publish_ordinary(
+        Message(sender, target, body, InfoKind, timestamp=now - 20, role=role), origin=origin,
+    )
+    reply = publish(held_bus, "lead", sender, now - 10, answers=(original.reference,))
+    scope = RepliesDisplayScope(frozenset({"lead"}), frozenset({sender}))
+    assert scope.includes(original) is eligible
+    found = AnswersTo(scope, now - 60).read_opened(held_bus.bus.bus)
+    assert found == ((reply,) if eligible else ())
+
+
+def test_latest_answer_retains_the_original_commander_alias(held_bus):
+    now = time.time()
+    original = publish(held_bus, "worker", "lead", now - 20)
+    held_bus.threads._rename_thread("lead", "renamed-lead")
+    reply = publish(held_bus, "renamed-lead", "worker", now - 10, answers=(original.reference,))
+    scope = RepliesDisplayScope(
+        held_bus.registry.snapshot().names_for("renamed-lead"), frozenset({"worker"}),
+    )
+    assert AnswersTo(scope, now - 60).read_opened(held_bus.bus.bus) == (reply,)
+
+
 @pytest.mark.parametrize('target,body', [
     ('lead', 'The worker needs an answer'),
     ('#comms', '@lead The worker needs an answer'),
@@ -356,8 +440,12 @@ def test_an_overdue_owner_directive_gates_until_answered(held_bus, tmp_path):
 @pytest.mark.parametrize('body', ['@outsider This question is yours', 'The worker broadcasts its result'])
 def test_channel_messages_without_a_commander_addressee_are_not_a_question(held_bus, body):
     held_bus.messaging.send('worker', '#comms', body, type=QuestionKind)
-    todos = StandingRule.todos(held_bus, 'lead')
-    assert UnansweredUnitAsks.for_orders(held_bus, 'lead', todos, time.time()) == ()
+    with held_bus.bus.bus.reading() as source:
+        questions = UnansweredUnitAsks.for_orders(
+            source, held_bus.registry.snapshot(), 'lead',
+            StandingRule.holders(held_bus, 'lead'), time.time(),
+        )
+    assert not any(questions.values())
 
 
 def test_send_and_check_accept_a_deletion_check_on_fresh_main(
@@ -448,9 +536,9 @@ def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus, 
     heartbeat.pass_body(held_bus, heartbeat.observe(held_bus))
     assert commander.incarnation in heartbeat.reviews
     assert isinstance(held_bus.registry.require("worker").goal.require().state, ActiveGoal)
-    page = held_bus.bus.log.read_page(MessagePageRequest(DMDisplayScope.capture(
+    page = MessagePageRequest(DMDisplayScope.capture(
         heartbeat.sender, "lead", held_bus.registry.snapshot(),
-    )))
+    )).read_opened(held_bus.bus.bus)
     message = next(message for message in page.messages if message.sender == heartbeat.sender)
     assert all(line in message.body for line in expected)
     assert question.reference.message_id in message.body
@@ -468,12 +556,11 @@ def test_every_pass_beats_and_a_stale_beat_is_heartbeat_silent(held_bus, monkeyp
     CommanderHeartbeat.register(held_bus.registry)
     assert HeartbeatSilent.violations(held_bus, "lead") == ()
     states = UnitState.current(held_bus, "lead", ProgressRead())
-    with held_bus.bus.locked():
-        review.wake(held_bus, CommanderHeartbeat.sender, commander, (), states)
-        review.wake(held_bus, CommanderHeartbeat.sender, commander, (), states)
-    page = held_bus.bus.log.read_page(MessagePageRequest(DMDisplayScope.capture(
+    review.wake(held_bus, CommanderHeartbeat.sender, commander, (), states)
+    review.wake(held_bus, CommanderHeartbeat.sender, commander, (), states)
+    page = MessagePageRequest(DMDisplayScope.capture(
         CommanderHeartbeat.sender, "lead", held_bus.registry.snapshot(),
-    )))
+    )).read_opened(held_bus.bus.bus)
     changed, unchanged = (message for message in page.messages
                           if message.sender == CommanderHeartbeat.sender)
     assert "Standing rules clear." in changed.body
@@ -542,23 +629,20 @@ def test_a_compliant_answer_resumes_a_held_unit_whose_attempt_was_interrupted(he
     assert isinstance(held_bus.registry.require("worker").goal.require().state, ActiveGoal)
 
 
-def test_a_restarted_heartbeat_does_not_resend_an_escalation_burst(held_bus, monkeypatch):
-    """The heartbeat's memory of what it enforced dies with its process; the bus says which
-    bursts already went out, so a rule that reads as new again after a restart is not resent."""
-    from agent_comms.commander.vibe_check import (
-        AnswersOwedDegradation,
-        EscalationSender,
-        Sign,
-        VibeCheck,
-        VibeCheckSender,
-    )
+def test_a_restarted_heartbeat_does_not_resend_an_escalation_burst(held_bus):
+    """Deduplication sees answered and unanswered bursts through the same retained bus."""
+    from agent_comms.commander.vibe_check import VibeCheckSender
 
-    monkeypatch.setattr(EscalationSender, "gap", 0.0)
-    first = VibeCheck(Sign(AnswersOwedDegradation, ("1:aaaaaaaaaaaa",), "owed one"))
-    first.enforce(held_bus, "lead")
-    first.enforce(held_bus, "lead")
+    first = "first escalation identity"
+    VibeCheckSender.burst_once(held_bus, "lead", (first,), first)
+    VibeCheckSender.burst_once(held_bus, "lead", (first,), first)
     sent = VibeCheckSender.unanswered(held_bus, "lead", time.time())
-    assert len(sent) == len(first.indictment())
-    VibeCheck(Sign(AnswersOwedDegradation, ("2:bbbbbbbbbbbb",), "owed two")).enforce(
-        held_bus, "lead")
-    assert len(VibeCheckSender.unanswered(held_bus, "lead", time.time())) == 2 * len(sent)
+    assert len(sent) == 1
+    publish(held_bus, "lead", VibeCheckSender.sender, time.time(), answers=(sent[0].reference,))
+    assert VibeCheckSender.sent(held_bus, "lead", first)
+    VibeCheckSender.burst_once(held_bus, "lead", (first,), first)
+    assert not VibeCheckSender.unanswered(held_bus, "lead", time.time())
+    second = "second escalation identity"
+    VibeCheckSender.burst_once(held_bus, "lead", (second,), second)
+    assert [message.body for message in VibeCheckSender.unanswered(
+        held_bus, "lead", time.time())] == [second]

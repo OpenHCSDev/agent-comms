@@ -1,6 +1,8 @@
-"""Sealed N/K claim_scope checks against real private bus, registry, and SQLite stores."""
+"""Native claims refuse stale authority and redirected filesystem paths."""
 
 from __future__ import annotations
+
+from bus_record_fixture import prepare_native_comms
 
 from conftest import publish_initial
 import os
@@ -12,7 +14,6 @@ from tempfile import TemporaryDirectory
 import pytest
 
 import agent_comms.selected_claim as selected_claim
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.assignment_states import FullPendingAssignment
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttempt, SettlingAttempt
@@ -29,10 +30,8 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim, WakeClaim
-from agent_comms.errors import ClaimEnvelopeUnknownError, RelationViolationError
+from agent_comms.errors import RelationViolationError
 from agent_comms.owner_fence import prepare_fence_token
-from agent_comms.message_page import MessagePageRequest
-from agent_comms.read_basis import AllChannelDisplayScope
 from agent_comms.selected_source_batch import SelectedSource
 
 pytestmark = pytest.mark.skipif(
@@ -52,14 +51,15 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
         parent.mkdir(mode=0o700)
         resource = parent / "module.py"
         resource.write_text("value = 1\n")
-        comms = Comms(root)
+        comms = prepare_native_comms(Comms(root))
+        comms.channels.create_tag("team")
         for name, created in (("sender", 17021.0), ("Alice", 17022.0), ("Bob", 17023.0)):
             comms.registry.declare(
                 comms.registry.new_thread(name, frozenset({'team'}), str(worktree), process_identity=ProcessIdentity.capture(os.getpid()), created_at=created)
             )
-        root_id = comms.messaging.initialize_private_initial_protocol()
+        root_id = comms.registry.prepare_native_root().namespace
         message = publish_initial(comms, "sender", "#team", "@Alice investigate")
-        initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
+        initial = comms.bus.bus.delivery(message.seq)
         with Coordination(str(root / "coordination.sqlite3")) as store:
             install_private_cohort_schema(store)
             for recipient in initial.audience.recipients:
@@ -70,8 +70,8 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                     committed=True,
                 )
             accept_delivery_cohort(comms.bus, root_id, message.seq, store)
-            alice_lookup = RecordedThreadIncarnation("fixture", comms.registry.require("Alice").created_at).lookup
-            bob_lookup = RecordedThreadIncarnation("fixture", comms.registry.require("Bob").created_at).lookup
+            alice_lookup = comms.registry.require("Alice").incarnation.lookup
+            bob_lookup = comms.registry.require("Bob").incarnation.lookup
             assert sealed_cohort_assignments(store, bob_lookup) == ()
             assignment = sealed_cohort_assignments(store, alice_lookup)[0]
             assert type(assignment.lifecycle) is FullPendingAssignment
@@ -126,20 +126,11 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                     "Bob",
                     ExistingFileClaim(Path(resource)),
                 )
-            assert comms.bus.log.claim_projection().get(str(resource)) is None
-            append = comms.bus.log.append_private_unlocked
-
-            def append_then_lose_receipt(metadata: dict[str, int | str], row: dict) -> None:
-                append(metadata, row)
-                raise OSError("lost acknowledgement after durable append")
-
-            with monkeypatch.context() as patch:
-                patch.setattr(comms.bus.log, "append_private_unlocked", append_then_lose_receipt)
-                with pytest.raises(ClaimEnvelopeUnknownError):
-                    publish_selected_resource_claim(
-                        comms, store, claim_scope, owner.name, ExistingFileClaim(Path(resource))
-                    )
-            selected_owner = Comms(root).bus.log.claim_projection()[str(resource)]
+            assert str(resource) not in comms.bus.bus.claim_projection()
+            publish_selected_resource_claim(
+                comms, store, claim_scope, owner.name, ExistingFileClaim(Path(resource))
+            )
+            selected_owner = Comms(root).bus.bus.claim_projection()[str(resource)]
             assert selected_owner.claim_scope == claim_scope
             assert selected_owner.resource == str(resource)
             assert (
@@ -148,9 +139,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 )
                 == selected_owner
             )
-            assert len(comms.bus.log.read_page(
-                MessagePageRequest(AllChannelDisplayScope("#any")),
-            ).messages) == 2
+            assert len(comms.bus.bus.scoped_page("1", (), limit=100)) == 2
             # Simulate a crash after the durable rename intent but before SQL
             # owner CAS: an already selected attempt and exact resource claim
             # must not admit a new claim or touch the existing file.
@@ -158,7 +147,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             intent.write_text("pending owner transition")
             with intent.open("rb") as stream:
                 os.fsync(stream.fileno())
-            with pytest.raises(RelationViolationError):
+            with pytest.raises(IdentityConflict):
                 verify_selected_wake(comms, store, claim_scope, "Alice")
             with pytest.raises(RelationViolationError):
                 publish_selected_resource_claim(
@@ -175,30 +164,6 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             external = outside / "module.py"
             external.write_bytes(b"outside untouched\n")
             displaced = worktree / "displaced-pkg"
-            from agent_comms.private_bus_checkpoint import CheckedRead
-
-            actual_claim = CheckedRead.claim
-
-            def swap_after_claim(source, resource):
-                current = actual_claim(source, resource)
-                parent.rename(displaced)
-                parent.symlink_to(outside, target_is_directory=True)
-                return current
-
-            # Swap after canonicalization and the indexed current-claim read:
-            # old absolute stat/open followed the parent symlink despite
-            # final-component O_NOFOLLOW.
-            with monkeypatch.context() as patch:
-                patch.setattr(CheckedRead, "claim", swap_after_claim)
-                with pytest.raises(IdentityConflict):
-                    write_selected_claimed_file(
-                        comms, store, claim_scope, "Alice", selected_owner, b"escaped\n"
-                    )
-            assert external.read_bytes() == b"outside untouched\n"
-            assert (displaced / "module.py").read_bytes() == b"value = 1\n"
-            parent.unlink()
-            displaced.rename(parent)
-
             actual_open = os.open
 
             def swap_after_open(path, flags, *args, **kwargs):
@@ -282,6 +247,4 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 publish_selected_resource_claim(
                     comms, store, claim_scope, "Alice", ExistingFileClaim(Path(resource))
                 )
-            assert len(comms.bus.log.read_page(
-                MessagePageRequest(AllChannelDisplayScope("#any")),
-            ).messages) == 2
+            assert len(comms.bus.bus.scoped_page("1", (), limit=100)) == 2

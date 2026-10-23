@@ -172,18 +172,18 @@ class PrivateSendClaim(PromptBoundary):
                 model=model,
                 thinking_level=self.owner.thread.thinking_level,
                 environment=self.owner.thread.native_environment(
-                    self.bus.log.path.parent, registry,
+                    self.bus.bus.path.parent, registry,
                     self.owner.thread.worktree,
                 ),
                 ingress=MaintenanceBarrier(self.bus._registry.store.path),
                 startup=NativeStartup(
-                    self.bus.log.path.parent,
+                    self.bus.bus.path.parent,
                     measurements=self.selected.cursor_delivery.measurements,
                 ),
                 selected_tool_mode=selected_tool_mode,
                 observe_event=observe_event,
                 request_observer=partial(
-                    record_request_progress, self.bus.log.path.parent, lease,
+                    record_request_progress, self.bus.bus.path.parent, lease,
                 ),
                 prompt_send_boundary=self,
                 execution=execution,
@@ -206,7 +206,7 @@ class PrivateSendClaim(PromptBoundary):
             raise
         finally:
             await Coordination.run_worker(partial(
-                record_acquisition_progress, self.bus.log.path.parent, lease,
+                record_acquisition_progress, self.bus.bus.path.parent, lease,
                 self.input_id, self.selected.cursor_delivery.measurements,
             ))
         async with self.selected.cursor_delivery.reading() as source_reads:
@@ -250,7 +250,7 @@ class PrivateSendClaim(PromptBoundary):
             if not self._once.acquire(blocking=False):
                 raise IdentityConflict("native send claim_scope cannot be reused")
             with self.selected.cursor_delivery.measurements.operation("claim_checks"):
-                _require_no_private_owner_rename(self.bus.log.path.parent)
+                _require_no_private_owner_rename(self.bus.bus.path.parent)
                 self.owner.require_snapshot(
                     registry, "recipient registry owner changed before native send"
                 )

@@ -1,31 +1,26 @@
 """A new history declaration crosses real current and retained-source boundaries."""
 
-from agent_comms.comms import Comms
 from agent_comms.historical_views import HistoryView
-from agent_comms.message_page import MessagePageRequest, PageBounds
+from agent_comms.message_page import PageBounds
 from agent_comms.read_basis import ChannelDisplayScope, NoDisplaySelection
 from agent_comms.threads import Thread
+from conftest import installed_comms
 
 
 class ReviewHistory(HistoryView):
     def capture(self, snapshot):
         return ChannelDisplayScope("#review", frozenset({"#review"}))
 
-    def live_page(self, presentation, bounds):
-        return presentation.bus.log.read_page(MessagePageRequest(
-            self.capture(presentation.registry.snapshot()), bounds
-        ))
-
 
 def test_new_history_case_owns_both_source_interpretations_without_reader_dispatch(tmp_path, *, thread_registration):
-    roots = [Comms(tmp_path / name) for name in ("prior", "current")]
+    roots = [installed_comms(tmp_path / name) for name in ("prior", "current")]
     for comms in roots:
         comms.registry.declare(thread_registration.new_thread('writer', frozenset({'review', 'other'}), str(comms.root)))
         for number in range(3):
             comms.messaging.send("writer", "#review", f"{comms.root.name} {number}").message.message_id
             comms.messaging.send("writer", "#other", f"excluded {number}").message.message_id
     prior, current = roots
-    original = prior.bus.log.path.read_bytes()
+    original = prior.bus.bus.revision()
     current.views.attach_history(prior.root)
     view = ReviewHistory()
     page = view.page(current.views.presentation, PageBounds(limit=2))
@@ -45,8 +40,8 @@ def test_new_history_case_owns_both_source_interpretations_without_reader_dispat
         cursor = page.newest_cursor
     assert [m.view_key for m in forward] == [m.view_key for m in backwards[1:]]
     assert isinstance(page.selection, NoDisplaySelection)
-    assert prior.bus.log.path.read_bytes() == original
-    assert current.bus.log.latest_sequence() == 6
+    assert prior.bus.bus.revision() == original
+    assert current.bus.bus.revision() == 6
     assert not (prior.root / "read_ledger.json").exists()
 
 

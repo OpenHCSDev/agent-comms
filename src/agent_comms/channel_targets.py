@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, overload
 
@@ -14,9 +14,12 @@ from .response_policy import DirectPolicy, MentionedOnlyPolicy
 from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, UnmentionedWake
 
 if TYPE_CHECKING:
+    from .bus_activity_index import ActivityClocks
+    from .catalog_document import CatalogDocument
     from .channels import Channel
     from .goal_management import Goals
     from .historical_views import ChannelHistory, DMHistory, HistoryView
+    from .history_views import HistoryViews
     from .messages import Message
     from .read_basis import ChannelConversation, Conversation, DisplayViewer, DMConversation
     from .registry_provenance import RegistryProvenance
@@ -174,6 +177,21 @@ class NamedTarget(CommandTarget):
     def conversation_key(self, sender: str, snapshot: RegistryProvenance,
                          channel: type[ChannelConversation], direct: type[DMConversation]) -> Conversation: ...
 
+    @abstractmethod
+    def pending_count(
+        self, counts: dict[str, int], snapshot: RegistryProvenance,
+        require_channel: Callable[[str], Channel],
+    ) -> int: ...
+
+    @abstractmethod
+    def changed_threads(
+        self, names: Iterable[str], snapshot: RegistryProvenance,
+        catalog: CatalogDocument, activity: ActivityClocks,
+    ) -> tuple[str, ...]: ...
+
+    @abstractmethod
+    def mark_view_read(self, views: HistoryViews, worktree: str) -> None: ...
+
     def canonical_name(self, canonical):
         return self.name
 
@@ -251,7 +269,10 @@ class ThreadTarget(NamedTarget):
     def available(self, snapshot) -> bool:
         return self.canonical_name(snapshot.canonical_name) in snapshot.threads
 
-    def pending_count(self, counts, snapshot, require_channel):
+    def pending_count(
+        self, counts: dict[str, int], snapshot: RegistryProvenance,
+        require_channel: Callable[[str], Channel],
+    ) -> int:
         return counts.get(snapshot.require(self.name).name, 0)
 
     def resolve(self, snapshot, require_channel) -> ResolvedThread:
@@ -297,10 +318,13 @@ class ThreadTarget(NamedTarget):
         names = sorted({snapshot.canonical_name(sender), self.canonical_name(snapshot.canonical_name)})
         return direct(participants=tuple(snapshot.participant(name).incarnation for name in names))
 
-    def changed_threads(self, names, snapshot, catalog, activity):
+    def changed_threads(
+        self, names: Iterable[str], snapshot: RegistryProvenance,
+        catalog: CatalogDocument, activity: ActivityClocks,
+    ) -> tuple[str, ...]:
         return (self.canonical_name(snapshot.canonical_name),)
 
-    def mark_view_read(self, views, worktree):
+    def mark_view_read(self, views: HistoryViews, worktree: str) -> None:
         views.mark_thread_user_read(self.name, worktree=worktree)
 
 
@@ -353,7 +377,10 @@ class ChannelTarget(NamedTarget):
         result_type = require_channel(self.name).history_result_type
         return result_type.for_target(self.name, messages, has_older)
 
-    def pending_count(self, counts, snapshot, require_channel):
+    def pending_count(
+        self, counts: dict[str, int], snapshot: RegistryProvenance,
+        require_channel: Callable[[str], Channel],
+    ) -> int:
         return require_channel(self.name).pending_count(counts)
 
     def resolve(self, snapshot, require_channel) -> ResolvedChannel:
@@ -407,12 +434,15 @@ class ChannelTarget(NamedTarget):
     def conversation_key(self, sender, snapshot, channel, direct):
         return channel(target=self.name)
 
-    def changed_threads(self, names, snapshot, catalog, activity):
+    def changed_threads(
+        self, names: Iterable[str], snapshot: RegistryProvenance,
+        catalog: CatalogDocument, activity: ActivityClocks,
+    ) -> tuple[str, ...]:
         channel = catalog.require_channel(self.name, activity)
         return tuple(name for name in names if (thread := snapshot.threads.get(name)) is not None
                      and channel.matches(thread.tags))
 
-    def mark_view_read(self, views, worktree):
+    def mark_view_read(self, views: HistoryViews, worktree: str) -> None:
         from .presentation import ReadAll
 
         views.presentation.mark_channel_read(

@@ -77,7 +77,6 @@ from agent_comms.messages import InfoKind, Message
 from agent_comms.order_runs import OrderRun
 from agent_comms.order_story import ProblemStory, StoryEvent, StoryLine, StorySource
 from agent_comms.plan_phases import OrderPhase, UnplannedPhase
-from agent_comms.private_bus_checkpoint import CheckedRead, PublicMessages
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.progress_claims import MergedClaim, ProgressClaim, WorkingClaim
 from agent_comms.recorded_time import (
@@ -106,6 +105,7 @@ from agent_comms.typed_table import (
 from agent_comms.work_branches import WorkBranchError, WorkBranches
 
 if TYPE_CHECKING:
+    from agent_comms.bus import BusReader
     from agent_comms.comms import Comms
     from agent_comms.goal_management import Goals
     from agent_comms.registration import Registration
@@ -136,6 +136,13 @@ class FileDeliveryEvidence(DeliveryEvidence):
 
     def require_run(self, run: OrderRun) -> None:
         run.require_artifact(self.path)
+
+
+class FreshMainCheck:
+    """Undelivered work is checked against fetched main, independent of the local branch."""
+
+    def check_base(self, repo: Path) -> str:
+        return f"origin/{WorkBranches.main}"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -409,10 +416,7 @@ class CheckedCommitDelivery(CommitDelivery):
 
 
 @dataclass(frozen=True, kw_only=True)
-class OperationDelivery(CheckedDelivery):
-    def check_base(self, repo: Path) -> str:
-        return WorkBranches.main
-
+class OperationDelivery(FreshMainCheck, CheckedDelivery):
     def done_claims(self, order: CheckedProblemOrder) -> tuple[ProgressClaim, ...]:
         super().done_claims(order)
         return (WorkingClaim(self.evidence.artifact()),)
@@ -2017,7 +2021,7 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
 
 
 @dataclass(frozen=True, kw_only=True)
-class DeliverableProblemOrder(OpenProblemOrder, declared_name=None):
+class DeliverableProblemOrder(FreshMainCheck, OpenProblemOrder, declared_name=None):
     """Pending work and a holder's claim both await the commander's delivery verdict."""
 
     def sent_back(self, reason: StrikeReason) -> PendingProblemOrder:
@@ -2038,9 +2042,6 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
     at: EventTime = field(default_factory=lambda: RecordedEventTime(time.time()))
     first_call_deadline: EventTime = field(
         default_factory=lambda: RecordedEventTime(time.time() + 120))
-
-    def check_base(self, repo: Path) -> str:
-        return WorkBranches.main
 
     def reissued(self, at: float) -> PendingProblemOrder:
         return self.fresh_order(at, self.edits)
@@ -2080,20 +2081,18 @@ class OrderClaim:
         if not self.message.body.strip():
             raise TodoError("A delivery claim needs its report text.")
 
-    def original(self, source: CheckedRead) -> Message:
-        row = PublicMessages.require(source.connection, message_id=self.message.message_id)
-        return replace(self.message, seq=row.seq)
+    def original(self, source: BusReader) -> Message:
+        return replace(self.message, seq=source.message_reference(self.message.message_id).seq)
 
     @staticmethod
     def originals[K](
-        comms: Comms, claims: Mapping[K, tuple[OrderClaim, ...]]
+        source: BusReader, claims: Mapping[K, tuple[OrderClaim, ...]]
     ) -> dict[K, tuple[Message, ...]]:
-        """Every claim's original from one checked read; no claim opens no read."""
+        """Every claim's original from the caller's acquired bus snapshot."""
         if not any(claims.values()):
             return {}
-        with comms.bus.log.checked_read() as source:
-            return {key: tuple(claim.original(source) for claim in held)
-                    for key, held in claims.items()}
+        return {key: tuple(claim.original(source) for claim in held)
+                for key, held in claims.items()}
 
     @classmethod
     def for_order(
@@ -2110,9 +2109,6 @@ class OrderClaim:
 class ClaimedProblemOrder(DeliverableProblemOrder):
     claim: OrderClaim
     line: ClassVar[str] = "Claimed by the unit, waiting on the commander's verdict"
-
-    def check_base(self, repo: Path) -> str:
-        return WorkBranches.main
 
     def require_reassignment(self, todo: Todo, proposed: Assignment) -> None:
         """A corrected order to the claimant replaces its claim; another owner is a transfer."""
@@ -2860,13 +2856,10 @@ class PeerAcceptedVerdict(AcceptedVerdict):
     peer: str
 
     def prepare(self, goals, current):
-        with goals.bus.log.opened_wire_snapshot() as opened, goals.bus.log.checked_read() as source:
-            message = PublicMessages.message_by_id(source, opened, self.peer)
-        if message is None:
-            raise ValueError("The peer order message does not exist.")
+        message = goals.bus.bus.lookup_message(self.peer)
         if (message.sender == self.actor.name or
                 (message.target != current.holder and
-                 current.holder not in {mention.name for mention in message.mentions})):
+                 current.holder not in {mention.thread for mention in message.mentions})):
             raise ValueError("--peer must name another sender's message to this unit.")
         self.require_quote(message.body)
         return self

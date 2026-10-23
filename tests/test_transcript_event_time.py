@@ -5,16 +5,16 @@ from datetime import datetime
 
 import pytest
 
-from agent_comms.comms import wire
 from agent_comms.field_codec import MalformedRecord, RecordedTimestamp
 from agent_comms.native_entries import NativeEntry, TranscriptProjection
 from agent_comms.routing import TurnRouting
 from agent_comms.transcript_events import AssistantTranscript
+from conftest import installed_comms
 
 
 @pytest.mark.parametrize("stamp", ["2026-09-28T23:12:33.123Z", "2026-09-28T19:12:33.123-04:00"])
 def test_original_record_clock_survives_split_and_routed_projection(tmp_path, stamp):
-    comms = wire(tmp_path / "wire")
+    comms = installed_comms(tmp_path / "wire")
     for name in ("peer", "owner"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
     requests = tuple(

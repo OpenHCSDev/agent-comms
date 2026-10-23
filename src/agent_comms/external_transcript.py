@@ -11,7 +11,7 @@ item finishes is the thread's activity, reported through Core's activity log.
 from __future__ import annotations
 
 from collections.abc import Generator, Iterable, Iterator
-from contextlib import closing, contextmanager
+from contextlib import aclosing, closing, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from sqlite3 import Connection
@@ -38,7 +38,7 @@ from .typed_table import (
     TypedRow,
     TypedTable,
 )
-from .wire_watch import WatchSource, WireWatch
+from .watched import FileSource, Watched
 
 if TYPE_CHECKING:
     from .turn_digests import TurnBound
@@ -465,8 +465,9 @@ class ExternalTranscript(TranscriptSource, DurableStore):
         return True
 
     def oldest(self, connection) -> ExternalPageRow | NoItems:
-        return ExternalItemRow.one(connection, thread=self.lookup, row_type=ExternalPageRow,
-                                   order_by=("seq",), limit=1) or NoItems()
+        rows = ExternalItemRow.select(connection, thread=self.lookup, row_type=ExternalPageRow,
+                                      order_by=("seq",), limit=1)
+        return next(iter(rows), NoItems())
 
     def publish_page(self, items, earlier: ExternalPage) -> None:
         """Publish the newest snapshot once, including empty items that own a continuation."""
@@ -492,14 +493,16 @@ class ExternalTranscript(TranscriptSource, DurableStore):
 
     async def watch_requests(self, emit) -> None:
         previous = ()
-        async for _ in WireWatch.observations(*(WatchSource.modified_file(path)
-                                               for path in self.source_paths(self.root))):
-            with self.reading() as records:
-                current = records.frames()
-            for frame in current:
-                if frame not in previous:
-                    emit(frame)
-            previous = current
+        async with aclosing(Watched.watch_sources(
+            *(FileSource(path) for path in self.source_paths(self.root))
+        )) as observations:
+            async for _ in observations:
+                with self.reading() as records:
+                    current = records.frames()
+                for frame in current:
+                    if frame not in previous:
+                        emit(frame)
+                previous = current
 
     def draft(self, *, turn_id: str, item_id: str,
               events: tuple[TranscriptEvent, ...]) -> None:

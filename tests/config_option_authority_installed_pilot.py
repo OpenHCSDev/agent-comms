@@ -6,6 +6,8 @@ root, setting, native journal or historical input is changed.
 """
 from __future__ import annotations
 
+from agent_comms.bus import Bus
+
 import argparse
 import asyncio
 from contextlib import AsyncExitStack
@@ -105,7 +107,7 @@ async def run(stage, package, models, ui, menu_contention=False):
     project = stage / 'project'
     project.mkdir()
     service = Comms(stage / 'wire')
-    service.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(service.root))
     environment = dict(os.environ)
     environment.update(
         AGENT_COMMS_ROOT=str(service.root),

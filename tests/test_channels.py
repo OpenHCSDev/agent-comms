@@ -14,7 +14,9 @@ from agent_comms.channel_management import (
     ArchiveThreadsTagDisposition, DeleteThreadsTagDisposition,
     DeleteExclusiveInactiveThreadsTagDisposition,
 )
+from agent_comms.bus import Bus
 from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.display_order import (
     ChannelSort, CreatedThreadSort, LastActivityThreadSort, LastMessageThreadSort, ThreadSort,
@@ -34,10 +36,49 @@ def test_builtin_channel_target_decodes_to_declaring_member(channel):
 
 
 def setup_wire(path):
+    Bus.install(Bus.path_in(path))
     comms = wire(path)
+    for tag in ("api", "ui"):
+        comms.channels.create_tag(tag)
     for name, tags in (("a", {"api"}), ("b", {"ui"}), ("both", {"api", "ui"}), ("other", set())):
         comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset(tags), worktree=str(path)))
     return comms
+
+
+def test_current_membership_cannot_create_an_unfrozen_delivery(tmp_path):
+    from agent_comms.bus import PublicRecord
+    from agent_comms.messages import InfoKind, Message
+
+    comms = setup_wire(tmp_path)
+    before_join = comms.messaging.send("a", "#api", "before other joined").message
+    comms.channels.update_tags("other", add=frozenset({"api"}))
+    addressed = comms.messaging.send("a", "#api", "frozen for other").message
+    historical = comms.bus.bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("a", "#api", "public history is not input", InfoKind, seq=seq),
+    ))
+    target = CommandTarget.named("#api")
+    assert [message.seq for message in comms.bus.inbox("other", target)] == [addressed.seq]
+    assert comms.bus.pending_count("other", target) == 1
+    assert comms.bus.pending_counts_all(("other",)) == {"other": 1}
+    received = comms.bus.bus.received(comms.registry.require("other").incarnation.lookup)
+    assert addressed.seq in {record.seq for record in received}
+    assert not {before_join.seq, historical.seq} & {record.seq for record in received}
+
+
+def test_tag_delta_and_replacement_use_the_current_registration(tmp_path):
+    comms = setup_wire(tmp_path)
+    changed = comms.channels.update_tags(
+        "a", add=frozenset({"ui"}), remove=frozenset({"api"}),
+    )
+    assert changed.tags == frozenset({"ui"})
+    replaced = comms.channels.replace_tags("a", frozenset({"fresh"}))
+    assert replaced.tags == frozenset({"fresh"})
+    assert comms.registry.require("a") == replaced
+    assert "fresh" in comms.channels.catalog.read().tags
+    members = {view.channel.name: view.members for view in comms.views.channel_views()}
+    assert "a" in members["#fresh"]
+    assert "a" not in members["#api"]
+    assert "a" not in members["#ui"]
 
 
 def test_channel_metadata_round_trips_without_changing_routing(tmp_path):
@@ -83,7 +124,7 @@ def test_tag_cohort_refuses_active_owners_before_any_registry_publication(tmp_pa
 
 
 def test_exclusive_tag_deletion_uses_original_storage_and_preserves_survivors(tmp_path):
-    comms = wire(tmp_path / 'wire')
+    comms = installed_comms(tmp_path / 'wire')
     saved = {}
     for name, tags, status in (
         ('single', {'remove'}, StoppedThreadStatus()),
@@ -457,7 +498,7 @@ def test_none_membership_and_independent_channel_order(tmp_path):
 
 
 def test_membership_notices_follow_exact_membership_and_do_not_wake(tmp_path):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     comms.registry.declare(comms.registry.new_thread('moving', frozenset(), str(tmp_path)))
     comms.registry.declare(
         comms.registry.new_thread('peer', frozenset({'api'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))

@@ -118,6 +118,7 @@ from .field_codec import (
 from .harness_install import Harness
 from .history_result import HistoryPageResult
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
+from .input_origin import InputProvenance
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
 from .install_choices import InstallerChoice, UnnamedInstaller
 from .maintenance_barrier import MaintenanceHeldError
@@ -181,7 +182,7 @@ from .turn_context import (
     TurnContext,
 )
 from .typed_table import ReconciledFile
-from .wire_log import WireLog
+from .recorded_bus import RecordedBusIdentity
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
 
@@ -539,7 +540,7 @@ class ThreadConfiguredResult(CliResult):
 @dataclass(frozen=True)
 class ConstraintPinnedResult(CliResult):
     pin: MessageReference
-    source: MessageReference
+    source: MessageReference | InputProvenance
 
 
 @dataclass(frozen=True)
@@ -1363,7 +1364,7 @@ class ExportRetainedCliCommand(CliCommand, declared_name="export-retained"):
     )
 
     def apply(self, ctx: Comms) -> CliResult:
-        return ctx.bus.log.retained_context(self.thread, ctx.registry).export(
+        return ctx.views.retained_context(self.thread).export(
             self.output, overwrite=self.overwrite)
 
 
@@ -1792,8 +1793,7 @@ class ReadBackCliCommand(CliCommand[BusReadBack], declared_name="read-back"):
         return self.answer(ctx.root)
 
     def execute(self, route: CommsRoute, output: TextIO) -> int:
-        """Opening the bus writes its metadata and checkpoint, and the installer reads back
-        before its carries, after the backup: only the registry is read, never written."""
+        """Before its carries, the installer reads only the existing registry."""
         return self.written(self.answer(route.root), output)
 
 
@@ -2539,6 +2539,5 @@ class ReplaceRouteCliCommand(CliCommand, declared_name=ActiveRoute.repair_comman
             "the old file is kept beside it")
 
     def apply(self, ctx: Comms) -> CliResult:
-        marker = WireLog(WireLog.path_in(ctx.root)).private_marker_unlocked()
-        route = ActiveRoute(ctx.root, marker.root_id)
+        route = ActiveRoute(ctx.root, RecordedBusIdentity.capture(ctx.bus.bus.path))
         return RouteReplacedResult(str(ctx.root), str(replace_unreadable_active_route(route)))

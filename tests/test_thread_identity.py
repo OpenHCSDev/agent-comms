@@ -9,6 +9,7 @@ import pytest
 from agent_comms.thread_text import SavedSessionFile
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.comms import Comms
+from conftest import installed_comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.read_basis import Conversation
@@ -233,7 +234,7 @@ def test_coordination_assignment_generation_is_independent_of_registry_process(t
 
 
 def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):
-    comms = Comms(tmp_path)
+    comms = installed_comms(tmp_path)
     comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     message = comms.messaging.send("owner", viewer, "already painted").message

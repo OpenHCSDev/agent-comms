@@ -2,111 +2,107 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from contextlib import closing
+import math
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.bus_page_index import BusPageIndex
+from agent_comms.bus import BusReader
 from agent_comms.message_page import MessageReadRequest
-from agent_comms.message_reference import MessageReference
-from agent_comms.messages import Message, NeedsAnswerKind
+from agent_comms.messages import Message, MessageKind, NeedsAnswerKind
 from agent_comms.read_basis import RepliesDisplayScope
-from agent_comms.wire_log import WireSnapshot
 
 if TYPE_CHECKING:
-    from agent_comms.comms import Comms
+    from agent_comms.registry_document import RegistrySnapshot
+    from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.todos import Todo
 
 
 @dataclass(frozen=True, slots=True)
-class UnansweredUnitAsks(MessageReadRequest[tuple[Message, ...]]):
+class SenderMessages(MessageReadRequest[tuple[Message, ...]]):
+    """Messages from the other side, with one captured SQL paging lifetime."""
+
     scope: RepliesDisplayScope
     since: float
     before: float
     empty: ClassVar[tuple[Message, ...]] = ()
 
-    @classmethod
-    def for_orders(
-        cls, comms: Comms, commander: str, todos: Sequence[Todo], before: float
-    ) -> tuple[Message, ...]:
-        if not todos:
-            return ()
-        snapshot = comms.registry.snapshot()
-        peers = frozenset(name for todo in todos for name in snapshot.names_for(todo.held().owner))
-        since = min(
-            order.at.recorded_at("A held order") for todo in todos for order in todo.order_history
-        )
-        questions = comms.bus.log.read_page(
-            cls(
-                RepliesDisplayScope(snapshot.names_for(commander), peers),
-                since,
-                before,
-            )
-        )
-        return tuple(message for message in questions if issubclass(message.type, NeedsAnswerKind))
+    def lower_bound(self, source: BusReader) -> float:
+        return self.since
 
-    def indexed(self, index: BusPageIndex, source: WireSnapshot) -> tuple[Message, ...]:
-        answered: set[MessageReference] = set()
+    def page(self, source: BusReader, lower: float, upper: int) -> tuple[Message, ...]:
+        requesters = tuple(self.scope.second_names - self.scope.first_names)
+        marks = ",".join("?" for _ in requesters)
+        predicate = f"sender IN ({marks}) AND " + Message.table._sql(
+            "{timestamp} >= ? AND {timestamp} <= ?")
+        return source.scoped_page(
+            predicate, (*requesters, lower, self.before), upper=upper, descending=True,
+        )
+
+    def read_opened(self, source: BusReader) -> tuple[Message, ...]:
         found: list[Message] = []
-        with closing(
-            index.recent_offsets(
-                self.since,
-                predicate=self.scope.index_predicate,
-                before_offset=source.boundary,
-            )
-        ) as offsets:
-            for row in self.indexed_records(source, offsets):
-                message = row.message
-                if message.sender in self.scope.first_names:
-                    answered.update(message.answers)
-                elif message.timestamp <= self.before and message.reference not in answered:
-                    found.append(message)
+        with source.reading() as reader:
+            lower = self.lower_bound(reader)
+            upper = reader.revision() + 1
+            while page := self.page(reader, lower, upper):
+                found.extend(message for message in page if self.scope.includes(message))
+                upper = page[-1].seq
         return tuple(found)
 
 
 @dataclass(frozen=True, slots=True)
-class SenderMessages(UnansweredUnitAsks):
-    """Everything the other side sent the commander in the window, answered or not."""
+class UnansweredUnitAsks(SenderMessages):
+    """Individual requests without an answer to their exact original reference."""
 
-    def indexed(self, index: BusPageIndex, source: WireSnapshot) -> tuple[Message, ...]:
-        with closing(
-            index.recent_offsets(
-                self.since,
-                predicate=self.scope.index_predicate,
-                before_offset=source.boundary,
+    @classmethod
+    def for_orders(
+        cls, source: BusReader, snapshot: RegistrySnapshot, commander: str,
+        held: Mapping[ThreadIncarnation, Sequence[Todo]], before: float,
+    ) -> dict[ThreadIncarnation, tuple[Message, ...]]:
+        from agent_comms.todos import OrderClaim
+
+        if not held:
+            return {}
+        for owner in held:
+            if snapshot.require(owner.name).incarnation != owner:
+                raise ValueError("Held order owner incarnation changed")
+        peers = frozenset(name for owner in held for name in snapshot.names_for(owner.name))
+        since = min(
+            order.at.recorded_at("A held order")
+            for todos in held.values() for todo in todos for order in todo.order_history
+        )
+        questions = cls(
+            RepliesDisplayScope(snapshot.names_for(commander), peers), since, before,
+        ).read_opened(source)
+        claims = OrderClaim.originals(
+            source,
+            {owner: tuple(claim for todo in todos for claim in todo.order.commander_claims())
+             for owner, todos in held.items()},
+        )
+        return {
+            owner: (
+                *(message for message in questions
+                  if snapshot.canonical_name(message.sender) == owner.name),
+                *claims.get(owner, ()),
             )
-        ) as offsets:
-            return tuple(
-                row.message
-                for row in self.indexed_records(source, offsets)
-                if row.message.sender not in self.scope.first_names
-                and row.message.timestamp <= self.before
-            )
+            for owner in held
+        }
+
+    def page(self, source: BusReader, lower: float, upper: int) -> tuple[Message, ...]:
+        return source.unanswered_page(
+            self.scope,
+            since=lower, before=self.before, upper=upper,
+            kinds=MessageKind.members_with(NeedsAnswerKind),
+        )
 
 
 @dataclass(frozen=True, slots=True)
-class UnansweredBurst(UnansweredUnitAsks):
-    """A sender whose messages arrive as one burst: an answer to any of its messages covers
-    everything it sent before that answer, so the commander answers a burst once, not once per
-    line. Only what it sent after the newest such answer is still open."""
+class UnansweredBurst(SenderMessages):
+    """An answer to one burst line covers everything sent before that answer."""
 
-    def indexed(self, index: BusPageIndex, source: WireSnapshot) -> tuple[Message, ...]:
-        replied: dict[MessageReference, float] = {}
-        sent: list[Message] = []
-        with closing(
-            index.recent_offsets(
-                self.since,
-                predicate=self.scope.index_predicate,
-                before_offset=source.boundary,
-            )
-        ) as offsets:
-            for row in self.indexed_records(source, offsets):
-                message = row.message
-                if message.sender in self.scope.first_names:
-                    for answered in message.answers:
-                        replied[answered] = max(replied.get(answered, 0.0), message.timestamp)
-                else:
-                    sent.append(message)
-        covered = max((replied[m.reference] for m in sent if m.reference in replied), default=0.0)
-        return tuple(m for m in sent if covered < m.timestamp <= self.before)
+    def lower_bound(self, source: BusReader) -> float:
+        covered = source.answer_timestamp(
+            self.scope,
+            since=self.since,
+        )
+        return max(self.since, math.nextafter(covered, math.inf))

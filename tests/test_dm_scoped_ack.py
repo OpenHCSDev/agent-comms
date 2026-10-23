@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.read_basis import DMSelection, EmptyTail
 from agent_comms.coordination_errors import DMPaintedBoundChanged, DMScopeChanged, TranscriptChanged
 from agent_comms.child_process import ProcessIdentity
@@ -24,7 +24,7 @@ def _thread(root: Path, name: str) -> Thread:
 
 
 def test_dm_page_marks_covered_range_preserving_omitted_older_unread(tmp_path: Path):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     comms.registry.declare(_thread(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     for index in range(50):
@@ -40,7 +40,7 @@ def test_dm_page_marks_covered_range_preserving_omitted_older_unread(tmp_path: P
 
 
 def test_peer_delete_same_name_rebind_rejects_stale_page_without_read_ack(tmp_path: Path):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     for name in ("peer", "other"):
         comms.registry.declare(_thread(tmp_path, name))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
@@ -68,7 +68,7 @@ def test_peer_delete_same_name_rebind_rejects_stale_page_without_read_ack(tmp_pa
 
 
 def test_foreign_root_wrong_peer_and_unbounded_or_bool_through_rejected(tmp_path: Path):
-    first, second = wire(tmp_path / "first"), wire(tmp_path / "second")
+    first, second = installed_comms(tmp_path / "first"), installed_comms(tmp_path / "second")
     for comms in (first, second):
         for name in ("peer", "other"):
             comms.registry.declare(_thread(comms.root, name))
@@ -92,7 +92,7 @@ def test_foreign_root_wrong_peer_and_unbounded_or_bool_through_rejected(tmp_path
 
 
 def test_painted_bound_uses_existing_transcript_refresh_error(tmp_path: Path):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     comms.registry.declare(_thread(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", viewer, "painted").message.message_id
@@ -106,7 +106,7 @@ def test_painted_bound_uses_existing_transcript_refresh_error(tmp_path: Path):
 
 
 def test_root_replaced_after_fetch_rejects_mark_without_reading_new_root(tmp_path: Path):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     comms.registry.declare(_thread(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", viewer, "painted in original root").message.message_id
@@ -120,7 +120,7 @@ def test_root_replaced_after_fetch_rejects_mark_without_reading_new_root(tmp_pat
 
 
 def test_independent_read_is_idempotent_and_never_retargets_page(tmp_path: Path):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     comms.registry.declare(_thread(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", viewer, "painted").message.message_id
@@ -132,7 +132,7 @@ def test_independent_read_is_idempotent_and_never_retargets_page(tmp_path: Path)
 
 
 def test_empty_dm_basis_is_no_op_without_creating_read_ledger(tmp_path: Path):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     comms.registry.declare(_thread(tmp_path, "peer"))
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
     assert page.selection.basis.displayed.tail == EmptyTail()

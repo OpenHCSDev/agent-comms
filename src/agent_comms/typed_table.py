@@ -50,7 +50,8 @@ from .field_codec import (
 )
 from .lifecycle import LifecycleState
 from .locked_store import (
-    DurableFile, FileStore, RegistryFile, RootFile, RuntimeFile, SQLiteFile, StoreBusy,
+    DurableFile, FileStore, PublishedSQLiteFile, RegistryFile, RootFile, RuntimeFile,
+    SQLiteFile, StoreBusy, StoreCommittedError,
 )
 from .maintenance_barrier import HOLDER_NONCE, MaintenanceBarrier
 from .store_files import _store_lock
@@ -585,6 +586,13 @@ class SQLiteSchemaDifference:
 
 
 @dataclass(frozen=True)
+class SQLiteDatabase(TypedRow):
+    seq: int
+    name: str
+    file: str
+
+
+@dataclass(frozen=True)
 class SQLiteSchemaObject(TypedRow):
     name: str
     sql: str
@@ -765,6 +773,11 @@ class TableSchema(ABC):
         return SQLiteSchemaObject.read(db.execute(
             "SELECT name,sql FROM sqlite_master "
             "WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"))
+
+    @classmethod
+    def stored_tables(cls, db: sqlite3.Connection) -> list[SQLiteTableName]:
+        """The physical tables this schema owns, dependents before their sources."""
+        return SQLiteTableName.stored(db)
 
     @classmethod
     def schema_differs(cls, db: sqlite3.Connection) -> bool:
@@ -1261,6 +1274,11 @@ class SharedFileTables(TableSchema):
     def stored_schema(cls, db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
         return TypedTable.objects_of(db, cls.schema_rows())
 
+    @classmethod
+    def stored_tables(cls, db: sqlite3.Connection) -> list[SQLiteTableName]:
+        names = frozenset(row.declared_name for row in cls.schema_rows())
+        return [table for table in super().stored_tables(db) if table.name in names]
+
 
 class AllObjectsTables(TableSchema):
     """A file that declares every object it holds, SQLite's own included."""
@@ -1274,14 +1292,14 @@ class AllObjectsTables(TableSchema):
 
 
 class DerivedTables(TableSchema):
-    """Rows derived from another source: a schema that differs is dropped and recreated empty."""
+    """Rows derived from another source: their owner can recreate schema and contents."""
 
     __slots__ = ()
 
     @classmethod
     def reset_schema(cls, db: sqlite3.Connection) -> None:
-        """Inside the caller's transaction: every stored table goes, the declared ones come."""
-        for stored in SQLiteTableName.stored(db):
+        """Inside the caller's transaction: rebuild only this schema's derived tables."""
+        for stored in cls.stored_tables(db):
             stored.drop(db)
         cls.create_schema(db)
 
@@ -1600,7 +1618,7 @@ class TypedTable(
     @classmethod
     def _keyed(cls, db: sqlite3.Connection, key: dict[str, object]) -> list[Self]:
         """At most one row is stored for a key; a repeated key is corruption."""
-        stored = cls.select(db, **key)
+        stored = cls.select(db, limit=2, **key)
         if len(stored) > 1:
             raise MalformedRecord(f"Expected one {cls.declared_name} for {tuple(key)}")
         return stored
@@ -1634,9 +1652,10 @@ class TypedTable(
             (cls.declared_name,)))[0]
 
     @classmethod
-    def exists(cls, db: sqlite3.Connection, *, where: str = "1", parameters: tuple = ()) -> bool:
+    def exists(cls, db: sqlite3.Connection, *, where: str = "1", parameters: tuple = (), **key: object) -> bool:
+        condition, parameters = cls._condition(where, parameters, key)
         return SqlValue.for_annotation(bool).read(db.execute(
-            f"SELECT EXISTS(SELECT 1 FROM {_identifier(cls.declared_name)} WHERE {cls._sql(where)})",
+            f"SELECT EXISTS(SELECT 1 FROM {_identifier(cls.declared_name)} WHERE {condition})",
             parameters))[0]
 
     @classmethod
@@ -1725,7 +1744,7 @@ class TypedTable(
         )
 
 
-class StoreWriter(SQLiteFile, FileStore):
+class StoreWriter(PublishedSQLiteFile, FileStore):
     """A transaction capability shared by stores and their turn-owned writers.
 
     Whether the file outlives an installation belongs to each store: it inherits
@@ -1744,28 +1763,13 @@ class StoreWriter(SQLiteFile, FileStore):
         """The store whose committed row changes this writer publishes."""
         return self
 
-    @classmethod
-    def files_in(cls, root: Path) -> frozenset[Path]:
-        return super().files_in(root) | frozenset(cls._source_paths(cls.path_in(root)))
-
-    @staticmethod
-    def _source_paths(path: Path) -> tuple[Path, ...]:
-        return (path.with_suffix('.changed'),)
-
-    @classmethod
-    def source_paths(cls, root: Path) -> tuple[Path, ...]:
-        """Watch committed row changes, never SQLite reader attachment or retirement."""
-        return cls._source_paths(cls.path_in(root))
-
     @contextmanager
     def transaction(self, connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
-        """The file's write transaction, and a touch of its watch file when rows changed."""
+        """Publish through the physical store after its row transaction commits."""
         self.require_maintenance_open()
-        before = connection.total_changes
-        with self.write_transaction(connection):
-            yield connection
-        if connection.total_changes != before:
-            self._source_paths(self.store.path)[0].write_bytes(b'')
+        with self.publishing_changes(connection, self.store.path):
+            with self.write_transaction(connection):
+                yield connection
 
     @abstractmethod
     def require_maintenance_open(self) -> None:
@@ -1816,35 +1820,10 @@ class RuntimeWriter(StoreWriter, RuntimeFile):
         """No installation reads this file, so maintenance never refuses its writers."""
 
 
-class TypedStore(StoreWriter, TableSchema):
-    """One owner-only SQLite file whose schema its TypedTable rows declare.
+class WalStore(StoreWriter):
+    """One WAL file owns connection setup, attachment and retirement."""
 
-    Members name the file and their rows, and inherit DurableStore or DerivedStore.
-    A transaction installs an absent store; a snapshot reads it as an empty in-memory
-    schema without creating storage. Readers refuse a schema that differs; the
-    writer reconciles it as the member's kind of file does.
-    """
-
-    rows: ClassVar[tuple[type[TypedTable], ...]]
     synchronous: ClassVar[str] = "FULL"
-    root: Path
-
-    @property
-    def path(self) -> Path:
-        return self.path_in(self.root)
-
-    @classmethod
-    def schema_rows(cls) -> tuple[type[TypedTable], ...]:
-        return cls.rows
-
-    @classmethod
-    @abstractmethod
-    def schema_change(cls, path: Path) -> SchemaChange:
-        """Whether this file's schema belongs to installation or its runtime."""
-
-    @classmethod
-    def declares_schema(cls) -> bool:
-        return "rows" in vars(cls)
 
     @contextmanager
     def _attached(
@@ -1870,8 +1849,9 @@ class TypedStore(StoreWriter, TableSchema):
             lifetime.push(retire)
             yield connection
 
-    def _open_writer(self, *, check_same_thread: bool = True) -> sqlite3.Connection:
-        """Attach and install an absent store under the connection boundary."""
+    @contextmanager
+    def _open_writer(self, *, check_same_thread: bool = True) -> Iterator[sqlite3.Connection]:
+        """Open one private writer and apply the file's declared WAL policy."""
         # Never open/close an extra descriptor for an existing SQLite inode:
         # doing so can release another connection's process-wide fcntl locks.
         try:
@@ -1884,16 +1864,79 @@ class TypedStore(StoreWriter, TableSchema):
             self.path, isolation_level=None, check_same_thread=check_same_thread)
         try:
             connection.execute(f"PRAGMA synchronous={self.synchronous}")
-            # Under the attachment boundary: a derived file is rebuilt, a durable one carried.
-            self.install_schema(connection, self.schema_change(self.path))
+            connection.execute("PRAGMA foreign_keys=ON")
             if SQLiteJournalMode.read(connection.execute("PRAGMA journal_mode=WAL")) != [
                 SQLiteJournalMode("wal")
             ]:
                 raise RelationViolationError(f"{self.filename} requires WAL")
-            return connection
-        except BaseException:
+            yield connection
+        finally:
             connection.close()
-            raise
+
+    @contextmanager
+    def writer_connection(self, *, check_same_thread: bool = True) -> Iterator[sqlite3.Connection]:
+        """Own attachment; joined workers may borrow one serialized connection."""
+        self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with self._attached(lambda: self._open_writer(
+                check_same_thread=check_same_thread)) as connection:
+            yield connection
+
+    def _retire_committed(self, lifetime: ExitStack) -> None:
+        try:
+            lifetime.close()
+        except Exception as error:
+            raise StoreCommittedError(
+                f"Committed {self.path}, but connection retirement failed: {error}"
+            ) from error
+
+    @contextmanager
+    def writing(self) -> Iterator[sqlite3.Connection]:
+        with ExitStack() as lifetime:
+            connection = lifetime.enter_context(self.writer_connection())
+            try:
+                with self.transaction(connection):
+                    yield connection
+            except StoreCommittedError:
+                self._retire_committed(lifetime)
+                raise
+            self._retire_committed(lifetime)
+
+
+class TypedStore(WalStore, TableSchema):
+    """One owner-only SQLite file whose schema its TypedTable rows declare.
+
+    Members name the file and their rows, and inherit DurableStore or DerivedStore.
+    A transaction installs an absent store; a snapshot reads it as an empty in-memory
+    schema without creating storage. Readers refuse a schema that differs; the
+    writer reconciles it as the member's kind of file does.
+    """
+
+    rows: ClassVar[tuple[type[TypedTable], ...]]
+    root: Path
+
+    @property
+    def path(self) -> Path:
+        return self.path_in(self.root)
+
+    @classmethod
+    def schema_rows(cls) -> tuple[type[TypedTable], ...]:
+        return cls.rows
+
+    @classmethod
+    @abstractmethod
+    def schema_change(cls, path: Path) -> SchemaChange:
+        """Whether this file's schema belongs to installation or its runtime."""
+
+    @classmethod
+    def declares_schema(cls) -> bool:
+        return "rows" in vars(cls)
+
+    @contextmanager
+    def _open_writer(self, *, check_same_thread: bool = True) -> Iterator[sqlite3.Connection]:
+        """Keep this store's schema policy inside its serialized attachment."""
+        with super()._open_writer(check_same_thread=check_same_thread) as connection:
+            self.install_schema(connection, self.schema_change(self.path))
+            yield connection
 
     @contextmanager
     def snapshot(self) -> Iterator[sqlite3.Connection]:
@@ -1909,18 +1952,6 @@ class TypedStore(StoreWriter, TableSchema):
                 self._configure_reader(connection)
                 self.begin_snapshot(connection)
             self.require_schema(connection)
-            yield connection
-
-    @contextmanager
-    def writer_connection(self, *, check_same_thread: bool = True) -> Iterator[sqlite3.Connection]:
-        """Own attachment and schema; joined workers may borrow one serialized connection."""
-        with self._attached(lambda: closing(self._open_writer(
-                check_same_thread=check_same_thread))) as connection:
-            yield connection
-
-    @contextmanager
-    def writing(self) -> Iterator[sqlite3.Connection]:
-        with self.writer_connection() as connection, self.transaction(connection):
             yield connection
 
 

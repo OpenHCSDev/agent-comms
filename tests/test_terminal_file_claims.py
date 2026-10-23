@@ -18,7 +18,7 @@ def test_terminal_release_spans_the_existing_envelope_bound():
             )
         from test_claim_bus_read import settle_failed
         settle_failed(store)
-        assert dict(comms.bus.log.claim_projection()) == {}
+        assert dict(comms.bus.bus.claim_projection()) == {}
         notices = [m for m in claim_originals(comms) if m.claim_transition.releases]
         releases = [m.claim_transition for m in notices]
         assert [len(row.releases) for row in releases] == [32, 3]

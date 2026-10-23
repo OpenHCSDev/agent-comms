@@ -1,3 +1,5 @@
+
+from agent_comms.bus import Bus
 import asyncio
 import sys
 
@@ -18,7 +20,7 @@ async def test_real_stopped_owner_starts_through_shared_agent_tool(tmp_path, mon
     source = tmp_path / "saved.jsonl"
     source.touch()
     comms = wire(tmp_path / "wire")
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=SavedSessionFile(str(source))))
     comms.registry.unregister("worker")
     try:

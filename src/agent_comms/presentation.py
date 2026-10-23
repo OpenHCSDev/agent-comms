@@ -5,19 +5,17 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from contextlib import ExitStack, contextmanager
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-
 from . import relationships
 from .activity import Activity, ActivityData, ActivityState, ObservedActivity
 from .audience_manifest import FrozenRecipient
+from .bus import Bus, BusSnapshot
 from .bus_activity_index import ChannelActivity
-from .bus_display_index import BusDisplayIndex
-from .bus_route_counts import BusRouteCounts
 from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
 from .cli_result import CliResult
@@ -28,21 +26,21 @@ from .display_order import ChannelSort, NameChannelSort
 from .display_references import DisplayReferences
 from .external_transcript import ExternalTranscript
 from .field_codec import (
+    Differs,
     FieldCodec,
     JsonShapeFamily,
     JsonShapeMember,
-    projected,
-    Differs,
     PresenceExclude,
     WatchPaths,
     WatchViews,
     WireExclude,
     WireInline,
     WireOmitDefault,
+    projected,
 )
+from .goal_attempts import GoalAttemptStore
 from .goal_presentation import GoalExecution
 from .goal_waits import GoalWaits
-from .goal_attempts import GoalAttemptStore
 from .mentions import MentionCandidate
 from .message_page import (
     NEWEST_PAGE,
@@ -62,7 +60,7 @@ from .read_basis import (
     NamedViewer,
 )
 from .read_ledger import NoReadNotice, ReadLedger, ReadNotice
-from .recorded_bus import RecordedBusIdentity
+from .recorded_bus import NoRecordedBus, RecordedBusIdentity
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .revision_views import (
     STATUS_SOURCE,
@@ -76,8 +74,7 @@ from .revision_views import (
 )
 from .runtime_info import RuntimeInfo
 from .storage_room import RoomLedger
-from .store_files import SharedLock, _store_lock
-from .thread_identity import ThreadIncarnation
+from .thread_identity import ThreadIncarnation, ThreadProvenance
 from .thread_presentation import (
     ThreadOwnerBinding,
     ThreadPresentation,
@@ -87,11 +84,10 @@ from .thread_status import ThreadStatus, ThreadStatusName
 from .threads import Thread
 from .tool_result import ToolResult
 from .ui_model.unread import ExactUnread, IndexingUnread, UnobservedUnread, UnreadPresentation
-from .wire_log import WireLog, WireSnapshot
 
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity, RecipientActivity
-    from .bus_publication import CommittedDelivery
+    from .bus_publication import Delivered
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
     from .comms import Comms
@@ -115,7 +111,7 @@ class OutcomeViewer(ABC):
         pass
 
     @abstractmethod
-    def sees_direct_read(self, source: CommittedDelivery) -> bool:
+    def sees_direct_read(self, source: Delivered) -> bool:
         pass
 
 
@@ -125,7 +121,7 @@ class AllOutcomes(OutcomeViewer):
     def includes(self, sender_lookup: str, recipient: FrozenRecipient) -> bool:
         return True
 
-    def sees_direct_read(self, source: CommittedDelivery) -> bool:
+    def sees_direct_read(self, source: Delivered) -> bool:
         return True
 
 
@@ -136,13 +132,13 @@ class OwnerOutcomes(OutcomeViewer):
     lookup: str
 
     @classmethod
-    def of(cls, owner: Thread) -> OwnerOutcomes:
-        return cls(owner.incarnation.lookup)
+    def of(cls, owner: ThreadProvenance) -> OwnerOutcomes:
+        return cls(owner.incarnation.require_recorded().lookup)
 
     def includes(self, sender_lookup: str, recipient: FrozenRecipient) -> bool:
         return self.lookup in (sender_lookup, recipient.recipient_lookup)
 
-    def sees_direct_read(self, source: CommittedDelivery) -> bool:
+    def sees_direct_read(self, source: Delivered) -> bool:
         return source.audience.sender_lookup == self.lookup
 
 
@@ -208,7 +204,7 @@ class MessageNotification:
 
     @classmethod
     def references(
-        cls, root: Path, registry: Registration, log: WireLog,
+        cls, root: Path, registry: Registration, log: Bus,
         references: Sequence[MessageReference],
     ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
         """Borrow mounted references in the original bounded delivery windows."""
@@ -225,8 +221,8 @@ class MessageNotification:
 
     @classmethod
     def read_references(
-        cls, log: WireLog, references: Sequence[MessageReference],
-        project: Callable[[Sequence[CommittedDelivery]], dict[tuple[int, str], tuple[MessageNotification, ...]]],
+        cls, log: Bus, references: Sequence[MessageReference],
+        project: Callable[[Sequence[Delivered]], dict[tuple[int, str], tuple[MessageNotification, ...]]],
     ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
         """Share bounded original delivery acquisition across live/recorded cuts."""
         result = {}
@@ -239,7 +235,7 @@ class MessageNotification:
 
     @classmethod
     def delivery_window(
-        cls, root: Path, registry: Registration, sources: Sequence[CommittedDelivery],
+        cls, root: Path, registry: Registration, sources: Sequence[Delivered],
         assignment_read: NotificationAssignmentRead, *, viewer: OutcomeViewer,
     ):
         """Project the original frozen audience even before handling is recorded."""
@@ -260,7 +256,7 @@ class MessageNotification:
 
     @classmethod
     def recorded_delivery_window(cls, root: Path, namespace: RegistryProvenance,
-                                 sources: Sequence[CommittedDelivery]):
+                                 sources: Sequence[Delivered]):
         from .agent_activity import RecordedRecipientActivity
         from .notification_assignment import NotificationAssignment
 
@@ -276,7 +272,7 @@ class MessageNotification:
     @classmethod
     def project_delivery_window(
         cls, root: Path, snapshot: RegistryProvenance,
-        sources: Sequence[CommittedDelivery], observations: Mapping[str, RecipientActivity],
+        sources: Sequence[Delivered], observations: Mapping[str, RecipientActivity],
         *, assignment_read: NotificationAssignmentRead, viewer: OutcomeViewer,
     ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
         """Original assignment and read authorities own both display projections."""
@@ -344,7 +340,7 @@ class MessageNotification:
 
     @classmethod
     def sent_sources(
-        cls, root: Path, registry: Registration, log: WireLog, name: str, *, limit: int = 5
+        cls, root: Path, registry: Registration, log: Bus, name: str, *, limit: int = 5
     ):
         """Read up to the requested number of messages sent by this thread."""
         if not 1 <= limit <= cls.window_limit:
@@ -360,7 +356,7 @@ class MessageNotification:
     @classmethod
     def for_sources(
         cls, root: Path, registry: Registration, viewer: OutcomeViewer,
-        sources: Sequence[CommittedDelivery], *,
+        sources: Sequence[Delivered], *,
         assignment_read: NotificationAssignmentRead,
     ) -> tuple[MessageNotification, ...]:
         """Attach notification outcomes to the messages the caller already checked."""
@@ -384,9 +380,8 @@ class ChannelReadMark(ABC):
     """A read request carries its own source cut and displayed-message selection."""
 
     def apply(self, presentation: BusPresentation, target: str, viewer: str) -> None:
-        with _store_lock(presentation._wire_lock_path, mode=SharedLock()):
-            with self.reading(presentation, target, viewer) as displayed:
-                presentation.bus.reads.mark_displayed(displayed.viewer, displayed)
+        with self.reading(presentation, target, viewer) as displayed:
+            presentation.bus.reads.mark_displayed(displayed.viewer, displayed)
 
     @abstractmethod
     def reading(self, presentation: BusPresentation, target: str, viewer: str): ...
@@ -396,16 +391,12 @@ class ChannelReadMark(ABC):
 class ReadAll(ChannelReadMark):
     @contextmanager
     def reading(self, presentation, target, viewer):
-        with presentation.bus.log.opened_wire_snapshot() as source:
-            with CapturedSelection.reading(
-                presentation.registry, presentation.catalog, presentation.bus.reads,
-                NamedViewer(viewer), presentation.bus.activity_index.snapshot(source),
-            ) as basis:
-                scope = basis.scope(target)
-            yield source.query_page_index(lambda index: scope.capture_all(
-                presentation.bus.reads, basis.require_viewer(), basis.registry, source, index,
-                document=basis.document, through=source.metadata.last_seq,
-            ))
+        with presentation.snapshot(NamedViewer(viewer)) as (basis, source):
+            scope = basis.scope(target)
+            yield scope.capture_all(
+                presentation.bus.reads, basis.require_viewer(), basis.registry, source,
+                document=basis.document, through=source.revision(),
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -423,7 +414,7 @@ class ReadThrough(ChannelReadMark):
             if basis.scope(target) != self.expected_scope:
                 raise DMPaintedBoundChanged()
             displayed.validate(
-                basis.require_viewer(), basis.registry, RecordedBusIdentity.capture(presentation.bus.log.path),
+                basis.require_viewer(), basis.registry, RecordedBusIdentity.capture(presentation.bus.bus.path),
             )
             yield displayed.through(self.through)
 
@@ -438,21 +429,11 @@ class BusPresentation:
         self.catalog = catalog
         self.agents = agents
         self.goals = goals
-        self._path = bus.log.path
-        self._wire_lock_path = bus.log.path.parent / "wire"
-        self._display_indexes: dict[str, BusDisplayIndex] = {}
-
-    def display_index(self, viewer: str) -> BusDisplayIndex:
-        index = self._display_indexes.get(viewer)
-        if index is None:
-            index = self.bus.log.register_append_index(BusDisplayIndex(self._path, viewer))
-            self._display_indexes[viewer] = index
-        return index
+        self._path = bus.bus.path
 
     @contextmanager
-    def snapshot(self, viewer: NamedViewer) -> Iterator[tuple[CapturedSelection, WireSnapshot]]:
-        """Check the display index before borrowing the bus-owned source cut."""
-        self.display_index(viewer.name)
+    def snapshot(self, viewer: NamedViewer) -> Iterator[tuple[CapturedSelection, BusSnapshot]]:
+        """Borrow the bus-owned source cut without preparing a second store."""
         with self.bus.snapshot(viewer) as selected:
             yield selected
 
@@ -482,18 +463,9 @@ class BusPresentation:
         bounds: PageBounds = NEWEST_PAGE,
     ) -> MessagePage:
         """Local display projection; underlying channel history remains target-owned."""
-        target = CommandTarget.named(target).require_channel()
-        with ExitStack() as resources:
-            with _store_lock(self._wire_lock_path, mode=SharedLock()):
-                source = resources.enter_context(self.bus.log.opened_wire_snapshot())
-                with CapturedSelection.reading(
-                    self.registry, self.catalog, self.bus.reads, viewer,
-                    self.bus.activity_index.snapshot(source),
-                ) as basis:
-                    scope = basis.scope(target.name)
-            # Resolve the reader separately from page preparation. Both direct
-            # messages and channels use the captured reader and bus state.
-            return basis.viewer.read_page(scope, bounds, basis, source)
+        channel = CommandTarget.named(target).require_channel()
+        with self.bus.snapshot(viewer) as (basis, source):
+            return basis.viewer.read_page(basis.scope(channel.name), bounds, basis, source)
 
     def mark_channel_read(
         self,
@@ -506,19 +478,19 @@ class BusPresentation:
 
     def display_view_metrics(
         self,
-        source: WireSnapshot,
+        source: BusSnapshot,
         basis: CapturedSelection,
     ) -> tuple[Mapping[str, ChannelActivity], Mapping[str, int]]:
         """Activity and human unread from one validated, already-opened bus boundary.
 
         The captured basis owns channel inclusion, viewer aliases and read
         membership. None is supplied independently by the metrics caller.
-        The index reads the captured complete-line cut; read and write errors propagate.
+        Derived maxima are committed by the append, never prepared by this reader.
         """
-        snapshot = self.display_index(basis.require_viewer()).snapshot(source, basis.scopes)
-        unread = source.query_page_index(lambda page: page.display_unread(
-            basis.scopes, basis.viewer_names, basis.seen(source), source.complete_prefix.boundary, basis.registry))
-        return snapshot.activity, unread
+        seen = basis.seen(source)
+        activity = {scope.channel: scope.activity(source) for scope in basis.scopes}
+        unread = source.display_unread(basis.scopes, basis.viewer_names, seen, basis.registry)
+        return activity, unread
 
 
 @dataclass(frozen=True, slots=True)
@@ -809,10 +781,6 @@ class NoRevision(ReadState):
 
 # typing evaluates class annotations with the class namespace as globals, so a
 # lambda written inside one cannot see this module; named functions can.
-def bus_route_paths(views: HistoryViews) -> tuple[Path, ...]:
-    return BusRouteCounts.source_paths(views.bus.log.path.parent)
-
-
 def room_ledger_paths(views: HistoryViews) -> tuple[Path, ...]:
     return RoomLedger.source_paths(views.registry.storage_rule.room_ledger.root)
 
@@ -859,14 +827,15 @@ class WireRevision(ReadState):
             lambda views: (views.channels.catalog.path,), *STATUS_SOURCE, RegistrationsView
         ),
     ]
-    bus_log: Annotated[
+    bus_changes: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(lambda views: (views.bus.log.path,), *STATUS_SOURCE, BusSourceView),
+        *revision_source(lambda views: views.bus.bus.source_paths(views.root), *STATUS_SOURCE),
     ]
-    bus_routes: Annotated[
-        tuple[FileRevision, ...],
-        *revision_source(bus_route_paths, StoresView, SidebarView),
+    bus_identity: Annotated[
+        RecordedBusIdentity, WatchViews((*STATUS_SOURCE, BusSourceView)),
+        Differs(lambda before, current: not before.matches(current)),
     ]
+    bus_seq: Annotated[int, WatchViews(STATUS_SOURCE)]
     history: Annotated[
         tuple[FileRevision, ...],
         *revision_source(lambda views: (views.bus.history.path,), *STATUS_SOURCE),
@@ -892,7 +861,7 @@ class WireRevision(ReadState):
     native_unread: Annotated[
         tuple[FileRevision, ...],
         *revision_source(
-            lambda views: (views.transcript_reads.index_path,), StoresView, SidebarView
+            lambda views: views.transcript_reads.source_paths(views.root), StoresView, SidebarView
         ),
     ]
     goal_execution: Annotated[
@@ -928,7 +897,7 @@ class WireRevision(ReadState):
                 for plan in FieldCodec.field_plans(cls)
                 if WatchPaths.single(plan.annotation)
             },
-            expiry_tick=0,
+            bus_identity=NoRecordedBus(), bus_seq=0, expiry_tick=0,
         )
 
     @classmethod
@@ -948,7 +917,8 @@ class WireRevision(ReadState):
                         for revision in FileRevision.capture(path).revisions())
             for name, group in cls.source_paths(views).items()
         }
-        return cls(**captured, expiry_tick=expiry_tick)
+        return cls(**captured, bus_identity=RecordedBusIdentity.capture(views.bus.bus.path),
+                   bus_seq=views.bus.bus.revision(), expiry_tick=expiry_tick)
 
     def selection_reusable_from(self, earlier: WireRevision) -> bool:
         return ((self.registry, self.catalog, self.history) ==
@@ -964,13 +934,12 @@ class WireRevision(ReadState):
         if (self.registry != earlier.registry or self.changed_since(BusSourceView(), earlier)
                 or not readable):
             return frozenset(names)
-        if self.bus_log != earlier.bus_log:
+        if self.bus_seq != earlier.bus_seq:
             snapshot = comms.registry.snapshot()
-            with comms.bus.log.opened_wire_snapshot() as source:
-                if source.changed_since(self.bus_log[0]):
-                    raise StaleRevision("Wire source changed before route attribution")
-                actors = {actor for message, _ in source.public_records(earlier.bus_log[0].size)
-                          for actor in (message.sender, message.target)}
+            source = comms.bus.bus
+            if source.revision() != self.bus_seq:
+                raise StaleRevision("Bus changed before route attribution")
+            actors = source.changed_names(earlier.bus_seq)
             catalog = comms.channels.catalog.read()
             with comms.bus.opened_activity() as channel_activity:
                 for actor in actors:
@@ -992,7 +961,7 @@ class WireRevision(ReadState):
         references = tuple(dict.fromkeys(reference for view in remaining.values()
                                         for reference in (*view.incoming_references, *view.sent_references)))
         if references:
-            outcomes = MessageNotification.references(comms.root, comms.registry, comms.bus.log, references)
+            outcomes = MessageNotification.references(comms.root, comms.registry, comms.bus.bus, references)
             for name, view in remaining.items():
                 viewer = OwnerOutcomes.of(view.read_identity.thread)
                 current = tuple(replace(item, message=None)

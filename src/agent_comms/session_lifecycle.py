@@ -187,7 +187,7 @@ class SessionLifecycle:
         self, cwd: str, mcp_servers: list[Any] | None = None, **kwargs: Any
     ) -> NewSessionResponse:
         self.reject_foreign_mcp(mcp_servers)
-        await Coordination.run_worker(self.effects._private_nk_marker)
+        await Coordination.run_worker(self.comms.owners.require_private_launch)
         thread = await Coordination.run_worker(partial(self.declare_thread, cwd))
         await self.bind_owned(thread, thread.name)
         self.effects.inputs.ensure_live_drain(thread.name)
@@ -232,7 +232,7 @@ class SessionLifecycle:
         self.effects.inputs.ensure_live_drain(session_id)
 
     async def _acquire_loaded(self, cwd: str, session_id: str) -> Thread:
-        await Coordination.run_worker(self.effects._private_nk_marker)
+        await Coordination.run_worker(self.comms.owners.require_private_launch)
         thread = await Coordination.run_worker(partial(self.validated_thread, cwd, session_id))
         if not (
             self.bindings.get(session_id) == thread.name

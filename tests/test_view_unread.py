@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.private_path import FileRevision
 from agent_comms.view_unread import Counted, ReplyIndex
 
@@ -34,7 +35,7 @@ def test_reply_suffix_counts_only_its_revision_or_a_fully_read_source(tmp_path):
 
 
 def test_any_mode_expansion_keeps_unpainted_dm_unread(tmp_path):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     comms.registry.declare(comms.registry.new_thread('alice', frozenset({'team'}), str(tmp_path)))
     comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team'}), str(tmp_path)))
     comms.messaging.send("alice", "bob", "hidden until any-mode").message.message_id
@@ -46,7 +47,7 @@ def test_any_mode_expansion_keeps_unpainted_dm_unread(tmp_path):
 
 
 def test_any_mode_ack_covers_only_the_painted_participant_basis(tmp_path):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     comms.registry.declare(comms.registry.new_thread('alice', frozenset({'team'}), str(tmp_path)))
     comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team'}), str(tmp_path)))
     comms.registry.declare(comms.registry.new_thread('carol', frozenset(), str(tmp_path)))
@@ -65,7 +66,7 @@ def test_any_mode_ack_covers_only_the_painted_participant_basis(tmp_path):
 
 
 def test_any_mode_rejects_stale_painted_page_after_participant_joins(tmp_path):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     comms.registry.declare(comms.registry.new_thread('alice', frozenset({'team'}), str(tmp_path)))
     comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team'}), str(tmp_path)))
     comms.registry.declare(comms.registry.new_thread('carol', frozenset(), str(tmp_path)))
@@ -89,7 +90,7 @@ def test_any_mode_rejects_stale_painted_page_after_participant_joins(tmp_path):
 def test_crashed_sender_reopen_does_not_hide_unpainted_any_mode_dm():
     with tempfile.TemporaryDirectory(dir="/var/tmp") as directory:
         root = Path(directory)
-        comms = wire(root)
+        comms = installed_comms(root)
         comms.registry.declare(comms.registry.new_thread('alice', frozenset({'team'}), str(root)))
         comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team'}), str(root)))
         comms.messaging.send("alice", "bob", "hidden before crash").message

@@ -1,4 +1,6 @@
 """Commander forks use registered identity and the original Todo assignment."""
+
+from agent_comms.bus import Bus
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import replace
@@ -48,7 +50,7 @@ def fork_bus(tmp_path):
     source.git(source.checkout, 'commit', '-qm', 'Declare shared assignment owner')
     source.git(source.checkout, 'push', 'origin', 'main')
     comms = Comms(tmp_path / 'saved-bus')
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     comms.channels.create_tag('comms')
     for name in ('lead', 'worker', 'other', 'retained'):
         comms.registry.declare(comms.registry.new_thread(

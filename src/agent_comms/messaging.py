@@ -2,23 +2,24 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
-from dataclasses import dataclass, field
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .active_route import guard_original_root_write
 from .bus_publication import AgentOrigin, HumanOrigin, InitialOrigin
 from .change_report import NoChangeReport, ReportEvidence
-from .errors import MessageAcknowledgmentError, RelationViolationError, UnregisteredThreadError
+from .coordination_session import NativeBoundary
+from .errors import (
+    CommittedMessageError, MessageAcknowledgmentError, RelationViolationError,
+    UnregisteredThreadError,
+)
+from .input_disposition import InputDispositions
 from .message_bus import MessageBus
 from .message_reference import MessageReference
 from .messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole, NoticeRole
-from .publisher import InitialWrites, OwnerPublisher
 from .registration import Registration
 from .send_result import CorrectionComplete, CorrectionFailed, SendResult
-from .store_files import SharedLock, _store_lock
 from .task_sources import (
     CurrentTaskScopeSelection,
     HumanConstraintPin,
@@ -37,38 +38,25 @@ if TYPE_CHECKING:
 from .todos import TodoError, TodoStore
 
 
-@dataclass
-class WireCommit:
-    """Messages published under one wire lock, each kept with the origin that sent it."""
-
-    publisher: OwnerPublisher
-    published: list[tuple[InitialOrigin, Message]] = field(default_factory=list)
-
-    def publish(self, message: Message, origin: InitialOrigin) -> Message:
-        committed = self.publisher.publish_ordinary(message, origin=origin)
-        self.published.append((origin, committed))
-        return committed
-
-
 class Messaging:
     def __init__(self, root: Path, registry: Registration, bus: MessageBus, goals: Goals):
         self.root = root
         self.registry = registry
         self.bus = bus
         self.goals = goals
-        self._wire_lock_path = root / "wire"
 
-    @contextmanager
-    def _wire_write(self) -> Iterator[WireCommit]:
-        """Publish under the wire lock; once it is released, each origin records what its
-        committed messages mean beyond the bus, so no send path can publish without it."""
-        commit = WireCommit(self.bus.publisher)
+    def _publish(self, message: Message, origin: InitialOrigin) -> Message:
+        """Record the meaning of a committed ordinary send beyond its bus transaction."""
         try:
-            with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
-                yield commit
-        finally:
-            for origin, message in commit.published:
-                origin.published(self.goals, message)
+            committed = self.bus.publisher.publish_ordinary(message, origin=origin)
+        except CommittedMessageError as error:
+            origin.published(self.goals, error.record.message)
+            raise
+        try:
+            origin.published(self.goals, committed)
+        except Exception as error:
+            raise CommittedMessageError(committed) from error
+        return committed
 
     def send(
         self,
@@ -85,7 +73,7 @@ class Messaging:
     ) -> SendResult:
         """Return the committed envelope and its separate wording-correction outcome."""
         type.require_sendable()
-        with self._wire_write() as commit:
+        with guard_original_root_write(self.root):
             if sender not in self.registry:
                 raise UnregisteredThreadError(f"Sender {sender!r} is not registered.")
             owner = self.registry.require(sender)
@@ -95,9 +83,7 @@ class Messaging:
             todos = TodoStore(self.root)
             with todos.snapshot():
                 pass  # The store validates its schema before any envelope is committed.
-            if answers:
-                with self.bus.log.checked_read() as source:
-                    tuple(source.references(answers))
+            self.bus.bus.messages_for_references(answers)
             message = Message(
                 sender=owner.name,
                 target=target,
@@ -108,7 +94,7 @@ class Messaging:
                 report=report,
                 answers=tuple(dict.fromkeys((*answers, *self._answered_by(owner, target)))),
             )
-            committed = commit.publish(message, origin)
+            committed = self._publish(message, origin)
         try:
             todos.correct(owner.incarnation, committed.message_id, body)
         except TodoError as error:
@@ -119,23 +105,13 @@ class Messaging:
 
     def _answered_by(self, owner: Thread, target: str) -> tuple[MessageReference, ...]:
         """What this owner's message to target answers among its running turn's inputs."""
-        from .input_disposition import InputDispositions
-
         for lease in owner.turn_lease.held():
             inputs = InputDispositions(self.root).in_turn(lease.turn_id)
-            with self.bus.log.checked_read() as source:
-                return inputs.answered_by(lease, source, self.registry.snapshot(), target)
+            with NativeBoundary(self.bus) as boundary, self.bus.bus.reading() as source:
+                return inputs.answered_by(
+                    lease, source, boundary.registry, target, privacy=boundary.privacy,
+                )
         return ()
-
-    def initialize_private_initial_protocol(self, *, history: Sequence[Message] = ()) -> str:
-        """Initialize a fresh root; selected public history grants no delivery."""
-        publisher: InitialWrites = self.bus.publisher
-        with _store_lock(self._wire_lock_path):
-            return publisher.initialize_private_protocol(history=history)
-
-    def _user_identity_under_wire_lock(self, worktree: str) -> Thread:
-        """Choose the durable USER identity while the caller holds the wire lock."""
-        return self.registry.user_thread().or_create(lambda: self._register_user(worktree))
 
     def _register_user(self, worktree: str) -> Thread:
         name = self.registry.snapshot().claim_name("user")
@@ -145,23 +121,21 @@ class Messaging:
 
     def user_identity(self, worktree: str) -> Thread:
         """One durable human sender, never an executor or a tag-derived agent role."""
-        with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            for thread in self.registry.user_thread().existing():
-                return thread
-        # Creation is a write, with its original exclusive recheck. Observing
-        # an existing sender must not serialize every sidebar/page preparation
-        # against independent native input or response publication.
-        with _store_lock(self._wire_lock_path):
-            return self._user_identity_under_wire_lock(worktree)
+        for thread in self.registry.user_thread().existing():
+            return thread
+        # The registry owns namespace allocation. Recheck under its canonical
+        # writer lock; an existing sender needs only the ordinary registry read.
+        with guard_original_root_write(self.root), self.registry.store.locked():
+            return self.registry.user_thread().or_create(lambda: self._register_user(worktree))
 
     def send_user_message(self, target: str, body: str, *, worktree: str,
                           task: TaskAttachment = NoTaskAttachment()) -> Message:
         """Cooperative local UI send, not cryptographic same-UID authentication."""
         # The historical root write fence precedes identity creation and
         # remains held through the actual bus publication on an old root.
-        with self._wire_write() as commit:
-            origin = HumanOrigin.of(self._user_identity_under_wire_lock(worktree))
-            return commit.publish(Message(origin.sender, target, body, InfoKind, task=task), origin)
+        with guard_original_root_write(self.root):
+            user = self.user_identity(worktree)
+            return self._publish_user(user, target, body, task)
 
     def pin_user_constraint(self, recipient: str, subject: MessageReference, *, worktree: str,
                             scope: TaskScopeSelection = CurrentTaskScopeSelection(),
@@ -186,29 +160,29 @@ class Messaging:
 
     def _pin_constraint(self, recipient, subject, declaration, *, worktree, scope, change,
                         **declaration_options):
-        with self._wire_write() as commit:
-            user = self._user_identity_under_wire_lock(worktree)
-            origin = HumanOrigin.of(user)
+        with guard_original_root_write(self.root):
+            user = self.user_identity(worktree)
             owner = self.registry.require(recipient)
             task = declaration(scope=scope.select_human(owner), subject=subject,
                                source_user=user.incarnation, recipient=owner.incarnation,
                                change=change, **declaration_options)
-            return commit.publish(
-                Message(origin.sender, owner.name, "Pinned constraint from its original source",
-                        InfoKind, task=task, role=NoticeRole()),
-                origin,
-            )
+            return self._publish_user(
+                user, owner.name, "Pinned constraint from its original source",
+                task, role=NoticeRole())
+
+    def _publish_user(self, user, target, body, task, *, role=ConversationRole()):
+        return self._publish(
+            Message(user.name, target, body, InfoKind, task=task, role=role),
+            HumanOrigin.of(user),
+        )
 
     def acknowledge(
         self, name: str, references: Sequence[MessageReference]
     ) -> int:
         """Mark only the returned message references delivered.
 
-        Reading the named messages takes no wire lock, like every inbox read.
-        The shared lock covers only the read-ledger update: it keeps exclusive
-        wire writers such as a maintenance cutover out of that one write, while
-        page readers proceed. The ledger merges sequences under its own lock and
-        rejects a replaced bus, so another reader or acknowledgment loses nothing.
+        The ledger owns its update lock and rejects a replaced bus; reading
+        the named messages uses the bus snapshot, not another exclusion path.
         Every distinct reference must be newly deliverable; an incomplete basis
         raises MessageAcknowledgmentError before any read fact is committed.
         """
@@ -219,10 +193,9 @@ class Messaging:
             raise MessageAcknowledgmentError(self.registry.require(name).name, references) from error
         if basis.message_count != len(references):
             raise MessageAcknowledgmentError(basis.viewer, basis.uncovered(references))
-        with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            self.bus.reads.mark_displayed(basis.viewer, basis)
+        self.bus.reads.mark_displayed(basis.viewer, basis)
         return basis.message_count
 
     def acknowledge_through(self, name: str, sequence: int) -> None:
-        # The bus owns capture under its read lock and the ledger validates that source.
+        # The bus owns snapshot capture and the ledger validates that source.
         self.bus.mark_delivered_through(self.registry.require(name).name, sequence)

@@ -84,8 +84,7 @@ def store(path: Path) -> StandaloneCoordination:
 
 def wire_source(db, assignment_id: str, original: Message, mode: WakePolicy):
     from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
-    from agent_comms.bus_publication import CommittedDelivery, decisions_digest, decisions_wire
-    from agent_comms.coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
+    from agent_comms.bus import PrivateRecord
     from agent_comms.selected_source_batch import SelectedSource
     from agent_comms.wake_policy import WakeDecision
 
@@ -93,9 +92,8 @@ def wire_source(db, assignment_id: str, original: Message, mode: WakePolicy):
                                "0" * 64, sender_lookup="sender",
                                sender_name=original.sender)
     decisions = (WakeDecision("owner", MessageAudience.DIRECT, mode),)
-    delivery = CommittedDelivery("0" * 32, original, audience, decisions,
-                                 decisions_digest(decisions_wire(decisions)), "ordinary",
-                                 RESOLVER_VERSION, POLICY_VERSION)
+    delivery = PrivateRecord.from_message(
+        original, audience=audience, decisions=decisions, control="ordinary")
     return SelectedSource(assignment_id, db.assignments, delivery)
 
 

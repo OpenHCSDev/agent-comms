@@ -1,15 +1,46 @@
-from agent_comms.acp_extension import BackendDeliveryFailure, ClaimBlockedFailure, UnknownDeliveryFailure, InputFailedUpdate, encode_updates, decode_updates
+import pytest
+
+from agent_comms.acp_extension import (
+    BackendDeliveryFailure,
+    ClaimBlockedFailure,
+    InputFailedUpdate,
+    decode_updates,
+    encode_updates,
+)
 from agent_comms.delivery_failure import delivery_failure
-from agent_comms.errors import HumanInitialUnknownError, HumanClaimBlockedError
+from agent_comms.errors import (
+    HumanClaimBlockedError,
+    HumanSendError,
+    HumanSendRefusedError,
+    ToolRefusedError,
+)
 
 
-def test_delivery_family_decodes_once_and_preserves_unknown_identity():
-    errors = (OSError('refused'), HumanInitialUnknownError('root', 17, 'input'), HumanClaimBlockedError('reserved gap'))
-    expected = (BackendDeliveryFailure, UnknownDeliveryFailure, ClaimBlockedFailure)
-    for error, member in zip(errors, expected):
-        value = delivery_failure(error)
-        assert type(value) is member
-        assert value.description == str(error)
-        assert decode_updates(encode_updates(InputFailedUpdate('body', value))) == (InputFailedUpdate('body', value),)
-    unknown = delivery_failure(errors[1])
-    assert (unknown.wire_root_id, unknown.wire_seq, unknown.message_id) == ('root', 17, 'input')
+@pytest.mark.parametrize(
+    "error, member",
+    (
+        (OSError("refused"), BackendDeliveryFailure),
+        (HumanSendRefusedError("Message was not sent"), BackendDeliveryFailure),
+        (HumanClaimBlockedError("reserved gap"), ClaimBlockedFailure),
+    ),
+)
+def test_delivery_failure_decodes_once(error, member):
+    value = delivery_failure(error)
+    assert type(value) is member
+    assert value.description == str(error)
+    update = InputFailedUpdate("body", value)
+    assert decode_updates(encode_updates(update)) == (update,)
+
+
+@pytest.mark.parametrize(
+    "error",
+    (HumanSendRefusedError("rolled back"), HumanClaimBlockedError("reserved gap")),
+)
+def test_human_send_failures_reach_the_ui_catch(error):
+    with pytest.raises(HumanSendError):
+        raise error
+
+
+def test_rolled_back_human_send_remains_a_tool_refusal():
+    with pytest.raises(ToolRefusedError):
+        raise HumanSendRefusedError("rolled back")

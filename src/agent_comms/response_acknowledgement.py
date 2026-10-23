@@ -8,16 +8,13 @@ import math
 from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Final, Self
+from typing import Self
 
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS, require_bounded, require_nonempty, validate_execution_id,
 )
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import MalformedRecord, NullMember, RecordMember, SubclassUnion
-
-_PRIVATE_WIRE_PREFIX: Final = "_agent_comms_private"
-
 
 def _canonical(value: object) -> bytes:
     return json.dumps(
@@ -34,14 +31,7 @@ def public_envelope_digest(record: Mapping[str, object]) -> str:
         or not math.isfinite(timestamp)
     ):
         raise MalformedRecord("A keyed wire timestamp must be finite.")
-    if has_private_wire_fields(record):
-        raise MalformedRecord("Digest input must be a public envelope.")
     return hashlib.sha256(_canonical(record)).hexdigest()
-
-
-def has_private_wire_fields(record: Mapping[str, object]) -> bool:
-    """Identify reserved private keys without inspecting their values."""
-    return any(isinstance(key, str) and key.startswith(_PRIVATE_WIRE_PREFIX) for key in record)
 
 
 def canonical_publication_key(execution_id: str, exact_target: str) -> str:
@@ -62,12 +52,6 @@ class ResponseAcknowledgement(SubclassUnion, affix="ResponseAcknowledgement"):
         """This acknowledgement, proved against its wire root and public envelope."""
 
     @abstractmethod
-    def add_unique(self, seen_keys: set[str]) -> None: ...
-
-    @abstractmethod
-    def publication_keys(self) -> tuple[str, ...]: ...
-
-    @abstractmethod
     def answers(self, publication_key: str, execution_id: str) -> bool:
         """Whether this acknowledges that publication; one key under another execution conflicts."""
 
@@ -76,12 +60,6 @@ class ResponseAcknowledgement(SubclassUnion, affix="ResponseAcknowledgement"):
 class NoResponseAcknowledgement(NullMember, ResponseAcknowledgement):
     def require(self, root_id, message) -> Self:
         return self
-
-    def add_unique(self, seen_keys: set[str]) -> None:
-        """An original delivery carries no response key."""
-
-    def publication_keys(self) -> tuple[str, ...]:
-        return ()
 
     def answers(self, publication_key: str, execution_id: str) -> bool:
         return False
@@ -102,14 +80,6 @@ class KeyedResponseAcknowledgement(RecordMember, ResponseAcknowledgement):
         if self.publication_key != canonical_publication_key(self.execution_id, message.target):
             raise ValueError("Response acknowledgement publication key differs from its execution/route.")
         return self
-
-    def add_unique(self, seen_keys: set[str]) -> None:
-        if self.publication_key in seen_keys:
-            raise MalformedRecord("Duplicate response publication key.")
-        seen_keys.add(self.publication_key)
-
-    def publication_keys(self) -> tuple[str, ...]:
-        return (self.publication_key,)
 
     def answers(self, publication_key: str, execution_id: str) -> bool:
         if self.publication_key != publication_key:

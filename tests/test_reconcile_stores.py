@@ -5,7 +5,6 @@ CLI opens first reconciles a store behind the verb's back. Without the hold, a s
 differs is refused, naming the store, and the file stays as it was."""
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import sqlite3
@@ -20,8 +19,9 @@ from agent_comms.cli_commands import (
     ReadBackCliCommand,
     ReconcileStoresCliCommand,
 )
-from agent_comms.bus_page_index import BusPageIndex
+from agent_comms.activity import ActivityStore
 from agent_comms.maintenance_barrier import HOLDER_NONCE
+from agent_comms.installer.backup import bus_files
 from agent_comms.typed_table import ReconciledFile
 from conftest import maintenance_held
 
@@ -32,11 +32,6 @@ def reconcile(root: Path, holder: str = "",
         [sys.executable, "-m", "agent_comms.cli", "--root", str(root),
          *command.invocation()], capture_output=True, text=True, timeout=120,
         env={**os.environ, HOLDER_NONCE: holder})
-
-
-def digests(root: Path) -> dict[Path, str]:
-    return {path: hashlib.sha256(path.read_bytes()).hexdigest()
-            for path in sorted(root.rglob("*")) if path.is_file()}
 
 
 def drop_one_index_each(root: Path) -> dict[str, str]:
@@ -85,18 +80,19 @@ def test_planned_reconcile_names_the_same_stores_and_writes_nothing(private_comm
     dropped = drop_one_index_each(root)
     # A schema-named runtime projection is rebuilt by its runtime, never carried
     # or included in the installer's backup/reconcile set.
-    with BusPageIndex(private_comms.bus.log.path).writing() as db:
+    projection = ActivityStore(ActivityStore.path_in(root))
+    with projection.writing() as db:
         db.execute('CREATE TABLE retired_derived_shape (unused INTEGER)')
     with maintenance_held(root) as nonce:
-        before = digests(root)
+        before = bus_files(root)
         completed = reconcile(root, nonce, PlannedReconcileCliCommand)
         assert completed.returncode == 0, completed.stdout + completed.stderr
         assert tuple(json.loads(completed.stdout)["rewritten"]) == tuple(sorted(dropped))
-        assert digests(root) == before
+        assert bus_files(root) == before
         completed = reconcile(root, nonce)
         assert completed.returncode == 0, completed.stdout + completed.stderr
         assert tuple(json.loads(completed.stdout)["rewritten"]) == tuple(sorted(dropped))
-    with closing(sqlite3.connect(BusPageIndex.path_in(root))) as db:
+    with closing(sqlite3.connect(projection.path)) as db:
         assert db.execute("SELECT 1 FROM sqlite_master WHERE name='retired_derived_shape'").fetchone()
 
 
@@ -107,7 +103,7 @@ def test_read_back_under_the_hold_writes_nothing_on_a_drifted_bus(private_comms)
     root = private_comms.root
     drop_one_index_each(root)
     with maintenance_held(root) as nonce:
-        before = digests(root)
+        before = bus_files(root)
         completed = reconcile(root, nonce, ReadBackCliCommand)
         assert completed.returncode == 0, completed.stdout + completed.stderr
-        assert digests(root) == before
+        assert bus_files(root) == before

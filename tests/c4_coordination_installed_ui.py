@@ -1,4 +1,6 @@
 """Installed snapshot values, original notification evidences and real sidebar rows."""
+
+from agent_comms.bus import Bus
 from conftest import publish_initial
 from agent_comms.thread_text import SavedSessionFile
 from agent_comms.channel_targets import CommandTarget
@@ -39,7 +41,7 @@ async def main():
     os.environ.update(XDG_CONFIG_HOME=str(root / 'config'), XDG_STATE_HOME=str(root / 'state'),
                       XDG_DATA_HOME=str(root / 'data'), AGENT_COMMS_ROOT=str(root / 'wire'))
     comms = Comms(root / 'wire')
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     owner = root.name
     for name in (owner, 'stopped', 'archived'):
         source = root / (name + '.jsonl')

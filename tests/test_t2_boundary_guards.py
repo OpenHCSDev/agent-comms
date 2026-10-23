@@ -20,7 +20,6 @@ def test_retired_attachment_protocol_is_deleted():
     paths = (
         "acp.py",
         "input_drain.py",
-        "native_source_cursor.py",
         "runtime.py",
         "session_lifecycle.py",
     )

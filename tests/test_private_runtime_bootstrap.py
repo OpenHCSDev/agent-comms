@@ -1,5 +1,7 @@
 """Explicit installation may fill absent schemas, never repair an existing drift."""
 
+from agent_comms.bus import Bus
+
 import sqlite3
 
 import pytest
@@ -12,7 +14,7 @@ from bus_history import read_history
 
 def test_drifted_private_owner_refused_and_readers_leave_missing_schema_alone(tmp_path):
     comms = Comms(tmp_path / "wire")
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path)))
     database = comms.root / "coordination.sqlite3"
     with sqlite3.connect(database) as db:

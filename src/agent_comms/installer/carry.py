@@ -38,7 +38,14 @@ class Carried:
     """Files under the bus root this run wrote; every other file stays byte-identical."""
 
 
+@dataclass(frozen=True)
 class Carry(ABC):
+    """One migration's decoded source, destination and retirement location."""
+
+    root: Annotated[Path, PathText]
+    original_root: Annotated[Path, PathText]
+    spill_dir: Annotated[Path, PathText]
+
     declared: ClassVar[dict[str, type[Carry]]] = {}
     """Every step imported so far, by its module name."""
 
@@ -58,14 +65,16 @@ class Carry(ABC):
     def name(cls) -> str:
         return cls.module().stem
 
-    @classmethod
-    def backup_files(cls, root: Path) -> tuple[Annotated[Path, PathText], ...]:
-        raise RuntimeError(f'{cls.name()} needs the full agent-comms install operation')
+    def backup_files(self) -> tuple[Annotated[Path, PathText], ...]:
+        raise RuntimeError(f'{self.name()} needs the full agent-comms install operation')
 
-    @classmethod
     @abstractmethod
-    def carry(cls, root: Path, *, apply: bool) -> Carried:
-        """Carry ``root`` with its wire lock held; on a dry run, write nothing."""
+    def carry(self, *, apply: bool) -> Carried:
+        """Carry this root; on a dry run, write nothing."""
+
+    def after_acceptance(self) -> Carried:
+        """Retire obsolete inputs after the installation's rollback window closes."""
+        return Carried(0)
 
     @staticmethod
     def require_confined(root: Path, path: Path) -> None:
@@ -77,20 +86,26 @@ class CarryOperation[Answer](InterpreterOperation[Answer], DeclaredFamily, affix
     """One step invocation, including its arguments and its declared answer type."""
 
     @abstractmethod
-    def run(self, step: type[Carry], root: Path) -> Answer: ...
+    def run(self, step: Carry) -> Answer: ...
 
 @dataclass(frozen=True)
 class BackupFilesOperation(CarryOperation[tuple[Annotated[Path, PathText], ...]]):
-    def run(self, step: type[Carry], root: Path) -> tuple[Annotated[Path, PathText], ...]:
-        return step.backup_files(root)
+    def run(self, step: Carry) -> tuple[Annotated[Path, PathText], ...]:
+        return step.backup_files()
 
 
 @dataclass(frozen=True)
 class MigrateOperation(CarryOperation[Carried]):
     apply: bool
 
-    def run(self, step: type[Carry], root: Path) -> Carried:
-        return step.carry(root, apply=self.apply)
+    def run(self, step: Carry) -> Carried:
+        return step.carry(apply=self.apply)
+
+
+@dataclass(frozen=True)
+class RetireInputsOperation(CarryOperation[Carried]):
+    def run(self, step: Carry) -> Carried:
+        return step.after_acceptance()
 
 
 @dataclass(frozen=True)

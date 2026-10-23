@@ -6,10 +6,16 @@ results, not another wire format or a change to native tool result producers.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Self
 
 from .message_reference import MessageReference
 from .transcript_events import SentTranscript
-from .transcript_sources import AssignedSourceIdentity
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from .messages import Message
+    from .transcript_sources import AssignedSourceIdentity
 
 
 @dataclass(frozen=True, eq=False)
@@ -41,6 +47,18 @@ class PublishedSentMessage:
 
     def __post_init__(self):
         self.scope.recipient.require_recorded()
+
+    @classmethod
+    def from_originals(
+        cls, message: SentTranscript, scope: AssignedSourceIdentity,
+        originals: Mapping[MessageReference, Message],
+    ) -> Self | SentTranscript:
+        """Only an exact original qualifies a report as a published message."""
+        try:
+            original = originals[message.source]
+        except KeyError:
+            return message
+        return cls(message, scope) if message.matches(original) else message
 
     @property
     def reference(self) -> OutgoingMessageReference:

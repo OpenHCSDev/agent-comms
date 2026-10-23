@@ -21,7 +21,9 @@ from typing import Any, ClassVar, Generic, Self, TypeVar
 
 from .coordination_errors import CoordinationReadUnavailable
 from .field_codec import FieldCodec, MalformedRecord
-from .store_files import SharedLock, StoreLock, StoreLockOwner, StoreOwner, store_lock_path
+from .store_files import (
+    SharedLock, StoreLock, StoreLockOwner, StoreOwner, _store_lock, store_lock_path,
+)
 
 T = TypeVar("T")
 
@@ -177,6 +179,13 @@ class RootFile:
     def copy_file(source: str | Path, target: str | Path) -> Path:
         return Path(shutil.copy2(source, target))
 
+    @classmethod
+    def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
+        """Copy this owner's consistent file cut and name the source files included."""
+        with _store_lock(source, mode=SharedLock()):
+            cls.copy_file(source, target)
+        return frozenset((source,))
+
     @staticmethod
     def digest(path: Path) -> str:
         return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -266,15 +275,33 @@ class DurableFile(RootFile):
     __slots__ = ()
 
 
+class BusFile(DurableFile):
+    """Declared data and lifecycle files that rule out a fresh bus installation."""
+
+    @classmethod
+    def fresh(cls, root: Path) -> bool:
+        return not any(
+            path.exists() or path.is_symlink()
+            for owner, directory in cls.declarations_in(root)
+            for path in (owner.path_in(directory),)
+        )
+
+
 class WireWakeFile(RootFile):
-    """Commits to this primary file wake idle wire readers, unlike lock-file churn."""
+    """Declared commit signals wake idle readers, unlike lock-file churn."""
 
     __slots__ = ()
 
     @classmethod
+    def source_paths(cls, root: Path) -> tuple[Path, ...]:
+        return (cls.path_in(root),)
+
+    @classmethod
     def watched_paths_in(cls, root: Path) -> frozenset[Path]:
         return frozenset(
-            owner.path_in(directory) for owner, directory in cls.declarations_in(root)
+            path
+            for owner, directory in cls.declarations_in(root)
+            for path in owner.source_paths(directory)
         )
 
 
@@ -283,6 +310,19 @@ class RegistryFile(DurableFile, WireWakeFile):
 
     __slots__ = ()
     filename = "registry.json"
+
+    @classmethod
+    def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
+        from .registry_store import RegistryStore
+
+        registry = RegistryStore(source)
+        with registry.locked(mode=SharedLock()):
+            copied = frozenset(path for path in registry.cut_paths if path.exists())
+            for path in copied:
+                destination = target.parent / path.relative_to(source.parent)
+                destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                cls.copy_file(path, destination)
+        return copied
 
 
 class StoreContention(ABC):
@@ -439,6 +479,12 @@ class SQLiteFile(RootFile):
         return target
 
     @classmethod
+    def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
+        """SQLite's snapshot owns the whole cut without a file lock spanning the copy."""
+        cls.copy_file(source, target)
+        return frozenset((source,))
+
+    @classmethod
     def digest(cls, path: Path) -> str:
         """Hash a consistent SQLite schema and row dump, including committed WAL data."""
         with closing(cls.read_snapshot(path)) as database:
@@ -473,6 +519,49 @@ class SQLiteFile(RootFile):
             if connection.in_transaction:
                 connection.execute("ROLLBACK")
             raise
+
+
+class StoreCommittedError(OSError):
+    """COMMIT succeeded; change signalling or connection retirement failed."""
+
+
+class PublishedSQLiteFile(SQLiteFile):
+    """Publish only completed row changes, independently of database attachment."""
+
+    __slots__ = ()
+
+    @staticmethod
+    def _source_paths(path: Path) -> tuple[Path, ...]:
+        return (path.with_suffix(".changed"),)
+
+    @classmethod
+    def source_paths(cls, root: Path) -> tuple[Path, ...]:
+        return cls._source_paths(cls.path_in(root))
+
+    @classmethod
+    def member_paths(cls, path: Path) -> frozenset[Path]:
+        return super().member_paths(path) | frozenset(cls._source_paths(path))
+
+    @classmethod
+    @contextmanager
+    def publishing_changes(
+        cls, connection: sqlite3.Connection, path: Path,
+    ) -> Iterator[None]:
+        before = connection.total_changes
+        yield
+        if connection.total_changes != before:
+            cls.publish_change(path)
+
+    @classmethod
+    def publish_change(cls, path: Path) -> None:
+        """Announce a completed mutation or replacement of this owner's store."""
+        marker, = cls._source_paths(path)
+        try:
+            marker.write_bytes(b"")
+        except OSError as error:
+            raise StoreCommittedError(
+                f"Committed {path}, but change notification failed: {error}"
+            ) from error
 
 
 class RuntimeFile(RootFile):

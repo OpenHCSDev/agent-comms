@@ -153,13 +153,6 @@ class DeliveryMessage:
     message: Message
     sender_lookup: str = ""
 
-    @classmethod
-    def from_wire(cls, record: Mapping, root_id: str | None):
-        from .wire_record import WireRecord
-
-        verified = WireRecord.from_wire(record, root_id)
-        yield from verified.delivery_messages()
-
 
 @dataclass(frozen=True, slots=True)
 class DeliveryScope(MessageDisplayScope):

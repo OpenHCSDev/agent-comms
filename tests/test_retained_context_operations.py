@@ -1,16 +1,23 @@
 """One original human-source workflow through the public CLI and file effects."""
 
+from agent_comms.bus import Bus
+from bus_history import read_history
 from agent_comms.lifecycle_capability import Unresolved
 
 import json
 
+import pytest
+
 from agent_comms.thread_text import SavedSessionFile
 from agent_comms.cli import main
+from agent_comms.cli_commands import ConstraintPinnedResult
 from agent_comms.field_codec import FieldCodec
 from agent_comms.context_segments.retained import RetainedSegment
-from agent_comms.threads import Thread
 from agent_comms.turn_lease import NoTurnLease
 from stored_inputs import stored_inputs
+
+
+pytestmark = pytest.mark.usefixtures("durable_home")
 
 
 def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
@@ -20,7 +27,7 @@ def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
     from test_task_decisions import saved_source
     import hashlib
 
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     saved = tmp_path / "original.jsonl"
     saved_source(saved)
     goal = Goal("Original task goal, not an exported human constraint", "original-goal", published_seq=0, revision=7)
@@ -36,8 +43,9 @@ def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
         code = main(["--root", str(comms.root), *args])
         return code, json.loads(capsys.readouterr().out)
 
-    protected = (saved, inputs.path, comms.registry.store.path, comms.root / "bus.jsonl")
+    protected = (saved, inputs.path, comms.registry.store.path)
     hashes = {file: hashlib.sha256(file.read_bytes()).hexdigest() for file in protected}
+    original_history = read_history(comms)
     destination = tmp_path / "authored-export.md"
     code, exported = command("export-retained", owner.name, "--output", str(destination))
     assert code == 0 and exported["exported_messages"] == 1
@@ -45,15 +53,16 @@ def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
     assert wording in text and goal.text not in text
     assert "Unpinned original UNKNOWN input" not in text
     assert all(hashlib.sha256(file.read_bytes()).hexdigest() == digest for file, digest in hashes.items())
+    assert read_history(comms) == original_history
 
 
 def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     owner = comms.registry.declare(comms.registry.new_thread('recipient', frozenset(), str(comms.root)))
     other = comms.registry.declare(comms.registry.new_thread('unaddressed', frozenset(), str(comms.root)))
     wording = "Never replay UNKNOWN.\nPreserve exact λ /source/owned bytes."
     original = comms.messaging.send_user_message(owner.name, wording, worktree=owner.worktree)
-    original_prefix = (comms.root / "bus.jsonl").read_bytes()
+    original_prefix = read_history(comms)
 
     def command(*args):
         code = main(["--root", str(comms.root), *args])
@@ -67,7 +76,7 @@ def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
                            "--worktree", owner.worktree)
     assert code == 0
     pin = reference(pinned["pin"])
-    snapshot = comms.bus.log.retained_context(owner.name, comms.registry)
+    snapshot = comms.views.retained_context(owner.name)
     assert FieldCodec.decode(RetainedSegment, FieldCodec.encode(snapshot)) == snapshot
     assert snapshot.text().count(wording.replace("\n", "\\n")) == 1
     assert comms.registry.require(owner.name).turn_lease == NoTurnLease()
@@ -82,10 +91,10 @@ def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
     code, refused = command("export-retained", owner.name, "--output", str(destination))
     assert code == 1 and destination.read_bytes() == artifact
     assert not list(comms.root.glob(".AGENTS-export.md.*.tmp"))
-    before_refusal = (comms.root / "bus.jsonl").read_bytes()
+    before_refusal = read_history(comms)
     code, refused = command("pin-constraint", other.name, "--source", source)
     assert code == 1 and "did not receive" in refused["error"]
-    assert (comms.root / "bus.jsonl").read_bytes() == before_refusal
+    assert read_history(comms) == before_refusal
     code, empty = command("export-retained", other.name, "--output", str(comms.root / "other.md"))
     assert code == 0 and empty["exported_messages"] == 0
     assert wording.encode() not in (comms.root / "other.md").read_bytes()
@@ -98,7 +107,7 @@ def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
     assert code == 0 and exported["exported_messages"] == 1
     assert replacement in destination.read_text() and wording not in destination.read_text()
     assert snapshot.text().count(wording.replace("\n", "\\n")) == 1
-    current = comms.bus.log.retained_context(owner.name, comms.registry)
+    current = comms.views.retained_context(owner.name)
     assert wording.replace("\n", "\\n") in current.text() and replacement in current.text()
     code, dropped = command("drop-constraint", owner.name, "--source", pin,
                             "--worktree", owner.worktree)
@@ -106,15 +115,15 @@ def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
     code, exported = command("export-retained", owner.name, "--output", str(destination), "--overwrite")
     assert code == 0 and exported["exported_messages"] == 0
     assert replacement not in destination.read_text()
-    assert (comms.root / "bus.jsonl").read_bytes().startswith(original_prefix)
+    assert read_history(comms)[:len(original_prefix)] == original_prefix
     assert comms.registry.require(owner.name).turn_lease == NoTurnLease()
 
     # No semantic sidecar is needed for a new Comms instance to read the result.
     from agent_comms.comms import Comms
 
     reopened = Comms(comms.root)
-    restored = reopened.bus.log.retained_context(owner.name, reopened.registry)
-    assert restored.text() == comms.bus.log.retained_context(owner.name, comms.registry).text()
+    restored = reopened.views.retained_context(owner.name)
+    assert restored.text() == comms.views.retained_context(owner.name).text()
 
 
 async def original_input_consumer_journey(tmp_path, command):
@@ -125,7 +134,7 @@ async def original_input_consumer_journey(tmp_path, command):
     from agent_comms.retained_task_facts import InputTaskFact
 
     comms, agent, _, _ = _owner(tmp_path)
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     origin = capture(comms)
     wording = "Never replay UNKNOWN.\nPreserve original λ /source/owned bytes."
     originals = []
@@ -157,9 +166,10 @@ async def original_input_consumer_journey(tmp_path, command):
         code, result = invoke("pin-input-constraint", "beta", "--source", row.key,
                               "--worktree", origin.project)
         assert code == 0
-        assert result["source"] == FieldCodec.encode(row.context_provenance())
+        pinned = FieldCodec.decode(ConstraintPinnedResult, result)
+        assert pinned.source == row.context_provenance()
         pins.append(reference(result["pin"]))
-    snapshot = comms.bus.log.retained_context("beta", comms.registry)
+    snapshot = comms.views.retained_context("beta")
     assert FieldCodec.decode(RetainedSegment, FieldCodec.encode(snapshot)) == snapshot
     # Distinct original human inputs retain equal wording twice; neutral
     # delivery evidence cannot decide that they are one human instruction.
@@ -178,13 +188,13 @@ async def original_input_consumer_journey(tmp_path, command):
     assert b'"author":"user"' in artifact and b'"author_role":"user"' in artifact
     code, _ = invoke("export-retained", "beta", "--output", str(destination))
     assert code == 1 and destination.read_bytes() == artifact
-    before_refusal = (comms.root / "bus.jsonl").read_bytes()
+    before_refusal = read_history(comms)
     for recipient, key in ((other.name, originals[0].key), ("beta", "absent"),
                            ("beta", "neutral-original")):
         code, _ = invoke("pin-input-constraint", recipient, "--source", key,
                          "--worktree", origin.project)
         assert code == 1
-        assert (comms.root / "bus.jsonl").read_bytes() == before_refusal
+        assert read_history(comms) == before_refusal
 
     comms.registry.rename("beta", "renamed-beta")
 
@@ -213,12 +223,12 @@ async def original_input_consumer_journey(tmp_path, command):
                            "--overwrite")
     assert code == 0 and result["exported_messages"] == 1
     assert wording not in destination.read_text() and replacement in destination.read_text()
-    assert snapshot.original_text_source(snapshot.retained.current_authored_sources(
-        comms.registry.require("renamed-beta"), comms.registry.snapshot())[0]) == originals[0]
+    assert snapshot.retained.original_text_source(snapshot.retained.current_authored_sources(
+        comms.registry.require("renamed-beta"), comms.registry.snapshot())[0].reference) == originals[0]
     from agent_comms.comms import Comms
     reopened = Comms(comms.root)
-    assert reopened.bus.log.retained_context("renamed-beta", reopened.registry).text() == (
-        comms.bus.log.retained_context("renamed-beta", comms.registry).text())
+    assert reopened.views.retained_context("renamed-beta").text() == (
+        comms.views.retained_context("renamed-beta").text())
     assert all(stored_inputs(inputs.root).lookup(row.key) == row and bool(row.items_with(Unresolved, True)) for row in originals)
     return {"original_inputs": 2, "distinct_equal_wording": True, "pins": 3,
             "refusals": 4, "rename_correction_drop_reopen": True,

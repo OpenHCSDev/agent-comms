@@ -352,11 +352,9 @@ class RecoverySnapshot:
         belonging to a later attempt (or an unbound manual claim) is untouched.
         The caller retains wire/bus/registry exclusion through terminal commit.
         """
-        bus, bus_lock = boundary.bus, boundary.bus_lock
+        bus = boundary.bus
         attempt = self.require_attempt()
-        metadata = bus.log.private_marker_unlocked()
-        with bus_lock.current_source(bus.log, metadata) as source:
-            current = source.claim_projection().live_in(boundary.registry)
+        current = bus.bus.claim_projection().live_in(boundary.registry)
         owned = tuple(
             claim for claim in current.values()
             if claim.claim_scope.belongs_to(attempt)

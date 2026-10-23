@@ -62,24 +62,23 @@ class EscalationSender(ServiceSender):
     @classmethod
     def sent(cls, comms: Comms, commander: str, line: str) -> bool:
         snapshot = comms.registry.snapshot()
-        return any(message.body == line for message in comms.bus.log.read_page(SenderMessages(
+        messages = SenderMessages(
             RepliesDisplayScope(snapshot.names_for(commander), snapshot.names_for(cls.sender)),
             time.time() - cls.horizon,
             time.time(),
-        )))
+        ).read_opened(comms.bus.bus)
+        return any(message.body == line for message in messages)
 
     @classmethod
     def unanswered(cls, comms: Comms, commander: str, before: float) -> tuple[Message, ...]:
         """This sender's messages to the commander, sent by ``before`` and after the newest
         answer to any of them: one answer covers the burst it lands after."""
         snapshot = comms.registry.snapshot()
-        return comms.bus.log.read_page(
-            UnansweredBurst(
-                RepliesDisplayScope(snapshot.names_for(commander), snapshot.names_for(cls.sender)),
-                time.time() - cls.horizon,
-                before,
-            )
-        )
+        return UnansweredBurst(
+            RepliesDisplayScope(snapshot.names_for(commander), snapshot.names_for(cls.sender)),
+            time.time() - cls.horizon,
+            before,
+        ).read_opened(comms.bus.bus)
 
     horizon: ClassVar[int] = 6 * 60 * 60
 
@@ -348,14 +347,12 @@ class ChokeholdAnswer(IndependentStandingRule, UndatedStandingRule, declared_nam
         if ChokeholdSender.unanswered(comms, commander, time.time()):
             return ()
         snapshot = comms.registry.snapshot()
-        return comms.bus.log.read_page(
-            AnswersTo(
-                RepliesDisplayScope(
-                    snapshot.names_for(commander), snapshot.names_for(ChokeholdSender.sender)
-                ),
-                time.time() - ChokeholdSender.horizon,
-            )
-        )[:1]
+        return AnswersTo(
+            RepliesDisplayScope(
+                snapshot.names_for(commander), snapshot.names_for(ChokeholdSender.sender)
+            ),
+            time.time() - ChokeholdSender.horizon,
+        ).read_opened(comms.bus.bus)
 
     @staticmethod
     def blocking(comms: Comms, commander: str) -> tuple[Sign, ...]:

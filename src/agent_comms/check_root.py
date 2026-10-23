@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from .attempt_recovery import RecoveryMonitorCapability
-from .candidate_maintenance import drain_candidate_catchup
+from .bus import Bus
 from .child_process import NoProcess
 from .cli_result import CliResult
 from .comms import Comms
@@ -78,7 +78,6 @@ class CheckRoot:
                 ):
                     copied.owners.stop(thread.name)
         finally:
-            drain_candidate_catchup(root)
             RecoveryMonitorCapability.retire_check_root(root)
 
     def _populate(self, copied: Comms) -> None:
@@ -91,22 +90,11 @@ class CheckRoot:
             target for name in names for target in catalog.targets_for(snapshot.require(name).tags)
         )
         scope = MemberActivityDisplayScope("#check", targets, participant_names=selected | aliases)
-        with self.source.bus.log.opened_wire_snapshot() as source:
-            messages = tuple(
-                reversed(
-                    tuple(
-                        islice(
-                            (
-                                message
-                                for message in source.newest_messages(self.max_bytes)
-                                if scope.includes(message)
-                            ),
-                            self.max_records,
-                        )
-                    )
-                )
-            )
-        copied.messaging.initialize_private_initial_protocol(history=messages)
+        with self.source.bus.bus.reading() as source:
+            messages = tuple(reversed(scope.records(
+                source, descending=True, limit=self.max_records)))
+        copied.registry.prepare_native_root()
+        Bus.install(Bus.path_in(copied.root), history=messages)
         copied.channels.catalog.replace(catalog)
         declarations = {}
         for name in names:

@@ -55,18 +55,15 @@ async def run_owner(comms: Comms) -> None:
 
 async def run_startup_input(agent: CommsAgent, name: str, key: str) -> None:
     """Consume this launch's explicitly authorized input, never scan for retries."""
-    from .store_files import SharedLock, _store_lock
-
     async with agent.turns.turn_locks.setdefault(name, asyncio.Lock()):
         def capture():
-            with _store_lock(agent._comms._wire_lock_path, mode=SharedLock()):
-                snapshot = agent._comms.registry.snapshot()
-                owner = snapshot.threads[name]
-                row = agent.inputs.dispositions.lookup(key)
-                if not row.queued_for(
-                    owner.incarnation, snapshot.claim_generation(name), row.source_text
-                ):
-                    raise ValueError("Startup input no longer belongs to this owner claim_scope")
+            snapshot = agent._comms.registry.snapshot()
+            owner = snapshot.threads[name]
+            row = agent.inputs.dispositions.lookup(key)
+            if not row.queued_for(
+                owner.incarnation, snapshot.claim_generation(name), row.source_text
+            ):
+                raise ValueError("Startup input no longer belongs to this owner claim_scope")
             return row
         row = await Coordination.run_worker(capture)
         await agent.inputs.emit_input_disposition(name, row)

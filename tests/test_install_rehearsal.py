@@ -134,14 +134,12 @@ def test_failed_live_migration_restores_data_checkout_and_runtime(
     step = checkout / "tools/cutover/carry_fault.py"
     step.write_text('''from agent_comms.installer.carry import Carry, Carried
 class Fault(Carry):
-    @classmethod
-    def backup_files(cls, root):
-        return (root / "saved",)
-    @classmethod
-    def carry(cls, root, *, apply):
+    def backup_files(self):
+        return (self.root / "saved",)
+    def carry(self, *, apply):
         if apply:
-            (root / "saved").write_text("changed by the worker")
-            if (root / "fail-live").exists():
+            (self.root / "saved").write_text("changed by the worker")
+            if (self.root / "fail-live").exists():
                 raise RuntimeError("intentional failure after writing the resource")
         return Carried(1, rewritten=("saved",))
 ''')

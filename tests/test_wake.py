@@ -7,7 +7,7 @@ import pytest
 from typing import Type
 
 from agent_comms.audience_manifest import FrozenAudience, FrozenRecipient, freeze_audience
-from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.wake_policy import MessageAudience
 from agent_comms.mentions import ThreadMention
 from agent_comms.messages import (
@@ -330,7 +330,7 @@ def test_full_cohort_preserves_direct_control_and_fail_closed_envelope() -> None
 def test_exact_stored_channel_routes_no_wildcard_or_silence_inference(
     tmp_path: Path,
 ) -> None:
-    comms = wire(tmp_path / "wire")
+    comms = installed_comms(tmp_path / "wire")
     for name in ("sender", "alpha", "beta"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path)))
     channel = comms.messaging.send("sender", "#team", "channel note").message
@@ -350,14 +350,13 @@ def test_exact_stored_channel_routes_no_wildcard_or_silence_inference(
 
 
 def test_pure_shadow_does_not_mutate_envelope_state_or_live_cursor(tmp_path: Path) -> None:
-    comms = wire(tmp_path / "wire")
+    comms = installed_comms(tmp_path / "wire")
     for name in ("sender", "alpha"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path)))
     message = comms.messaging.send("sender", "#team", "status update").message
     manifest = audience(message, MEMBERS[:1])
     before = message.to_wire()
-    bus_before = comms.bus.log.path.read_bytes()
-    high_water = comms.bus.log.latest_sequence()
+    high_water = comms.bus.bus.revision()
     pending = comms.bus.pending_count("alpha")
     live_policy = message.role.response_policy(message)
     live_starts = message.role.response_policy(message).starts_turn_for(message, "alpha")
@@ -370,8 +369,7 @@ def test_pure_shadow_does_not_mutate_envelope_state_or_live_cursor(tmp_path: Pat
     ) == WakeDecision("lookup-alpha", MessageAudience.COLLECTIVE, BoundedTriageWake())
     assert message.exact_reply_target == "#team"
     assert message.to_wire() == before
-    assert comms.bus.log.path.read_bytes() == bus_before
-    assert comms.bus.log.latest_sequence() == high_water
+    assert comms.bus.bus.revision() == high_water
     assert comms.bus.pending_count("alpha") == pending
     assert (message.role.response_policy(message), message.role.response_policy(message).starts_turn_for(message, "alpha"), message.reply_target) == (
         live_policy,

@@ -8,7 +8,7 @@ import pytest
 from agent_comms.cli_commands import (
     CheckpointCliCommand, CleanCheckpoint, PushUnknownCheckpoint, PushedCheckpoint, RefusedCheckpoint,
 )
-from test_private_bus_checkpoint import _root
+from bus_record_fixture import context_comms
 
 
 def _git(worktree: Path, *arguments: str):
@@ -35,7 +35,7 @@ def test_a_dirty_worktree_is_committed_and_pushed_to_the_derived_branch(
     tmp_path: Path, monkeypatch
 ):
     monkeypatch.delenv("GIT_CEILING_DIRECTORIES", raising=False)
-    comms, _ = _root(tmp_path)
+    comms = context_comms(tmp_path)
     worktree = _repo(tmp_path, "repo")
     (worktree / "step.py").write_text("print('step')\n")
     _git(worktree, "add", "-A")
@@ -65,7 +65,7 @@ def test_production_git_never_discovers_a_checkout_above_the_declaration(
     # The production git() carries the ceiling pin itself; the ancestor repo
     # here exists on purpose and the declared non-repo worktree must refuse.
     monkeypatch.delenv("GIT_CEILING_DIRECTORIES", raising=False)
-    comms, _ = _root(tmp_path)
+    comms = context_comms(tmp_path)
     ancestor = _repo(tmp_path, "ancestor", remote=False)
     (ancestor / "base.txt").write_text("base\n")
     _git(ancestor, "add", "-A")
@@ -91,7 +91,7 @@ def test_a_stale_declaration_or_broken_transport_never_names_a_fake_push(
 ):
     # The production git() owns the ceiling pin; no test-side pin is needed.
     monkeypatch.delenv("GIT_CEILING_DIRECTORIES", raising=False)
-    comms, _ = _root(tmp_path)
+    comms = context_comms(tmp_path)
     outside = tmp_path / "outside"
     outside.mkdir()
     comms.registry.register(

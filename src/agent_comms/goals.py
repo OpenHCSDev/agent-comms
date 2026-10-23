@@ -37,6 +37,7 @@ from .text_digest import TextDigest
 from .ui_model.goal import GoalDisplay
 
 if TYPE_CHECKING:
+    from .bus import BusReader
     from .goal_actions import DirectiveGoalAction, GoalAction, GoalActionContext
     from .goal_presentation import GoalExecution
     from .goal_waits import GoalWaits
@@ -51,7 +52,6 @@ if TYPE_CHECKING:
     from .thread_identity import TurnId
     from .todos import Todo
     from .messages import Message
-    from .private_bus_checkpoint import CheckedRead
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -547,8 +547,8 @@ class RequestDirective:
     def due_time(self) -> str:
         return time.strftime("%H:%M", time.localtime(self.deadline))
 
-    def original(self, source: CheckedRead) -> Message:
-        return source.delivery(self.seq).message
+    def original(self, source: BusReader) -> Message:
+        return source.lookup(self.seq)
 
 
 @dataclass(frozen=True)
@@ -584,25 +584,24 @@ class RequestGoalOrder(GoalOrder):
         return directive.request(goal, ctx)
 
     def directive_messages(self, goals: Goals) -> tuple[Message, ...]:
-        """Every directive's original, read in one checked read: a read per directive held the
-        wire lock once per message the owner ever sent (2,258 holds, 20 s per order call)."""
-        source: CheckedRead
-        with goals.bus.log.checked_read() as source:
+        """Every directive's original, read from one snapshot of the bus."""
+        source: BusReader
+        with goals.bus.bus.reading() as source:
             return tuple(directive.original(source) for directive in self.directives)
 
     def overdue_directives(self, goal: Goal, goals: Goals, owner: ThreadIncarnation,
                            now: float) -> tuple[tuple[RequestDirective, Message], ...]:
         """Each directive past its deadline that the owner has not answered, with its original;
-        the originals and every reply to them come from one checked read."""
+        the originals and every reply to them come from one snapshot of the bus."""
         due = tuple(directive for directive in self.directives if directive.deadline < now)
         if not due:
             return ()
-        source: CheckedRead
-        with goals.bus.log.checked_read() as source:
+        source: BusReader
+        with goals.bus.bus.reading() as source:
             originals = tuple((directive, directive.original(source)) for directive in due)
             answered = {answer for reply in source.replies(tuple(
                 message.reference for _, message in originals))
-                if reply.message.sender == owner.name for answer in reply.message.answers}
+                if reply.sender == owner.name for answer in reply.answers}
         return tuple((directive, message) for directive, message in originals
                      if message.reference not in answered)
 

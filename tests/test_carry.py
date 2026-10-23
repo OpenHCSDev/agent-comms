@@ -1,5 +1,7 @@
 """The carry family: one chain of idempotent steps whose dry runs say what a bus still needs."""
 
+from agent_comms.bus import Bus
+
 import os
 import sqlite3
 import subprocess
@@ -50,7 +52,7 @@ def step_source() -> str:
     return (
         "from agent_comms.installer.carry import Carried, Carry\n\n"
         "class Step(Carry):\n"
-        "    @classmethod\n    def carry(cls, root, *, apply):\n        return Carried(0)\n"
+        "    def carry(self, *, apply):\n        return Carried(0)\n"
     )
 
 
@@ -158,9 +160,9 @@ def stack(tmp_path):
     return Stack(REPO, InstallCommands(), home=tmp_path, runtime=LaunchRuntime.running())
 
 
-@pytest.fixture
-def noisy_step(tmp_path):
-    tree = TargetTree(REPO, tmp_path, "noisy-step")
+@pytest.fixture(scope="module")
+def noisy_step(tmp_path_factory):
+    tree = TargetTree(REPO, tmp_path_factory.mktemp("noisy-step"), "noisy-step")
     (tree.path / "tools" / "cutover").mkdir(parents=True)
     (tree.path / "src").symlink_to(REPO / "src", target_is_directory=True)
     module = tree.path / "tools" / "cutover" / "carry_noisy.py"
@@ -168,17 +170,15 @@ def noisy_step(tmp_path):
         "from pathlib import Path\n"
         "from agent_comms.installer.carry import Carry, Carried\n"
         "class Noisy(Carry):\n"
-        "    @classmethod\n"
-        "    def backup_files(cls, root):\n"
+        "    def backup_files(self):\n"
         "        print('backup diagnostic')\n"
-        "        return (root / 'saved',)\n"
-        "    @classmethod\n"
-        "    def carry(cls, root, *, apply):\n"
+        "        return (self.root / 'saved',)\n"
+        "    def carry(self, *, apply):\n"
         "        import atexit\n"
         "        atexit.register(print, 'diagnostic after the answer')\n"
         "        if apply:\n"
-        "            (root / 'saved').write_text('migrated')\n"
-        "            if (root / 'fail').exists():\n"
+        "            (self.root / 'saved').write_text('migrated')\n"
+        "            if (self.root / 'fail').exists():\n"
         "                raise RuntimeError('failed after changing the saved file')\n"
         "        return Carried(1, {'applied': apply}, ('saved',))\n"
     )
@@ -189,6 +189,9 @@ def noisy_step(tmp_path):
         def module(cls):
             return module
 
+        def carry(self, *, apply):
+            raise AssertionError("The selected interpreter executes the carry, never its caller")
+
     return tree, SelectedStep
 
 
@@ -198,11 +201,12 @@ def test_step_answers_are_separate_from_diagnostics_and_keep_their_types(
     tree, step = noisy_step
     root = tmp_path / "bus"
     root.mkdir()
-    assert stack.call_step(step, root, tree, BackupFilesOperation()) == (root / "saved",)
-    assert stack.call_step(step, root, tree, MigrateOperation(False)) == (
+    request = step(root, root, tmp_path / "spill")
+    assert stack.call_step(request, tree, BackupFilesOperation()) == (root / "saved",)
+    assert stack.call_step(request, tree, MigrateOperation(False)) == (
         Carried(1, {"applied": False}, ("saved",)))
     assert not (root / "saved").exists()
-    assert stack.call_step(step, root, tree, MigrateOperation(True)) == (
+    assert stack.call_step(request, tree, MigrateOperation(True)) == (
         Carried(1, {"applied": True}, ("saved",)))
     assert (root / "saved").read_text() == "migrated"
 
@@ -219,7 +223,7 @@ def test_backed_up_migration_restores_a_real_worker_failure(comms, stack, noisy_
             migration = original.extended(BackedUpMigration, backup=StoreBackup.take(
                 comms.root, comms.root / "no-route", (saved,), comms.root.parent / "spill"))
         with pytest.raises(UpgradeRefused, match="failed after changing the saved file"):
-            migration.carry((step,), stack, tree)
+            migration.carry((step(comms.root, comms.root, comms.root.parent / "spill"),), stack, tree)
         assert saved.read_text() == "migrated"
         migration.restore()
         assert saved.read_text() == "original"
@@ -243,7 +247,7 @@ def test_restart_selection_uses_receiving_declaration_with_connected_cli_inbox(c
 
 
 def test_owner_request_failure_joins_the_entire_set_before_propagating(comms, stack):
-    comms.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(comms.root))
     names = ["failed", "other", "last"]
     for name in names[1:]:
         comms.registry.declare(

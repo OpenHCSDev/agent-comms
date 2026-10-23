@@ -15,8 +15,9 @@ from pathlib import Path
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 
-from .bus_publication import CommittedDelivery
 from .cohort_schema import CohortTable
+from .bus import BusReader, BusSnapshot
+from .bus_publication import Delivered
 from .comms import Comms
 from .coordination_cohort import _claim_record
 from .coordination_database import CoordinationStore
@@ -29,15 +30,11 @@ from .envelope_claim_transitions import (
     WakeClaim,
 )
 from .errors import RelationViolationError
-from .message_bus import MessageBus
 from .native_input_owner import RegistryOwner
-from .private_registry_guard import _require_no_private_owner_rename
-from .publisher import Publisher
+from .private_registry_guard import RegistryPrivacy, _require_no_private_owner_rename
 from .registry_document import RegistrySnapshot
-from .store_files import ExclusiveLock, LockMode, SharedLock, _store_lock
+from .store_files import SharedLock
 from .threads import Thread
-from .wire_log import CheckedWireStoreLock
-from .wire_metadata import WireMetadata
 
 
 def verify_selected_wake(
@@ -46,18 +43,19 @@ def verify_selected_wake(
     """Reject any unselected, stale, stopped, or unrelated N/K execution."""
     try:
         with _selected_claim_boundary(comms, store, claim_scope, owner_name,
-                                      store.session.read, SharedLock()):
+                                      store.session.read):
             pass
     except (RelationViolationError, ValueError) as error:
         raise IdentityConflict("Wake bus or live owner authority changed") from error
 
 
 def _verify_selected_wake_state(
-    initial: CommittedDelivery,
+    initial: Delivered,
     owner: Thread,
     generation: int,
     store: Coordination,
     claim_scope: WakeClaim,
+    privacy: RegistryPrivacy,
 ) -> None:
     """Check an already locked bus/owner snapshot against one SQL state."""
     registry_owner = RegistryOwner(thread=owner, claimed_generation=generation)
@@ -65,15 +63,13 @@ def _verify_selected_wake_state(
         turn = registry_owner.require_active_turn()
     except StaleFence as error:
         raise IdentityConflict("Wake source or owner turn does not match") from error
-    if initial.message.reference != claim_scope.source:
-        raise IdentityConflict("Wake source message changed")
     if owner.incarnation.lookup != claim_scope.recipient_lookup:
         raise IdentityConflict("Wake recipient incarnation changed")
     if generation != claim_scope.owner_claimed_generation or turn.id != claim_scope.turn_id:
         raise IdentityConflict("Wake source or owner turn does not match")
     with store.session.read():
         CohortTable.require_installed(store.session._connection)
-        acknowledgement = _claim_record(store.session._connection, initial)
+        acknowledgement = _claim_record(store.session._connection, initial, privacy)
         if not any(
             assignment.assignment_id == claim_scope.wake_assignment_id
             for assignment in acknowledgement.assignments
@@ -109,12 +105,13 @@ def _verify_selected_wake_state(
 
 
 def _committed_source(
-    bus_lock: CheckedWireStoreLock, claim_scope: WakeClaim, absent: str
-) -> CommittedDelivery:
-    """The message a selected turn answers, read through the held bus lock's checkpoint."""
+    source: BusReader, claim_scope: WakeClaim, absent: str
+) -> Delivered:
+    """Require the original reference and its delivery capability in one bus snapshot."""
     try:
-        return bus_lock.checked_read.delivery(claim_scope.source_seq)
-    except RelationViolationError as error:
+        initial, = source.deliveries_for_references((claim_scope.source,))
+        return initial
+    except (RelationViolationError, ValueError) as error:
         raise IdentityConflict(absent) from error
 
 
@@ -122,17 +119,16 @@ def _committed_source(
 def _selected_claim_boundary(
     comms: Comms, store: Coordination, claim_scope: WakeClaim, owner_name: str,
     checking: Callable[[], AbstractContextManager[object]],
-    mode: LockMode = ExclusiveLock(),
-) -> Iterator[tuple[MessageBus[Publisher], CheckedWireStoreLock, WireMetadata, RegistrySnapshot, Thread]]:
-    """One wire/bus/registry boundary for selected claim acquisition."""
+) -> Iterator[tuple[RegistrySnapshot, Thread]]:
+    """Keep the registry and coordinator's own authority checks through the effect.
+
+    Native settlement already orders the coordinator before Bus publication. A
+    coordinator read holds its rollback-journal read lock; a mediated file write
+    uses its existing write transaction. Neither is a replacement bus lock.
+    """
     if store.session.path.resolve() != (CoordinationStore.path_in(comms.root)).resolve():
         raise IdentityConflict("Wake coordinator does not belong to this wire root")
-    bus = comms.bus
-    with (
-        _store_lock(comms._wire_lock_path, mode=mode),
-        bus.log.locked(mode=mode) as bus_lock,
-        _store_lock(comms.registry.store.path, mode=SharedLock()),
-    ):
+    with comms.registry.store.locked(mode=SharedLock()):
         registry = comms.registry.store.read_snapshot_unlocked()
         canonical = registry.canonical_name(owner_name)
         try:
@@ -144,17 +140,14 @@ def _selected_claim_boundary(
             raise IdentityConflict("Selected wake owner stopped or changed") from error
         owner, generation = captured.thread, captured.claimed_generation
         _require_no_private_owner_rename(comms.root)
-        metadata = bus.log.private_marker_unlocked()
-        if metadata.root_id != claim_scope.wire_root_id:
-            raise IdentityConflict("Selected wake belongs to another wire root")
-        if claim_scope.source_seq <= metadata.claimed_after_seq:
-            raise IdentityConflict("Selected wake precedes the current claim_scope floor")
-        initial = _committed_source(
-            bus_lock, claim_scope, "Selected wake has no committed initial row"
-        )
-        with checking():
-            _verify_selected_wake_state(initial, owner, generation, store, claim_scope)
-            yield bus, bus_lock, metadata, registry, owner
+        privacy = comms.registry.store.private_guard_unlocked()
+        privacy.require_root(
+            claim_scope.wire_root_id, IdentityConflict("Selected wake belongs to another namespace"))
+        with checking(), comms.bus.bus.reading() as source:
+            initial = _committed_source(
+                source, claim_scope, "Selected wake has no committed initial row")
+            _verify_selected_wake_state(initial, owner, generation, store, claim_scope, privacy)
+            yield registry, owner
 
 
 def publish_selected_resource_claim(
@@ -173,16 +166,11 @@ def publish_selected_resource_claim(
     with (
         comms.bus.opened_activity() as activity,
         _selected_claim_boundary(comms, store, claim_scope, owner_name, store.session.read) as (
-            bus,
-            bus_lock,
-            metadata,
-            registry,
-            owner,
+            registry, owner,
         ),
     ):
         resource = resource_path.normalized(Path(owner.worktree))
-        return bus.publisher._publish_acquisition_unlocked(
-            bus_lock,
+        return comms.bus.publisher._publish_acquisition_unlocked(
             registry,
             owner,
             resource,
@@ -274,13 +262,16 @@ def write_selected_claimed_file(
     if not hasattr(os, "O_NOFOLLOW"):
         raise IdentityConflict("Selected write requires no-follow file descriptors")
     with Coordination(str(store.session.path)) as scoped:
-        # The same claim boundary holds the write transaction through fsync.
-        with _selected_claim_boundary(comms, scoped, claim_scope, owner_name,
-                                      scoped.session.writing) as (bus, bus_lock, marker, registry, owner):
+        # Native settlement's existing coordinator -> Bus order also protects the
+        # exact resource claim through fsync, without any root or file-bus gate.
+        with (
+            _selected_claim_boundary(comms, scoped, claim_scope, owner_name,
+                                     scoped.session.writing) as (_, owner),
+            comms.bus.bus.writing() as db,
+        ):
             normalized = ExistingFileClaim(Path(claimed.resource)).normalized(Path(owner.worktree))
-            with bus_lock.current_source(bus.log, marker) as source:
-                if claimed.claim_scope != claim_scope or source.claim(normalized) != claimed:
-                    raise IdentityConflict("Selected write has no current exact resource claim")
+            if claimed.claim_scope != claim_scope or BusSnapshot.from_connection(db).resource_owner(normalized) != claimed:
+                raise IdentityConflict("Selected write has no current exact resource claim")
             with _opened_selected_file(Path(owner.worktree), normalized) as (fd, stable):
                 os.ftruncate(fd, 0)
                 view = memoryview(contents)

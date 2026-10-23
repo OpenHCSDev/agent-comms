@@ -3,18 +3,35 @@
 import pytest
 
 from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
 from agent_comms.historical_views import (
     ChannelDisplayHistory,
     ConversationObservation,
     DMDisplayHistory,
     DMDisplayIdentity,
 )
+from agent_comms.private_path import FileRevision
+from bus_record_fixture import prepare_native_comms
 
 
 def declared_wire(root):
-    comms = wire(root)
+    comms = prepare_native_comms(wire(root))
     comms.registry.declare(comms.registry.new_thread(name='peer', tags=frozenset({'comms'}), worktree=str(root)))
     return comms
+
+
+@pytest.mark.parametrize("view,target", [(DMDisplayHistory, "peer"), (ChannelDisplayHistory, "#comms")])
+@pytest.mark.parametrize("archived", [False, True])
+def test_revision_keeps_the_typed_history_catalogue_observation(tmp_path, view, target, archived):
+    comms = declared_wire(tmp_path / "live")
+    if archived:
+        source = declared_wire(tmp_path / "original")
+        comms.views.attach_history(source.root)
+    observed = view.revision(
+        comms.views, target, ConversationObservation(), worktree=str(comms.root),
+    )
+    assert observed.selection.history_revision == FileRevision.capture(comms.bus.history.path)
+    assert FieldCodec.decode(type(observed.selection), FieldCodec.encode(observed.selection)) == observed.selection
 
 
 @pytest.mark.parametrize("view,target", [(DMDisplayHistory, "peer"), (ChannelDisplayHistory, "#comms")])

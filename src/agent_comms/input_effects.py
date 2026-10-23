@@ -19,10 +19,3 @@ class InputEffects(ABC):
 
     @abstractmethod
     async def _drain_private_nk(self, session_id: str, wire_root_id: str) -> int: ...
-
-    @abstractmethod
-    def _private_nk_marker(self) -> str: ...
-
-    @property
-    @abstractmethod
-    def configured_root_id(self) -> str: ...

@@ -1,5 +1,7 @@
 """Retained Git work protects linked rows through the real watcher and heartbeat."""
 
+from agent_comms.bus import Bus
+
 import json
 import os
 import subprocess
@@ -10,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.candidate_maintenance import drain_candidate_catchup
+from order_scope_fixture import FIX_SCOPE
 from agent_comms.change_report import FileLine
 from agent_comms.commander.config import CommanderConfig
 from agent_comms.commander.standing import (
@@ -125,8 +127,9 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
     root = tmp_path / 'seed'
     root.mkdir(mode=0o700)
     (root / 'storage.json').write_text(json.dumps(FieldCodec.encode(rule)))
+    Bus.install(Bus.path_in(root))
     c = Comms(root)
-    c.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(c.root))
     for name in ('lead', 'worker', 'idle'):
         c.registry.declare(c.registry.new_thread(
             name, frozenset(), str(home), execution=ExternalThreadExecution))
@@ -228,7 +231,6 @@ def test_dirty_then_unpushed_then_pushed_linked_checkout(checkout_bus: Comms, tm
             assert assigned.holder == 'idle'
             assert c.registry.require('idle').goal.require().text
             beat()
-        drain_candidate_catchup(root)
         history = subprocess.run(
             (sys.executable, '-m', 'agent_comms.cli', '--root', str(root), 'history',
              '--target', '@commander-heartbeat', '--as', 'lead', '--limit', '10'),

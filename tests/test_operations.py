@@ -139,7 +139,7 @@ class TestMessaging:
         page = wired.views.history_page(CommandTarget.named("#all"), PageBounds(limit=2))
         assert [message.body for message in page.messages] == ["m3", "m4"]
         assert page.has_older
-        assert wired.bus.log.latest_sequence() == 5
+        assert wired.bus.bus.revision() == 5
 
 
 class TestThreadOps:

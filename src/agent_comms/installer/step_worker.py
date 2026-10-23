@@ -1,6 +1,6 @@
 """Run one carry step's operation with the staged stack's interpreter.
 
-``python -m agent_comms.installer.step_worker NAME ROOT OPERATION RESULT``, with the
+``python -m agent_comms.installer.step_worker NAME INPUT OPERATION RESULT``, with the
 target tree's ``src`` and ``tools`` on the path; writes the encoded result to ``RESULT``.
 """
 
@@ -15,11 +15,11 @@ from agent_comms.installer.carry import STEPS, Carry, CarryOperation
 
 
 def main() -> None:
-    name, root, encoded_operation, result_path = sys.argv[1:]
+    name, encoded_step, encoded_operation, result_path = sys.argv[1:]
     import_module(f"{STEPS.name}.{name}")
-    step = Carry.declared[name]
+    step = FieldCodec.decode(Carry.declared[name], FieldCodec.parse(encoded_step))
     operation = FieldCodec.decode(CarryOperation, FieldCodec.parse(encoded_operation))
-    result = operation.run(step, Path(root))
+    result = operation.run(step)
     Path(result_path).write_text(operation.encode_answer(result))
 
 

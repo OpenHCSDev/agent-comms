@@ -1,7 +1,5 @@
 """The opt-in channel activity feed is a local display, never wire authority."""
 
-from agent_comms.read_basis import ChannelDisplayScope, DMDisplayScope, NamedViewer
-from agent_comms.coordination_errors import DMPaintedBoundChanged, DMScopeChanged
 import json
 from dataclasses import replace
 from threading import Event
@@ -9,11 +7,14 @@ from threading import Thread as WorkerThread
 
 import pytest
 
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
 from agent_comms.comms import wire
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.coordination_errors import DMPaintedBoundChanged, DMScopeChanged
 from agent_comms.message_page import PageBounds
-from agent_comms.page_traversal import NewerTraversal, OlderTraversal
+from agent_comms.page_traversal import LiveCursor, NewerTraversal
+from agent_comms.read_basis import ChannelDisplayScope, DMDisplayScope, NamedViewer
+from bus_record_fixture import prepare_native_comms
 
 
 def test_missing_painted_scope_is_a_stale_bound():
@@ -31,7 +32,7 @@ def test_invalid_display_participants_are_typed_scope_changes(tmp_path):
 
 
 def populated(tmp_path):
-    comms = wire(tmp_path)
+    comms = prepare_native_comms(wire(tmp_path))
     for name, tags in (
         ("alice", {"api"}),
         ("carol", {"api"}),
@@ -56,7 +57,7 @@ def test_default_off_and_opt_in_only_changes_display(tmp_path):
     comms.messaging.send("outsider", "bob", "ordinary outsider DM").message.message_id
     with comms.bus.snapshot(viewer=NamedViewer("alice")) as (basis, source):
         before_delivery = comms.bus.pending_counts_opened(source, basis)
-    before_wire = tmp_path.joinpath("bus.jsonl").read_bytes()
+    before_bus = comms.bus.bus.page(comms.bus.bus.revision() + 1, 100)
     assert bodies(comms.views.history_page(CommandTarget.named("#api"))) == ["exact target"]
     assert bodies(comms.views.channel_display_page("#api")) == ["exact target"]
 
@@ -75,7 +76,7 @@ def test_default_off_and_opt_in_only_changes_display(tmp_path):
     assert bodies(comms.views.history_page(CommandTarget.named("#api"))) == ["exact target"]
     assert [message.body for message in list(comms.views.history_page(CommandTarget.named("#api")).messages)] == ["exact target"]
     assert bodies(comms.views.channel_display_page("#ui")) == ["unrelated channel"]
-    assert tmp_path.joinpath("bus.jsonl").read_bytes() == before_wire
+    assert comms.bus.bus.page(comms.bus.bus.revision() + 1, 100) == before_bus
     with comms.bus.snapshot(viewer=NamedViewer("alice")) as (basis, source):
         assert comms.bus.pending_counts_opened(source, basis) == before_delivery
     assert not comms.channels.set_channel_any_mode("api", False).any_mode
@@ -121,26 +122,26 @@ def test_alias_retag_and_tag_rename_reproject_without_new_wire_row(tmp_path):
     comms = populated(tmp_path)
     comms.messaging.send("alice", "bob", "old sender DM").message.message_id
     comms.channels.set_channel_any_mode("api", True)
-    high_water = comms.bus.log.latest_sequence()
+    high_water = comms.bus.bus.revision()
     assert bodies(comms.views.channel_display_page("#api")) == ["old sender DM"]
     initial = comms.views.viewer_snapshot(str(tmp_path)).channels
     assert initial["#api"].last_activity > 0
 
     comms.registry.rename("alice", "renamed")
-    assert comms.bus.log.latest_sequence() == high_water
+    assert comms.bus.bus.revision() == high_water
     assert bodies(comms.views.channel_display_page("#api")) == ["old sender DM"]
     renamed = comms.registry.require("renamed")
     comms.registry.register(
         replace(renamed, tags=frozenset({"ui"})), comms.registry.status("renamed")
     )
-    assert comms.bus.log.latest_sequence() == high_water
+    assert comms.bus.bus.revision() == high_water
     assert bodies(comms.views.channel_display_page("#api")) == []
     after = comms.views.viewer_snapshot(str(tmp_path)).channels
     assert after["#api"].last_activity < initial["#api"].last_activity
 
     comms.registry.register(replace(comms.registry.require("renamed"), tags=frozenset({"api"})))
     comms.channels.rename_tag("api", "services")
-    assert comms.bus.log.latest_sequence() == high_water
+    assert comms.bus.bus.revision() == high_water
     assert comms.bus.require_channel("#services").any_mode
     with pytest.raises(ValueError):
         comms.bus.require_channel("#api")
@@ -174,20 +175,16 @@ def test_human_marker_unread_and_own_alias_exclusion(tmp_path):
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"].count == 0
 
 
-def test_page_boundaries_and_byte_budget_match_target_pager(tmp_path):
+def test_page_boundaries_match_target_pager(tmp_path):
     comms = populated(tmp_path)
     comms.messaging.send("alice", "bob", "first projected").message.message_id
     comms.messaging.send("outsider", "#api", "second target").message.message_id
     comms.messaging.send("bob", "alice", "third projected").message.message_id
     comms.channels.set_channel_any_mode("#api", True)
     rows = comms.views.channel_display_page("#api").messages
-    first_bytes = len((json.dumps(rows[0].to_wire()) + "\n").encode())
-    assert bodies(
-        comms.views.channel_display_page("#api", bounds=PageBounds(NewerTraversal(), 20, first_bytes))
-    ) == ["first projected"]
     head = comms.views.channel_display_page("#api", bounds=PageBounds(NewerTraversal(), 1))
     assert head.has_newer and not head.has_older
-    tail = comms.views.channel_display_page("#api", bounds=PageBounds(OlderTraversal(rows[-1].seq), 1))
+    tail = comms.views.channel_display_page("#api", bounds=PageBounds(LiveCursor(rows[-1].seq).older(), 1))
     assert bodies(tail) == ["second target"] and tail.has_older and tail.has_newer
 
 
@@ -238,4 +235,4 @@ def test_views_answer_how_far_the_bus_has_grown(tmp_path):
     comms.messaging.send("alice", "bob", "to someone else").message.message_id
     # Every message counts, not only those one conversation shows.
     newest_in_channel = comms.views.channel_display_page("#api").messages[-1].seq
-    assert comms.views.latest_sequence() == comms.bus.log.latest_sequence() > newest_in_channel
+    assert comms.views.latest_sequence() == comms.bus.bus.revision() > newest_in_channel

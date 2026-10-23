@@ -292,7 +292,7 @@ def test_changed_owner_after_release_refuses_escalation_and_replacement(releasin
     assert phase.launches[0].process == child.identity
     assert child.alive(), "Stale fence must not authorize forced retirement"
     assert comms.registry.require("worker").require_process().pid == child.identity.pid
-    with _store_lock(comms._wire_lock_path, blocking=False):
+    with _store_lock(comms.bus.bus.path, blocking=False):
         pass  # the failed restart released the wire itself
 
 

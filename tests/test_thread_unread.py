@@ -12,6 +12,7 @@ import pytest
 
 from agent_comms.thread_text import SavedSessionFile
 from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.private_path import FileRevision
 from agent_comms.registry_document import DEFAULT_ROSTER
 from agent_comms.ui_model.unread import CappedReplyUnread, EmptyCappedReplyUnread, ReplyUnread
@@ -46,7 +47,7 @@ def session(path, identity='session-test'):
 def setup_thread(tmp_path):
     source = tmp_path / 'session.jsonl'
     session(source)
-    comms = wire(tmp_path / 'wire')
+    comms = installed_comms(tmp_path / 'wire')
     comms.registry.declare(comms.registry.new_thread('worker', frozenset({'ci'}),
         str(tmp_path), session_file=SavedSessionFile(str(source))))
     return comms, source

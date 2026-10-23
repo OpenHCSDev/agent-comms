@@ -557,7 +557,7 @@ class Connector:
         Waiting with a client route borrowed would hold up its replacement. The
         pass inherits the bus's hold wait; requests retain client_wire's fast refusal.
         """
-        yield Comms.blocking_reads(self.root)
+        yield Comms(self.root)
 
     def invoke(
         self, tool: type[ToolRequest] | type[ConnectorTool], arguments: Mapping[str, object]

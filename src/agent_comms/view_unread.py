@@ -15,7 +15,8 @@ from typing import TYPE_CHECKING, ClassVar, Annotated
 from weakref import WeakValueDictionary, finalize
 
 from .coordination_errors import CoordinationReadUnavailable
-from .locked_store import RuntimeFile, SQLiteFile, StoreBusy
+from .locked_store import PublishedSQLiteFile, RuntimeFile, SQLiteFile, StoreBusy
+from .bus import Bus
 from .native_entries import NativeEntry
 from .native_transcript import SessionCut, reverse_records
 from .private_path import FileObservation, FileRevision, MissingFile
@@ -25,7 +26,7 @@ from .store_files import SharedLock, _store_lock
 from .thread_owned_state import ThreadOwnedState
 from .typed_table import Column, JsonStorage, SQLiteTableName, SQLiteUserVersion, TypedRow, TypedTable
 from .ui_model.unread import CappedReplyUnread, IndexingUnread, ReplyUnread, UnreadPresentation
-from .wire_watch import FileWatch, NativeFileWatch, WatchSource
+from .watched import FileSource
 
 if TYPE_CHECKING:
     from .agent_backend import RuntimeLocation
@@ -344,7 +345,9 @@ class NativeReplyPreparation(ReplyPreparation):
         # A busy writer leaves these exact completed readers for the next observation.
         try:
             with _store_lock(state.path.parent / "wire", mode=SharedLock(), blocking=False):
-                with CoordinationReadUnavailable.checking(), SQLiteFile.write_transaction(database):
+                with (CoordinationReadUnavailable.checking(),
+                      state.publishing_changes(database, state.index_path),
+                      SQLiteFile.write_transaction(database)):
                     for source in completed:
                         self.readers[source].commit(database)
         except (BlockingIOError, CoordinationReadUnavailable):
@@ -386,7 +389,7 @@ class TranscriptReadKeys:
         })
 
 
-class TranscriptReadState(RuntimeFile, SQLiteFile, ThreadOwnedState):
+class TranscriptReadState(RuntimeFile, PublishedSQLiteFile, ThreadOwnedState):
     """Index only replies after read marks, capped from the newest records.
 
     One disposable suffix index owns reply offsets and scan coverage. No worker
@@ -399,8 +402,8 @@ class TranscriptReadState(RuntimeFile, SQLiteFile, ThreadOwnedState):
         self._thread_keys: dict[str, TranscriptReadKeys] = {}
         self._path_threads: dict[Path, set[str]] = {}
         self._key_snapshot: RegistrySnapshot | None = None
-        self._source_watch: FileWatch = NativeFileWatch.open()
         self._source_resources = ExitStack()
+        self._source_watch = self._source_resources.enter_context(Bus.register_sources())
         self.path = ReadLedger.path_in(path.parent)
         self.reads = ReadLedger(self.path)
         self.index_path = self.path_in(path.parent)
@@ -463,7 +466,8 @@ class TranscriptReadState(RuntimeFile, SQLiteFile, ThreadOwnedState):
                 # needs a writer; recheck after taking it because another
                 # process may have initialized the file since this read.
                 if version.user_version != _INDEX_VERSION:
-                    with SQLiteFile.write_transaction(connection):
+                    with (self.publishing_changes(connection, self.index_path),
+                          SQLiteFile.write_transaction(connection)):
                         (version,) = SQLiteUserVersion.read(connection.execute("PRAGMA user_version"))
                         if version.user_version == 0:
                             if SQLiteTableName.stored(connection):
@@ -484,6 +488,7 @@ class TranscriptReadState(RuntimeFile, SQLiteFile, ThreadOwnedState):
         self._close_database()
         for path in self.files(self.index_path):
             path.unlink(missing_ok=True)
+        self.publish_change(self.index_path)
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
         """Drop the reply projection of each deleted thread's transcript."""
@@ -496,7 +501,8 @@ class TranscriptReadState(RuntimeFile, SQLiteFile, ThreadOwnedState):
             self._preparation.retire(sources)
             if not self.index_path.exists():
                 return
-            with closing(self.writer(self.index_path)) as database, database:
+            with (closing(self.writer(self.index_path)) as database,
+                  self.publishing_changes(database, self.index_path), database):
                 for table in TypedTable.members_with(ReplyIndexTable):
                     database.executemany(
                         f"DELETE FROM {table.declared_name} WHERE source = ?",
@@ -526,7 +532,6 @@ class TranscriptReadState(RuntimeFile, SQLiteFile, ThreadOwnedState):
 
     def _refresh_keys(self, snapshot: RegistrySnapshot) -> None:
         changed = self._source_watch.changed_paths()
-        invalid = self._source_watch.invalid
         # Visibility selects counts, not the lifetime of a registered source.
         rebuild = False
         if snapshot is not self._key_snapshot:
@@ -540,8 +545,7 @@ class TranscriptReadState(RuntimeFile, SQLiteFile, ThreadOwnedState):
             rebuild |= bool(self._thread_keys.keys() - current.keys())
             self._thread_keys = current
             self._key_snapshot = snapshot
-        names = (self._thread_keys.keys() if invalid else
-                 {name for path in changed for name in self._path_threads.get(path, ())})
+        names = {name for path in changed for name in self._path_threads.get(path, ())}
         # A queued event can belong to a source removed by this registry revision.
         for name in names & self._thread_keys.keys():
             keys = self._thread_keys[name]
@@ -555,17 +559,17 @@ class TranscriptReadState(RuntimeFile, SQLiteFile, ThreadOwnedState):
             for name, keys in self._thread_keys.items():
                 for path in keys.paths.values():
                     self._path_threads.setdefault(path, set()).add(name)
-        if rebuild or invalid:
+        if rebuild:
             self._source_resources.close()
-            sources = tuple(WatchSource.modified_file(path) for path in self._path_threads)
+            sources = tuple(FileSource(path) for path in self._path_threads)
             wanted = {key for keys in self._thread_keys.values() for key in keys.revisions}
             self._preparation.retain(wanted)
             if not sources:
                 self._preparation.cancel()
                 self._preparation = self._idle
-            self._source_watch = self._source_resources.enter_context(closing(
-                NativeFileWatch.open(*sources)
-            ))
+            self._source_watch = self._source_resources.enter_context(
+                Bus.register_sources(*sources)
+            )
             # Cover a write between the first capture and installing its watch.
             for name, keys in tuple(self._thread_keys.items()):
                 observed = {key: FileRevision.capture(path) for key, path in keys.paths.items()}

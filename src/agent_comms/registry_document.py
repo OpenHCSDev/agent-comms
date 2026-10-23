@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Literal, Annotated
 
 
 from .child_process import NoProcess, ProcessIdentity
+from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import (
     FieldCodec,
@@ -59,7 +60,7 @@ if TYPE_CHECKING:
     from .activity import ObservedActivity
     from .agent_activity import AgentActivity
     from .audience_manifest import FrozenRecipient
-    from .bus_publication import CommittedDelivery
+    from .bus_publication import Delivered
 
 
 @dataclass(frozen=True, slots=True)
@@ -236,16 +237,35 @@ class GenerationOf(ThreadSlice[GenerationCounter]):
         return GenerationCounter(value.counter, dict(value.generations))
 
 
-class WholeDocumentValue(ThreadSlice[int]):
+class WholeDocumentValue[Value](ThreadSlice[Value]):
     """A scalar shared by the whole document and every one-thread view."""
 
     @staticmethod
-    def cut(raw: int, canonical: str) -> int:
+    def cut(raw: Value, canonical: str) -> Value:
         return raw
 
     @classmethod
-    def copy(cls, value: int) -> int:
+    def copy(cls, value: Value) -> Value:
         return value
+
+
+class RootPurpose(DeclaredFamily, affix="RootPurpose"):
+    """The registry's durable permission to mutate this root."""
+
+    @abstractmethod
+    def require_write(self) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class WorkingRootPurpose(RootPurpose):
+    def require_write(self) -> None:
+        pass
+
+
+@dataclass(frozen=True, slots=True)
+class HistoricalRootPurpose(RootPurpose):
+    def require_write(self) -> None:
+        raise RelationViolationError("Historical roots are read-only")
 
 
 @ThreadSlice.required
@@ -254,6 +274,9 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
     version: Annotated[
         Literal[1], SlicePolicy(WholeDocumentValue), WireRequired()
     ] = 1
+    purpose: Annotated[RootPurpose, SlicePolicy(WholeDocumentValue)] = field(
+        default_factory=WorkingRootPurpose
+    )
     threads: Annotated[dict[str, Thread], SlicePolicy(OwnRow)] = field(
         default_factory=dict
     )
@@ -699,6 +722,7 @@ class RegistryEntry:
 
 @dataclass(frozen=True, slots=True)
 class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryProvenance):
+    purpose: RootPurpose
     threads: Mapping[str, Thread]
     statuses: Mapping[str, ThreadStatus]
     last_seen: Mapping[str, float]
@@ -742,6 +766,7 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
                 raise RelationViolationError("Registry creation identities collide.")
             indexed[lookup] = thread
         return cls(
+            purpose=document.purpose,
             threads=MappingProxyType(dict(document.threads)),
             statuses=MappingProxyType(dict(document.statuses)),
             last_seen=MappingProxyType(dict(document.last_seen)),
@@ -766,11 +791,16 @@ class RegistrySnapshot(RegistryPresence[Mapping[str, ThreadStatus]], RegistryPro
                 observed[name] = DeletedThread(canonical)
         return observed
 
+    def unread_since(
+        self, actor: str, since: float | None, recorded_delivery: bool,
+    ) -> float | None:
+        return self.require(actor).role.unread_since(since, recorded_delivery)
+
     def displayed_recipient_effect(self, reads, message, thread: Thread, *, document=None):
         return thread.role.displayed_recipient_effect(reads, message, thread, self, document)
 
     def recipient(
-        self, recipient: FrozenRecipient, original: CommittedDelivery
+        self, recipient: FrozenRecipient, original: Delivered
     ) -> RegisteredRecipient | RetiredRecipient:
         """A missing live thread was retired only if the original send names it."""
         lookup = recipient.recipient_lookup

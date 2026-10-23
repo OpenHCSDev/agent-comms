@@ -1,5 +1,7 @@
 """Normal coding policies use existing claims; no provider or user work is touched."""
 
+from agent_comms.bus import Bus
+
 from agent_comms.pi_payloads import ReportedFlag, ReportedText
 import json
 import os
@@ -38,7 +40,7 @@ def test_create_claim_competes_before_file_exists_and_releases_without_creation(
         for name, created in [("a", 21.0), ("b", 22.0)]:
             thread = c.registry.new_thread(name, frozenset({'team'}), str(work), created_at=created)
             c.registry.declare(replace(thread, process_identity=ProcessIdentity.capture(os.getpid())))
-        c.messaging.initialize_private_initial_protocol()
+        Bus.install(Bus.path_in(c.root))
         resource = WritableFileClaim(Path("new/nested/file.py"))
         def acquire(name):
             with NativeBoundary(c.bus) as boundary:
@@ -46,12 +48,12 @@ def test_create_claim_competes_before_file_exists_and_releases_without_creation(
                 scope = NativeClaim(owner_claimed_generation=boundary.registry.claim_generation(name),
                                     operation_id=secrets.token_hex(16), turn_id=f"create-{name}",
                                     input_id=f"create-input-{name}")
-                return c.bus.publisher._publish_acquisition_unlocked(boundary.bus_lock,
+                return c.bus.publisher._publish_acquisition_unlocked(
                     boundary.registry, owner, resource.normalized(work), scope,
                     activity=boundary.activity)
         committed = acquire("a")
         assert not (work / "new").exists()
-        assert c.bus.log.claim_projection()[str(work / "new/nested/file.py")].seq == committed.seq
+        assert c.bus.bus.claim_projection()[str(work / "new/nested/file.py")].seq == committed.seq
         with pytest.raises(ClaimConflict):
             acquire("b")
         with NativeBoundary(c.bus) as boundary:
@@ -75,7 +77,7 @@ def test_stopped_holder_reclaimed_in_copied_root(tmp_path, monkeypatch, existing
         original.registry.declare(replace(
             thread, process_identity=ProcessIdentity.capture(os.getpid())
         ))
-    original.messaging.initialize_private_initial_protocol()
+    Bus.install(Bus.path_in(original.root))
 
     def acquire(comms, name):
         with NativeBoundary(comms.bus) as boundary:
@@ -86,12 +88,12 @@ def test_stopped_holder_reclaimed_in_copied_root(tmp_path, monkeypatch, existing
                 input_id=f"input-{name}",
             )
             return comms.bus.publisher._publish_acquisition_unlocked(
-                boundary.bus_lock, boundary.registry, owner, resource.normalized(work),
+                boundary.registry, owner, resource.normalized(work),
                 scope, activity=boundary.activity,
             )
 
     first = acquire(original, "holder-a")
-    original_bytes = original.bus.log.path.read_bytes()
+    original_revision = original.bus.bus.revision()
     copied = Comms(shutil.copytree(original.root, tmp_path / "copied"))
     assert first.live(copied.registry.snapshot())
     with pytest.raises(ClaimConflict):
@@ -102,8 +104,8 @@ def test_stopped_holder_reclaimed_in_copied_root(tmp_path, monkeypatch, existing
     assert second.owner == "holder-b" and second.generation != first.generation
     with NativeBoundary(copied.bus) as boundary:
         copied.bus.publisher.release_resources(boundary, (first,), "Late old release")
-    assert copied.bus.log.claim_projection()[second.resource] == second
-    assert original.bus.log.path.read_bytes() == original_bytes
+    assert copied.bus.bus.claim_projection()[second.resource] == second
+    assert original.bus.bus.revision() == original_revision
     assert original.registry.status("holder-a").active
     assert resource.resource.exists() == existing
     if existing:

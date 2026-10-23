@@ -16,10 +16,7 @@ from agent_comms.installer.backup import UpgradeRefused
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.locked_store import RegistryFile, RootFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier
-from agent_comms.registry_store import RegistryStore
 from agent_comms.storage_rules import StorageRule
-from agent_comms.store_files import SharedLock, _store_lock
-from agent_comms.wire_log import WireLog
 
 
 @dataclass(frozen=True)
@@ -104,8 +101,8 @@ def practice_copy(root: Path, into: Path) -> Iterator[tuple[Path, PracticeMeasur
     runtime's bugs cannot block the install of their fix, and the target cannot read a
     format its carries have not run on yet. The copy is the declared owners' files and
     nothing else: every SQLite owner's database copies through SQLite's backup, and its
-    -wal, -shm and journal never; the log's and the registry's cut_paths copy together
-    under each one's lock; every other declared file byte for byte.
+    -wal, -shm and journal never. Each declared owner copies its consistent file group;
+    the retired history converter alone knows its old marker relationship.
     The maintenance witnesses stay behind: the rehearsal holds its copy itself. Stored
     paths keep naming the live bus, and every step writes only inside the root it is given."""
     floor = StorageRule.load(root).floor_gib * 2**30
@@ -114,31 +111,14 @@ def practice_copy(root: Path, into: Path) -> Iterator[tuple[Path, PracticeMeasur
         raise UpgradeRefused("Insufficient free space before building the practice copy")
     started = time.monotonic()
     witnesses = set(MaintenanceBarrier(RegistryFile.path_in(root)).witness_paths)
-    log = WireLog(WireLog.path_in(root))
-    registry = RegistryStore.at(root)
     files = RootFile.existing_in(root)
     into.mkdir(mode=0o700)
 
-    def copy(path: Path) -> None:
-        owner = files.get(path, RootFile)
+    copied: set[Path] = set()
+    for path, owner in files.items():
+        if path in copied or path in witnesses:
+            continue
         target = into / path.relative_to(root)
         target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        owner.copy_file(path, target)
-
-    # The log's own file lock, never WireLog.locked(): that checks the index with the
-    # target's code, which refuses a bus whose carries have not run yet. Each group is one
-    # cut, its paths read under its lock: a writer advancing the log between its copy and
-    # its checkpoint's would leave a checkpoint past the end of the copied log, and a turn
-    # claimed after the declared files were listed would leave the registry naming a
-    # missing turn.
-    locked_copies = ((_store_lock(log.path), log), (registry.locked(mode=SharedLock()), registry))
-    copied: set[Path] = set()
-    for lock, owner in locked_copies:
-        with lock:
-            for path in owner.cut_paths:
-                if path.exists():
-                    copy(path)
-                    copied.add(path)
-    for path in files.keys() - copied - witnesses:
-        copy(path)
+        copied.update(owner.copy_group(path, target))
     yield into, PracticeMeasurement.of(into, time.monotonic() - started, floor)

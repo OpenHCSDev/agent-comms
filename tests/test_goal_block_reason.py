@@ -7,6 +7,7 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     BlockedGoalAction,
@@ -23,7 +24,7 @@ from agent_comms.tool_caller import ThreadCaller
 
 
 def _owner(tmp_path):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     comms.registry.declare(comms.registry.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Finish selected work"))
     assert goal is not None

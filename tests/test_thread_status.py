@@ -11,6 +11,7 @@ import pytest
 from agent_comms.thread_text import SavedSessionFile
 from agent_comms.activity import Activity, ActivityState
 from agent_comms.comms import wire
+from conftest import installed_comms
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.field_codec import FieldCodec
@@ -56,7 +57,7 @@ def test_captured_owner_presentation_survives_exit_until_fresh_acquisition(tmp_p
 
 @pytest.mark.parametrize("status", [member() for member in ThreadStatus.members_with(ThreadStatus)])
 def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status):
-    comms = wire(tmp_path)
+    comms = installed_comms(tmp_path)
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
     try:
         thread = comms.registry.new_thread('owner', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(child.pid), title=GivenThreadText('Retained title'), session_file=SavedSessionFile('/retained/session.jsonl'), created_at=12.5)

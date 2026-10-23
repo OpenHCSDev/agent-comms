@@ -27,7 +27,6 @@ from agent_comms.thread_status import ThreadStatus
 from agent_comms.todos import (
     MergedProgress,
     NoCommitProgress,
-    OrderClaim,
     OrderProgress,
     ProgressRead,
     ProgressSource,
@@ -158,35 +157,16 @@ class UnitState(UndatedStandingRule, declared_name=None):
     ) -> tuple[UnitObservation, ...]:
         snapshot, now = comms.registry.snapshot(), time.time()
         held = StandingRule.holders(comms, commander)
-        for owner in held:
-            if snapshot.require(owner.name).incarnation != owner:
-                raise ValueError("Held order owner incarnation changed")
         requests = pulls.register(tuple(todo for todos in held.values() for todo in todos))
-        asks = UnansweredUnitAsks.for_orders(
-            comms, commander, StandingRule.todos(comms, commander), now
-        )
-        # Claim originals come from one read here, so no unit's questions read can fail alone.
-        claims = OrderClaim.originals(
-            comms,
-            {
-                owner: tuple(claim for todo in todos for claim in todo.order.commander_claims())
-                for owner, todos in held.items()
-            },
-        )
+        with comms.bus.bus.reading() as source:
+            questions = UnansweredUnitAsks.for_orders(source, snapshot, commander, held, now)
         readings = tuple(
             UnitObservation(
                 comms,
                 thread,
                 tuple(held.get(thread.incarnation, ())),
                 requests,
-                (
-                    *(
-                        message
-                        for message in asks
-                        if snapshot.canonical_name(message.sender) == thread.name
-                    ),
-                    *claims.get(thread.incarnation, ()),
-                ),
+                questions.get(thread.incarnation, ()),
                 now,
                 snapshot.status(thread.name),
                 comms.agents.is_working(thread.incarnation, snapshot),

@@ -24,6 +24,7 @@ from agent_comms.acp_extension import (
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
 from agent_comms.comms import Comms
+from bus_record_fixture import prepare_native_comms
 from agent_comms.queued_input import QueuedInput, QueuedInputContext
 from agent_comms.runtime import present_session
 from agent_comms.thread_identity import ClaimedIdentity
@@ -32,7 +33,7 @@ from stored_inputs import stored_inputs
 
 
 def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, float, int]:
-    comms = Comms(tmp_path / "wire")
+    comms = prepare_native_comms(Comms(tmp_path / "wire"))
     thread = comms.registry.new_thread('beta', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(thread)
     agent = CommsAgent(comms)

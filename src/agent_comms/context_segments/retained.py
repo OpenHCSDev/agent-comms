@@ -3,9 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from ..exporting import AuthoredSourceScope, FullLimit, WireExportBoundary, WireTranscriptExporter
-from ..messages import Message
 from ..retained_task_facts import RetainedTaskFacts
-from ..input_attempt import StoredInput
 from ..turn_context import ContextSegment, OwnerProvenance, WireProvenance
 
 @dataclass(frozen=True, kw_only=True)
@@ -21,7 +19,7 @@ class RetainedSegment(ContextSegment):
         sources = {message.reference: message for fact in retained.facts
                    for message in fact.wire_sources()}
         wording_sources = tuple(message.task.original_wording_context_source(
-            retained.original_text_source(message)) for message in sources.values())
+            retained.original_text_source(message.reference)) for message in sources.values())
         return cls(provenance=tuple(dict.fromkeys((source,
                        *(WireProvenance(ref) for ref in sources), *wording_sources))),
                    retained=retained, boundary=boundary,
@@ -30,9 +28,6 @@ class RetainedSegment(ContextSegment):
 
     def text(self) -> str:
         return self.retained.text
-
-    def original_text_source(self, declaration: Message) -> Message | StoredInput:
-        return self.retained.original_text_source(declaration)
 
     def inspection(self) -> dict[str, object]:
         """Authored constraints retain their exact source and narrower export scope."""

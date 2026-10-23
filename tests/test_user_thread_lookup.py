@@ -7,6 +7,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.registry_document import NoUserThread, RegistryDocument
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.thread_text import GivenThreadText
+from conftest import installed_comms
 
 
 def test_user_answer_follows_revisions_and_stays_out_of_wire_fields(tmp_path):
@@ -28,7 +29,7 @@ def test_user_answer_follows_revisions_and_stays_out_of_wire_fields(tmp_path):
 
 
 def test_channel_and_dm_history_keep_the_human_as_sender(tmp_path):
-    comms = Comms(tmp_path)
+    comms = installed_comms(tmp_path)
     comms.registry.declare(comms.registry.new_thread('peer', frozenset({'comms'}), str(tmp_path)))
     channel = comms.messaging.send_user_message('#comms', 'own channel message', worktree=str(tmp_path))
     direct = comms.messaging.send_user_message('peer', 'own DM message', worktree=str(tmp_path))

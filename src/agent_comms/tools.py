@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, NoReturn, TextIO
 from pydantic import JsonValue
 
 from agent_comms.lifecycle_capability import Active
-from agent_comms.private_bus_checkpoint import PublicMessages
 from agent_comms.todos import (
     ClaimOrder,
     CorrectCheckTodo,
@@ -75,6 +74,7 @@ from .field_codec import (
     SingleFieldValue,
     SubclassUnion,
     WireChoices,
+    WireForm,
     WireName,
     WireOmitDefault,
     projected,
@@ -142,6 +142,11 @@ from .task_sources import (
     TaskChange,
     TaskScopeSelection,
 )
+from .order_story import FleetStory, OrderStory
+from .order_work import OrderWork
+from .pi_vocabulary import ServiceTier, ThinkingLevelField
+from .progress_claims import ProgressClaim
+from .relationships import RelationshipEdit
 from .thread_execution import (
     ArchiveOwnerControl,
     NativeOwnerCommand,
@@ -334,7 +339,7 @@ class TaskPublished(ToolResult):
 class InboxPageRead(ToolResult):
     """One unread page; only its returned references can be acknowledged."""
 
-    messages: tuple[Message, ...]
+    messages: tuple[Annotated[Message, WireForm], ...]
     acknowledged: int
     remaining: int
     unresolved_inputs: tuple[UnresolvedInput, ...]
@@ -1093,13 +1098,10 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolReque
         actor = comms.registry.require(caller.name).incarnation
         generation = todo.held().generation
         todo.require_assignee(actor, generation)
-        with comms.bus.log.checked_read() as source:
-            original = PublicMessages.require(
-                source.connection, message_id=todo.latest_message.message_id
-            )
+        original = comms.bus.bus.lookup_message(todo.latest_message.message_id)
         claim = OrderClaim.for_order(
             todo, actor, self.pull_request, self.head, self.report,
-            MessageReference(original.seq, original.message_id),
+            original.reference,
         )
         changed = ClaimOrder(
             todo.revision, actor, generation, claim
@@ -1559,7 +1561,7 @@ class CommsInboxTool(ToolRequest):
         review = self.standby.review(comms, thread)
         page = comms.bus.inbox_at(
             thread, comms.registry.snapshot(), CommandTarget.named(target),
-            bounds=PageBounds(limit=self.limit, max_bytes=MAX_INLINE_OUTPUT_BYTES // 2),
+            bounds=PageBounds(limit=self.limit),
         )
         messages = page.page.messages
         unresolved = tuple(comms.goals.unresolved_inputs(thread))

@@ -14,7 +14,9 @@ from dataclasses import dataclass
 from typing import Annotated
 
 from agent_comms.assignment_states import AssignmentState, PendingNotification
-from agent_comms.bus_publication import CommittedDelivery
+from agent_comms.bus_publication import Delivered
+from agent_comms.coordination_session import NativeBoundary
+from agent_comms.private_registry_guard import RegistryPrivacy
 from agent_comms.cohort_schema import (
     AwarenessClaimGenerations,
     ClaimBatchAcknowledgements,
@@ -57,7 +59,7 @@ def _assignment_id(root: str, seq: int, lookup: str) -> str:
 
 
 def _expected_assignments(
-    initial: CommittedDelivery, accepted_at_ms: int
+    initial: Delivered, accepted_at_ms: int, privacy: RegistryPrivacy
 ) -> tuple[WakeAssignment, ...]:
     result: list[WakeAssignment] = []
     for recipient, member in zip(initial.audience.recipients, initial.decisions, strict=True):
@@ -67,7 +69,7 @@ def _expected_assignments(
             result.append(
                 WakeAssignment(
                     assignment_id=_assignment_id(
-                        initial.wire_root_id, initial.message.seq, decision.recipient
+                        privacy.namespace, initial.message.seq, decision.recipient
                     ),
                     recipient=recipient.canonical_thread,
                     recipient_lookup=decision.recipient,
@@ -85,43 +87,25 @@ def _expected_assignments(
     return tuple(result)
 
 
-def _claim_record(db: sqlite3.Connection, initial: CommittedDelivery) -> AcceptedCohort:
+def _claim_record(
+    db: sqlite3.Connection, initial: Delivered, privacy: RegistryPrivacy,
+) -> AcceptedCohort:
     message = initial.message
     audience = initial.audience
-    row = ClaimBatchAcknowledgements.one(db, wire_root_id=initial.wire_root_id, wire_seq=message.seq)
+    namespace = privacy.namespace
+    row = ClaimBatchAcknowledgements.one(db, wire_root_id=namespace, wire_seq=message.seq)
     if row is None or not row.sealed:
         raise IdentityConflict("cohort acknowledgement is absent or unsealed")
-    expected_count = sum(len(decision.claim_decisions()) for decision in initial.decisions)
-    if any(
-        getattr(row, field) != expected
-        for field, expected in (
-            ("message_id", message.message_id),
-            ("exact_target", message.target),
-            ("envelope_digest", audience.wire_envelope_digest),
-            ("audience_digest", audience.digest),
-            ("decisions_digest", initial.decisions_digest),
-            ("member_count", len(audience.recipients)),
-            ("claim_count", expected_count),
-            ("manifest_codec", initial.manifest_codec),
-            ("resolver_version", initial.resolver_version),
-            ("policy_version", initial.policy_version),
-        )
-    ):
-        raise IdentityConflict("sealed cohort acknowledgement conflicts with committed bus")
-    expected = _expected_assignments(initial, row.accepted_at_ms)
+    row.require_delivery(initial, privacy)
+    expected = _expected_assignments(initial, row.accepted_at_ms, privacy)
     members = ClaimBatchMembers.select(
-        db,
-        where="wire_root_id=? AND wire_seq=?",
-        parameters=(initial.wire_root_id, message.seq),
-        order_by=("ordinal",),
+        db, where="wire_root_id=? AND wire_seq=?",
+        parameters=(namespace, message.seq), order_by=("ordinal",),
     )
     if members != [
         ClaimBatchMembers(
-            wire_root_id=initial.wire_root_id,
-            wire_seq=message.seq,
-            ordinal=ordinal,
-            claim_id=assignment.assignment_id,
-            recipient_lookup=assignment.recipient_lookup,
+            wire_root_id=namespace, wire_seq=message.seq, ordinal=ordinal,
+            claim_id=assignment.assignment_id, recipient_lookup=assignment.recipient_lookup,
         )
         for ordinal, assignment in enumerate(expected)
     ]:
@@ -129,13 +113,13 @@ def _claim_record(db: sqlite3.Connection, initial: CommittedDelivery) -> Accepte
     deliveries = CohortDeliveries.select(
         db,
         where="wire_root_id=? AND wire_seq=?",
-        parameters=(initial.wire_root_id, message.seq),
+        parameters=(namespace, message.seq),
         order_by=("ordinal",),
     )
     selected = {assignment.recipient_lookup: assignment.assignment_id for assignment in expected}
     if deliveries != [
         CohortDeliveries(
-            wire_root_id=initial.wire_root_id,
+            wire_root_id=namespace,
             wire_seq=message.seq,
             ordinal=ordinal,
             recipient_lookup=recipient.recipient_lookup,
@@ -148,29 +132,19 @@ def _claim_record(db: sqlite3.Connection, initial: CommittedDelivery) -> Accepte
         raise IdentityConflict("sealed N delivery rows conflict with committed bus")
     current: list[WakeAssignment] = []
     for accepted in expected:
-        db_row = WakeAssignment.one(db, assignment_id=accepted.assignment_id)
-        if db_row is None:
+        actual = WakeAssignment.one(db, assignment_id=accepted.assignment_id)
+        if actual is None:
             raise IdentityConflict("sealed cohort claim is missing")
-        actual = db_row
         accepted.require_same_acceptance(actual)
         current.append(actual)
-    # A singleton claim for an explicitly no-wake observer cannot be accepted
-    # as a K member or hidden by a valid sealed N acknowledgement.
     if any(
         WakeAssignment.one(db, recipient_lookup=recipient.recipient_lookup, wire_seq=message.seq)
         for recipient, decision in zip(audience.recipients, initial.decisions, strict=True)
         if not decision.claim_decisions()
     ):
         raise IdentityConflict("no-wake observer has a conflicting unbound claim")
-    return AcceptedCohort(
-        initial.wire_root_id,
-        message.seq,
-        message.message_id,
-        len(audience.recipients),
-        len(expected),
-        row.accepted_at_ms,
-        tuple(current),
-    )
+    return AcceptedCohort(namespace, message.seq, message.message_id, len(audience.recipients),
+                          len(expected), row.accepted_at_ms, tuple(current))
 
 
 def _record_optional_owner_generations(
@@ -219,18 +193,13 @@ def accept_delivery_cohort(
     participant owner or commit one based merely on a bus message. If the
     coordinator has not registered each frozen stable lookup, no N is accepted.
     """
-    # Hold the bus read open for the whole SQL write.
-    with bus.log.checked_read() as source, store.session.writing() as db:
-        marker = source.marker
-        if marker.root_id != wire_root_id:
-            raise IdentityConflict("cohort claim_scope wire root changed")
-        if wire_seq <= marker.claimed_after_seq:
-            raise IdentityConflict("historical source precedes the current claim_scope floor")
+    with NativeBoundary(bus) as boundary, bus.bus.reading() as source, store.session.writing() as db:
+        boundary.privacy.require_root(wire_root_id, IdentityConflict("cohort native namespace changed"))
         initial = source.delivery(wire_seq)
         CohortTable.require_installed(db)
         acknowledgement = ClaimBatchAcknowledgements.one(db, wire_root_id=wire_root_id, wire_seq=wire_seq)
         if acknowledgement is not None:
-            return AlreadyApplied(_claim_record(db, initial))
+            return AlreadyApplied(_claim_record(db, initial, boundary.privacy))
         if WakeAssignment.select(db, where="wire_seq=?", parameters=(wire_seq,)):
             raise IdentityConflict("singleton claim cannot be adopted by a cohort")
         if ClaimBatchAcknowledgements.select(db, where="wire_seq=?", parameters=(wire_seq,)):
@@ -239,22 +208,8 @@ def accept_delivery_cohort(
             if Participants.one(db, participant_lookup=recipient.recipient_lookup) is None:
                 raise IdentityConflict("frozen recipient has no durable participant identity")
         accepted_at = store.session.now()
-        expected = _expected_assignments(initial, accepted_at)
-        ClaimBatchAcknowledgements(
-            wire_root_id=wire_root_id,
-            wire_seq=wire_seq,
-            message_id=initial.message.message_id,
-            exact_target=initial.message.target,
-            envelope_digest=initial.audience.wire_envelope_digest,
-            audience_digest=initial.audience.digest,
-            decisions_digest=initial.decisions_digest,
-            member_count=len(initial.audience.recipients),
-            claim_count=len(expected),
-            manifest_codec=initial.manifest_codec,
-            resolver_version=initial.resolver_version,
-            policy_version=initial.policy_version,
-            accepted_at_ms=accepted_at,
-        ).insert(db)
+        expected = _expected_assignments(initial, accepted_at, boundary.privacy)
+        ClaimBatchAcknowledgements.for_delivery(initial, boundary.privacy, accepted_at).insert(db)
         for ordinal, assignment in enumerate(expected):
             assignment.insert(db)
             ClaimBatchMembers(
@@ -285,7 +240,7 @@ def accept_delivery_cohort(
             parameters=(wire_root_id, wire_seq),
             sealed=True,
         )
-        return Applied(_claim_record(db, initial))
+        return Applied(_claim_record(db, initial, boundary.privacy))
 
 
 def next_sealed_assignment(

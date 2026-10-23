@@ -60,7 +60,7 @@ if TYPE_CHECKING:
     from .native_session_reopen import NativeSessionIdentity
 
 
-class NativeRuntimeTable(SharedFileTables, DurableTables, PrivateRuntimeSchema):
+class NativeRuntimeTable(PrivateRuntimeSchema):
     """Capability identifying the native-runtime schema's declared tables."""
 
     __slots__ = ()
