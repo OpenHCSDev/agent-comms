@@ -7,7 +7,15 @@ from copyreg import __newobj__
 from typing import Never
 
 
-class CoordinationError(RuntimeError):
+class DrainDeferred(Exception):  # noqa: N818 - capability, not an outcome
+    """A failure an inbox drain records and retries later instead of stopping on."""
+
+
+class DrainUnavailable(DrainDeferred):
+    """A failure meaning the drain's store or coordinator is unavailable right now."""
+
+
+class CoordinationError(RuntimeError, DrainUnavailable):
     """Base class for fail-loud coordinator errors."""
 
     def __reduce__(self):
