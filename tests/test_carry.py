@@ -49,6 +49,7 @@ def step_source() -> str:
     return (
         "from agent_comms.installer.carry import Carried, Carry\n\n"
         "class Step(Carry):\n"
+        "    def backup_files(self):\n        return ()\n"
         "    def carry(self, *, apply):\n        return Carried(0)\n"
     )
 
@@ -185,6 +186,9 @@ def noisy_step(tmp_path_factory):
         @classmethod
         def module(cls):
             return module
+
+        def backup_files(self):
+            raise AssertionError("The selected interpreter lists the backups, never its caller")
 
         def carry(self, *, apply):
             raise AssertionError("The selected interpreter executes the carry, never its caller")

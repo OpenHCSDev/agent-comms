@@ -50,7 +50,7 @@ from agent_comms.field_codec import (
     boundary_decoder,
 )
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
-from agent_comms.goals import OrderCheck, ProblemGoalOrder
+from agent_comms.goals import OrderCheck
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
 from agent_comms.native_tool_call import SelectedToolDenied
@@ -71,12 +71,10 @@ from agent_comms.todos import (
     DeliverySource,
     DirectiveText,
     LocatedProblemFinding,
-    MeasuredReview,
     NoSuccessor,
     OperationDelivery,
     OrderDelivery,
     OrderedHunt,
-    OrderMessage,
     OrderProgress,
     OrderText,
     OrderWords,
@@ -319,133 +317,6 @@ class OrderFile:
         check = replace(self.order.check,
                         directory=str(context.repo_directory(self.order.check.directory)))
         return replace(self, order=replace(self.order, finding=finding, check=check))
-
-    def assignment_refusals(self, context: CommanderContext, unit: str,
-                            group: Sequence[str], listed: Mapping[str, Todo],
-                            target: OrderedProblems,
-                            traced: FileLine | NoSourceReference) -> list[str]:
-        """The document's selected problems, phase and existing owners must agree."""
-        reading = context.plan_reading(context.comms.goals.todos.history_for_commander(context.incarnation))
-        problems = list(self.order.phase.order_refusals(reading, self.unplanned_reason))
-        held = tuple(todo for todo in listed.values() if todo.holder)
-        busy = tuple(todo for todo in held if todo.holder == unit and todo.id not in group)
-        if busy:
-            snapshot = context.comms.registry.snapshot()
-            occupied = {todo.holder for todo in held} | {context.commander} | context.parked
-            idle = sorted(thread.name for thread in snapshot.active_threads(snapshot.threads.values())
-                          if thread.name not in occupied and thread.role.executor(thread))
-            problems.append(f'{unit} already holds orders '
-                            f'{", ".join(todo.id for todo in busy)}; '
-                            f'running units holding no order: {", ".join(idle) or "none"}')
-        if not group or any(not ProblemNumber.accepts(pid) for pid in group):
-            problems.append('problems: fix: supply an array of P<n> IDs, or use order problem')
-        problems.extend(target.refusals(self, group, listed))
-        for pid in group:
-            try:
-                with MalformedRecord.refusing(pid):
-                    if pid in listed:
-                        listed[pid].holder_state.require_trace(unit, traced)
-            except MalformedRecord as error:
-                problems.append(str(error))
-        return problems
-
-    def check_refusals(self, context: CommanderContext) -> tuple[str, ...]:
-        """Send and correction use the check owner's clean-main acceptance rule."""
-        try:
-            with MalformedRecord.refusing('order.check'):
-                self.order.require_writable()
-                check = self.order.check
-                if Path(check.directory).is_dir():
-                    Repo.git(Path(check.directory), 'fetch', '-q', 'origin', 'main')
-                    base = self.order.check_base(Path(check.directory))
-                    check.require_acceptance(base, context.worktrees)
-        except MalformedRecord as error:
-            return (f'order.check: {error}; fix: supply a focused measurable command',)
-        return ()
-
-    def source_refusals(self, context: CommanderContext,
-                        traced: FileLine | NoSourceReference) -> list[str]:
-        """Scope, prose and pattern citations share the order's source revision."""
-        order, check = self.order, self.order.check
-        problems = []
-        for label, validate in (('order.source', order.require_references),
-                                ('order.check.directory', check.require_directory)):
-            try:
-                with MalformedRecord.refusing(label):
-                    validate()
-            except MalformedRecord as error:
-                problems.append(f'{label}: {error}; fix: name an existing source location or directory')
-        references = tuple(dict.fromkeys((
-            *FileLine.scan('\n'.join((self.prose, *order.edits))),
-            *(reference for slop in self.slop for reference in (slop.at, slop.by)),
-            *traced.located(),
-        )))
-        deleted = {Path(module).stem for module in order.deletes.modules}
-        if deleted and (unread := context.importers(deleted, check)):
-            problems.append(f'the order deletes {sorted(deleted)}, which {unread} import; '
-                            'the check must also count their `from agent_comms` imports')
-        for reference in references:
-            try:
-                with MalformedRecord.refusing(reference.to_wire()):
-                    reference.require_exists(Path(check.directory), order.cited_revision)
-            except MalformedRecord as error:
-                problems.append(f'{error}; fix: cite an existing source line')
-        body = '\n'.join((self.prose, *order.edits, order.report))
-        if any((Path(check.directory) / reference.file).resolve().is_relative_to(
-                   Path(check.directory) / 'tools/') for reference in references) and not all(
-                said in body for said in ('--root tools', '--root src')):
-            problems.append('the order changes tools/: say "ratchet with --root tools and with '
-                            '--root src, each as its own command"')
-        return problems
-
-    def require_send(self, context: CommanderContext, unit: str,
-                     group: Sequence[str], listed: Mapping[str, Todo], target: OrderedProblems,
-                     reassign: Reassignment, holders: Sequence[str], clean: bool,
-                     traced: FileLine | NoSourceReference) -> None:
-        """Collect field refusals before recording any part of this document."""
-        problems = self.problems_found(clean)
-        try:
-            context.comms.registry.storage_rule.require_quota(context.comms.registry.require(unit))
-        except SelectedToolDenied as quota:
-            problems.append(f'{unit}: {quota}: it cleans up its own checkouts and scratch '
-                            'before it gets new work')
-        problems.extend(self.assignment_refusals(context, unit, group, listed, target, traced))
-        problems.extend(self.source_refusals(context, traced))
-        problems.extend(self.check_refusals(context))
-        problems.extend(reassign.refusals(holders))
-        if problems:
-            sys.exit('Refused order:\n  ' + '\n  '.join(problems))
-        fired = tuple(listed[pid] for pid in group if pid in listed and listed[pid].struck_out(unit))
-        self.order.run.require_assignment(context.comms.registry.require(unit).incarnation,
-                                          fired, ProblemGoalOrder.StrikeLimit)
-
-    def message(self, context: CommanderContext, unit: str, group: Sequence[str],
-                replacing: bool, reassign: Reassignment) -> str:
-        """Render owned fields; never parse this message back into an order."""
-        instructions = '\n'.join((self.prose, *(slop.render() for slop in self.slop),
-            f'Problems: {", ".join(group)}', *self.order.work_instructions()))
-        replacement = '\nThis replaces my earlier order on it; drop that one.' if replacing else ''
-        storage = context.comms.registry.storage_rule.order_text(
-            context.comms.registry.require(unit),
-            [f'{repo.checkout}/.venv/bin/python' for repo in context.repos])
-        return (instructions + replacement + reassign.note() + '\n' + storage
-                + '\nIf two lines of this order conflict, take the narrower reading, '
-                'say which one you took, and proceed; do not stop to ask.'
-                + '\nStart now and push as you go.\n'
-                + '\n'.join(line for pid in group for line in self.order.scope.instructions(pid)))
-
-    def record(self, context: CommanderContext, unit: str, group: Sequence[str],
-               target: OrderedProblems, traced: FileLine | NoSourceReference,
-               review_at: RecordedEventTime, request: OwnerRequestId) -> None:
-        """The native tools record the typed order; the document supplies no second store."""
-        target.record(context, self.order, unit, group, traced, request, review_at)
-
-    def send_back(self, context: Commander, unit: str, group: Sequence[str],
-                  replacing: bool, clean: bool, reassign: Reassignment, struck_already: bool) -> None:
-        if replacing and not clean:
-            reassign.send_back(context, self, unit, group[0], struck_already)
-
-
 STAGES = (
     "tool call",
     "review",
@@ -543,23 +414,6 @@ class CommanderContext(CommanderConfig):
         thread = self.comms.registry.require(unit)
         return thread.runtime.history_source(self.comms.root, thread.incarnation).last_tool_call()
 
-    def board_text(self) -> str:
-        """Render the live Todo view without saving a competing board file."""
-        lines = ['# Fleet board', '',
-                 "Live view of Core's Todo store; no board file is saved.", '',
-                 '| Problem | Owner file | Owner | Order | Due | Check | Progress | Order state '
-                 '| Strikes | Owner last acted |',
-                 '|---|---|---|---|---|---|---|---|---|---|']
-        listed, read = self.todos(), self.progress()
-        activity = {unit: self.last_activity(unit) for unit in {t.holder for t in listed if t.holder}}
-        for t in sorted(listed, key=lambda t: ProblemNumber.parse(t.id).number):
-            lines.append(f'| {t.id}: {t.text.replace("|", "&#124;")} | {t.order.board_cells(t)} | '
-                         f'{read[t.id].line if t.id in read else "-"} | {t.order.line} | '
-                         f'{t.strike_count} | {activity[t.holder].clock() if t.holder else "-"} |')
-        history = self.comms.goals.todos.history_for_commander(self.incarnation)
-        lines += ['', '## Withdrawn orders', '',
-                  *(f'- {line}' for t in history for line in t.order.withdrawals(t))]
-        return '\n'.join(lines) + '\n'
 
 
 class OrderedProblems(ABC):
@@ -738,29 +592,7 @@ class Commander(CommanderContext):
              answers: tuple[MessageReference, ...] = (), *, request: RequestSelection) -> None:
         """Record the decoded order, or report every failed prerequisite before any write."""
         document = document.resolved(self, finding)
-        group = target.group(document)
-        listed = {todo.id: todo for todo in self.todos()}
-        holders = sorted({listed[pid].holder for pid in group if pid in listed} - {unit, None})
-        replacing = target.replacing(unit, group, listed)
-        document.require_send(self, unit, group, listed, target, reassign, holders, clean, traced)
-        struck_already = replacing and listed[group[0]].struck_on_order(unit)
-        measured = MeasuredReview.read(self.comms.goals.todos)
-        review_at = measured.review_at(document.order)
-        message = document.message(self, unit, group, replacing, reassign)
-        request_id = request.for_order(self.comms.goals.todos, self.incarnation)
-        document.record(self, unit, group, target, traced, review_at, request_id)
-        sent = self.post(VerdictAudience((unit,)), message, answers)
-        for pid in group:
-            self.call(CommsChangeProblemTool(problem=pid, operation=OrderMessage(
-                self.comms.goals.todos.get(pid).revision, self.actor_identity, sent)))
-        for other in holders:
-            self.post(VerdictAudience((other,)),
-                      f'Taken off you: {", ".join(group)} ("{listed[group[0]].text[:120]}") '
-                      f'now belongs to {unit} because: {reassign.because()}. '
-                      'Stop that work; do not touch its files.')
-        print(f'{measured.summary}; review timer {review_at.clock()}')
-        print(document.order.id)
-        document.send_back(self, unit, group, replacing, clean, reassign, struck_already)
+        document.order.send(self, document, unit, clean, reassign, target, traced, answers, request)
 
     def correct_check(self, pid: str, line: str, why: str) -> None:
         """Correct the current check against the source preceding this order's delivery."""
@@ -769,9 +601,7 @@ class Commander(CommanderContext):
         check = self.read_check(line)
         if len(why.split()) < 8:
             sys.exit('Refused: --why says what was wrong with the recorded check (8+ words)')
-        repo = self.repo_directory(check.directory)
-        Repo.git(repo, 'fetch', '-q', 'origin', 'main')
-        check.require_acceptance(order.check_base(repo), self.worktrees)
+        order.require_check_acceptance(check, self.worktrees)
         self.call(CommsOrderCheckTool(problem=pid, check=check, why=why))
         print(f'{pid}: order {order.id} now checks `{check.command}`')
 
@@ -1415,11 +1245,6 @@ class IdleVerb(OrderVerb):
             print(thread.name)
 
 
-class BoardVerb(OrderVerb):
-    help = "show Core's current Todo store without saving a board file"
-
-    def run(self, ctx: Commander) -> None:
-        print(ctx.board_text(), end='')
 
 
 def main(a, ctx: Commander):

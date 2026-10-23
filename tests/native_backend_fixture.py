@@ -281,27 +281,25 @@ async def native_backend_fixture(tmp_path, *, package: VerifiedNativePackage,
                 await asyncio.gather(*connections, return_exceptions=True)
 
             async def retire_all():
-                try:
-                    async with AsyncExitStack() as retirement:
-                        retirement.push_async_callback(close_server)
-                        for child in owner.children:
-                            retirement.push_async_callback(child.shutdown)
-                        retirement.push_async_callback(owner.persistent.close)
-                finally:
-                    assert all(child.retired for child in owner.children)
-                    print(json.dumps({
-                        "saved_native_fixture": str(root),
-                        "localhost_posts": provider.posts,
-                        "native_input_proofs": sum(
-                            len(read_proof_rows(files))
-                            for files in {
-                                child.key[0].session.files(child.key[0].root)
-                                for child in owner.children
-                            }
-                            if files.input_proof.is_file()
-                        ),
-                        "children": [FieldCodec.encode(child.proc.identity) for child in owner.children],
-                        "children_retired": True,
-                    }))
+                async with AsyncExitStack() as retirement:
+                    retirement.push_async_callback(close_server)
+                    for child in owner.children:
+                        retirement.push_async_callback(child.shutdown)
+                    retirement.push_async_callback(owner.persistent.close)
+                assert all(child.retired or child.release_failure is not None for child in owner.children)
+                print(json.dumps({
+                    "saved_native_fixture": str(root),
+                    "localhost_posts": provider.posts,
+                    "native_input_proofs": sum(
+                        len(read_proof_rows(files))
+                        for files in {
+                            child.key[0].session.files(child.key[0].root)
+                            for child in owner.children
+                        }
+                        if files.input_proof.is_file()
+                    ),
+                    "children": [FieldCodec.encode(child.proc.identity) for child in owner.children],
+                    "children_retired": all(child.retired for child in owner.children),
+                }))
 
             await join_retirement(asyncio.create_task(retire_all()))

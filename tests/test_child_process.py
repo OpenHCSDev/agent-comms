@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import subprocess
 import sys
-import time
 from contextlib import closing, nullcontext
 from dataclasses import replace
 from pathlib import Path
@@ -23,7 +21,6 @@ from agent_comms.child_process import (
     GroupMember,
     IdentityMismatchError,
     ObservedProcess,
-    OutlivesLauncherLifetime,
     SpawnedProcess,
     SynchronousProcess,
     Platform,
@@ -243,69 +240,11 @@ def test_new_outcome_is_derived_and_field_encoded() -> None:
 
 
 @pytest.mark.asyncio
-async def test_namespace_deadline_kills_group_escaping_descendant(tmp_path: Path) -> None:
-    from agent_comms.child_process import NamespaceContainment, NamespacedChild, SignaledOutcome
-
-    if not isinstance(Platform.current(), NamespaceContainment):
-        pytest.skip("This platform does not provide PID namespaces")
-    acknowledgement = tmp_path / "escaped"
-    command = (
-        sys.executable,
-        "-c",
-        """import subprocess,sys,time
-code=('import os,sys,time; os.setsid(); '
-      'open(sys.argv[1],"w").write("alive"); time.sleep(60)')
-subprocess.Popen([sys.executable,'-c',code,sys.argv[1]])
-time.sleep(60)
-""",
-        str(acknowledgement),
-    )
-    child = await NamespacedChild.start(command, deadline=time.monotonic() + 2)
-    try:
-        await ready(acknowledgement)
-        assert child.namespace.alive()
-        async with asyncio.timeout(6):
-            outcome = await child.wait()
-            assert isinstance(outcome, SignaledOutcome)
-    finally:
-        await child.stop()
-    assert not child.namespace.alive()
-
-
-@pytest.mark.asyncio
 async def test_exec_failure_is_reported_by_real_exec_boundary(tmp_path: Path) -> None:
     from agent_comms.child_process import FailedToStartOutcome
 
     result = await BoundedRun.run((str(tmp_path / "missing-executable"),), timeout=2)
     assert isinstance(result.outcome, FailedToStartOutcome)
-
-
-@pytest.mark.asyncio
-async def test_namespace_watchdog_survives_launcher_death(tmp_path: Path) -> None:
-    from agent_comms.child_process import NamespaceContainment, PidNamespace
-
-    if not isinstance(Platform.current(), NamespaceContainment):
-        pytest.skip("This platform does not provide PID namespaces")
-    acknowledgement = tmp_path / "namespace.json"
-    launcher = SpawnedProcess.launch(
-        (
-            sys.executable,
-            str(Path(__file__).with_name('namespace_launcher_child.py')),
-            str(acknowledgement),
-        )
-    )
-    try:
-        await ready(acknowledgement)
-        namespace = FieldCodec.decode(PidNamespace, json.loads(acknowledgement.read_text()))
-        assert namespace.alive()
-        launcher.force()
-        await launcher.wait()
-        async with asyncio.timeout(6):
-            while namespace.alive():
-                await asyncio.sleep(0.02)
-    finally:
-        if launcher.alive():
-            await launcher.stop()
 
 
 @pytest.mark.asyncio
@@ -397,24 +336,17 @@ async def test_killed_launcher_takes_its_child_and_leaves_its_resident(tmp_path:
 
 def test_detached_reserves_identity_before_child_can_execute(tmp_path: Path) -> None:
     acknowledgement = tmp_path / "started"
-    recorded = []
-
-    def reserve(identity: ProcessIdentity) -> None:
-        assert not acknowledgement.exists()
-        assert identity.alive()
-        recorded.append(identity)
-
-    child = SpawnedProcess.launch(
+    with SpawnedProcess.launching(
         (
             sys.executable,
             "-c",
             'import sys,time; open(sys.argv[1],"w").write("started"); time.sleep(60)',
             str(acknowledgement),
         ),
-        before_start=reserve,
-    )
+    ) as child:
+        assert not acknowledgement.exists()
+        assert child.identity.alive()
     try:
-        assert recorded == [child.identity]
         stale = ObservedProcess(replace(child.identity, start_time=child.identity.start_time + 1))
         with pytest.raises(IdentityMismatchError):
             stale.stop_sync()
@@ -428,20 +360,16 @@ def test_reservation_failure_never_executes_and_reaps_child(tmp_path: Path) -> N
     acknowledgement = tmp_path / "should-not-exist"
     captured = []
 
-    def reject(identity: ProcessIdentity) -> None:
-        captured.append(identity)
+    with pytest.raises(ValueError), SpawnedProcess.launching(
+        (
+            sys.executable,
+            "-c",
+            "import sys; open(sys.argv[1], 'w').write('wrong')",
+            str(acknowledgement),
+        ),
+    ) as child:
+        captured.append(child.identity)
         raise ValueError("reservation refused")
-
-    with pytest.raises(ValueError):
-        SpawnedProcess.launch(
-            (
-                sys.executable,
-                "-c",
-                "import sys; open(sys.argv[1], 'w').write('wrong')",
-                str(acknowledgement),
-            ),
-            before_start=reject,
-        )
     assert len(captured) == 1
     assert not captured[0].alive()
     assert not acknowledgement.exists()

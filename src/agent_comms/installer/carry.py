@@ -69,8 +69,9 @@ class Carry(ABC):
     def name(cls) -> str:
         return cls.module().stem
 
+    @abstractmethod
     def backup_files(self) -> tuple[Annotated[Path, PathText], ...]:
-        raise RuntimeError(f'{self.name()} needs the full agent-comms install operation')
+        """The existing files this step rewrites or deletes, backed up before it applies."""
 
     @abstractmethod
     def carry(self, *, apply: bool) -> Carried:

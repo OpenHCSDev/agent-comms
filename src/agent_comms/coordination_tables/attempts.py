@@ -97,7 +97,7 @@ class AttemptRecord(
     declared_name="attempts",
 ):
     counter_reference = ForeignKey(
-        ("owner_lookup", "owner_generation"), OwnerGenerations, ("owner_lookup", "generation")
+        columns=("owner_lookup", "owner_generation"), target=OwnerGenerations, target_columns=("owner_lookup", "generation")
     )
     column_orders = (
         NonDecreasing(("updated_at_ms", "last_progress_at_ms", "backend_done", "process_dead")),
@@ -289,12 +289,12 @@ class AttemptRecord(
         from agent_comms.coordination_tables.participants import Participants
 
         return (
-            ForeignKey(("execution_id",), ExecutionRecord, ("execution_id",)),
-            ForeignKey(("owner_lookup",), Participants, ("participant_lookup",)),
+            ForeignKey(columns=("execution_id",), target=ExecutionRecord, target_columns=("execution_id",)),
+            ForeignKey(columns=("owner_lookup",), target=Participants, target_columns=("participant_lookup",)),
             ForeignKey(
-                ("execution_id", "attempt_ordinal", "owner_lookup", "active_required_status"),
-                ExecutionRecord,
-                ("execution_id", "current_attempt_ordinal", "owner_lookup", "status"),
+                columns=("execution_id", "attempt_ordinal", "owner_lookup", "active_required_status"),
+                target=ExecutionRecord,
+                target_columns=("execution_id", "current_attempt_ordinal", "owner_lookup", "status"),
                 deferred=True,
             ),
         )

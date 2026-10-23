@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Callable
 from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -26,6 +27,7 @@ from .input_attempt import (
 )
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from .lifecycle_capability import Unresolved
+from .locked_store import DocumentChange
 from .message_reference import MessageReference
 from .messages import Message
 from .threads import Thread
@@ -235,15 +237,18 @@ class InputDispositions(DurableStore):
         with self.snapshot() as connection:
             return self._document(connection, where, parameters)
 
-    def _update(self, where: str, parameters: tuple, change) -> InputDocument:
+    def _update[R](
+        self, where: str, parameters: tuple,
+        change: Callable[[InputDocument], DocumentChange[InputDocument, R]],
+    ) -> R:
         """Change only the selected rows; the callback returns the original to skip writing."""
         with self.writing() as connection:
             original = self._document(connection, where, parameters)
             changed = change(original)
-            for key, row in changed.rows.items():
+            for key, row in changed.document.rows.items():
                 if original.rows.get(key) is not row:
                     InputDispositionRow(key, row).upsert(connection)
-            return changed
+            return changed.result
 
     def read(self, keys: tuple[str, ...]) -> InputDocument:
         return self._select(*_members("key", keys))
@@ -277,14 +282,14 @@ class InputDispositions(DurableStore):
         self, *originals: ReservedInput, ownership: ExitStack | None = None,
     ) -> InputDocument:
         """Publish one original cohort; return its exact captured document."""
-        def reserve(original: InputDocument) -> InputDocument:
+        def reserve(original: InputDocument) -> DocumentChange[InputDocument, InputDocument]:
             changed = original.record(*originals)
             if changed is not original and ownership is not None:
                 ownership.callback(
                     self.settle_unbound,
                     tuple(key for key in changed.rows if key not in original.rows),
                 )
-            return changed
+            return DocumentChange.to(changed)
 
         return self._update(*_members("key", (row.key for row in originals)), reserve)
 
@@ -309,21 +314,18 @@ class InputDispositions(DurableStore):
         return document
 
     def _transition(self, key: str, change) -> bool:
-        changed = False
-
-        def update(document: InputDocument) -> InputDocument:
-            nonlocal changed
+        def update(document: InputDocument) -> DocumentChange[InputDocument, bool]:
             successor = document.transition((key,), change)
-            changed = successor is not document
-            return successor
+            return DocumentChange(successor, successor is not document)
 
-        self._update(*_members("key", (key,)), update)
-        return changed
+        return self._update(*_members("key", (key,)), update)
 
     def clear_unbound(self, keys: tuple[str, ...]) -> InputDocument:
         return self._update(
             *_members("key", keys),
-            lambda document: document.transition(keys, lambda row: row.clear_unbound()),
+            lambda document: DocumentChange.to(
+                document.transition(keys, lambda row: row.clear_unbound())
+            ),
         )
 
     def clear_native(self, key: str, native_id: str, text: str) -> None:
@@ -361,22 +363,17 @@ class InputDispositions(DurableStore):
         self, keys: tuple[str, ...], *, claim_scope: int, turn_id: str, native_id: str, text: str
     ) -> bool:
         """Bind the complete captured original atomically; no partial batch grant."""
-        bound = False
-
-        def change(document: InputDocument) -> InputDocument:
-            nonlocal bound
+        def change(document: InputDocument) -> DocumentChange[InputDocument, bool]:
             if not keys or len(set(keys)) != len(keys):
-                return document
+                return DocumentChange(document, False)
             successors = {name: row for key in keys for name, row in document.lookup(key).bind(
                 claim_scope=claim_scope, turn_id=turn_id, native_id=native_id, text=text
             ).successors(key).items()}
             if successors.keys() != set(keys):
-                return document
-            bound = True
-            return replace(document, rows={**document.rows, **successors})
+                return DocumentChange(document, False)
+            return DocumentChange(replace(document, rows={**document.rows, **successors}), True)
 
-        self._update(*_members("key", keys), change)
-        return bound
+        return self._update(*_members("key", keys), change)
 
     def started(self, key: str, *, turn_id: str, native_id: str, text: str) -> bool:
         return self._transition(
@@ -385,7 +382,9 @@ class InputDispositions(DurableStore):
 
     def settle_unbound(self, keys: tuple[str, ...]) -> InputDocument:
         """Publish one complete retirement and return that exact document cut."""
-        return self._update(*_members("key", keys), lambda document: document.settle_unbound(keys))
+        return self._update(
+            *_members("key", keys), lambda document: DocumentChange.to(document.settle_unbound(keys))
+        )
 
     def review_for_goal(
         self,
@@ -399,7 +398,7 @@ class InputDispositions(DurableStore):
     ) -> None:
         decision = GoalInputDecision(goal_revision, turn_id)
 
-        def review(document: InputDocument) -> InputDocument:
+        def review(document: InputDocument) -> DocumentChange[InputDocument, InputDocument]:
             rows = dict(document.rows)
             for row in observed:
                 if row.key not in keys or (row.key in rows and rows[row.key] != row):
@@ -411,11 +410,11 @@ class InputDispositions(DurableStore):
             ):
                 raise ValueError("Reviewed inputs changed; inspect them again.")
             if not keys:
-                return document
-            return replace(
+                return DocumentChange.to(document)
+            return DocumentChange.to(replace(
                 document,
                 rows={**rows, **{key: rows[key].review(goal_id, decision) for key in keys}},
-            )
+            ))
 
         self._update(*_members("key", keys), review)
 
@@ -425,13 +424,15 @@ class InputDispositions(DurableStore):
         *,
         scope: InputDeliveryScope = UNOBSERVED_DELIVERY_SCOPE,
     ) -> DeliveryOverview:
-        def dismiss(document: InputDocument) -> InputDocument:
+        def dismiss(document: InputDocument) -> DocumentChange[InputDocument, InputDocument]:
             changed = {
                 row.key: replace(row, notice_dismissed=True)
                 for row in document.unknown(owners)
                 if scope.historical_notice(row) and not row.notice_dismissed
             }
-            return replace(document, rows={**document.rows, **changed}) if changed else document
+            return DocumentChange.to(
+                replace(document, rows={**document.rows, **changed}) if changed else document
+            )
 
         where, parameters = _members("owner", sorted(owners))
         return self._update(f"unresolved = 1 AND {where}", parameters, dismiss).delivery_overview(

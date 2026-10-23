@@ -10,7 +10,7 @@ from dataclasses import dataclass, replace
 
 import pytest
 
-from agent_comms.locked_store import LockedStore
+from agent_comms.locked_store import DocumentChange, LockedStore
 from agent_comms.pi_counts import PiCount
 from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoDocument, RuntimeInfoStore
 from agent_comms.store_files import ExclusiveLock, SharedLock, _store_lock
@@ -21,22 +21,21 @@ def observation(thread="goal"):
 
 
 def record(store, value):
-    store.update(lambda document: RuntimeInfoDocument({**document.observations, value.thread: value}))
+    store.update(lambda document: DocumentChange.to(
+        RuntimeInfoDocument({**document.observations, value.thread: value})
+    ))
 
 
 def clear(store, thread, *, timestamp=None):
-    removed = False
-
     def change(document):
-        nonlocal removed
         current = document.observations.get(thread)
         if current is None or (timestamp is not None and current.timestamp != timestamp):
-            return document
-        removed = True
-        return RuntimeInfoDocument({key: row for key, row in document.observations.items() if key != thread})
+            return DocumentChange(document, False)
+        return DocumentChange(RuntimeInfoDocument(
+            {key: row for key, row in document.observations.items() if key != thread}
+        ), True)
 
-    store.update(change)
-    return removed
+    return store.update(change)
 
 
 def _hold_lock(path, mode, ready, release):

@@ -494,25 +494,16 @@ class OwnerLifecycle:
         env = initial_input.launch(thread.launch()).apply(env)
         env[NativeArguments.binary_key] = agent_bin
         agent_args.apply(env)
-        owned: Thread | None = None
-
-        def reserve(identity: ProcessIdentity) -> None:
-            nonlocal owned
-            owned = self._register_owner(thread, identity, initial_input)
-
-        with owner_process_output(self.root, thread) as output:
-            SpawnedProcess.launch(
-                (str(launch_runtime.interpreter), "-m", "agent_comms.worker",
-                 *LaunchRoot.from_path(self.launch_authority.child_root).arguments()),
-                env=env,
-                cwd=thread.worktree,
-                output=output,
-                before_start=reserve,
-                runtime=launch_runtime,
-                lifetime=OutlivesLauncherLifetime,
-            )
-        assert owned is not None
-        return owned
+        with owner_process_output(self.root, thread) as output, SpawnedProcess.launching(
+            (str(launch_runtime.interpreter), "-m", "agent_comms.worker",
+             *LaunchRoot.from_path(self.launch_authority.child_root).arguments()),
+            env=env,
+            cwd=thread.worktree,
+            output=output,
+            runtime=launch_runtime,
+            lifetime=OutlivesLauncherLifetime,
+        ) as child:
+            return self._register_owner(thread, child.identity, initial_input)
 
     def _require_same_stop_owner(self, thread: Thread, claimed_generation: int) -> None:
         snapshot = self.registry.snapshot()

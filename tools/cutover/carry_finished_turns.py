@@ -14,7 +14,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.historical_views import HistoryArchive
 from agent_comms.installer.carry import Carried, Carry
 from agent_comms.registry_store import RegistryStore
-from agent_comms.store_files import _atomic_write_text, _store_lock
+from agent_comms.store_files import AtomicFile, _store_lock
 
 from .carry_bus_history import BusHistory, CarryCatalogSource
 from .carry_dead_turns import DeadTurns
@@ -63,8 +63,8 @@ class FinishedTurns(Carry):
                 for name in result.rewritten
             ]
             if resealed:
-                _atomic_write_text(
-                    HistoryArchive.path_in(self.root), json.dumps(FieldCodec.encode(tuple(rebound)))
+                AtomicFile(HistoryArchive.path_in(self.root)).write_text(
+                    json.dumps(FieldCodec.encode(tuple(rebound)))
                 )
                 rewritten.append(HistoryArchive.filename)
             finished = sum(int(result.detail.get("finished", 0)) for _, result in results)

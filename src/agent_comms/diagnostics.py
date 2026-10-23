@@ -7,18 +7,19 @@ import json
 import os
 import time
 from contextlib import contextmanager
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
-from enum import StrEnum
 from pathlib import Path
 from traceback import TracebackException
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 
 from .child_process import Platform
-from .field_codec import FieldCodec, Id128Text, MalformedRecord
+from .field_codec import FieldCodec, Id128Text
 from .locked_store import DurableFile, PatternFile
 from .store_files import AtomicFile
+from .turn_failure import TurnFailure
 
 if TYPE_CHECKING:
     from .activity import DrainDiagnostic
@@ -42,20 +43,6 @@ def owner_process_output(root: Path, thread: Thread):
         output.write(f"Owner launch: {thread.name}\n")
         output.flush()
         yield output
-
-
-class FailureReason(StrEnum):
-    BACKEND_FAILED = "backend_failed"
-    PREFLIGHT_TIMEOUT = "native_preflight_timeout"
-    PREFLIGHT_EXIT = "native_preflight_exit"
-    INPUT_ID_UNAVAILABLE = "pi_input_id_unavailable"
-    IDENTITY_UNCERTAIN = "session_identity_uncertain"
-    AUTHORITY_CHANGED = "input_authority_changed"
-    FOLLOWUP_UNRECOGNIZED = "unrecognized_followup_input"
-    INPUT_MISSING = "current_prompt_input_missing"
-    MODEL_REQUEST_FAILED = "model_request_failed"
-    FINAL_STOP_MISSING = "assistant_final_stop_missing"
-    QUEUED_INPUT_MISSING = "queued_input_start_missing"
 
 
 @dataclass
@@ -134,34 +121,20 @@ class RequestObservations(DurableFile, PatternFile):
             output.write(json.dumps(record) + "\n")
 
 
-def terminal_failure_reason(event: dict) -> FailureReason:
-    """Allowlisted backend terminal classification; never diagnostic prose."""
-    measurements = event.get("diagnostic", {})
-    if not isinstance(measurements, dict):
-        measurements = {}
-    try:
-        reason = measurements.get("reason") or event.get("reason_code")
-        return FieldCodec.decode(FailureReason, reason)
-    except MalformedRecord:
-        return FailureReason.BACKEND_FAILED
-
-
 def record_terminal_failure(
     root: Path,
     *,
     turn_id: str,
     thread: str,
-    event: dict,
+    failure: type[TurnFailure],
     sequences: tuple[int, ...],
+    measurements: Mapping[str, object] | None = None,
     native_response: Response | None = None,
     source_error: BaseException | None = None,
 ) -> Path:
     """Persist before publishing the failure notice; this record grants no retry authority."""
     Id128Text.decode(turn_id)
-    measurements = event.get("diagnostic", {})
-    if not isinstance(measurements, dict):
-        measurements = {}
-    reason = terminal_failure_reason(event)
+    measurements = measurements or {}
     safe = {
         key: value
         for key in (
@@ -177,7 +150,7 @@ def record_terminal_failure(
         "version": 1,
         "turn_id": turn_id,
         "thread": thread,
-        "reason": reason.value,
+        "failure": failure.declared_name,
         "sequences": list(sequences),
         "measurements": safe,
         "outcome": "failed; inputs must not be replayed automatically",
@@ -186,40 +159,6 @@ def record_terminal_failure(
         document["native_response"] = native_response.rejection_details()
     document.update(_source_error_evidence(source_error))
     return DiagnosticDocument.write(root, turn_id, document)
-
-
-@dataclass(frozen=True)
-class NativeTerminalFailureRecord:
-    """The document ``record_terminal_failure`` writes for a native terminal failure.
-
-    Core writes it only after verifying the failed input's live context.
-    """
-
-    version: Literal[1]
-    turn_id: str
-    thread: str
-    reason: FailureReason
-    sequences: tuple[int, ...]
-    measurements: dict[str, int]
-    outcome: str
-    source_error: str
-    native: dict[str, str]
-
-    @classmethod
-    def read(cls, root: Path, input_id: str) -> NativeTerminalFailureRecord:
-        path = DiagnosticDocument.path_in(root, name=input_id)
-        record = FieldCodec.decode(cls, json.loads(path.read_text()))
-        if record.turn_id != input_id or not record.raised.startswith(
-            "agent_comms.native_pi.NativePiTerminalFailure: "
-        ):
-            raise ValueError("Diagnostic does not record a native terminal failure for this input")
-        return record
-
-    @property
-    def raised(self) -> str:
-        """The first unindented line of the last traceback is the raised exception."""
-        final = self.source_error.rpartition("Traceback (most recent call last):\n")[2]
-        return next((line for line in final.splitlines() if not line.startswith(" ")), "")
 
 
 def record_drain_failure(

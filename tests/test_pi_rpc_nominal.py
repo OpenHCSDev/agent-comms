@@ -119,7 +119,7 @@ def test_failure_precedence_and_text_have_one_owner(left, right):
     expected = min((left, right), key=lambda cls: cls.declared_position())
     assert type(session.output.failure) is expected
     assert session.output.failure_text == expected.__name__
-    assert session.output.failure.code == expected.code
+    assert session.output.failure.declared_name == expected.declared_name
 
 
 def test_external_formats_are_derived_and_pin_wire_spellings():
