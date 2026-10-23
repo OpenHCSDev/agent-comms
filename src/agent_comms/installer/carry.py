@@ -1,6 +1,6 @@
 """The steps a retained bus is carried through when its durable format changes.
 
-A step is one module in ``tools/cutover``, ``carry_<what>.py``, holding one ``Carry``
+A step is one module in ``tools/cutover`` holding one ``Carry``
 subclass. Only ``agent-comms install`` runs it, with the target revision's ``src`` and
 ``tools``, so every step runs against the source it is installed with. A step is
 idempotent: data it already carried reports no change, so a step's own dry run is the
@@ -13,18 +13,18 @@ every bus has run it.
 from __future__ import annotations
 
 import inspect
+import json
 import subprocess
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from graphlib import TopologicalSorter
-from importlib import import_module
 from pathlib import Path
 from typing import Annotated, ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import PathText
+from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.installer.interpreter_operation import InterpreterOperation
 
 STEPS = Path("tools/cutover")
@@ -36,38 +36,25 @@ class Carried:
 
     changed: int
     detail: dict[str, int | bool] = field(default_factory=dict)
-    rewritten: tuple[str, ...] = ()
-    """Files under the bus root this run wrote; every other file stays byte-identical."""
+    rewritten: tuple[Annotated[Path, PathText], ...] = ()
+    """Files under the bus root this run wrote or deleted; every other file stays
+    byte-identical."""
 
 
 @dataclass(frozen=True)
-class Carry(ABC):
+class Carry(DeclaredFamily, affix="", discovery_package="cutover"):
     """One migration's decoded source, destination and retirement location."""
 
     root: Annotated[Path, PathText]
     original_root: Annotated[Path, PathText]
     spill_dir: Annotated[Path, PathText]
 
-    declared: ClassVar[dict[str, type[Carry]]] = {}
     precedes: ClassVar[tuple[type[Carry], ...]] = ()
     """Steps whose decoders require this step's output, regardless of addition date."""
-    """Every step imported so far, by its module name."""
-
-    def __init_subclass__(cls, **kwargs: object) -> None:
-        super().__init_subclass__(**kwargs)
-        if inspect.isabstract(cls):
-            return
-        if cls.name() in Carry.declared and Carry.declared[cls.name()] is not cls:
-            raise TypeError(f"{cls.name()} declares a second carry step")
-        Carry.declared[cls.name()] = cls
 
     @classmethod
     def module(cls) -> Path:
         return Path(inspect.getfile(cls)).resolve()
-
-    @classmethod
-    def name(cls) -> str:
-        return cls.module().stem
 
     @abstractmethod
     def backup_files(self) -> tuple[Annotated[Path, PathText], ...]:
@@ -92,6 +79,13 @@ class CarryOperation[Answer](InterpreterOperation[Answer, Carry], DeclaredFamily
 
     @abstractmethod
     def run(self, step: Carry) -> Answer: ...
+
+    def encode_answers(self, answers: tuple[Answer, ...]) -> str:
+        """One pass's answers, in step order, under this operation's declared answer type."""
+        return json.dumps(FieldCodec.encode(answers, tuple[self.answer_type(), ...]))
+
+    def decode_answers(self, answers: str) -> tuple[Answer, ...]:
+        return FieldCodec.decode(tuple[self.answer_type(), ...], FieldCodec.parse(answers))
 
 @dataclass(frozen=True)
 class BackupFilesOperation(CarryOperation[tuple[Annotated[Path, PathText], ...]]):
@@ -123,19 +117,19 @@ class CarryChain:
     def at(cls, tree: Path) -> CarryChain:
         """Import the tree's steps (its ``tools`` is on the path) and order them by the
         first-parent commit that added each file."""
-        directory = (tree / STEPS).resolve()
-        for path in sorted(directory.glob("carry_*.py")):
-            import_module(f"{directory.name}.{path.stem}")
-        steps = [step for step in Carry.declared.values() if step.module().parent == directory]
+        tree = tree.resolve()
+        directory = tree / STEPS
+        steps = [step for step in Carry.members_with(Carry) if step.module().parent == directory]
         log = subprocess.check_output(
             ["git", "-C", str(tree), "log", "-m", "--first-parent", "--no-renames",
              "--diff-filter=A", "--reverse", "--name-only", "--format=", "HEAD", "--",
              str(STEPS)]).decode().split()
-        added = {Path(path).stem: position for position, path in reversed(list(enumerate(log)))}
-        unordered = sorted(step.name() for step in steps if step.name() not in added)
+        added = {Path(path): position for position, path in reversed(list(enumerate(log)))}
+        unordered = sorted(step.declared_name for step in steps
+                           if step.module().relative_to(tree) not in added)
         if unordered:
             raise ValueError(f"{unordered} are not on the main line, so nothing orders them")
-        ordered = sorted(steps, key=lambda step: added[step.name()])
+        ordered = sorted(steps, key=lambda step: added[step.module().relative_to(tree)])
         dependencies: dict[type[Carry], set[type[Carry]]] = {step: set() for step in ordered}
         for step in ordered:
             for later in step.precedes:
@@ -151,4 +145,3 @@ class CarryChain:
             if dry_run(step).changed:
                 return self.steps[position:]
         return ()
-

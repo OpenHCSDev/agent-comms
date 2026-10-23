@@ -21,7 +21,7 @@ def test_carry_drops_the_table_and_its_triggers_once(tmp_path):
 
     with maintenance_held(tmp_path):
         assert step.carry(apply=False).changed == 1
-        assert step.carry(apply=True).rewritten == (CoordinationStore.filename,)
+        assert step.carry(apply=True).rewritten == (step.path.relative_to(step.root),)
         assert step.carry(apply=False).changed == 0
         with sqlite3.connect(path) as db:
             assert not db.execute(

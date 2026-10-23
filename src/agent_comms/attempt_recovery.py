@@ -93,7 +93,7 @@ class VerifiedOwnerLoss(ABC):
             if attempt is None or not snapshot.is_current:
                 raise RecoveryBlocked("native recovery requires the current attempted execution")
             try:
-                release = comms.owners.releases.get(attempt.owner_thread)
+                release = comms.owners.releases.get(registry.by_lookup[attempt.owner_lookup].name)
             except (OSError, RelationViolationError, MalformedRecord) as error:
                 raise RecoveryBlocked("native owner release acknowledgement is invalid") from error
             try:
@@ -203,7 +203,7 @@ class DispatchedOwnerLoss(VerifiedOwnerLoss):
         self.require_native_exit()
         PublicationAppendDispatches.resolve_retained(
             store, self.boundary.bus, self.boundary,
-            owner_lookup=owner.incarnation.lookup, owner_thread=owner.name,
+            owner_lookup=owner.incarnation.lookup,
             execution_id=execution_id,
         )
         pointer = CurrentExecutions.require(store.session._connection, owner_lookup=owner.incarnation.lookup)

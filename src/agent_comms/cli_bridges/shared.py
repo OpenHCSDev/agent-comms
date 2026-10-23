@@ -23,7 +23,6 @@ from pathlib import Path
 from typing import Annotated, ClassVar, Generic, Literal, Self, TextIO, TypeVar
 
 from acp.schema import SessionConfigSelectOption
-from metaclass_registry import RegistryConfig
 from pydantic import Field, TypeAdapter, model_validator
 
 from agent_comms import field_codec, messages
@@ -799,7 +798,7 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
     async def accept(self, message: messages.Message) -> None:
         conversation = message.type.conversation_message
         outcome = UnconfirmedOutcome if conversation else FilteredOutcome
-        delivery = DeliveryRow(message.message_id, json.dumps(message.to_wire(), separators=(',', ':')) + '\n', outcome)
+        delivery = DeliveryRow(message.message_id, FieldCodec.compact(message.to_wire()) + '\n', outcome)
         with self.db:
             first = delivery.insert_if_absent(self.db).rowcount
         if not first:
@@ -889,16 +888,13 @@ class TranscriptBridge(PublishesTranscript, CliBridge[BridgeOptions]):
                 await comms.bus.when_open(partial(output.publish_batch, pending))
 
 
-class MonitorFrame(TaggedWire, ABC):
+class MonitorFrame(TaggedWire, ABC, affix=""):
     """Our line protocol inside the harness's task-notification envelope."""
-    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
     @abstractmethod
     async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None: ...
 
 
-class MonitorProbe(MonitorFrame):
-    wire_tag = 'probe'
+class MonitorProbe(MonitorFrame, declared_name='probe'):
     protocol: Literal['agent-comms-monitor'] = 'agent-comms-monitor'
     wire_prefix: ClassVar[str] = '{"protocol":' + json.dumps(protocol) + ','
     session: str
@@ -908,8 +904,7 @@ class MonitorProbe(MonitorFrame):
         await bridge.confirm_probe(self)
 
 
-class MonitorPart(MonitorFrame):
-    wire_tag = 'part'
+class MonitorPart(MonitorFrame, declared_name='part'):
     id: str
     sender: str
     number: int = Field(ge=1)
@@ -927,8 +922,7 @@ class MonitorPart(MonitorFrame):
             await delivery.monitor.confirm(bridge, delivery, self, record)
 
 
-class ForeignMonitorFrame(MonitorFrame):
-    wire_tag = 'foreign'
+class ForeignMonitorFrame(MonitorFrame, declared_name='foreign'):
     text: str
 
     async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None:

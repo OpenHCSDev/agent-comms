@@ -8,7 +8,7 @@ from threading import Thread as WorkerThread
 import pytest
 
 from agent_comms.channel_targets import CommandTarget
-from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
+from agent_comms.channels import AnyOfMatch, ViewPredicate, ActivityView
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import DMPaintedBoundChanged, DMScopeChanged
 from agent_comms.message_page import PageBounds
@@ -86,12 +86,10 @@ def test_default_off_and_opt_in_only_changes_display(tmp_path):
 def test_mode_rejects_builtins_union_view_and_unknown_without_sidecar_mutation(tmp_path):
     comms = populated(tmp_path)
     comms.channels.set_saved_view(
-        SavedView(
-            "engineering", ViewKind.ACTIVITY, ViewPredicate(AnyOfMatch, frozenset({"api", "ui"}))
-        )
+        ActivityView('engineering', ViewPredicate(AnyOfMatch, frozenset({'api', 'ui'})))
     )
     comms.channels.set_saved_view(
-        SavedView("saved", ViewKind.ACTIVITY, ViewPredicate(AnyOfMatch, frozenset({"api"})))
+        ActivityView('saved', ViewPredicate(AnyOfMatch, frozenset({'api'})))
     )
     metadata = comms.channels.catalog.path
     before = metadata.read_bytes() if metadata.exists() else None

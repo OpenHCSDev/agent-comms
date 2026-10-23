@@ -73,7 +73,7 @@ class RegistryOwner:
         try:
             GoalRegistryIdentityCheck(
                 expected=expected, actual=self.thread,
-                expected_claim=claim_scope, claim_scope=self.claimed_generation,
+                expected_claim=claim_scope, claim_generation=self.claimed_generation,
                 process=ProcessIdentity.capture(os.getpid()),
                 goal_permission=OwnerGoalPermission(expected.goal),
             ).require_valid()
@@ -112,11 +112,11 @@ class RegistryOwner:
                 expected=self.thread,
                 actual=actual,
                 expected_claim=self.claimed_generation,
-                claim_scope=claim_scope,
+                claim_generation=claim_scope,
                 process=ProcessIdentity.capture(os.getpid()),
                 goal_permission=self.goal_permission,
             ).require_valid()
-        except ReservationViolationError as error:
+        except (ReservationViolationError, RelationViolationError) as error:
             raise StaleFence(f"{reason}: {error}") from error
 
     def require_snapshot(self, snapshot: RegistrySnapshot, reason: str) -> None:
@@ -190,7 +190,7 @@ class ParticipantOwner:
 
     def coordinator_identity(self, lookup: str) -> OwnerGenerations:
         return OwnerGenerations(
-            owner_lookup=lookup, owner_thread=self.thread.name, generation=self.generation
+            owner_lookup=lookup, generation=self.generation
         )
 
     def require(self, store: Coordination, lookup: str) -> None:

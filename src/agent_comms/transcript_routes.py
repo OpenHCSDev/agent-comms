@@ -14,15 +14,14 @@ from .errors import RelationViolationError
 from .field_codec import MalformedRecord
 from .private_path import FileObservation, FileRevision
 from .routing import TurnRouting
-from .typed_table import Column, DurableStore, TypedTable
+from .typed_table import Column, DurableStore, TypedTable, WithoutRowid
 
 
 @dataclass(frozen=True)
-class TranscriptRoute(TypedTable):
+class TranscriptRoute(WithoutRowid):
     session_file: Annotated[str, Column(primary_key=True)]
     entry_id: Annotated[str, Column(primary_key=True)]
     routing: TurnRouting
-    without_rowid = True
 
     def require_publication(self, routing: TurnRouting) -> None:
         if self.routing.publications and self.routing != routing:
@@ -30,14 +29,13 @@ class TranscriptRoute(TypedTable):
 
 
 @dataclass(frozen=True)
-class InputDisplay(TypedTable):
+class InputDisplay(WithoutRowid):
     """Owner-authored presentation for one native input; None text means internal."""
 
     native_id: Annotated[str, Column(primary_key=True)]
     text: str | None
     routing: TurnRouting | None = None
     sent_text_digest: str | None = None
-    without_rowid = True
     checks = ("routing IS NULL OR sent_text_digest IS NOT NULL",)
 
     def matches(self, text: str) -> bool:

@@ -43,4 +43,4 @@ class ContextRequestKey(Carry):
             with SQLiteFile.write_transaction(db):
                 ContextRequest.rebuild(db)
                 ContextStore.require_schema(db)
-            return Carried(1, {"context_requests": rows}, (ContextStore.filename,))
+            return Carried(1, {"context_requests": rows}, (self.path.relative_to(self.root),))

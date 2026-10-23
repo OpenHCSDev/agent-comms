@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .runtime_children import RuntimeChildrenStore
+from .root_runtime import RootRuntimeStore
 import time
 from dataclasses import dataclass, field, replace
 from typing import ClassVar
@@ -26,7 +26,7 @@ class ServicePasses:
 @dataclass(frozen=True, slots=True)
 class ServicePassStore(RuntimeFile, LockedStore[ServicePasses]):
     """The connector's log reaches nobody; the commander's standing rules read this file."""
-    locks_after = RuntimeChildrenStore
+    locks_after = RootRuntimeStore
 
     filename: ClassVar[str] = "service_passes.json"
     record_type = ServicePasses

@@ -29,16 +29,7 @@ from agent_comms.field_codec import (
     WireNonNull,
     WireTransient,
 )
-from agent_comms.messages import (
-    ConversationRole,
-    InfoKind,
-    MembershipChange,
-    MembershipConversationRole,
-    MembershipNoticeRole,
-    Message,
-    MessageRole,
-    NoticeRole,
-)
+from agent_comms.messages import ConversationRole, InfoKind, MembershipConversationRole, MembershipNoticeRole, Message, MessageRole, NoticeRole, JoinedMembership, LeftMembership
 
 
 def test_transient_plan_excludes_fields_before_decoder_or_value_access():
@@ -840,8 +831,8 @@ def test_missing_and_null_membership_decode_to_the_same_role(wire, expected):
     [
         (ConversationRole(), {}),
         (NoticeRole(), {"notice": True}),
-        (MembershipConversationRole(MembershipChange.JOINED), {"membership": "joined"}),
-        (MembershipNoticeRole(MembershipChange.LEFT), {"membership": "left", "notice": True}),
+        (MembershipConversationRole(JoinedMembership), {"membership": "joined"}),
+        (MembershipNoticeRole(LeftMembership), {"membership": "left", "notice": True}),
     ],
 )
 def test_message_role_keeps_the_exact_external_envelope(role, external):

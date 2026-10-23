@@ -10,7 +10,7 @@ from agent_comms.selected_tool_broker import selected_extension
 
 
 @pytest.mark.parametrize("packaged", [True, False])
-def test_actual_pi_loader_admits_packaged_channel_tool_only(tmp_path, packaged, pinned_native):
+def test_actual_pi_loader_admits_channel_tool_from_package_only(tmp_path, packaged, pinned_native):
     package = pinned_native
     extension = selected_extension(package)
     if not packaged:

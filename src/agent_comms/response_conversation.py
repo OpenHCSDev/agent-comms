@@ -51,7 +51,7 @@ class ResponseConversation:
         return tuple(dict.fromkeys((*cls.source_references(snapshot, obligation), *following)))
 
     @classmethod
-    def capture(cls, bus, snapshot, obligation: ResponseObligation, privacy: RegistryPrivacy):
+    def capture(cls, bus, snapshot, obligation: ResponseObligation, privacy: RegistryPrivacy, registry):
         originals = cls.source_references(snapshot, obligation)
         sources = bus.bus.deliveries_for_references(originals)
         if len(sources) != len(originals):
@@ -61,7 +61,7 @@ class ResponseConversation:
         if any(source.message.exact_reply_target != obligation.exact_target for source in sources):
             raise IdentityConflict("Response obligation differs from its original routes")
         return cls(
-            FrozenRecipient(snapshot.execution.owner_lookup, snapshot.execution.owner_thread),
+            FrozenRecipient(snapshot.execution.owner_lookup, registry.by_lookup[snapshot.execution.owner_lookup].name),
             obligation,
             sources,
             privacy,
@@ -81,12 +81,12 @@ class ResponseConversation:
             participants.extend(source.message.sender_role.executor(
                 FrozenRecipient(audience.sender_lookup, audience.sender_name)
             ))
-            if self.responder not in audience.recipients:
+            if not any(member.recipient_lookup == self.responder.recipient_lookup for member in audience.recipients):
                 raise IdentityConflict("Responder was not in original frozen audience")
             for member in participants:
-                previous = members.setdefault(member.recipient_lookup, member)
-                if previous != member:
-                    raise IdentityConflict("Conversation participant identity changed")
+                # Names belong to these original envelopes. A participant can
+                # have been renamed between sources without changing identity.
+                members.setdefault(member.recipient_lookup, member)
         members.pop(self.responder.recipient_lookup, None)
         recipients = CommandTarget.named(self.obligation.exact_target).response_recipients(tuple(members.values()))
         revision = hashlib.sha256(
@@ -103,16 +103,16 @@ class ResponseConversation:
     def record(self, seq: int, message: Message, intent) -> KeyedPrivateRecord:
         from agent_comms.bus import KeyedPrivateRecord
         from agent_comms.delivery_policy import ResponseDeliveryPolicy
-        from agent_comms.wake import ControlClassification
+        from agent_comms.wake import OrdinaryControl
 
         stored = replace(message, seq=seq)
         audience = self.audience(stored)
         decisions = ResponseDeliveryPolicy.resolve(
-            stored, audience, ControlClassification.ORDINARY,
+            stored, audience, OrdinaryControl,
         )
         return KeyedPrivateRecord.from_message(
             stored, audience=audience, decisions=decisions,
-            control=ControlClassification.ORDINARY.value,
+            control=OrdinaryControl.declared_name,
             acknowledgement=KeyedResponseAcknowledgement(
                 self.privacy.namespace, intent.execution_id, intent.publication_key,
                 public_envelope_digest(stored.to_wire()),

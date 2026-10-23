@@ -153,18 +153,18 @@ class OwnerRequests(Carry):
                 mapped = source.mapped_root(self.root, self.original_root)
                 result = self.carry_root(mapped, apply=apply)
                 results.append((mapped, result))
-                if apply and RegistryStore.at(mapped).path.name in result.rewritten:
+                if apply and RegistryStore.at(mapped).path.relative_to(mapped) in result.rewritten:
                     source = source.carried_registry(mapped)
                     resealed = True
                 rebound.append(source)
             rewritten = [
-                str(root.relative_to(self.root) / name)
+                root.relative_to(self.root) / name
                 for root, result in results
                 for name in result.rewritten
             ]
             if resealed:
                 AtomicFile(HistoryArchive.path_in(self.root)).write_text(json.dumps(FieldCodec.encode(tuple(rebound))))
-                rewritten.append(HistoryArchive.filename)
+                rewritten.append(HistoryArchive.path_in(self.root).relative_to(self.root))
             detail: dict[str, int] = {}
             for _, result in results:
                 for key, value in result.detail.items():
@@ -341,7 +341,7 @@ class OwnerRequests(Carry):
                 for entry in GoalHistoryEntry.stream(history):
                     for prefix in entry.request_revisions:
                         prefix.validate(requests)
-            rewritten: list[str] = []
+            rewritten: list[Path] = []
             if apply:
                 # Prepared in-memory files are private to this carry. Replacing a
                 # retained file requires the installer's actual maintenance hold.
@@ -358,15 +358,15 @@ class OwnerRequests(Carry):
                         with closing(SQLiteFile.writer(path)) as destination:
                             prepared.backup(destination)
                         path.chmod(0o600)
-                        rewritten.append(str(path.relative_to(root)))
+                        rewritten.append(path.relative_to(root))
                 if todo_changed:
                     TodoStore.publish_change(todo_path)
                     rewritten.extend(
-                        str(path.relative_to(root)) for path in TodoStore.source_paths(root)
+                        path.relative_to(root) for path in TodoStore.source_paths(root)
                     )
                 if current:
                     registry._write_unlocked(raw)
-                    rewritten.extend(str(path.relative_to(root)) for path in registry.written)
+                    rewritten.extend(path.relative_to(root) for path in registry.written)
             return Carried(
                 new_rows + int(old_links) + int(history_changed) + len(current),
                 detail={

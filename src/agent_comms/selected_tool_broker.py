@@ -22,7 +22,6 @@ from agent_comms.child_process import Platform
 from agent_comms.coordinator import Coordination
 
 from .comms import Comms
-from .child_process import Platform
 from agent_comms.native_runtime_input import NativeRuntimeTable
 from .coordination_errors import CoordinationReadUnavailable
 from .coordination_tables.participants import OwnerGenerations
@@ -72,7 +71,7 @@ class SelectedToolIntent(SelectedAction):
         return selected_tool_mode_for_owner(
             owner.comms,
             owner.store,
-            owner.claim_scope,
+            owner.resource_scope,
             owner.owner_name,
             owner.session_dir,
             owner.input_id,
@@ -296,7 +295,6 @@ def _require_sent_full_input(
         input_id, FullNativeExecution(claim_scope.execution_id, claim_scope.attempt_ordinal),
         OwnerGenerations(
             owner_lookup=claim_scope.recipient_lookup,
-            owner_thread=owner_name,
             generation=claim_scope.participant_generation,
         ),
     )

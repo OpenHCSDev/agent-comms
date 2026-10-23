@@ -272,7 +272,7 @@ class JsonStorage(SqlStorage):
 
     @classmethod
     def to_sql(cls, value: object) -> str | None:
-        return None if value is None else json.dumps(value, separators=(",", ":"), allow_nan=False)
+        return None if value is None else FieldCodec.compact(value, allow_nan=False)
 
     @classmethod
     def from_sql(cls, value: object) -> object:
@@ -1890,8 +1890,13 @@ class TypedTable(
         return (self.insertion_statement(),
                 tuple(item.encode(getattr(self, item.name)) for item in writable))
 
+    def insertion(self) -> tuple[str, tuple]:
+        """The statement and values that insert this row; a table whose insert differs
+        overrides this, so one row and a batch of rows insert alike."""
+        return self._insertion()
+
     def insert(self, db: sqlite3.Connection) -> sqlite3.Cursor:
-        return db.execute(*self._insertion())
+        return db.execute(*self.insertion())
 
     def insert_if_absent(self, db: sqlite3.Connection) -> sqlite3.Cursor:
         statement, values = self._insertion()
@@ -2196,3 +2201,16 @@ class DerivedStore(TypedStore, DerivedTables, RuntimeWriter):
         cls.filename = (
             f"{declared_words(cls.__name__)}.{hashlib.sha256(schema).hexdigest()[:12]}.sqlite3"
         )
+
+
+class WithoutRowid(TypedTable, declared_name=None):
+    """The table is stored directly by its declared primary key."""
+
+    without_rowid = True
+
+
+@dataclass(frozen=True)
+class SingletonRow(TypedTable, declared_name=None):
+    """The table has one fixed primary key, preceding its owned value fields."""
+
+    singleton: Annotated[Literal[1], Column(primary_key=True)]

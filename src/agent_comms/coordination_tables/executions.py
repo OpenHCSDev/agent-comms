@@ -5,8 +5,7 @@ from __future__ import annotations
 import sqlite3
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
-from enum import StrEnum
-from typing import Annotated, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
@@ -16,6 +15,7 @@ from agent_comms.coordination_contracts import (
 )
 from agent_comms.coordination_errors import IdentityConflict, IntegrityViolationError, StaleRevision
 from agent_comms.coordination_schema import CoordinatorRow
+from agent_comms.declared_family import DeclaredFamily
 from agent_comms.coordination_tables.attempts import (
     APPROVED_REPLAY_FACT_MASK,
     AttemptRecord,
@@ -55,11 +55,103 @@ from agent_comms.typed_table import (
 )
 
 
-class ExecutionOrigin(StrEnum):
-    WIRE = "wire"
-    ACP = "acp"
-    GOAL = "goal"
-    SYSTEM = "system"
+if TYPE_CHECKING:
+    from agent_comms.coordination_tables.assignments import WakeAssignment
+    from agent_comms.coordination_tables.responses import ResponseObligation
+    from agent_comms.selected_source_batch import SelectedSource
+
+
+class ExecutionProvenance(DeclaredFamily, affix="Origin"):
+    """The origin owns source membership, route eligibility and retry policy."""
+
+    @classmethod
+    @abstractmethod
+    def require_sources(cls, sources: tuple[SelectedSource, ...]) -> None: ...
+
+    @classmethod
+    @abstractmethod
+    def validate_routes(
+        cls, assignments: tuple[WakeAssignment, ...], obligations: tuple[ResponseObligation, ...],
+    ) -> None: ...
+
+    @classmethod
+    @abstractmethod
+    def retry_authorized(cls, obligations: tuple[ResponseObligation, ...]) -> bool: ...
+
+    @classmethod
+    @abstractmethod
+    def require_obligation(cls) -> None: ...
+
+
+class ClaimlessOrigin(ExecutionProvenance, declared_name=None):
+    @classmethod
+    def require_sources(cls, sources: tuple[SelectedSource, ...]) -> None:
+        if sources:
+            raise IdentityConflict("claimless execution cannot bind claims")
+
+    @classmethod
+    def validate_routes(
+        cls, assignments: tuple[WakeAssignment, ...], obligations: tuple[ResponseObligation, ...],
+    ) -> None:
+        if assignments or obligations:
+            raise IntegrityViolationError("claimless snapshots cannot have claims or obligations")
+
+    @classmethod
+    def retry_authorized(cls, obligations: tuple[ResponseObligation, ...]) -> bool:
+        return True
+
+    @classmethod
+    def require_obligation(cls) -> None:
+        from agent_comms.wake_candidate_index import ProjectionUnavailableError
+
+        raise ProjectionUnavailableError("open obligation has no wire origin")
+
+
+class WireOrigin(ExecutionProvenance):
+    @classmethod
+    def require_sources(cls, sources: tuple[SelectedSource, ...]) -> None:
+        if not sources:
+            raise IdentityConflict("wire execution requires ordered original sources")
+
+    @classmethod
+    def validate_routes(
+        cls, assignments: tuple[WakeAssignment, ...], obligations: tuple[ResponseObligation, ...],
+    ) -> None:
+        if not assignments or not obligations:
+            raise IntegrityViolationError("wire snapshots require original obligations")
+
+    @classmethod
+    def retry_authorized(cls, obligations: tuple[ResponseObligation, ...]) -> bool:
+        return bool(obligations) and all(row.lifecycle.retryable for row in obligations)
+
+    @classmethod
+    def require_obligation(cls) -> None:
+        pass
+
+    @classmethod
+    def matches_sql(cls, column: str) -> str:
+        return f"{column} IN {cls.sql_choices()}"
+
+    @classmethod
+    def retry_sql(cls, execution: str) -> str:
+        return (
+            f"(NOT ({cls.matches_sql(execution + '.origin')}) OR (EXISTS (SELECT 1 FROM obligations o\n"
+            f"       WHERE o.execution_id={execution}.execution_id) AND NOT EXISTS "
+            "(SELECT 1 FROM obligations o\n"
+            f"       WHERE o.execution_id={execution}.execution_id AND o.retryable != 1)))"
+        )
+
+
+class AcpOrigin(ClaimlessOrigin):
+    pass
+
+
+class GoalOrigin(ClaimlessOrigin):
+    pass
+
+
+class SystemOrigin(ClaimlessOrigin):
+    pass
 
 
 class PointerExecution(SubclassUnion, TextChoice, affix="Execution"):
@@ -174,14 +266,12 @@ class CurrentExecutions(
             ),
         )
 
-_RETRY_BASIS = """SELECT e.execution_id,
+_RETRY_BASIS = f"""SELECT e.execution_id,
   CASE WHEN e.current_attempt_ordinal IS NOT NULL
      AND e.current_attempt_ordinal < e.max_attempts
      AND EXISTS (SELECT 1 FROM replay_assessments r
        WHERE r.execution_id = e.execution_id AND r.retry_authorized = 1)
-     AND (e.origin != 'wire' OR (EXISTS (SELECT 1 FROM obligations o
-       WHERE o.execution_id=e.execution_id) AND NOT EXISTS (SELECT 1 FROM obligations o
-       WHERE o.execution_id=e.execution_id AND o.retryable != 1)))
+     AND {WireOrigin.retry_sql("e")}
   THEN 1 ELSE 0 END AS authorized
 FROM executions e"""
 
@@ -199,12 +289,12 @@ class ExecutionRecord(
 ):
     column_orders = (NonDecreasing(("updated_at_ms",)),)
     column_guards = (
-        ColumnGuard(("lifecycle",), """(json_extract(NEW.lifecycle, '$.kind')
-        IN ({optional_attempt_execution_names}) AND json_extract(NEW.lifecycle, '$.ordinal')
+        ColumnGuard(("lifecycle",), f"""(json_extract(NEW.lifecycle, '$.kind')
+        IN ({{optional_attempt_execution_names}}) AND json_extract(NEW.lifecycle, '$.ordinal')
         IS NOT NULL AND NOT EXISTS (SELECT 1 FROM attempts a WHERE a.execution_id = NEW.execution_id
         AND a.attempt_ordinal = json_extract(NEW.lifecycle, '$.ordinal')
-        AND a.owner_lookup = NEW.owner_lookup AND a.phase IN ({failed_attempt_phases})))
-        OR ((NEW.origin = 'wire') AND ((NOT EXISTS (SELECT 1 FROM obligations
+        AND a.owner_lookup = NEW.owner_lookup AND a.phase IN ({{failed_attempt_phases}})))
+        OR (({WireOrigin.matches_sql("NEW.origin")}) AND ((NOT EXISTS (SELECT 1 FROM obligations
         WHERE execution_id = NEW.execution_id))
         OR (json_extract(NEW.lifecycle, '$.kind') = 'completed'
         AND EXISTS (SELECT 1 FROM obligations WHERE execution_id = NEW.execution_id
@@ -228,14 +318,13 @@ class ExecutionRecord(
         return super().schema_objects(if_not_exists=if_not_exists) | {
             cls.retry_view: f"CREATE VIEW {existence}{cls.retry_view} AS\n" + _RETRY_BASIS}
 
-    def retry_authorized(self, replay: ReplayState, obligations) -> bool:
+    def retry_authorized(
+        self, replay: ReplayState, obligations: tuple[ResponseObligation, ...],
+    ) -> bool:
         return (
             self.lifecycle.has_retry_budget(self.max_attempts)
             and replay.allows_retry
-            and (
-                self.origin is not ExecutionOrigin.WIRE
-                or (bool(obligations) and all(row.lifecycle.retryable for row in obligations))
-            )
+            and self.origin.retry_authorized(obligations)
         )
 
     execution_id: Annotated[
@@ -250,9 +339,8 @@ class ExecutionRecord(
             ),
         ),
     ]
-    origin: Annotated[ExecutionOrigin, FrozenColumn()]
+    origin: Annotated[type[ExecutionProvenance], FrozenColumn()]
     lifecycle: Annotated[ExecutionState, SnapshotExclude()]
-    owner_thread: Annotated[str, FrozenColumn(check="length(owner_thread) BETWEEN 1 AND 256")]
     owner_lookup: Annotated[str, FrozenColumn()]
     revision: Annotated[int, Column(check="revision > 0")]
     max_attempts: Annotated[int, FrozenColumn(check="max_attempts > 0")]
@@ -274,9 +362,7 @@ class ExecutionRecord(
 
     def __post_init__(self) -> None:
         validate_execution_id(self.execution_id)
-        object.__setattr__(self, "origin", ExecutionOrigin(self.origin))
         for field, value in (
-            ("owner_thread", self.owner_thread),
             ("owner_lookup", self.owner_lookup),
         ):
             require_nonempty(value, field)
@@ -332,11 +418,11 @@ class ExecutionRecord(
     )
     wire_execution_id: ClassVar[Generated] = Generated(
         str,
-        Column(generated="CASE WHEN origin = 'wire' THEN execution_id END", nullable=True),
+        Column(generated=f"CASE WHEN {WireOrigin.matches_sql('origin')} THEN execution_id END", nullable=True),
     )
     wire_claim_ordinal: ClassVar[Generated] = Generated(
         int,
-        Column(generated="CASE WHEN origin = 'wire' THEN 0 END", nullable=True),
+        Column(generated=f"CASE WHEN {WireOrigin.matches_sql('origin')} THEN 0 END", nullable=True),
     )
     claim_status_kind: ClassVar[Generated] = Generated(
         str,

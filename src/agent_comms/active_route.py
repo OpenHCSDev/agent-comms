@@ -180,7 +180,7 @@ def guard_original_root_write(root: Path) -> Iterator[None]:
 
 
 def active_route_path() -> Path:
-    return Path.home() / ".local/state/agent-comms/active-route.json"
+    return Path.home() / ".local/state/agent-comms" / RouteFile.filename
 
 
 def read_active_route(path: Path | None = None) -> ActiveRoute | None:
@@ -371,6 +371,8 @@ class RouteFile(ABC):
     that selects no bus (unreadable, an old version, or naming a root gone or replaced) is
     replaced by both; every other state owns its own answer."""
 
+    filename: ClassVar[str] = "active-route.json"
+
     @staticmethod
     def read(path: Path) -> RouteFile:
         try:
@@ -389,8 +391,9 @@ class RouteFile(ABC):
         return LocalRoute.default().root
 
     def replace(self, route: ActiveRoute, path: Path, directory: int) -> Path:
+        name = Path(self.filename)
         backup = path.with_name(
-            f"active-route.{time.strftime('%Y%m%dT%H%M%S')}-{uuid.uuid4().hex}.bak.json")
+            f"{name.stem}.{time.strftime('%Y%m%dT%H%M%S')}-{uuid.uuid4().hex}.bak{name.suffix}")
         _publish_active_route_locked(route, path, directory, backup=backup)
         return backup
 
@@ -432,7 +435,7 @@ class SelectingRoute(RouteFile):
 def _route_directory(route: ActiveRoute, path: Path | None) -> Iterator[tuple[Path, int]]:
     """The checked route path and its directory FD, held with route EX."""
     path = active_route_path() if path is None else path
-    if path.name != "active-route.json" or not path.is_absolute():
+    if path.name != RouteFile.filename or not path.is_absolute():
         raise ValueError("active comms route requires its absolute route path")
     FieldCodec.encode(route)
     route.launch().validate()

@@ -13,7 +13,6 @@ from .cohort_schema import CohortDeliveries, CohortTable
 from .coordination_cohort import accept_delivery_cohort
 from .errors import RelationViolationError
 from .message_bus import MessageBus
-from .private_registry_guard import _require_no_private_owner_rename
 
 
 async def _accept_visible_deliveries(
@@ -34,7 +33,6 @@ async def _accept_visible_deliveries(
     """
     def accept(resource: Coordination) -> int:
         with NativeBoundary(bus) as boundary, bus.bus.reading() as source:
-            _require_no_private_owner_rename(bus.bus.path.parent)
             boundary.privacy.require_root(root_id, IdentityConflict("native namespace changed"))
             with resource.session.read():
                 CohortTable.require_installed(resource.session._connection)

@@ -151,6 +151,7 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
         HistoryMetadata,
         HistoryOffset,
     )
+    from cutover.carry_finished_turns import FinishedTurns
     from cutover.carry_owner_requests import OwnerRequests
 
     from agent_comms.bus import Bus, ClaimRecord, PublicRecord
@@ -168,7 +169,8 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
     from agent_comms.todos import TodoStore
 
     chain = CarryChain.at(REPOSITORY)
-    assert chain.steps.index(OwnerRequests) < chain.steps.index(BusHistory)
+    assert (chain.steps.index(FinishedTurns) < chain.steps.index(OwnerRequests)
+            < chain.steps.index(BusHistory))
 
     generated = predecessor_history(tmp_path)
     original = generated / "destination"
@@ -177,6 +179,14 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
     spill = tmp_path / "hdd-spill"
     spill.mkdir()
     StoreBackup.copy_tree(original, root)
+    # This publisher authored a pre-carry registry. Its finished-turn carry
+    # precedes the goal-request carry and every current registry reader.
+    finished = FinishedTurns(root, original, spill)
+    finished_dry_run = finished.carry(apply=False)
+    finished_result = finished.carry(apply=True)
+    assert finished_result.changed > 0
+    assert finished_result.detail == finished_dry_run.detail
+    assert finished.carry(apply=False).changed == 0
     relatives = (Path(), archived.relative_to(original))
     originals = {relative: (original / relative / BusHistory.filename).read_bytes()
                  for relative in relatives}
@@ -205,15 +215,15 @@ def test_predecessor_publisher_history_round_trips_into_bus(tmp_path):
     result_path = tmp_path / "carried.json"
     with hold.holding():
         completed = subprocess.run(
-            [sys.executable, "-m", "agent_comms.installer.step_worker", request.name(),
-             json.dumps(FieldCodec.encode(request)), json.dumps(FieldCodec.encode(operation)),
-             str(result_path)], cwd=REPOSITORY,
+            [sys.executable, "-m", "agent_comms.installer.step_worker",
+             json.dumps(FieldCodec.encode(operation)), str(result_path),
+             json.dumps([[request.name(), FieldCodec.encode(request)]])], cwd=REPOSITORY,
             env={**os.environ, "PYTHONPATH": os.pathsep.join(
                 map(str, (REPOSITORY / "src", REPOSITORY / "tools")))},
             capture_output=True, text=True, timeout=60,
         )
     assert completed.returncode == 0, completed.stdout + completed.stderr
-    result = operation.decode_answer(result_path.read_text())
+    (result,) = operation.decode_answers(result_path.read_text())
     steps = (StepRun(requests.name(), request_result), StepRun(request.name(), result))
     carried(root, saved, steps, RehearsalFiles.declared(steps))
     maintenance.clear(hold)

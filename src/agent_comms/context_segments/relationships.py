@@ -23,4 +23,4 @@ class RelationshipsSegment(InstructionSegment):
         return (super().capture((OwnerProvenance(owner.incarnation, revision),), records=records),)
 
     def values(self):
-        return {"records": json.dumps(FieldCodec.encode(self.records), separators=(",", ":"))}
+        return {"records": FieldCodec.compact(FieldCodec.encode(self.records))}

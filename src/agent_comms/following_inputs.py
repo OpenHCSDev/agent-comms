@@ -90,7 +90,7 @@ class OwnerFollowingInputs(FollowingInputs):
             session_id=self.session_id,
             thread=thread,
             turn=TurnId(lease.turn_id),
-            claim_scope=lease.claimed_generation,
+            claim_generation=lease.claimed_generation,
             original=original,
             goal_permit=NoLaunchPermit(),
         )

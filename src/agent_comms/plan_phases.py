@@ -404,17 +404,19 @@ class DuplicatesPhase(MultipleInheritancePhase):
                     ("__init__",),
                     ("durable_turn.py", "execution_store.py", "exporting.py", "publisher.py"),
                 ),
-                (("wire_member",), ("pi_payloads.py",)),
+                (("wire_member",), ("pi_payloads.py", "field_codec.py")),
                 (
                     (
                         "_assert_response_schema",
                         "assert_cohort_schema",
                         "assert_native_runtime_schema",
+                        "require_schema",
                     ),
                     (
                         "cohort_schema.py",
                         "coordinated_runtime_schema.py",
                         "coordination_response.py",
+                        "typed_table.py",
                     ),
                 ),
                 (
@@ -427,7 +429,7 @@ class DuplicatesPhase(MultipleInheritancePhase):
                 ),
                 (
                     ("annotation_disclosure", "disclosure_for"),
-                    ("pi_payloads.py", "turn_context.py"),
+                    ("pi_payloads.py", "turn_context.py", "annotation_disclosure.py"),
                 ),
             )
         )
@@ -436,16 +438,16 @@ class DuplicatesPhase(MultipleInheritancePhase):
 
 class FieldDirectivesPhase(MultipleInheritancePhase):
     """Batch 2: the field groups and table mixins the plan names exist and each has members.
-    The bus groups are deleted by the virtual bus, and ``Addressed`` is the bus's own."""
+    The bus groups are deleted by the virtual bus, and ``Addressed`` is the bus's own.
+    SchemaMeta has no shared field beyond SingletonRow.
+    Revisioned and ExecutionKeyed would reorder table columns because inherited fields
+    come first (typed_table.py:1480), violating the plan's stored DDL rule."""
 
     evidence = ParentsShared(
         names=(
             "TurnItem",
             "ClaimScoped",
             "SingletonRow",
-            "SchemaMeta",
-            "Revisioned",
-            "ExecutionKeyed",
             "WithoutRowid",
         )
     )
@@ -642,7 +644,11 @@ class OwnedDispatchPhase(RemainingSlopPhase):
     evidence = AllEvidence(
         (
             PatternAbsent(r"class TurnInboxReceiver\b"),
-            PatternAbsent(r"separators=\(\",\", ?\":\"\)"),
+            PatternAbsent(
+                r"""separators\s*=\s*\(\s*["'],["']\s*,\s*["']:["']\s*\)""",
+                ("src", ":!src/agent_comms/field_codec.py"),
+            ),
+            PatternPresent(r"def compact\(", ("src/agent_comms/field_codec.py",)),
         )
     )
 
@@ -650,9 +656,15 @@ class OwnedDispatchPhase(RemainingSlopPhase):
 class KindFamiliesPhase(RemainingSlopPhase):
     """6.3: kinds are families whose members carry their behaviour and spelling."""
 
-    evidence = PatternAbsent(
-        r"class (TagAction|ExecutionOrigin|WhenBusy|ControlClassification|MembershipChange"
-        r"|ViewKind)\b"
+    evidence = AllEvidence(
+        (
+            PatternAbsent(
+                r"class (TagAction|ExecutionOrigin|WhenBusy|ControlClassification"
+                r"|MembershipChange)\b"
+            ),
+            # SQLite's ViewKind(CatalogKind) is already a behavior-owning member.
+            PatternAbsent(r"class ViewKind\((StrEnum|Enum)\)"),
+        )
     )
 
 

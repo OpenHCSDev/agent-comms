@@ -11,7 +11,7 @@ from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
-from typing import TYPE_CHECKING, Any, Generic, Self, TypeVar, Annotated
+from typing import TYPE_CHECKING, Any, Generic, Self, TypeVar
 
 from acp import RequestError
 
@@ -24,7 +24,7 @@ from .coordination_errors import IdentityConflict, StaleRevision
 from .coordination_session import ReadNativeCoordinationSession
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .field_codec import Id128Text, WireName
+from .field_codec import Id128Text
 from .goals import GoalDeclaration, NoGoal
 from .image_inputs import ImageInput
 from .input_attempt import InputAttempt, ReservedInput
@@ -55,7 +55,7 @@ class InputHandoffRefused(RelationViolationError):
 
 @dataclass(frozen=True, slots=True)
 class QueuedInputContext:
-    claim_scope: Annotated[ClaimedIdentity, WireName("admission")]
+    claimed_identity: ClaimedIdentity
     goal: GoalDeclaration = field(default_factory=NoGoal)
 
     @classmethod
@@ -66,14 +66,14 @@ class QueuedInputContext:
         """Use the caller's canonical registry name without changing authority."""
         return replace(
             self,
-            claim_scope=replace(
-                self.claim_scope,
-                incarnation=replace(self.claim_scope.incarnation, name=name),
+            claimed_identity=replace(
+                self.claimed_identity,
+                incarnation=replace(self.claimed_identity.incarnation, name=name),
             ),
         )
 
     def owns(self, claim_scope: ClaimedIdentity) -> bool:
-        return self.named(claim_scope.incarnation.name).claim_scope == claim_scope
+        return self.named(claim_scope.incarnation.name).claimed_identity == claim_scope
 
     @property
     def active_goal_id(self) -> str | None:
@@ -98,7 +98,7 @@ class QueuedInput:
         """Show the item only when its recorded input generation matches the queue."""
         from .acp_extension import QueueItem
 
-        return (QueueItem(self.input_id, self.text),) if self.context.owns(scope.claim_scope) else ()
+        return (QueueItem(self.input_id, self.text),) if self.context.owns(scope.claimed_identity) else ()
 
     def source(self) -> AcceptedFollowingInput:
         return AcceptedFollowingInput(
@@ -130,7 +130,7 @@ class QueuedInput:
             owner,
             snapshot.claimed_identity(canonical),
         )
-        origin.require_ingress(inputs.comms, snapshot, context.claim_scope, controller)
+        origin.require_ingress(inputs.comms, snapshot, context.claimed_identity, controller)
         item = cls(
             text or prompt or "[image prompt]",
             echo,
@@ -141,7 +141,7 @@ class QueuedInput:
             controller,
         )
         row = ReservedInput(
-            item.key, None, canonical, context.claim_scope.claimed_generation,
+            item.key, None, canonical, context.claimed_identity.claimed_generation,
             canonical, item.text, origin=origin,
         )
         document = inputs.dispositions.reserve_originals(row, ownership=ownership)
@@ -362,7 +362,7 @@ class DeliveredInput(QueuedInput):
                         (DeliveredMessageSegment.capture(source, assignment, owner),)
                     )
                     row = ReservedInput(
-                        key, message.seq, canonical, context.claim_scope.claimed_generation,
+                        key, message.seq, canonical, context.claimed_identity.claimed_generation,
                         message.target,
                         ScheduledTurn.incoming(message, aliases=snapshot.aliases).prompt,
                         origin=WireInputOrigin(root_id, message.reference),
@@ -483,7 +483,7 @@ class DeliveredInput(QueuedInput):
             with store.session.read():
                 assignments = tuple(
                     assignment for assignment in pending_sealed_assignments(
-                        store, lookup, owner.name, after_seq=after_seq
+                        store, lookup, after_seq=after_seq
                     ) if assignment.audience.joins_active_turn()
                 )
             with NativeBoundary(bus) as boundary, bus.bus.reading() as source:

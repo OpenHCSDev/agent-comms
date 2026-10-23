@@ -135,7 +135,7 @@ async def test_subscription_replay_uses_requested_alias(tmp_path, request_origin
         thread = comms.registry.require(original)
         with Coordination(str(comms.root / "coordination.sqlite3")) as store:
             PrivateCoordinatorTable.install(store)
-            store.participants.register(thread.incarnation.lookup, original, original, committed=True)
+            store.participants.register(thread.incarnation.lookup, committed=True)
         comms.threads.attach_session(thread, str(journal), process=thread.process_identity)
         comms.threads.rename_managed_thread(original, "renamed", owner=ProcessIdentity.capture(os.getpid()))
         requested = original if request_original else "renamed"
@@ -317,9 +317,3 @@ async def test_new_session_metadata_has_a_display_title_before_first_switch(tmp_
         )
     finally:
         await agent.shutdown()
-
-
-
-
-
-

@@ -252,7 +252,10 @@ class PatternEvidence(MainEvidence):
     paths: tuple[str, ...] = ("src",)
 
     def read(self, main: MainTree) -> bool:
-        return self.satisfied(main.count(self.pattern, self.paths))
+        from .plan_phases import PlanPhase
+
+        declaration = main.repo.module_file(PlanPhase.__module__)
+        return self.satisfied(main.count(self.pattern, (*self.paths, f":!{declaration.as_posix()}")))
 
     @abstractmethod
     def satisfied(self, count: int) -> bool: ...

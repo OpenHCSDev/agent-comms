@@ -61,6 +61,7 @@ class BusProjectionTables(ProducedRow, SharedFileTables, DerivedTables):
         holders = ReplayedHolders()
         for record in BusCapability.history(db):
             record.project_into(db, holders)
+        holders.flush(db)
 
 
 class BusSchema(ComposedSchemas, BusTables, ProjectionProducerTables, BusProjectionTables):
@@ -386,7 +387,18 @@ class HeldResources(TypedTable, BusProjectionTables):
         holders.advance(removed, projected)
 
 
-class ClaimHolders(ABC):
+class ProjectionPass(ABC):
+    """How one projection pass writes the rows its records derive: an append writes its
+    few rows at once."""
+
+    def write(self, db: sqlite3.Connection, row: TypedTable) -> None:
+        row.insert(db)
+
+    def flush(self, db: sqlite3.Connection) -> None:
+        """Rows written at once leave nothing to flush."""
+
+
+class ClaimHolders(ProjectionPass):
     """The current holders a claim transition projects from, before it is applied."""
 
     @abstractmethod
@@ -413,6 +425,18 @@ class ReplayedHolders(ClaimHolders):
 
     last_seq: int = 0
     owners: dict[str, ClaimOwner] = field(default_factory=dict)
+    rows: dict[str, list[tuple]] = field(default_factory=dict)
+    """Derived rows by insert statement; nothing in the rebuild reads them back before
+    ``flush``, which inserts each statement's rows with one ``executemany``."""
+
+    def write(self, db: sqlite3.Connection, row: TypedTable) -> None:
+        statement, values = row.insertion()
+        self.rows.setdefault(statement, []).append(values)
+
+    def flush(self, db: sqlite3.Connection) -> None:
+        for statement, values in self.rows.items():
+            db.executemany(statement, values)
+        self.rows.clear()
 
     def before(self, db: sqlite3.Connection, transition: ClaimTransition) -> ClaimProjection:
         return ClaimProjection(self.last_seq, {
@@ -523,7 +547,7 @@ class BusCapability(TypedRow):
 
     def project_into(self, db: sqlite3.Connection, holders: ClaimHolders) -> None:
         for row in self.projections():
-            row.insert(db)
+            holders.write(db, row)
 
 @dataclass(frozen=True)
 class Addressed(BusCapability):

@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
@@ -66,23 +65,6 @@ class CommanderConfig(CommanderRole, BaseModel, DurableFile):
     def path(home: Path | None = None) -> Path:
         return (home or Path.home()) / '.config/agent-comms' / CommanderConfig.filename
 
-    @staticmethod
-    def packaged_rules() -> Path:
-        return Path(str(files(__package__) / 'rules'))
-
-    @staticmethod
-    def packaged_skill() -> Path:
-        return Path(str(files('agent_comms.skills') / 'comms-commander/SKILL.md'))
-
-    @staticmethod
-    def packaged_indictment() -> Path:
-        return Path(str(files(__package__) / 'indictment.md'))
-
-
-    @staticmethod
-    def packaged_voice() -> Path:
-        return Path(str(files(__package__) / 'voice.md'))
-
     @field_validator('root')
     @classmethod
     def selected_root(cls, root: Path, info: ValidationInfo) -> Path:
@@ -105,14 +87,6 @@ class CommanderConfig(CommanderRole, BaseModel, DurableFile):
         return cls(commander=commander, repos=repos, parked=parked, root=root,
                    state=home / '.local/state/agent-comms/commander', worktrees=home / 'wt',
                    scratch=home / '.cache/agent-scratch', disk=home)
-
-    @classmethod
-    def packaged_rules_files(cls) -> tuple[Path, ...]:
-        """All packaged rule files, shared by review and session context."""
-        rules = tuple(sorted(path for path in cls.packaged_rules().iterdir() if path.is_file()))
-        if not rules:
-            raise ValueError('The packaged commander rules directory is empty.')
-        return rules
 
     def repo_directory(self, name: str) -> Path:
         """Only the configured repositories can supply an order's check checkout."""

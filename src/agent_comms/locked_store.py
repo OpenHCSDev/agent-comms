@@ -10,7 +10,7 @@ import sqlite3
 import stat
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Collection, Iterator, Mapping
 from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from functools import cache
@@ -146,6 +146,12 @@ class RootFile:
         return Path(root) / cls.filename.format(**parts)
 
     @classmethod
+    def directory_in(cls, root: Path | str) -> Path:
+        """The directory this declaration's files live in under the bus root ``root``;
+        ``bus_root`` is its inverse."""
+        return Path(root) / cls.root_directory
+
+    @classmethod
     def bus_root(cls, path: Path) -> Path:
         """The bus root a file of this declaration at ``path`` lives under: one parent per
         directory its declared location names, the filename's own directories included."""
@@ -155,6 +161,17 @@ class RootFile:
     def member_paths(cls, path: Path) -> frozenset[Path]:
         """The resources composed onto one declared primary file."""
         return frozenset((path, store_lock_path(path)))
+
+    @classmethod
+    def transient_paths(cls, path: Path) -> frozenset[Path]:
+        return frozenset((store_lock_path(path),))
+
+    @classmethod
+    def snapshot_members(
+        cls, path: Path, observed: Mapping[Path, os.stat_result],
+    ) -> frozenset[Path]:
+        """Content changes count; lock and coordination files are not content."""
+        return frozenset((path,))
 
     @classmethod
     def files_in(cls, root: Path) -> frozenset[Path]:
@@ -213,7 +230,7 @@ class RootFile:
             visited.add(family)
             pending.extend(family.__subclasses__())
             if "filename" in vars(family):
-                yield family, root / family.root_directory
+                yield family, family.directory_in(root)
 
     @classmethod
     def existing_in(cls, root: Path) -> dict[Path, type[Self]]:
@@ -224,11 +241,58 @@ class RootFile:
                 for path in owner.matching_in(directory)}
 
     @classmethod
+    def owned_files(
+        cls, root: Path, paths: Collection[Path],
+    ) -> dict[DeclaredFile | UndeclaredFile, type[RootFile]]:
+        """Resolve primaries once; companions belong to their primary's declaration.
+
+        Missing selected files still identify an absent resource to restore. An
+        undeclared existing file acquires content behavior without inventing a
+        store declaration for it.
+        """
+        primaries = cls.existing_in(root)
+        declarations = {member: owner for path, owner in primaries.items()
+                        for member in owner.member_paths(path)}
+        declarations.update(primaries)
+        selected = frozenset(paths)
+        owners: dict[Path, type[RootFile]] = {
+            path: owner for path, owner in primaries.items() if path in selected
+        }
+        companions = {member for path, owner in owners.items()
+                      for member in (*owner.files(path), *owner.transient_paths(path))
+                      if member != path}
+        owners.update((path, cls.content_owner(path) if path.exists() else RootFile)
+                      for path in selected - owners.keys() - companions)
+        companions.update(member for path, owner in owners.items()
+                          for member in (*owner.files(path), *owner.transient_paths(path))
+                          if member != path)
+        return {
+            (DeclaredFile(declarations[path], path.relative_to(root)) if path in declarations
+             else UndeclaredFile(path.relative_to(root))): owner
+            for path, owner in owners.items() if path not in companions
+        }
+
+    @classmethod
     def paths_in(cls, root: Path) -> frozenset[Path]:
         return frozenset(
             path for owner, directory in cls.declarations_in(root)
             for path in owner.files_in(directory)
         )
+
+
+@dataclass(frozen=True)
+class DeclaredFile(RootFile):
+    """A declared store and one retained file path identify a resource."""
+
+    owner: type[RootFile]
+    path: Path
+
+
+@dataclass(frozen=True)
+class UndeclaredFile(RootFile):
+    """A physical file without a stored declaration, still identified by its path."""
+
+    path: Path
 
 
 class FileStore(RootFile, ABC):
@@ -360,7 +424,8 @@ class SQLiteFile(RootFile):
     """SQLite connections, snapshots, copies and companions share one file owner."""
 
     __slots__ = ()
-    companion_suffixes: ClassVar[tuple[str, ...]] = ("-wal", "-shm", "-journal")
+    wal_suffix: ClassVar[str] = "-wal"
+    transient_suffixes: ClassVar[tuple[str, ...]] = ("-shm", "-journal")
 
     @classmethod
     def writer(
@@ -491,7 +556,28 @@ class SQLiteFile(RootFile):
 
     @classmethod
     def files(cls, path: Path) -> tuple[Path, ...]:
-        return (path, *(path.with_name(path.name + suffix) for suffix in cls.companion_suffixes))
+        return (path, cls.wal_path(path),
+                *(path.with_name(path.name + suffix) for suffix in cls.transient_suffixes))
+
+    @classmethod
+    def wal_path(cls, path: Path) -> Path:
+        return path.with_name(path.name + cls.wal_suffix)
+
+    @classmethod
+    def transient_paths(cls, path: Path) -> frozenset[Path]:
+        return super().transient_paths(path) | frozenset((
+            *(set(cls.files(path)) - {path, cls.wal_path(path)}), StoreOwner.snapshot_lock(path),
+        ))
+
+    @classmethod
+    def snapshot_members(
+        cls, path: Path, observed: Mapping[Path, os.stat_result],
+    ) -> frozenset[Path]:
+        wal = cls.wal_path(path)
+        # A read can create an empty WAL; only a nonempty WAL holds content.
+        return super().snapshot_members(path, observed) | frozenset(
+            (wal,) if wal in observed and observed[wal].st_size else ()
+        )
 
     @classmethod
     def member_paths(cls, path: Path) -> frozenset[Path]:
@@ -567,7 +653,7 @@ class RuntimeFile(RootFile):
 
 
 @dataclass(frozen=True, slots=True)
-class LockedStore(FileStore, StoreLockOwner, JsonDocument[T]):
+class LockedStore(FileStore, StoreLockOwner, JsonDocument[T], declared_name=None):
     """Ordered document transactions; callbacks never mutate or reenter."""
 
     path: Path

@@ -384,7 +384,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             with store.session.read():
                 participant = store.participants.get(lookup)
                 candidate = next_sealed_assignment(
-                    store, participant.lookup, owner.name, after_seq=after_seq,
+                    store, participant.lookup, after_seq=after_seq,
                 )
                 if candidate is None:
                     return False

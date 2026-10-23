@@ -16,15 +16,16 @@ from datetime import datetime
 from functools import cache
 from pathlib import Path
 from string import Formatter
-from typing import ClassVar, Iterator, Self
+from typing import Annotated, ClassVar, Iterator, Self
 
 from agent_comms.child_process import Platform
-from agent_comms.active_route import ActiveRoute, _route_directory, route_directory
+from agent_comms.active_route import ActiveRoute, RouteFile, _route_directory, active_route_path, route_directory
 from agent_comms.coordination_errors import CoordinationError
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.installer.interpreter_operation import RouteSelection
-from agent_comms.locked_store import LockedStore, RootFile, RuntimeFile, SQLiteFile
+from agent_comms.locked_store import DeclaredFile, LockedStore, RootFile, RuntimeFile, UndeclaredFile
 from agent_comms.private_path import FileObservation, FileRevision, MissingFile
+from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import AtomicFile
 
 
@@ -55,21 +56,23 @@ class SavedFile:
         return self.size == copied.size
 
 
-def bus_files(root: Path) -> dict[str, SavedFile]:
-    """Read saved file identity and modification metadata, never contents."""
+def bus_files(root: Path) -> dict[DeclaredFile | UndeclaredFile, dict[Path, SavedFile]]:
+    """Record owner identities and their content members' physical metadata."""
     excluded = RuntimeFile.paths_in(root)
-    saved = {}
+    observed: dict[Path, os.stat_result] = {}
     for path in root.rglob("*"):
-        if path in excluded or path.name.endswith((".lock", "-shm", "-journal")):
+        if path in excluded:
             continue
-        observed = path.lstat()
-        # Empty WAL files appear on a read-only SQLite open; they hold no committed frames.
-        if path.name.endswith("-wal") and observed.st_size == 0:
-            continue
-        if stat.S_ISREG(observed.st_mode):
-            saved[str(path.relative_to(root))] = SavedFile(
-                observed.st_size, observed.st_mtime_ns, observed.st_ino)
-    return saved
+        info = path.lstat()
+        if stat.S_ISREG(info.st_mode):
+            observed[path] = info
+    return {
+        resource: {
+            member.relative_to(root): SavedFile(
+                observed[member].st_size, observed[member].st_mtime_ns, observed[member].st_ino,
+            ) for member in owner.snapshot_members(root / resource.path, observed)
+        } for resource, owner in RootFile.owned_files(root, observed).items()
+    }
 
 
 @dataclass(frozen=True)
@@ -172,9 +175,27 @@ class StoreBackup(ResourceBackup):
     def spill_directory(self, configured: Path) -> Path:
         return self.path
 
-    def files(self) -> dict[str, str]:
-        return FieldCodec.decode(dict[str, str],
-                                 FieldCodec.parse((self.path / 'files.json').read_text()))
+    def files(self) -> dict[Path, str]:
+        stored = FieldCodec.decode(dict[str, str],
+                                   FieldCodec.parse((self.path / 'files.json').read_text()))
+        return {PathText.decode(path): digest for path, digest in stored.items()}
+
+    def selected_files(self) -> tuple[Annotated[Path, PathText], ...]:
+        return FieldCodec.decode(tuple[Annotated[Path, PathText], ...],
+                                 FieldCodec.parse((self.path / 'selected.json').read_text()))
+
+    @classmethod
+    def interrupted(cls, root: Path, spill_dir: Path) -> tuple[StoreBackup, ...]:
+        if not spill_dir.exists():
+            return ()
+        route = active_route_path()
+        backups = (
+            cls(root, route, spill_dir / name.value)
+            for name in sorted(BackupName.matching(
+                root, (path.name for path in spill_dir.iterdir() if path.is_dir())
+            ), reverse=True)
+        )
+        return tuple(backup for backup in backups if not backup.original())
 
     def retire(self) -> Path:
         archived = self.path.with_name(f'{self.path.name}.restored-{time.time_ns()}')
@@ -190,7 +211,7 @@ class StoreBackup(ResourceBackup):
                 return
             if self.route_original():
                 return
-            saved = self.path / 'active-route.json'
+            saved = self.path / RouteFile.filename
             if saved.exists():
                 AtomicFile(self.route).write_text(saved.read_text())
             else:
@@ -215,7 +236,7 @@ class StoreBackup(ResourceBackup):
                 self.route_revision = FileRevision.capture(path)
 
     def route_original(self) -> bool:
-        saved = self.path / 'active-route.json'
+        saved = self.path / RouteFile.filename
         if not saved.exists():
             return not self.route.exists()
         if not self.route.exists():
@@ -226,11 +247,15 @@ class StoreBackup(ResourceBackup):
 
     @classmethod
     def take(cls, root: Path, route: Path, files: tuple[Path, ...], spill_dir: Path) -> StoreBackup:
+        registry = RegistryStore.at(root).written
+        if any(path in files for path in registry):
+            files = tuple(dict.fromkeys((*files, *registry)))
         path = spill_dir / BackupName.now(root).value
         backup = cls(root, route, path)
-        selected = tuple(str(file.relative_to(root)) for file in files)
+        selected = tuple(sorted(resource.path for resource in RootFile.owned_files(root, files)))
+        files = tuple(root / path for path in selected)
         if path.exists():
-            if tuple(json.loads((path / 'selected.json').read_text())) != selected:
+            if backup.selected_files() != selected:
                 raise UpgradeRefused('Existing backup belongs to different resources')
             backup.files()  # An interrupted snapshot is never treated as complete.
             with route_directory(route):
@@ -239,13 +264,15 @@ class StoreBackup(ResourceBackup):
                 backup.route_revision = FileRevision.capture(route)
             return backup
         path.mkdir(mode=0o700, parents=True)
-        AtomicFile(path / 'selected.json').write_text(json.dumps(selected))
+        AtomicFile(path / 'selected.json').write_text(json.dumps(FieldCodec.encode(
+            selected, tuple[Annotated[Path, PathText], ...])))
         contents = backup.capture(files)
         with route_directory(route):
             if route.exists():
-                shutil.copy2(route, path / 'active-route.json')
+                shutil.copy2(route, path / RouteFile.filename)
             backup.route_revision = FileRevision.capture(route)
-        AtomicFile(path / 'files.json').write_text(json.dumps(FieldCodec.encode(contents), indent=1))
+        AtomicFile(path / 'files.json').write_text(json.dumps(
+            {PathText.encode(file): digest for file, digest in contents.items()}, indent=1))
         return backup
 
     def retain(self, spill_dir: Path) -> tuple[Path, ...]:
@@ -288,29 +315,28 @@ class StoreBackup(ResourceBackup):
         """Copy committed files; their owners declare transient names before any stat."""
 
         def transient(directory: str, names: list[str]) -> set[str]:
-            omitted: set[str] = set()
-            for name in sorted(names):
-                path = Path(directory) / name
-                if name in omitted or path in excluded or LockedStore.is_staging(path):
-                    omitted.add(name)
+            omitted: set[Path] = set()
+            for path in sorted(Path(directory) / name for name in names):
+                if path in omitted or path in excluded or LockedStore.is_staging(path):
+                    omitted.add(path)
                     continue
                 if stat.S_ISSOCK(path.lstat().st_mode):
-                    omitted.add(name)
+                    omitted.add(path)
                 elif path.is_file() and not path.is_symlink():
                     owner = RootFile.content_owner(path)
-                    omitted.update(companion.name for companion in owner.files(path)[1:])
-            return omitted
+                    omitted.update(set(owner.files(path)) - {path})
+            return {path.name for path in omitted}
 
         shutil.copytree(
             source, target, symlinks=True, ignore=transient, copy_function=cls.copy_file
         )
 
-    def capture(self, files: tuple[Path, ...]) -> dict[str, str]:
-        contents = {}
+    def capture(self, files: tuple[Path, ...]) -> dict[Path, str]:
+        contents: dict[Path, str] = {}
         for source in files:
             if not source.exists():
                 continue
-            name = str(source.relative_to(self.root))
+            name = source.relative_to(self.root)
             target = self.data_root / name
             target.parent.mkdir(parents=True, exist_ok=True)
             self.copy_file(source, target)
@@ -319,7 +345,7 @@ class StoreBackup(ResourceBackup):
             Platform.current().sync_directory(target.parent)
         return contents
 
-    def file_original(self, name: str, saved: dict[str, str]) -> bool:
+    def file_original(self, name: Path, saved: dict[Path, str]) -> bool:
         """An unchanged selected file keeps its identity as well as its contents."""
         target = self.root / name
         if name not in saved:
@@ -334,14 +360,24 @@ class StoreBackup(ResourceBackup):
             return False
         saved = self.files()
         return all(self.file_original(name, saved)
-                   for name in json.loads((self.path / 'selected.json').read_text()))
+                   for name in self.selected_files())
 
     def restore(self) -> None:
         saved = self.files()
-        for name in json.loads((self.path / 'selected.json').read_text()):
+        selected = self.selected_files()
+        registry = tuple(path.relative_to(self.root) for path in RegistryStore.at(self.root).written)
+        # The registry owns this ordering: restore its snapshot before publishing
+        # the matching guard, after every unrelated selected file.
+        ordered = (
+            *(name for name in selected if name not in registry),
+            *(name for name in registry if name in selected),
+        )
+        for name in ordered:
             if self.file_original(name, saved):
                 continue
             target = self.root / name
+            observed = self.data_root / name if name in saved else target
+            owner = RootFile.content_owner(observed) if observed.exists() else RootFile
             if name in saved:
                 descriptor, temporary = tempfile.mkstemp(prefix='.restore-', dir=target.parent)
                 os.close(descriptor)
@@ -353,7 +389,7 @@ class StoreBackup(ResourceBackup):
                     stage.unlink(missing_ok=True)
             else:
                 target.unlink(missing_ok=True)
-            for companion in SQLiteFile.files(target)[1:]:
+            for companion in set(owner.files(target)) - {target}:
                 companion.unlink(missing_ok=True)
         Platform.current().sync_directory(self.root)
         self.restore_route()

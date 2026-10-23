@@ -84,7 +84,7 @@ def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
     store = Coordination(str(CoordinationStore.path_in(root)), clock_ms=lambda: 9999)
     PrivateCoordinatorTable.install(store)
     for name in lookups:
-        store.participants.register(lookups[name], name, name, committed=True)
+        store.participants.register(lookups[name], committed=True)
     return comms, store, comms.registry.prepare_native_root().namespace, lookups
 
 
@@ -228,5 +228,3 @@ def test_separate_processes_serialize_one_private_user_identity(tmp_path: Path) 
     humans = [human for thread in members for human in thread.role.human(thread)]
     assert len(humans) == 1
     assert [comms.bus.bus.delivery(seq).message.seq for seq in seqs] == seqs
-
-

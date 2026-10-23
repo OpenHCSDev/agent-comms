@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import json
 import os
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
 from agent_comms.child_process import Platform
-from .field_codec import RecordedTimestamp
+from .field_codec import FieldCodec, RecordedTimestamp
 from .native_entries import SessionEntry
 from .native_failures import NativePiUnavailable
 from agent_comms.native_session_files import NativeSessionFiles
@@ -33,7 +32,7 @@ def create_fresh_private_session(
         id=session_id, version=3, cwd=str(worktree),
         timestamp=RecordedTimestamp.written(datetime.now(UTC)),
     )
-    encoded = json.dumps(header.to_wire(), separators=(",", ":"), allow_nan=False).encode() + b"\n"
+    encoded = FieldCodec.compact(header.to_wire(), allow_nan=False).encode() + b"\n"
     try:
         descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         try:

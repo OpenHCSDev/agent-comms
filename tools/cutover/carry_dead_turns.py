@@ -45,4 +45,6 @@ class DeadTurns(Carry):
             self.require_confined(self.root, path)
             if apply:
                 path.unlink()
-        return Carried(len(dead), detail={"kept": len(current), "deleted": len(dead)})
+        return Carried(len(dead), detail={"kept": len(current), "deleted": len(dead)},
+                       rewritten=tuple(path.relative_to(self.root) for path in dead)
+                       if apply else ())

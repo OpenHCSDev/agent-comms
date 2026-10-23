@@ -13,6 +13,7 @@ from agent_comms.context_store import UNREAD_CONTEXT
 
 from conftest import publish_initial
 import hashlib
+from pathlib import Path
 import os
 import sys
 from dataclasses import replace
@@ -31,7 +32,7 @@ from agent_comms.selected_claim import (
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
 from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.coordination_tables.executions import ExecutionOrigin
+from agent_comms.coordination_tables.executions import ExecutionProvenance, WireOrigin
 from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim, NativeClaim, WakeClaim
 from agent_comms.coordination_session import NativeBoundary
@@ -92,8 +93,7 @@ def selected_turn(private_comms, private_directory):
         PrivateCoordinatorTable.install(store)
         for recipient in initial.audience.recipients:
             store.participants.register(
-                recipient.recipient_lookup, recipient.canonical_thread,
-                recipient.canonical_thread, committed=True,
+                recipient.recipient_lookup, committed=True,
             )
         accept_delivery_cohort(comms.bus, root_id, message.seq, store)
         lookup = RecordedThreadIncarnation("fixture", comms.registry.require("Alice").created_at).lookup
@@ -104,7 +104,7 @@ def selected_turn(private_comms, private_directory):
         )
         person = store.participants.get(lookup)
         store.create(
-            "execution", ExecutionOrigin.WIRE, lookup, owner.name, 1,
+            "execution", WireOrigin, lookup, 1,
             sources=(SelectedSource(assignment.assignment_id, store.assignments, initial),),
         )
         snapshot = store.get("execution")
@@ -112,7 +112,7 @@ def selected_turn(private_comms, private_directory):
             "execution", expected_revision=snapshot.execution.revision
         ).value
         store.start(AttemptStart(
-            "execution", 1, owner.name, person.owner_identity.generation, prepare_fence_token(),
+            "execution", 1, lookup, person.owner_identity.generation, prepare_fence_token(),
             expected_execution_revision=snapshot.execution.revision,
             expected_pointer_revision=snapshot.pointer_revision,
         ))
@@ -232,5 +232,3 @@ def test_claim_operation_is_refused_after_its_claim_was_released(selected_turn) 
     )
     assert again.generation != claimed.generation
     assert dict(comms.bus.bus.claim_projection()) == {str(resource): again}
-
-

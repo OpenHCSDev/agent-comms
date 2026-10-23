@@ -6,20 +6,20 @@ import builtins
 from abc import ABC, abstractmethod
 from dataclasses import replace
 from graphlib import TopologicalSorter
+from itertools import groupby
 from typing import TYPE_CHECKING, Annotated, AsyncIterator, ClassVar, NoReturn, Self, Union
 
-from metaclass_registry import AutoRegisterMeta, RegistryConfig
 from pydantic import BaseModel, ConfigDict, Discriminator, InstanceOf, PlainSerializer, PlainValidator, Tag, TypeAdapter, computed_field, field_validator, model_validator
-from pydantic._internal._model_construction import ModelMetaclass
 from typing_extensions import TypeForm
 
 from .coordination_errors import CoordinationReadUnavailable
-from .declared_family import DeclaredFamily
+from .declared_family import DeclaredFamily, DeclaredWireFamily, UnknownFamilyMember
 from .maintenance_barrier import MaintenanceHeldError
 from .messages import Message
 from .field_codec import TimestampText
 from .recorded_time import UnrecordedTimeError
 from .external_transcript import RequestedEarlierPage
+from .turn_item import TurnItem
 
 if TYPE_CHECKING:
     from .child_process import AttachedChild
@@ -55,10 +55,6 @@ class TimestampedWire(WireModel):
         return TimestampText.from_text(value).at.timestamp()
 
 
-class RegisteredWireMeta(AutoRegisterMeta, ModelMetaclass):
-    """Compose declaration registration with external-field validation."""
-
-
 class WireHeader(WireModel):
     type: str
 
@@ -66,22 +62,20 @@ class WireHeader(WireModel):
 class TextWire:
     """The text tag shared by external CLI content families."""
 
-    wire_tag: ClassVar[str] = 'text'
 
 
-class TaggedWire(WireModel, ABC, metaclass=RegisteredWireMeta):
+class TaggedWire(DeclaredWireFamily, WireModel, ABC, affix="", declared_name=None):
     """A JSON type tag supplied by its declared class, not caller policy."""
-    wire_tag: ClassVar[str]
     header: ClassVar[builtins.type[WireHeader]] = WireHeader
 
-    @staticmethod
-    def family_registry() -> RegistryConfig:
-        return RegistryConfig(registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
+    @classmethod
+    def tag(cls) -> str:
+        return cls.declared_name
 
     @computed_field
     @property
     def type(self) -> str:
-        return self.wire_tag
+        return self.tag()
 
     @classmethod
     def tag_of(cls, value: object) -> str:
@@ -91,13 +85,12 @@ class TaggedWire(WireModel, ABC, metaclass=RegisteredWireMeta):
     def declared_union(cls) -> TypeForm[Self]:
         def tag(value: object) -> str:
             if isinstance(value, cls):
-                return value.wire_tag
+                return value.tag()
             return cls.tag_of(value)
-        by_tag: dict[str, list[builtins.type[TaggedWire]]] = {}
-        for member in cls.__registry_config__.registry_dict.values():
-            by_tag.setdefault(member.wire_tag, []).append(member)
         variants = []
-        for wire_tag, members in by_tag.items():
+        declarations = sorted(cls.members_with(cls), key=lambda member: member.tag())
+        for wire_tag, group in groupby(declarations, key=lambda member: member.tag()):
+            members = tuple(group)
             hierarchy = TopologicalSorter({
                 member: tuple(base for base in member.__mro__[1:] if base in members)
                 for member in members
@@ -108,14 +101,18 @@ class TaggedWire(WireModel, ABC, metaclass=RegisteredWireMeta):
         return Annotated[Union[tuple(variants)], Discriminator(tag)]
 
 
-class OpenWire(TaggedWire, ABC):
+class OpenWire(TaggedWire, ABC, declared_name=None):
     """A family whose source adds kinds freely: a tag it does not declare decodes as its
     member tagged 'foreign', which carries no conversation."""
 
     @classmethod
     def tag_of(cls, value: object) -> str:
         tag = super().tag_of(value)
-        return tag if tag in cls.__registry_config__.registry_dict else 'foreign'
+        try:
+            cls.member_named(tag)
+        except UnknownFamilyMember:
+            return 'foreign'
+        return tag
 
 
 class Outcome(DeclaredFamily, affix='Outcome'):
@@ -154,11 +151,8 @@ class EmittedOutcome(UnconfirmedOutcome):
     pass
 
 
-class WatchLine(TaggedWire):
+class WatchLine(TaggedWire, affix=""):
     """One declared line from a Core watch child."""
-    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True,
-    )
 
     @abstractmethod
     async def handle(self, bridge: CliBridge, child: AttachedChild) -> None: ...
@@ -169,7 +163,7 @@ class WatchLine(TaggedWire):
             yield WATCH_LINE.validate_json(line)
 
 
-class CoreError(WatchLine):
+class CoreError(WatchLine, declared_name=None):
     """One-line Core failure; each member owns its source and watch behavior."""
     exception_type: ClassVar[builtins.type[BaseException]]
     error: str
@@ -177,8 +171,7 @@ class CoreError(WatchLine):
     @classmethod
     def from_exception(cls, error: BaseException) -> CoreError:
         members = {member.exception_type: member
-                   for member in cls.__registry_config__.registry_dict.values()
-                   if issubclass(member, cls)}
+                   for member in cls.members_with(cls)}
         message = str(error)
         cause = error.__cause__ or (None if error.__suppress_context__ else error.__context__)
         while cause is not None:
@@ -193,14 +186,12 @@ class CoreError(WatchLine):
         await raise_child_exit(child, self.error)
 
 
-class UnavailableCoreError(CoreError):
-    wire_tag = 'unavailable'
+class UnavailableCoreError(CoreError, declared_name='unavailable'):
     exception_type = CoordinationReadUnavailable
 
 
-class HeldCoreError(CoreError):
+class HeldCoreError(CoreError, declared_name='held'):
     """The bus went into maintenance: the child has closed, and the bridge resumes it."""
-    wire_tag = 'held'
     exception_type = MaintenanceHeldError
 
     async def handle(self, bridge: CliBridge, child: AttachedChild) -> None:
@@ -208,25 +199,20 @@ class HeldCoreError(CoreError):
         raise MaintenanceHeldError(self.error)
 
 
-class FailedCoreError(CoreError):
-    wire_tag = 'failed'
+class FailedCoreError(CoreError, declared_name='failed'):
     exception_type = BaseException
 
 
-class ArrivedMessage(WatchLine):
+class ArrivedMessage(WatchLine, declared_name='message'):
     """One decoded message; its journal retains canonical Message wire."""
-    wire_tag = 'message'
     message: InstanceOf[Annotated[Message, PlainValidator(Message.from_wire), PlainSerializer(Message.to_wire)]]
 
     async def handle(self, bridge: CliBridge, child: AttachedChild) -> None:
         await bridge.accept(self.message)
 
 
-class EarlierItems(WatchLine):
+class EarlierItems(WatchLine, TurnItem, declared_name='earlier-items'):
     """The pager's outstanding continuation, handled only by its socket-owning bridge."""
-    wire_tag = 'earlier-items'
-    turn_id: str
-    item_id: str
     request: RequestedEarlierPage
 
     @classmethod

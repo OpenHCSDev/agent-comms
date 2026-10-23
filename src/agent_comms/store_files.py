@@ -23,7 +23,6 @@ from contextlib import (
 from contextvars import Context, ContextVar
 from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
-from inspect import isabstract
 from pathlib import Path
 from typing import BinaryIO, ClassVar
 
@@ -252,7 +251,7 @@ class StoreLockOwner(StoreOwner, declared_name=None):
 
     def __init_subclass__(cls, **kwargs) -> None:
         super().__init_subclass__(**kwargs)
-        if isabstract(cls) or cls.declared_name is None:
+        if cls.declared_name is None:
             return
         if "locks_after" not in vars(cls):
             raise TypeError(f"{cls.__name__} must declare locks_after")

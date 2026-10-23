@@ -100,7 +100,7 @@ class CodingToolOwner(ABC):
 @dataclass(frozen=True, slots=True)
 class SelectedCodingToolOwner(CodingToolOwner):
     store: Coordination
-    claim_scope: WakeClaim
+    resource_scope: WakeClaim
     session_dir: Path
     input_id: str
     goal_permission: TurnGoalPermission = field()
@@ -115,8 +115,8 @@ class SelectedCodingToolOwner(CodingToolOwner):
                 self.store.session._connection, self.input_id
             ):
                 raise SelectedToolDenied("Tool original is absent from the reserved native batch")
-        return replace(self, claim_scope=replace(
-            self.claim_scope,
+        return replace(self, resource_scope=replace(
+            self.resource_scope,
             source_seq=assignment.wire_seq,
             source_message_id=assignment.message_id,
             wake_assignment_id=assignment.assignment_id,
@@ -127,11 +127,11 @@ class SelectedCodingToolOwner(CodingToolOwner):
     def verify(self, store, turn, snapshot):
         if self.input_id != turn.command.input_id:
             raise SelectedToolDenied("Native tool input changed")
-        verify_sent_full_input(store, self.claim_scope, self.owner_name, self.input_id)
-        verify_selected_wake(self.comms, store, self.claim_scope, self.owner_name)
+        verify_sent_full_input(store, self.resource_scope, self.owner_name, self.input_id)
+        verify_selected_wake(self.comms, store, self.resource_scope, self.owner_name)
 
     def claim_resource(self, store, turn, resource, slot):
-        scope = replace(self.claim_scope, operation_id=slot)
+        scope = replace(self.resource_scope, operation_id=slot)
         return publish_selected_resource_claim(self.comms, store, scope, self.owner_name, resource)
 
 

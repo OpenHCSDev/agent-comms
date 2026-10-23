@@ -12,7 +12,8 @@ from .acp_extension import ContextAnnotatedUpdate, encode_updates
 from .coordination_database import CoordinationStore
 from .coordinator import Coordination
 from .working_memory_annotations import PreviouslyRequestedAnnotation, WorkingMemoryAnnotations
-from .working_memory_disclosure import DisclosureState, DisclosureWithheld
+from .annotation_disclosure import DisclosureWithheld
+from .working_memory_disclosure import DisclosureState
 from .working_memory_labels import QuestionVersion
 from .working_memory_policy import AnnotationPolicy
 from .working_memory_questions import KindQuestion

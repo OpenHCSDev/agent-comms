@@ -25,7 +25,7 @@ def seed_unknown(comms, count, text):
     dispositions = InputDispositions(comms.root)
     rows = {
         f"bus:{index}": FieldCodec.encode(BoundUnknownInput(
-            key=f"bus:{index}", sequence=index, owner="b", claim_scope=index,
+            key=f"bus:{index}", sequence=index, owner="b", claim_generation=index,
             target="b", source_text=f"{index}: {text}", turn_id="private-turn",
             native_id="f" * 32, sent_digest=TextDigest.of("private-native-prompt"),
         ))
@@ -45,7 +45,10 @@ def inbox_comms(root):
     return comms
 
 
-@pytest.mark.parametrize("count,text", [(930, "historical input " * 65), (1, "🧪漢" * 40_000)])
+@pytest.mark.parametrize("count,text", [
+    pytest.param(930, "historical input " * 65, id="many-inputs"),
+    pytest.param(1, "🧪漢" * 40_000, id="large-unicode"),
+])
 def test_large_uncertain_inputs_do_not_stop_the_message_page_draining(inbox_comms, count, text):
     comms = inbox_comms
     ledger = seed_unknown(comms, count, text)

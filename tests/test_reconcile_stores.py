@@ -120,7 +120,7 @@ def test_private_carry_plans_and_restores_missing_native_tables(private_comms):
     root = private_comms.root
     database = CoordinationStore.path_in(root)
     with Coordination(database) as store:
-        store.participants.register("retained", "Retained owner", "retained-thread", committed=True)
+        store.participants.register("retained", committed=True)
         retained = store.participants.get("retained")
         store.session._connection.execute(f"DROP TABLE {TriageNativeSources.declared_name}")
 

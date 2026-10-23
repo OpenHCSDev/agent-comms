@@ -46,7 +46,7 @@ from agent_comms.selected_triage import (
 
 def cursor():
     return CurrentNativeCursor(
-        wire_root_id="a" * 32, recipient_lookup="b" * 32, owner_thread="owner",
+        wire_root_id="a" * 32, recipient_lookup="b" * 32,
         owner_generation=1, owner_claimed_generation=2, covered_seq=1, injected_seq=1,
         input_id=TextNativeColumn("c" * 32), stage=TextNativeColumn("full"),
         session_id=TextNativeColumn("original-session"), request_generation=NumberNativeColumn(1),
@@ -69,7 +69,7 @@ def test_native_cursor_state_owns_start_observation_and_input_proof(
 def reservation():
     return NativeRuntimeInput(
         input_id="c" * 32, stage=TriageNativeExecution, execution_id=UnrecordedNativeColumn(), attempt_ordinal=UnrecordedNativeColumn(),
-        owner_lookup="b" * 32, owner_thread="owner", owner_generation=1,
+        owner_lookup="b" * 32,  owner_generation=1,
         owner_token_digest="e" * 64,
     )
 
@@ -120,7 +120,7 @@ def historical_source(recorded):
     return dict(
         wire_root_id="a" * 32, source_seq=1, source_message_id="original-message",
         assignment_id="d" * 32, input_id=recorded.input_id,
-        owner_lookup=recorded.owner_lookup, owner_thread=recorded.owner_thread,
+        owner_lookup=recorded.owner_lookup,
         owner_generation=recorded.owner_generation,
         context=NativeContextProof(recorded.input_id, recorded.session_id,
             recorded.context_value("session_entry_id"), 1, "f" * 64, 1_791_964_800_001,

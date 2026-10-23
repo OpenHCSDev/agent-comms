@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import math
 import os
 from abc import abstractmethod
@@ -42,7 +41,7 @@ class WireExportFormat(DeclaredFamily, affix="Format"):
 
     @staticmethod
     def json_record(record: Mapping[str, object]) -> str:
-        return json.dumps(record, ensure_ascii=False, separators=(",", ":"))
+        return FieldCodec.compact(record, ensure_ascii=False)
 
 
 class SelectableWireExportFormat(WireExportFormat):

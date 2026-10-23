@@ -36,7 +36,7 @@ from agent_comms.installer.upgrade import (
     TargetTree,
     carried,
 )
-from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_execution import ExternalThreadExecution
@@ -154,8 +154,9 @@ def test_a_store_compares_by_its_rows_and_not_by_its_companion_files(tmp_path):
 
 @pytest.fixture
 def stack(tmp_path):
-    """Use the test interpreter, not an unrelated installed runtime under HOME."""
-    return Stack(REPO, InstallCommands(), home=tmp_path, runtime=LaunchRuntime.running())
+    """CLI children keep the test's source path rather than an editable install's checkout."""
+    return Stack(REPO, InstallCommands(), home=tmp_path,
+                 runtime=RestoredRuntime(LaunchRuntime.running().interpreter))
 
 
 @pytest.fixture(scope="module")
@@ -178,11 +179,11 @@ def noisy_step(tmp_path_factory):
         "            (self.root / 'saved').write_text('migrated')\n"
         "            if (self.root / 'fail').exists():\n"
         "                raise RuntimeError('failed after changing the saved file')\n"
-        "        return Carried(1, {'applied': apply}, ('saved',))\n"
+        "        return Carried(1, {'applied': apply}, (Path('saved'),))\n"
     )
     # The parent needs only the selected step's identity; its implementation is loaded
     # by the worker from the target tree.
-    class SelectedStep(Carry):
+    class Noisy(Carry):
         @classmethod
         def module(cls):
             return module
@@ -193,7 +194,7 @@ def noisy_step(tmp_path_factory):
         def carry(self, *, apply):
             raise AssertionError("The selected interpreter executes the carry, never its caller")
 
-    return tree, SelectedStep
+    return tree, Noisy
 
 
 def test_step_answers_are_separate_from_diagnostics_and_keep_their_types(
@@ -205,10 +206,10 @@ def test_step_answers_are_separate_from_diagnostics_and_keep_their_types(
     request = step(root, root, tmp_path / "spill")
     assert stack.call_step(request, tree, BackupFilesOperation()) == (root / "saved",)
     assert stack.call_step(request, tree, MigrateOperation(False)) == (
-        Carried(1, {"applied": False}, ("saved",)))
+        Carried(1, {"applied": False}, (Path("saved"),)))
     assert not (root / "saved").exists()
     assert stack.call_step(request, tree, MigrateOperation(True)) == (
-        Carried(1, {"applied": True}, ("saved",)))
+        Carried(1, {"applied": True}, (Path("saved"),)))
     assert (root / "saved").read_text() == "migrated"
 
 

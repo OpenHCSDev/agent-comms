@@ -22,9 +22,15 @@ from agent_comms.store_files import AtomicFile
 from agent_comms.typed_table import HeldBusFile, sql_literal
 
 from .carry_bus_history import CarryCatalogSource
+from .carry_claim_fields import ClaimFields
+from .retired_claim_fields import RetiredClaimFields
 
 
-class DeclaredFailures(Carry):
+class DeclaredFailures(RetiredClaimFields, Carry):
+    # Both changes affect one table. Rebuild it once with both source columns;
+    # ClaimFields then observes the already-carried SQL claim field.
+    precedes = (ClaimFields,)
+
     old_names: ClassVar[dict[str, type[failures.TurnFailure]]] = {
         "backend_failed": failures.BackendFailed,
         "native_preflight_timeout": failures.NativePreflightTimeout,
@@ -50,9 +56,9 @@ class DeclaredFailures(Carry):
         paths = tuple(
             path for root in self.roots()
             for path in (
-                *GoalAttemptStore.files(GoalAttemptStore.path_in(root)),
+                *GoalAttemptStore.files(GoalAttemptStore.path_in(GoalAttemptStore.directory_in(root))),
                 *DiagnosticDocument.files_in(root),
-                *GoalAttemptStore.source_paths(root),
+                *GoalAttemptStore.source_paths(GoalAttemptStore.directory_in(root)),
             ) if path.exists()
         )
         for path in paths:
@@ -63,7 +69,8 @@ class DeclaredFailures(Carry):
         self.backup_files()
         if apply:
             # The installer's root hold also covers its retained, inactive snapshots.
-            HeldBusFile(GoalAttemptStore, GoalAttemptStore.path_in(self.root)).require()
+            HeldBusFile(GoalAttemptStore, GoalAttemptStore.path_in(
+                GoalAttemptStore.directory_in(self.root))).require()
         results = tuple(self.carry_root(root, apply=apply) for root in self.roots())
         return Carried(
             sum(result.changed for result in results),
@@ -72,13 +79,15 @@ class DeclaredFailures(Carry):
 
     def carry_root(self, root: Path, *, apply: bool) -> Carried:
         changed = 0
-        rewritten: list[str] = []
-        path = GoalAttemptStore.path_in(root)
+        rewritten: list[Path] = []
+        store = GoalAttemptStore.directory_in(root)
+        path = GoalAttemptStore.path_in(store)
         if path.exists():
             with closing(SQLiteFile.writer(":memory:")) as prepared:
                 with closing(SQLiteFile.read_snapshot(path)) as original:
                     original.backup(prepared)
                 columns = FailedTurnEvidence.stored_columns(prepared)
+                replacements = self.retired_columns(FailedTurnEvidence, columns)
                 if "reason" in columns:
                     for (reason,) in prepared.execute(
                         f'SELECT DISTINCT reason FROM "{FailedTurnEvidence.declared_name}"'
@@ -89,7 +98,9 @@ class DeclaredFailures(Carry):
                         f"WHEN {sql_literal(old)} THEN {sql_literal(kind)}"
                         for old, kind in self.old_names.items()
                     )
-                    FailedTurnEvidence.rebuild(prepared, {"failure": f"CASE reason {cases} END"})
+                    replacements["failure"] = f"CASE reason {cases} END"
+                if replacements:
+                    FailedTurnEvidence.rebuild(prepared, replacements)
                     changed += 1
                 if AttemptRecord.stored_columns(prepared):
                     for old, kind in self.old_names.items():
@@ -106,8 +117,8 @@ class DeclaredFailures(Carry):
                         with closing(SQLiteFile.writer(path)) as destination:
                             prepared.backup(destination)
                         GoalAttemptStore.publish_change(path)
-                        rewritten.extend(str(file.relative_to(self.root)) for file in (
-                            path, *GoalAttemptStore.source_paths(root),
+                        rewritten.extend(file.relative_to(self.root) for file in (
+                            path, *GoalAttemptStore.source_paths(store),
                         ))
         for diagnostic in DiagnosticDocument.matching_in(root):
             document = json.loads(diagnostic.read_text())
@@ -119,6 +130,6 @@ class DeclaredFailures(Carry):
             document["failure"] = self.old_names[old].declared_name
             if apply:
                 AtomicFile(diagnostic).write_text(json.dumps(document, indent=2) + "\n")
-                rewritten.append(str(diagnostic.relative_to(self.root)))
+                rewritten.append(diagnostic.relative_to(self.root))
             changed += 1
         return Carried(changed, rewritten=tuple(rewritten))

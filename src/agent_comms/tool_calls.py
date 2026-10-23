@@ -13,10 +13,10 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import ClassVar
 
-from metaclass_registry import RegistryConfig
 from pydantic import AliasChoices, Field, JsonValue, ValidationError
 
-from .cli_protocol import RegisteredWireMeta, WireModel
+from .cli_protocol import WireModel
+from .declared_family import DeclaredWireFamily, UniqueExternalSelector
 from .field_codec import FieldCodec, MalformedRecord
 from .native_tools import BashTool, EditTool, GlobTool, GrepTool, ReadTool, WriteTool
 from .tool_declaration import ReplacementEdit, ToolDeclaration
@@ -82,23 +82,23 @@ class PatchedToolCall(DecodedToolCall):
         return replace(super().ended(text, ok, position, timestamp), diff=self.diff)
 
 
-class CliToolArguments(WireModel, metaclass=RegisteredWireMeta):
+class CliToolArguments(UniqueExternalSelector, DeclaredWireFamily, WireModel, affix="Arguments"):
     """A runtime's arguments for one Core tool in its own spelling (Claude Code's, OpenCode's), read
     once into the Core record; the runtime's other keys stay in its raw input."""
 
     cli_names: ClassVar[tuple[str, ...]] = ()
-    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute="cli_names", registry_name="CLI tool arguments",
-    )
-    __registry__: ClassVar[dict[tuple[str, ...], type[CliToolArguments]]]
     model_config = {"extra": "allow"}
+
+    @classmethod
+    def selection_key(cls) -> tuple[str, ...]:
+        return cls.cli_names
 
     @classmethod
     def decode(cls, sent: ToolCall, arguments: Mapping[str, JsonValue]) -> ToolCall:
         """The call decoded when its name has a declared shape that its values fit, else as sent.
 
         The model can send values that do not fit (Claude refuses them with an error result)."""
-        shapes = [shape for names, shape in cls.__registry__.items() if sent.name in names]
+        shapes = [shape for shape in cls.members_with(cls) if sent.name in shape.cli_names]
         if not shapes:
             return sent
         if len(shapes) > 1:
