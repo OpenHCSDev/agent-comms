@@ -11,7 +11,6 @@ import fcntl
 import hashlib
 import json
 import os
-import sys
 import time
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
@@ -190,7 +189,8 @@ class WatchState:
         announce()
         return True
 
-    def name_wait(self, claim: WatchClaim) -> bool:
+    def name_wait(self, announce: Callable[[], None]) -> bool:
+        """An absent holder is not a wait to name."""
         return False
 
     def await_socket(self, claim: WatchClaim, absent: OSError) -> None:
@@ -249,12 +249,9 @@ class LiveWatch(RecordedWatch):
         """A held claim's absent socket is an install's swap, not an outage."""
         return False
 
-    def name_wait(self, claim: WatchClaim) -> bool:
-        sys.stdout.write(
-            f"Waiting for the session bridge of {claim.thread}: "
-            "an install holds its claim and is replacing it.\n"
-        )
-        sys.stdout.flush()
+    def name_wait(self, announce: Callable[[], None]) -> bool:
+        """Name a held claim's replacement once through the reader's protocol."""
+        announce()
         return True
 
     def await_socket(self, claim: WatchClaim, absent: OSError) -> None:
