@@ -1,5 +1,7 @@
-"""A reviewer's verdict on one exact pull-request head, posted as the review status the merge
-queue requires (agent-comms/review). Every path that posts that status goes through here."""
+"""A reviewer's verdict on one exact pull-request head, posted as main's required status.
+
+Every path that posts that status goes through here.
+"""
 
 from __future__ import annotations
 
@@ -35,8 +37,6 @@ class PullRequestHead:
 
 class HeadReview(DeclaredFamily, affix="HeadReview"):
     context: ClassVar[str] = "agent-comms/review"
-    # The merge-queue job (debt-ratchet.yml) that reads ``context`` on the queued head.
-    queue_check: ClassVar[str] = "review-verdict"
     # GitHub's commit-status states, an external contract.
     state: ClassVar[str]
     # GitHub caps a status description at 140 characters.

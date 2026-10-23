@@ -8,13 +8,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
+from .child_process import Platform
 from .field_codec import RecordedTimestamp
 from .native_entries import SessionEntry
 from .native_failures import NativePiUnavailable
 from agent_comms.native_session_files import NativeSessionFiles
 from .native_session_files import PrivateSession, SavedSessionFile
 from .native_session_reopen import NativeSessionIdentity
-from .private_path import NativeSessionFileRole, fsync_directory
+from .private_path import NativeSessionFileRole
 
 
 def create_fresh_private_session(
@@ -47,7 +48,7 @@ def create_fresh_private_session(
             os.fsync(descriptor)
         finally:
             os.close(descriptor)
-        fsync_directory(session_dir)
+        Platform.current().sync_directory(session_dir)
         return NativeSessionIdentity(session_id, str(path))
     except OSError as error:
         # A failed sync can leave a committed file. Preserve it, never infer success.

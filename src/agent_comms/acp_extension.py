@@ -22,6 +22,7 @@ from .acp_failure import (
 )
 from .agent_backend import InputId, SendNow, TurnInbox
 from .agent_events import CompactionEvent
+from .child_process import ProcessIdentity
 from .context_reading import ContextReading
 from .declared_family import DeclaredFamily
 from .external_transcript import DraftRow
@@ -201,7 +202,7 @@ class LiveAttachmentScope(AttachmentScope):
     """Logical ACP attachment and executor evidence have separate identities."""
     session_id: str
     claimed_identity: ClaimedIdentity
-    owner_pid: int
+    owner: ProcessIdentity
 
     @property
     @abstractmethod
@@ -265,7 +266,7 @@ class ObservedAttachmentRelation(AttachmentRelation):
     def ambiguous(self):
         return (not self.same_incarnation or
                 (self.original.claimed_generation == self.received.claimed_generation
-                 and self.original.owner_pid != self.received.owner_pid))
+                 and self.original.owner != self.received.owner))
 
     @property
     def newer(self):
@@ -279,7 +280,7 @@ class ObservedAttachmentRelation(AttachmentRelation):
     def current(self):
         return (self.same_incarnation
                 and self.original.claimed_generation == self.received.claimed_generation
-                and self.original.owner_pid == self.received.owner_pid)
+                and self.original.owner == self.received.owner)
 
 
 class CursorScope(AttachmentScope):
@@ -302,14 +303,13 @@ class LiveCursorScope(CursorScope, LiveAttachmentScope):
     session_id: str
     wire_root_id: str
     claimed_identity: Annotated[ClaimedIdentity, WireName("admission")]
-    owner_pid: int
+    owner: ProcessIdentity
 
     def __post_init__(self):
         Id128Text.decode(self.wire_root_id)
         self.claimed_identity.incarnation.require_recorded()
         if (
             not self.session_id
-            or self.owner_pid <= 0
             or self.claimed_identity.claimed_generation <= 0
         ):
             raise ValueError("Invalid native cursor scope")
@@ -447,7 +447,7 @@ class NoQueueScope(QueueScope):
 class LiveQueueScope(QueueScope, LiveAttachmentScope):
     session_id: str
     claimed_identity: Annotated[ClaimedIdentity, WireName("admission")]
-    owner_pid: int
+    owner: ProcessIdentity
 
     @property
     def logical_key(self):
@@ -591,7 +591,7 @@ class InputStartedUpdate(AgentCommsUpdate):
 class CoordinationChangedUpdate(AgentCommsUpdate):
     thread: ThreadIncarnation
     wire_root: str
-    owner_pid: int
+    owner: ProcessIdentity
     worktree: str
     model: str
     thinking_level: str | None

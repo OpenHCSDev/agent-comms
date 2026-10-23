@@ -160,9 +160,10 @@ class RecordPlanePhase(CommanderNativePhase):
 
 
 class ReviewQueuePhase(CommanderNativePhase):
-    """Revised 2026-10-21: a verdict per PR head gates the merge queue. Done when the ruleset
-    requires the queue job that reads ``agent-comms/review`` and an unreviewed PR cannot
-    merge, which an always-bypass actor would defeat."""
+    """A verdict per PR head gates merging through main's required review status.
+
+    No GitHub merge queue is required. A bypass actor defeats the review gate.
+    """
 
     after = (RecordPlanePhase,)
     evidence = RulesetGates()
@@ -214,8 +215,8 @@ class StoryPhase(CommanderNativePhase):
     after = (RecordPlanePhase,)
     evidence = AllEvidence(
         (
-            PatternPresent(r"\bcomms_order_story\b", OUTSIDE_PARITY),
-            PatternPresent(r"\bcomms_fleet_story\b", OUTSIDE_PARITY),
+            PatternPresent(r"^class CommsOrderStoryTool\b", ("src/agent_comms/tools.py",)),
+            PatternPresent(r"^class CommsFleetStoryTool\b", ("src/agent_comms/tools.py",)),
             PatternAbsent(r"^def roast\b", (COMMANDER + "judge.py",)),
         )
     )

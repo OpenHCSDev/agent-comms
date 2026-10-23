@@ -19,6 +19,7 @@ from pathlib import Path
 from pkgutil import walk_packages
 from typing import Any, ClassVar, Generic, Self, TypeVar
 
+from .child_process import Platform
 from .coordination_errors import CoordinationReadUnavailable
 from .field_codec import FieldCodec, MalformedRecord
 from .store_files import (
@@ -86,7 +87,6 @@ class JsonDocument(ABC, Generic[T]):
         """
         fd, staged = StoreOwner.stage_file(self.path)
         backup = StoreOwner.rollback_file(staged)
-        directory_fd = None
         published = False
         had_original = False
         keep_backup = False
@@ -100,10 +100,6 @@ class JsonDocument(ABC, Generic[T]):
                 output.flush()
                 os.chmod(staged, mode)
                 os.fsync(output.fileno())
-            if os.name == "posix":
-                directory_fd = os.open(
-                    self.path.parent, os.O_RDONLY | os.O_DIRECTORY
-                )
             try:
                 os.link(self.path, backup)
                 had_original = True
@@ -111,8 +107,7 @@ class JsonDocument(ABC, Generic[T]):
                 pass
             os.replace(staged, self.path)
             published = True
-            if directory_fd is not None:
-                os.fsync(directory_fd)
+            Platform.current().sync_directory(self.path.parent)
             # A failed backup cleanup is still a failed update: retain the old
             # inode until unlink succeeds so the exception path can restore it.
             backup.unlink(missing_ok=True)
@@ -128,12 +123,9 @@ class JsonDocument(ABC, Generic[T]):
                         raise
                 else:
                     self.path.unlink()
-                if directory_fd is not None:
-                    os.fsync(directory_fd)
+                Platform.current().sync_directory(self.path.parent)
             raise
         finally:
-            if directory_fd is not None:
-                os.close(directory_fd)
             staged.unlink(missing_ok=True)
             if not keep_backup:
                 backup.unlink(missing_ok=True)
@@ -570,50 +562,11 @@ class RuntimeFile(RootFile):
     __slots__ = ()
 
 
-class DocumentConversion(ABC):
-    """A store's declared converter names the old schemas it can actually read."""
-
-    source_fingerprints: ClassVar[frozenset[str]] = frozenset()
-
-    @classmethod
-    @abstractmethod
-    def converted(cls, raw: dict) -> dict:
-        """Convert a supported old document before the current codec validates it."""
-        raise NotImplementedError
-
-
 @dataclass(frozen=True, slots=True)
 class LockedStore(FileStore, StoreLockOwner, JsonDocument[T]):
     """Ordered document transactions; callbacks never mutate or reenter."""
 
     path: Path
-    conversion: ClassVar[type[DocumentConversion]] = DocumentConversion
-
-    @staticmethod
-    def _canonical_schema(value):
-        """Schema sets have no order; tuple positions and default arrays do."""
-        if isinstance(value, dict):
-            result = {}
-            for key, child in value.items():
-                if key in ("properties", "$defs", "patternProperties", "dependentSchemas"):
-                    child = {name: LockedStore._canonical_schema(schema) for name, schema in child.items()}
-                elif key not in ("default", "examples", "const", "enum"):
-                    child = LockedStore._canonical_schema(child)
-                if key in ("required", "enum", "anyOf", "oneOf", "allOf") and isinstance(child, list):
-                    child = sorted(child, key=lambda item: json.dumps(item, sort_keys=True))
-                result[key] = child
-            return result
-        if isinstance(value, list):
-            return [LockedStore._canonical_schema(child) for child in value]
-        return value
-
-    @classmethod
-    def format_fingerprint(cls) -> str:
-        """The stored declaration, never a manually maintained version number."""
-        schema = LockedStore._canonical_schema(FieldCodec.value_schema(cls.record_type))
-        encoded = json.dumps(schema, sort_keys=True, separators=(",", ":"), allow_nan=False)
-        return hashlib.sha256(encoded.encode()).hexdigest()
-
     @contextmanager
     def reading(self, *sources, blocking: bool = True) -> Iterator[T]:
         """Retain dependent source owners before this document's shared lock."""

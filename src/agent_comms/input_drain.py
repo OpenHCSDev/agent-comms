@@ -586,7 +586,7 @@ class InputDrain(InputObservation):
         return LiveQueueScope(
             session_id,
             ClaimedIdentity(owner.incarnation, claim_scope),
-            owner.require_process().pid,
+            owner.require_process(),
         )
 
     def next_revision(self, session_id: str) -> int:

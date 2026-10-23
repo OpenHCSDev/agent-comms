@@ -157,12 +157,12 @@ def test_attachment_routing_rename_preserves_exact_executor_fences():
     from dataclasses import replace
     original = ClaimedIdentity(RecordedThreadIncarnation("old-route", 1000.0), 7)
     renamed = replace(original, incarnation=replace(original.incarnation, name="new-route"))
-    scopes = (LiveQueueScope("official-acp-id", original, 123),
-              LiveCursorScope("official-acp-id", "a" * 32, original, 123))
+    scopes = (LiveQueueScope("official-acp-id", original, ProcessIdentity(123, 1)),
+              LiveCursorScope("official-acp-id", "a" * 32, original, ProcessIdentity(123, 1)))
     for scope in scopes:
         assert scope.relation(replace(scope, claimed_identity=renamed)).current
         assert scope.relation(replace(scope, session_id="new-route")).foreign
-        assert scope.relation(replace(scope, owner_pid=124)).ambiguous
+        assert scope.relation(replace(scope, owner=ProcessIdentity(124, 1))).ambiguous
         assert scope.relation(replace(scope, claimed_identity=replace(original, incarnation=replace(original.incarnation, created_at=1001.0)))).ambiguous
         assert scope.relation(replace(scope, claimed_identity=replace(original, claimed_generation=8))).newer
         assert scope.relation(replace(scope, claimed_identity=replace(original, claimed_generation=6))).older

@@ -97,7 +97,7 @@ class OwnerFollowingInputs(FollowingInputs):
         self.scope = LiveQueueScope(
             self.session_id,
             ClaimedIdentity(lease.identity.incarnation, lease.claimed_generation),
-            thread.require_process().pid,
+            thread.require_process(),
         )
         inputs.state(self.session_id).capture_first_source(original)
         session.forward_inbox(self.inbox, sender)

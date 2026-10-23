@@ -34,7 +34,6 @@ from .audience_manifest import FrozenRecipient
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .maintenance_barrier import MaintenanceBarrier
 from .routing import TurnRouting
 from .runtime_info import RuntimeInfo, RuntimeInfoStore
 from .thread_identity import OwnerIdentity, ThreadIncarnation
@@ -120,8 +119,6 @@ class AgentActivity:
         """Declare a thread's current activity (thinking/working/idle)."""
         if state.retires_thread:
             raise RelationViolationError("Only permanent thread deletion retires its activity.")
-        # A tool-use hook runs outside any watch; maintenance refuses it like a send.
-        MaintenanceBarrier(self.registry.store.path).assert_open_unlocked()
         self._emit_activity(Activity.create(self.registry.require(thread).name, state, detail))
 
     def activity_of(self, thread: str, *, snapshot: RegistrySnapshot) -> ObservedActivity:

@@ -21,6 +21,7 @@ from typing import ClassVar
 from agent_comms.coordinator import Coordination
 
 from .comms import Comms
+from .child_process import Platform
 from agent_comms.native_runtime_input import NativeRuntimeTable
 from .coordination_errors import CoordinationReadUnavailable
 from .coordination_tables.participants import OwnerGenerations
@@ -40,7 +41,7 @@ from .native_tool_transport import (
     ToolTransport,
     UnboundToolTransport,
 )
-from .private_path import PrivateDirectoryRole, PrivateFileRole, fsync_directory
+from .private_path import PrivateDirectoryRole, PrivateFileRole
 from .selected_actions import SelectedAction
 from .selected_claim import publish_selected_resource_claim, write_selected_claimed_file
 from .turn_context import InstructionFile
@@ -194,7 +195,7 @@ def consume_selected_slot(directory: Path, input_id: str, call_id: str) -> None:
         info = ledger.lstat()
         if PrivateDirectoryRole.violation(info) is not None:
             raise SelectedToolDenied("Selected tool ledger is not private")
-        fsync_directory(directory)
+        Platform.current().sync_directory(directory)
         fd = os.open(ledger / input_id, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     except FileExistsError as error:
         raise SelectedToolDenied(
@@ -207,7 +208,7 @@ def consume_selected_slot(directory: Path, input_id: str, call_id: str) -> None:
             stream.write((call_id + "\n").encode("ascii"))
             stream.flush()
             os.fsync(stream.fileno())
-        fsync_directory(ledger)
+        Platform.current().sync_directory(ledger)
     except OSError as error:
         # Do NOT remove the visible slot; a failed fsync or a crash may have
         # committed it. No automatic re-append, retry, or write follows.
@@ -223,7 +224,7 @@ def record_selected_terminal(directory: Path, input_id: str, call_id: str) -> No
             output.write((call_id + "\n").encode("ascii"))
             output.flush()
             os.fsync(output.fileno())
-        fsync_directory(result.parent)
+        Platform.current().sync_directory(result.parent)
     except OSError as error:
         raise SelectedToolDenied("Selected tool terminal acknowledgement UNKNOWN; no retry") from error
 

@@ -17,7 +17,6 @@ import json
 import os
 import secrets
 import sqlite3
-import stat
 import tempfile
 from abc import abstractmethod
 from collections.abc import Callable
@@ -30,6 +29,7 @@ from uuid import uuid4
 
 from agent_comms.goal_turn_permit import GoalTurnPermit
 
+from .child_process import Platform
 from .declared_family import DeclaredFamily
 from .field_codec import MalformedRecord
 from .goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
@@ -689,9 +689,7 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
     def initialize(cls, root: str | Path) -> GoalAttemptStore:
         """Explicit setup; creation or fsync uncertainty never returns a store."""
         directory = Path(root)
-        if not directory.is_dir() or (
-            os.name == "posix" and stat.S_IMODE(directory.stat().st_mode) != 0o700
-        ):
+        if not directory.is_dir() or not Platform.current().is_private(directory.stat(), 0o700):
             raise StorageUncertainError("An existing owner-0700 directory is required.")
         path = cls.path_in(directory)
         if path.exists():
@@ -710,12 +708,14 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
                 conn.execute("PRAGMA foreign_keys=ON")
                 with cls.write_transaction(conn):
                     GoalLedgerTable.create_schema(conn)
-            cls._sync_paths(staging, directory)
+            platform = Platform.current()
+            platform.sync_file(staging)
+            platform.sync_directory(directory)
             # Publish only the complete schema; a concurrent initializer may win.
             # The staging descriptor is closed before its inode becomes shared.
             with suppress(FileExistsError):
                 os.link(staging, path, follow_symlinks=False)
-            cls._sync_directory(directory)
+            platform.sync_directory(directory)
         except (sqlite3.Error, OSError) as error:
             raise StorageUncertainError("Goal attempt initialization is uncertain.") from error
         finally:
@@ -723,14 +723,11 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
         return cls(directory)
 
     def _require_root(self) -> None:
-        if not self.root.is_dir() or (
-            os.name == "posix" and stat.S_IMODE(self.root.stat().st_mode) != 0o700
-        ):
+        if not self.root.is_dir() or not Platform.current().is_private(self.root.stat(), 0o700):
             raise StorageUncertainError("Goal attempt root must remain owner-0700.")
         if (
             self.path.exists()
-            and os.name == "posix"
-            and stat.S_IMODE(self.path.stat().st_mode) != 0o600
+            and not Platform.current().is_private(self.path.stat(), 0o600)
         ):
             raise StorageUncertainError("Goal attempt database must remain owner-0600.")
 
@@ -753,27 +750,10 @@ class GoalAttemptStore(DurableFile, PublishedSQLiteFile, WireWakeFile):
         except sqlite3.Error as error:
             raise StorageUncertainError("Goal attempt database unavailable.") from error
 
-    @classmethod
-    def _sync_paths(cls, path: Path, directory: Path) -> None:
-        # Windows' CRT _commit (used by os.fsync) needs a writable handle.
-        file_fd = os.open(path, os.O_RDWR if os.name == "nt" else os.O_RDONLY)
-        try:
-            os.fsync(file_fd)
-        finally:
-            os.close(file_fd)
-        cls._sync_directory(directory)
-
-    @staticmethod
-    def _sync_directory(directory: Path) -> None:
-        if os.name == "posix":
-            dir_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
-            try:
-                os.fsync(dir_fd)
-            finally:
-                os.close(dir_fd)
-
     def _sync(self) -> None:
-        self._sync_paths(self.path, self.root)
+        platform = Platform.current()
+        platform.sync_file(self.path)
+        platform.sync_directory(self.root)
 
     def _change(
         self, operation: Callable[[sqlite3.Connection], _T], verify: Callable[[_T], bool]
