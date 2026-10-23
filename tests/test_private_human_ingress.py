@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from bus_record_fixture import prepare_native_comms
 
 from agent_comms.channel_targets import CommandTarget
@@ -15,7 +16,6 @@ import pytest
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.bus_publication import HumanOrigin
-from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_results import Applied
@@ -47,7 +47,7 @@ def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(root), created_at=created_at))
         lookups[name] = RecordedThreadIncarnation("fixture", created_at).lookup
     store = Coordination(str(CoordinationStore.path_in(root)), clock_ms=lambda: 9999)
-    install_private_cohort_schema(store)
+    PrivateCoordinatorTable.install(store)
     for name in lookups:
         store.participants.register(lookups[name], name, name, committed=True)
     return comms, store, comms.registry.prepare_native_root().namespace, lookups

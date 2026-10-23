@@ -42,7 +42,7 @@ from agent_comms.messages import ConversationRole, InfoKind, Message, MessageKin
 from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.obligation_states import PublishedResponse, PublishingResponse
 from agent_comms.owner_fence import OwnerFence
-from agent_comms.private_runtime_schema import PrivateRuntimeSchema
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from agent_comms.private_registry_guard import RegistryPrivacy
 from agent_comms.private_send_rules import RunningTurnRegistryCheck
 from agent_comms.publisher import ResponseWrites
@@ -59,14 +59,10 @@ from agent_comms.typed_table import (
 from .locked_store import RegistryFile
 
 
-class ResponseTable(ImmutableRows, PrivateRuntimeSchema):
+class ResponseTable(ImmutableRows, PrivateCoordinatorTable):
     """An immutable response definition with its write checks and append evidence."""
 
     schema_error = PublicationActivationBlocked
-
-    @classmethod
-    def install(cls, store) -> None:
-        install_private_response_schema(store)
 
 @dataclass(frozen=True)
 class PublicationAppendDispatches(ResponseTable, TypedTable):
@@ -222,14 +218,6 @@ class SelectedResponseRoute(TypedRow):
         )
         if self != expected:
             raise IdentityConflict("response sealed route differs from committed source")
-
-
-def install_private_response_schema(store: Coordination) -> None:
-    """Install the current response tables on a fresh coordinator only."""
-    with store.session.writing() as db:
-        if not ResponseTable.stored_schema(db):
-            ResponseTable.create_schema(db)
-        ResponseTable.require_installed(db)
 
 
 @dataclass(frozen=True, kw_only=True)

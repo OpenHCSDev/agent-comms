@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 import json
 import os
 from dataclasses import replace
@@ -13,7 +14,6 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.context_segments.wake import SelectedWakeSegment
 from agent_comms.coordinated_runtime import SelectedExecution, SessionSetupFailed
-from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
 from agent_comms.coordination_errors import (
@@ -161,8 +161,8 @@ def test_native_runtime_schema_explicit_install_and_drift_fail_closed(tmp_path: 
             ).fetchone()
             is None
         )
-        install_native_runtime_schema(store)
-        install_native_runtime_schema(store)
+        PrivateCoordinatorTable.install(store)
+        PrivateCoordinatorTable.install(store)
         NativeRuntimeTable.require_installed(store.session._connection)
         trigger = next(iter(NativeRuntimeInput.triggers()))
         store.session._connection.execute(f'DROP TRIGGER "{trigger}"')

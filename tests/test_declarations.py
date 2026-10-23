@@ -1,4 +1,5 @@
 
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from agent_comms.bus import Bus
 from bus_record_fixture import prepare_native_comms
 
@@ -397,7 +398,7 @@ class TestRegistration:
         prepare_native_comms(comms)
         # A native coordinator is retained evidence of private mode even if its guard vanishes.
         with Coordination(str(CoordinationStore.path_in(root))) as store:
-            CohortTable.install(store)
+            PrivateCoordinatorTable.install(store)
         cold = Registration(root / "registry.json")
         assert cold.require("a").name == "a"
         guard = root / ".registry-owner-guard"

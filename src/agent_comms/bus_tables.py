@@ -26,6 +26,7 @@ from agent_comms.response_policy import ResponsePolicy
 from agent_comms.typed_table import (
     AppendOnlyTables,
     Column,
+    ComposedSchemas,
     DerivedTables,
     DurableTables,
     ForeignKey,
@@ -57,20 +58,8 @@ class BusProjectionTables(SharedFileTables, DerivedTables):
                 header.kind.read_from(db, header.seq).project_into(db)
 
 
-class BusSchema(BusTables, BusProjectionTables):
+class BusSchema(ComposedSchemas, BusTables, BusProjectionTables):
     """One file reconciles its declared families using each family's carry policy."""
-
-    @classmethod
-    def schema_rows(cls) -> tuple[type[TypedTable], ...]:
-        return tuple(dict.fromkeys(
-            row for family in cls.__bases__ for row in family.schema_rows()
-        ))
-
-    @classmethod
-    def carry_schema(cls, db: sqlite3.Connection) -> None:
-        for family in cls.__bases__:
-            family.carry_schema(db)
-
 
 @dataclass(frozen=True)
 class ParticipantSource(TypedTable, BusProjectionTables, declared_name=None):

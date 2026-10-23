@@ -1,5 +1,6 @@
 """Restoration changes visibility without replay or transferring live ownership."""
 
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from bus_record_fixture import prepare_native_comms
 from conftest import installed_comms
 
@@ -123,7 +124,6 @@ def test_catalog_restore_preserves_current_preferences_and_historical_channels(t
 def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
     tmp_path, repair_existing
 ):
-    from agent_comms.cohort_schema import install_private_cohort_schema
     from agent_comms.coordination_cohort import accept_delivery_cohort
     from agent_comms.coordinator import Coordination
 
@@ -135,7 +135,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
     root_id = current.registry.prepare_native_root().namespace
     source = old.registry.snapshot()
     with Coordination(str(current.root / "coordination.sqlite3")) as store:
-        install_private_cohort_schema(store)
+        PrivateCoordinatorTable.install(store)
         live_before = store.participants.register(
             RecordedThreadIncarnation("fixture", live.created_at).lookup, live.name, live.name, committed=True
         ).value

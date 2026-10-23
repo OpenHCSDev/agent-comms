@@ -6,6 +6,7 @@ activate private processing for existing public sessions.
 
 from __future__ import annotations
 
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from bus_record_fixture import prepare_native_comms
 
 
@@ -23,7 +24,6 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import ParticipantNotRegistered, PublicationActivationBlocked, StaleRevision
 from agent_comms.coordinator import Coordination
-from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.errors import RelationViolationError
 from test_coordinated_runtime import tmp_path as private_root_fixture
 from agent_comms.thread_model import DeclaredModel
@@ -44,7 +44,7 @@ def _private_comms(tmp_path):
         store.participants.register(
             RecordedThreadIncarnation("fixture", owner.created_at).lookup, "beta", "beta", committed=True
         )
-        install_native_runtime_schema(store)
+        PrivateCoordinatorTable.install(store)
     return comms, root_id
 
 

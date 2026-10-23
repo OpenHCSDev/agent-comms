@@ -87,14 +87,10 @@ class Registration:
 
     def prepare_native_root(self) -> PrivateRegistryGuard:
         """Prepare native authority, then its complete runtime outside the registry lock."""
-        from .coordination_database import CoordinationStore
-        from .coordinator import Coordination
-
         with self.store.locked():
             self.store.read_snapshot_unlocked().purpose.require_write()
             guard = self.store.private_guard_unlocked().prepare_native(self.store.path)
-        with Coordination(CoordinationStore.path_in(self.store.path.parent)) as store:
-            store.install_private_runtime()
+        guard.prepare_runtime()
         return guard
 
     def register_commander_child(self, name: str, parent_name: str, goals: Goals) -> Thread:

@@ -20,6 +20,13 @@ from agent_comms.cli_commands import (
     ReconcileStoresCliCommand,
 )
 from agent_comms.activity import ActivityStore
+from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination_session import CoordinationSession
+from agent_comms.coordinator import Coordination
+from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.private_runtime_schema import PrivateCoordinatorSchema
+from agent_comms.triage_native_sources import TriageNativeSources
+from agent_comms.bus import Bus
 from agent_comms.maintenance_barrier import HOLDER_NONCE
 from agent_comms.installer.backup import bus_files
 from agent_comms.typed_table import ReconciledFile
@@ -107,3 +114,47 @@ def test_read_back_under_the_hold_writes_nothing_on_a_drifted_bus(private_comms)
         completed = reconcile(root, nonce, ReadBackCliCommand)
         assert completed.returncode == 0, completed.stdout + completed.stderr
         assert bus_files(root) == before
+
+
+def test_private_carry_plans_and_restores_missing_native_tables(private_comms):
+    root = private_comms.root
+    database = CoordinationStore.path_in(root)
+    with Coordination(database) as store:
+        store.participants.register("retained", "Retained owner", "retained-thread", committed=True)
+        retained = store.participants.get("retained")
+        store.session._connection.execute(f"DROP TABLE {TriageNativeSources.declared_name}")
+
+    with maintenance_held(root) as nonce:
+        before = bus_files(root)
+        planned = reconcile(root, nonce, PlannedReconcileCliCommand)
+        assert planned.returncode == 0, planned.stdout + planned.stderr
+        assert json.loads(planned.stdout)["rewritten"] == [database.name]
+        assert bus_files(root) == before
+        carried = reconcile(root, nonce)
+        assert carried.returncode == 0, carried.stdout + carried.stderr
+        assert json.loads(carried.stdout)["rewritten"] == [database.name]
+        assert json.loads(reconcile(root, nonce, PlannedReconcileCliCommand).stdout)["rewritten"] == []
+
+    with Coordination(database) as store:
+        assert store.participants.get("retained") == retained
+        PrivateCoordinatorSchema.require_installed(store.session._connection)
+
+
+def test_public_reconcile_does_not_install_native_state(tmp_path):
+    root = tmp_path / "public"
+    Bus.install(Bus.path_in(root))
+    database = CoordinationStore.path_in(root)
+    with CoordinationSession(database):
+        pass
+    before = bus_files(root)
+    planned = reconcile(root, command=PlannedReconcileCliCommand)
+    assert planned.returncode == 0, planned.stdout + planned.stderr
+    assert json.loads(planned.stdout)["rewritten"] == []
+    carried = reconcile(root)
+    assert carried.returncode == 0, carried.stdout + carried.stderr
+    assert json.loads(carried.stdout)["rewritten"] == []
+    assert bus_files(root) == before
+    with closing(sqlite3.connect(database)) as db:
+        assert not db.execute(
+            "SELECT name FROM sqlite_master WHERE name=?", (NativeRuntimeInput.declared_name,)
+        ).fetchone()

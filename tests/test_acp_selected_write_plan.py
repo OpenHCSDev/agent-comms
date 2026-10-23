@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.private_runtime_schema import PrivateCoordinatorTable
+from bus_record_fixture import prepare_native_comms
 from conftest import responder
 
 import asyncio
@@ -23,15 +25,11 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_foreground import _accept_visible_deliveries
-from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.launch_root import LaunchRoot
-from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import sealed_cohort_assignments
 from agent_comms.envelope_claim_transitions import UnclaimedResource
-from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordinator import Coordination
-from agent_comms.native_prompt_binding import install_prompt_binding_schema
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.thread_model import DeclaredModel
 from native_backend_fixture import native_backend_fixture
@@ -49,7 +47,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(tmp_path, native_runtime_
         root, work = native.root, native.project
         resource = work / "module.py"
         resource.write_bytes(b"before\n")
-        comms = Comms(root)
+        comms = prepare_native_comms(Comms(root))
         sender_pid = os.getpid()
         comms.registry.declare(
             comms.registry.new_thread('sender', frozenset(), str(work), process_identity=ProcessIdentity.capture(sender_pid), created_at=61001.0)
@@ -59,10 +57,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(tmp_path, native_runtime_
         )
         root_id = comms.owners.require_private_launch().wire_root_id
         with Coordination(str(root / "coordination.sqlite3")) as store:
-            install_private_cohort_schema(store)
-            install_private_response_schema(store)
-            install_native_runtime_schema(store)
-            install_prompt_binding_schema(store)
+            PrivateCoordinatorTable.install(store)
             store.participants.register(
                 alpha.incarnation.lookup, "alpha", "alpha", committed=True
             )

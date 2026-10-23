@@ -842,6 +842,25 @@ class TableSchema(ABC):
         """Inside the reconcile's transaction: this kind of file's way onto its declaration."""
 
 
+class ComposedSchemas:
+    """One file derives its rows and carry policy from its nominal schema parents."""
+
+    @classmethod
+    def schema_families(cls) -> tuple[type[TableSchema], ...]:
+        return tuple(family for family in cls.__bases__ if issubclass(family, TableSchema))
+
+    @classmethod
+    def schema_rows(cls) -> tuple[type[TypedTable], ...]:
+        return tuple(dict.fromkeys(
+            row for family in cls.schema_families() for row in family.schema_rows()
+        ))
+
+    @classmethod
+    def carry_schema(cls, db: sqlite3.Connection) -> None:
+        for family in cls.schema_families():
+            family.carry_schema(db)
+
+
 class RowMutation(Enum):
     """SQLite's destructive row events own their immutable-history guards."""
 
@@ -1794,14 +1813,19 @@ class ReconciledFile(SQLiteFile):
         """The declaration this file's schema is reconciled onto."""
 
     @classmethod
+    def schema_at(cls, path: Path) -> type[TableSchema]:
+        return cls.table_schema()
+
+    @classmethod
     def schema_change(cls, path: Path) -> SchemaChange:
         return HeldBusFile(cls, path)
 
     @classmethod
     def reconcile_at(cls, path: Path) -> bool:
         """Whether reconciling the file at ``path`` changed it."""
+        schema = cls.schema_at(path)
         with _store_lock(path), closing(cls.writer(path, isolation_level=None)) as db:
-            return cls.table_schema().reconcile_schema(db, cls.schema_change(path))
+            return schema.reconcile_schema(db, cls.schema_change(path))
 
 
 class CarriedWriter(StoreWriter, DurableFile):

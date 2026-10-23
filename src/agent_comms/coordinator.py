@@ -25,7 +25,6 @@ from .coordination_session import (
 )
 from .execution_store import ExecutionStore
 from .participant_store import ParticipantStore
-from .private_runtime_schema import PrivateRuntimeSchema
 from .store_files import StoreLock
 from .working_memory_annotations import WorkingMemoryAnnotations
 
@@ -205,19 +204,6 @@ class Coordination(ExecutionStore, AttemptStore):
         self.participants = ParticipantStore(self.session)
         self.assignments = AssignmentStore(self.session)
         self.annotations = WorkingMemoryAnnotations(self.session)
-
-    def install_private_runtime(self) -> None:
-        """Explicit protocol/owner bootstrap, never invoked by a reader."""
-        # Load the canonical declarations before querying their existing family.
-        from agent_comms import (  # noqa: F401
-            cohort_schema,
-            coordination_response,
-            native_prompt_binding,
-            native_runtime_input,
-        )
-
-        for schema in PrivateRuntimeSchema.__subclasses__():
-            schema.install(self)
 
     def close(self) -> None:
         self.session.close()
