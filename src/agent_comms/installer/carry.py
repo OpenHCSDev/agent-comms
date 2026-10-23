@@ -35,7 +35,7 @@ class Carried:
 
     changed: int
     detail: dict[str, int | bool] = field(default_factory=dict)
-    rewritten: tuple[str, ...] = ()
+    rewritten: tuple[Annotated[Path, PathText], ...] = ()
     """Files under the bus root this run wrote or deleted; every other file stays
     byte-identical."""
 

@@ -104,7 +104,7 @@ from agent_comms.installer.practice import (
 from agent_comms.installer.reporting import RootWriter, RuntimeWriter, UnpostedWriter
 from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SpecifiedImportPath
-from agent_comms.locked_store import BusFile, RootFile
+from agent_comms.locked_store import BusFile, RootFile, UndeclaredFile
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
     MaintenanceOperator,
@@ -136,7 +136,7 @@ class RehearsalFiles:
 
     identical: int
     rewritten: int
-    names: tuple[str, ...]
+    names: tuple[Annotated[Path, PathText], ...]
     restore_bytes: int
 
     @classmethod
@@ -145,7 +145,7 @@ class RehearsalFiles:
         return cls(0, 0, (), 0)
 
     @staticmethod
-    def declared(steps: tuple[StepRun, ...]) -> frozenset[str]:
+    def declared(steps: tuple[StepRun, ...]) -> frozenset[Path]:
         return frozenset(name for step in steps for name in step.carried.rewritten)
 
     def require_rehearsal(self, rehearsal: RehearsalFiles) -> None:
@@ -155,25 +155,30 @@ class RehearsalFiles:
 
 
 
-def carried(root: Path, before: dict[str, SavedFile], steps: tuple[StepRun, ...],
-            expected: frozenset[str]) -> RehearsalFiles:
+def carried(
+    root: Path,
+    before: dict[tuple[type[RootFile] | UndeclaredFile, Path], dict[Path, SavedFile]],
+    steps: tuple[StepRun, ...], expected: frozenset[Path],
+) -> RehearsalFiles:
     """Only the files a step names as rewritten may differ from ``before``."""
     after = bus_files(root)
-    physical = {name for name in before.keys() | after.keys()
-                if before.get(name) != after.get(name)}
-    # SQLite's committed WAL belongs to its database declaration, not a second carry.
-    changed = {name[:-4] if name.endswith('-wal') and name[:-4] in before.keys() | after.keys()
-               else name for name in physical}
-    unnamed = sorted(changed - RehearsalFiles.declared(steps))
+    physical = {key for key in before.keys() | after.keys()
+                if before.get(key) != after.get(key)}
+    members = {member: primary for (_owner, primary), snapshot in (*before.items(), *after.items())
+               for member in snapshot}
+    changed = {primary for _owner, primary in physical}
+    declared = {members.get(path, path) for path in RehearsalFiles.declared(steps)}
+    unnamed = sorted(changed - declared)
     if unnamed:
         raise UpgradeRefused(f"Carries changed files no step names: {unnamed}")
-    outside = sorted(changed - expected)
+    outside = sorted(changed - {members.get(path, path) for path in expected})
     if outside:
         raise UpgradeRefused(f"Carries changed files outside the expected set: {outside}")
     return RehearsalFiles(
-        identical=len(before.keys() - changed), rewritten=len(changed),
+        identical=len({primary for _owner, primary in before} - changed), rewritten=len(changed),
         names=tuple(sorted(changed)),
-        restore_bytes=sum(before[name].size for name in physical & before.keys()))
+        restore_bytes=sum(file.size for key in physical & before.keys()
+                          for file in before[key].values()))
 
 
 @dataclass(frozen=True)
@@ -843,7 +848,7 @@ class PreparedMigration(Extendable):
     """The held bus as the outgoing runtime read it, before any migration."""
 
     hold: MaintenanceState
-    before: dict[str, SavedFile]
+    before: dict[tuple[type[RootFile] | UndeclaredFile, Path], dict[Path, SavedFile]]
     read: BusReadBack
 
     @property
@@ -914,7 +919,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
 
     def live(self, rehearsal: RehearsedFiles, report: InstallReport) -> CarriedRun:
         expected = frozenset(rehearsal.files.names) | frozenset(
-            str(path.relative_to(self.root))
+            path.relative_to(self.root)
             for path in self.staged.backup_files(self.pending, self.tree))
         selected = tuple(self.root / name for name in sorted(expected))
         restore = RestoreSpace.measure(max(

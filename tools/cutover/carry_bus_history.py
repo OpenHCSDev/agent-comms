@@ -150,7 +150,7 @@ class CarryCatalogSource(SubclassUnion, ABC, affix=""):
         if path.read_bytes() == payload.encode():
             return Carried(changed, rewritten=rewritten)
         AtomicFile(path).write_text(payload)
-        return Carried(changed + len(converted), rewritten=(*rewritten, HistoryArchive.filename))
+        return Carried(changed + len(converted), rewritten=(*rewritten, path.relative_to(root)))
 
     def mapped_root(self, root: Path, original_root: Path) -> Path:
         original = Path(self.root)
@@ -219,7 +219,7 @@ class HistoryCatalogSource(RecordMember, CarryCatalogSource):
         source.validate()
         return source, Carried(
             1,
-            rewritten=tuple(str(path.relative_to(root)) for path in registry.written),
+            rewritten=tuple(path.relative_to(root) for path in registry.written),
         )
 
 
@@ -819,7 +819,7 @@ class HistoryInput:
         return replace(result, changed=changed)
 
     @staticmethod
-    def moved(root: Path, directory: Path, spill: Path) -> tuple[str, ...]:
+    def moved(root: Path, directory: Path, spill: Path) -> tuple[Path, ...]:
         """Retire each old file after acceptance, never while rollback can need its inode."""
         rewritten = []
         for name in (BusHistory.filename, HistoryMetadata.filename):
@@ -832,7 +832,7 @@ class HistoryInput:
             Carry.require_confined(spill, target)
             source.chmod(0o400)
             shutil.move(source, target)
-            rewritten.append(str(source.relative_to(root)))
+            rewritten.append(source.relative_to(root))
         return tuple(rewritten)
 
 
@@ -904,7 +904,7 @@ class BusHistory(Carry, BusFile):
                 "read_transcripts_before": len(document.transcripts),
                 "read_transcripts_after": len(rebound.transcripts),
             },
-            rewritten=(ledger.filename,),
+            rewritten=(ledger.path.relative_to(root),),
         )
 
     def carry(self, *, apply: bool) -> Carried:
@@ -936,7 +936,7 @@ class BusHistory(Carry, BusFile):
             results = []
             read_results = []
             bindings = {}
-            rewritten: set[str] = set()
+            rewritten: set[Path] = set()
             for source in inputs:
                 result = self.transfer(source.source, source.bus, source.metadata)
                 read = self.rebind_reads(source.bus.path.parent, source.original_identity)
@@ -945,7 +945,7 @@ class BusHistory(Carry, BusFile):
                 bindings[source.original_identity] = RecordedBusIdentity.capture(source.bus.path)
                 directory = source.bus.path.parent.relative_to(self.root)
                 rewritten.update(
-                    str(directory / name) for name in (*result.rewritten, *read.rewritten)
+                    directory / name for name in (*result.rewritten, *read.rewritten)
                 )
             catalog_result = CarryCatalogSource.publish(
                 self.root, self.original_root, catalog, bindings
@@ -1039,7 +1039,8 @@ class BusHistory(Carry, BusFile):
         return Carried(
             changed,
             detail=dict(rows=count, continuous=count, round_tripped=count),
-            rewritten=(bus.path.name, *(path.name for path in bus.source_paths(bus.path.parent))),
+            rewritten=(bus.path.relative_to(bus.path.parent),
+                       *(path.relative_to(bus.path.parent) for path in bus.source_paths(bus.path.parent))),
         )
 
 

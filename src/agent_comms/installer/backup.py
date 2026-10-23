@@ -23,7 +23,7 @@ from agent_comms.active_route import ActiveRoute, _route_directory, route_direct
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.interpreter_operation import RouteSelection
-from agent_comms.locked_store import LockedStore, RootFile, RuntimeFile, SQLiteFile
+from agent_comms.locked_store import LockedStore, RootFile, RuntimeFile, SQLiteFile, UndeclaredFile
 from agent_comms.private_path import FileObservation, FileRevision, MissingFile
 from agent_comms.store_files import AtomicFile
 
@@ -55,21 +55,31 @@ class SavedFile:
         return self.size == copied.size
 
 
-def bus_files(root: Path) -> dict[str, SavedFile]:
+def bus_files(root: Path) -> dict[tuple[type[RootFile] | UndeclaredFile, Path], dict[Path, SavedFile]]:
     """Read saved file identity and modification metadata, never contents."""
     excluded = RuntimeFile.paths_in(root)
-    saved = {}
+    observed: dict[Path, os.stat_result] = {}
     for path in root.rglob("*"):
-        if path in excluded or path.name.endswith((".lock", "-shm", "-journal")):
+        if path in excluded:
             continue
-        observed = path.lstat()
-        # Empty WAL files appear on a read-only SQLite open; they hold no committed frames.
-        if path.name.endswith("-wal") and observed.st_size == 0:
-            continue
-        if stat.S_ISREG(observed.st_mode):
-            saved[str(path.relative_to(root))] = SavedFile(
-                observed.st_size, observed.st_mtime_ns, observed.st_ino)
-    return saved
+        info = path.lstat()
+        if stat.S_ISREG(info.st_mode):
+            observed[path] = info
+    declared = RootFile.existing_in(root)
+    owners = {path: owner for path, owner in declared.items() if path in observed}
+    companions = {member for path, owner in owners.items()
+                  for member in owner.member_paths(path) if member != path}
+    owners.update((path, RootFile.content_owner(path))
+                  for path in observed.keys() - owners.keys() - companions)
+    companions.update(member for path, owner in owners.items()
+                      for member in owner.member_paths(path) if member != path)
+    return {
+        (declared.get(path, UndeclaredFile(path.relative_to(root))), path.relative_to(root)): {
+            member.relative_to(root): SavedFile(
+                observed[member].st_size, observed[member].st_mtime_ns, observed[member].st_ino,
+            ) for member in owner.snapshot_members(path, observed)
+        } for path, owner in owners.items() if path not in companions
+    }
 
 
 @dataclass(frozen=True)

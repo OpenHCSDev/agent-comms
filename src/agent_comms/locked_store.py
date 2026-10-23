@@ -163,6 +163,13 @@ class RootFile:
         return frozenset((path, store_lock_path(path)))
 
     @classmethod
+    def snapshot_members(
+        cls, path: Path, observed: dict[Path, os.stat_result],
+    ) -> frozenset[Path]:
+        """Content changes count; lock and coordination files are not content."""
+        return frozenset((path,))
+
+    @classmethod
     def files_in(cls, root: Path) -> frozenset[Path]:
         return cls.member_paths(cls.path_in(root))
 
@@ -235,6 +242,13 @@ class RootFile:
             path for owner, directory in cls.declarations_in(root)
             for path in owner.files_in(directory)
         )
+
+
+@dataclass(frozen=True)
+class UndeclaredFile(RootFile):
+    """A physical file without a stored declaration, still identified by its path."""
+
+    path: Path
 
 
 class FileStore(RootFile, ABC):
@@ -366,7 +380,8 @@ class SQLiteFile(RootFile):
     """SQLite connections, snapshots, copies and companions share one file owner."""
 
     __slots__ = ()
-    companion_suffixes: ClassVar[tuple[str, ...]] = ("-wal", "-shm", "-journal")
+    wal_suffix: ClassVar[str] = "-wal"
+    transient_suffixes: ClassVar[tuple[str, ...]] = ("-shm", "-journal")
 
     @classmethod
     def writer(
@@ -497,7 +512,22 @@ class SQLiteFile(RootFile):
 
     @classmethod
     def files(cls, path: Path) -> tuple[Path, ...]:
-        return (path, *(path.with_name(path.name + suffix) for suffix in cls.companion_suffixes))
+        return (path, cls.wal_path(path),
+                *(path.with_name(path.name + suffix) for suffix in cls.transient_suffixes))
+
+    @classmethod
+    def wal_path(cls, path: Path) -> Path:
+        return path.with_name(path.name + cls.wal_suffix)
+
+    @classmethod
+    def snapshot_members(
+        cls, path: Path, observed: dict[Path, os.stat_result],
+    ) -> frozenset[Path]:
+        wal = cls.wal_path(path)
+        # A read can create an empty WAL; only a nonempty WAL holds content.
+        return super().snapshot_members(path, observed) | frozenset(
+            (wal,) if wal in observed and observed[wal].st_size else ()
+        )
 
     @classmethod
     def member_paths(cls, path: Path) -> frozenset[Path]:
