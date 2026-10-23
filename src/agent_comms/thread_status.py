@@ -115,9 +115,6 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
     def deletable_threads(self, thread: Thread) -> tuple[Thread, ...]:
         return () if thread.process_alive else (thread,)
 
-    def claims_owner(self, process: ProcessState) -> bool:
-        return False
-
     def owns_entry(self, entry: RegistryEntry, owner: OwnerIdentity, process: ProcessIdentity) -> bool:
         return False
 
@@ -194,9 +191,6 @@ class ActiveThreadPresence(AlwaysListed, Visible, ThreadStatus, declared_name=No
 
     def deletable_threads(self, thread: Thread) -> tuple[Thread, ...]:
         return ()
-
-    def claims_owner(self, process: ProcessState) -> bool:
-        return process.claims_owner()
 
     def owns_entry(self, entry: RegistryEntry, owner: OwnerIdentity, process: ProcessIdentity) -> bool:
         return (entry.matches_name(owner.incarnation.name)

@@ -584,8 +584,12 @@ class CarriedDocument[T](DurableFile, LockedStore[T], declared_name=None):
 
     __slots__ = ()
 
-    def _write_unlocked(self, text: str) -> None:
+    def require_maintenance_open(self) -> None:
+        """Refuse every writer but the maintenance holder."""
         MaintenanceBarrier(RegistryFile.path_in(self.bus_root(self.path))).assert_open_unlocked()
+
+    def _write_unlocked(self, text: str) -> None:
+        self.require_maintenance_open()
         self._replace_unlocked(text)
 
     def _replace_unlocked(self, text: str) -> None:

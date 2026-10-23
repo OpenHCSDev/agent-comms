@@ -13,7 +13,6 @@ from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError
 from .goal_actions import GoalActionContext, SetGoalAction
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
-from .maintenance_barrier import MaintenanceBarrier
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import PrivateRegistryGuard
 from .registration_change import RegistrationChange
@@ -228,9 +227,9 @@ class Registration:
             channels.remember_tags(change.thread.tags)
 
     def _commit_registration(self, edit: RegistryEdit, change: RegistrationChange) -> RegistrationChange:
-        change.thread.role.require_maintenance_open(
-            MaintenanceBarrier(self.store.path), change.claims_owner
-        )
+        # The registry write refuses during maintenance; refuse first, so the goal journal
+        # never records an intent for a registration that cannot commit.
+        self.store.require_maintenance_open()
         before = change.prior_goal
         history = None
         intent = None
