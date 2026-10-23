@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
-from agent_comms.errors import RejectedEnforcement
+from agent_comms.errors import RejectedEnforcementError
 from agent_comms.text_digest import TextDigest
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repo import Repo
@@ -109,7 +109,7 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     def attention(self) -> bool:
         return True
 
-    def rejected_line(self, error: RejectedEnforcement) -> str:
+    def rejected_line(self, error: RejectedEnforcementError) -> str:
         return f"Not applied ({error.reason}): {self.line()}"
 
     def enforce(self, comms: Comms, commander: str) -> None:
@@ -117,12 +117,12 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
 
     @staticmethod
     def enforce_all(comms: Comms, commander: str,
-                    rules: Iterable[StandingRule]) -> Mapping[StandingRule, RejectedEnforcement]:
-        rejected: dict[StandingRule, RejectedEnforcement] = {}
+                    rules: Iterable[StandingRule]) -> Mapping[StandingRule, RejectedEnforcementError]:
+        rejected: dict[StandingRule, RejectedEnforcementError] = {}
         for rule in rules:
             try:
                 rule.enforce(comms, commander)
-            except RejectedEnforcement as error:
+            except RejectedEnforcementError as error:
                 rejected[rule] = error
         return rejected
 

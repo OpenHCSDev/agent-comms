@@ -19,7 +19,7 @@ from .child_process import (BoundedRun, CheckPrinted, ChildOutcome, ChildResult,
                             ExitedOutcome, SignaledOutcome, TimedOutOutcome)
 from .context_segments.wake_values import NoWakeGoalContext, WakeGoalContext, WakeGoalValue
 from .declared_family import DeclaredFamily
-from .errors import RejectedEnforcement, RelationViolationError
+from .errors import RejectedEnforcementError, RelationViolationError
 from .field_codec import (
     FieldCodec, JsonShapeFamily, JsonShapeMember, MalformedRecord, NullMember,
     PresenceExclude, RecordMember, SubclassUnion,
@@ -251,7 +251,7 @@ class PresentGoalCheckpoint(GoalCheckpoint, declared_name="present"):
         return f"goal {self.revision.id}@{self.revision.revision}"
 
 
-class GoalChangedError(RejectedEnforcement):
+class GoalChangedError(RejectedEnforcementError):
     """An observed goal changed before its checked action could run."""
 
     reason: ClassVar[str] = "goal changed"

@@ -8,7 +8,7 @@ import pytest
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
 from agent_comms.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, RulePing
-from agent_comms.errors import OverdueHeadRefusal, UnregisteredThreadError
+from agent_comms.errors import OverdueHeadRefusalError, UnregisteredThreadError
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.read_basis import DMDisplayScope
@@ -79,7 +79,7 @@ def test_overdue_head_refusal_is_published_and_later_rule_still_runs(notificatio
     def enforce(rule, _comms, _commander):
         enforced.append(rule.watch)
         if rule.watch == "overdue-head":
-            raise OverdueHeadRefusal("Review overdue heads before sending new orders:\ntoad#1176")
+            raise OverdueHeadRefusalError("Review overdue heads before sending new orders:\ntoad#1176")
 
     monkeypatch.setattr(ServicePassFailing, "enforce", enforce)
     rules = (ServicePassFailing("overdue-head", 1.0, "review pending"),
