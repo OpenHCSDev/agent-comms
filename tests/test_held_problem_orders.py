@@ -14,9 +14,13 @@ from agent_comms.commander.request import RequestAddVerb
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.locked_store import RootFile
-from agent_comms.goals import OrderCheck
+from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.todos import DeliveredProblemOrder, OrderMessage
+from agent_comms.todos import (
+    DeliveredProblemOrder, MergedListedPullRequest, OrderMessage, PullRequestCommit,
+    PullRequestLink,
+)
+from agent_comms.work_branches import WorkBranches
 from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsChannelsTool
@@ -55,6 +59,47 @@ def held_commander(pr_commander, cited_source):
     ctx = source.model_copy(update={"root": root, "state": root / "state"})
     yield ctx
     assert source.comms.goals.todos.get(todo.id) == original
+
+
+def link_pull_request(ctx, pid, number):
+    """The order's recorded PR link, as `order pr` writes it."""
+    store = ctx.comms.goals.todos
+    current = store.get(pid)
+    order = replace(current.order, pull_requests=(PullRequestLink(current.repo, number),))
+    with store.writing() as connection:
+        replace(current, order=order, revision=current.revision + 1).upsert(connection)
+    return store.get(pid)
+
+
+def merge_two_commit_fix(source, binaries, number):
+    """A fix PR merged with a merge commit: its first commit only half-fixes count.txt.
+
+    Returns (base, first, merge); GitHub's row for the request joins the forge stub."""
+    checkout = source.checkout
+    source.git(checkout, 'fetch', '-q', 'origin', WorkBranches.main)
+    source.git(checkout, 'checkout', '-q', '-B', 'main', f'origin/{WorkBranches.main}')
+    (checkout / 'count.txt').write_text('2\n')
+    source.git(checkout, 'add', 'count.txt')
+    source.git(checkout, 'commit', '-qm', 'The defect counts two')
+    base = source.git(checkout, 'rev-parse', 'HEAD').strip()
+    source.git(checkout, 'checkout', '-q', '-b', f'fix/{number}')
+    commits = []
+    for count in (1, 0):
+        (checkout / 'count.txt').write_text(f'{count}\n')
+        source.git(checkout, 'commit', '-qam', f'The fix leaves {count}')
+        commits.append(source.git(checkout, 'rev-parse', 'HEAD').strip())
+    source.git(checkout, 'checkout', '-q', 'main')
+    source.git(checkout, 'merge', '-q', '--no-ff', '-m', f'Merge pull request #{number}', f'fix/{number}')
+    merge = source.git(checkout, 'rev-parse', 'HEAD').strip()
+    source.git(checkout, 'push', '-q', 'origin', 'main', f'{commits[-1]}:refs/pull/{number}/head')
+    stub = binaries / 'pull_requests.json'
+    data = json.loads(stub.read_text())
+    data['requests'][str(number)] = {'body': f'## fix {number}', 'listed': FieldCodec.encode(
+        MergedListedPullRequest(number=number, branch=f'fix/{number}', head=commits[-1],
+                                updated='2026-10-23T12:00:00Z', base=WorkBranches.main,
+                                merge=PullRequestCommit(merge), merged='2026-10-23T12:00:00Z'))}
+    stub.write_text(json.dumps(data))
+    return base, commits[0], merge
 
 
 def test_clean_resend_derives_the_existing_order_and_leaves_no_strike(held_commander, cited_source):
@@ -118,22 +163,41 @@ def test_second_unplanned_order_is_refused_without_recording(held_commander, cit
     print(str(refused.value))
 
 
-def test_done_problem_delivers_the_units_held_order(held_commander):
+def test_done_checks_the_merged_tree_and_records_the_first_commit(
+    held_commander, cited_source, tmp_path,
+):
+    """The merged tree is the delivered tree; a half-fixed first commit is still the delivery."""
     ctx = held_commander
-    sha = ctx.repos[0].git(ctx.repos[0].checkout, "rev-parse", "HEAD").strip()
-    with chdir(ctx.repos[0].checkout):
-        main(["done", "worker", "P1", "--sha", sha], ctx)
-    saved = ctx.comms.goals.todos.get("P1")
+    base, first, merge = merge_two_commit_fix(cited_source, tmp_path / 'bin', 4)
+    current = ctx.comms.goals.todos.get('P1')
+    check = OrderCheck(str(cited_source.checkout), 'cat count.txt', CountCheckResult(0))
+    store = ctx.comms.goals.todos
+    with store.writing() as connection:
+        replace(current, order=replace(current.order, check=check),
+                revision=current.revision + 1).upsert(connection)
+    link_pull_request(ctx, 'P1', 4)
+    with chdir(cited_source.checkout):
+        main(["done", "worker", "P1"], ctx)
+    saved = store.get("P1")
     assert not saved.pending
     assert isinstance(saved.order, DeliveredProblemOrder)
-    assert saved.order.delivery.delivered == sha
+    assert (saved.order.delivery.delivered, saved.order.delivery.commit) == (first, merge)
+    assert saved.order.check_base(cited_source.checkout) == base
+
+
+def test_done_without_a_merged_pull_request_records_nothing(held_commander):
+    ctx = held_commander
+    original = ctx.comms.goals.todos.get("P1")
+    with pytest.raises(ValueError, match="P1 has no merged pull request"):
+        main(["done", "worker", "P1"], ctx)
+    assert ctx.comms.goals.todos.get("P1") == original
 
 
 def test_a_problem_not_held_by_the_unit_is_refused(held_commander):
     ctx = held_commander
     original = ctx.comms.goals.todos.get("P1")
     with pytest.raises(ValueError, match="worker holds no order on P2"):
-        main(["done", "worker", "P2", "--sha", "HEAD"], ctx)
+        main(["done", "worker", "P2"], ctx)
     with pytest.raises(ValueError, match="other holds no order on P1"):
         ctx.comms.goals.todos.resolve_order(ctx.incarnation, "other", "P1")
     assert ctx.comms.goals.todos.get("P1") == original

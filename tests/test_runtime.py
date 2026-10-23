@@ -1,7 +1,6 @@
 """Single-owner attachment and idle wakeup through real processes and sockets."""
 from agent_comms.controller import SessionUpdateSink
 
-from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 import asyncio
 import json
 import os
@@ -110,11 +109,11 @@ def test_owner_cursor_scope_rebases_only_attachment_session_alias():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("request_original", [False, True])
-async def test_subscription_replay_uses_requested_alias(tmp_path, request_original):
+async def test_subscription_replay_uses_requested_alias(tmp_path, request_original, private_comms):
     from agent_comms.coordinator import Coordination
     from agent_comms.launch_root import LaunchRoot
 
-    comms = wire(tmp_path / "wire")
+    comms = private_comms
     LaunchRoot.from_path(comms.root).install()
     owner = canonical_agent(comms, runtime_enabled=True, auto_wake=False)
     client = canonical_agent(comms, auto_wake=False)
@@ -140,7 +139,6 @@ async def test_subscription_replay_uses_requested_alias(tmp_path, request_origin
         )))
         thread = comms.registry.require(original)
         with Coordination(str(comms.root / "coordination.sqlite3")) as store:
-            PrivateCoordinatorTable.install(store)
             store.participants.register(thread.incarnation.lookup, committed=True)
         comms.threads.attach_session(thread, str(journal), process=thread.process_identity)
         comms.threads.rename_managed_thread(original, "renamed", owner=ProcessIdentity.capture(os.getpid()))

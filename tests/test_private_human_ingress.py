@@ -30,7 +30,6 @@ from agent_comms.field_codec import PathText
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message
-from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from agent_comms.read_basis import NamedViewer
 from agent_comms.task_sources import TaskAttachment
 from agent_comms.thread_identity import RecordedThreadIncarnation, UserThreadRole
@@ -84,7 +83,6 @@ def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
         comms.registry.declare(Thread(name, frozenset({'team'}), str(root), created_at=created_at))
         lookups[name] = RecordedThreadIncarnation("fixture", created_at).lookup
     store = Coordination(str(CoordinationStore.path_in(root)), clock_ms=lambda: 9999)
-    PrivateCoordinatorTable.install(store)
     for name in lookups:
         store.participants.register(lookups[name], committed=True)
     return comms, store, comms.registry.prepare_native_root().namespace, lookups
