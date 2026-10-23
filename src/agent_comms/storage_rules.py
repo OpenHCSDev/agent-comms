@@ -229,13 +229,11 @@ class StorageRule(RoomAllocation, DurableFile):
         home = thread.project_path
         candidates = (home, *self.checkout_paths(thread))
         checkouts = {home}
-        listed = set()
+        listed: set[Path] = set()
         for repository in candidates:
             if repository in listed or not (repository / '.git').exists():
                 continue
-            output = Repo.git(repository, 'worktree', 'list', '--porcelain', '-z', timeout=10)
-            entries = tuple(Path(field.removeprefix('worktree ')).resolve()
-                            for field in output.split('\0') if field.startswith('worktree '))
+            entries = WorkBranches(repository).read_checkout().worktrees()
             listed.update(entries)
             checkouts.update(path for path in entries
                              if path.is_dir() and self.owns_checkout(thread, path, path))
