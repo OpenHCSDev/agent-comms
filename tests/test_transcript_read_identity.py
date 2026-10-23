@@ -6,7 +6,7 @@ from contextlib import closing
 
 import pytest
 
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import SavedSessionFile
 from conftest import installed_comms
 from agent_comms.coordination_errors import StaleRevision
 from agent_comms.thread_text import ForkedParent, GivenThreadText

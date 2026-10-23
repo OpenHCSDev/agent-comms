@@ -37,7 +37,6 @@ from .pi_events import AutoRetryEnd, DurablePiEvent, RetryEnd
 from .pi_payloads import PiOmitted, PiResponseData
 from .pi_vocabulary import ThinkingLevelField
 from .transcript_sources import TranscriptSource
-from .unstarted_runtime import UnstartedRuntime
 
 
 @dataclass(frozen=True)
@@ -206,9 +205,7 @@ class CompactDurable(ExactResponse, Compact):
 
 
 class PiDurableBackend(AgentBackend, Compacts):
-    serves_threads = False
     location_type = DurableDatabase
-    unstarted_type = UnstartedRuntime
     event_kinds = frozenset(kind for member in DurablePiEvent.members_with(DurablePiEvent) for kind in member.known_kinds())
 
     def __init__(self):

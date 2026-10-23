@@ -7,7 +7,7 @@ from abc import ABC, ABCMeta
 from collections.abc import Mapping
 from typing import Any, ClassVar, Self, cast
 
-from metaclass_registry import (  # type: ignore[import-untyped]
+from metaclass_registry import (
     AutoRegisterMeta,
     LazyDiscoveryDict,
     RegistryConfig,

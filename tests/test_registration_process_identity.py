@@ -15,7 +15,8 @@ from agent_comms.maintenance_barrier import (
     InstallingPhase, MaintenanceOperator, PausedPhase, ReadyPhase,
 )
 from agent_comms.thread_status import NoBridgeThreadStatus
-from agent_comms.thread_text import GivenThreadText, SavedSessionFile
+from agent_comms.thread_text import GivenThreadText
+from agent_comms.session_file import SavedSessionFile
 
 
 @pytest.mark.parametrize('phases', [(), (PausedPhase,), (PausedPhase, InstallingPhase)])

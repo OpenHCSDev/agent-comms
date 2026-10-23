@@ -3,7 +3,7 @@ import time
 from dataclasses import replace
 
 
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import SavedSessionFile
 from agent_comms.todos import (DirectiveText)
 
 

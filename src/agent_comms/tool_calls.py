@@ -11,11 +11,12 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from typing import ClassVar, Unpack
+from typing import ClassVar
 
-from pydantic import AliasChoices, ConfigDict, Field, JsonValue, ValidationError
+from metaclass_registry import RegistryConfig
+from pydantic import AliasChoices, Field, JsonValue, ValidationError
 
-from .cli_protocol import WireModel
+from .cli_protocol import RegisteredWireMeta, WireModel
 from .field_codec import FieldCodec, MalformedRecord
 from .native_tools import BashTool, EditTool, GlobTool, GrepTool, ReadTool, WriteTool
 from .tool_declaration import ReplacementEdit, ToolDeclaration
@@ -81,27 +82,31 @@ class PatchedToolCall(DecodedToolCall):
         return replace(super().ended(text, ok, position, timestamp), diff=self.diff)
 
 
-class CliToolArguments(WireModel):
+class CliToolArguments(WireModel, metaclass=RegisteredWireMeta):
     """A runtime's arguments for one Core tool in its own spelling (Claude Code's, OpenCode's), read
     once into the Core record; the runtime's other keys stay in its raw input."""
 
     cli_names: ClassVar[tuple[str, ...]] = ()
-    types: ClassVar[dict[str, type[CliToolArguments]]] = {}
+    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
+        registry_dict={}, key_attribute="cli_names", registry_name="CLI tool arguments",
+    )
+    __registry__: ClassVar[dict[tuple[str, ...], type[CliToolArguments]]]
     model_config = {"extra": "allow"}
-
-    def __init_subclass__(cls, **kwargs: Unpack[ConfigDict]) -> None:
-        super().__init_subclass__(**kwargs)
-        cls.types.update(dict.fromkeys(cls.cli_names, cls))
 
     @classmethod
     def decode(cls, sent: ToolCall, arguments: Mapping[str, JsonValue]) -> ToolCall:
         """The call decoded when its name has a declared shape that its values fit, else as sent.
 
         The model can send values that do not fit (Claude refuses them with an error result)."""
-        if sent.name not in cls.types:
+        shapes = [shape for names, shape in cls.__registry__.items() if sent.name in names]
+        if not shapes:
             return sent
+        if len(shapes) > 1:
+            owners = ", ".join(shape.__name__ for shape in shapes)
+            raise ValueError(f"Ambiguous CLI tool name {sent.name!r}: {owners}")
+        shape, = shapes
         try:
-            return cls.types[sent.name].model_validate(arguments).call(sent.id)
+            return shape.model_validate(arguments).call(sent.id)
         except ValidationError, MalformedRecord:  # kept as sent; its runtime answers the refusal
             return sent
 

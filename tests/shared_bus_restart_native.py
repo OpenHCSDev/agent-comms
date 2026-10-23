@@ -9,7 +9,7 @@ from agent_comms.channel_targets import CommandTarget
 from bus_record_fixture import prepare_native_comms
 from agent_comms.lifecycle_capability import Complete
 from agent_comms.coordination_session import NativeBoundary
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import SavedSessionFile
 from agent_comms.native_entries import NativeEvidenceScope
 from conftest import publish_initial
 from agent_comms.pi_vocabulary import OffThinkingLevel

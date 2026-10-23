@@ -12,8 +12,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.installer.carry import Carry
+from agent_comms.pi_turn_phase import PiTurnPhase
+from agent_comms.thread_identity import BirthlessIncarnation
+from agent_comms.thread_rename import ThreadRename
+from agent_comms.tool_calls import CliToolArguments
 from agent_comms.phase_evidence import (
     AllEvidence,
+    BusStorageAbsent,
     ClassFlagsAbsent,
     CommitMerged,
     NoAbsenceProbes,
@@ -154,9 +160,10 @@ class RecordPlanePhase(CommanderNativePhase):
 
 
 class ReviewQueuePhase(CommanderNativePhase):
-    """Revised 2026-10-21: a verdict per PR head gates the merge queue. Done when the ruleset
-    requires the queue job that reads ``agent-comms/review`` and an unreviewed PR cannot
-    merge, which an always-bypass actor would defeat."""
+    """A verdict per PR head gates merging through main's required review status.
+
+    No GitHub merge queue is required. A bypass actor defeats the review gate.
+    """
 
     after = (RecordPlanePhase,)
     evidence = RulesetGates()
@@ -322,9 +329,7 @@ class BusDeletionPhase(VirtualBusPhase):
                     "src/agent_comms/wire_record.py",
                 )
             ),
-            PatternAbsent(
-                r"bus\.jsonl|bus_meta|_wire_lock_path|has_private_wire_fields|/ \"wire\""
-            ),
+            BusStorageAbsent(),
         )
     )
 
@@ -652,9 +657,25 @@ class KindFamiliesPhase(RemainingSlopPhase):
 
 
 class RostersPhase(RemainingSlopPhase):
-    """6.4: rosters beside families are derived from the family."""
+    """6.4: remove the known internal registries; external producer ABI stays independent."""
 
-    evidence = PatternAbsent(r"PI_0_85_1_EVENT_KINDS|THREAD_CAPABILITIES|serves_new_threads")
+    evidence = AllEvidence(
+        (
+            PatternAbsent(r"^\s*THREAD_CAPABILITIES\s*[:=]"),
+            ClassFlagsAbsent(r"^\s*serves_(new_)?threads\s*[:=]"),
+            *(
+                ClassFlagsAbsent(r"^\s*" + attribute + r"\s*[:=]", owners=(owner,))
+                for owner, attribute in (
+                    (Carry, "declared"),
+                    (ThreadRename, "kinds"),
+                    (BirthlessIncarnation, "members"),
+                    (CliToolArguments, "types"),
+                    (PiTurnPhase, "_start_phases"),
+                    (PiTurnPhase, "_end_events"),
+                )
+            ),
+        )
+    )
 
 
 class RecordsPhase(RemainingSlopPhase):

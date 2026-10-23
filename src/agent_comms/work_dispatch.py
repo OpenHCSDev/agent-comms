@@ -29,7 +29,7 @@ from .repo import Checkout
 from .repository_name import RepositoryName
 from .storage_rules import CheckoutStorageEffect, StorageProjection
 from .thread_status import StoppedThreadStatus
-from .thread_text import SavedSessionFile
+from .session_file import SavedSessionFile
 
 if TYPE_CHECKING:
     from .comms import Comms

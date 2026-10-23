@@ -5,7 +5,7 @@ import sys
 
 import pytest
 
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import SavedSessionFile
 from agent_comms.tools import invoke_tool
 from agent_comms.comms import wire
 from agent_comms.tool_caller import NoThreadCaller

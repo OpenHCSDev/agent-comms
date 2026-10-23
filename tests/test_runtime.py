@@ -23,7 +23,7 @@ from agent_comms.runtime import (
 )
 from agent_comms.private_path import PrivateSocketRole
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import SavedSessionFile
 from agent_comms.native_arguments import GivenBinary
 from delivery_owner_fixture import canonical_agent
 

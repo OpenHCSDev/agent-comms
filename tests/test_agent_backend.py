@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+import runpy
 import sys
 from pathlib import Path
-from types import MappingProxyType
+from types import MappingProxyType, SimpleNamespace
 
 import pytest
 
@@ -18,6 +19,7 @@ from agent_comms.pi_native_backend import PI_0_85_1_EVENT_KINDS, PiNativeBackend
 from agent_comms.threads import Thread
 from agent_comms.unstarted_runtime import UnstartedRuntime
 from agent_comms.thread_model import DeclaredModel
+from agent_comms.session_file import NoSessionFile, SavedSessionFile
 
 # -- registry ---------------------------------------------------------------
 
@@ -25,7 +27,7 @@ from agent_comms.thread_model import DeclaredModel
 def test_registry_holds_the_pi_native_backend_and_is_frozen():
     assert ab.AgentBackend.names() == ("pi_native", "pi_durable")
     assert ab.AgentBackend.member_named("pi_native") is PiNativeBackend
-    assert ab.AgentBackend.for_new_threads() is PiNativeBackend
+    assert ab.NewThreadBackend.selected() is PiNativeBackend
     assert isinstance(ab.AgentBackend.__registry__, MappingProxyType)
     assert ab.AgentBackend.member_named("pi_durable") is PiDurableBackend
 
@@ -40,18 +42,21 @@ def test_a_backend_declared_after_sealing_fails_loud():
 
 
 def test_pi_native_serves_threads_with_every_thread_capability():
-    assert PiNativeBackend.serves_threads
-    for role in (*ab.THREAD_CAPABILITIES, ab.Interrupts, ab.Forks):
-        assert issubclass(PiNativeBackend, role), role
+    assert issubclass(PiNativeBackend, ab.NewThreadBackend)
+    assert issubclass(PiNativeBackend, ab.ThreadServingBackend)
+    assert issubclass(PiNativeBackend, ab.Interrupts)
+    assert issubclass(PiNativeBackend, ab.Forks)
+    assert not issubclass(PiDurableBackend, ab.ThreadServingBackend)
     assert not PiNativeBackend.__abstractmethods__
     assert PiNativeBackend.location_type is PiSessionFile
 
 
-@pytest.mark.parametrize("location", [
-    PiSessionFile("/home/ts/wt/test/session.jsonl"), UnstartedRuntime(PiNativeBackend),
+@pytest.mark.parametrize("session_file, location", [
+    (SavedSessionFile("/home/ts/wt/test/session.jsonl"), PiSessionFile("/home/ts/wt/test/session.jsonl")),
+    (NoSessionFile(), UnstartedRuntime(PiNativeBackend)),
 ])
-def test_runtime_location_round_trip_uses_declared_backend(location, *, thread_registration):
-    thread = thread_registration.new_thread('location', frozenset(), '/home/ts/wt/test', session_file=location.read_key)
+def test_runtime_location_round_trip_uses_declared_backend(session_file, location, *, thread_registration):
+    thread = thread_registration.new_thread('location', frozenset(), '/home/ts/wt/test', session_file=session_file)
     restored = FieldCodec.decode(Thread, FieldCodec.encode(thread))
     assert restored.runtime == location
     assert restored.runtime is restored.runtime
@@ -63,57 +68,95 @@ def test_runtime_location_round_trip_uses_declared_backend(location, *, thread_r
 # -- declaration checks -------------------------------------------------------
 
 
-class _Location(ab.RuntimeLocation):
-    def location_payload(self):
-        return None
+@pytest.fixture
+def backend_declarations():
+    # Re-execute the actual declaration module in a fresh namespace. The canonical
+    # package has already sealed its runtime family; none of that state is changed.
+    scope = SimpleNamespace(**runpy.run_path(ab.__file__, run_name=ab.__name__))
+
+    class Location(scope.RuntimeLocation):
+        def history_source(self, root, incarnation):
+            raise NotImplementedError("Declaration checks do not open history")
+
+        def storage_files(self):
+            return ()
+
+    class RuntimeMethods(scope.AgentBackend, declared_name=None):
+        @classmethod
+        def for_worker(cls, runner, session_id):
+            return cls()
+
+        @classmethod
+        def new_location(cls, root, worktree):
+            return cls.location_type()
+
+        def run_turn(self, thread, content, delivery):
+            raise NotImplementedError("Declaration checks do not run turns")
+
+        async def abort(self, owner):
+            raise NotImplementedError("Declaration checks do not own turns")
+
+        async def close_idle(self):
+            pass
+
+        async def compact(self, thread, instructions):
+            return scope.NothingToCompaction()
+
+    class Native(RuntimeMethods, scope.NewThreadBackend):
+        location_type = Location
+        event_kinds = frozenset()
+
+    scope.RuntimeMethods = RuntimeMethods
+    scope.Native = Native
+    return scope
 
 
-class _OtherLocation(ab.RuntimeLocation):
-    def location_payload(self):
-        return None
+def test_incomplete_thread_backend_stays_abstract_and_cannot_rebind_a_location(backend_declarations):
+    scope = backend_declarations
+    original = PiSessionFile("saved-session").backend
+
+    class IncompleteNative(scope.Native):
+        location_type = PiSessionFile
+        compact = scope.Compacts.compact
+
+    with pytest.raises(TypeError, match="compact"):
+        IncompleteNative()
+    assert IncompleteNative not in scope.AgentBackend.members_with(scope.AgentBackend)
+    assert PiSessionFile("saved-session").backend is original
+    scope.AgentBackend.seal()
+    assert scope.Native.new_location(None, None).backend is scope.Native
+    assert scope.NewThreadBackend.selected() is scope.Native
+    with pytest.raises(TypeError, match="run_turn"):
+        scope.ThreadServingBackend()
 
 
-def _declared(name, *roles, location=_Location, new_threads=False, serves=True, kinds=frozenset()):
-    return type(name, roles or (object,), {
-        "location_type": location, "serves_new_threads": new_threads,
-        "serves_threads": serves, "event_kinds": kinds,
-    })
+def test_sealing_rejects_competing_location_owners_before_attaching_any(backend_declarations):
+    scope = backend_declarations
+
+    class Rival(scope.RuntimeMethods):
+        location_type = scope.Native.location_type
+        event_kinds = frozenset()
+
+    assert scope.NewThreadBackend.selected() is scope.Native
+    with pytest.raises(scope.BackendDeclarationError, match="belongs to several backends"):
+        scope.AgentBackend.seal()
+    with pytest.raises(AttributeError):
+        scope.Native.new_location(None, None).backend
 
 
-def test_validation_names_missing_roles_and_abstract_methods():
-    class HalfBackend(ab.Steers):
+def test_new_thread_selection_requires_one_concrete_nominal_member(backend_declarations):
+    empty = SimpleNamespace(**runpy.run_path(ab.__file__, run_name=ab.__name__))
+    with pytest.raises(empty.BackendDeclarationError, match="exactly one backend"):
+        empty.NewThreadBackend.selected()
+    scope = backend_declarations
+
+    class SecondDefault(scope.Native):
         pass
 
-    HalfBackend.location_type = _Location
-    HalfBackend.serves_threads = True
-    HalfBackend.serves_new_threads = True
-    HalfBackend.event_kinds = frozenset()
-    with pytest.raises(ab.BackendDeclarationError) as error:
-        ab.validate_backends([HalfBackend])
-    message = str(error.value)
-    for role in ("Compacts",):
-        assert role in message
-    assert "leaves methods abstract" in message
-    for method in ("run_turn", "abort", "close_idle"):
-        assert repr(method) in message
-
-
-def test_validation_requires_one_location_type_per_backend_and_one_default():
-    first = _declared("FirstBackend", serves=False, new_threads=True)
-    second = _declared("SecondBackend", serves=False, new_threads=True)
-    with pytest.raises(ab.BackendDeclarationError) as error:
-        ab.validate_backends([first, second])
-    assert "belongs to several backends ['FirstBackend', 'SecondBackend']" in str(error.value)
-    assert "exactly one backend must serve new threads" in str(error.value)
-    ab.validate_backends([first, _declared("Other", serves=False, location=_OtherLocation)])
-
-
-def test_validation_requires_a_location_and_event_kinds():
-    bare = type("BareBackend", (), {"serves_threads": False, "serves_new_threads": True})
-    with pytest.raises(ab.BackendDeclarationError) as error:
-        ab.validate_backends([bare])
-    assert "BareBackend declares no RuntimeLocation type" in str(error.value)
-    assert "BareBackend declares no event_kinds" in str(error.value)
+    with pytest.raises(scope.BackendDeclarationError, match="exactly one backend"):
+        scope.NewThreadBackend.selected()
+    with pytest.raises(scope.BackendDeclarationError, match="exactly one backend"):
+        scope.AgentBackend.seal()
 
 
 class _ProbeEvent(DeclaredFamily):

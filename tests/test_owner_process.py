@@ -28,7 +28,8 @@ from agent_comms.launch_root import LaunchRoot
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.restart_scope import OwnersNamed
 from agent_comms.thread_model import DeclaredModel
-from agent_comms.thread_text import GivenThreadText, NoSessionFile
+from agent_comms.thread_text import GivenThreadText
+from agent_comms.session_file import NoSessionFile
 from delivery_owner_fixture import canonical_agent
 from native_backend_fixture import native_backend_fixture
 

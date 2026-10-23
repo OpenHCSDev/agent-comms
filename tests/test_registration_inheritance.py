@@ -3,7 +3,7 @@
 from typing import Annotated
 from dataclasses import dataclass, replace
 
-from agent_comms.thread_text import SavedSessionFile
+from agent_comms.session_file import SavedSessionFile
 from agent_comms import field_codec
 from agent_comms.comms import wire
 from agent_comms.pi_vocabulary import HighThinkingLevel

@@ -14,7 +14,8 @@ from agent_comms.message_page import MessagePageRequest
 from agent_comms.read_basis import DMDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.thread_text import ForkedParent, SavedSessionFile
+from agent_comms.thread_text import ForkedParent
+from agent_comms.session_file import SavedSessionFile
 from agent_comms.todos import DeliverTodo, OperationDelivery, ProgressRead
 from agent_comms.ui_model.unit_state import (
     AwaitingCommander,
